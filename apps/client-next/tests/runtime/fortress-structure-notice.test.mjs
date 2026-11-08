@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-fortress-structure-notice.test.mjs - construction and repair reply notices
+fortress-structure-notice.test.mjs - construction, upgrade and repair notices
 
 The native reply names an event zone. Its structure name comes from the
 character catalog, including when no corresponding actor is visible. The
@@ -24,10 +24,13 @@ const FORTRESS = 1;
 const ZONE = 109;
 const STRUCTURE = 19565;
 const CONSTRUCT = 0x0a;
+const UPGRADE = 0x0b;
 const REPAIR = 0x0c;
 const CONSTRUCTION_KEY = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
 const REPAIR_KEY = "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE";
+const UPGRADE_KEY = "UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE";
 const STRUCTURE_NAME = "Jangan barricade";
+const REFERENCE = { name: STRUCTURE_NAME, tidWord: 0x32c4, level: 1 };
 
 /*
 ================
@@ -53,7 +56,7 @@ function reply( action, zone = ZONE, hp = 80000 ) {
 			1,
 			...u32( FORTRESS ),
 			...u32( zone ),
-			...(action === REPAIR ? u32( hp ) : [])
+			...(action === REPAIR ? u32( hp ) : action === UPGRADE ? [ hp ] : [])
 		] )
 	};
 }
@@ -142,6 +145,115 @@ function world( t, name = STRUCTURE_NAME, kind = "structure" ) {
 
 /*
 ================
+upgradeWorld
+
+The public reference file and login have already been joined at this seam.
+No structure needs to be in the visible actor list.
+================
+*/
+/** @param {{ refObjId: number; kind: string; tidWord: number; name: string; level: number; } | undefined} upgraded */
+function upgradeWorld( t, reference, upgraded = undefined ) {
+	const core = createWorldCore( () => {} );
+	t.after( () => core.dispose() );
+	const value = bootstrap();
+	core.bootstrap( {
+		...value,
+		refObjSnapshot: [ { ...value.refObjSnapshot[0], ...reference }, ...(upgraded ? [ upgraded ] : []) ]
+	} );
+	flush( core );
+	const frame = roster();
+	// Native rank comes from the reference, not this unrelated state word.
+	frame.payload[18] = frame.payload[19] = 0xff;
+	core.receive( frame, 0 );
+	flush( core );
+	return core;
+}
+
+/*
+================
+Upgrade wording follows the old reference's type and rank, not the variant.
+================
+*/
+test("upgrade replies distinguish headquarters, initial construction and ordinary upgrades", t => {
+	const target = STRUCTURE + 1;
+	const cases = [
+		{ tidWord: 0x2ac4, level: 0, key: CONSTRUCTION_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x2ac7, level: 2, key: CONSTRUCTION_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x22c4, level: 0, key: CONSTRUCTION_KEY, name: "Raised position" },
+		{ tidWord: 0x22c4, level: 1, key: UPGRADE_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x2244, level: 0, key: UPGRADE_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x12c4, level: 1, key: UPGRADE_KEY, name: STRUCTURE_NAME }
+	];
+	for ( const row of cases ) {
+		const core = upgradeWorld( t, { tidWord: row.tidWord, level: row.level, fortressUpgradeRef: target }, {
+			refObjId: target,
+			kind: "structure",
+			tidWord: row.tidWord,
+			name: "Raised position",
+			level: 2
+		} );
+		const messages = createHudMessages( () => 0 );
+		for ( const variant of [ 0, 1, 2, 3 ] ) {
+			core.receive( reply( UPGRADE, ZONE, variant ), 1 );
+			const notices = defined( gameplay( flush( core ) ).notices );
+			const notice = defined( notices.at( -1 ) );
+			assert.equal( notice.key, row.key );
+			assert.deepEqual( notice.arguments, [ row.name ] );
+			assert.equal( notice.nativeType, 0 );
+			assert.equal( notice.banner, true );
+			const copy = key => key === row.key ? "%s complete" : key;
+			assert.equal( noticeText( copy, notice, "banner" ), `${row.name} complete` );
+			assert.equal( messages.step( 1, [], 1, 0, notices, copy ).at( -1 )?.value, `${row.name} complete` );
+		}
+	}
+});
+
+/*
+================
+An authoritative roster after the reply changes the next operation's rank.
+================
+*/
+test("a reply followed by its roster names the construction once, then the next upgrade", t => {
+	const target = STRUCTURE + 1;
+	const core = upgradeWorld( t, { tidWord: 0x22c4, fortressUpgradeRef: target }, {
+		refObjId: target,
+		kind: "structure",
+		tidWord: 0x22c4,
+		level: 1,
+		name: "Raised position"
+	} );
+	core.receive( reply( UPGRADE, ZONE, 0 ), 1 );
+	core.receive( roster( target ), 1 );
+	const built = defined( gameplay( flush( core ) ).notices );
+	assert.equal( built.length, 1 );
+	assert.equal( built[0].key, CONSTRUCTION_KEY );
+	assert.deepEqual( built[0].arguments, [ "Raised position" ] );
+	core.receive( reply( UPGRADE, ZONE, 0 ), 2 );
+	const raised = defined( gameplay( flush( core ) ).notices );
+	assert.equal( raised.length, 2 );
+	assert.equal( raised[1].key, UPGRADE_KEY );
+	assert.deepEqual( raised[1].arguments, [ "Raised position" ] );
+	core.receive( { opcode: 0xb1e1, payload: Uint8Array.of( UPGRADE, 2, 0x39 ) }, 3 );
+	assert.equal( defined( gameplay( flush( core ) ).notices ).filter( row => row.key === UPGRADE_KEY ).length, 1 );
+});
+
+/*
+================
+Missing target rows and explicit zero must not invent a construction name.
+================
+*/
+test("default upgrade lookup keeps a missing mapping distinct from an unresolved target", t => {
+	for ( const target of [ undefined, 0, STRUCTURE + 1 ] ) {
+		const core = upgradeWorld( t, { tidWord: 0x22c4, level: 0, fortressUpgradeRef: target } );
+		core.receive( reply( UPGRADE, ZONE, 0 ), 1 );
+		const notices = gameplay( flush( core ) ).notices ?? [];
+		assert.equal( notices.length, target === undefined ? 1 : 0 );
+		if ( target === undefined ) assert.deepEqual( notices[0].arguments, [ STRUCTURE_NAME ] );
+	}
+});
+
+/*
+================
 The two direct success arms reach both native display channels.
 ================
 */
@@ -184,16 +296,16 @@ test("construction and repair name an out-of-view structure in chat and banner",
 The helper does not turn another reply or a refusal into success.
 ================
 */
-test("only the direct construction and repair success arms emit these lines", () => {
+test("only construction, upgrade and repair success arms emit these lines", () => {
 	const state = fortressBootstrap( {} );
-	assert.equal( fortressStructureNotice( state, STRUCTURE_NAME ), null );
+	assert.equal( fortressStructureNotice( state, REFERENCE ), null );
 	for ( let action = 0; action <= 0x18; action++ ) {
 		assert.equal(
-			fortressStructureNotice( { ...state, service: { action, result: 2, error: 3 } }, STRUCTURE_NAME ),
+			fortressStructureNotice( { ...state, service: { action, result: 2, error: 3 } }, REFERENCE ),
 			null
 		);
-		const notice = fortressStructureNotice( { ...state, service: { action, result: 1 } }, STRUCTURE_NAME );
-		assert.equal( notice !== null, action === CONSTRUCT || action === REPAIR, `action ${action}` );
+		const notice = fortressStructureNotice( { ...state, service: { action, result: 1 } }, REFERENCE );
+		assert.equal( notice !== null, [ CONSTRUCT, UPGRADE, REPAIR ].includes( action ), `action ${action}` );
 	}
 });
 
@@ -249,7 +361,7 @@ Parse failures are atomic with respect to the published notice queue.
 */
 test("truncated and trailing-byte successes publish no partial notice", t => {
 	const core = world( t );
-	for ( const action of [ CONSTRUCT, REPAIR ] ) {
+	for ( const action of [ CONSTRUCT, UPGRADE, REPAIR ] ) {
 		const frame = reply( action );
 		for ( let end = 0; end < frame.payload.length; end++ ) {
 			assert.throws( () => core.receive( { ...frame, payload: frame.payload.subarray( 0, end ) }, 1 ) );

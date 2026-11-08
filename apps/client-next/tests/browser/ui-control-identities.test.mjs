@@ -37,14 +37,14 @@ test( "service close and cancel controls survive real DOM publication and clicks
 			for ( const panel of [ "magic-option", "skin", "exchange", "stall" ] ) {
 				for ( const action of panel === "stall" ? [ "close", "leave" ] : [ "close", "cancel" ] ) {
 					const assets = createAssets(), commands = [];
-					const ui = createUi(
+					const ui = createUi( {
 						assets,
-						command => commands.push( command ),
-						() => {},
-						() => {},
-						location.origin,
-						"https://fixture.invalid"
-					);
+						commands: command => commands.push( command ),
+						publish: () => {},
+						texture: () => {},
+						base: location.origin,
+						apiBase: "https://fixture.invalid"
+					} );
 					const bridge = createUiBridge( canvas, event => ui.event( event ), () => {} );
 					const entity = {
 						gid: 1,

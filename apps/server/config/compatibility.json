@@ -1,14 +1,14 @@
 {
 	"client": {
-		"protocol": 12,
+		"protocol": 14,
 		"assetSchema": 4
 	},
 	"server": {
-		"protocolMin": 12,
-		"protocolMax": 12,
-		"storeReadMin": 38,
-		"storeReadMax": 38,
-		"storeWrite": 38,
+		"protocolMin": 14,
+		"protocolMax": 14,
+		"storeReadMin": 41,
+		"storeReadMax": 41,
+		"storeWrite": 41,
 		"storeUpgradeFrom": 13
 	}
 }

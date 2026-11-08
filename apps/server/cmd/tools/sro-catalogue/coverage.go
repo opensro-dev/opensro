@@ -59,8 +59,10 @@ var catalogueReaders = map[string]string{
 	"SRO_UNIQUE_SEAL_DROPS":                  "BuildDropTables publishes it in the unique object (unique.sealDrops, progression.UniqueRulesFromEnv)",
 	"SRO_SHOP_EXTRA_GOODS":                   "shardShops reads it (commerce.ExtraGoodsFromEnv) into the shops' extra tabs",
 	"SRO_JANGAN_ALCHEMY_SHOP":                "shardShops reads it through the extra goods (commerce.JanganAlchemyShopFromEnv regroups Jangan's alchemy tabs)",
+	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",
 	"SRO_STACK_SIZES":                        "shardItems reads it (enterworld.StackSizesFromEnv) into items.json's stack caps",
 	"SRO_ALEXANDRIA":                         "BuildNpcs' roster reads it (simulation.LoadNpcWorldRoster hides the city while off, alexandria.Hidden)",
+	"SRO_ALEXANDRIA_HIDE_D11_GOODS":          "shardShops reads it (commerce.AlexandriaHideD11GoodsFromEnv) to withhold Alexandria's degree-11 goods from the shops",
 }
 
 // catalogueExempt lists every other shard setting with the reason it
@@ -77,7 +79,11 @@ var catalogueExempt = map[string]string{
 	"SRO_BETA_SILK_ACTIVE_ONLY":               "which hours count for the silk grant; the catalogue publishes no account state",
 	"SRO_MAINTENANCE_MESSAGE":                 "the refusal shown during a release window; no catalogue file carries it",
 	"SRO_PET_PACING":                          "pet movement speed at runtime; the catalogue publishes no movement speeds",
+	"SRO_PET_INVENTORY_PAGES":                 "a pet's inventory size at runtime; the catalogue publishes no pet state",
+	"SRO_CHAT_ITEM_LINKS":                     "chat behaviour at runtime; the catalogue publishes no chat",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE":         "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_STORAGE_AUTO_STACK":                  "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
+	"SRO_INVENTORY_PAGES":                     "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                     "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                  "a post-kill damage notice; the catalogue publishes no notices",
 	"SRO_CLOSED_OBJECT_RESCUE":                "a login placement rescue; monsters.json publishes nests, not login placement",
@@ -96,6 +102,7 @@ var catalogueExempt = map[string]string{
 	"SRO_PREMIUM_UPGRADE":                     "a mall ticket replacement rule; the catalogue publishes no mall listing",
 	"SRO_NAME_CHANGE_SCROLL":                  "adds a scroll to the Item Mall; the catalogue publishes no mall listing, and items.json publishes the scroll either way",
 	"SRO_KILL_STATS":                          "staff telemetry; no catalogue file carries it",
+	"SRO_CONNECTION_JOURNAL":                  "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                "how a worn suit is drawn; the catalogue publishes no rendering",
 	"SRO_JOB_SUIT_TIERS":                      "stats a worn suit grants at runtime; items.json publishes the suits either way",
 	"SRO_MOONLIT_THIEF_SUIT":                  "a worn suit's look; the catalogue publishes no rendering",
@@ -133,6 +140,7 @@ var catalogueExempt = map[string]string{
 	"SRO_REVERSE_RETURN_MAP":                  "destinations the reverse return scroll offers at runtime; no catalogue file publishes return destinations",
 	"SRO_HUNTING_GUIDE":                       "hunting areas drawn on the world map from the monster data at runtime; monsters.json publishes the same monsters either way",
 	"SRO_GM_SETSPEED":                         "a GM command; no catalogue file carries it",
+	"SRO_GM_ITEM_FORGE":                       "a GM command; no catalogue file carries it",
 	"SRO_GM_TRAINING_DUMMY":                   "GM-only training targets; the catalogue publishes the shipped population, not GM summons",
 	"SRO_TEAM_DEATH_REVIVE":                   "where a battle death revives at runtime; no catalogue file carries it",
 	"SRO_FLAGWAR_START_UTC":                   "the Capture the Flag schedule; the catalogue's event list carries no Capture the Flag row",
@@ -150,5 +158,6 @@ var catalogueExempt = map[string]string{
 	"SRO_WHISPER_JOB_ALIAS":                   "how a whisper resolves its target; the catalogue publishes no chat routing",
 	"SRO_THIEF_CART_TOWN_AREAS":               "where a thief cart is stopped at runtime; npcs.json publishes the townspeople, not town protection",
 	"SRO_BETA_UNIQUE_RESPAWN":                 "unique respawn timing; monsters.json publishes nests, not timers",
+	"SRO_JANGAN_CAVE_RESPAWN":                 "monster respawn timing in the Ch'in Tomb caves; monsters.json publishes nests, not timers",
 	"SRO_WEBTRANSPORT_PUBLIC":                 "how the shard's transport is served; no catalogue file carries it",
 }

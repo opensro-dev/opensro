@@ -27,7 +27,7 @@ import (
 upsertMetaTx
 ================
 */
-func upsertMetaTx(tx *sql.Tx, key, value string) error {
+func upsertMetaTx(tx sqlExecer, key, value string) error {
 	_, err := tx.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
 	return err
 }
@@ -121,7 +121,7 @@ func (w *characterRowTx) writeCharacterRecord(division string, c *domain.Charact
 	}
 	key := committedCharacterKey{division: division, id: c.ID}
 	w.written[key] = sha256.Sum256(record)
-	w.copies[key] = domain.CloneCharacter(c)
+	w.copies[key] = domain.CloneCharacterStaged(c, w.store.committedRows[key])
 	delete(w.deleted, key)
 	return nil
 }
@@ -302,7 +302,7 @@ The walk writes through one groundRowWriter (#1943 W3): the changed
 rows of a churn-heavy commit no longer pay tx.Exec's prepare each.
 ================
 */
-func writeGroundDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
+func writeGroundDiffTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
 	writer := newGroundRowWriter(tx, scratch)
 	defer writer.close()
 	divisionIDs := make([]string, 0, len(next)+len(committed))
@@ -377,7 +377,7 @@ each own one and close it before their caller commits.
 ================
 */
 type groundRowWriter struct {
-	tx         *sql.Tx
+	tx         sqlExecer
 	scratch    *jsonscratch.Scratch
 	upsertStmt *sql.Stmt
 	deleteStmt *sql.Stmt
@@ -388,7 +388,7 @@ type groundRowWriter struct {
 newGroundRowWriter
 ================
 */
-func newGroundRowWriter(tx *sql.Tx, scratch *jsonscratch.Scratch) *groundRowWriter {
+func newGroundRowWriter(tx sqlExecer, scratch *jsonscratch.Scratch) *groundRowWriter {
 	return &groundRowWriter{tx: tx, scratch: scratch}
 }
 
@@ -405,15 +405,8 @@ func (w *groundRowWriter) upsert(divisionID string, item *domain.GroundItemRecor
 	if err != nil {
 		return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 	}
-	if w.upsertStmt == nil {
-		stmt, err := w.tx.Prepare(upsertGroundSQL)
-		if err != nil {
-			return err
-		}
-		w.upsertStmt = stmt
-	}
 	// string(record), as in writeCharacterTx: a []byte binds as a blob.
-	_, err = w.upsertStmt.Exec(divisionID, item.Gid, string(record))
+	_, err = w.exec(&w.upsertStmt, upsertGroundSQL, divisionID, item.Gid, string(record))
 	return err
 }
 
@@ -425,15 +418,32 @@ One ground row removed by gid.
 ================
 */
 func (w *groundRowWriter) deleteRow(divisionID string, gid uint32) error {
-	if w.deleteStmt == nil {
-		stmt, err := w.tx.Prepare(deleteGroundSQL)
-		if err != nil {
-			return err
-		}
-		w.deleteStmt = stmt
-	}
-	_, err := w.deleteStmt.Exec(divisionID, gid)
+	_, err := w.exec(&w.deleteStmt, deleteGroundSQL, divisionID, gid)
 	return err
+}
+
+/*
+================
+groundRowWriter::exec
+
+One ground statement. Through a real transaction the statement is
+prepared on first use and reused (#1943 W3); into a commitBatch it is
+recorded, and the batch's apply prepares it once.
+================
+*/
+func (w *groundRowWriter) exec(stmt **sql.Stmt, query string, args ...any) (sql.Result, error) {
+	preparer, ok := w.tx.(sqlPreparer)
+	if !ok {
+		return w.tx.Exec(query, args...)
+	}
+	if *stmt == nil {
+		prepared, err := preparer.Prepare(query)
+		if err != nil {
+			return nil, err
+		}
+		*stmt = prepared
+	}
+	return (*stmt).Exec(args...)
 }
 
 /*
@@ -483,7 +493,7 @@ func sortedGround(rows []domain.GroundItemRecord) []domain.GroundItemRecord {
 replaceMailboxTx
 ================
 */
-func replaceMailboxTx(tx *sql.Tx, division string, charID int64, mailbox []domain.LetterRecord) error {
+func replaceMailboxTx(tx sqlExecer, division string, charID int64, mailbox []domain.LetterRecord) error {
 	if _, err := tx.Exec("DELETE FROM memos WHERE division = ? AND char_id = ?", division, charID); err != nil {
 		return err
 	}
@@ -509,7 +519,7 @@ func replaceMailboxTx(tx *sql.Tx, division string, charID int64, mailbox []domai
 replaceGuildTx
 ================
 */
-func replaceGuildTx(tx *sql.Tx, division string, guildID int64, guild domain.GuildRecord, members []domain.GuildMemberRecord) error {
+func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.GuildRecord, members []domain.GuildMemberRecord) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
@@ -543,7 +553,7 @@ func replaceGuildTx(tx *sql.Tx, division string, guildID int64, guild domain.Gui
 deleteGuildTx
 ================
 */
-func deleteGuildTx(tx *sql.Tx, division string, guildID int64) error {
+func deleteGuildTx(tx sqlExecer, division string, guildID int64) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
@@ -564,7 +574,7 @@ func deleteGuildTx(tx *sql.Tx, division string, guildID int64) error {
 replaceCampTx
 ================
 */
-func replaceCampTx(tx *sql.Tx, division string, campID int64, camp domain.TrainingCampRecord, members []domain.TrainingCampMemberRecord) error {
+func replaceCampTx(tx sqlExecer, division string, campID int64, camp domain.TrainingCampRecord, members []domain.TrainingCampMemberRecord) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
@@ -598,7 +608,7 @@ func replaceCampTx(tx *sql.Tx, division string, campID int64, camp domain.Traini
 deleteCampTx
 ================
 */
-func deleteCampTx(tx *sql.Tx, division string, campID int64) error {
+func deleteCampTx(tx sqlExecer, division string, campID int64) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}

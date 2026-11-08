@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
@@ -84,7 +85,7 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	}
 	clock.Advance(pick.Pending.Eta + time.Millisecond)
 	pick = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
-	assertOpcodes(t, pick.Frames, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
+	assertOpcodes(t, pick.Frames, opCommerceItemReferences, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("pickup left item on ground")
 	}
@@ -104,6 +105,40 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("replayed fatal generated loot")
+	}
+}
+
+/*
+================
+TestPickupGrantLeadsWithTheGrantedItemsReference
+
+#2885: a bag grant (0xB06D type 6) must lead with the granted item's
+reference rows even when the picker never saw the drop spawn. The browser
+has no item table: a grant naming a reference it does not hold throws
+"Unknown inventory reference" and ends the session. The shared-recipient
+and COS paths already lead (#1612); the plain grant did not.
+================
+*/
+func TestPickupGrantLeadsWithTheGrantedItemsReference(t *testing.T) {
+	character := testCharacter()
+	rt, _ := newTestRuntime(character, testItems())
+	spawn := simulation.SeedWorldState(character).Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 50080, Codename: "ITEM_CH_SWORD_09_B",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1,
+		Position: grounditem.Point{RegionID: spawn.RegionID, X: float32(spawn.X), Z: float32(spawn.Z)}})
+	result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
+	assertOpcodes(t, result.Frames, opCommerceItemReferences, wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpObjectDespawn, wire.OpActionState)
+	var refs struct {
+		Items []struct {
+			ID uint32 `json:"refObjId"`
+		}
+	}
+	if err := json.Unmarshal(result.Frames[0].Payload, &refs); err != nil {
+		t.Fatal(err)
+	}
+	if len(refs.Items) != 1 || refs.Items[0].ID != 50080 {
+		t.Fatalf("grant does not lead with the granted item's reference: %s", result.Frames[0].Payload)
 	}
 }
 

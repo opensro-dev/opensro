@@ -13,204 +13,129 @@ import {
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 
-/*
-================
-createIdentityMatrix
-
-Return a fresh 4x4 column-major identity matrix for procedural effect bindings.
-================
-*/
-function createIdentityMatrix(): Float32Array {
-	const out = new Float32Array( 16 );
-	out[0] =
-		out[5] =
-		out[10] =
-		out[15] =
-			1;
-	return out;
-}
-
-/*
-================
-buildProceduralEffectModel
-
-Wrap vertex streams and a procedural BGRA native texture into an admitted CharacterModel.
-================
-*/
-function buildProceduralEffectModel(
-	positions: number[],
-	normals: number[],
-	uvs: number[],
-	indices: number[],
-	texture: NativeTexture
-): { model: CharacterModel; images: NativeTexture[]; } {
-	const vertexCount = positions.length / 3;
-	const weights = new Float32Array( vertexCount * 4 );
-	for ( let i = 0; i < vertexCount; i++ ) {
-		weights[i * 4] = 1;
-	}
-	return {
-		model: {
-			nodes: [
-				{
-					name: "root",
-					parent: -1,
-					translation: [ 0, 0, 0 ],
-					rotation: [ 0, 0, 0, 1 ],
-					scale: [ 1, 1, 1 ]
-				}
-			],
-			clips: [ { name: "effect", duration: 1, channels: [] } ],
-			images: [ { width: texture.width, height: texture.height } ],
-			primitives: [
-				{
-					name: "effect",
-					node: 0,
-					joints: [ 0 ],
-					inverseBind: createIdentityMatrix(),
-					image: 0,
-					geometry: {
-						positions: Float32Array.from( positions ),
-						normals: Float32Array.from( normals ),
-						uvs: Float32Array.from( uvs ),
-						joints: new Uint32Array( vertexCount * 4 ),
-						weights,
-						indices: Uint32Array.from( indices ),
-						transform: createIdentityMatrix(),
-						material: {
-							color: [ 1, 1, 1, 1 ],
-							alphaCutoff: 0,
-							blend: true,
-							blendPair: { source: 5, destination: 2 },
-							depthWrite: false,
-							textureAlpha: true,
-							fadeAlphaOnly: true,
-							doubleSided: true,
-							unlit: true,
-							fogDisabled: true
-						}
-					}
-				}
-			]
-		},
-		images: [ texture ]
-	};
-}
+import { buildProceduralEffectModel, createIdentityMatrix } from "./effect-model";
+import { createBlizzardResource } from "./blizzard-resources";
 
 /*
 ================
 createChallengingRoarAuraResource
 
-Build the 3D golden-crimson primal aura shell and interlocking vortex rings that
-brighten over the 1-second Challenging Roar buildup around the bear.
+Three thin, forward-facing sonic rings, sized for the bear's mouth.
 ================
 */
 function createChallengingRoarAuraResource(): { model: CharacterModel; images: NativeTexture[]; } {
-	const size = 128;
-	const pixels = new Uint8Array( size * size * 4 );
-	for ( let y = 0; y < size; y++ ) {
-		const v = (y + 0.5) / size;
-		const envV = Math.pow( Math.sin( v * Math.PI ), 1.35 );
-		const coreV = Math.pow( Math.sin( v * Math.PI ), 2.6 );
-		for ( let x = 0; x < size; x++ ) {
-			const u = (x + 0.5) / size;
-			const angle = u * Math.PI * 2;
-			const f1 = 0.5 + 0.5 * Math.sin( angle * 8 + v * 10 );
-			const f2 = 0.5 + 0.5 * Math.cos( angle * 14 - v * 16 );
-			const f3 = 0.5 + 0.5 * Math.sin( angle * 22 + v * 6 );
-			const energy = envV * (0.38 + 0.34 * (f1 * f1) + 0.18 * (f2 * f2 * f2) + 0.10 * (f3 * f3));
-			const r = Math.min( 255, Math.round( 255 * Math.min( 1, energy * 1.50 + coreV * 0.42 ) ) );
-			const g = Math.min(
-				255,
-				Math.round( 255 * Math.min( 1, Math.pow( energy, 1.32 ) * 1.08 + Math.pow( coreV, 1.8 ) * 0.58 ) )
-			);
-			const b = Math.min(
-				255,
-				Math.round( 255 * Math.min( 1, Math.pow( energy, 2.35 ) * 0.65 + Math.pow( coreV, 2.9 ) * 0.72 ) )
-			);
-			const a = Math.min( 255, Math.round( 255 * Math.min( 1, energy * 1.18 ) ) );
-			const idx = (y * size + x) * 4;
-			pixels[idx] = b;
-			pixels[idx + 1] = g;
-			pixels[idx + 2] = r;
-			pixels[idx + 3] = a;
+	const resource = createPetCounterRippleResource();
+	const positions = [], normals = [], uvs = [], indices = [];
+	const geometry = resource.model.primitives[0]!.geometry;
+	for ( let ring = 0; ring < 3; ring++ ) {
+		const base = positions.length / 3;
+		const radius = 4 + ring * 2.5;
+		for ( let i = 0; i < geometry.positions.length; i += 3 ) {
+			// The retail head socket points down its local X axis, not Z.
+			positions.push( 6 + ring * 8, geometry.positions[i]! * radius, geometry.positions[i + 2]! * radius );
+			normals.push( 1, 0, 0 );
 		}
+		uvs.push( ...geometry.uvs! );
+		indices.push( ...Array.from( geometry.indices, index => index + base ) );
 	}
+	return buildProceduralEffectModel( positions, normals, uvs, indices, resource.images[0]! );
+}
+
+/*
+================
+createRoarDebrisResource
+
+Port-only dust curls and olive leaves swept outward by the reference's shockwave.
+Each particle has its own joint, so its size stays fixed while it travels.
+================
+*/
+function createRoarDebrisResource(): { model: CharacterModel; images: NativeTexture[]; } {
 	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
-	const segs = 32, rings = 8;
-	// 1. Ovoid primal energy cocoon around the bear's torso/head.
-	for ( let r = 0; r <= rings; r++ ) {
-		const v = r / rings;
-		const phi = (v - 0.5) * Math.PI * 0.88;
-		const cp = Math.cos( phi ), sp = Math.sin( phi );
-		for ( let s = 0; s <= segs; s++ ) {
-			const u = s / segs, theta = u * Math.PI * 2;
-			const ct = Math.cos( theta ), st = Math.sin( theta );
-			positions.push( ct * cp * 10.5, 10.5 + sp * 11.5, st * cp * 10.5 );
-			normals.push( ct * cp, sp, st * cp );
-			uvs.push( u, v );
+	const pixels = new Uint8Array( 64 * 32 * 4 );
+	for ( let y = 0; y < 32; y++ ) {
+		for ( let x = 0; x < 64; x++ ) {
+			const leaf = x >= 32;
+			const u = (x % 32 + .5) / 16 - 1, v = (y + .5) / 16 - 1;
+			const alpha = leaf ?
+				Math.max( 0, 1 - Math.abs( u ) - Math.abs( v ) ) :
+				Math.pow( Math.max( 0, 1 - Math.hypot( u, v ) ), 2 );
+			pixels.set(
+				leaf ?
+					[ 35, 100 + Math.round( 35 * alpha ), 89, Math.round( alpha * 255 ) ] :
+					[ 125, 173, 196, Math.round( alpha * 180 ) ],
+				(y * 64 + x) * 4
+			);
 		}
 	}
-	for ( let r = 0; r < rings; r++ ) {
-		for ( let s = 0; s < segs; s++ ) {
-			const a = r * (segs + 1) + s, b = a + segs + 1;
-			indices.push( a, b, a + 1, a + 1, b, b + 1 );
-		}
-	}
-	// 2. Rising 8-pointed flame pillar crown around the bear.
-	const crownBase = positions.length / 3;
-	for ( let r = 0; r <= 4; r++ ) {
-		const v = r / 4;
-		const y = 0.8 + v * 22.0;
-		const baseR = 11.5 + v * 3.8;
-		for ( let s = 0; s <= segs; s++ ) {
-			const u = s / segs, theta = u * Math.PI * 2;
-			const star = 1 + 0.14 * Math.cos( theta * 8 + v * 1.8 );
-			const rad = baseR * star;
-			const ct = Math.cos( theta ), st = Math.sin( theta );
-			positions.push( ct * rad, y, st * rad );
-			normals.push( ct, 0.15, st );
-			uvs.push( u, v );
-		}
-	}
-	for ( let r = 0; r < 4; r++ ) {
-		for ( let s = 0; s < segs; s++ ) {
-			const a = crownBase + r * (segs + 1) + s, b = a + segs + 1;
-			indices.push( a, b, a + 1, a + 1, b, b + 1 );
-		}
-	}
-	// 3. Two interlocking tilted vortex bands precessing around the bear.
-	for ( const tilt of [ 0.48, -0.48 ] ) {
-		const bandBase = positions.length / 3;
-		const cs = Math.cos( tilt ), sn = Math.sin( tilt );
-		for ( let r = 0; r <= 2; r++ ) {
-			const v = r / 2;
-			const localY = (v - 0.5) * 4.6;
-			const rad = 14.2 - Math.abs( v - 0.5 ) * 1.4;
-			for ( let s = 0; s <= segs; s++ ) {
-				const u = s / segs, theta = u * Math.PI * 2;
-				const lx = Math.cos( theta ) * rad, lz = Math.sin( theta ) * rad;
-				const wy = 10.0 + localY * cs - lz * sn;
-				const wz = localY * sn + lz * cs;
-				positions.push( lx, wy, wz );
-				normals.push( Math.cos( theta ), cs, Math.sin( theta ) * cs );
-				uvs.push( u, v );
+	const nodes: CharacterModel["nodes"][number][] = [];
+	const channels: CharacterModel["clips"][number]["channels"][number][] = [];
+	const joints: number[] = [];
+	for ( let i = 0; i < 48; i++ ) {
+		const leaf = i >= 32, angle = i * 2.399963, size = leaf ? 1.4 : 14 + i % 5 * 2;
+		const base = positions.length / 3;
+		// Crossed soft cards remain visible from the normal elevated game camera.
+		for ( const horizontal of [ false, true ] ) {
+			for ( const [x, y] of [ [ -1, -1 ], [ 1, -1 ], [ -1, 1 ], [ 1, 1 ] ] ) {
+				positions.push( x! * size, horizontal ? 0 : y! * size, horizontal ? y! * size : 0 );
+				normals.push( 0, 1, 0 );
+				uvs.push( (leaf ? .5 : 0) + (x! + 1) * .25, (y! + 1) * .5 );
+				joints.push( i, 0, 0, 0 );
 			}
 		}
-		for ( let r = 0; r < 2; r++ ) {
-			for ( let s = 0; s < segs; s++ ) {
-				const a = bandBase + r * (segs + 1) + s, b = a + segs + 1;
-				indices.push( a, b, a + 1, a + 1, b, b + 1 );
-			}
-		}
+		for ( const b of [ base, base + 4 ] ) indices.push( b, b + 1, b + 2, b + 2, b + 1, b + 3 );
+		nodes.push( {
+			name: `debris-${i}`,
+			parent: -1,
+			translation: [ 0, 0, 0 ],
+			rotation: [ 0, 0, 0, 1 ],
+			scale: [ 1, 1, 1 ]
+		} );
+		const distance = 220 + i % 7 * 12;
+		channels.push( {
+			node: i,
+			path: "translation",
+			interpolation: "LINEAR",
+			times: new Float32Array( [ 0, .25, .50, .90 ] ),
+			values: new Float32Array( [ 0, .45, .85, 1 ].flatMap( progress => {
+				const turn = angle + progress * .16;
+				return [
+					Math.cos( turn ) * (8 + distance * progress),
+					3 + Math.sin( progress * Math.PI ) * (leaf ? 24 : 8),
+					Math.sin( turn ) * (8 + distance * progress)
+				];
+			} ) )
+		} );
 	}
-	return buildProceduralEffectModel( positions, normals, uvs, indices, {
+	const resource = buildProceduralEffectModel( positions, normals, uvs, indices, {
 		kind: "native-texture",
-		width: size,
-		height: size,
+		width: 64,
+		height: 32,
 		format: "bgra8unorm",
 		levels: [ pixels ]
 	} );
+	const primitive = resource.model.primitives[0]!;
+	return {
+		images: resource.images,
+		model: {
+			...resource.model,
+			nodes,
+			clips: [ { name: "effect", duration: .9, channels } ],
+			primitives: [ {
+				...primitive,
+				joints: nodes.map( ( _, index ) => index ),
+				inverseBind: new Float32Array( nodes.flatMap( () => [ ...createIdentityMatrix() ] ) ),
+				geometry: {
+					...primitive.geometry,
+					joints: Uint32Array.from( joints ),
+					material: {
+						...primitive.geometry.material!,
+						fadeAlphaOnly: false,
+						blendPair: { source: 5, destination: 6 }
+					}
+				}
+			} ]
+		}
+	};
 }
 
 /*
@@ -438,13 +363,20 @@ createPetCounterRippleResource
 A soft, unit-radius ground annulus without the roar's walls or bright spokes.
 ================
 */
-function createPetCounterRippleResource( wind = false ): { model: CharacterModel; images: NativeTexture[]; } {
+function createPetCounterRippleResource(
+	wind = false,
+	roar = false
+): { model: CharacterModel; images: NativeTexture[]; } {
 	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
 	for ( let i = 0; i <= 64; i++ ) {
 		const angle = i / 64 * Math.PI * (wind ? 3 : 2);
 		for ( const edge of [ 0, 1 ] ) {
-			const radius = wind ? .2 + .7 * i / 64 + edge * .025 : .96 + edge * .04;
-			positions.push( Math.cos( angle ) * radius, wind ? .02 + .18 * i / 64 : .025, Math.sin( angle ) * radius );
+			const radius = wind ? .2 + .7 * i / 64 + edge * .025 : (roar ? .994 + edge * .006 : .96 + edge * .04);
+			positions.push(
+				Math.cos( angle ) * radius,
+				wind ? .02 + .18 * i / 64 : roar ? .001 : .025,
+				Math.sin( angle ) * radius
+			);
 			normals.push( 0, 1, 0 );
 			uvs.push( wind ? i / 64 : .5, edge );
 		}
@@ -669,6 +601,8 @@ Explicit calls keep effect execution visible to the capability contract.
 ================
 */
 export function createProceduralEffect( path: string ) {
+	const blizzard = createBlizzardResource( path );
+	if ( blizzard ) return blizzard;
 	switch ( path ) {
 		case "/assets/effects/survival-flame":
 			return createSurvivalFireResource();
@@ -690,10 +624,14 @@ export function createProceduralEffect( path: string ) {
 			return createPenguinIceResource( true );
 		case "/assets/effects/crow-wind-burst":
 			return createPetCounterRippleResource( true );
+		case "/assets/effects/bear-roar-ring":
+			return createPetCounterRippleResource( false, true );
 		case "/assets/effects/pet-counter-ripple":
 			return createPetCounterRippleResource();
 		case "/assets/effects/iron-hide-shield":
 			return createIronHideShieldResource();
+		case "/assets/effects/bear-roar-debris":
+			return createRoarDebrisResource();
 		case "/assets/effects/challenging-roar-aura":
 			return createChallengingRoarAuraResource();
 		case "/assets/effects/challenging-roar-shockwave":

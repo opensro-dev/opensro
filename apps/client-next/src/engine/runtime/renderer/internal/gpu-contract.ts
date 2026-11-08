@@ -98,6 +98,23 @@ tone-maps its unassociated color and composites over the presented UI.
 export interface HdrDraw extends BloomDraw {
 	encodePreview( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
+
+/*
+================
+AmbientOcclusionDraw
+
+The experimental occlusion stage (#2094): view is the blurred factor
+the surfaces sample (their binding 15), stable between resizes;
+encode totals this frame's stored depth into it for the next frame.
+The view is null while the live target has no measurement yet
+(creation, resize, re-enable): the surfaces then keep the white view,
+so the factor is 1 and a fresh target's zero is never sampled.
+================
+*/
+export interface AmbientOcclusionDraw {
+	readonly view: GPUTextureView | null;
+	encode( encoder: GPUCommandEncoder, depth: GPUTextureView ): void;
+}
 /*
 ================
 SunShadowOwner
@@ -133,6 +150,7 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly ao?: AmbientOcclusionDraw;
 }
 /*
 ================
@@ -164,6 +182,12 @@ export interface DeviceOwner extends Disposable {
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
 	sunShadow(): SunShadowOwner;
+	ambientOcclusion(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): AmbientOcclusionDraw | undefined;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
@@ -187,6 +211,10 @@ export interface DeviceOwner extends Disposable {
 	recoverable(): boolean;
 	phase(): RuntimePhase;
 	error(): string | null;
+	/** Record a failure the frame met on this device (device.ts fail): a
+	 * memory refusal becomes recoverable, so the renderer replaces the
+	 * device instead of ending on its own failure (#2866). */
+	fail( error: unknown ): void;
 	commands(): FrameCommands | null;
 	surfaceCommands(): SurfaceCommands | null;
 	format(): GPUTextureFormat;

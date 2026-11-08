@@ -51,6 +51,13 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	// Sun supply is drop-side only, forever. Do not make this conditional
 	// again - withholding here is the rule, not a leftover of the gate.
 	c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunShopExcluded(ref) })
+	// Port-only, not native (commerce/alexandriashops.go): an operator
+	// who wants degree-11 gear from grinding only hides Alexandria's
+	// degree-11 shop goods; off - the default - sells the native stock
+	// the original game sold there (#2842).
+	if rt.AlexandriaHideD11Goods {
+		c.WithholdAlexandriaD11()
+	}
 	if rt.TradeTiers {
 		// Port-only, not native: the shops price trade goods with their
 		// scaled references (SRO_TRADE_TIERS).
@@ -456,6 +463,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		case wire.MoveTypeShopSell:
 			item, found := inv.At(q.SourceSlot)
 			if !found || !isCOS && q.SourceSlot < inventory.EquipmentSlotEnd {
+				return false
+			}
+			// Port-only (forge.go, issue #1980): a bound forged item
+			// cannot be sold to a merchant, from bag or COS bag alike.
+			if item.ForgeBound {
+				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
 			// Port-only, not native (halloween.go): the seal leaves the

@@ -18,6 +18,8 @@ TestBetaSilkStarterAndCreditPersist
 ================
 */
 func TestBetaSilkStarterAndCreditPersist(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	if granted, err := s.GrantBetaSilkStarter("acct", 300); err != nil || !granted {

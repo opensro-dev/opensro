@@ -354,6 +354,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_TRADE_TIERS", "off", nil, "items", ""},
 		{"SRO_SHOP_EXTRA_GOODS", "off", nil, "shops", ""},
 		{"SRO_JANGAN_ALCHEMY_SHOP", "off", nil, "shops", ""},
+		{"SRO_JANGAN_XL_POTIONS", "off", nil, "shops", ""},
 		{"SRO_TRADE_ROUTE_DONWHANG_PERCENT", "150", nil, "trade", ""},
 		{"SRO_TRADE_ROUTE_HOTAN_PERCENT", "160", nil, "trade", ""},
 		{"SRO_TRADE_ROUTE_SAMARKAND_PERCENT", "170", nil, "trade", ""},
@@ -375,8 +376,9 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 	// over the shipped data can show, and the test that proves the
 	// reader instead. Every other modelled setting flips above.
 	flipUnitProven := map[string]string{
-		"SRO_CAP110_LEVEL100":        "the level-100 slice's admission is pinned by the monster package's TestCap110Level100SliceFollowsItsFlag; over the shipped data the cap-110 build refuses before the slice can differ",
-		"SRO_PHARAOH_TOMB_GEAR_RATE": "the modelled counts are pinned by the catalogue package's TestPharaohGearRateScalesTheTombDrops and the env read by the monster package's TestAppendPharaohTombReadsTheGearRate; over the shipped data the tomb build refuses before the rate can differ",
+		"SRO_CAP110_LEVEL100":           "the level-100 slice's admission is pinned by the monster package's TestCap110Level100SliceFollowsItsFlag; over the shipped data the cap-110 build refuses before the slice can differ",
+		"SRO_PHARAOH_TOMB_GEAR_RATE":    "the modelled counts are pinned by the catalogue package's TestPharaohGearRateScalesTheTombDrops and the env read by the monster package's TestAppendPharaohTombReadsTheGearRate; over the shipped data the tomb build refuses before the rate can differ",
+		"SRO_ALEXANDRIA_HIDE_D11_GOODS": "the withholding is pinned by the commerce package's TestWithholdAlexandriaD11 and the env read by its TestAlexandriaHideD11GoodsFromEnv; over the shipped data no Alexandria shop tab exists, so no shop output can differ",
 	}
 	flipped := map[string]bool{}
 	for _, flip := range flips {

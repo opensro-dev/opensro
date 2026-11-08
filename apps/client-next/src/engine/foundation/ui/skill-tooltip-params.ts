@@ -814,9 +814,12 @@ projectedNativeRowsForBlock
 					[ `${text( "PARAM_MP" )} ${v[0]}% ${text( "UIIT_STT_DAMAGE" )} ${text( "PARAM_ABSORB" )}` ] :
 					[];
 			// CSkillParameters_AppendLocalizedTooltip @0x7faa83..0x7fab03: hwir prints
-			// the berserk-gauge chance at values[0].
+			// the berserk-gauge chance at values[0]. The native gate is
+			// cmp dword [ebx],0 / jbe skip (unsigned), so any nonzero
+			// value prints - a negative chance prints too, where a
+			// signed > 0 would drop the line (#2628).
 			case 0x1e0:
-				return (v[0] ?? 0) > 0 ?
+				return (v[0] ?? 0) !== 0 ?
 					[ `${text( "UIIT_CTL_TC_ACQUISITION_WHAN" )} ${v[0]}% ${increase}` ] :
 					[];
 			// CSkillParameters_AppendLocalizedTooltip @0x7ff48f..0x7ff546: saps prints

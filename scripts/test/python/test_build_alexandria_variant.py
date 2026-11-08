@@ -485,6 +485,53 @@ class MapTests(unittest.TestCase):
 		self.assertEqual(variant.overview_tiles(box, [(67, 84)]),
 			["interface/worldmap/map/map_world_66x85.ddj"])
 
+	# ================
+	# test_seam_tiles_join_the_import_through_empty_v150_tiles_only
+	#
+	# Import at (67, 88): tile 66x89 takes later art. 70x89 and 74x89 show no
+	# v1.150 region, so they join it; 78x89 holds v1.150 land and stops the
+	# walk, so 82x89 behind it stays even though it is empty too.
+	# ================
+	def test_seam_tiles_join_the_import_through_empty_v150_tiles_only(self):
+		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
+		empty = {(x, y) for x in (70, 74, 82) for y in (89,)}
+		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
+		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: True)
+		self.assertEqual(seams, [
+			"interface/worldmap/map/map_world_70x89.ddj", "interface/worldmap/map/map_world_74x89.ddj"
+		])
+
+	# ================
+	# test_seam_tiles_keep_identical_art_and_the_walk_stops_there
+	# ================
+	def test_seam_tiles_keep_identical_art_and_the_walk_stops_there(self):
+		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
+		same = "interface/worldmap/map/map_world_70x89.ddj"
+		empty = {(70, 89), (74, 89)}
+		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
+		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: path != same)
+		# 74x89 is reachable only through 70x89, whose art is the same.
+		self.assertEqual(seams, [])
+
+	# ================
+	# test_seam_tiles_join_the_later_art_south_of_the_v150_box
+	# ================
+	def test_seam_tiles_join_the_later_art_south_of_the_v150_box(self):
+		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
+		land = lambda x, y: (x - (x - 66) % 4, y + (85 - y) % 4) != (150, 85)
+		seams = variant.seam_tiles(box, native_box, [], land, lambda path: True)
+		self.assertEqual(seams, ["interface/worldmap/map/map_world_150x85.ddj"])
+
+	# ================
+	# test_region_available_reads_what_enable_regions_writes
+	# ================
+	def test_region_available_reads_what_enable_regions_writes(self):
+		blank = variant.MFO_SIGNATURE + bytes(variant.MFO_HEADER_BYTES - len(variant.MFO_SIGNATURE) + 8192)
+		marked = variant.enable_regions(blank, [(67, 84)])
+		self.assertTrue(variant.region_available(marked, 67, 84))
+		self.assertFalse(variant.region_available(marked, 68, 84))
+		self.assertFalse(variant.region_available(blank, 67, 84))
+
 
 def cp949(rows):
 	return ("\r\n".join(rows) + "\r\n").encode("cp949")
@@ -565,6 +612,21 @@ class GateLevelCapTests(unittest.TestCase):
 
 	def test_110_lifts_the_cap(self):
 		self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: "110"}), variant.EXPANSION_LEVEL_CAP)
+
+	def test_port_stock_defaults_to_the_official_stock(self):
+		"""#2846: unset or off keeps each store's official goods."""
+		for value in ("", "0", "off", "OFF", "false", " off "):
+			self.assertFalse(variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value}), value)
+		self.assertFalse(variant.port_stock_enabled({}))
+
+	def test_port_stock_on_asks_for_the_ports_own_goods(self):
+		for value in ("1", "on", "ON", "true", " true "):
+			self.assertTrue(variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value}), value)
+
+	def test_a_port_stock_value_nobody_defined_is_refused(self):
+		for value in ("yes", "90", "110"):
+			with self.assertRaises(ValueError, msg=value):
+				variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value})
 
 	def test_a_value_the_server_refuses_is_refused(self):
 		for value in ("on", "true", "1", "100", "yes"):

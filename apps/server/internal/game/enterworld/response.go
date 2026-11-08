@@ -44,6 +44,10 @@ type RefObjRow struct {
 	Name      string                         `json:"name,omitempty"`
 	Level     uint8                          `json:"level,omitempty"`
 	MaxHP     uint32                         `json:"maxHp,omitempty"`
+	// FortressUpgradeRef is the client's default structure variant (7E14E0,
+	// type -1). Nil means no row, which resolves to this reference; zero is
+	// a named target with no character reference, not a fallback.
+	FortressUpgradeRef *uint32 `json:"fortressUpgradeRef,omitempty"`
 	// BodyRadius is the row's RefObjChar BCRadius: the body combat spacing
 	// adds around the action's reach. A monster's instance grades it (the
 	// client applies the grade from the live spawn's rarity byte); a
@@ -251,6 +255,7 @@ type BootstrapResult struct {
 	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
+	SiegeStructUpgrades  []SiegeStructUpgradeRow
 	GameWorldData        []GameWorldDataRow
 	AvatarItems          []EquipItemRow
 	EquipItems           []EquipItemRow
@@ -271,6 +276,9 @@ type BootstrapResult struct {
 	// StorageAutoStack tells the client's storage quick move to prefer a
 	// matching stack (port-only, not native; false is native).
 	StorageAutoStack bool
+	// ChatItemLinks tells the client how many item links one chat line
+	// may carry (port-only, not native: SRO_CHAT_ITEM_LINKS; 0 is native).
+	ChatItemLinks int64
 	// FastDenReturn tells the client's delay bar that the Bandit Den scroll
 	// counts down half its Param1 (port-only, not native; false is native).
 	FastDenReturn bool
@@ -330,6 +338,7 @@ type bootstrapSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -342,6 +351,7 @@ type bootstrapSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -416,6 +426,7 @@ type bootstrapBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -427,6 +438,7 @@ type bootstrapBlobSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -459,6 +471,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -470,6 +483,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -534,6 +548,7 @@ func (r *BootstrapResult) blobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -545,6 +560,7 @@ func (r *BootstrapResult) blobView() any {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
@@ -591,6 +607,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -602,6 +619,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
@@ -661,6 +679,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -673,6 +692,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,

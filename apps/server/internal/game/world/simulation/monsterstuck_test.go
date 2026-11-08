@@ -683,3 +683,54 @@ func TestStuckRelocationNeverEntersACaveFromOutdoors(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMoverStuckAtAnswersAsMover
+
+The stuck probe resolveStuck runs on every step answers Mover(...).Stuck()
+through any slot hint: the real slots, the no-slot sentinels and a stale
+slot that names nothing all give the gid door's answer, before and after
+the latch, and an unknown gid answers no (#2133).
+================
+*/
+func TestMoverStuckAtAnswersAsMover(t *testing.T) {
+	ops, instance, mover, _ := pursuitControlsFixture(t)
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+
+	const staleSlot = 1 << 20
+	check := func(phase string) {
+		t.Helper()
+		ops.Monsters.mu.Lock()
+		state := ops.Monsters.division(monsterTestDivision)
+		slot, _ := state.movers.slotOf(instance.Gid)
+		monsterSlot, _ := state.instances.hotSlotOf(instance.Gid)
+		ops.Monsters.mu.Unlock()
+		want, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if !ok {
+			t.Fatalf("%s: fixture mover is missing", phase)
+		}
+		hints := [][2]uint32{{slot, monsterSlot}, {behaviorNoMoverSlot, behaviorNoMonsterSlot}, {staleSlot, staleSlot}}
+		for _, h := range hints {
+			if got := ops.Monsters.moverStuckAt(monsterTestDivision, instance.Gid, h[0], h[1]); got != want.Stuck() {
+				t.Fatalf("%s: moverStuckAt(slots %d,%d) = %v, Mover says %v", phase, h[0], h[1], got, want.Stuck())
+			}
+		}
+	}
+	check("before the latch")
+
+	origin := mover.Pose
+	for i := 0; i < testStuckFailureLimit; i++ {
+		mover.NoteMoveIssued(origin, false)
+		mover.NoteMoveStopped(origin)
+	}
+	if !mover.Stuck() {
+		t.Fatal("fixture did not latch the stuck event")
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+	check("after the latch")
+
+	if ops.Monsters.moverStuckAt(monsterTestDivision, instance.Gid+1_000_000, behaviorNoMoverSlot, behaviorNoMonsterSlot) {
+		t.Fatal("an unknown gid answered stuck")
+	}
+}

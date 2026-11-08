@@ -65,21 +65,64 @@ func TestResumeBeforeAnUnappliedEntryAnswerDropsItAndItsScene(t *testing.T) {
 ================
 TestResumeAfterTheAppliedEntryAnswerStillResendsItsScene
 
-The client applied the answer (position 1) but not the scene frame
-behind it. That frame belongs to the world the client holds and is
-re-sent, as before #2338.
+The client applied the answer (position 1) and confirmed the scene
+(game-ready) but not the scene frame behind it. That frame belongs
+to the world the client holds and is re-sent, as before #2338.
 ================
 */
 func TestResumeAfterTheAppliedEntryAnswerStillResendsItsScene(t *testing.T) {
 	_, sess, _ := attachedSession(t, false)
+	sess.BeginSceneAdmission()
 	sess.mu.Lock()
 	sess.noteWrittenLocked(Frame{Opcode: OpEnterWorldResult, Payload: []byte{1}}, true)
 	sess.noteWrittenLocked(Frame{Opcode: entrySceneOp, Payload: []byte{0, 0}}, true)
+	sess.mu.Unlock()
+	if !sess.FinishSceneReentry() {
+		t.Fatal("the scene must finish loading to stand confirmed")
+	}
+	sess.mu.Lock()
 	ok := sess.resumeFromLocked(1)
 	queue := dataFrames(sess.queue)
 	sess.mu.Unlock()
 	if !ok || len(queue) != 1 || queue[0].Opcode != entrySceneOp {
 		t.Fatalf("resume from past the answer: ok %v re-sent %v, want the scene frame", ok, queue)
+	}
+}
+
+/*
+================
+TestResumeAfterAnAckedAnswerOfAnUnconfirmedSceneDropsItsScene
+
+The answer was written and the client's stream position covers it,
+but the client never confirmed the scene with game-ready: a large
+blob applies only after its references load, so "acknowledged on
+the stream" is not "applied". The scene behind such an answer is
+superseded exactly like an unapplied answer's (#2363): the resumed
+client asks for a new entry and the snapshot rebuilds the scene.
+Re-sending the scene reached clients that held no world yet as
+world packets before EnterWorld (#2872: the 0x3369 behind the
+answer).
+================
+*/
+func TestResumeAfterAnAckedAnswerOfAnUnconfirmedSceneDropsItsScene(t *testing.T) {
+	_, sess, _ := attachedSession(t, false)
+	sess.BeginSceneAdmission()
+	sess.mu.Lock()
+	sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	sess.noteWrittenLocked(Frame{Opcode: OpEnterWorldResult, Payload: []byte{0xAA}}, true)
+	sess.noteWrittenLocked(Frame{Opcode: entrySceneOp, Payload: []byte{0, 0}}, true)
+	ok := sess.resumeFromLocked(2)
+	queue := dataFrames(sess.queue)
+	pos := sess.streamPos
+	sess.mu.Unlock()
+	if !ok {
+		t.Fatal("resume from 2 refused; the ring covers it")
+	}
+	if len(queue) != 0 {
+		t.Fatalf("re-sent %v, want no scene of an unconfirmed entry", queue)
+	}
+	if pos != 2 {
+		t.Fatalf("stream position after the cut = %d, want the client's 2", pos)
 	}
 }
 

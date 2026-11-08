@@ -3,6 +3,7 @@
   "root": "src/engine/runtime/runtime.ts",
   "bootstrap": "src/bootstrap.ts",
   "modules": {
+    "src/engine/runtime/ui/frame/frame.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/hud/reverse-return-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -23,6 +24,7 @@
     "src/engine/runtime/ui/hud/repair-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/skin-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/global-chat-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/chat-link-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/name-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/specialty-deal-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -195,7 +197,8 @@
     "src/engine/runtime/characters/viewer-queries.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/ui/hud/compact-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/world-map.ts": "src/engine/runtime/ui/ui.ts",
-    "src/engine/runtime/ui/hud/hunting-guide.ts": "src/engine/runtime/ui/hud/world-map.ts"
+    "src/engine/runtime/ui/hud/hunting-guide.ts": "src/engine/runtime/ui/hud/world-map.ts",
+    "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
@@ -243,14 +246,18 @@
     "src/engine/runtime/assets/worker/world/mesh-admission/mesh-admission.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/ambient-occlusion.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
-    "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts"
+    "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/characters/resources/effect-model.ts": "src/engine/runtime/characters/resources/resources.ts",
+    "src/engine/runtime/characters/resources/blizzard-resources.ts": "src/engine/runtime/characters/resources/resources.ts"
   },
   "workers": {
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",
     "src/engine/runtime/assets/worker/entry.ts": "src/engine/runtime/assets/assets.ts"
   },
   "contracts": {
+    "src/engine/runtime/ui/frame/frame-contract.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/assets/worker/packs/internal/pack-contract.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
     "src/engine/runtime/renderer/internal/gpu-contract.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/assets/worker/world/internal/resource-contract.ts": "src/engine/runtime/assets/worker/world/world.ts",

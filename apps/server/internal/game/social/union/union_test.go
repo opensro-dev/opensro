@@ -106,3 +106,56 @@ func TestUnionRemovalAndDissolution(t *testing.T) {
 		t.Fatalf("a union founded by guild 7 is %d (%v)", record.AllianceID, err)
 	}
 }
+
+/*
+================
+TestUnionCrestSetAndRemove
+
+The register lane's contract (#2282): a set lands only on the union
+the guild leads and only over the probed revision; the staff remove
+clears whichever guild stands in the union; and every change saves.
+================
+*/
+func TestUnionCrestSetAndRemove(t *testing.T) {
+	store := &memoryStore{rows: map[int64]domain.AllianceRecord{}}
+	a := New()
+	_ = a.Restore("d", store)
+	_, _ = a.Join("d", 1, 2)
+
+	if _, refusal := a.CrestState("d", 99); refusal != CrestRefusalNoUnion {
+		t.Fatalf("no-union state = %v", refusal)
+	}
+	if _, refusal := a.CrestState("d", 2); refusal != CrestRefusalNotMasterGuild {
+		t.Fatalf("member-guild state = %v", refusal)
+	}
+	if record, refusal := a.CrestState("d", 1); refusal != CrestRefusalNone || record.Crest != 0 {
+		t.Fatalf("leader state = %+v, %v", record, refusal)
+	}
+	if _, refusal, err := a.SetCrest("d", 2, 0, 5); err != nil || refusal != CrestRefusalNotMasterGuild {
+		t.Fatalf("member-guild set = %v, %v", refusal, err)
+	}
+	record, refusal, err := a.SetCrest("d", 1, 0, 5)
+	if err != nil || refusal != CrestRefusalNone || record.Crest != 5 {
+		t.Fatalf("leader set = %+v, %v, %v", record, refusal, err)
+	}
+	if store.rows[record.AllianceID].Crest != 5 {
+		t.Fatal("the set did not save")
+	}
+	// A second set over a stale probe refuses: the crest changed.
+	if _, refusal, err := a.SetCrest("d", 1, 0, 6); err != nil || refusal != CrestRefusalHasCrest {
+		t.Fatalf("stale set = %v, %v", refusal, err)
+	}
+	if record, refusal, err := a.SetCrest("d", 1, 5, 6); err != nil || refusal != CrestRefusalNone || record.Crest != 6 {
+		t.Fatalf("probed set = %+v, %v, %v", record, refusal, err)
+	}
+	// The staff remove clears from any member guild's standing.
+	if record, refusal, err := a.RemoveCrest("d", 2); err != nil || refusal != CrestRefusalNone || record.Crest != 0 {
+		t.Fatalf("staff remove = %+v, %v, %v", record, refusal, err)
+	}
+	if store.rows[record.AllianceID].Crest != 0 {
+		t.Fatal("the remove did not save")
+	}
+	if _, refusal, err := a.RemoveCrest("d", 1); err != nil || refusal != CrestRefusalNoCrest {
+		t.Fatalf("a second remove = %v, %v", refusal, err)
+	}
+}

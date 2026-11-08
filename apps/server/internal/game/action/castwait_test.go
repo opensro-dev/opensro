@@ -193,12 +193,6 @@ still lands exactly as before.
 */
 func TestProjectileCastWaitTickDoesNotCopyTheBag(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
-	// Production deps carry a magic-option catalogue with a source
-	// identity, so the stats memo serves the wait; the combat fixture
-	// leaves the source unset, and a source without an identity is
-	// computed fresh on every read. The fixture caster's rows carry
-	// no options for the empty catalogue to resolve.
-	rt.deps.(*enterworld.Deps).MagicOptions = &emptyMagicOptionSource{}
 	loadCombatBag(c)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
@@ -245,7 +239,6 @@ draining the caster below the snapshot still refuses it on the tick.
 */
 func TestProjectileCastWaitVerdictPricesFromThePreparedSnapshot(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
-	rt.deps.(*enterworld.Deps).MagicOptions = &emptyMagicOptionSource{}
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 	if decision != skillCastAccepted || len(start.Frames) != 1 {

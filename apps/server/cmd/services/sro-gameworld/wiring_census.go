@@ -19,9 +19,11 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/transport"
@@ -89,5 +91,35 @@ func installConnectionJournal(application *gameWorldApplication, ts *transport.S
 	ts.Hub.Census = censusObserver{journal: journal, named: named}
 	log.Infof("connection journal: entered sessions recorded with keyed address hashes (%s, port-only, not native)",
 		connjournal.EnvConnectionJournal)
+	return nil
+}
+
+/*
+================
+installCensusReads
+
+Part 2 of the census (opensro#2717): the staff console's reads over
+the journal - online people, uniques, clusters with evidence, the
+person view and bot signals (internal/platform/census). There is
+nothing to read while the journal is off, so the routes install only
+when installConnectionJournal opened one.
+================
+*/
+func installCensusReads(application *gameWorldApplication, ownedShardID string) error {
+	journal := application.connJournal
+	if journal == nil {
+		return nil
+	}
+	directory := store.DirForShardFromEnv(ownedShardID)
+	service := census.NewService(census.JournalRows(journal), census.ChatLogCounts(directory), time.Now)
+	// The public status answer's people counts read this same
+	// service (opensro-web#78); installPublicAPI runs after us.
+	application.census = service
+	handler, err := census.Handler(service, filepath.Join(directory, "operator-token"))
+	if err != nil {
+		return fmt.Errorf("census reads: %w", err)
+	}
+	application.controlAPI.InstallCensus(census.Path, handler)
+	log.Infof("census: staff reads on %s (people, clusters with evidence, bot signals; port-only, not native)", census.Path)
 	return nil
 }

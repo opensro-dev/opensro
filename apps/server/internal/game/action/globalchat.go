@@ -30,6 +30,10 @@ import (
 // restriction notice has already told them why.
 const globalChatRestricted uint8 = 2
 
+// globalChatTypeIDs is the Global Chatting item (native item use case 4,
+// itemuse_admission.go admittedItemUseFamily).
+var globalChatTypeIDs = [4]int64{3, 3, 3, 5}
+
 /*
 ================
 globalChatUse
@@ -42,6 +46,31 @@ type globalChatUse struct {
 	character *enterworld.Character
 	row       int
 	request   wire.ItemUseRequest
+	// storage holds the line's warehouse links, read before the door
+	// (globalChatStorageLinks); port-only, SRO_CHAT_ITEM_LINKS.
+	storage map[chat.LinkRef]chat.LinkedItem
+}
+
+/*
+================
+Runtime.globalChatStorageLinks
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): a Global Chatting use's
+warehouse links, read before the item-use door. The door holds the store's
+lock and the warehouse read takes it too, so reading inside would hang the
+store (chatitemlinks.go StorageLinks).
+================
+*/
+func (rt *Runtime) globalChatStorageLinks(divisionID string, live *enterworld.Character, request wire.ItemUseRequest, tail []byte) map[chat.LinkRef]chat.LinkedItem {
+	global := enterworld.ItemRef{TypeIDs: globalChatTypeIDs}
+	if rt.ChatItemLinks == nil || request.TypeWord != global.TypeFlags() {
+		return nil
+	}
+	_, refs, ok := decodeGlobalChatMessage(tail, true)
+	if !ok {
+		return nil
+	}
+	return rt.StorageLinks(divisionID, live, refs)
 }
 
 /*
@@ -51,24 +80,35 @@ decodeGlobalChatMessage
 The 0x75BD tail: u16 wide-char count + UTF-16LE text, nothing after. The
 client's edit box holds at most 0x64 characters (CIFWholeChat_OnCreate
 6D2080) and never sends an empty line (client 6D1EE0 answers it locally), so a
-longer, empty or trailing tail can only come from another client.
+longer, empty or trailing tail can only come from another client. With links
+on (port-only, not native: SRO_CHAT_ITEM_LINKS), the chat lane's item-link
+block may follow the text (chat/itemlinks.go).
 ================
 */
-func decodeGlobalChatMessage(tail []byte) (string, bool) {
+func decodeGlobalChatMessage(tail []byte, links bool) (string, []chat.LinkRef, bool) {
 	reader := wire.NewReader(tail)
 	count, err := reader.U16()
 	if err != nil || count == 0 || count > chat.ChatMessageMaxWideChars {
-		return "", false
+		return "", nil, false
 	}
 	text, err := reader.Bytes(int(count) * 2)
-	if err != nil || reader.Done() != nil {
-		return "", false
+	if err != nil {
+		return "", nil, false
+	}
+	var refs []chat.LinkRef
+	if links && reader.Done() != nil {
+		if refs, err = chat.DecodeLinkRefs(reader); err != nil {
+			return "", nil, false
+		}
+	}
+	if reader.Done() != nil {
+		return "", nil, false
 	}
 	units := make([]uint16, count)
 	for i := range units {
 		units[i] = uint16(text[i*2]) | uint16(text[i*2+1])<<8
 	}
-	return string(utf16.Decode(units)), true
+	return string(utf16.Decode(units)), refs, true
 }
 
 /*
@@ -85,7 +125,7 @@ push still excludes the author by character name, the presence identity.
 ================
 */
 func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpResult, after *func()) bool {
-	message, ok := decodeGlobalChatMessage(tail)
+	message, refs, ok := decodeGlobalChatMessage(tail, rt.ChatItemLinks != nil)
 	if !ok {
 		return false
 	}
@@ -94,10 +134,17 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		*result = itemUseFailure(globalChatRestricted)
 		return false
 	}
+	// Port-only, not native: the links are read before the item is spent,
+	// so a link to the last Global Chatting item shows it as it was.
+	var items []chat.LinkedItem
+	if rt.ChatItemLinks != nil {
+		message, items = chat.ResolveLinks(rt.ChatItemLinks, use.division, c, use.storage, message, refs)
+	}
+	text := chat.LabelText(message, items)
 	remaining := rt.consumeItemUseRow(c, use.row)
 	display := enterworld.PartyMemberName(c)
 	line := wire.Frame{Opcode: chat.OpChatBroadcast,
-		Payload: chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, display, message)}
+		Payload: chat.AppendLinkTail(chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, display, message), items)}
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}, line}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
@@ -111,7 +158,7 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 	record := func() {
 		if rt.ModerationLog != nil {
 			rt.ModerationLog.Record(chatlog.Entry{
-				AccountID: c.AccountID, Character: c.Name, Channel: "global", Muted: muted, Text: message,
+				AccountID: c.AccountID, Character: c.Name, Channel: "global", Muted: muted, Text: text,
 			})
 		}
 	}
@@ -123,9 +170,14 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 	*after = func() {
 		record()
 		if rt.PushShardPeerFrames != nil {
-			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
+			// A linked item's references go ahead of the line (BUG-084).
+			var prelude []wire.Frame
+			for _, item := range items {
+				prelude = append(prelude, item.References...)
+			}
+			rt.PushShardPeerFrames(division, name, append(prelude, line))
 		}
-		rt.PublicChat.Record(division, chatfeed.KindGlobal, name, display, message)
+		rt.PublicChat.Record(division, chatfeed.KindGlobal, name, display, text)
 	}
 	return true
 }

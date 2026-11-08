@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
@@ -77,6 +78,9 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// census is the player census over the connection journal
+	// (port-only, #2717); nil while the journal is off.
+	census *census.Service
 	// mutes is the staff chat mute book (#2671): opened before admission,
 	// reaped on a timer.
 	mutes *moderation.Book
@@ -295,6 +299,11 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("chat log: %w", err)
 	}
 	authority.agentAPI.InstallChatLog(chatlog.OperatorPath, chatLogHandler)
+	// Port-only: the staff console's census reads over the journal
+	// (part 2, #2717); installs only while the journal runs.
+	if err := installCensusReads(application, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -333,11 +342,12 @@ func newGameWorldApplication(
 	// Built after gameplay construction: the static item rows name the
 	// alchemy and Magic Pop catalogues it configures.
 	references, err := enterworld.NewBrowserReferences(enterworld.BrowserReferenceSources{
-		Skills:       gameplay.deps.Skills,
-		ItemCommands: authority.textdata.Items,
-		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
-		Monsters:     enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
-		HuntingGuide: gameplay.deps.MonsterState,
+		Skills:              gameplay.deps.Skills,
+		ItemCommands:        authority.textdata.Items,
+		StaticItems:         enterworld.StaticRefItemRows(gameplay.deps),
+		Monsters:            enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
+		FortressUpgradeRefs: gameplay.items.FortressUpgradeReferences(),
+		HuntingGuide:        gameplay.deps.MonsterState,
 		// Empty unless SRO_REVERSE_RETURN_MAP is on (port-only, not native).
 		ReverseMapPoints: gameplay.items.ReverseReturnMapPoints(),
 	})
@@ -396,6 +406,10 @@ func newGameWorldApplication(
 	// one history event per committed grant.
 	gameplay.items.SilkWallet = authority.store
 	gameplay.items.RecordSilkGrant = func(grant action.SilkGrant) { journal.Record(silkGrantEvent(grant)) }
+	// Crest uploads and staff removals (#2282): the crest store over
+	// the marks directory, and one audit event per committed change.
+	gameplay.items.Crests = authority.crests
+	gameplay.items.RecordCrestChange = func(change action.CrestChange) { journal.Record(crestChangeEvent(change)) }
 	// The mute book opens before admission: a muted character's first
 	// bind after a restart must already find its record (#2671).
 	application.mutes, err = openMuteBook(ts.Hub, ownedShard.ID)
@@ -406,7 +420,7 @@ func newGameWorldApplication(
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
-	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard)
+	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard, application.census)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)

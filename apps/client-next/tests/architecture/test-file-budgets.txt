@@ -1,0 +1,14 @@
+# Per-file budget allowances for the client test runner (#2907).
+#
+# The default per-file budget is 60 s (SRO_TEST_FILE_BUDGET_MS). A file
+# listed here gets the cap on its line instead. An entry names debt, it
+# does not excuse it: lower the cap as the file gets faster, delete the
+# line when the file fits the default, and never raise a cap without
+# saying why in the PR. A line naming a file that no longer exists
+# fails the run.
+#
+# tests/architecture/execution.test.mjs computes the execution graph
+# for many fixture trees: 4.5 s on a 16-core workstation, 109.2 s on
+# the two-core CI runner (2026-11-08). The cap leaves headroom over
+# the CI number while that file awaits its split.
+tests/architecture/execution.test.mjs 150

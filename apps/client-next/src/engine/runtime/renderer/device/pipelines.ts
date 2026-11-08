@@ -62,9 +62,10 @@ const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
 // native flat fog return stands.
 
 // Port-only, not native: the second experimental stages vec4 (byte 368 of
-// the environment block; env.stages2 in WGSL) switches the three lighting
+// the environment block; env.stages2 in WGSL) switches the lighting
 // stages of the 2026-10-08 wave: x the HDR intermediate with its tone map,
-// y the sun shadow cascade, z per-pixel character and object lighting.
+// y the sun shadow cascade, z per-pixel character and object lighting,
+// w the ambient occlusion of the previous frame's depth (#2094).
 //
 // HDR - the scene renders into an rgba16float intermediate and the
 // presentation applies a filmic tone map. The 2005 frame is authored
@@ -258,7 +259,33 @@ struct SkyOut {@builtin(position) position:vec4f,@location(0) ray:vec3f}
  let p=array<vec2f,6>(vec2f(-1,1),vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1))[i];
  var o:SkyOut;o.position=vec4f(p,1,1);o.ray=env.forward.xyz+p.x*env.right.xyz+p.y*env.up.xyz;return o;
 }
-@fragment fn fs(o:SkyOut)->@location(0) vec4f {return vec4f(mix(env.horizon.rgb,env.zenith.rgb,clamp(normalize(o.ray).y*env.zenith.w,0,1)),1);}`
+fn skyHash(p:vec2f)->f32{
+ let q=fract(p*vec2f(123.34,456.21));
+ return fract(q.x*q.y*(q.x+q.y)*7857.13);
+}
+fn skyNoise(p:vec2f)->f32{
+ let i=floor(p);
+ let f=fract(p);
+ let u=f*f*(3.0-2.0*f);
+ return mix(mix(skyHash(i),skyHash(i+vec2f(1,0)),u.x),mix(skyHash(i+vec2f(0,1)),skyHash(i+vec2f(1,1)),u.x),u.y);
+}
+@fragment fn fs(o:SkyOut)->@location(0) vec4f{
+ let ray=normalize(o.ray);
+ var colour=mix(env.horizon.rgb,env.zenith.rgb,clamp(ray.y*env.zenith.w,0,1));
+ // Port-only sky detail (stages.w): drifting procedural clouds and the
+ // sun's atmospheric glow, off the native gradient and the authored disc.
+ if(env.stages.w>0.5){
+  if(ray.y>0.01){
+   let at=ray.xz/ray.y*3.0+vec2f(env.skyTime.y*0.02,0.0);
+   let cloud=skyNoise(at)*0.5+skyNoise(at*2.3)*0.3+skyNoise(at*5.1)*0.2;
+   let cover=smoothstep(0.55,0.75,cloud)*smoothstep(0.42,0.12,ray.y);
+   colour=mix(colour,mix(colour*0.9+vec3f(0.1),clamp(env.sun.rgb,vec3f(0),vec3f(1))*0.4+vec3f(0.6),0.5),cover*0.75);
+  }
+  let sunAmount=pow(max(0.0,dot(ray,normalize(env.sunDirection.xyz))),64.0);
+  colour+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*sunAmount*0.35;
+ }
+ return vec4f(colour,1);
+}`
 	} );
 	const preparedSky = created.createRenderPipelineAsync( {
 		layout: "auto",
@@ -322,6 +349,17 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
+// The ambient occlusion factor (experimental, #2094): the blurred
+// half-resolution total of the previous frame's depth, written by
+// ambient-occlusion.ts after the scene. While the stage is off every
+// draw binds a 1x1 white view and the gated read below never samples
+// it, so the native frame is untouched.
+@group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
+fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
+ let size=vec2i(textureDimensions(ambientOcclusionMap));
+ let px=clamp(vec2i(fragCoord*0.5),vec2i(0),size-vec2i(1));
+ return textureLoad(ambientOcclusionMap,px,0).r;
+}
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -457,6 +495,13 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
 		let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  var surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
+ // Port-only sky detail (stages.w): a rim light against the sky; additive
+ // on the lit surface, never on the unlit path (options.y) where it would
+ // double the diffuse.
+ if(env.stages.w>0.5&&material.options.y<0.5){
+  let rim=pow(1.0-abs(dot(normalize(input.normal),env.forward.xyz)),3.0);
+  surfaceLight+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*rim*0.25;
+ }
  // Per-pixel character lighting (experimental): the retail vs_1_1 path
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same
@@ -475,6 +520,18 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   sunShade=mix(1.0,sunShadowFactor(vec3f(input.worldXZ.x,input.worldY,input.worldXZ.y)),${SUN_SHADOW_STRENGTH});
   let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
   surfaceLight=ambientTerm+(surfaceLight-ambientTerm)*sunShade;
+ }
+// Ambient occlusion (experimental, #2094): the previous frame's depth
+// scales the ambient term only, under the cascade's admissions
+// (reflection.z world-space receivers, never water or sky) and never
+// in the mirror capture, whose positions are the reflection's, not
+// the scene's. The vertex-lit path's illumination was saturated at
+// the vertex; the same decomposition the cascade applies stands.
+var occlusion=1.0;
+if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.skin.w==0.0&&waterPass.plane.w<0.5){
+  occlusion=ambientOcclusionFactor(input.position.xy);
+  let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
+  surfaceLight=surfaceLight-ambientTerm+ambientTerm*occlusion;
  }
  // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
  // the resource. Its DIFFUSE is the vertex colour as lit, or unlit the
@@ -557,7 +614,9 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  if(material.skin.y>0.5){
   // Lightmap terrain receives the same cascade: the baked light sum is the
   // diffuse term here, so the shade multiplies it ahead of the fog blend.
-  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade;
+  // The occlusion factor multiplies it whole for the same reason: the
+  // baked sum carries no separable ambient term (#2094).
+  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
  if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}

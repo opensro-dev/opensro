@@ -53,11 +53,13 @@ func halloweenTestItems() staticItemSource {
 		RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD", TypeIDs: [4]int64{3, 1, 13, 0},
 		NameStrID:    "SN_ITEM_ETC_E050526_M_EGHEAD",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
+		CanDrop:      true, CanDropOnDeath: true,
 	}
 	items["ITEM_ETC_E071030_W_EGHEAD"] = &enterworld.ItemRef{
 		RefObjID: 23459, Codename: "ITEM_ETC_E071030_W_EGHEAD", TypeIDs: [4]int64{3, 1, 13, 0},
 		NameStrID:    "SN_ITEM_ETC_E050526_W_EGHEAD",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
+		CanDrop:      true, CanDropOnDeath: true,
 	}
 	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"] = etc(3911, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 50)
 	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A"] = etc(3912, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 50)

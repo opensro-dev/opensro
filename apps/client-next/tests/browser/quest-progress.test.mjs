@@ -16,7 +16,7 @@ test('Graesp progress crosses production wire, closed-journal UI and GPU banner'
    (await import('/src/bootstrap.ts')).runtime.dispose();
    const {createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createUi}=await import('/src/engine/runtime/ui/ui.ts'),{createRenderer}=await import('/src/engine/runtime/renderer/renderer.ts'),{createGameplay}=await import('/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts');
    const canvas=document.createElement('canvas');document.body.replaceChildren(canvas);const assets=createAssets(),renderer=createRenderer(canvas),game=createGameplay(()=>{});let scene;
-   const ui=createUi(assets,()=>{},s=>{scene=s;renderer.setUi(s);},(id,image)=>renderer.setUiTexture(id,image),location.origin,'http://fixture.invalid');
+   const ui=createUi({assets,commands:()=>{},publish:s=>{scene=s;renderer.setUi(s);},texture:(id,image)=>renderer.setUiTexture(id,image),base:location.origin,apiBase:'http://fixture.invalid'});
    game.bootstrap({character:{activeQuests:[]}});
    const state={session:{phase:'world',revision:1,character:'Fixture'},gameplay:game.take(),entities:[],width:1200,height:900,worldReady:true};
    function receive(count){const hex=fixture.frames[count].payloadHex;game.receive({opcode:0x31ed,payload:Uint8Array.from(hex.match(/../g),b=>parseInt(b,16))},1000);state.gameplay=game.take();}

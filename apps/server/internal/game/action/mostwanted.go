@@ -15,17 +15,19 @@ memory: a restart forgets the window, never the streak). There is no level
 window and no distinct-victims rule (the advisor's answers). The streak is
 saved on the character (domain.MostWanted, store schema 24).
 
-Reset. Death of any kind clears the streak. The wanted level also lapses
-seven days after it was last raised (domain.MostWanted.ExpiresAtMs, store
-schema 35): a counted kill that raises the level restamps the lapse, and
-one at the cap renews it too (a capped streak can gain no level, so
-without the renewal its most active holder would lapse first - an
-inference, recorded here). Taking the job suit off no longer clears
-anything (#1849): the streak waits, and only the bonuses below shelve
-while the suit is off, because mostWantedWrites and mostWantedSpeedFactor
-already gate on the dressed job. The lapse is enforced where a door
-holds the record: the next counted kill, the victim's death, and the
-tick sweep for tracked holders (mostwantedstate.go).
+Reset. Death of any kind clears the streak. The wanted level also decays
+(owner decision 2026-11-07, #2721): every counted kill restamps the next
+decay step one day out (domain.MostWanted.NextDecayAtMs, store schema
+40), and each day that passes without a counted kill drops the level by
+one, down to none. The seven-day lapse of schema 35 is retired; its
+stamp stays in the record unread so old saves still decode. Taking the
+job suit off no longer clears anything (#1849): the streak waits, and
+only the bonuses below shelve while the suit is off, because
+mostWantedWrites and mostWantedSpeedFactor already gate on the dressed
+job. The decay is judged where a door holds the record: the next
+counted kill, the victim's death, and the tick sweep for tracked
+holders (mostwantedstate.go). The server owns the decay; the client
+only displays the countdown it is sent (mostwantedstate.go).
 
 Bonuses, per wanted level: +1 STR, +1 INT and +1% movement speed on foot;
 damage dealt +1% and taken -1% from level 3, 2% from 5, 3% at 10, while
@@ -95,9 +97,9 @@ const (
 	mostWantedKillsPerLevel = 5
 	// mostWantedMaxLevel caps the wanted level.
 	mostWantedMaxLevel = 10
-	// mostWantedLapseMs is how long a raised wanted level lasts: seven
-	// days from the kill that raised it (domain.MostWanted.ExpiresAtMs).
-	mostWantedLapseMs = 7 * 24 * 60 * 60_000
+	// mostWantedDecayMs is how long one counted kill holds the wanted
+	// level: one day from that kill (domain.MostWanted.NextDecayAtMs).
+	mostWantedDecayMs = 24 * 60 * 60_000
 	// mostWantedPairLimit and mostWantedPairWindowMs: one killer counts one
 	// victim at most this often in the window.
 	mostWantedPairLimit    = 3
@@ -192,15 +194,103 @@ func mostWantedLevel(c *enterworld.Character) int64 {
 
 /*
 ================
-mostWantedExpired
+mostWantedDecayDrops
 
-Whether a streak's wanted level has lapsed by nowMs. A streak saved
-before the lapse existed carries no stamp and never lapses until its
-next level stamps one.
+How many decay steps a wanted record has come due by nowMs: one per
+day since its stamp, the first at the stamp itself. An unstamped
+record (saved before the decay existed) is due none: its first
+judging door stamps a fresh day instead, so no saved streak ever
+drops a level early.
 ================
 */
-func mostWantedExpired(c *enterworld.Character, nowMs int64) bool {
-	return c != nil && c.MostWanted != nil && c.MostWanted.ExpiresAtMs > 0 && nowMs >= c.MostWanted.ExpiresAtMs
+func mostWantedDecayDrops(w *domain.MostWanted, nowMs int64) int64 {
+	if w == nil {
+		return 0
+	}
+	return mostWantedDropsAt(w.NextDecayAtMs, nowMs)
+}
+
+/*
+================
+mostWantedDropsAt
+
+The one decay count: how many steps have come due by nowMs against a
+next-decay stamp (0 = unstamped, due none).
+================
+*/
+func mostWantedDropsAt(nextDecayAtMs, nowMs int64) int64 {
+	if nextDecayAtMs <= 0 || nowMs < nextDecayAtMs {
+		return 0
+	}
+	return 1 + (nowMs-nextDecayAtMs)/mostWantedDecayMs
+}
+
+/*
+================
+mostWantedDecayedLevel
+
+The wanted level a streak of the given size holds at nowMs, after the
+decay steps due by then have taken their levels. A victim's bounty is
+judged by this: a level the decay has already taken pays nothing.
+================
+*/
+func mostWantedDecayedLevel(streak, nextDecayAtMs, nowMs int64) int64 {
+	streak -= mostWantedDropsAt(nextDecayAtMs, nowMs) * mostWantedKillsPerLevel
+	if streak < mostWantedKillsPerLevel {
+		return 0
+	}
+	return min(streak/mostWantedKillsPerLevel, mostWantedMaxLevel)
+}
+
+/*
+================
+mostWantedLevelAt
+
+A character's wanted level at nowMs, its decay judged read-only.
+================
+*/
+func mostWantedLevelAt(c *enterworld.Character, nowMs int64) int64 {
+	if c == nil || c.MostWanted == nil {
+		return 0
+	}
+	return mostWantedDecayedLevel(c.MostWanted.Streak, c.MostWanted.NextDecayAtMs, nowMs)
+}
+
+/*
+================
+Runtime.decayMostWantedInDoor
+
+Judge a streak's decay inside its holder's door: apply every step due
+by now. A streak that keeps a level holds its cadence (the stamp
+advances by the steps taken, never to now, so a holder judged late
+loses exactly the days it missed); one the steps take to none clears
+through the cleared-streak path. Returns the refresh and state frames
+a drop owes, empty when nothing was due; the caller holds c's door.
+================
+*/
+func (rt *Runtime) decayMostWantedInDoor(division string, c *enterworld.Character, now int64) (private, public []wire.Frame) {
+	drops := mostWantedDecayDrops(c.MostWanted, now)
+	if drops == 0 {
+		return nil, nil
+	}
+	before := mostWantedLevel(c)
+	streak := c.MostWanted.Streak - drops*mostWantedKillsPerLevel
+	if streak < mostWantedKillsPerLevel {
+		return rt.clearMostWantedInDoor(division, c, "decayed", now)
+	}
+	c.MostWanted.Streak = streak
+	c.MostWanted.NextDecayAtMs += drops * mostWantedDecayMs
+	log.WithFields(log.Fields{"division": division, "character": c.Name, "drops": drops,
+		"level": mostWantedLevel(c)}).Info("most wanted: level decayed")
+	rt.mostWantedHolders.note(petOwnerKey{division: division, name: c.Name}, c.MostWanted.NextDecayAtMs)
+	private = []wire.Frame{rt.mostWantedStateFrame(c, now)}
+	if mostWantedLevel(c) == before {
+		// The drop ate only the surplus past the cap: stats and speed
+		// derive from the level, so only the countdown moved.
+		return private, nil
+	}
+	stats, speed := rt.mostWantedRefresh(division, c, now)
+	return append(stats, private...), speed
 }
 
 /*
@@ -382,13 +472,13 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	if !rt.MostWanted || killer == nil || victim == nil {
 		return nil, nil, nil, nil
 	}
-	// A lapsed level pays nothing. The victim's record is already
-	// cleared by its death, so the lapse is judged from the snapshot
-	// withVictim took (the live record is checked too, for doors that
-	// did not go through a death first).
-	victimWanted := kill.victimWanted
-	if kill.victimWantedLapse > 0 && now >= kill.victimWantedLapse || mostWantedExpired(victim, now) {
-		victimWanted = 0
+	// A level the decay has taken pays nothing. The victim's record is
+	// already cleared by its death, so the decay is judged from the
+	// snapshot withVictim took (the live record is checked too, for
+	// doors that did not go through a death first).
+	victimWanted := mostWantedDecayedLevel(kill.victimWantedStreak, kill.victimWantedStamp, now)
+	if victim != nil && victim.MostWanted != nil {
+		victimWanted = mostWantedLevelAt(victim, now)
 	}
 	if victimWanted > 0 && kill.mostWantedStrangers {
 		notices = rt.mostWantedBountyNotice(division, killer, victim, victimWanted, now)
@@ -407,10 +497,10 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 		!rt.countMostWantedPair(division, killer.Name, victim.Name, now) {
 		return actor, nil, owed, notices
 	}
-	// A lapsed streak restarts from this kill: the clear's refresh and
-	// state frames ride this kill's, then the count below is the first.
-	if mostWantedExpired(killer, now) {
-		private, open := rt.clearMostWantedInDoor(division, killer, "lapsed", now)
+	// The killer's own decay is judged first: a streak it took to none
+	// restarts from this kill, and one it only lowered counts on the
+	// lowered streak. The clear's or drop's frames ride this kill's.
+	if private, open := rt.decayMostWantedInDoor(division, killer, now); private != nil {
 		actor, public = append(actor, private...), append(public, open...)
 	}
 	before := mostWantedLevel(killer)
@@ -418,24 +508,21 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 		killer.MostWanted = &domain.MostWanted{}
 	}
 	killer.MostWanted.Streak += rt.mostWantedStreakStep()
+	// Every counted kill holds the level another day (#2721): the next
+	// decay step is one day out from this kill, raised level or not.
+	killer.MostWanted.NextDecayAtMs = now + mostWantedDecayMs
 	log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
 	actor = append(actor, rt.mostWantedStreakNotice(killer)...)
 	if level := mostWantedLevel(killer); level != before {
-		// A raised level restamps the seven-day lapse (#1849).
-		killer.MostWanted.ExpiresAtMs = now + mostWantedLapseMs
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
 		notices = append(notices, rt.mostWantedLevelNotice(division, killer, level, now)...)
-	} else if before >= mostWantedMaxLevel {
-		// At the cap no level can rise; a counted kill renews the lapse
-		// instead (see the file banner's inference).
-		killer.MostWanted.ExpiresAtMs = now + mostWantedLapseMs
 	}
 	// The holder's wanted state follows every counted kill (progress
 	// moved), for the buff-board row (mostwantedstate.go).
-	actor = append(actor, rt.mostWantedStateFrame(killer))
-	rt.mostWantedHolders.note(petOwnerKey{division: division, name: killer.Name}, killer.MostWanted.ExpiresAtMs)
+	actor = append(actor, rt.mostWantedStateFrame(killer, now))
+	rt.mostWantedHolders.note(petOwnerKey{division: division, name: killer.Name}, killer.MostWanted.NextDecayAtMs)
 	return actor, public, owed, notices
 }
 
@@ -497,10 +584,10 @@ func (rt *Runtime) clearMostWantedInDoor(division string, c *enterworld.Characte
 	c.MostWanted = nil
 	rt.mostWantedHolders.forget(petOwnerKey{division: division, name: c.Name})
 	if level == 0 {
-		return []wire.Frame{rt.mostWantedStateFrame(c)}, nil
+		return []wire.Frame{rt.mostWantedStateFrame(c, now)}, nil
 	}
 	private, public = rt.mostWantedRefresh(division, c, now)
-	return append(private, rt.mostWantedStateFrame(c)), public
+	return append(private, rt.mostWantedStateFrame(c, now)), public
 }
 
 /*

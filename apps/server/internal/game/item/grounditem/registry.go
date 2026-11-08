@@ -90,6 +90,9 @@ type Item struct {
 	Heading    uint16
 	// OwnerJID is the temporary native pickup reservation. Zero is public.
 	OwnerJID uint32
+	// ForgeBound marks a GM-forged item on the ground plane (port only,
+	// issue #1980): pickup restores the mark, so a bound drop stays bound.
+	ForgeBound bool
 	// DroppedBy records the character that dropped or earned it.
 	DroppedBy string
 	// DroppedAt is when the drop hit the ground; the fixture-policy expiry

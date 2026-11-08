@@ -11,8 +11,9 @@ Dispose cancels any requests still owned by this module.
 ===========================================================================
 */
 
+import type { HudData } from "../frame/frame-contract";
 import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gameplay/portal";
-import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
+import { decodeTooltipMasteries } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { tradeGoldBases } from "@/engine/foundation/gameplay/specialty-deal";
@@ -23,15 +24,7 @@ import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matc
 import { createTooltipSkillDecoder } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import { decodeActionSlots, type ActionSlot } from "@/engine/foundation/ui/action-layout";
-import {
-	decodeMapLabels,
-	decodeMapIcons,
-	decodeWorldMapLayout,
-	nativeLayout,
-	type WorldMapLayout,
-	type MapLabel,
-	type MapIcon
-} from "@/engine/foundation/ui/world-map";
+import { decodeMapLabels, decodeMapIcons, decodeWorldMapLayout, nativeLayout } from "@/engine/foundation/ui/world-map";
 import {
 	creationNameRules,
 	NAME_FILTER_CHAT,
@@ -43,13 +36,26 @@ import { equipmentSocket } from "@/engine/foundation/ui/inventory-layout";
 import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/message-tips";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
-import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
-import { decodeFortressMap, type FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
+import { decodeCosReferences } from "@/engine/foundation/ui/cos-command";
+import { decodeFortressMap } from "@/engine/foundation/gameplay/fortress-map";
 import { decodeCommandTable } from "@/engine/foundation/ui/debug-commands";
-import { decodeCameraDataRows, type CameraDataRow } from "@/engine/foundation/ui/camera-waypoints";
+import { decodeCameraDataRows } from "@/engine/foundation/ui/camera-waypoints";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
 const TOOLTIP_ROWS_PER_STEP = 1024;
+/*
+================
+catalogueByBytes
+
+The finished catalogue for one admitted skillData buffer, kept while the
+buffer lives. The decode is a pure function of the bytes, so a second HUD
+admitting the same buffer object (the test fixture serves one buffer per
+path per process) reuses it instead of decoding 27,835 rows again. A real
+client admits each buffer once, so nothing changes there; the entry dies
+with its buffer.
+================
+*/
+const catalogueByBytes = new WeakMap<ArrayBuffer, TooltipSkillCatalog>();
 // Authored button state images: normal, focus, press, disable.
 const BUTTON_STATE_SUFFIXES = [ "", "_focus", "_press", "_disable" ] as const;
 /*
@@ -63,67 +69,6 @@ type Load = { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "read
 	kind: "failed";
 	message: string;
 } | { kind: "disposed"; };
-/*
-================
-HudData
-================
-*/
-interface HudData {
-	readonly withdrawalPage: AuthoredLayout;
-	readonly stallPricePage: AuthoredLayout;
-	readonly stallTextPage: AuthoredLayout;
-	readonly cosReferences: ReadonlyMap<number, CosReference>;
-	// The battle aide's fortress map; null in a build that publishes none.
-	readonly fortressMap: FortressMapCatalog | null;
-	readonly portals: PortalCatalog;
-	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
-	readonly masteryCosts: Readonly<Record<number, number>>;
-	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
-	// levelgold.txt column 2 by level: the trade scale's basis (649050).
-	readonly tradeGoldBases: Readonly<Record<number, number>>;
-	readonly mallNotify: MallNotify;
-	// config\command.txt: the debug console's command names by id (68D9C0).
-	readonly commandTable: ReadonlyMap<string, number>;
-	// config\cameradata.txt rows: the /cw* waypoint store's keyframes (#1716).
-	readonly cameraDataRows: readonly CameraDataRow[];
-	readonly jobExpThresholds: JobExpThresholds;
-	readonly extended: readonly AuthoredLayout[];
-	readonly countries: Readonly<Record<number, number>>;
-	readonly tooltipSkills: TooltipSkillCatalog;
-	readonly mapLayout: WorldMapLayout;
-	readonly mapIcons: readonly MapIcon[];
-	readonly actions: readonly ActionSlot[];
-	readonly mapLabels: readonly MapLabel[];
-	readonly expandedMapIcons: readonly MapIcon[];
-	readonly expandedMapLabels: readonly MapLabel[];
-	readonly nameRules: NameRules;
-	// The same filter's guild-name column (790A30).
-	readonly guildNameRules: NameRules;
-	// The same filter's chat column (790C70): what a composed chat line
-	// may not contain (545EF0's local refusal).
-	readonly chatRules: NameRules;
-	readonly skillUi: SkillUi;
-	readonly popupArt: {
-		readonly tab: string;
-		readonly blocked: string;
-		readonly portrait: string;
-		readonly sockets: Readonly<Record<number, string>>;
-	};
-	readonly warmPaths: readonly string[];
-	readonly windows: Readonly<Record<string, AuthoredLayout>>;
-	readonly tips: readonly MessageTip[];
-	readonly targets: Readonly<Record<string, AuthoredLayout>>;
-	readonly root: AuthoredLayout;
-	readonly player: AuthoredLayout;
-	readonly bar: AuthoredLayout;
-	readonly minimap: AuthoredLayout;
-	readonly map: AuthoredLayout;
-	readonly chat: AuthoredLayout;
-	readonly status: AuthoredLayout;
-	readonly regionCodes: Readonly<Record<string, string>>;
-	readonly zones: Readonly<Record<string, string>>;
-	readonly strings: Readonly<Record<string, string>>;
-}
 // Polled requests are children of the existing UI/asset lifetime. Layout and text
 // share admission and cancellation; neither can outlive its HUD.
 /*
@@ -325,8 +270,10 @@ export function createHudResources(
 	let goldPrices: Readonly<Record<number, number>> = {};
 	let tradeBases: Readonly<Record<number, number>> = {};
 	let jobThresholds: JobExpThresholds = {};
-	// The skill catalogue's decode while its state is "decoding".
+	// The skill catalogue's decode while its state is "decoding", and the
+	// buffer it is decoding (the memo key once it finishes).
 	let skillDecoder: ReturnType<typeof createTooltipSkillDecoder> | null = null;
+	let skillBytes: ArrayBuffer | null = null;
 	const warm = new Set<string>();
 	// Resolved button families, valid for one admitted HUD data.
 	const families: {
@@ -352,13 +299,16 @@ export function createHudResources(
 					try {
 						const value = skillDecoder!.step( TOOLTIP_ROWS_PER_STEP );
 						if ( value ) {
+							if ( skillBytes ) catalogueByBytes.set( skillBytes, value );
 							states[i] = { kind: "ready", value };
 							skillDecoder = null;
+							skillBytes = null;
 							changed = true;
 						}
 					} catch ( e ) {
 						states[i] = { kind: "failed", message: String( e ) };
 						skillDecoder = null;
+						skillBytes = null;
 						changed = true;
 					}
 				} else if ( state.kind === "loading" ) {
@@ -425,9 +375,15 @@ export function createHudResources(
 								jobThresholds = jobExpThresholds( raw );
 							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
 							else if ( i === layouts.length + 8 ) {
-								skillDecoder = createTooltipSkillDecoder( raw );
-								states[i] = { kind: "decoding" };
-								continue;
+								const memoised = catalogueByBytes.get( r.buffer );
+								if ( memoised ) {
+									value = memoised;
+								} else {
+									skillDecoder = createTooltipSkillDecoder( raw );
+									skillBytes = r.buffer;
+									states[i] = { kind: "decoding" };
+									continue;
+								}
 							} else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
 							else if ( i === layouts.length + 5 ) value = raw;
 							else if ( i === layouts.length + 4 ) {

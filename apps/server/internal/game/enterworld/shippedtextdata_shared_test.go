@@ -94,14 +94,17 @@ sharedShippedSkills
 sharedShippedSkills returns the package-wide skilldata loader from the
 same process-level path contract used by GameWorld.
 The projection resolves once per process: callers read it inside per-row
-loops, and each resolution re-identifies the artifact on disk.
-==================
+loops, and each resolution re-identifies the artifact on disk. The
+shipped datum is the native table, pinned at construction: a shell with
+the tomb switch exported cannot rewrite the shared rows (#2850),
+whichever test loads the singleton first.
+================
 */
 func sharedShippedSkills(t *testing.T) *TextdataSkills {
 	t.Helper()
 	dir := gamedatatest.TextdataDir(t)
 	sharedShippedSkillsOnce.Do(func() {
-		sharedShippedSkillsInst = NewTextdataSkills(dir)
+		sharedShippedSkillsInst = NewTextdataSkillsWithTomb(dir, false)
 	})
 	return sharedShippedSkillsInst
 }

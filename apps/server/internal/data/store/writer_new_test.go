@@ -8,6 +8,8 @@ import (
 )
 
 func TestWriteNewFileAtomicPublishesOnceWithoutClobber(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "credential")
 	if err := WriteNewFileAtomic(path, []byte("first\n")); err != nil {
 		t.Fatalf("WriteNewFileAtomic(first): %v", err)

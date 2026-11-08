@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/townarea"
+	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"os"
 )
@@ -44,12 +45,15 @@ import (
 var unlistedSettings = map[string]string{
 	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	action.EnvGMItemForge:               "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:            "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
+	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
@@ -87,7 +91,8 @@ var unlistedSettings = map[string]string{
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
 	// Staff telemetry (#1691): name-free seal counts by degree and tier
 	// for the staff console; players never meet it.
-	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
+	economy.EnvSealCensus:            "staff seal census telemetry, not a rule players meet",
+	connjournal.EnvConnectionJournal: "the staff connection census, not a rule players meet",
 	// Staff telemetry (#2538): the Sun counting cycle measures supply
 	// before any Sun knob; players never meet it.
 	action.EnvSunDropCount: "staff Sun drop counting for one measurement cycle, not a rule players meet",
@@ -118,7 +123,10 @@ func publicRules() publicstats.RulesResponse {
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
+	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
+	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -162,10 +170,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The world is the v1.150 map; Alexandria is not part of it.",
 				Now:    "The Alexandria city is open, with its gates, ferry and townspeople.",
 				Why:    "Optional Alexandria expansion, imported from a later client."},
+			{Flag: commerce.EnvAlexandriaHideD11Goods, On: hideAlexandriaD11,
+				Native: "Alexandria's smith, armourer and accessory shops sell degree-11 gear and alchemy, as the original game's shops did.",
+				Now:    "Degree-11 goods are hidden from Alexandria's shops; degree-11 gear comes from monster drops only.",
+				Why:    "An operator choice for shards that want degree-11 gear earned by grinding, not bought."},
 			{Flag: companion.EnvAttackPetExpansion, On: companion.AttackPetExpansionEnabled(),
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
+				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
+				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
+				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -267,10 +283,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
 				Why:    "Owner-approved beta pacing for pets."},
+			{Flag: chat.EnvChatItemLinks, On: chat.ItemLinksFromEnv(),
+				Native: "Chat lines are text only.",
+				Now:    "Alt+click an item while typing to link it in the line; readers hover the link for the item's tooltip.",
+				Why:    "Owner decision 2026-11-07: players show items in chat."},
 			{Flag: action.EnvStorageAutoStack, On: action.StorageAutoStackFromEnv(),
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
+				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
+				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
+				Why:    "Owner decision 2026-11-07 (#2769): players found the expansion quests not worth half a page."},
 			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
 				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
 				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
@@ -292,6 +316,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
 				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
+			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
+				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",
+				Now:    "Jangan's potion merchant also sells X-Large HP and MP potions at Hotan's price of 900 gold.",
+				Why:    "The owner's convenience set: the endgame potions in the starting town."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",

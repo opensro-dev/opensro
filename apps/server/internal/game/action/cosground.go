@@ -113,6 +113,12 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			return false
 		}
 		if q.MovementType == wire.MoveTypeCosDrop {
+			// Port-only (forge.go, issue #1980): a bound forged item
+			// never leaves for the ground, from a pet's bag either.
+			if row, present := inv.At(q.SourceSlot); present && row.ForgeBound {
+				refusalCause = "forge-bound"
+				return false
+			}
 			dropped, fault := inv.Drop(q.SourceSlot)
 			if fault != nil {
 				return false
@@ -133,6 +139,12 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		}
 		if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
 			refusalCause = "reserved"
+			return false
+		}
+		// Port-only (forge.go, issue #1980): a pet may fetch a bound
+		// forged drop only for the character that forged it.
+		if item.ForgeBound && !strings.EqualFold(item.DroppedBy, c.Name) {
+			refusalCause = "forge-bound"
 			return false
 		}
 		item.Summon.RefreshRentalTimes(now.Unix())
@@ -173,7 +185,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if count == 0 {
 				count = 1
 			}
-			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon)}, rt.maxStackFor(item.TypeFlags, item.Codename))
+			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
 				code := fault.Code
 				if code == wire.ErrCodeStorageFull {
@@ -279,6 +291,12 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 	}
 	item, found := rt.characterGround(division, c, q.GroundGID)
 	if !found || item.TradeOwner != "" {
+		return OpResult{}, false
+	}
+	// Port-only (forge.go, issue #1980): a bound forged drop never takes
+	// the shared path - no rotation may hand it to another member. The
+	// owner's own pet path below applies the bound rule.
+	if item.ForgeBound {
 		return OpResult{}, false
 	}
 	if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != p.sharedOwner {

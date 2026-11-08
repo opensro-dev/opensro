@@ -18,11 +18,17 @@ import { petOwnerStacks, petSkillIcon, petSkillIconUV } from "./pet-skill-icons"
 import { PET_DESIGN } from "./pet-design-data";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
-import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
+import { paramJobFraction, paramJobHelpText, paramJobRemainingMs } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
 import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
 export const buffTimerRoot = "/assets/images/Media_extracted/icon/stateodd/";
+// 6E6E00 kinds 7/8: the Academy buff bar's full scale is the saved
+// buff's 24 h window (0x5265C00 ms), and the slot-7 pass is offered
+// once an hour of the window has accumulated (6E2840).
+export const TC_BUFF_WINDOW_MS = 0x5265c00;
+const ACADEMY_BUFF_WINDOW_MINUTES = 1440;
+const TC_BUFF_PASS_AFTER_MINUTES = 60;
 
 /*
 ================
@@ -41,6 +47,7 @@ export function buffBoard(
 		| "cosWindows"
 		| "paramJobs"
 		| "countJobs"
+		| "academy"
 		| "vitals"
 		| "abnormalRecords"
 		| "petTailwind"
@@ -55,8 +62,7 @@ export function buffBoard(
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
 	showPetTraining = true,
-	copy: ( key: string ) => string = key => key,
-	showMostWanted = false
+	copy: ( key: string ) => string = key => key
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -121,7 +127,9 @@ export function buffBoard(
 		}
 	}
 	// 6E6E00 kind 4: an EXP/SP scroll job, one bar counted down from the
-	// remaining seconds against the internal item's duration.
+	// remaining seconds against the internal item's duration. The hover
+	// help (6E2C90 kind 4) reads the item's name, its total duration and
+	// the remained period; paramJobHelpText composes it from the text keys.
 	for ( const job of game.paramJobs ?? [] ) {
 		const path = iconPath( job.reference.icon );
 		if ( path ) {
@@ -132,7 +140,12 @@ export function buffBoard(
 			primary.push( {
 				helpText: job.reference.description ?
 					`${job.reference.name}\n${job.reference.description}\n${left}s remaining` :
-					job.reference.name,
+					paramJobHelpText(
+						job.reference.name ?? "",
+						job.reference.durationSec,
+						paramJobRemainingMs( job, timeMs ),
+						copy
+					),
 				id: "param-job:" + job.itemRefObjId,
 				path,
 				label: job.reference.name ?? "",
@@ -159,6 +172,50 @@ export function buffBoard(
 				fraction: countJobFraction( rows[0]!, reference.periodSec, timeMs )
 			} );
 		}
+	}
+	// 6E6E00 kinds 7/8: the Academy cumulated buffs - the saved row
+	// (slot 7) and one row per received buff (slot 8), each counted
+	// down from its receipt against the 24 h window.
+	const academy = game.academy;
+	if ( academy?.savedBuff ) {
+		const remaining = tcBuffRemainingMs( academy.savedBuff, timeMs );
+		if ( remaining > 0 ) {
+			primary.push( {
+				helpText: tcBuffHelpText(
+					"UIIT_CTL_TC_SAVE_BUFF",
+					"UIIT_CTL_TC_SAVE_BUFF_POINT",
+					remaining,
+					academy.savedBuff.value,
+					undefined,
+					copy
+				),
+				id: "academy-buff-saved",
+				path: iconPath( "skill\\etc\\tc_reserve_buff.ddj" ) ?? "",
+				label: copy( "UIIT_CTL_TC_SAVE_BUFF" ),
+				fraction: Math.min( 1, remaining / TC_BUFF_WINDOW_MS ),
+				...(ACADEMY_BUFF_WINDOW_MINUTES - academy.savedBuff.minutes >= TC_BUFF_PASS_AFTER_MINUTES ?
+					{ passBuff: true } :
+					{})
+			} );
+		}
+	}
+	for ( const row of academy?.receivedBuffs ?? [] ) {
+		const remaining = tcBuffRemainingMs( row, timeMs );
+		if ( remaining <= 0 ) continue;
+		primary.push( {
+			helpText: tcBuffHelpText(
+				"UIIT_CTL_TC_RESERVE_BUFF",
+				"UIIT_CTL_TC_RESERVE_BUFF_POINT",
+				remaining,
+				row.value,
+				academy?.members?.find( m => m.id === row.memberId )?.name,
+				copy
+			),
+			id: "academy-buff-received:" + row.memberId,
+			path: iconPath( "skill\\etc\\tc_amends_buff.ddj" ) ?? "",
+			label: copy( "UIIT_CTL_TC_RESERVE_BUFF" ),
+			fraction: Math.min( 1, remaining / TC_BUFF_WINDOW_MS )
+		} );
 	}
 	for ( const row of petOwnerStacks( ownerPet ) ) {
 		primary.push( {
@@ -217,10 +274,13 @@ export function buffBoard(
 			} );
 		}
 	}
-	// Port-only (#1849): the streak holder's own wanted row, opted into
-	// in the Experimental window. It wears the dressed job's icon (the
-	// row waits while the suit is off, as its bonuses do).
-	const wantedRow = showMostWanted ? mostWantedRow( game.mostWanted, timeMs ) : null;
+	// Port-only (#1849): the streak holder's own wanted row, shown
+	// whenever the shard sends the 0x3FBA state (owner 2026-11-06,
+	// #2721: the server's SRO_MOST_WANTED flag is the only switch, with
+	// no client opt-in; no state leaves the native board). It wears the
+	// dressed job's icon (the row waits while the suit is off, as its
+	// bonuses do).
+	const wantedRow = mostWantedRow( game.mostWanted, timeMs );
 	if ( wantedRow ) {
 		primary.push( {
 			id: "most-wanted",
@@ -255,6 +315,9 @@ Entry
 interface Entry {
 	suppressed?: boolean;
 	cancel?: { mode: "direct" | "confirm"; skillId: number; token: number; instance: number; };
+	// The saved Academy buff past its first hour: clicking the slot
+	// asks the pass question (6E2840) instead of cancelling a buff.
+	passBuff?: boolean;
 	departure?: { frame: number; alpha: number; };
 	helpText?: string;
 	helpSource?: import("@/engine/contracts/ui").UiHelpSource;
@@ -317,4 +380,45 @@ export function abnormalBuffIcons( mask: number ) {
 		if ( mask & (2 ** bit) ) rows.push( { id: "abnormal:" + bit, ...abnormalIcon( bit ) } );
 	}
 	return rows;
+}
+
+/*
+================
+tcBuffRemainingMs
+
+770E70 / 770970 hold a show state's minutes from its receipt
+instant; the slot counts minutes*60000+1 ms down from there.
+================
+*/
+function tcBuffRemainingMs( buff: { minutes: number; receivedAtMs: number; }, timeMs: number ): number {
+	return Math.max( 0, buff.minutes * 60000 + 1 - (timeMs - buff.receivedAtMs) );
+}
+
+/*
+================
+tcBuffHelpText
+
+6E2C90 kinds 7/8: the title, a blank line, the remain-time line and
+the point line; a received row names its sender in between.
+================
+*/
+function tcBuffHelpText(
+	titleKey: string,
+	pointKey: string,
+	remainingMs: number,
+	value: number,
+	sender: string | undefined,
+	copy: ( key: string ) => string
+): string {
+	const minutes = Math.trunc( remainingMs / 60000 );
+	const lines = [
+		copy( titleKey ),
+		" ",
+		`${copy( "UIIT_STT_REMAIN_TIME" )}: ${Math.trunc( minutes / 60 )}${copy( "PARAM_HOUR" )} ${minutes % 60}${
+			copy( "PARAM_MINUTE" )
+		}`
+	];
+	if ( sender !== undefined ) lines.push( `${copy( "UIIT_STT_LETTER_SENDER" )}: ${sender}` );
+	lines.push( `${copy( "UIIT_STT_SILKMALL_P_POINT" )}: ${value} ${copy( pointKey )}` );
+	return lines.join( "\n" );
 }

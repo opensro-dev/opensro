@@ -67,7 +67,6 @@ held it rather than only this hook.
 */
 func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
-		timed := rt.Steps.Time
 		var out []simulation.DivisionFrames
 		sealed := 0
 		// Every step commits inside character doors and routes its private
@@ -95,20 +94,31 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 			if cut {
 				return
 			}
-			acquired := false
-			timed("tickPublicationGate", func() {
-				acquired = rt.acquireTickGate()
-			})
+			// The gate wait and the step are timed as spans, not as
+			// timed(name, func() {...}) closures: a timing closure
+			// boxes its captures on every step of every tick (#2030).
+			// The gate span ends explicitly so a lost wait is recorded
+			// before the cut and the wait never swallows the step's
+			// own span; its End is also deferred as a backstop so a
+			// panicking gate wait still records (and closes its
+			// zone), exactly as StepTimer.Time's defer did - End
+			// records at most once, so the calm path is unchanged.
+			// The step span's End is deferred for the same reason,
+			// still ahead of the gate release below.
+			gate := rt.Steps.Begin("tickPublicationGate")
+			defer gate.End()
+			acquired := rt.acquireTickGate()
+			gate.End()
 			if !acquired {
 				cut = true
 				return
 			}
 			defer rt.releaseTickGate()
-			timed(name, func() {
-				run()
-				out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
-				sealed = len(out)
-			})
+			span := rt.Steps.Begin(name)
+			defer span.End()
+			run()
+			out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
+			sealed = len(out)
 		}
 		frames := func(name string, advance func(int64) []simulation.DivisionFrames) {
 			step(name, func() { out = append(out, advance(nowMs)...) })
@@ -199,11 +209,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
 		// Pending pickups take the gate themselves (publishPendingPickup).
 		if !cut {
-			timed("advancePendingPickups", func() {
-				out = append(out, rt.advancePendingPickups(nowMs)...)
-				out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
-				sealed = len(out)
-			})
+			out, sealed = rt.runPendingPickups(nowMs, out, sealed)
 		}
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
@@ -216,6 +222,25 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out
 	}
+}
+
+/*
+================
+runPendingPickups
+
+TickHook's pending-pickup span, scoped in a method so its End can be
+deferred: an explicit end alone would lose the record (and leave the
+zone open) when advancePendingPickups panics, where StepTimer.Time's
+own defer kept both. The helper is a plain method, not a closure, so
+the span conversion's zero-allocation property holds (#2030).
+================
+*/
+func (rt *Runtime) runPendingPickups(nowMs int64, out []simulation.DivisionFrames, sealed int) ([]simulation.DivisionFrames, int) {
+	span := rt.Steps.Begin("advancePendingPickups")
+	defer span.End()
+	out = append(out, rt.advancePendingPickups(nowMs)...)
+	out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+	return out, len(out)
 }
 
 /*
@@ -409,6 +434,11 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 		(rt.CanPickupOwnedDrop == nil ||
 			!rt.CanPickupOwnedDrop(pending.DivisionID, snapshot.Name, groundItem.OwnerJID)) {
 		// The native pickup owner gate (0x1812): the drop is another's for now.
+		return pickupRefusal(wire.ErrCodeLockedByOther), character
+	}
+	// Port-only (forge.go, issue #1980): a bound forged drop is its
+	// forger's for good, not just for the reservation window.
+	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, snapshot.Name) {
 		return pickupRefusal(wire.ErrCodeLockedByOther), character
 	}
 

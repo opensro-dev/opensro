@@ -252,8 +252,18 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 		return false
 	}
 	s.ackLocked(lastApplied)
-	cut := supersededEntryLocked(s.ring)
-	if cut < len(s.ring) {
+	if s.sceneLoading {
+		// The scene was never confirmed with game-ready, so its answer
+		// may be acknowledged on the stream yet unapplied in the
+		// client (a large blob applies only after its references
+		// load): everything counted behind it is superseded exactly
+		// like an unapplied answer's tail below, whether or not the
+		// answer itself still sits in the ring. The resumed client
+		// asks for a new entry and its snapshot rebuilds the scene;
+		// re-sending the tail reached clients holding no world yet
+		// as world packets before EnterWorld (#2872).
+		s.dropSupersededEntryLocked(0)
+	} else if cut := supersededEntryLocked(s.ring); cut < len(s.ring) {
 		s.dropSupersededEntryLocked(cut)
 	} else if queued := queuedEntryLocked(s.queue); queued < len(s.queue) {
 		s.dropQueuedEntryLocked(queued)

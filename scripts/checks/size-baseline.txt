@@ -13,6 +13,7 @@ apps/client-next/src/engine/runtime/platform/ui/ui.ts # one DOM bridge owner: co
 apps/client-next/src/engine/runtime/renderer/device/geometry.ts # cohesive draw-resource and binding lifetime owner; upload snapshots have a separate owner
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
+apps/client-next/src/engine/runtime/assets/worker/loader.ts # one asset-worker owner: the download lanes and their stall windows, the pack reads and the world decode dispatch with its liveness notes all serve one job table, and the #2862 decode-progress work is part of that same job
 apps/client-next/src/engine/runtime/runtime.ts # one frame/lifetime orchestrator; extracted diagnostics owner is separate, but splitting the sealed frame order would obscure its lifecycle
 apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts # one transactional entity packet dispatcher owns spawn, movement, visibility and retirement state
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts # one session combat owner: cast lifecycle, pulse and tick result lanes and the vitals feed share one ordered receive dispatch; the decoders it calls are separate owners
@@ -22,7 +23,7 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/mov
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts # one link owner: WebSocket and WebTransport lifecycles, framing, acks and close facts share one connection state
 apps/client-next/src/engine/runtime/simulation/worker/session/session.ts # one session owner: login and character commands, the native refusal ingest and the world-entry handoff share one state machine; the blocked refusal's strings (#2271) ride the same publish as its status, and no responsibility boundary runs inside the login answer handling
 apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts # one world-session owner: entry, the retry ladder, reference loading and the bind share each attempt's deadline, epoch and failure state; the #2311 failure evidence is read at the same attempt boundary, so no responsibility boundary runs inside the file
-apps/client-next/src/engine/runtime/ui/ui.ts # one closure holds state, input and rendering for every window; split per window
+apps/client-next/src/engine/runtime/ui/ui.ts # frame primitives and admission live in runtime/ui/frame; the remaining closure holds state, input and per-window drawing, to split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-presentation.test.mjs # test file; split by feature
@@ -32,6 +33,8 @@ apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every w
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/session.test.mjs # test file; split by feature
+apps/server/internal/game/action/petai.go # one pet-tick coordinator: the pet session book, the per-owner lane sequence and its frame routing share the tick's ordering; the lanes it calls are separate owners, and the sequence must stay readable in call order
+apps/server/internal/game/action/runtime.go # the action Runtime state owner: one struct holds every shard switch's runtime state (TradeTiers, SunEventOnly, the Alexandria switches), so it grows a field per feature and no responsibility boundary runs through it
 apps/server/internal/game/quest/runtime.go # one quest-runtime owner: definition lookup, acceptance, NPC option projection and the reward transaction share the character door and the active-quest list; the per-programme composition rows (acceptance grants, grant-day stamps, offer and re-grant hooks) join their programmes here, with no responsibility boundary inside the transaction owner
 apps/server/internal/game/world/simulation/monstertick.go # one leg orchestrator: scope visibility, the activity gate, batch dispatch and publication share the leg's ordered phases and its stats record; the batch-release defer (#2030) has no responsibility boundary to split on
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted

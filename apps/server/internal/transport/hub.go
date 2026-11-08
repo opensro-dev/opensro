@@ -134,6 +134,9 @@ type Hub struct {
 	// storeLockMetrics reads the authority lock's waits, holds and commit
 	// phases (SetStoreLockMetrics); nil publishes no block.
 	storeLockMetrics atomic.Pointer[func() any]
+	// tickZoneMetrics reads the simulation's exact per-zone tick totals
+	// (SetTickZoneMetrics, #2824); nil publishes no block.
+	tickZoneMetrics atomic.Pointer[func() map[string]TickZone]
 }
 
 /*
@@ -607,6 +610,15 @@ func (h *Hub) AcceptConn(conn Conn) {
 	}
 	if resumePresented {
 		h.metrics.resumeFresh.Add(1)
+	}
+
+	if !h.clientSlotOpen(conn.RemoteAddr()) {
+		h.metrics.clientSessionRefusals.Add(1)
+		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "limit": h.cfg.MaxSessionsPerClient}).
+			Warn("transport: client session limit reached, refusing the new session")
+		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonServerBusy}})
+		_ = conn.Close("client session limit reached")
+		return
 	}
 
 	sess, err := h.createSession()

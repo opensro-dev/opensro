@@ -143,3 +143,33 @@ Changing the switch does **not** delete learned masteries, skills or spent SP.
 A character above the native total can still enter the game, but further mastery
 training is refused until the total is within the restored allowance. An official
 launch character reset, if desired, is a separate operator decision.
+
+## Item links in chat
+
+Port-only, not native: the original client has no item links. While typing
+a chat line (or a Global Chatting line), hold Alt and click an item in the
+inventory window (bag, worn equipment or costume), the open storage, or the
+pet's bag. The line shows `<Name +N>` where the link sits; Backspace removes
+the whole link. Readers hover the name in the chat log to see the item's
+tooltip exactly as it was when the line was sent: plus, stats, blues and
+durability.
+
+- One link per line. A second Alt+click replaces the first.
+- Every channel typed in the chat input carries links (All, whisper, party,
+  guild, union) and so does the Global Chatting window; the audience is the
+  channel's own. Stall chat does not carry links.
+- The server reads the item itself from the sender's character, so a link
+  cannot show an item its sender does not hold. A link to an item that moved
+  before the line was sent is dropped and the line goes out as text.
+- Without a chat line being typed, Alt+click keeps its usual effect (bag to
+  pet with the pet window open), and Shift+click still splits a stack.
+- The website's public chat feed and the staff chat log store the line as
+  text with `<Name +N>` in place of the link.
+
+Settings:
+
+- Server: `SRO_CHAT_ITEM_LINKS` (default `off`; off is the native text-only
+  chat) and `SRO_CHAT_ITEM_LINKS_PER_MESSAGE` (default 1, at most 8, read at
+  boot).
+- Client: Experimental window, Chat tab, "Item links in chat" (on by
+  default). Off inserts nothing and shows received links as plain text.

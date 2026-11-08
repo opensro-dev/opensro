@@ -192,12 +192,27 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	if err != nil {
 		return nil, err
 	}
+	// The GameWorld appends the same X-Large potions (SRO_JANGAN_XL_POTIONS).
+	xl, err := commerce.JanganXLPotionGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	extra = append(extra, xl...)
 	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
 	if err != nil {
 		return nil, err
 	}
 	// The GameWorld withholds the same goods permanently (action.ConfigureCommerce).
 	shops.WithholdGoods(action.SunShopExcluded)
+	// And hides Alexandria's degree-11 goods on the same switch
+	// (SRO_ALEXANDRIA_HIDE_D11_GOODS, port-only, #2842).
+	hideD11, err := commerce.AlexandriaHideD11GoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if hideD11 {
+		shops.WithholdAlexandriaD11()
+	}
 	// And prices trade goods the same way (SRO_TRADE_TIERS).
 	if action.TradeTiersFromEnv() {
 		shops.ScaleTradeGoodsPrices(enterworld.TradeGoodsPriceFactor)

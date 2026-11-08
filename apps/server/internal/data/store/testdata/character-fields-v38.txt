@@ -391,9 +391,6 @@ skillActionRecoveryUntilMs
 skillExp
 skillPoints
 skills
-sookArenaActive
-sookArenaDay
-sookArenaEntries
 stallDecoration
 statPoints
 strength

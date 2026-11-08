@@ -314,11 +314,15 @@ petTickFacts
 The facts one pet tick judges on, read as values under one store
 read door (#2139): whether the companion exists at all, whether this
 tick admits pet action (the admitted seam's own verdict), whether
-the owner has fallen, and - only when admitted - the companion's
-record itself, detached without its container and rental rows (its
-only deep children, CloneCOS; neither is a tick fact). A tick that
-can finish on these values pays no owner copy; advancePetJudged
-abstains the moment a tick must commit through the record, and the
+the owner has fallen, and - only when admitted - the companion
+values the judged lane reads: identity (the ref resolution and the
+follower binding), brood stage (the egg stop) and cosParameter's
+pet inputs (satiety, the installed follow-run factor, and the
+mercenary attributes for that one function's other arm, though the
+band itself abstains before any read). A tick that can finish on
+these values pays for neither an owner copy nor a companion-record
+copy: advancePetJudged rebuilds its pet view from the values, and
+abstains the moment a tick must commit through the record, when the
 companion copy judges exactly as before.
 ================
 */
@@ -326,7 +330,15 @@ type petTickFacts struct {
 	companionSeen bool
 	admitted      bool
 	ownerDead     bool
-	pet           enterworld.CharacterCOS
+
+	petGID                 uint32
+	petRefObjID            uint32
+	petCodename            string
+	petBroodStage          uint8
+	petSatiety             uint16
+	petMercenaryAttributes uint8
+	petFollowRunFactor     float32
+	petFollowRunSet        bool
 }
 
 /*
@@ -339,29 +351,53 @@ func (rt *Runtime) readPetTickFacts(
 	character *enterworld.Character,
 	gid uint32,
 ) *petTickFacts {
-	// The facts travel by pointer: the record copy inside is wide, and a
-	// by-value hand-off to advancePetJudged heap-copied it a second time
-	// every pet tick (#2030). The judged path reads the same values.
-	facts := &petTickFacts{}
+	return rt.readPetTickFactsInto(&petTickFacts{}, divisionID, character, gid)
+}
+
+/*
+================
+readPetTickFactsInto
+
+readPetTickFacts into caller-owned storage: advancePet passes its
+session scratch, so the settled tick's fact read allocates nothing -
+no fresh container and no door closure (#2030). The facts are
+scalars only (the codename header aside, a copy of the record's own
+header), so the scratch is zeroed per call and reused tick after
+tick; the facts travel by pointer, so the one heap hand-off to
+advancePetJudged stays a few dozen bytes and never grows a record
+copy.
+================
+*/
+func (rt *Runtime) readPetTickFactsInto(
+	facts *petTickFacts,
+	divisionID string,
+	character *enterworld.Character,
+	gid uint32,
+) *petTickFacts {
+	*facts = petTickFacts{}
 	if character == nil {
 		return facts
 	}
 
-	rt.deps.Read(divisionID, func() {
-		pet := character.CompanionByGID(gid)
-		if pet == nil {
-			return
-		}
+	guard := rt.deps.AcquireRead(divisionID)
+	pet := character.CompanionByGID(gid)
+	if pet != nil {
 		facts.companionSeen = true
 		facts.ownerDead = enterworld.CurrentHP(character) == 0
 		facts.admitted = !character.DeletePending && !facts.ownerDead &&
 			pet.Summoned && !pet.Mounted && pet.CurrentHP != 0
 		if facts.admitted {
-			facts.pet = *pet
-			facts.pet.Container = nil
-			facts.pet.Rentals = nil
+			facts.petGID = pet.GID
+			facts.petRefObjID = pet.RefObjID
+			facts.petCodename = pet.Codename
+			facts.petBroodStage = pet.BroodStage
+			facts.petSatiety = pet.Satiety
+			facts.petMercenaryAttributes = pet.MercenaryAttributes
+			facts.petFollowRunFactor = pet.FollowRunFactor
+			facts.petFollowRunSet = pet.FollowRunSet
 		}
-	})
+	}
+	guard.Release()
 
 	return facts
 }

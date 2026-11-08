@@ -28,8 +28,9 @@ is known to do this.)
 The census is regenerated, never edited: `--write` rewrites the
 checked-in table, `--check` (the default) rebuilds it and fails on any
 difference. Scenes build in parallel worker processes (`--scene <name>`
-runs one scene and prints its row); nothing in ui.ts moves under this
-tool.
+runs one scene and prints its row), capped by censusWorkers.mjs so two
+checks on one PC cannot fan out into memory exhaustion (#2766); nothing
+in ui.ts moves under this tool.
 
 ===========================================================================
 */
@@ -37,13 +38,13 @@ tool.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import "../tests/helpers/native-source-loader.mjs";
+import { censusWorkerCount } from "./censusWorkers.mjs";
 import { root } from "./project.mjs";
 
 const { createUi } = await import( "../src/engine/runtime/ui/ui.ts" );
@@ -56,7 +57,7 @@ const { fortressProductionQuery } = await import(
 
 const CENSUS_PATH = path.join( root, "tests/runtime/ui-action-census.json" );
 const KEYS = [ "Escape", "Enter", "F1", "F2", "F3", "F4", "KeyR" ];
-const WORKERS = Math.min( 8, Math.max( 1, os.cpus().length - 2 ) );
+const WORKERS = censusWorkerCount();
 
 // ============================================================================
 // The fixture: ui-fixture.mjs's asset delivery without the text-run
@@ -75,9 +76,12 @@ the session commands it sends.
 function censusFixture( commands ) {
 	const pending = new Map();
 	let nextId = 0;
-	const ui = createUi(
-		{
+	const ui = createUi( {
+		assets: {
 			available: () => 8,
+			// The census inventories the published build's full UI; the HD
+			// row (#2800) is listed while a set is published, as here.
+			hdAvailable: () => true,
 			take: id => {
 				const bytes = pending.get( id );
 				pending.delete( id );
@@ -121,23 +125,17 @@ function censusFixture( commands ) {
 			cancel: id => pending.delete( id )
 		},
 		commands,
-		() => {},
-		() => {},
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		() => {},
-		undefined,
-		undefined,
-		() => {},
-		() => {},
-		() => {},
-		() => {},
-		() => {},
-		undefined,
-		undefined,
-		{}
-	);
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		sound: () => {},
+		saveOptions: () => {},
+		audioPreference: () => {},
+		saveSight: () => {},
+		saveBindings: () => {},
+		saveVideo: () => {}
+	} );
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },

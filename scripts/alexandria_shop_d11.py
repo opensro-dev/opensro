@@ -30,6 +30,12 @@ degree 10 pass mints its packages. Missing item packages are reported,
 never partly granted. Restocking is re-entry safe: a good already in the
 tab is never stocked twice.
 
+The twin-alongside-its-degree-10-good stock above is the port's
+invention (#2846). The default build stocks what official Alexandria
+sold instead - the source named in official_stock below - and the
+twins ship only behind the SRO_ALEXANDRIA_PORT_STOCK build flag
+(port_stock=True).
+
 ===========================================================================
 """
 from collections import defaultdict
@@ -41,6 +47,9 @@ import import_vsro_alexandria as tables
 SOURCE_DEGREE = "10"
 NEW_DEGREE = "11"
 STORES = ("STORE_SD_SMITH", "STORE_SD_ARMOR", "STORE_SD_ACCESSORY")
+# The armourer is the one store an official build mints no grade A
+# twins for (official_stock).
+ARMOR_STORE = "STORE_SD_ARMOR"
 
 
 # ================
@@ -86,12 +95,49 @@ def next_stock(packages, items):
 
 
 # ================
+# official_stock
+#
+# A tab's goods in an official build (#2846; the source is iSRO-R, the
+# official city that has a smith - #2842's research): its smith and
+# accessory sell degree-11 grade A goods only, every degree-10 row
+# inactive, so each stocked family is replaced by its degree-11 twin
+# and a family whose degree-11 item this build lacks leaves the tab.
+# The armourer sells degree-11 set armour only, so its tabs mint no
+# twins: the set rows stay (they are the imported tables' own) and the
+# clone's grade A rows leave. Rows carrying no degree family - the
+# smith's arrows, the alchemy tab's stones - and the set and rare rows
+# are not degree stock this pass owns, and stay where they are.
+# Returns the stock and the twins to mint.
+# ================
+def official_stock(packages, items, mint_twins):
+	have = set(packages)
+	seen = set()
+	stock, twins = [], []
+	for package in packages:
+		parsed = d10.family_of(package)
+		if parsed is None or "_SET_" in package or "_RARE" in package:
+			stock.append(package)
+			continue
+		if parsed[0] in seen:
+			continue
+		seen.add(parsed[0])
+		if not mint_twins:
+			continue
+		twin = d10.with_degree(package, NEW_DEGREE)
+		if twin.replace("PACKAGE_ITEM_", "ITEM_", 1) in items:
+			stock.append(twin)
+			if twin not in have:
+				twins.append(twin)
+	return stock, twins
+
+
+# ================
 # merge_d11_stock
 #
 # raw maps the shop table names to raw bytes; items maps an item code to
 # its itemdata row. Returns the changed tables, and a summary.
 # ================
-def merge_d11_stock(raw, items):
+def merge_d11_stock(raw, items, port_stock=False):
 	rows = {name: tables.table_rows(raw[name]) for name in d10.NAMES}
 	next_id = {name: max((int(r[col]) for r in rows[name] if len(r) > col and r[col].isdigit()), default=0) + 1 for name, col in d10.IDENTITY.items()}
 
@@ -166,12 +212,15 @@ def merge_d11_stock(raw, items):
 	# ================
 	# restock
 	# ================
-	def restock(tab_code):
+	def restock(tab_code, mint_twins=True):
 		"""The tab's goods after the degree 11 ones are added: rows in slot order."""
 		old = sorted(goods_by_tab[tab_code], key=lambda r: int(r[4]))
 		if not old:
 			return [], 0
-		stock, added = next_stock([r[3] for r in old], items)
+		if port_stock:
+			stock, added = next_stock([r[3] for r in old], items)
+		else:
+			stock, added = official_stock([r[3] for r in old], items, mint_twins)
 		template = old[0]
 		made = {code for code in added if make_package(code)}
 		rows_out = []
@@ -185,10 +234,14 @@ def merge_d11_stock(raw, items):
 	for store in STORES:
 		for group in groups_of_store[store]:
 			for tab_row in tabs_of_group[group]:
-				stocked, count = restock(tab_row[3])
-				if count:
+				stocked, count = restock(tab_row[3], store != ARMOR_STORE)
+				# A tab is replaced whenever its goods change, minting or
+				# not: at the armourer the official stock only removes
+				# goods (#2846), and the removal must land too.
+				current = [r[3] for r in sorted(goods_by_tab[tab_row[3]], key=lambda r: int(r[4]))]
+				if [r[3] for r in stocked] != current:
 					replaced_tabs[tab_row[3]] = stocked
-					summary["goods"] += count
+				summary["goods"] += count
 
 	goods = [r for r in rows["refshopgoods.txt"] if len(r) < 3 or r[2] not in replaced_tabs]
 	for stocked in replaced_tabs.values():

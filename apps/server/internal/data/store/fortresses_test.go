@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -24,6 +25,8 @@ back after the store reopens; a withdrawn request is gone.
 ================
 */
 func TestFortressStateSurvivesReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Fortresses()
@@ -71,6 +74,8 @@ TestFortressTaxStateSurvivesReopen
 ================
 */
 func TestFortressTaxStateSurvivesReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	want := domain.FortressRecord{FortressID: 1, GuildID: 41, TaxRate: -20, TaxGold: 12345}
@@ -101,6 +106,8 @@ fortress tables and its characters untouched.
 ================
 */
 func TestLayout5AuthorityGainsTheFortressTables(t *testing.T) {
+	tier.Long(t, "a schema-16 layout-5 authority gains empty fortress tables with its characters untouched")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {
@@ -136,6 +143,8 @@ character record.
 ================
 */
 func TestFortressReturnCooldownSurvivesReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {

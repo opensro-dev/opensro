@@ -65,7 +65,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
-		structureName: refObjId => entities.structureName( refObjId ),
+		structure: refObjId => entities.structureReference( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
 		npcs: () => entities.npcs()
 	} );
@@ -641,7 +641,7 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
-		takeDegradations: () => entities.takeDegradations(),
+		takeDegradations: () => [ ...entities.takeDegradations(), ...gameplay.takeDegradations() ],
 		readyRevision: () => pendingTravel?.revision ?? 0,
 		/*
 ================

@@ -29,7 +29,7 @@ The proposed `UIIT_MSG_EVENT_START` actually means “Event has started.”
   storage interaction or another instance's return anchor.
 - Each entrant gets a separate generation-pinned layer of definition 30,
   overflowing to 31: up to 200 solo layers per division.
-- Gold is awarded by total kills on death or the 20-minute timeout. Death waits for its presentation,
+- Gold is awarded by total kills on death or the 20-minute timeout. Death waits five seconds for its presentation,
   revives the player and returns them without EXP/equipment loss. Early
   departure or disconnect forfeits the run. Restart recovery works even
   when the feature flag is subsequently disabled.
@@ -646,3 +646,20 @@ rows and 96 learned skills remain; other characters were not lowered.
 Existing native/expansion cap transition tests pass, including XP grants
 at native level 90 remaining at level 90. The active job now reports 90;
 no shared assets or production database were edited.
+
+## Main merge and effect-loading correction (2026-11-08)
+
+Merged upstream main `169c52a4` while preserving the private arena, both bad
+eggs, Fire Pit and kill rewards. Compatibility follows main's protocol 14;
+store schema 41 adds the optional arena fields after main's schema 40.
+Historical schema field lists remain unchanged. Upgrade only an offline,
+backed-up authority with `sro-authority-upgrade` before starting this build.
+
+Death return now waits exactly five seconds, including a death at the match
+end; tests reject a return even one millisecond early. Short crow/recovery
+and arena blast effects now begin their visible lifetime only once their
+models are resident, rather than silently expiring during a cold load.
+Loading is bounded by the existing 15-second stale-effect timeout. Fire Pit
+keeps its fixed server-aligned 60-second lifetime. This fixes a reproduced
+cold-model omission; it does not prove every intermittent live effect issue
+has been eliminated. No recordings or local databases belong in the commit.

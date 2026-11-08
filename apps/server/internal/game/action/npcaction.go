@@ -51,7 +51,7 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 		// function request pending: answer with the native 0xB338 kind-2
 		// refusal the way every refused function request retires it.
 		if _, live := session.SceneRevision(); !live {
-			sendFrames(session, []wire.Frame{{
+			sendSessionAnswer(session, []wire.Frame{{
 				Opcode:  wire.OpNpcInteractionAck,
 				Payload: wire.EncodeNpcInteractionRefusal(wire.ErrCodeInvalidRequest),
 			}})

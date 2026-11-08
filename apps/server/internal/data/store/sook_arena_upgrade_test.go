@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-sook_arena_upgrade_test.go - schema 38 retains every pre-arena character byte
+sook_arena_upgrade_test.go - schema 41 retains every pre-arena character byte
 
 ===========================================================================
 */
@@ -26,7 +26,7 @@ func TestSookArenaUpgradePreservesCharacter(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, 37)
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, 40)
 	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
 		t.Fatalf("upgrade: %s %v", backup, err)
 	}

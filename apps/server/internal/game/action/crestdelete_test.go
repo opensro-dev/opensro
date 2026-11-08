@@ -68,6 +68,22 @@ bag either way.
 */
 func crestDeleteFixtureWith(t *testing.T, codename string, param1 float64, opts crestDeleteOptions) (*doorRuntime, *enterworld.Character, int64) {
 	t.Helper()
+	return crestItemFixtureWith(t, codename, 9269, param1, 2, opts)
+}
+
+/*
+================
+crestItemFixtureWith
+
+The shared crest-item fixture: the guild-manager fixture's leader (or
+a plain member, under the options) holding one crest item of the
+named kind in bag slot 21 - the delete item for crestDeleteFixture,
+the register item for the upload lane's tests. Returns the runtime,
+the holder and its guild's id.
+================
+*/
+func crestItemFixtureWith(t *testing.T, codename string, refObjID uint32, param1, param2 float64, opts crestDeleteOptions) (*doorRuntime, *enterworld.Character, int64) {
+	t.Helper()
 	d := guildManagerFixture(t)
 	c := d.character
 	if c.GuildID == nil {
@@ -96,13 +112,13 @@ func crestDeleteFixtureWith(t *testing.T, codename string, param1 float64, opts 
 		holder = member
 	}
 	refs := testItems()
-	refs[codename] = &enterworld.ItemRef{Codename: codename, RefObjID: 9269, Country: 3,
+	refs[codename] = &enterworld.ItemRef{Codename: codename, RefObjID: refObjID, Country: 3,
 		TypeIDs:      [4]int64{3, 3, 12, 2},
-		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": param1, "itemParam2_2a0": 2})}
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": param1, "itemParam2_2a0": param2})}
 	d.rt.deps.(*enterworld.Deps).Items = refs
-	d.authority.UpdateCharacter(holder, "crest-delete-fixture", func() bool {
+	d.authority.UpdateCharacter(holder, "crest-item-fixture", func() bool {
 		holder.MissionInventory = append(holder.MissionInventory, enterworld.InventoryRow{Slot: 21,
-			RefObjID: 9269, Codename: codename, TypeFlags: refs[codename].TypeFlags(), StackCount: 1})
+			RefObjID: refObjID, Codename: codename, TypeFlags: refs[codename].TypeFlags(), StackCount: 1})
 		return true
 	})
 	if opts.union || opts.unionLedByOther {
@@ -515,8 +531,10 @@ func TestGuildCrestDeleteDivisionFanout(t *testing.T) {
 ================
 TestCrestRegisterItemStaysUnusable
 
-The register twins (param2 1) keep the unsupported answer: their flow
-is the owner-blocked half of #2282 (#2272), not this slice.
+The register twins (param2 1) keep the unsupported answer on the
+item-use lane: their image cannot ride the native packet, so the
+use itself refuses and spends nothing. Registration itself stands
+through the upload lane (crestregister_test.go).
 ================
 */
 func TestCrestRegisterItemStaysUnusable(t *testing.T) {

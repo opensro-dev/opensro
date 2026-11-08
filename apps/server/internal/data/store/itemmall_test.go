@@ -21,6 +21,8 @@ TestMallPurchaseAtomicity
 ================
 */
 func TestMallPurchaseAtomicity(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -95,6 +97,8 @@ cannot cross the store's pointer ownership boundary to spend another wallet.
 ================
 */
 func TestMallPurchaseUntrustedAccountIdentity(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	account := "mall'; UPDATE mall_accounts SET silk = 0; --"
 	character := seededCharacter()
@@ -131,6 +135,8 @@ one delivery can consume a balance that only covers one purchase.
 ================
 */
 func TestMallRacePurchasesCannotDoubleSpend(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	characters := []*domain.Character{seededCharacter(), seededCharacter()}
 	characters[1].Name = "MallRace"
@@ -184,6 +190,8 @@ TestMallBalancesRejectOutOfRangeStorage
 ================
 */
 func TestMallBalancesRejectOutOfRangeStorage(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	for _, amount := range []int64{-1, 4294967296} {
 		for _, statement := range []string{

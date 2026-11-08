@@ -84,9 +84,7 @@ func (door storeCampDoor) Camp(divisionID string, campID int64) (domain.Training
 		return domain.TrainingCampRecord{}, nil, false
 	}
 	live := door.s.campMembers[divisionID][campID]
-	members := make([]domain.TrainingCampMemberRecord, len(live))
-	copy(members, live)
-	return camp, members, true
+	return camp, cloneCampMembers(live), true
 }
 
 /*
@@ -188,11 +186,9 @@ func (door storeCampDoor) AdmitStudent(
 	s.changes.camps[campKey{division: divisionID, campID: campID}] = true
 	s.commitLocked(fmt.Sprintf("training-camp-admit-student %s/%d", divisionID, campID))
 
-	resultMembers := make([]domain.TrainingCampMemberRecord, len(next))
-	copy(resultMembers, next)
 	return domain.TrainingCampAdmissionResult{
 		Camp:    camp,
-		Members: resultMembers,
+		Members: cloneCampMembers(next),
 	}, true
 }
 
@@ -390,7 +386,7 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 		}
 	}
 
-	membersBefore := append([]domain.TrainingCampMemberRecord(nil), s.campMembers[divisionID][campID]...)
+	membersBefore := cloneCampMembers(s.campMembers[divisionID][campID])
 	delete(s.camps[divisionID], campID)
 	delete(s.campMembers[divisionID], campID)
 	key := campKey{division: divisionID, campID: campID}
@@ -474,7 +470,6 @@ func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, nowMs
 		return domain.TrainingCampLeaveResult{Refusal: domain.TrainingCampLeaveWait24h}
 	}
 
-	membersBefore := append([]domain.TrainingCampMemberRecord(nil), members...)
 	next := make([]domain.TrainingCampMemberRecord, 0, len(members)-1)
 	next = append(next, members[:memberIdx]...)
 	next = append(next, members[memberIdx+1:]...)
@@ -485,8 +480,8 @@ func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, nowMs
 	return domain.TrainingCampLeaveResult{
 		Refusal:       domain.TrainingCampLeaveAccepted,
 		Camp:          camp,
-		RemovedMember: removed,
-		MembersBefore: membersBefore,
+		RemovedMember: cloneCampMember(removed),
+		MembersBefore: cloneCampMembers(members),
 	}
 }
 
@@ -552,7 +547,6 @@ func (door storeCampDoor) KickMember(divisionID string, masterCharID int64, targ
 		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickWait24h}
 	}
 
-	membersBefore := append([]domain.TrainingCampMemberRecord(nil), members...)
 	next := make([]domain.TrainingCampMemberRecord, 0, len(members)-1)
 	next = append(next, members[:targetIdx]...)
 	next = append(next, members[targetIdx+1:]...)
@@ -563,8 +557,8 @@ func (door storeCampDoor) KickMember(divisionID string, masterCharID int64, targ
 	return domain.TrainingCampKickResult{
 		Refusal:       domain.TrainingCampKickAccepted,
 		Camp:          camp,
-		RemovedMember: removed,
-		MembersBefore: membersBefore,
+		RemovedMember: cloneCampMember(removed),
+		MembersBefore: cloneCampMembers(members),
 	}
 }
 
@@ -576,6 +570,89 @@ campOfCharacterLocked is CampOfCharacter's body for callers already
 holding s.mu.
 ================
 */
+/*
+================
+cloneCampMember
+
+cloneCampMember detaches one member record: since schema 38 a member
+carries its received-buff rows in a slice, and a copy that shared it
+would let a caller mutate the store's live rows (or the reverse).
+================
+*/
+func cloneCampMember(member domain.TrainingCampMemberRecord) domain.TrainingCampMemberRecord {
+	if member.ReservedBuffs != nil {
+		reserved := make([]domain.TrainingCampReservedBuff, len(member.ReservedBuffs))
+		copy(reserved, member.ReservedBuffs)
+		member.ReservedBuffs = reserved
+	}
+	return member
+}
+
+/*
+================
+cloneCampMembers
+
+cloneCampMembers detaches a member list leaving the store.
+================
+*/
+func cloneCampMembers(members []domain.TrainingCampMemberRecord) []domain.TrainingCampMemberRecord {
+	out := make([]domain.TrainingCampMemberRecord, len(members))
+	for i, member := range members {
+		out[i] = cloneCampMember(member)
+	}
+	return out
+}
+
+/*
+================
+WriteMemberBuffs
+
+WriteMemberBuffs replaces the cumulated-buff state (saved value,
+window, live flag, received rows) of the listed members of one camp
+under the store lock and commits the camp as one dirty unit. It is
+the only door the buff's flushes, passes and clears write through:
+the mentor runtime holds the live state on its hot path and lands it
+here wholesale, so a stale write can never resurrect points a pass
+already moved. Members no longer in the camp are skipped.
+================
+*/
+func (door storeCampDoor) WriteMemberBuffs(divisionID string, campID int64, states map[int64]domain.TrainingCampMemberBuffState) bool {
+	s := door.s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	live, ok := s.campMembers[divisionID][campID]
+	if !ok {
+		return false
+	}
+	next := make([]domain.TrainingCampMemberRecord, len(live))
+	changed := false
+	for i, member := range live {
+		next[i] = cloneCampMember(member)
+		state, listed := states[member.CharID]
+		if !listed {
+			continue
+		}
+		changed = true
+		next[i].BuffValue = state.Value
+		next[i].BuffWindowStartMs = state.WindowStartMs
+		next[i].BuffLive = state.Live
+		if state.Reserved != nil {
+			reserved := make([]domain.TrainingCampReservedBuff, len(state.Reserved))
+			copy(reserved, state.Reserved)
+			next[i].ReservedBuffs = reserved
+		} else {
+			next[i].ReservedBuffs = nil
+		}
+	}
+	if !changed {
+		return true
+	}
+	s.campMembers[divisionID][campID] = next
+	s.changes.camps[campKey{division: divisionID, campID: campID}] = true
+	s.commitLocked(fmt.Sprintf("training-camp-buff %s/%d", divisionID, campID))
+	return true
+}
+
 func (door storeCampDoor) campOfCharacterLocked(divisionID string, characterID int64) (int64, bool) {
 	for campID, members := range door.s.campMembers[divisionID] {
 		for _, member := range members {

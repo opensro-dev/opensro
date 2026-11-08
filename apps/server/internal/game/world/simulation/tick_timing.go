@@ -70,21 +70,26 @@ type StepTimer struct {
 	// timeline (ticktrace.go, #2301); nil - the default - records
 	// none and costs one nil check per step.
 	Zone func(name string) func()
+	// Total, when set, receives every step's elapsed time, slow or
+	// not: the always-on zone ledger's step rows (zone_ledger.go,
+	// #2824). Nil - the default - reports none.
+	Total func(name string, elapsed time.Duration)
 }
 
 /*
 ================
 StepTimer.Time
 
-Runs one step and reports it at or above SlowHookThreshold, including when
-it panics (the hook's recover boundary is the ticker's).
+Runs one step, totals it when Total is set and reports it at or above
+SlowHookThreshold, including when it panics (the hook's recover boundary
+is the ticker's).
 ================
 */
 func (s *StepTimer) Time(name string, run func()) {
 	if s.Zone != nil {
 		defer s.Zone(name)()
 	}
-	if s.Slow == nil {
+	if s.Slow == nil && s.Total == nil {
 		run()
 		return
 	}
@@ -94,11 +99,97 @@ func (s *StepTimer) Time(name string, run func()) {
 	}
 	started := now()
 	defer func() {
-		if elapsed := now().Sub(started); elapsed >= SlowHookThreshold {
+		elapsed := now().Sub(started)
+		if s.Total != nil {
+			s.Total(name, elapsed)
+		}
+		if s.Slow != nil && elapsed >= SlowHookThreshold {
 			s.Slow(name, elapsed)
 		}
 	}()
 	run()
+}
+
+/*
+================
+StepSpan
+
+One step opened by Begin: the timing Time would record, carried in a
+plain value instead of behind a func(). Time's run parameter boxes its
+captures on every call - inside the action TickHook that was two heap
+boxes per step per tick, the tick profile's largest single flat root
+(#2030) - while a span begun and ended by value allocates nothing.
+The records are identical: Total hears every step, Slow hears the ones
+at or above SlowHookThreshold, the Zone opens at Begin and closes
+after the record, exactly Time's deferred order, and an End deferred
+by the caller keeps a panicking step's record the way Time's own
+defer does.
+================
+*/
+type StepSpan struct {
+	timer   *StepTimer
+	name    string
+	now     func() time.Time
+	started time.Time
+	zoneEnd func()
+	live    bool
+}
+
+/*
+================
+StepTimer.Begin
+
+Opens a step span the caller ends once with End. A timer with nothing
+wired (or only a Zone) records no timing; End still closes the zone.
+================
+*/
+func (s *StepTimer) Begin(name string) StepSpan {
+	span := StepSpan{timer: s, name: name}
+	if s.Zone != nil {
+		span.zoneEnd = s.Zone(name)
+	}
+	if s.Slow == nil && s.Total == nil {
+		return span
+	}
+	now := s.Now
+	if now == nil {
+		now = time.Now
+	}
+	span.now, span.started, span.live = now, now(), true
+	return span
+}
+
+/*
+================
+StepSpan.End
+
+Closes the span: the timing record first, then the zone, Time's order.
+End records at most once, so a caller may defer it as a panic backstop
+beside an explicit end - the deferred call then keeps a panicking
+step's record (and closes its zone) exactly as Time's own defer did,
+and the explicit end on the calm path keeps the wait out of the spans
+that follow.
+================
+*/
+func (sp *StepSpan) End() {
+	if sp.timer == nil {
+		return
+	}
+	if sp.live {
+		sp.live = false
+		elapsed := sp.now().Sub(sp.started)
+		if sp.timer.Total != nil {
+			sp.timer.Total(sp.name, elapsed)
+		}
+		if sp.timer.Slow != nil && elapsed >= SlowHookThreshold {
+			sp.timer.Slow(sp.name, elapsed)
+		}
+	}
+	if sp.zoneEnd != nil {
+		zoneEnd := sp.zoneEnd
+		sp.zoneEnd = nil
+		zoneEnd()
+	}
 }
 
 /*
