@@ -147,6 +147,13 @@ import {
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
 import { playerInfoJob } from "@/engine/foundation/gameplay/player-info-job";
 import { MALL_NOTIFY_HEIGHT, MALL_NOTIFY_WIDTH, mallNotifyOrigin } from "@/engine/foundation/ui/mall-notify";
+import {
+	EVENT_INTERFACE_HEIGHT,
+	EVENT_INTERFACE_WIDTH,
+	eventInterfaceOrigin,
+	eventInterfaceShown,
+	type EventInterfaceLayout
+} from "@/engine/foundation/ui/event-interface";
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
@@ -1639,6 +1646,12 @@ export function createUi( ports: UiPorts ) {
 	// Deliberate deviation (owner, 2026-10-28): a close is remembered per
 	// account until the next release (mall-notice-memory.ts).
 	let mallNotice: "pending" | "open" | "closed" = "pending";
+	// CIFEventInterface (547750) rides the same +0x6FC latch: on the
+	// session's first world entry the gate window (type 0) is created
+	// unconditionally and the PC-room one (type 1) when the player is
+	// PC-room eligible (862A80); each closes with its own button.
+	let eventGate: "pending" | "open" | "closed" = "pending";
+	let eventPcRoom: "pending" | "open" | "closed" = "pending";
 	const mallNoticeStorage = extensions.mallNoticeStorage === undefined ? pageStorage() : extensions.mallNoticeStorage;
 	const mallNoticeRevision = extensions.clientRevision ?? stampedClientRevision();
 	const windowWarm = createWindowWarm();
@@ -3878,6 +3891,16 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( id.startsWith( "item-mall-" ) && itemMall.compactAction( id ) ) {
+			dirty = true;
+			return;
+		}
+		if ( id === "event-interface-close" ) {
+			eventGate = "closed";
+			dirty = true;
+			return;
+		}
+		if ( id === "event-interface-pcroom-close" ) {
+			eventPcRoom = "closed";
 			dirty = true;
 			return;
 		}
@@ -9671,6 +9694,8 @@ export function createUi( ports: UiPorts ) {
 			const sessionPhase = next.session?.phase;
 			if ( sessionPhase !== "world" && sessionPhase !== "disconnected" && sessionPhase !== "reconnecting" ) {
 				mallNotice = "pending";
+				eventGate = "pending";
+				eventPcRoom = "pending";
 				// A restarted server may now provide pet stats after earlier requests were refused.
 				petStateAsked = { ref: 0, asks: 0, atMs: 0 };
 				petTrainingAskedRef = 0;
@@ -9684,6 +9709,25 @@ export function createUi( ports: UiPorts ) {
 				} catch {}
 				mallNotice = hud.data()!.mallNotify.open && !remembered ? "open" : "closed";
 				dirty = true;
+			}
+			// 683B40 also creates both event windows under the same latch;
+			// 546B50's Open verdict and 862a80's eligibility bit decide.
+			if (
+				sessionPhase === "world" && !next.travel &&
+				(eventGate === "pending" || eventPcRoom === "pending") && hud.data()
+			) {
+				const events = hud.data()!.eventInterface;
+				if ( eventGate === "pending" ) {
+					eventGate = eventInterfaceShown( events.gate ) ? "open" : "closed";
+					dirty = true;
+				}
+				if ( eventPcRoom === "pending" ) {
+					eventPcRoom = next.gameplay?.eligibility?.pcRoomEvent &&
+							eventInterfaceShown( events.pcroom ) ?
+						"open" :
+						"closed";
+					dirty = true;
+				}
 			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
@@ -23254,6 +23298,110 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					} );
 				}
 				endWindow( admission );
+			}
+			/*
+			================
+			eventInterfaceWindow
+
+			CIFEventInterface_OnCreate (547750): the ifeventgate window with
+			its layout file's texts (or the string codes they resolve
+			through), fonts, colors, positions, background and close-button
+			pictures. The body wraps to the body static's authored width;
+			its line pitch is the font's extent plus the file's TextMargin
+			(the field the native line-spacing setter receives).
+			================
+			*/
+			function eventInterfaceWindow(
+				layout: EventInterfaceLayout,
+				closeId: string,
+				tag: string
+			): void {
+				const page = hud.data()?.windows.ifeventgate;
+				if ( !page ) return;
+				const node = ( id: number ) => Object.values( page ).find( n => n.id === id ),
+					pic = node( 11 ),
+					button = node( 12 ),
+					body = node( 13 ),
+					title = node( 14 );
+				const admission = beginWindow();
+				const [ex, ey] = eventInterfaceOrigin( w, h );
+				blocks.push( [ ex, ey, EVENT_INTERFACE_WIDTH, EVENT_INTERFACE_HEIGHT ] );
+				if ( pic ) {
+					image( authoredRect( pic, ex, ey ), layout.picBg ?? pic.texture );
+				}
+				if ( title ) {
+					const lines = textBoxLines(
+							layout.title || hudCopy( layout.titleCode ),
+							title.rect[2],
+							value => text.run( value, 0, layout.titleFont ).width
+						),
+						pitch = text.extentHeight( layout.titleFont );
+					lines.forEach( ( line, index ) =>
+						quads.push(
+							...text.quads(
+								line,
+								[
+									ex + layout.titlePosition[0],
+									ey + layout.titlePosition[1] + index * pitch,
+									title.rect[2],
+									pitch
+								],
+								full,
+								layout.titleColor,
+								{ fontIndex: layout.titleFont, vAlign: 0, overflow: "clip" }
+							)
+						)
+					);
+				}
+				if ( body ) {
+					const lines = textBoxLines(
+							layout.text || hudCopy( layout.textCode ),
+							body.rect[2],
+							value => text.run( value, 0, layout.textFont ).width
+						),
+						pitch = text.extentHeight( layout.textFont ) + layout.textMargin,
+						clip: UiRect = [
+							ex + body.rect[0],
+							ey + body.rect[1],
+							body.rect[2],
+							body.rect[3]
+						];
+					lines.forEach( ( line, index ) =>
+						quads.push(
+							...text.quads(
+								line,
+								[
+									ex + layout.textPosition[0],
+									ey + layout.textPosition[1] + index * pitch,
+									body.rect[2],
+									pitch
+								],
+								clip,
+								layout.textColor,
+								{ fontIndex: layout.textFont, vAlign: 0, overflow: "clip" }
+							)
+						)
+					);
+				}
+				if ( button ) {
+					const moved = layout.buttonRect ? { ...button, rect: layout.buttonRect } : button,
+						shown = layout.picButton ? { ...moved, texture: layout.picButton } : moved;
+					authoredButton( shown, ex, ey, closeId, "" );
+				}
+				endWindow( admission, tag );
+			}
+			const eventData = hud.data();
+			if ( worldVisible && eventData?.windows.ifeventgate ) {
+				if ( eventGate === "open" && eventData.eventInterface.gate ) {
+					eventInterfaceWindow( eventData.eventInterface.gate, "event-interface-close", "event-interface" );
+				}
+				if ( eventPcRoom === "open" && eventData.eventInterface.pcroom ) {
+					eventInterfaceWindow(
+						eventData.eventInterface.pcroom,
+						"event-interface-pcroom-close",
+						"event-interface-pcroom"
+					);
+				}
 			}
 			const noticeData = hud.data(), noticeLayout = noticeData?.windows.ifmallnotifywnd;
 			if ( worldVisible && mallNotice === "open" && noticeData && noticeLayout ) {
