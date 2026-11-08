@@ -27,6 +27,7 @@ import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import { isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -129,7 +130,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		texturesKnown = resolve;
 	} );
 	const fail = ( error: unknown, canRecover = false ) => {
-		if ( !canRecover ) texturesKnown( [] );
+		// A memory refusal takes the recovery path however it arrived:
+		// the builders' promise catches below see it as a rejected
+		// DOMException long after `retryable` cleared (#2866).
+		const recover = canRecover || isOutOfMemoryRefusal( error );
+		if ( !recover ) texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}
@@ -137,7 +142,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		// rejecting a format or usage) and then every consequence ("createView:
 		// texture is not valid"); the report must name the cause (BUG-022).
 		if ( phase === "failed" ) return;
-		recoverable = canRecover;
+		recoverable = recover;
 		failure = String( error );
 		phase = "failed";
 	};
@@ -209,7 +214,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				// cure: it starts empty. Validation errors would only repeat.
 				fail(
 					message,
-					typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError
+					isOutOfMemoryRefusal( event.error ) ||
+						(typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError)
 				);
 			} );
 
@@ -823,6 +829,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		*/
 		error: () => failure,
+		/*
+		================
+		fail
+
+		Record a failure the renderer met while driving this device.
+		================
+		*/
+		fail: ( error: unknown ) => fail( error ),
 		/*
 		================
 		gpuTiming
