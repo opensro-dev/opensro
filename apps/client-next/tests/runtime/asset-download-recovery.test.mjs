@@ -99,14 +99,13 @@ test("interrupted response body restarts the read without publishing partial byt
 });
 
 test("a download stalled only by a synchronous world decode is not killed, and the decode reports its work", async t => {
-	// One manual clock drives performance.now; mock timers drive the
-	// loader's setTimeout deadlines. The decode's work notes are the only
-	// hands that move the clock while the decode parks the loop: each
-	// note stands for 6 s of synchronous decode, so the notes park the
-	// worker for 30 s of wall time inside one blocked span.
-	const clock = { now: 1000 };
-	t.mock.method( performance, "now", () => clock.now );
+	// Mock timers drive the loader's deadlines. setTime is time passing
+	// while the loop is parked: it advances the clock without firing
+	// anything, exactly as a synchronous decode defers every timer to
+	// the moment the loop frees. Each work note stands for 6 s of the
+	// decode, so the notes park the worker for 30 s inside the span.
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	let parkedMs = 0;
 	const bundle = {
 		source: { sectorX: 1, sectorY: 1 },
 		terrain: { blocks: [] },
@@ -150,7 +149,10 @@ test("a download stalled only by a synchronous world decode is not killed, and t
 	const messages = [];
 	const loader = createLoader( message => {
 		messages.push( message );
-		if ( message.kind === "job-decoding-progress" ) clock.now += 6000;
+		if ( message.kind === "job-decoding-progress" ) {
+			parkedMs += 6000;
+			t.mock.timers.setTime( parkedMs );
+		}
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: "https://example.test/asset.bin", limit: 1024 } );
@@ -165,24 +167,24 @@ test("a download stalled only by a synchronous world decode is not killed, and t
 		"decode work notes must increase monotonically"
 	);
 	assert.ok( messages.some( m => m.kind === "world" && m.id === 2 ), "the world load must still complete" );
-	// The download's whole silence was the decode's park: its stall
-	// deadline passes with 30 s of blocked time covering it, so the
-	// no-progress timer must not fire (the extra small tick covers the
-	// retry backoff a fired timer would have started).
-	t.mock.timers.tick( 15000 );
-	t.mock.timers.tick( 1000 );
+	// The download's whole silence was the decode's park. Advance to
+	// just past the restarted window and tick once: a stall timer that
+	// came due during the park (the old behaviour) would have fired on
+	// waking and already retried; the restarted one has at most just
+	// fired, and no retry has begun.
+	t.mock.timers.setTime( 44999 );
+	t.mock.timers.tick( 250 );
 	await settle();
 	assert.equal( assetFetches, 1, "a download stalled only by the decode must not be retried" );
 	assert.ok( !messages.some( m => m.kind === "error" && m.id === 1 ) );
-	// Real silence outlasts the window even after blocked time is
-	// subtracted: the timer still kills the download and retries it.
-	clock.now += 16000;
+	// Real silence after the park still kills the download: its
+	// restarted window runs out and the read is abandoned and retried.
 	for ( let turn = 0; turn < 40 && assetFetches < 2; turn++ ) {
 		t.mock.timers.tick( 60000 );
 		await settle();
 	}
 	assert.equal( assetFetches, 2, "a truly silent download must still be abandoned and retried" );
-} );
+});
 
 test("persistent transport failure exhausts exactly three attempts", async t => {
 	let attempts = 0;

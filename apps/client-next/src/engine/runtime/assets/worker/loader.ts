@@ -147,29 +147,31 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Foreground downloads in flight. The decoding mark waits for the pipe
 	// to drain: while a download can still deliver, a load is fetching.
 	let activeDownloads = 0;
-	// Worker time spent inside synchronous work (a world decode, a scene
-	// pack). While the loop is parked there, no download can be read and
-	// no stall timer can run, so the time counts against nobody: download
-	// stall accounting subtracts it (downloadAttempt), because bytes that
-	// were only queued behind the park did arrive (#2862).
-	let blockedMs = 0;
+	// Stall windows of the downloads in flight, as their restart calls.
+	// A synchronous span (a world decode, a scene pack) parks the
+	// worker's loop for its whole length: no download can be read and no
+	// stall timer can run while it lasts, so when the span ends every
+	// in-flight window restarts (syncWork) - the parked time was never
+	// silence a download could have used (#2862).
+	const stallWindows = new Set<() => void>();
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
 	/*
 	================
 	syncWork
 
-	Run one synchronous stretch (a world decode, a scene pack) and charge
-	its duration to blockedMs: while it ran, the worker could not read a
-	single download, so that time is nobody's stall.
+	Run one synchronous stretch (a world decode, a scene pack). The
+	loop is parked for its whole length, so when it ends every
+	in-flight download's stall window restarts: a download whose
+	bytes were only queued behind the stretch must not be killed
+	for the wait.
 	================
 	*/
 	function syncWork<T>( run: () => T ): T {
-		const started = performance.now();
 		try {
 			return run();
 		} finally {
-			blockedMs += performance.now() - started;
+			for ( const restart of stallWindows ) restart();
 		}
 	}
 	/*
@@ -357,48 +359,34 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
-		// received chunk restarts the timer. The timer measures silence the
-		// worker could have acted on: time parked in a synchronous decode
-		// (blockedMs) is subtracted, so a download whose bytes were only
-		// queued behind the decode is not killed the moment the loop frees.
+		// received chunk restarts the timer, and so does the end of a
+		// synchronous span that parked the loop (syncWork): silence is
+		// only ever time the worker could have read in.
 		const attempt = new AbortController(), stalled = new NoProgressError( url, DOWNLOAD_NO_PROGRESS_MS );
 		const forward = () => attempt.abort( signal.reason );
 		signal.addEventListener( "abort", forward, { once: true } );
-		let lastProgressAt = performance.now(), blockedAtProgress = blockedMs;
-		let timer: ReturnType<typeof setTimeout>;
+		let timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		/*
 		================
-		onStall
+		restart
 
-		The stall deadline arrived: abort only if the silence since the
-		last chunk, minus the time the loop was parked in synchronous
-		work, really spans the no-progress window; otherwise re-arm for
-		what is left of it.
+		Restart the stall window.
 		================
 		*/
-		const onStall = () => {
-			const silence = (performance.now() - lastProgressAt) - (blockedMs - blockedAtProgress);
-			if ( silence >= DOWNLOAD_NO_PROGRESS_MS ) {
-				attempt.abort( stalled );
-				return;
-			}
-			timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS - silence );
-		};
-		timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS );
-		const progressed = () => {
-			lastProgressAt = performance.now();
-			blockedAtProgress = blockedMs;
+		const restart = () => {
 			clearTimeout( timer );
-			timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS );
+			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
+		stallWindows.add( restart );
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
 			signal.throwIfAborted();
 			throw attempt.signal.reason === stalled ? stalled : error;
 		} finally {
+			stallWindows.delete( restart );
 			clearTimeout( timer );
 			signal.removeEventListener( "abort", forward );
 		}
@@ -707,8 +695,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
+					// The decode closures below capture the bundle: narrowing
+					// does not reach into them, so name the non-null value.
+					const resolvedBundle = resolved;
 					let scene = syncWork( () =>
-						worlds.decode( resolved, request.decode === "frontend-world", {
+						worlds.decode( resolvedBundle, request.decode === "frontend-world", {
 							origin,
 							part,
 							onProgress: noteDecodeWork
@@ -733,17 +724,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						for ( const prop of manifest.props ) {
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
-							const region = resolved.source.sectorX | (resolved.source.sectorY << 8);
+							const region = resolvedBundle.source.sectorX | (resolvedBundle.source.sectorY << 8);
 							const product = syncWork( () =>
-								worlds.decode( {
-									source: resolved.source,
-									terrain: { blocks: [] },
-									terrainTextures: { tileCatalog: { referencedTiles: [] } },
-									objects: {
-										resources: manifest.resources,
-										placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
-									}
-								}, true, { onProgress: noteDecodeWork } )
+								worlds.decode(
+									{
+										source: resolvedBundle.source,
+										terrain: { blocks: [] },
+										terrainTextures: { tileCatalog: { referencedTiles: [] } },
+										objects: {
+											resources: manifest.resources,
+											placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
+										}
+									},
+									true,
+									{ onProgress: noteDecodeWork }
+								)
 							);
 							decodeBase = decodeUnits;
 							added.push(
