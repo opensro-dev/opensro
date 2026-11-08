@@ -728,6 +728,9 @@ type Runtime struct {
 	AdvanceQuestItem     func(*enterworld.Character, int64) []wire.Frame
 	ForgetQuestItem      func(*enterworld.Character)
 	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	// HwanLevel answers a character's Blue Berserk level (the quest owner's
+	// derived value, quest/hwan_level.go); nil is level 0 (hwan.go).
+	HwanLevel func(*enterworld.Character) uint8
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
 	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame

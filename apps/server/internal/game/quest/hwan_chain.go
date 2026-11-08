@@ -40,7 +40,6 @@ type hwanRace struct {
 	general, guide, hunter  string // General, Exorcist / Witch, Hunter Associate
 	charm, ritualOrb1, orb2 string // the 1_4 carried item, the 1_5 and 2_5 sight items
 	trap2                   string // the Annihilation Trap
-	fragmentUnderworld      string // ITEM_QNO_CH_HWAN_2_5_02: shared
 }
 
 const hwanPriest = "NPC_CH_PRIEST"

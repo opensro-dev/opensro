@@ -260,6 +260,10 @@ func (rt *Runtime) HandleItemUse(
 			}
 			return rt.wakeSpirit(character, ref, rowIndex, request, &result)
 		}
+		if code := rt.hwanItemRequirement(character, ref); code != 0 {
+			result = itemUseFailure(code)
+			return false
+		}
 		nowMs := rt.Now().UnixMilli()
 		if family == itemUseMercenary {
 			if len(tail) != 0 {

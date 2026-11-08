@@ -16,6 +16,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -47,4 +48,29 @@ func applyHwanKnobs(quests *quest.Runtime) error {
 		log.Infof("quest: Alexandria ostracon steps drop %d items per kill (%s)", quest.FastDropCount, quest.EnvHwan3FastDrop)
 	}
 	return nil
+}
+
+/*
+================
+wireHwanLevel
+
+The Blue Berserk level's seats: the quest owner derives it, the action lane
+spends it (absorption, scroll requirements, the length of a Berserk), and the
+port-only 0x3FBF frames tell the owner at world entry and when it rises.
+================
+*/
+func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) {
+	game.items.HwanLevel = quests.HwanLevel
+	quests.HwanLevelFrames = game.items.HwanLevelFrames
+	halloween := game.deps.EntryEventFrames
+	game.deps.EntryEventFrames = func(division string, character *enterworld.Character) []enterworld.Packet {
+		var packets []enterworld.Packet
+		if halloween != nil {
+			packets = halloween(division, character)
+		}
+		for _, frame := range game.items.HwanEntryFrames(character) {
+			packets = append(packets, enterworld.NewPacket(frame.Opcode, frame.Payload))
+		}
+		return packets
+	}
 }

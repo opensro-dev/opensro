@@ -55,11 +55,12 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 17 adds survival checkpoint rewards and tags the seasonal
+	// Protocol 18 adds the port-only 0x3FC0 Blue Berserk level (cap-110), so a
+	// client that reads it is the one served. Protocol 17 adds survival checkpoint rewards and tags the seasonal
 	// decoration's placements with their world layer (see WorldContract
 	// 1). Protocol 16 grows a pet chat link to name its pet (see
 	// ChatContract 2).
-	Current = 17
+	Current = 18
 	// The world contract: 1 tags a region bundle placement with the
 	// seasonal layer that owns it (layerobject.json, #3265), drawn only
 	// while that layer's event group is on. Region bundles keep their

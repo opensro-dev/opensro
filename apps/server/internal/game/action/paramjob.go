@@ -36,7 +36,7 @@ import (
 const (
 	paramExpRate      uint16 = 0x100
 	paramSkillExpRate uint16 = 0x102
-	paramHPRate       uint16 = 0x3c
+	paramBerserkTime  uint16 = 0x3c // the Berserk gauge's extra seconds (ITEM_ETC_INCREASE_HWAN_TIME_0n)
 	// paramPremiumExpRate / paramPremiumSkillExpRate are the second terms the
 	// distributor sums (0x100 + 0xBA, 0x102 + 0xCA). The premium
 	// time tickets raise them (premiumticket.go).
@@ -49,7 +49,7 @@ const (
 
 // paramJobFourCC maps the internal item's Param2 to a ParamKeeper id.
 var paramJobFourCC = map[uint32]uint16{
-	0x706874:   paramHPRate,       // "tph"
+	0x706874:   paramBerserkTime,  // "thp": extra Berserk seconds (hwan.go)
 	0x70657275: paramExpRate,      // "urep"
 	0x70737275: paramSkillExpRate, // "ursp"
 	0x73657275: paramSkillExpRate, // "urse"
