@@ -990,7 +990,16 @@ export function createRenderer(
 						sunShadow,
 						casters: shadowOn ?
 							[ ...opaqueDraws, ...(preview ? [] : liveCharacters.filter( draw => !draw.blended )) ] :
-							[]
+							[],
+						// Ambient occlusion (experimental, port-only; #2094):
+						// prepared against the scene and camera like the
+						// bloom stage; preview frames never arm it.
+						ao: device.ambientOcclusion(
+							sceneWidth,
+							sceneHeight,
+							!preview && experimental.ambientOcclusion,
+							scene.camera
+						)
 					},
 					targetSurface
 				);

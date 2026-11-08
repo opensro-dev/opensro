@@ -76,10 +76,24 @@ const (
 // sharing one owner snapshot per owner tick (#2030), measured
 // 54,405 B / 902 allocs; with the crow-brood tick judging on
 // door-read facts and taking the owner copy only on a tick that
-// fires a brood event (#2030), measured 48,993 B / 858 allocs.
+// fires a brood event (#2030), measured 48,993 B / 858 allocs;
+// with the elemental walk's armed facts recycled across ticks
+// instead of captured fresh per owner tick (#2030), measured
+// 45,541 B / 822 allocs; with the tick driver's steps timed as
+// spans instead of per-step timing closures (#2030), measured
+// 39,284 B / 562 allocs; with the pet counter judge taking the
+// read guard and composing its frame only on a change instead
+// of through a door closure per pet tick (#2030), measured
+// 27,259 B / 268 allocs; with the mercenary cooldown pass
+// collecting its owner keys into runtime scratch instead of a
+// slice grown from empty every tick (#2030), measured 25,952 B /
+// 263 allocs; with the bond lane's revival walk judging its
+// refusal on door-read facts before bondSource's answer comes
+// home, instead of paying for the escaped SkillDef on every pet
+// owner's tick (#2030), measured 25,150 B / 258 allocs.
 const (
-	tickBudgetBytesPerTick  = 54000
-	tickBudgetAllocsPerTick = 970
+	tickBudgetBytesPerTick  = 27700
+	tickBudgetAllocsPerTick = 284
 )
 
 /*

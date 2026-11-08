@@ -104,7 +104,7 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 				t.Fatal("storm not armed")
 			}
 			last := first.CurrentHP
-			for range 3 {
+			for range 4 {
 				clock.now = clock.now.Add(time.Second)
 				batches := rt.TickHook()(clock.NowMs())
 				next, _ := rt.Monsters.Get(testDivision, mob.Gid)
@@ -159,8 +159,14 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 			if frozen != (book == 3) {
 				t.Fatal("end freeze book gate", book, frozen)
 			}
-			if c.ActiveCOS.Training.Rows[1].ReadyAtMs-clock.NowMs() != 17000 {
+			if c.ActiveCOS.Training.Rows[1].ReadyAtMs-clock.NowMs() != 16000 {
 				t.Fatal("pulses refreshed cooldown")
+			}
+			clock.now = clock.now.Add(time.Second)
+			rt.TickHook()(clock.NowMs())
+			afterExpiry, _ := rt.Monsters.Get(testDivision, mob.Gid)
+			if afterExpiry.CurrentHP != end.CurrentHP {
+				t.Fatal("storm dealt a sixth pulse after expiry")
 			}
 		})
 	}
@@ -182,7 +188,7 @@ func TestPenguinStormPulsesKeepSpeciesAndGearScaling(t *testing.T) {
 		t.Fatal("initial storm did not hit")
 	}
 	last := first.CurrentHP
-	for range 3 {
+	for range 4 {
 		clock.now = clock.now.Add(time.Second)
 		rt.TickHook()(clock.NowMs())
 		next, _ := rt.Monsters.Get(testDivision, mob.Gid)
@@ -299,7 +305,7 @@ func TestPenguinShatterOwnerGateAndFrozenKillBurst(t *testing.T) {
 	learnPetBook(t, c, 36)
 	learnPetBook(t, c, 39)
 	castPenguinFixture(t, rt, clock, c, mob, 36)
-	for range 3 {
+	for range 4 {
 		clock.now = clock.now.Add(time.Second)
 		rt.TickHook()(clock.NowMs())
 	}
@@ -455,7 +461,7 @@ func TestPenguinStormNeedsContinuousExposureAndCancelsOnDeath(t *testing.T) {
 	clock.now = clock.now.Add(time.Second)
 	rt.TickHook()(clock.NowMs())
 	rt.LineOfSight = nil
-	for range 2 {
+	for range 3 {
 		clock.now = clock.now.Add(time.Second)
 		rt.TickHook()(clock.NowMs())
 	}
@@ -494,7 +500,7 @@ func TestPenguinBlizzardEchoDoesNotFeedCounters(t *testing.T) {
 	if len(step.state.penguin.storms) != 2 {
 		t.Fatal("Blizzard echo missing")
 	}
-	for range 3 {
+	for range 4 {
 		clock.now = clock.now.Add(time.Second)
 		rt.TickHook()(clock.NowMs())
 	}
@@ -535,7 +541,7 @@ func TestPenguinEchoFrozenKillStillShattersWithoutProgress(t *testing.T) {
 	learnPetBook(t, c, 36)
 	learnPetBook(t, c, 39)
 	castPenguinFixture(t, rt, clock, c, mob, 36)
-	for range 3 {
+	for range 4 {
 		clock.now = clock.now.Add(time.Second)
 		rt.TickHook()(clock.NowMs())
 	}

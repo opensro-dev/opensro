@@ -18,7 +18,8 @@ lifecycles that belong in separate owners (see the size ledger).
 import {
 	createPenguinBolts,
 	penguinEffectActors,
-	PENGUIN_EFFECT_SOUND
+	PENGUIN_EFFECT_SOUND,
+	PENGUIN_BLIZZARD_SECONDS
 } from "@/engine/foundation/animation/penguin-effects";
 import {
 	PET_BOND_TRANSFER_SOUND,
@@ -3755,7 +3756,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xda)
+						!(action >= 0xd0 && action <= 0xda) && !(entity.kind === "cos" && action >= 34 && action <= 36)
 					) {
 						continue;
 					}
@@ -3780,22 +3781,28 @@ export function createCharacterEffects(
 				for ( const [gid, skill] of [ ...wolfSkills ] ) {
 					const entity = byGid.get( gid );
 					const elapsed = Math.max( 0, now - skill.startedAt );
-					const frost = skill.action >= 0xd0 && skill.action <= 0xd6;
+					const penguinCasting = skill.action >= 34 && skill.action <= 36;
+					const frost = (skill.action >= 0xd0 && skill.action <= 0xd6) || penguinCasting;
 					const gear = skill.action >= 0xd7 && skill.action <= 0xda;
+					const lifetime = skill.action >= 0xd3 && skill.action <= 0xd5 ?
+						PENGUIN_BLIZZARD_SECONDS :
+						penguinCasting ?
+						1.25 :
+						WOLF_EFFECT_SECONDS;
 					// Ground frost outlives its victim; retain the latched pose for its bounded lifetime.
 					if (
 						!frost && !gear && (!entity || entity.emote?.revision !== skill.revision) ||
-						!entity && elapsed >= WOLF_EFFECT_SECONDS
+						!entity && elapsed >= lifetime
 					) {
 						wolfSkills.delete( gid );
 						continue;
 					}
 					const parts = frost ? [] : wolfEffectParts( skill.action );
-					const kind = skill.action >= 0xd0 && skill.action <= 0xd6 ?
+					const kind = penguinCasting ? "follow" : skill.action >= 0xd0 && skill.action <= 0xd6 ?
 						"victim" :
 						wolfEffectKind( skill.action );
 					// Keep the consumed revision until the entity leaves or a new emote arrives.
-					if ( elapsed >= WOLF_EFFECT_SECONDS ) continue;
+					if ( elapsed >= lifetime ) continue;
 					const live = presentation.get( gid )?.pose ?? skill.pose;
 					// Victims keep where they were struck; a dead monster may already be gone.
 					const pose = kind === "victim" ? skill.pose : live;

@@ -16,7 +16,6 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/world/monster"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -506,6 +505,11 @@ lookups remain cached and fail closed if a non-production caller skips it.
 */
 type TextdataSkills struct {
 	dir string
+	// tomb pins the Qin-Shi tomb switch (SRO_QINSHI_TOMB) at
+	// construction: the merged 232 tomb rows are instance state,
+	// never a parse-time environment read, so an exported switch
+	// in a developer shell cannot rewrite a table built without it.
+	tomb bool
 
 	once    sync.Once
 	rows    skillStorage
@@ -532,11 +536,26 @@ var sharedSkillParses texttable.SharedParses[TextdataSkills]
 NewTextdataSkills
 
 NewTextdataSkills returns a lazy loader over dir (skilldata.txt index +
-shards + skilldata_virtual.txt).
+shards + skilldata_virtual.txt). The tomb position is the environment's
+at construction - the one ambient read left; a table built for the tomb
+variant states it explicitly instead (NewTextdataSkillsWithTomb).
 ================
 */
 func NewTextdataSkills(dir string) *TextdataSkills {
-	return &TextdataSkills{dir: dir}
+	return NewTextdataSkillsWithTomb(dir, monster.QinShiTombFromEnv())
+}
+
+/*
+================
+NewTextdataSkillsWithTomb
+
+The same loader with its tomb position stated at construction: the
+merged tomb rows are instance state from here on; no environment read
+at parse time can flip the table later (#2850).
+================
+*/
+func NewTextdataSkillsWithTomb(dir string, tomb bool) *TextdataSkills {
+	return &TextdataSkills{dir: dir, tomb: tomb}
 }
 
 /*
@@ -642,62 +661,6 @@ func (t *TextdataSkills) MaxMasteryRequirement() int64 {
 		}
 	}
 	return highest
-}
-
-/*
-==================
-load
-
-load adopts the process-wide parse of the same files. The parse is
-immutable once published: rows, compiled plans and the codename index are
-only read afterwards, and UseBoundedCache replaces fields, never contents.
-==================
-*/
-func (t *TextdataSkills) load() {
-	shards := skillShards(t.dir)
-	// skilleffect.txt feeds AssistsCompanions (skillassist.go).
-	paths := []string{filepath.Join(t.dir, "skilldata.txt"), filepath.Join(t.dir, "skilleffect.txt")}
-	for _, shard := range shards {
-		paths = append(paths, filepath.Join(t.dir, shard))
-	}
-	t.sharedKey = texttable.Fingerprint(paths...)
-	if monster.QinShiTombFromEnv() {
-		t.sharedKey += "+qinshi_tomb"
-	}
-	// The rank index is a pure function of the rows, so it is built once
-	// with the parse and shared read-only: decoding every resident row per
-	// loader cost each test binary tens of seconds.
-	parsed := sharedSkillParses.Get(t.sharedKey, func() *TextdataSkills {
-		p := &TextdataSkills{dir: t.dir}
-		p.parse(shards)
-		p.indexLearnedRanks()
-		return p
-	})
-	t.shared = parsed
-	t.rows, t.plans, t.byCodename, t.loadErr = parsed.rows, parsed.plans, parsed.byCodename, parsed.loadErr
-	t.byRank = parsed.byRank
-}
-
-/*
-==================
-skillShards
-
-skillShards reads skilldata.txt, an INDEX naming the shard files; the
-client feeds it and skilldata_virtual.txt through the same parser
-(Client_LoadGameDataTables @0x00722f78 then @0x00722fc0), so the server
-loads the same set.
-==================
-*/
-func skillShards(dir string) []string {
-	shards := []string{}
-	for _, fields := range readTextdataFile(filepath.Join(dir, "skilldata.txt")) {
-		if len(fields) == 1 && fields[0] != "" {
-			// The server projection canonicalizes textdata filenames to lowercase;
-			// the authored index retains Windows casing (SkillData_5000.txt).
-			shards = append(shards, strings.ToLower(fields[0]))
-		}
-	}
-	return append(shards, "skilldata_virtual.txt")
 }
 
 /*
@@ -932,7 +895,7 @@ func (t *TextdataSkills) parse(shards []string) {
 		log.Warnf("bootstrap: %v; skill learning will refuse every request", t.loadErr)
 		return
 	}
-	if monster.QinShiTombFromEnv() {
+	if t.tomb {
 		// Port-only, not native: append the 230 Qin-Shi Emperor Tomb monster
 		// skills mapped into the v1.150 skill ID gaps (monster/qinshi_tomb.go).
 		parseRows(monster.SplitTabbedText(qinshiTombSkillDataTSV))

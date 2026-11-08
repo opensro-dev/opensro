@@ -268,6 +268,8 @@ import {
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createGlobalChatHud } from "./hud/global-chat-hud";
+import { chatLinkFromActivate, createChatLinkHud } from "./hud/chat-link-hud";
+import { chatLinkSpans } from "@/engine/foundation/gameplay/chat-item-links";
 import { createNameChangeHud } from "./hud/name-change-hud";
 import { createReverseReturnHud } from "./hud/reverse-return-hud";
 import { createSpecialtyDealHud } from "./hud/specialty-deal-hud";
@@ -1522,6 +1524,8 @@ export function createUi( ports: UiPorts ) {
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const globalChatHud = createGlobalChatHud();
+	// Port-only (SRO_CHAT_ITEM_LINKS): the links waiting in the chat editors.
+	const chatLinkHud = createChatLinkHud();
 	const renameHud = createNameChangeHud();
 	const reverseScrollHud = createReverseReturnHud();
 	const specialtyDealHud = createSpecialtyDealHud();
@@ -3385,6 +3389,51 @@ export function createUi( ports: UiPorts ) {
 	}
 	/*
 	================
+	chatLinksOn
+
+	Port-only (SRO_CHAT_ITEM_LINKS): the server publishes a link limit and
+	the Experimental "Item links in chat" row is on. Off draws and behaves
+	as the native client does.
+	================
+	*/
+	function chatLinksOn() {
+		return (view?.gameplay?.chatItemLinks ?? 0) > 0 && experimental.state().saved.chatItemLinks;
+	}
+	/*
+	================
+	insertChatLink
+
+	Port-only, not native (SRO_CHAT_ITEM_LINKS): an Alt+click on control id
+	while a chat editor has focus puts the item's link at the caret
+	(chat-link-hud.ts). False when the server switch or the Experimental row
+	is off, no chat editor has focus, or id names no held item, so the
+	native Alt+click runs instead.
+	================
+	*/
+	function insertChatLink( id: string ) {
+		const game = view?.gameplay, limit = game?.chatItemLinks ?? 0;
+		if ( !game || !chatLinksOn() ) return false;
+		const wholeChat = globalChatHud.state();
+		const editor = focus === "chat-text" ? focus : focus === GLOBAL_CHAT_TEXT && wholeChat ? focus : null;
+		if ( !editor ) return false;
+		const link = chatLinkFromActivate( id, {
+			inventory: game.inventory,
+			avatarInventory: game.avatarInventory,
+			storage: game.storage?.items,
+			pet: game.cosRecords?.find( record => record.gid === cosGid )?.inventory
+		} );
+		if ( !link ) return false;
+		const text = editor === "chat-text" ? chatText : wholeChat!.text;
+		const caret = Math.max( 0, Math.min( text.length, selection[1] ?? text.length ) );
+		const next = chatLinkHud.insert( editor, text, caret, link, limit );
+		if ( editor === "chat-text" ) chatText = next.text;
+		else globalChatHud.type( next.text );
+		selection = [ next.caret, next.caret ];
+		focusRequest = { id: editor, revision: ++focusRevision, caret: next.caret };
+		return true;
+	}
+	/*
+	================
 	openStallPrompt
 
 	CIFStall_OpenTextInput (5A1A40) builds the price box (528670 mode 10) and
@@ -3417,9 +3466,13 @@ export function createUi( ports: UiPorts ) {
 			if ( !line ) hudMessages.append( hudCopy( "UIIT_STT_WHOLECHAT_INPUTMSG" ) );
 			else if ( rules && !textAllowed( line, rules ) ) {
 				hudMessages.append( hudCopy( "UIIT_MSG_WHOLECHATERR_NOTINUSEMSG" ) );
-			} else sendGameplay( { kind: "item-use", slot, message: line } );
+			} else {
+				const links = chatLinkHud.links( GLOBAL_CHAT_TEXT );
+				sendGameplay( { kind: "item-use", slot, message: line, ...(links.length ? { links } : {}) } );
+			}
 		}
 		globalChatHud.sent();
+		chatLinkHud.clear( GLOBAL_CHAT_TEXT );
 		focusAtEnd( GLOBAL_CHAT_TEXT, "" );
 	}
 	/*
@@ -5518,6 +5571,9 @@ export function createUi( ports: UiPorts ) {
 					chatText
 			);
 			if ( draft ) {
+				// Sent or refused, the line is given up and its links with it.
+				const links = chatLinkHud.links( "chat-text" );
+				chatLinkHud.clear( "chat-text" );
 				// 6AEBD0: the membership refusals print before the abuse
 				// filter is consulted - party (6AEFF4), then guild
 				// (6AF03E), and only then 790C70 (6AF0B9).
@@ -5537,7 +5593,7 @@ export function createUi( ports: UiPorts ) {
 					hudMessages.append( hud.data()?.strings["UIIT_MSG_CHATWND_MESSAGE_FILTER"] ?? "", 0xffff0000 );
 					chatText = "";
 				} else {
-					sendGameplay( { kind: "chat", ...draft } );
+					sendGameplay( { kind: "chat", ...draft, ...(links.length ? { links } : {}) } );
 					chatText = chatTabPrefix( chatTab ) || (draft.channel === 2 ? "$" + draft.target + " " : "");
 				}
 			} else {
@@ -7061,7 +7117,7 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 				if ( event.kind === "edit" && event.id === GLOBAL_CHAT_TEXT ) {
-					globalChatHud.type( event.value );
+					globalChatHud.type( chatLinkHud.edited( GLOBAL_CHAT_TEXT, wholeChat.text, event.value ) );
 					dirty = true;
 					return;
 				}
@@ -9006,6 +9062,13 @@ export function createUi( ports: UiPorts ) {
 					}
 					return;
 				}
+				// Port-only, not native (SRO_CHAT_ITEM_LINKS): with a chat editor
+				// focused, Alt+click links the item into the line instead of the
+				// native pet transfer below.
+				if ( event.alt && insertChatLink( event.id ) ) {
+					dirty = true;
+					return;
+				}
 				if ( event.alt && (event.id.startsWith( "slot:" ) || event.id.startsWith( "cos-slot:" )) ) {
 					if ( panel === "COS inventory" ) {
 						if ( event.id.startsWith( "slot:" ) ) {
@@ -9273,8 +9336,9 @@ export function createUi( ports: UiPorts ) {
 				else if ( event.id === "exchange-gold" ) {
 					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
 				} else if ( event.id === "gm-input" ) consoleText = event.value;
-				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
-				else if ( event.id === "chat-target" ) chatTarget = event.value;
+				else if ( event.id === "chat-text" ) {
+					chatText = chatLinkHud.edited( "chat-text", chatText, event.value.slice( 0, 100 ) );
+				} else if ( event.id === "chat-target" ) chatTarget = event.value;
 				else if ( event.id === "account" ) account = event.value;
 				else if ( event.id === "password" ) password = event.value;
 				else if ( event.id === "endpoint" ) {
@@ -11321,11 +11385,15 @@ export function createUi( ports: UiPorts ) {
 					}
 					return;
 				}
+				// Port-only item links: the Global Chatting box draws a marker as its
+				// label and keeps its focus on Alt presses (chat-link-hud.ts).
+				const shown = ( part: string ) => chatLinkHud.display( id, part ),
+					linkable = id === GLOBAL_CHAT_TEXT && chatLinksOn();
 				const r = authoredRect( node, ox, oy ),
 					ink = native ? authoredClientRect( node, ox, oy ) : r,
 					hAlign = native ? node.hAlign : 0,
 					vAlign = node.vAlign,
-					width = text.run( value ).width,
+					width = text.run( shown( value ) ).width,
 					offset = Math.max( 0, ink[2] - width ) *
 						(hAlign === 2 ? 1 : hAlign === 1 ? .5 : 0);
 				controls.push( {
@@ -11335,6 +11403,7 @@ export function createUi( ports: UiPorts ) {
 					value,
 					rect: r,
 					maxLength,
+					...(linkable ? { keepFocusOnAltPress: true } : {}),
 					...(native ?
 						{
 							textInsets: node.client,
@@ -11344,8 +11413,8 @@ export function createUi( ports: UiPorts ) {
 				} );
 				const start = Math.min( value.length, selection[0] ?? 0 ),
 					end = Math.min( value.length, selection[1] ?? start ),
-					before = text.run( value.slice( 0, start ) ).width,
-					through = text.run( value.slice( 0, end ) ).width,
+					before = text.run( shown( value.slice( 0, start ) ) ).width,
+					through = text.run( shown( value.slice( 0, end ) ) ).width,
 					caret = selection[2] === selection[0] ? before : through;
 				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
 				const scroll = focus === id && width > ink[2] ? Math.max( 0, caret - ink[2] + EDIT_CARET_WIDTH ) : 0,
@@ -11374,7 +11443,7 @@ export function createUi( ports: UiPorts ) {
 						ink
 					);
 				}
-				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign, vAlign } ) );
+				quads.push( ...text.quads( shown( value ), box, ink, white, { overflow: "clip", hAlign, vAlign } ) );
 				if ( focus === id && caretVisible ) {
 					// A right-aligned empty edit puts the caret on the clip's right
 					// edge, which the clip excludes; keep the native-looking caret
@@ -12784,6 +12853,9 @@ export function createUi( ports: UiPorts ) {
 						];
 					key.push( experimental.state().saved.noticeLinks );
 					key.push( experimental.state().saved.eventChatTab );
+					// Port-only item links: the row and the input's labels change the layout.
+					key.push( chatLinksOn() );
+					key.push( ...chatLinkHud.labels( "chat-text" ) );
 					for ( const line of lines ) {
 						key.push(
 							line.channel,
@@ -12792,7 +12864,8 @@ export function createUi( ports: UiPorts ) {
 							line.text,
 							line.outgoing,
 							line.notice?.name,
-							line.notice?.item
+							line.notice?.item,
+							line.links
 						);
 					}
 					const output = chatLayoutCache.read(
@@ -12801,6 +12874,8 @@ export function createUi( ports: UiPorts ) {
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
 								noticeLinks: experimental.state().saved.noticeLinks,
+								chatItemLinks: chatLinksOn(),
+								inputLabels: chatLinkHud.labels( "chat-text" ),
 								eventTab: experimental.state().saved.eventChatTab,
 								compact: compact ?
 									{
@@ -22007,7 +22082,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							const sender = line.name || next.entities.find( e => e.gid === line.gid )?.name ||
 								"Unknown speaker";
 							label(
-								`${line.outgoing && line.channel === 2 ? "To " : ""}${sender}: ${line.text}`,
+								`${line.outgoing && line.channel === 2 ? "To " : ""}${sender}: ${
+									chatLinkSpans( line.text, line.links, false ).text
+								}`,
 								px + 22,
 								py + 78 + i * 22,
 								white,

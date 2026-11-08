@@ -279,6 +279,9 @@ func (rt *Runtime) penguinAfterSpell(step petCombatStep, primary petCombatTarget
 	}
 	use := ts.uses[0]
 	if use.skill.EffectName() == "Blizzard" {
+		if !step.announced {
+			rt.wolfEmote(step.key.division, step.pet.GID, use.skill.ID)
+		}
 		rt.wolfEmote(step.key.division, primary.gid, 0xd0+use.skill.ID-31)
 	} else {
 		for _, hit := range strikes {
@@ -295,7 +298,7 @@ func (rt *Runtime) penguinAfterSpell(step petCombatStep, primary petCombatTarget
 		for _, hit := range strikes {
 			stayed[hit.gid] = true
 		}
-		step.state.penguin.storms = append(step.state.penguin.storms, penguinStorm{skill: skill, center: primary.at, next: step.nowMs + 1000, left: 3, book: use.skill.ID, extended: ts.coldExtension, stayed: stayed})
+		step.state.penguin.storms = append(step.state.penguin.storms, penguinStorm{skill: skill, center: primary.at, next: step.nowMs + 1000, left: 4, book: use.skill.ID, extended: ts.coldExtension, stayed: stayed})
 	}
 	var echoFrames []simulation.Frame
 	if ts.echo {
@@ -324,7 +327,7 @@ func (rt *Runtime) penguinAfterSpell(step petCombatStep, primary petCombatTarget
 ================
 advancePenguin
 
-At most four four-pulse storms exist; a missed simulation tick never catches up
+At most four five-pulse storms exist; a missed simulation tick never catches up
 with a damage burst. Death, separation, unslot and logout discard the storms.
 ================
 */

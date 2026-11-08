@@ -131,6 +131,12 @@ func NewTicker(
 	ticker.Hooks = append(ticker.Hooks, hooks...)
 	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "tick-duration", Hook: tickDurationHook(hub, ticker)})
 	ticker.PhaseObserver = tickPhaseObserver(hub)
+	// Exact per-zone tick totals (#2824), always on: the budget read
+	// for #2150 diffs two /transport/metrics snapshots of tick_zones.
+	ticker.Zones = simulation.NewZoneLedger()
+	if hub != nil {
+		hub.SetTickZoneMetrics(tickZoneMetrics(ticker.Zones))
+	}
 	// Slow-tick zone timelines (#2301): armed only by SRO_TICK_TRACE,
 	// otherwise every zone point answers the shared no-op and the
 	// tick pays the nil checks. The sink hands each slow tick's
@@ -145,6 +151,28 @@ func NewTicker(
 		}
 	}
 	return ticker
+}
+
+/*
+==================
+tickZoneMetrics
+
+The tick_zones provider: the ledger's rows keyed "<kind>:<name>", in
+milliseconds.
+==================
+*/
+func tickZoneMetrics(ledger *simulation.ZoneLedger) func() map[string]transport.TickZone {
+	return func() map[string]transport.TickZone {
+		rows := ledger.Snapshot()
+		out := make(map[string]transport.TickZone, len(rows))
+		for _, row := range rows {
+			out[row.Kind+":"+row.Name] = transport.TickZone{
+				Count:   row.Count,
+				TotalMs: float64(row.Total) / float64(time.Millisecond),
+			}
+		}
+		return out
+	}
 }
 
 /*

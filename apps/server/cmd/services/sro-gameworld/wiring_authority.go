@@ -386,6 +386,8 @@ func newBootstrapDependencies(
 	deps.ReadCharacter = func(divisionID string, read func()) {
 		authorityStore.ReadState(read)
 	}
+	deps.ReadLock = func(string) { authorityStore.ReadLock() }
+	deps.ReadUnlock = func(string) { authorityStore.ReadUnlock() }
 	deps.CanEnterWorldRegion = func(character *enterworld.Character, regionID uint16) bool {
 		return paths.AuthoredAreas.CanEnterRegion(regionID, character != nil && character.GMPrivilege)
 	}

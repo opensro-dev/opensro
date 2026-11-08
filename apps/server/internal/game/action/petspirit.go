@@ -141,16 +141,15 @@ func (rt *Runtime) petSpiritExpires(key petOwnerKey, state *petSession, now int6
 	}
 	owner := state.character
 	var stacks, standing bool
-	rt.deps.Read(key.division, func() {
-		pet := owner.CompanionByGID(key.gid)
-		if pet == nil || pet.ResolveStacks == 0 {
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	pet := owner.CompanionByGID(key.gid)
+	if pet != nil && pet.ResolveStacks > 0 {
 		stacks = true
 		skill, _, learned := companion.Spirit(pet)
 		standing = learned && skill.ID == state.trained.resolveBook && rt.petExpansionAllowed(owner, pet) &&
 			pet.Summoned && pet.CurrentHP > 0 && enterworld.CharacterAlive(owner) && now < state.trained.resolveUntil
-	})
+	}
+	guard.Release()
 	if !stacks {
 		return false, true
 	}

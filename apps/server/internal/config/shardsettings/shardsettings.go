@@ -156,6 +156,10 @@ var Settings = []Setting{
 	// native: a grab pet holds 28 slots and a transport its authored size.
 	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
+	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
+	// native: chat lines are text only. The limit is a tunable (game/tunables).
+	{Env: "SRO_CHAT_ITEM_LINKS", NomadVar: "chat_item_links", Default: "off"},
+	{Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", NomadVar: "chat_item_links_per_message", Default: "1"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
@@ -418,6 +422,11 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: hide Alexandria's degree-11 shop goods
+	// (#2842). The original game sold them there, so "off" is native;
+	// "on" is for operators who want degree-11 gear from grinding only.
+	// The catalogue's shop lists follow it.
+	{Env: "SRO_ALEXANDRIA_HIDE_D11_GOODS", NomadVar: "alexandria_hide_d11_goods", Default: "off", Catalogue: true},
 	// Port-only, not native: WebTransport as a public endpoint (epic
 	// #1451). "off" keeps the loopback/development transport; "on" lets
 	// the GameWorld serve WT publicly under its explicit TLS pair and

@@ -386,6 +386,10 @@ type Ticker struct {
 	// TraceSink receives one slow tick's rendered trace. Nil drops
 	// the render.
 	TraceSink func(TickTrace)
+	// Zones, when set, totals every zone's exact time and count
+	// (zone_ledger.go, #2824) for /transport/metrics tick_zones.
+	// Production wiring always sets it; nil records nothing.
+	Zones *ZoneLedger
 	// Commit is the authority's per-tick batch (tick_commit.go).
 	Commit TickCommit
 	clock  tickClock
@@ -593,25 +597,30 @@ func (t *Ticker) RunTick(nowMs int64) {
 	t.clock.begin(t.timingNow())
 	t.traceBegin()
 	defer t.observePhases()
+	// Deferred after observePhases so it closes first: every zone of
+	// the tick, the commit flush included, ends inside phase:total.
+	defer t.zone(ZoneKindPhase, "total").End()
 	t.beginCommit()
 	defer t.flushCommit()
 
+	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
-	endZone := t.zone("phase:before_hooks")
+	prepare.End()
+	span := t.zone(ZoneKindPhase, "before_hooks")
 	t.runHookList(t.BeforeHooks, nowMs, work)
-	endZone()
+	span.End()
 	t.watch.phase.Store(tickPhaseDivisions)
 	t.clock.enterDivisions(t.timingNow())
-	endZone = t.zone("phase:divisions")
+	span = t.zone(ZoneKindPhase, "divisions")
 	for _, division := range work {
 		t.runDivision(division, tick, nowMs)
 	}
-	endZone()
+	span.End()
 	t.watch.phase.Store(tickPhaseHooks)
 	t.clock.enterHooks(t.timingNow())
-	endZone = t.zone("phase:hooks")
+	span = t.zone(ZoneKindPhase, "hooks")
 	t.runHooks(nowMs, work)
-	endZone()
+	span.End()
 }
 
 /*
@@ -626,16 +635,21 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	t.clock.begin(t.timingNow())
 	t.traceBegin()
 	defer t.observePhases()
+	// Deferred after observePhases so it closes first: every zone of
+	// the tick, the commit flush included, ends inside phase:total.
+	defer t.zone(ZoneKindPhase, "total").End()
 	t.beginCommit()
 	defer t.flushCommit()
 
+	prepare := t.zone(ZoneKindPhase, "prepare")
 	tick, work := t.prepareTick()
-	endZone := t.zone("phase:before_hooks")
+	prepare.End()
+	span := t.zone(ZoneKindPhase, "before_hooks")
 	t.runHookList(t.BeforeHooks, nowMs, work)
-	endZone()
+	span.End()
 	t.watch.phase.Store(tickPhaseDivisions)
 	t.clock.enterDivisions(t.timingNow())
-	endZone = t.zone("phase:divisions")
+	span = t.zone(ZoneKindPhase, "divisions")
 	batches := make([]shardTickBatch, len(inboxes))
 	for i := range batches {
 		batches[i] = shardTickBatch{tick: tick, nowMs: nowMs, done: make(chan struct{})}
@@ -663,13 +677,13 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	for _, batch := range dispatched {
 		<-batch.done
 	}
-	endZone()
+	span.End()
 	if ctx.Err() == nil {
 		t.watch.phase.Store(tickPhaseHooks)
 		t.clock.enterHooks(t.timingNow())
-		endZone = t.zone("phase:hooks")
+		span = t.zone(ZoneKindPhase, "hooks")
 		t.runHooks(nowMs, work)
-		endZone()
+		span.End()
 	}
 }
 
@@ -717,7 +731,7 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	started := t.timingNow()
 	defer func() { t.clock.timeDivision(work.divisionID, t.timingNow().Sub(started)) }()
 
-	defer t.zoneDivision(work.divisionID)()
+	defer t.zone(ZoneKindDivision, work.divisionID).End()
 
 	live := make(map[string]bool, len(work.sessions))
 	for _, session := range work.sessions {
@@ -725,43 +739,43 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	}
 	// Each leg is a watchdog step: a starved tick that still finishes legs
 	// is slow, not stuck (tick_watchdog.go).
-	endZone := t.zone("peerVisibility")
+	span := t.zone(ZoneKindSub, "peerVisibility")
 	t.runPeerVisibility(work.state, nowMs, work.sessions, live)
-	endZone()
+	span.End()
 	t.watch.step()
-	endZone = t.zone("peerCOSVisibility")
+	span = t.zone(ZoneKindSub, "peerCOSVisibility")
 	t.runPeerCOSVisibility(work.state, nowMs, work.sessions, live)
-	endZone()
+	span.End()
 	t.watch.step()
-	endZone = t.zone("playerMap")
+	span = t.zone(ZoneKindSub, "playerMap")
 	t.runPlayerMap(work.state, nowMs, work.sessions)
-	endZone()
+	span.End()
 	t.watch.step()
-	endZone = t.zone("sessionLegs")
+	span = t.zone(ZoneKindSub, "sessionLegs")
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
 		t.watch.step()
 	}
-	endZone()
+	span.End()
 	for sessionID := range work.state.settled {
 		if !live[sessionID] {
 			delete(work.state.settled, sessionID)
 		}
 	}
-	endZone = t.zone("monsterLeg")
+	span = t.zone(ZoneKindSub, "monsterLeg")
 	work.state.monsters.RunMonsterLeg(nowMs, work.sessions, t.Push)
-	endZone()
+	span.End()
 	t.watch.step()
 	// Last, on purpose: the resumed viewer's re-push (resume.go) reads the
 	// shown sets the legs above just refreshed, and its ordered frames land
 	// behind everything this tick already queued for that viewer.
-	endZone = t.zone("repush")
+	span = t.zone(ZoneKindSub, "repush")
 	for _, session := range work.sessions {
 		if work.resumed[session.SessionID] {
 			t.repushResumedViewer(work, session, tick, nowMs)
 		}
 	}
-	endZone()
+	span.End()
 }
 
 /*
@@ -782,7 +796,7 @@ func (t *Ticker) runHookList(hooks []NamedTickHook, nowMs int64, work []division
 	for _, hook := range hooks {
 		func() {
 			defer recoverTickPanic("hook")
-			defer t.zoneHook(hook.Name)()
+			defer t.zone(ZoneKindHook, hook.Name).End()
 			t.watch.enterHook(hook.Name)
 			defer t.watch.leaveHook()
 			// The hook's routing and pushes below are part of its time.

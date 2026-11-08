@@ -324,6 +324,7 @@ import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
+import { CHAT_LINK_SOURCE, type ChatLinkRef, resolveChatLinks } from "@/engine/foundation/gameplay/chat-item-links";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
@@ -513,6 +514,8 @@ export function createGameplay(
 	let gmCatalog: GmCatalog | null = null, gmCatalogPending = false;
 	// The server's port-only storage auto-stack rule (storageAutoStack).
 	let storageAutoStack = false;
+	// The server's port-only item-link limit (SRO_CHAT_ITEM_LINKS); 0 is off.
+	let chatItemLinks = 0;
 	// The shard's client tuning from the world-entry bootstrap (ui-tuning.ts).
 	let uiTuning: UiTuning = defaultUiTuning();
 	// The server's port-only Bandit Den countdown rule (fastDenReturn).
@@ -1072,6 +1075,32 @@ re-resolved at release from wherever the player then stands.
 	}
 	/*
 ================
+linkedChatItem
+
+Port-only (SRO_CHAT_ITEM_LINKS): the item a chat link names, read where the
+server reads it (action chatitemlinks.go) - the bag and worn gear, the
+costume slots, the open warehouse, the pet bag. Undefined when it is not
+there, so the line goes out without that link.
+================
+	*/
+	function linkedChatItem( ref: ChatLinkRef ) {
+		const state = inventory.state();
+		switch ( ref.source ) {
+			case CHAT_LINK_SOURCE.inventory:
+				return state.inventory.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.avatar:
+				return state.avatarInventory?.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.storage:
+				return presentedStorage()?.items.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.pet:
+				return [ ...cosRecords.values() ].find( record => record.inventory )?.inventory?.find( item =>
+					item.slot === ref.slot
+				);
+		}
+		return undefined;
+	}
+	/*
+================
 presentedStorage
 
 The open storage room with its rows named and drawn like the bag's.
@@ -1289,7 +1318,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
-	const chat = createChat( send, body => inventory.noticeItem( body ) ),
+	const chat = createChat( send, body => inventory.noticeItem( body ), ref => linkedChatItem( ref ) ),
 		quests = createQuests( send ),
 		friends = createFriends( send ),
 		letters = createLetters( send );
@@ -1755,6 +1784,10 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			const linkLimit = (value as { chatItemLinks?: unknown; } | null)?.chatItemLinks;
+			chatItemLinks = typeof linkLimit === "number" && Number.isInteger( linkLimit ) && linkLimit > 0 ?
+				linkLimit :
+				0;
 			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
@@ -3370,7 +3403,8 @@ state here before a command can claim a native wire conversation.
 					command.channel === 1 && eligibility.gm ? 3 : command.channel,
 					command.text,
 					command.target ?? "",
-					now
+					now,
+					command.links
 				);
 				return null;
 			}
@@ -3677,7 +3711,12 @@ state here before a command can claim a native wire conversation.
 					api.notice( refusal );
 					return null;
 				}
-				const sent = inventory.use( command.slot, now, context, command.message );
+				// Port-only (SRO_CHAT_ITEM_LINKS): the Global Chatting line links
+				// only what this client can read, as the chat line does.
+				const line = command.message === undefined ?
+					undefined :
+					resolveChatLinks( command.message, command.links ?? [], chatItemLinks, linkedChatItem );
+				const sent = inventory.use( command.slot, now, context, line?.text, line?.refs );
 				// Port-only (#1689): the scroll's use went out; its answer
 				// is the one 0xB5BD the refusal chain reads as its lines.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
@@ -5985,6 +6024,7 @@ The published plane when something changed since the last take, else null.
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
+				...(chatItemLinks ? { chatItemLinks } : {}),
 				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),

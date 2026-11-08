@@ -534,26 +534,36 @@ def heartbeat_claims(targets: list, record: dict, mode: str, owner_path: Path, t
 #
 # Atomic publish (write-temp-then-replace) so contenders never read a
 # partial record, exactly as the single-owner protocol published
-# owner.json.
+# owner.json. The empty-state releases remove the whole state directory,
+# and a publish landing inside that removal re-creates its parent and
+# tries again inside the retry budget instead of failing the claim it
+# serves (the Node publisher retries the same window).
 # ================
 def write_state_file(file_path: Path, record: dict) -> None:
-	give_up_at_ms = int(time.time() * 1000) + READ_RETRY_MS
+	give_up_at_ms = int(time.time() * 1000) + REMOVE_RETRY_MS
 	while True:
 		try:
 			file_path.parent.mkdir(parents=True, exist_ok=True)
-			break
 		except FileExistsError:
 			# The claim directory's removal by an idle release is still
 			# pending (see acquire_state_mutex).
 			if int(time.time() * 1000) >= give_up_at_ms:
 				raise
 			time.sleep(MUTEX_SPIN_SLEEP_S)
-	temporary = file_path.with_name(f"{file_path.name}.{record['token']}.{time.time_ns()}.tmp")
-	try:
-		temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-		os.replace(temporary, file_path)
-	finally:
-		temporary.unlink(missing_ok=True)
+			continue
+		temporary = file_path.with_name(f"{file_path.name}.{record['token']}.{time.time_ns()}.tmp")
+		try:
+			temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+			os.replace(temporary, file_path)
+			return
+		except (FileNotFoundError, PermissionError):
+			# The parent went away (or its Windows removal is still
+			# pending) between the ensure above and this publish.
+			if int(time.time() * 1000) >= give_up_at_ms:
+				raise
+			time.sleep(MUTEX_SPIN_SLEEP_S)
+		finally:
+			temporary.unlink(missing_ok=True)
 
 
 # ================

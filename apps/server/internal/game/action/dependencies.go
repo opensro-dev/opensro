@@ -79,6 +79,10 @@ type Dependencies interface {
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())
+	// AcquireRead holds the read door as a value (enterworld
+	// Deps.AcquireRead): the per-tick pet judges read their facts
+	// through it without a door closure per call (#2030).
+	AcquireRead(divisionID string) enterworld.ReadGuard
 	ItemReferences() enterworld.ItemRefSource
 	LevelData() enterworld.LevelDataSource
 	SkillData() enterworld.SkillDataSource

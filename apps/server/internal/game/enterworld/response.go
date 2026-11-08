@@ -276,6 +276,9 @@ type BootstrapResult struct {
 	// StorageAutoStack tells the client's storage quick move to prefer a
 	// matching stack (port-only, not native; false is native).
 	StorageAutoStack bool
+	// ChatItemLinks tells the client how many item links one chat line
+	// may carry (port-only, not native: SRO_CHAT_ITEM_LINKS; 0 is native).
+	ChatItemLinks int64
 	// FastDenReturn tells the client's delay bar that the Bandit Den scroll
 	// counts down half its Param1 (port-only, not native; false is native).
 	FastDenReturn bool
@@ -348,6 +351,7 @@ type bootstrapSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -434,6 +438,7 @@ type bootstrapBlobSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -478,6 +483,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
@@ -554,6 +560,7 @@ func (r *BootstrapResult) blobView() any {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
@@ -612,6 +619,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
@@ -684,6 +692,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
+		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,

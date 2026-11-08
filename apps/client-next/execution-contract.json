@@ -1352,7 +1352,23 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
-				"callback:createChat:1"
+				"callback:createChat:1",
+				"callback:createChat:2"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/chat-item-links.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/chat-item-links.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback:createChat:2",
+				"linkedChatItem"
 			]
 		},
 		{
@@ -2533,6 +2549,13 @@
 			"functions": [
 				"encode",
 				"encodePreview"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/ambient-occlusion.ts",
+			"functions": [
+				"encode"
 			]
 		},
 		{

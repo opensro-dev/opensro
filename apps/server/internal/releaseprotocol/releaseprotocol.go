@@ -48,13 +48,21 @@ type Contracts struct {
 	Notices    int // the port-only 0x3667 notice channels
 	Movement   int // the 0xB738 movement acknowledgement's source block
 	Wanted     int // the port-only 0x3FBA most-wanted state frame
+	Chat       int // the port-only item-link tails on player chat
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 14 adds expanded pet frames to protocol 13's wanted contract.
-	Current = 14
+	// Protocol 15 adds expanded pet frames to protocol 14's chat-link contract.
+	Current = 15
+	// The chat contract: 1 carries the port-only item links
+	// (SRO_CHAT_ITEM_LINKS): a link block after the text of a 0x7367 request
+	// and of a 0x75BD Global Chatting use, and the linked item bodies after
+	// the text of a player 0x3667 line. A protocol-13 client reads that
+	// tail as trailing bytes and fails its session, so the bump sends every
+	// open tab the 426 that reloads it onto a client that reads links.
+	ChatContract = 1
 	// The wanted contract: 1 sends the port-only 0x3FBA most-wanted
 	// state (level, kills into the level, dressed job, kills per level,
 	// lapse) to a streak holder for the buff-board row (#1849). A
@@ -130,8 +138,10 @@ var history = map[int]Contracts{
 	11: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1},
 	12: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 1},
 	13: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2},
+	14: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract},
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
+		Chat: ChatContract},
 }
 
 /*

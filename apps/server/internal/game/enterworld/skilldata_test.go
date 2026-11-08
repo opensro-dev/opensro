@@ -80,7 +80,9 @@ func TestTextdataSkillsReadsThePinnedColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skills := NewTextdataSkills(dir)
+	// The fixture is the datum: state the native position at
+	// construction so no shell export can add the tomb rows (#2850).
+	skills := NewTextdataSkillsWithTomb(dir, false)
 	if err := skills.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}

@@ -60,7 +60,7 @@ from alexandria_map_tables import (  # noqa: E402
 	MAP_ALEXANDRIA_ID, MAPINFO_COLUMNS, LOCALINFO_COLUMNS, MAP_PIN_IDS,
 	OVERVIEW_ID, OVERVIEW_KIND, OVERVIEW_BOX, OVERVIEW_TEXTURE, OVERVIEW_DRAW,
 	OVERVIEW_TILE_REGIONS, MAP_TEXTURES, table_text, append_rows, native_text_row,
-	merge_map_tables, overview_box, widen_overview, overview_tiles, map_media_paths
+	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -105,6 +105,12 @@ NATIVE_LEVEL_CAP = 90
 # gate conditions are clamped to the cap the shard runs, read with the same
 # values the server accepts so build and server can never disagree.
 LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
+# The shops' stock choice (#2846): unset, the Alexandria variant stocks
+# each store with the goods one official source had active; on, the
+# shop passes stock the port's own degree goods instead.
+PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
+PORT_STOCK_OFF_VALUES = ("", "0", "off", "false")
+PORT_STOCK_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
 LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
@@ -259,6 +265,17 @@ def enable_regions(mapinfo, regions):
 		region_id = (sector_y << 8) | sector_x
 		data[MFO_HEADER_BYTES + (region_id >> 3)] |= 0x80 >> (region_id & 7)
 	return bytes(data)
+
+
+# ================
+# region_available
+# ================
+def region_available(mapinfo, sector_x, sector_y):
+	"""Whether mapinfo.mfo marks the (sectorX, sectorY) region available; enable_regions' reader."""
+	if mapinfo[:len(MFO_SIGNATURE)] != MFO_SIGNATURE:
+		raise ValueError("not a JMXVMFO availability file")
+	region_id = (sector_y << 8) | sector_x
+	return bool(mapinfo[MFO_HEADER_BYTES + (region_id >> 3)] & (0x80 >> (region_id & 7)))
 
 
 #============================================================================
@@ -616,7 +633,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out)
+	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
 	environment = read_vsro_file(vsro_root, "Map", "environment.ifo")
 	replace_file(out / "Map_extracted" / "environment.ifo", environment)
@@ -666,6 +683,25 @@ def gate_level_cap(environ=None):
 
 
 # ================
+# port_stock_enabled
+# ================
+def port_stock_enabled(environ=None):
+	"""
+	The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK:
+	False - the default, and the value every official build has - asks
+	the shop passes for each store's official stock; on asks for the
+	port's own degree goods. Anything else is refused, as the server
+	refuses a value it does not know.
+	"""
+	value = (os.environ if environ is None else environ).get(PORT_STOCK_FLAG, "").strip().lower()
+	if value in PORT_STOCK_OFF_VALUES:
+		return False
+	if value in PORT_STOCK_ON_VALUES:
+		return True
+	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
+
+
+# ================
 # add_gates
 # ================
 def add_gates(vsro_root, native, out):
@@ -712,25 +748,36 @@ def add_map(vsro_root, native, out, regions, text_base):
 	overrides = set(overview_tiles(summary["overview"], regions))
 	icons = {row[2].replace("\\", "/").lower() for row in stage1.table_rows(merged["worldmap_localinfo.txt"])
 		if len(row) == LOCALINFO_COLUMNS and row[1] == "2" and row[2].lower().endswith(".ddj")}
+	native_box = overview_box(tables["worldmap_mapinfo.txt"])
+	native_mapinfo = (native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()
 	path, handle, data = stage1.open_archive(vsro_root, "Media")
 	try:
 		index = stage1.archive_index(data)
+
+		def differs(archive_path):
+			entry, native_file = index.get(archive_path), native / "Media_extracted" / archive_path
+			return entry is not None and native_file.is_file() and sro_pk2.payload(data, entry) != native_file.read_bytes()
+
+		seams = seam_tiles(summary["overview"], native_box, regions,
+			lambda x, y: region_available(native_mapinfo, x, y), differs)
+		overrides.update(seams)
 		added, absent = 0, []
-		paths = map_media_paths(regions, summary["overview"], overview_box(tables["worldmap_mapinfo.txt"]))
+		paths = map_media_paths(regions, summary["overview"], native_box) + seams
 		for archive_path in dict.fromkeys(paths + sorted(icons)):
 			entry = index.get(archive_path)
 			if entry is None:
 				absent.append(archive_path)
 			elif archive_path not in present or archive_path in overrides:
 				# Existing v1.150 overview art can show sea where these source
-				# regions now exist. Replace only the tiles that cover the import,
-				# unlinking the variant's hard link before writing later artwork.
+				# regions now exist. Replace only the tiles that cover the import
+				# and the seam tiles that join it to the page, unlinking the
+				# variant's hard link before writing later artwork.
 				replace_file(safe_target(out / "Media_extracted", entry.path), sro_pk2.payload(data, entry))
 				added += 1
 	finally:
 		data.close()
 		handle.close()
-	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent})
+	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent, "seamTiles": len(seams)})
 	return summary
 
 

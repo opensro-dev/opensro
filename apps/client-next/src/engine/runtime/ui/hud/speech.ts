@@ -11,6 +11,7 @@ admission (lines marked history).
 
 ===========================================================================
 */
+import { chatLinkSpans } from "@/engine/foundation/gameplay/chat-item-links";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 
 // CICharactor_SetTimedOverheadMessageUnlessStalling timer 10.
@@ -52,7 +53,9 @@ expired or whose speaker left view.
 				if ( line.history || !SPEECH_CHANNELS.includes( line.channel ) ) continue;
 				const gid = line.gid ?? players.find( p => p.name === line.name )?.gid;
 				if ( gid !== undefined && present.has( gid ) ) {
-					active.set( gid, { text: line.text, channel: line.channel, expires: now + SPEECH_MS } );
+					// Port-only item links: a marker shows as its item's label.
+					const text = chatLinkSpans( line.text, line.links, false ).text;
+					active.set( gid, { text, channel: line.channel, expires: now + SPEECH_MS } );
 				}
 			}
 			for ( const [gid, row] of active ) if ( now >= row.expires || !present.has( gid ) ) active.delete( gid );

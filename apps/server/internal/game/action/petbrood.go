@@ -244,30 +244,35 @@ func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64)
 		return crowBroodFacts{}, false
 	}
 	var facts crowBroodFacts
-	var pets []crowBroodPetFacts
+	// The brood facts ride a stack array, not a grown slice: the
+	// record's Brood never exceeds BroodLimit rows (castCrowBrood
+	// refuses the cast that would), so the judge allocates nothing
+	// on the door (#2030).
+	var pets [companion.BroodLimit]crowBroodPetFacts
+	petCount := 0
 	valid := false
 	judged := false
-	rt.deps.Read(key.division, func() {
-		judged = true
-		live := state.character
-		source := crowBroodSource(live, key.gid)
-		facts.crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
-		if !facts.crow {
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	judged = true
+	live := state.character
+	source := crowBroodSource(live, key.gid)
+	facts.crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+	if facts.crow {
 		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 &&
 			enterworld.CharacterAlive(live) && !rt.inTown(key.division, live)
 		for _, pet := range live.Brood {
 			if pet.BroodSource != key.gid {
 				continue
 			}
-			pets = append(pets, crowBroodPetFacts{gid: pet.GID, stage: pet.BroodStage, until: pet.BroodUntil, hp: pet.CurrentHP})
+			pets[petCount] = crowBroodPetFacts{gid: pet.GID, stage: pet.BroodStage, until: pet.BroodUntil, hp: pet.CurrentHP}
+			petCount++
 		}
-	})
+	}
+	guard.Release()
 	if !judged || !facts.crow {
 		return facts, judged
 	}
-	for _, pet := range pets {
+	for _, pet := range pets[:petCount] {
 		child := rt.petSessionFor(key.division, key.name, pet.gid)
 		if child != nil && child.follower != nil {
 			child.broodAt = child.follower.Position(now)

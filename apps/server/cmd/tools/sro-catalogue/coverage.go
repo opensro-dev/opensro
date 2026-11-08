@@ -62,6 +62,7 @@ var catalogueReaders = map[string]string{
 	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",
 	"SRO_STACK_SIZES":                        "shardItems reads it (enterworld.StackSizesFromEnv) into items.json's stack caps",
 	"SRO_ALEXANDRIA":                         "BuildNpcs' roster reads it (simulation.LoadNpcWorldRoster hides the city while off, alexandria.Hidden)",
+	"SRO_ALEXANDRIA_HIDE_D11_GOODS":          "shardShops reads it (commerce.AlexandriaHideD11GoodsFromEnv) to withhold Alexandria's degree-11 goods from the shops",
 }
 
 // catalogueExempt lists every other shard setting with the reason it
@@ -79,6 +80,8 @@ var catalogueExempt = map[string]string{
 	"SRO_MAINTENANCE_MESSAGE":                 "the refusal shown during a release window; no catalogue file carries it",
 	"SRO_PET_PACING":                          "pet movement speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_PET_INVENTORY_PAGES":                 "a pet's inventory size at runtime; the catalogue publishes no pet state",
+	"SRO_CHAT_ITEM_LINKS":                     "chat behaviour at runtime; the catalogue publishes no chat",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE":         "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_STORAGE_AUTO_STACK":                  "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
 	"SRO_INVENTORY_PAGES":                     "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                     "a scroll countdown at runtime; the catalogue publishes no timers",

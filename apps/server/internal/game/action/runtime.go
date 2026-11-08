@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/namefilter"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/crest"
@@ -321,6 +322,11 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// mercenaryKeys is the cooldown pass's owner-key scratch
+	// (mercenary_clock.go): refilled under petMu on every pass and
+	// consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is serial and nothing retains it.
+	mercenaryKeys []petOwnerKey
 	// cosOwners is the pet gid to owner index (cosownerindex.go):
 	// whose pet a gid is, without walking the division's characters.
 	cosOwners  cosOwnerIndex
@@ -362,10 +368,13 @@ type Runtime struct {
 	// elementalFacts holds each pet owner's armed elemental-walk facts
 	// (petwolf.go, #2030), keyed by division and lower-cased owner name.
 	// advancePetInDivision arms one entry per owner tick and clears it
-	// after the wolf lane; elementalFactsMu owns the map only - an
-	// entry itself is read and written under its division's lane.
-	elementalFactsMu sync.Mutex
-	elementalFacts   map[petOwnerKey]*elementalWalkFacts
+	// after the wolf lane; elementalFactsMu owns the map and the
+	// recycle list - an entry itself is read and written under its
+	// division's lane. elementalFactsFree holds cleared captures for
+	// the next arm to reset and reuse (takeElementalFacts).
+	elementalFactsMu   sync.Mutex
+	elementalFacts     map[petOwnerKey]*elementalWalkFacts
+	elementalFactsFree []*elementalWalkFacts
 	// castCopy, when set, replaces the press/release cast copy
 	// (characterSnapshotCast); only the cast-copy differential tests
 	// set it, to the full or the combat copy. Nil is the cast copy.
@@ -530,6 +539,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
+	// own shops (commerce/alexandriashops.go; port-only, not native).
+	// False is native: the original game sold them there (#2842).
+	AlexandriaHideD11Goods bool
 	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
@@ -808,6 +821,9 @@ type Runtime struct {
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
 	ChatShadowMuted func(accountID string) bool
+	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
+	// Global Chatting line (globalchat.go); nil keeps the native tail.
+	ChatItemLinks *chat.ItemLinks
 	// ModerationLog keeps the Global Chatting line for the staff
 	// (chatlog, port-only, not native), muted lines included and
 	// marked. Record only queues the line; nil keeps no log.

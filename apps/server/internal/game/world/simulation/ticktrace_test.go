@@ -124,23 +124,20 @@ func TestTickerTraceFinishSinksOnlySlowTicks(t *testing.T) {
 		},
 	}
 	ticker.Trace.beginTick(time.Now())
-	end := ticker.zone("phase:hooks")
-	end()
+	ticker.zone(ZoneKindPhase, "hooks").End()
 	ticker.traceFinish(TickTiming{Total: tickTraceSlowThreshold - time.Millisecond})
 	if len(sunk) != 0 {
 		t.Fatalf("a fast tick sank %d traces, want none", len(sunk))
 	}
 	ticker.Trace.beginTick(time.Now())
-	end = ticker.zone("phase:hooks")
-	end()
+	ticker.zone(ZoneKindPhase, "hooks").End()
 	ticker.traceFinish(TickTiming{Total: tickTraceSlowThreshold})
 	if len(sunk) != 1 || sunk[0].Events != 2 {
 		t.Fatalf("a slow tick sank %+v, want one trace of the zoned step", sunk)
 	}
 	// Disarmed: no tracer, no sink call, no panic.
 	disarmed := &Ticker{TraceSink: func(trace TickTrace) { t.Fatal("disarmed ticker sank a trace") }}
-	end = disarmed.zone("phase:hooks")
-	end()
+	disarmed.zone(ZoneKindPhase, "hooks").End()
 	disarmed.traceFinish(TickTiming{Total: tickTraceSlowThreshold})
 }
 
@@ -179,8 +176,7 @@ func BenchmarkTickTraceZonesOff(b *testing.B) {
 	ticker := &Ticker{}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		end := ticker.zone("phase:hooks")
-		end()
+		ticker.zone(ZoneKindPhase, "hooks").End()
 	}
 }
 

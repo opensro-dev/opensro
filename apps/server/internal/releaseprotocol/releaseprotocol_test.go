@@ -49,19 +49,25 @@ func TestTheCurrentProtocolPasses(t *testing.T) {
 
 /*
 ================
-TestExpandedPetFramesDoNotReuseReleasedProtocolThirteen
+TestExpandedPetFramesDoNotReuseReleasedProtocols
 ================
 */
-func TestExpandedPetFramesDoNotReuseReleasedProtocolThirteen(t *testing.T) {
+func TestExpandedPetFramesDoNotReuseReleasedProtocols(t *testing.T) {
 	previous, ok := ContractsOf(13)
 	if !ok || previous.Wanted != 2 || previous.Companions != 2 {
 		t.Fatalf("released protocol 13 changed: %+v", previous)
 	}
-	if Current <= 13 || WantedContract != 2 || CompanionsContract != 3 {
+	releasedChat, ok := ContractsOf(14)
+	if !ok || releasedChat.Chat != 1 || releasedChat.Companions != 2 {
+		t.Fatalf("released protocol 14 changed: %+v", releasedChat)
+	}
+	if Current <= 14 || WantedContract != 2 || ChatContract != 1 || CompanionsContract != 3 {
 		t.Fatal("expanded pet frames need a new protocol while retaining main's wanted contract")
 	}
-	if reached, recorder := serve(t, http.MethodPost, "13"); reached || recorder.Code != http.StatusUpgradeRequired {
-		t.Fatal("a protocol-13 browser would receive incompatible pet frames")
+	for _, declared := range []string{"13", "14"} {
+		if reached, recorder := serve(t, http.MethodPost, declared); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("a protocol-%s browser would receive incompatible pet frames", declared)
+		}
 	}
 }
 
@@ -114,7 +120,7 @@ TestEveryReleasedProtocolNamesDistinctContracts
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
 	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract}) {
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract, Chat: ChatContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -302,5 +308,35 @@ func TestAClientWithoutTheWantedStateIsRefused(t *testing.T) {
 	}
 	if WantedContract < showsTheWantedState {
 		t.Fatalf("WantedContract = %d; this build sends the wanted state", WantedContract)
+	}
+}
+
+/*
+================
+TestAClientWithoutChatLinksIsRefused
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): a protocol-13 browser reads
+a player line that carries an item-link tail as trailing bytes and fails
+the session, so it is refused with 426 and told to reload.
+================
+*/
+func TestAClientWithoutChatLinksIsRefused(t *testing.T) {
+	const readsChatLinks = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Chat >= readsChatLinks {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (chat %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Chat, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[13]; !ok || refused == 0 {
+		t.Fatal("the protocol-13 client is not in the history this test refuses")
+	}
+	if ChatContract < readsChatLinks || Current < 14 {
+		t.Fatalf("ChatContract = %d, Current = %d; this build sends link tails since protocol 14", ChatContract, Current)
 	}
 }

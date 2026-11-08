@@ -50,6 +50,7 @@ var unlistedSettings = map[string]string{
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
@@ -119,6 +120,7 @@ func publicRules() publicstats.RulesResponse {
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
+	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
@@ -164,6 +166,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The world is the v1.150 map; Alexandria is not part of it.",
 				Now:    "The Alexandria city is open, with its gates, ferry and townspeople.",
 				Why:    "Optional Alexandria expansion, imported from a later client."},
+			{Flag: commerce.EnvAlexandriaHideD11Goods, On: hideAlexandriaD11,
+				Native: "Alexandria's smith, armourer and accessory shops sell degree-11 gear and alchemy, as the original game's shops did.",
+				Now:    "Degree-11 goods are hidden from Alexandria's shops; degree-11 gear comes from monster drops only.",
+				Why:    "An operator choice for shards that want degree-11 gear earned by grinding, not bought."},
 			{Flag: companion.EnvAttackPetExpansion, On: companion.AttackPetExpansionEnabled(),
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
@@ -272,6 +278,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
 				Why:    "Owner-approved beta pacing for pets."},
+			{Flag: chat.EnvChatItemLinks, On: chat.ItemLinksFromEnv(),
+				Native: "Chat lines are text only.",
+				Now:    "Alt+click an item while typing to link it in the line; readers hover the link for the item's tooltip.",
+				Why:    "Owner decision 2026-11-07: players show items in chat."},
 			{Flag: action.EnvStorageAutoStack, On: action.StorageAutoStackFromEnv(),
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",

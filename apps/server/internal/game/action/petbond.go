@@ -74,23 +74,21 @@ func (rt *Runtime) bondSourceRefused(key petOwnerKey, state *petSession) (refuse
 	if rt.companionCopy != nil {
 		return false, false
 	}
-	rt.deps.Read(key.division, func() {
-		owner := state.character
-		pet := owner.CompanionByGID(key.gid)
-		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || companion.PetKind(pet.Codename) != "Bear" || !pet.Summoned {
-			refused = true
-			return
-		}
-		if rt.inFreeBattle(owner) || wearsJobSuit(owner, rt.deps.ItemReferences()) ||
-			domain.CharacterWorldInstance(owner) != domain.DefaultWorldInstance {
-			refused = true
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	owner := state.character
+	pet := owner.CompanionByGID(key.gid)
+	if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || companion.PetKind(pet.Codename) != "Bear" || !pet.Summoned {
+		refused = true
+	} else if rt.inFreeBattle(owner) || wearsJobSuit(owner, rt.deps.ItemReferences()) ||
+		domain.CharacterWorldInstance(owner) != domain.DefaultWorldInstance {
+		refused = true
+	} else {
 		row := *pet
 		row.Container, row.Rentals = nil, nil
 		_, _, slotted := companion.Passive(&row, "Guardian's Bond", companion.ModifiersFor(&row))
 		refused = !slotted
-	})
+	}
+	guard.Release()
 	return refused, true
 }
 
@@ -272,6 +270,18 @@ scale HP/EXP recovery and the saved shared cooldown, surviving resummon.
 ================
 */
 func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
+	// Judge the refusal before taking bondSource's answer home (#2030):
+	// the SkillDef it returns escapes in this frame even when the
+	// admission refuses, so every pet owner paid 160 B a tick for
+	// a verdict the door-read facts already hold. Behind the same gate
+	// bondSource judges under; the facts abstain behind the
+	// companionCopy seam (judged false), and bondSource re-judges the
+	// same facts inside. Nothing about the verdict moves.
+	if rt.AttackPetExpansion && state != nil && state.ready && state.follower != nil {
+		if refused, judged := rt.bondSourceRefused(key, state); judged && refused {
+			return nil
+		}
+	}
 	owner, pet, skill, _, ok := rt.bondSource(key, state)
 	if !ok {
 		return nil
