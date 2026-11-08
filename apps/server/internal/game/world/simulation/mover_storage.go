@@ -164,7 +164,6 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	if s.byGID == nil {
 		s.byGID = make(map[uint32]uint32)
 	}
-	s.blocks.note(gid)
 	slot, exists := s.slotOf(gid)
 	if !exists {
 		s.blocks.rosterGeneration++
@@ -172,6 +171,7 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		s.slots = append(s.slots, moverSlot{gid: gid})
 		s.byGID[gid] = slot
 	}
+	s.blocks.note(slot, gid)
 	s.setRow(slot, gid, row, exists)
 }
 
@@ -199,7 +199,7 @@ func (s *moverStorage) setAt(slot uint32, gid uint32, row monster.MoverState) {
 	if s.byGID == nil {
 		s.byGID = make(map[uint32]uint32)
 	}
-	s.blocks.note(gid)
+	s.blocks.note(slot, gid)
 	s.setRow(slot, gid, row, true)
 }
 
@@ -731,7 +731,7 @@ func (s *moverStorage) remove(gid uint32) {
 	if !exists {
 		return
 	}
-	s.blocks.note(gid)
+	s.blocks.leaveSlot(slot, gid)
 	s.blocks.rosterGeneration++
 	s.spatial.remove(gid, s.slots[slot].rec.interestBounds())
 	last := uint32(len(s.slots) - 1)
@@ -741,5 +741,6 @@ func (s *moverStorage) remove(gid uint32) {
 	}
 	s.slots[last] = moverSlot{}
 	s.slots = s.slots[:last]
+	s.blocks.moveSlot(slot, last)
 	delete(s.byGID, gid)
 }
