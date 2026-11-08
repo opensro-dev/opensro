@@ -9723,7 +9723,9 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( eventPcRoom === "pending" ) {
 					eventPcRoom = next.gameplay?.eligibility?.pcRoomEvent &&
-						eventInterfaceShown( events.pcroom ) ? "open" : "closed";
+							eventInterfaceShown( events.pcroom ) ?
+						"open" :
+						"closed";
 					dirty = true;
 				}
 			}
@@ -23295,7 +23297,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const page = hud.data()?.windows.ifeventgate;
 				if ( !page ) return;
 				const node = ( id: number ) => Object.values( page ).find( n => n.id === id ),
-					pic = node( 11 ), button = node( 12 ), body = node( 13 ), title = node( 14 );
+					pic = node( 11 ),
+					button = node( 12 ),
+					body = node( 13 ),
+					title = node( 14 );
 				const admission = beginWindow();
 				const [ex, ey] = eventInterfaceOrigin( w, h );
 				blocks.push( [ ex, ey, EVENT_INTERFACE_WIDTH, EVENT_INTERFACE_HEIGHT ] );
@@ -23334,7 +23339,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						pitch = text.extentHeight( layout.textFont ) + layout.textMargin,
 						clip: UiRect = [
-							ex + body.rect[0], ey + body.rect[1], body.rect[2], body.rect[3]
+							ex + body.rect[0],
+							ey + body.rect[1],
+							body.rect[2],
+							body.rect[3]
 						];
 					lines.forEach( ( line, index ) =>
 						quads.push(
