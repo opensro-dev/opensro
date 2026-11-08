@@ -297,7 +297,7 @@ func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
 		}
 		grant := d.rt.HandleTargetInteract(testDivision, d.character, wire.TargetInteract{Gid: dropped.Gid}.Encode())
 		assertOpcodes(t, grant.Frames,
-			wire.OpPickupAnim, wire.OpItemMoveResponse,
+			opCommerceItemReferences, wire.OpPickupAnim, wire.OpItemMoveResponse,
 			wire.OpObjectDespawn, wire.OpActionState)
 
 		r := d.reboot(t)

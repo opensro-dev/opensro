@@ -233,7 +233,7 @@ func (s *Store) goldRowLocked(label, division string, c *domain.Character, balan
 insertLedgerRowsTx
 ================
 */
-func insertLedgerRowsTx(tx *sql.Tx, rows []ledgerRow) error {
+func insertLedgerRowsTx(tx sqlExecer, rows []ledgerRow) error {
 	for _, row := range rows {
 		if _, err := tx.Exec(`INSERT INTO economy_ledger (at_ms, division, char_id, reason, door, gold, balance)
 VALUES (?, ?, ?, ?, ?, ?, ?)`, row.atMs, row.division, row.charID, row.reason, row.door, row.gold, row.balance); err != nil {

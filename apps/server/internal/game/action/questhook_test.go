@@ -35,12 +35,12 @@ func TestQuestInventoryHookRidesTheItemBursts(t *testing.T) {
 		t.Fatalf("hook calls after the drop = %d, want 1", hookCalls)
 	}
 
-	// Pickup grant of the same item: [0xB2CD][0x35C7][0xB06D][0x36AB] +
+	// Pickup grant of the same item: [0x000E][0x35C7][0xB06D][0x36AB] +
 	// the hook's 0x31ED.
 	dropped := rt.Ground.All(testDivision)[0]
 	grant := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: dropped.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
-		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		opCommerceItemReferences, wire.OpPickupAnim, wire.OpItemMoveResponse,
 		wire.OpObjectDespawn, 0x31ED, wire.OpActionState)
 	if hookCalls != 2 {
 		t.Fatalf("hook calls after the pickup = %d, want 2", hookCalls)

@@ -22,6 +22,14 @@ or seal items are never added. A package's price is its item's price column
 ITEM_CH_BLADE_09_A). INFERENCE: v1.150 has no degree 10 shop, so the item
 table is the only price source.
 
+The degree 10 twins are the port's invention (#2846): official Alexandria
+sold no degree 10 shop goods - iSRO-R's smith and accessory carry
+degree-11 grade A only (their degree-10 rows are inactive), and its
+armourer degree-11 set armour only. The default build therefore adds
+nothing here; the stores are still copied, and the degree 11 pass stocks
+them with the official goods. The twins ship only behind the
+SRO_ALEXANDRIA_PORT_STOCK build flag (port_stock=True).
+
 ===========================================================================
 """
 import re
@@ -117,7 +125,7 @@ def next_stock(packages, items):
 # tables maps the NAMES to raw bytes; items maps an item code to its
 # itemdata row. Returns the changed tables, and a summary.
 # ================
-def merge_d10_stock(raw, items):
+def merge_d10_stock(raw, items, port_stock=False):
 	rows = {name: tables.table_rows(raw[name]) for name in NAMES}
 	next_id = {name: max((int(r[col]) for r in rows[name] if len(r) > col and r[col].isdigit()), default=0) + 1 for name, col in IDENTITY.items()}
 
@@ -186,7 +194,12 @@ def merge_d10_stock(raw, items):
 	def restock(tab_code):
 		"""The tab's goods after the degree 10 ones are added: rows in slot order."""
 		old = sorted(goods_by_tab[tab_code], key=lambda r: int(r[4]))
-		stock, added = next_stock([r[3] for r in old], items)
+		if port_stock:
+			stock, added = next_stock([r[3] for r in old], items)
+		else:
+			# Official stock (#2846): no degree 10 goods anywhere; the
+			# copied tab waits for the degree 11 pass as it is.
+			stock, added = [r[3] for r in old], []
 		template = old[0]
 		made = {code for code in added if make_package(code)}
 		rows_out = []

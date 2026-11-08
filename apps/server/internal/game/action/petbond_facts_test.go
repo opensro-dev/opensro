@@ -121,3 +121,33 @@ func TestBondSourceFactsAgreeWithTheCopy(t *testing.T) {
 		}
 	})
 }
+
+/*
+================
+BenchmarkAdvancePetBondRefusedOwner
+
+The revival walk for an owner whose pet is no Guardian's Bond bear,
+refused on door-read facts: what every pet owner's tick pays when no
+bond can fire. Judging the refusal before bondSource's answer comes
+home keeps it allocation-free; taking the SkillDef home first cost
+160 B and one allocation per tick per owner (#2030).
+================
+*/
+func BenchmarkAdvancePetBondRefusedOwner(b *testing.B) {
+	owner := petTickBenchOwner(1)
+	deps := &enterworld.Deps{Characters: enterworld.StaticCharacterSource{testDivision: {owner}}, Items: testItems()}
+	rt := NewRuntime(deps, nil)
+	rt.AttackPetExpansion = true
+	rt.BindPetSession(testDivision, owner, 1)
+	key := petOwnerKey{testDivision, owner.Name, owner.ActiveCOS.GID}
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	if state == nil {
+		b.Fatal("no pet session")
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if frames := rt.advancePetBond(key, state, 1_000_000); frames != nil {
+			b.Fatal("a refused owner produced bond frames")
+		}
+	}
+}

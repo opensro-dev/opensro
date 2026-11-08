@@ -32,6 +32,14 @@ kind's degree 9 (or lower-grade) package with the item's own price column,
 as the degree 10 pass mints its packages. Missing item packages are
 reported, never partly granted.
 
+The alchemy band is the port's invention (#2846): of the degree-11
+alchemy, both official databases have exactly the speed potion active -
+neither has the degree-11 stone band, and neither has the degree-10 or
+degree-11 prob-up active. The default build therefore stocks only that
+one package (OFFICIAL_ALCHEMY_ITEM) on the alchemy tab. The full band
+ships only behind the SRO_ALEXANDRIA_PORT_STOCK build flag
+(port_stock=True).
+
 ===========================================================================
 """
 import re
@@ -68,6 +76,11 @@ ATTRSTONE_KINDS = (
 )
 ELEMENT_KINDS = ("EARTH", "FIRE", "WATER", "WIND")
 ALCHEMY_DEGREES = ("10", "11")
+
+# The one degree-11 alchemy item official Alexandria sold (#2846; the
+# research on #2842): active in both official databases, where the stone
+# band and the degree-10/11 prob-up rows are inactive.
+OFFICIAL_ALCHEMY_ITEM = "ITEM_ETC_ARCHEMY_POTION_SPEED_11"
 
 
 # ================
@@ -118,7 +131,7 @@ def degree9_source(code):
 # raw maps the shop table names to raw bytes; items maps an item code to
 # its itemdata row. Returns the changed tables, and a summary.
 # ================
-def merge_supplies(raw, items):
+def merge_supplies(raw, items, port_stock=False):
 	rows = {name: tables.table_rows(raw[name]) for name in d10.NAMES}
 	next_id = {name: max((int(r[col]) for r in rows[name] if len(r) > col and r[col].isdigit()), default=0) + 1 for name, col in d10.IDENTITY.items()}
 
@@ -260,35 +273,44 @@ def merge_supplies(raw, items):
 	if alchemy_tab is not None:
 		summary["alchemyTab"] = alchemy_tab[3]
 		goods_row = goods_by_tab[alchemy_tab[3]][0]
-		stocked, count = stock_tab(alchemy_tab[3], alchemy_items(ALCHEMY_DEGREES[0]), degree9_source, goods_row)
-		if count:
-			replaced_tabs[alchemy_tab[3]] = stocked
-			summary["goods"] += count
-		degree11 = [code for code in alchemy_items(ALCHEMY_DEGREES[1]) if code in items]
-		if degree11 and len(alchemy_tabs) > 1:
-			# A second alchemy tab is already there (staged by a previous
-			# build): it is the degree 11 tab, restocked in place, never
-			# authored twice.
-			second = alchemy_tabs[1]
-			template = goods_by_tab[second[3]][0] if goods_by_tab[second[3]] else goods_row
-			stocked, count = stock_tab(second[3], degree11, degree9_source, template)
+		if not port_stock:
+			# Official stock (#2846): the one degree-11 alchemy package
+			# both official databases have active, minted like any band
+			# package. The band below is the port's, behind its flag.
+			stocked, count = stock_tab(alchemy_tab[3], [OFFICIAL_ALCHEMY_ITEM], degree9_source, goods_row)
 			if count:
-				replaced_tabs[second[3]] = stocked
+				replaced_tabs[alchemy_tab[3]] = stocked
 				summary["goods"] += count
-		elif degree11:
-			group_tabs = tabs_of_group[alchemy_tab[4]]
-			numbers = [int(m.group(1)) for t in group_tabs if (m := TAB_NUMBER.search(t[3]))]
-			stem = TAB_NUMBER.sub("", alchemy_tab[3])
-			new_tab = stem + str(max(numbers, default=0) + 1)
-			tab_row = list(alchemy_tab)
-			tab_row[2], tab_row[3] = new_id("refshoptab.txt"), new_tab
-			goods_by_tab[new_tab] = []
-			stocked, count = stock_tab(new_tab, degree11, degree9_source, goods_row)
-			# The second tab is authored only when something stocks on it.
+		else:
+			stocked, count = stock_tab(alchemy_tab[3], alchemy_items(ALCHEMY_DEGREES[0]), degree9_source, goods_row)
 			if count:
-				appended["refshoptab.txt"].append(tab_row)
-				appended_goods += stocked
+				replaced_tabs[alchemy_tab[3]] = stocked
 				summary["goods"] += count
+			degree11 = [code for code in alchemy_items(ALCHEMY_DEGREES[1]) if code in items]
+			if degree11 and len(alchemy_tabs) > 1:
+				# A second alchemy tab is already there (staged by a previous
+				# build): it is the degree 11 tab, restocked in place, never
+				# authored twice.
+				second = alchemy_tabs[1]
+				template = goods_by_tab[second[3]][0] if goods_by_tab[second[3]] else goods_row
+				stocked, count = stock_tab(second[3], degree11, degree9_source, template)
+				if count:
+					replaced_tabs[second[3]] = stocked
+					summary["goods"] += count
+			elif degree11:
+				group_tabs = tabs_of_group[alchemy_tab[4]]
+				numbers = [int(m.group(1)) for t in group_tabs if (m := TAB_NUMBER.search(t[3]))]
+				stem = TAB_NUMBER.sub("", alchemy_tab[3])
+				new_tab = stem + str(max(numbers, default=0) + 1)
+				tab_row = list(alchemy_tab)
+				tab_row[2], tab_row[3] = new_id("refshoptab.txt"), new_tab
+				goods_by_tab[new_tab] = []
+				stocked, count = stock_tab(new_tab, degree11, degree9_source, goods_row)
+				# The second tab is authored only when something stocks on it.
+				if count:
+					appended["refshoptab.txt"].append(tab_row)
+					appended_goods += stocked
+					summary["goods"] += count
 
 	mapping = []
 	for row in rows["refmappingshopgroup.txt"]:

@@ -193,6 +193,9 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 	if code := censusOnlineCode(t, application.controlAPI, token); code != http.StatusNotFound {
 		t.Fatalf("census off: got %d, want 404", code)
 	}
+	if application.census != nil {
+		t.Fatal("census off: application.census set, the public counts would ride an off census")
+	}
 
 	t.Setenv(connjournal.EnvConnectionJournal, "on")
 	application, server, named, directory := installCensusForTest(t)
@@ -206,6 +209,9 @@ func TestCensusReadsInstallOnlyWithTheJournal(t *testing.T) {
 	defer func() { _ = application.connJournal.Close() }()
 	if err := installCensusReads(application, "global-official"); err != nil {
 		t.Fatal(err)
+	}
+	if application.census == nil {
+		t.Fatal("census on: application.census nil, the public status answer would lose its people counts")
 	}
 	if code := censusOnlineCode(t, application.controlAPI, ""); code != http.StatusForbidden {
 		t.Fatalf("census on without credentials: got %d, want 403", code)

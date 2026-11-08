@@ -58,6 +58,10 @@ type petSession struct {
 	follower            *simulation.PetFollower
 	// judgedPet is the judged tick's scratch pet view (petjudged.go).
 	judgedPet enterworld.CharacterCOS
+	// tickFacts is the judged tick's scratch fact read
+	// (readPetTickFactsInto, runtime_position.go), zeroed per tick:
+	// the settled follow tick judges without allocating.
+	tickFacts petTickFacts
 	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
@@ -318,15 +322,8 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 		return 0, frames, nil, nil, nil, "", nil
 	}
 	if rt.AttackPetExpansion {
-		var counter wire.Frame
-		rt.deps.Read(key.division, func() { counter = petSkillCounterFrame(state, key.gid) })
-		if len(counter.Payload) > 0 {
-			var view [22]byte
-			copy(view[:], counter.Payload)
-			if !state.counterSent || view != state.counterView {
-				frames = append(frames, simFrames([]wire.Frame{counter})...)
-				state.counterView, state.counterSent = view, true
-			}
+		if counter, send := rt.judgePetCounter(key, state); send {
+			frames = append(frames, simFrames([]wire.Frame{counter})...)
 		}
 	}
 	characterID := state.character.ID
@@ -423,7 +420,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	// (#1943). companionSeen separates the two refusals; ownerDead
 	// carries the copy's life fact the guardian test below weighs, read
 	// in the same door pass that judged admission.
-	facts := rt.readPetTickFacts(key.division, state.character, key.gid)
+	facts := rt.readPetTickFactsInto(&state.tickFacts, key.division, state.character, key.gid)
 	if !facts.companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)

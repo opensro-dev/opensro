@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -66,6 +67,142 @@ func TestPetSkillCounterFrame(t *testing.T) {
 	if len(petSkillCounterFrame(state, pet.GID+1).Payload) != 0 || len(petSkillCounterFrame(nil, pet.GID).Payload) != 0 {
 		t.Fatal("wrong pet was published")
 	}
+}
+
+/*
+================
+TestPetCounterJudgeAllocatesNothing
+
+The steady pet tick judges its counter view from the counts behind
+the read guard and composes the frame only when a count moved, so
+an unchanged tick allocates nothing at all: no door closure, no
+captured frame cell, no payload composed just to be compared away
+(#2030).
+================
+*/
+func TestPetCounterJudgeAllocatesNothing(t *testing.T) {
+	rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	pet := c.ActiveCOS
+	state := rt.petSessionFor(testDivision, c.Name, pet.GID)
+	if state == nil {
+		t.Fatal("pet session missing")
+	}
+	state.trained.attacks = 79
+	state.trained.counterHits = [2]int{9, 8}
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: pet.GID}
+	restore := enterworld.SuspendRefusalAudit(t)
+	defer restore()
+	if _, send := rt.judgePetCounter(key, state); !send {
+		t.Fatal("first judged tick did not publish the counters")
+	}
+	steady := func() {
+		if _, send := rt.judgePetCounter(key, state); send {
+			t.Error("unchanged counters published again")
+		}
+	}
+	if allocs := testing.AllocsPerRun(50, steady); allocs != 0 {
+		t.Fatalf("steady counter judge allocates %.0f per call, want 0 (a door closure or a composed-then-discarded payload is back)", allocs)
+	}
+}
+
+/*
+================
+TestPetCounterJudgeMatchesComposedFrame
+
+The judged publication is the composed one, byte for byte. The
+judge reads the counts and composes only on a change, while
+petSkillCounterFrame composes unconditionally for the training
+door; over a trained bear, a penguin with its stacked tail and a
+pet that dies between ticks, both agree, and an unchanged tick or
+an unresolved pet publishes nothing.
+================
+*/
+func TestPetCounterJudgeMatchesComposedFrame(t *testing.T) {
+	judged := func(t *testing.T, codename string, dress func(state *petSession)) (*Runtime, petOwnerKey, *petSession) {
+		t.Helper()
+		rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+		makeTrainedPet(rt, c, codename, 90)
+		rt.AttackPetExpansion = true
+		pet := c.ActiveCOS
+		state := rt.petSessionFor(testDivision, c.Name, pet.GID)
+		if state == nil {
+			t.Fatal("pet session missing")
+		}
+		if dress != nil {
+			dress(state)
+		}
+		return rt, petOwnerKey{division: testDivision, name: c.Name, gid: pet.GID}, state
+	}
+	agree := func(t *testing.T, rt *Runtime, key petOwnerKey, state *petSession, wantSend bool) {
+		t.Helper()
+		frame, send := rt.judgePetCounter(key, state)
+		if send != wantSend {
+			t.Fatalf("judge send = %v, want %v", send, wantSend)
+		}
+		full := petSkillCounterFrame(state, key.gid)
+		if !wantSend {
+			// Silence is earned only by an unchanged view: the bytes
+			// the composer rebuilt are the remembered ones.
+			var view [22]byte
+			copy(view[:], full.Payload)
+			if len(full.Payload) == 0 || !state.counterSent || view != state.counterView {
+				t.Fatalf("judge silent but the view moved: payload %x, remembered %x (sent %v)", full.Payload, state.counterView, state.counterSent)
+			}
+			return
+		}
+		if frame.Opcode != full.Opcode || string(frame.Payload) != string(full.Payload) {
+			t.Fatalf("judged frame %x (%04x) != composed %x (%04x)", frame.Payload, frame.Opcode, full.Payload, full.Opcode)
+		}
+	}
+
+	t.Run("bear", func(t *testing.T) {
+		rt, key, state := judged(t, "COS_P_BEAR_090", func(state *petSession) {
+			state.trained.attacks = 79
+			state.trained.counterHits = [2]int{9, 8}
+		})
+		agree(t, rt, key, state, true)
+		agree(t, rt, key, state, false)
+		state.trained.counterHits[0]++
+		agree(t, rt, key, state, true)
+	})
+
+	t.Run("penguin", func(t *testing.T) {
+		rt, key, state := judged(t, "COS_P_PENGUIN_090", func(state *petSession) {
+			state.penguin.stacks = [2]uint8{3, 4}
+			state.penguin.hourglass = 5
+		})
+		frame, send := rt.judgePetCounter(key, state)
+		if !send || len(frame.Payload) != 20 {
+			t.Fatalf("penguin frame: send=%v payload=%x", send, frame.Payload)
+		}
+		full := petSkillCounterFrame(state, key.gid)
+		if string(frame.Payload) != string(full.Payload) {
+			t.Fatalf("judged penguin frame %x != composed %x", frame.Payload, full.Payload)
+		}
+	})
+
+	t.Run("death zeroes the counts", func(t *testing.T) {
+		rt, key, state := judged(t, "COS_P_BEAR_090", func(state *petSession) {
+			state.trained.attacks = 12
+		})
+		agree(t, rt, key, state, true)
+		state.character.ActiveCOS.CurrentHP = 0
+		agree(t, rt, key, state, true)
+		agree(t, rt, key, state, false)
+	})
+
+	t.Run("unresolved pet", func(t *testing.T) {
+		rt, key, state := judged(t, "COS_P_BEAR_090", nil)
+		key.gid++
+		if _, send := rt.judgePetCounter(key, state); send {
+			t.Fatal("unresolved pet published a counter frame")
+		}
+		if state.counterSent {
+			t.Fatal("unresolved pet marked the counter sent")
+		}
+	})
 }
 
 /*

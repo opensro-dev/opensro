@@ -147,8 +147,33 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Foreground downloads in flight. The decoding mark waits for the pipe
 	// to drain: while a download can still deliver, a load is fetching.
 	let activeDownloads = 0;
+	// Stall windows of the downloads in flight, as their restart calls.
+	// A synchronous span (a world decode, a scene pack) parks the
+	// worker's loop for its whole length: no download can be read and no
+	// stall timer can run while it lasts, so when the span ends every
+	// in-flight window restarts (syncWork) - the parked time was never
+	// silence a download could have used (#2862).
+	const stallWindows = new Set<() => void>();
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
+	/*
+	================
+	syncWork
+
+	Run one synchronous stretch (a world decode, a scene pack). The
+	loop is parked for its whole length, so when it ends every
+	in-flight download's stall window restarts: a download whose
+	bytes were only queued behind the stretch must not be killed
+	for the wait.
+	================
+	*/
+	function syncWork<T>( run: () => T ): T {
+		try {
+			return run();
+		} finally {
+			for ( const restart of stallWindows ) restart();
+		}
+	}
 	/*
 	================
 	progress
@@ -334,23 +359,34 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
-		// received chunk restarts the timer.
+		// received chunk restarts the timer, and so does the end of a
+		// synchronous span that parked the loop (syncWork): silence is
+		// only ever time the worker could have read in.
 		const attempt = new AbortController(), stalled = new NoProgressError( url, DOWNLOAD_NO_PROGRESS_MS );
 		const forward = () => attempt.abort( signal.reason );
 		signal.addEventListener( "abort", forward, { once: true } );
 		let timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
-		const progressed = () => {
+		/*
+		================
+		restart
+
+		Restart the stall window.
+		================
+		*/
+		const restart = () => {
 			clearTimeout( timer );
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
+		stallWindows.add( restart );
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
 			signal.throwIfAborted();
 			throw attempt.signal.reason === stalled ? stalled : error;
 		} finally {
+			stallWindows.delete( restart );
 			clearTimeout( timer );
 			signal.removeEventListener( "abort", forward );
 		}
@@ -569,6 +605,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( total > (128 << 20) ) throw new Error( "World resource transaction exceeds budget" );
 						return resource;
 					}
+					// The decoder's work notes, forwarded as this job's liveness:
+					// each decode call counts from zero, so a per-job base keeps
+					// the forwarded total monotonic across the call sequence.
+					let decodeBase = 0, decodeUnits = 0;
+					/*
+					================
+					noteDecodeWork
+					================
+					*/
+					const noteDecodeWork = ( units: number ) => {
+						const total = decodeBase + units;
+						if ( total <= decodeUnits ) return;
+						decodeUnits = total;
+						if ( !disposed ) send( { kind: "job-decoding-progress", id: request.id, units: total }, [] );
+					};
 					// An outdoor scene names its coordinate anchor and which part it
 					// wants (world.ts WorldDecodeOptions); a terrain part is one region.
 					const hash = new URLSearchParams( url.hash.slice( 1 ) ),
@@ -581,12 +632,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = prepareWorldScene(
-							worlds.decode( terrain, false, {
-								origin,
-								part
-							} )
+						const prepared = syncWork( () =>
+							prepareWorldScene(
+								worlds.decode( terrain, false, {
+									origin,
+									part,
+									onProgress: noteDecodeWork
+								} )
+							)
 						);
+						decodeBase = decodeUnits;
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
 						return;
@@ -640,10 +695,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
-					let scene = worlds.decode( resolved, request.decode === "frontend-world", {
-						origin,
-						part
-					} );
+					// The decode closures below capture the bundle: narrowing
+					// does not reach into them, so name the non-null value.
+					const resolvedBundle = resolved;
+					let scene = syncWork( () =>
+						worlds.decode( resolvedBundle, request.decode === "frontend-world", {
+							origin,
+							part,
+							onProgress: noteDecodeWork
+						} )
+					);
+					decodeBase = decodeUnits;
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {
 						const manifest = JSON.parse(
@@ -662,16 +724,23 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						for ( const prop of manifest.props ) {
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
-							const region = resolved.source.sectorX | (resolved.source.sectorY << 8);
-							const product = worlds.decode( {
-								source: resolved.source,
-								terrain: { blocks: [] },
-								terrainTextures: { tileCatalog: { referencedTiles: [] } },
-								objects: {
-									resources: manifest.resources,
-									placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
-								}
-							}, true );
+							const region = resolvedBundle.source.sectorX | (resolvedBundle.source.sectorY << 8);
+							const product = syncWork( () =>
+								worlds.decode(
+									{
+										source: resolvedBundle.source,
+										terrain: { blocks: [] },
+										terrainTextures: { tileCatalog: { referencedTiles: [] } },
+										objects: {
+											resources: manifest.resources,
+											placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
+										}
+									},
+									true,
+									{ onProgress: noteDecodeWork }
+								)
+							);
+							decodeBase = decodeUnits;
 							added.push(
 								...product.groups.map( group => ({
 									...group,
@@ -696,7 +765,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					}
 					resolved = null;
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-					const prepared = prepareWorldScene( scene ), transfer = worldSceneTransfers( prepared.scene );
+					const prepared = syncWork( () => prepareWorldScene( scene ) ),
+						transfer = worldSceneTransfers( prepared.scene );
 					send( { kind: "world", id: request.id, prepared }, transfer );
 					pending.delete( request.id );
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
@@ -884,15 +954,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "cancel" ) {
 				const controller = pending.get( request.id );
-				if ( !controller ) return;
-				controller.abort();
-				pending.delete( request.id );
-				const queued = waiting.findIndex( entry => entry.request.id === request.id );
-				if ( queued >= 0 ) waiting.splice( queued, 1 );
+				if ( controller ) {
+					controller.abort();
+					pending.delete( request.id );
+					const queued = waiting.findIndex( entry => entry.request.id === request.id );
+					if ( queued >= 0 ) waiting.splice( queued, 1 );
+				}
 				// Acknowledged on receipt, not on settlement: an execution
 				// AbortSignal cannot stop (a native decode) may drain long
 				// past the caller's acknowledgement window, but it delivers
 				// nothing more for this id; its slot frees when it settles.
+				// A cancel read after its execution settled is acknowledged
+				// too: the result already crossed, and the caller's slot is
+				// freed by this message - dropping it strands the slot on a
+				// healthy worker (#2871). The caller ignores an
+				// acknowledgement for a job it no longer holds.
 				send( { kind: "released", id: request.id }, [] );
 				return;
 			}

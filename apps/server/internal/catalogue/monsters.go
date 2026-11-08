@@ -189,8 +189,10 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 	regions := map[uint32]map[uint16]bool{}
 	promotes := map[uint32]bool{}
 	for _, nest := range source.Template.Nests {
-		// A nest with no instance cap never spawns (Template.SpawnableRefs).
-		if nest.InstanceLimit() == 0 {
+		// A nest with no instance cap never spawns (Template.SpawnableRefs),
+		// unless the TombChain owns it: the chain spawns at the nest point,
+		// so the nest still names where the species stands (#2856).
+		if nest.InstanceLimit() == 0 && !chainOwnedNest(source.Template, nest) {
 			continue
 		}
 		if regions[nest.RefObjID] == nil {
@@ -231,6 +233,8 @@ producibleMonsters
 
 The world monsters the server itself creates, from its own spawn sources:
   - a nest with an instance cap (the population's nests);
+  - a nest the Qin-Shi TombChain owns: its cap is pinned to zero for the
+    chain (#2372, #2373), but the chain spawns the species at that nest;
   - a quest script's monster (quest.ScriptMonsterCodenames);
   - a summon child of a placed unique's default skills, transitively, as the
     unique encounter roster resolves it (enterworld.MonsterSummonClosure),
@@ -255,6 +259,8 @@ func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
 	for _, nest := range template.Nests {
 		if nest.InstanceLimit() > 0 {
 			admit(nest.RefObjID, SourceNest)
+		} else if chainOwnedNest(template, nest) {
+			admit(nest.RefObjID, SourceChain)
 		}
 	}
 	byCodename := map[string]uint32{}
@@ -287,9 +293,25 @@ func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
 // The spawn sources producibleMonsters reads, as its result names them.
 const (
 	SourceNest   = "nest"
+	SourceChain  = "chain"
 	SourceQuest  = "quest"
 	SourceSummon = "summon"
 )
+
+/*
+================
+chainOwnedNest
+
+Whether this nest's species is spawned by the Qin-Shi TombChain at this
+nest instead of by the nest lifecycle: the chain owns the nest exactly
+when monster says so for its region and codename (#2372, #2373). A
+codename the chain owns on one floor may nest normally on another.
+================
+*/
+func chainOwnedNest(template monster.Template, nest monster.NestRow) bool {
+	ref, ok := template.Refs[nest.RefObjID]
+	return ok && monster.QinShiTombChainOwned(nest.RegionID, ref.Codename)
+}
 
 /*
 ================

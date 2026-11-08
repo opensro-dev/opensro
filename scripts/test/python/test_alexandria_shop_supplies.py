@@ -41,7 +41,7 @@ TEMPLATE_PACKAGES = [
 	"PACKAGE_ITEM_ETC_HP_POTION_05", "PACKAGE_ITEM_ETC_CURE_ALL_03", "PACKAGE_ITEM_ETC_CURE_RANDOM_03",
 	"PACKAGE_ITEM_ETC_DETECT_03", "PACKAGE_ITEM_ETC_ALL_POTION_03",
 	"PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09", "PACKAGE_ITEM_ETC_ELEMENT_FIRE_09",
-	"PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"
+	"PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", "PACKAGE_ITEM_ETC_ARCHEMY_POTION_SPEED_09"
 ]
 ALCHEMY_GOODS = ["PACKAGE_ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"]
 
@@ -94,7 +94,8 @@ ITEMS = {
 	"ITEM_ETC_ELEMENT_FIRE_10": item("ITEM_ETC_ELEMENT_FIRE_10", 903),
 	"ITEM_ETC_ELEMENT_FIRE_11": item("ITEM_ETC_ELEMENT_FIRE_11", 1035),
 	"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10": item("ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_10", 63656),
-	"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11": item("ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11", 70875)
+	"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11": item("ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_11", 70875),
+	"ITEM_ETC_ARCHEMY_POTION_SPEED_11": item("ITEM_ETC_ARCHEMY_POTION_SPEED_11", 1200)
 }
 
 
@@ -115,9 +116,38 @@ class BandTests(unittest.TestCase):
 		self.assertIsNone(supplies.lower_grade_of("PACKAGE_ITEM_ETC_ARROW"))
 
 
+class OfficialStockTests(unittest.TestCase):
+	"""The default build stocks what official Alexandria sold (#2846):
+	of the degree-11 alchemy both official databases have exactly the
+	speed potion active - neither has the degree-11 stone band and
+	neither has the degree-10 or degree-11 prob-up active - so the
+	alchemy tab gains that one package and no second tab is authored.
+	The port's band waits behind the port-stock build flag."""
+
+	def test_the_alchemy_tab_gains_only_the_official_speed_potion(self):
+		merged, summary = supplies.merge_supplies(tables(), ITEMS)
+		self.assertEqual(summary["alchemyTab"], "STORE_SD_ACCESSORY_TAB3")
+		ten = [r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB3")]
+		self.assertEqual(ten, ALCHEMY_GOODS + ["PACKAGE_ITEM_ETC_ARCHEMY_POTION_SPEED_11"])
+		self.assertNotIn("STORE_SD_ACCESSORY_TAB4", {r[3] for r in table_rows(merged["refshoptab.txt"])})
+
+	def test_without_the_speed_item_the_tab_keeps_its_own_goods(self):
+		items = {k: v for k, v in ITEMS.items() if k != "ITEM_ETC_ARCHEMY_POTION_SPEED_11"}
+		merged, _ = supplies.merge_supplies(tables(), items)
+		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB3")], ALCHEMY_GOODS)
+
+	def test_reentry_stocks_the_same_official_goods(self):
+		merged, _ = supplies.merge_supplies(tables(), ITEMS)
+		again, summary = supplies.merge_supplies(merged, ITEMS)
+		for tab in ("STORE_SD_POTION_TAB1", "STORE_SD_ACCESSORY_TAB3"):
+			self.assertEqual([r[3] for r in goods_of(again, tab)], [r[3] for r in goods_of(merged, tab)])
+		self.assertEqual(summary["goods"], 0)
+		self.assertEqual(summary["packages"], 0)
+
+
 class MergeTests(unittest.TestCase):
 	def merge(self, items=ITEMS, **kwargs):
-		return supplies.merge_supplies(tables(**kwargs), items)
+		return supplies.merge_supplies(tables(**kwargs), items, port_stock=True)
 
 	def test_the_city_gets_a_potion_store_of_its_own_and_khotans_stays_unchanged(self):
 		raw = tables()
@@ -195,7 +225,7 @@ class MergeTests(unittest.TestCase):
 
 	def test_reentry_authors_no_second_degree_11_tab(self):
 		merged, _ = self.merge()
-		again, summary = supplies.merge_supplies(merged, ITEMS)
+		again, summary = supplies.merge_supplies(merged, ITEMS, port_stock=True)
 		tabs = {r[3] for r in table_rows(again["refshoptab.txt"])}
 		self.assertEqual(tabs, {r[3] for r in table_rows(merged["refshoptab.txt"])})
 		self.assertNotIn("STORE_SD_ACCESSORY_TAB5", tabs)

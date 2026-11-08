@@ -232,6 +232,18 @@ func newGameplayPlane(
 		return nil, err
 	}
 	extraGoods = append(extraGoods, xlGoods...)
+	// SRO_ALEXANDRIA_HIDE_D11_GOODS (port-only, not native, #2842):
+	// degree-11 goods leave Alexandria's own shops as ConfigureCommerce
+	// loads them, so it is set first. "off" (the default) is native:
+	// the original game sold them there.
+	hideD11, err := commerce.AlexandriaHideD11GoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	items.AlexandriaHideD11Goods = hideD11
+	if hideD11 {
+		log.Infof("shops: Alexandria's degree-11 goods are hidden (%s, port-only, not native)", commerce.EnvAlexandriaHideD11Goods)
+	}
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
 	items.TradeTiers = action.TradeTiersFromEnv()

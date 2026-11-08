@@ -641,7 +641,7 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
-		takeDegradations: () => entities.takeDegradations(),
+		takeDegradations: () => [ ...entities.takeDegradations(), ...gameplay.takeDegradations() ],
 		readyRevision: () => pendingTravel?.revision ?? 0,
 		/*
 ================

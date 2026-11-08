@@ -62,6 +62,7 @@ var catalogueReaders = map[string]string{
 	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",
 	"SRO_STACK_SIZES":                        "shardItems reads it (enterworld.StackSizesFromEnv) into items.json's stack caps",
 	"SRO_ALEXANDRIA":                         "BuildNpcs' roster reads it (simulation.LoadNpcWorldRoster hides the city while off, alexandria.Hidden)",
+	"SRO_ALEXANDRIA_HIDE_D11_GOODS":          "shardShops reads it (commerce.AlexandriaHideD11GoodsFromEnv) to withhold Alexandria's degree-11 goods from the shops",
 }
 
 // catalogueExempt lists every other shard setting with the reason it
@@ -101,6 +102,7 @@ var catalogueExempt = map[string]string{
 	"SRO_PREMIUM_UPGRADE":                     "a mall ticket replacement rule; the catalogue publishes no mall listing",
 	"SRO_NAME_CHANGE_SCROLL":                  "adds a scroll to the Item Mall; the catalogue publishes no mall listing, and items.json publishes the scroll either way",
 	"SRO_KILL_STATS":                          "staff telemetry; no catalogue file carries it",
+	"SRO_CONNECTION_JOURNAL":                  "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                "how a worn suit is drawn; the catalogue publishes no rendering",
 	"SRO_JOB_SUIT_TIERS":                      "stats a worn suit grants at runtime; items.json publishes the suits either way",
 	"SRO_MOONLIT_THIEF_SUIT":                  "a worn suit's look; the catalogue publishes no rendering",

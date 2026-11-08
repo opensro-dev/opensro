@@ -98,7 +98,7 @@ test("mall commits currency and items only after matching native receipt", () =>
 	assert.equal( owner.state().inventoryPending, false );
 });
 
-test("mall rejects unsolicited, stale and malformed delivery without publishing staged changes", () => {
+test("mall rejects malformed delivery and sets unsolicited delivery aside without publishing staged changes", () => {
 	for (
 		const kind of [
 			"unsolicited",
@@ -111,7 +111,12 @@ test("mall rejects unsolicited, stale and malformed delivery without publishing 
 	) {
 		const { owner, request } = fixture();
 		if ( kind === "unsolicited" ) {
-			assert.throws( () => owner.receive( 15, json( delivery() ) ) );
+			// A delivery for a request the client no longer holds (the
+			// scene reset retired it, #2864) is set aside: never fatal,
+			// and nothing it carries is published.
+			owner.receive( 15, json( delivery() ) );
+			assert.equal( owner.state().inventory.length, 0 );
+			assert.equal( owner.state().itemMall?.silk, 100 );
 			continue;
 		}
 		owner.purchaseMall( request, 1 );

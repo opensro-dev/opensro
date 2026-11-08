@@ -208,6 +208,10 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// Owner, 2026-11-08: the connection census - staff census reads and
+	// the public people counts (#2716/#2717, opensro-web#78; port-only,
+	// not native; "off" opens no journal and installs no census route).
+	{Env: "SRO_CONNECTION_JOURNAL", NomadVar: "connection_journal", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -422,6 +426,11 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: hide Alexandria's degree-11 shop goods
+	// (#2842). The original game sold them there, so "off" is native;
+	// "on" is for operators who want degree-11 gear from grinding only.
+	// The catalogue's shop lists follow it.
+	{Env: "SRO_ALEXANDRIA_HIDE_D11_GOODS", NomadVar: "alexandria_hide_d11_goods", Default: "off", Catalogue: true},
 	// Port-only, not native: WebTransport as a public endpoint (epic
 	// #1451). "off" keeps the loopback/development transport; "on" lets
 	// the GameWorld serve WT publicly under its explicit TLS pair and

@@ -173,16 +173,48 @@ test("stalled presentation retains one sampled pose per mover without dropping l
 	owner.step( 9616 );
 	owner.ack( inflight.sequence );
 	const next = owner.take();
-	assert.equal( next.events.length, 141, "84,000 sampled poses collapse to 140 plus reliable death" );
+	assert.equal( next.events.length, 140, "84,000 sampled poses and the death collapse to one row per mover" );
 	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === 1 );
-	assert.equal( states.length, 2 );
-	assert.notEqual( states[0].entity.appearanceState?.[0], 2 );
-	assert.equal( states[1].entity.appearanceState[0], 2 );
+	// The death is the mover's newest row (#2868): it replaces the queued
+	// pose and is never lost behind it.
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[0], 2 );
 	assert.equal( next.events.find( e => e.entity?.gid === 2 ).entity.x, owner.read( 2 ).x );
 	owner.ack( next.sequence );
 	owner.step( 9632 );
 	const after = flush( owner );
 	assert.equal( after.events.length, 139 );
+	owner.dispose();
+});
+
+test("a stalled consumer coalesces one entity's states into one row and never compacts (#2868)", () => {
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	for ( const row of rows ) owner.receive( row );
+	const spawn = flush( owner ).events.find( e => e.kind === "spawn" ).entity;
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( spawn.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	// The live failure: about 1000 states queued behind a batch the main
+	// thread did not acknowledge for 4.5 s filled the 32 MiB bound and
+	// compacted ("state":1017 of 1105 dropped). Before the fix every
+	// state queued on its own and this flood compacted.
+	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
+	const inflight = owner.take();
+	for ( let i = 0; i < 200000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	owner.receive( packet( 4 ) );
+	assert.equal( owner.resyncs(), 0, "no compaction: the queue holds one row per entity" );
+	assert.deepEqual( owner.takeDegradations().filter( d => d.code === "world-journal-resync" ), [] );
+	owner.ack( inflight.sequence );
+	const next = owner.take();
+	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === spawn.gid );
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[2], 4, "the newest row wins" );
 	owner.dispose();
 });
 
@@ -198,8 +230,9 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 	assert.equal( owner.synchronized(), true );
 	assert.ok( p.read( spawn.gid ) );
 	// The consumer stalls: one batch is taken and not acknowledged while
-	// the wire keeps producing state behind it - a hidden or frozen tab,
-	// the 2026-10-24 backlog deaths. The queue used to throw at 32 MiB.
+	// the wire keeps producing lifecycle changes behind it - a hidden or
+	// frozen tab, the 2026-10-24 backlog deaths. The queue used to throw
+	// at 32 MiB.
 	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
 	const inflight = owner.take();
 	const packet = value => {
@@ -209,15 +242,23 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// On its return the consumer applies the stalled batch as offered,
 	// acks it, and the next take is the rebuilt world on a new epoch.
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized" ]
 	);
 	assert.equal( resync.events[2].entity.gid, spawn.gid );
@@ -251,7 +292,7 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 	const notice = marker => ({ kind: "native", opcode: 0x300c, payload: Uint8Array.of( marker ) });
 	// The consumer stalls on an unacknowledged batch (which carries one
 	// native of its own) while two more one-shots queue behind it; a
-	// state flood then compacts the queue (#1482). The rebuilt snapshot
+	// lifecycle flood then compacts the queue (#1482). The rebuilt snapshot
 	// supersedes the flood, never the one-shots.
 	owner.publish( notice( 0 ) );
 	const inflight = owner.take();
@@ -264,15 +305,23 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// A native queued behind the drop is newer than the kept ones.
 	owner.publish( notice( 3 ) );
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized", "native", "native", "native" ]
 	);
 	assert.equal( p.apply( resync ), true );
@@ -380,6 +429,39 @@ test("grouped removal count, incomplete data and operation bounds remain enforce
 	owner.receive( { opcode: 0x30cb, payload: Uint8Array.of( 2, 0, 0 ) } );
 	owner.receive( { opcode: 0x3417, payload: new Uint8Array() } );
 	owner.receive( { opcode: 0x330a, payload: new Uint8Array() } );
+	owner.dispose();
+});
+test("object-list chunks without an open bracket are dropped instead of killing the session", () => {
+	// #2882: this exact 27-byte chunk arrived with no bracket open (the
+	// bracket was split away before it, or it is a replayed tail after the
+	// finalize) and "Unexpected object-list chunk" killed the session.
+	// Native 0x77BDC0 appends into the persistent key-0 buffer that the
+	// next start (0x77BD30) rewinds, so stray bytes are never consumed.
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	const stray = Uint8Array.from(
+		Buffer.from( "b8050000008e6905006f5d05c08a439e3374454d6833448a590000", "hex" )
+	);
+	assert.doesNotThrow( () => owner.receive( { opcode: 0x3417, payload: stray } ) );
+	assert.equal( owner.count(), 0 );
+	assert.equal( owner.take(), null );
+	for ( const row of rows ) owner.receive( row );
+	flush( owner );
+	assert.equal( owner.count(), 1, "the next well-formed bracket still commits" );
+	assert.doesNotThrow(
+		() => owner.receive( rows[1] ),
+		"a replayed copy of the committed chunk after finalize is dropped too"
+	);
+	assert.equal( owner.count(), 1 );
+	assert.equal( owner.take(), null );
+	owner.receive( { opcode: 0x30cb, payload: Uint8Array.of( 1, 1, 0 ) } );
+	owner.receive( rows[1] );
+	assert.throws(
+		() => owner.receive( rows[1] ),
+		/Unexpected object-list chunk/,
+		"a chunk past the declared count of an open bracket still throws"
+	);
 	owner.dispose();
 });
 test("server-pinned monster rows commit atomically and synchronize only after acknowledgement", () => {
@@ -1088,28 +1170,84 @@ test("a fresh entry retries a stalled admission and enters", async t => {
 	await settle();
 	world.step( 3 );
 	assert.deepEqual( mints, [ "transport", "enterworld" ] );
-	// The EnterWorld answer never comes: a full admission window of
+	// The EnterWorld answer never comes: a full answer window of
 	// silence fails the attempt, but the entry itself retries instead
 	// of rejecting back to character select (#1416).
-	world.step( 10004 );
+	world.step( 60004 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( world.status().error, "World connection timed out" );
-	world.step( 10254 );
+	world.step( 60254 );
 	await settle();
-	world.step( 10255 );
+	world.step( 60255 );
 	assert.equal( sockets.length, 2 );
 	const second = sockets[1];
 	second.onopen();
 	second.receive( 2, welcome() );
-	world.step( 10256 );
+	world.step( 60256 );
 	await settle();
-	world.step( 10257 );
+	world.step( 60257 );
 	second.receive( 7, entered() );
 	for ( const row of rows ) second.receive( row.opcode, row.payload );
-	world.step( 10258 );
+	world.step( 60258 );
 	flush( world );
-	world.step( 10259 );
+	world.step( 60259 );
 	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+});
+
+/*
+================
+a slow EnterWorld answer outlives the old admission window (#2867)
+
+The EnterWorld answer is one multi-megabyte record. On the
+WebTransport path its chunks prove the link as they land, but on the
+socket a WebSocket message is atomic: no byte of the answer is
+visible until the whole record lands, and the server's loading pings
+queue behind it on the same ordered stream. A slow socket therefore
+showed total silence well past the ten-second admission window, the
+entry tore down a healthy answer mid-flight, retried into the same
+download and gave up to character select with "World connection
+timed out" - the world_entry_rejected reports of #2867, whose server
+log shows each socket closing exactly one admission window after
+the entry was presented. The answer wait now runs to the transport's
+own idle bound, so an answer still streaming at half a minute lands.
+================
+*/
+test("a slow EnterWorld answer outlives the old admission window", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	// Thirty seconds without one visible byte: the old admission
+	// window failed this attempt at ten. The entry is still waiting.
+	world.step( 30003 );
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().error, undefined );
+	// The answer lands whole, as a socket message does, and the entry
+	// binds on the same attempt: no retry, no rejection.
+	socket.receive( 7, entered() );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	world.step( 30004 );
+	flush( world );
+	world.step( 30005 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().error, undefined );
 });
@@ -3845,7 +3983,8 @@ a silent socket still times out
 
 Byte liveness must not keep a dead wire alive: with the EnterWorld
 answer never arriving at all, the entry deadline still fires on the
-socket exactly as before (#2311).
+socket exactly as before (#2311) - at the answer wait's own bound
+(#2867), not instantly and not never.
 ================
 */
 test("a silent socket still times out", async t => {
@@ -3863,9 +4002,9 @@ test("a silent socket still times out", async t => {
 	world.step( 3 );
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
-	world.step( 9999 );
+	world.step( 59999 );
 	assert.equal( world.status().phase, "entering-world", "inside the window" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
 	world.dispose();
 });
@@ -3898,7 +4037,7 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
 	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const evidence = world.status().entryFailure;
 	assert.equal( evidence?.stage, "entering-world" );
@@ -3909,13 +4048,13 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	// would inherit the first WELCOME and report a streaming wire for a
 	// server that never answered.
 	assert.equal( world.status().phase, "reconnecting" );
-	world.step( 10300 );
+	world.step( 60300 );
 	await settle();
-	world.step( 10301 );
+	world.step( 60301 );
 	await settle();
 	assert.equal( world.status().phase, "connecting", "the retry is under way" );
 	assert.equal( sockets.length, 2, "the retry opened its own socket" );
-	world.step( 21000 );
+	world.step( 71000 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const silent = world.status().entryFailure;
 	assert.equal( silent?.stage, "connecting" );
@@ -3923,24 +4062,24 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
 	// The next attempt starts clean, and a world that binds keeps no
 	// failure evidence.
-	world.step( 21600 );
+	world.step( 71600 );
 	await settle();
 	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
-	world.step( 21601 );
+	world.step( 71601 );
 	await settle();
 	const third = sockets[2];
 	third.onopen();
 	third.receive( 2, welcome() );
-	world.step( 21602 );
+	world.step( 71602 );
 	await settle();
-	world.step( 21603 );
+	world.step( 71603 );
 	await settle();
 	third.receive( 7, entered() );
 	for ( const row of rows ) third.receive( row.opcode, row.payload );
-	world.step( 21604 );
+	world.step( 71604 );
 	const batch = world.take();
 	world.ack( batch.sequence );
-	world.step( 21605 );
+	world.step( 71605 );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
 	world.dispose();
@@ -3975,9 +4114,9 @@ test("a record that stops streaming still times out", async t => {
 	await settle();
 	world.step( 4000 );
 	assert.equal( world.status().phase, "entering-world", "the third bought its window" );
-	world.step( 13999 );
+	world.step( 63999 );
 	assert.equal( world.status().phase, "entering-world", "window from the last byte still open" );
-	world.step( 14010 );
+	world.step( 64010 );
 	assert.equal( world.status().phase, "reconnecting", "silence after the bytes still fails" );
 	assert.equal( sockets.length, 0, "the retry has not run yet" );
 	world.dispose();

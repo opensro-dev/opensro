@@ -227,6 +227,21 @@ function projectionFov( camera: WorldCamera, aspect: number ): number {
 	if ( !camera.lockHorizontalFov || aspect >= 1 ) return camera.fov;
 	return Math.min( Math.PI - 0.01, 2 * Math.atan( Math.tan( camera.fov / 2 ) / aspect ) );
 }
+
+/*
+================
+projectionTangents
+
+The tangents of the projected half-angles viewProjection builds with,
+after the horizontal-FOV lock: a view-space point (x, y, z) projects to
+NDC (x / (z * tanX), y / (z * tanY)), so a depth-reading pass rebuilds
+view positions from the same projection the scene was drawn with.
+================
+*/
+export function projectionTangents( camera: WorldCamera, aspect: number ): { tanX: number; tanY: number; } {
+	const tanY = Math.tan( projectionFov( camera, aspect ) / 2 );
+	return { tanX: tanY * aspect, tanY };
+}
 /*
 ================
 viewProjection

@@ -65,3 +65,24 @@ func maintenanceAdmits(path, accountID string) bool {
 	}
 	return false
 }
+
+/*
+================
+MaintenanceGatePresent
+
+Whether a maintenance window is open right now: the gate file exists
+at path. Every other gate reader keeps this one's fail-closed rule (a
+file that cannot be read or decoded still counts as a window - only
+existence is read here, never the listed accounts), so the Agent's
+not-operating refusals name the maintenance only while the release
+actually holds the gate shut (#2861). No path, or no file at it: no
+window.
+================
+*/
+func MaintenanceGatePresent(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}

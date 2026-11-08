@@ -195,7 +195,7 @@ expandedWorldMapOn
 Port-only, not native: the published wider overview and Alexandria town
 pages are used only while the shard runs Alexandria (SRO_ALEXANDRIA, the
 world-entry "alexandria" switch). Off, the M window keeps the native five
-towns and 28 x 8 overview (5758D0), whatever the build published.
+towns and 28 x 8 overview, whatever the build published.
 ================
 */
 export function expandedWorldMapOn( game: { readonly alexandria?: boolean; } | null | undefined ): boolean {

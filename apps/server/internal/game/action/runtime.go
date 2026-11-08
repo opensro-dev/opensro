@@ -322,6 +322,11 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// mercenaryKeys is the cooldown pass's owner-key scratch
+	// (mercenary_clock.go): refilled under petMu on every pass and
+	// consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is serial and nothing retains it.
+	mercenaryKeys []petOwnerKey
 	// cosOwners is the pet gid to owner index (cosownerindex.go):
 	// whose pet a gid is, without walking the division's characters.
 	cosOwners  cosOwnerIndex
@@ -534,6 +539,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
+	// own shops (commerce/alexandriashops.go; port-only, not native).
+	// False is native: the original game sold them there (#2842).
+	AlexandriaHideD11Goods bool
 	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.

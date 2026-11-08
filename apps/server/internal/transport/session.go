@@ -88,12 +88,6 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
-	// sceneSnapshotBuilt marks the narrow window after the enter lane
-	// has built this scene's snapshot and before its bootstrap (or
-	// refusal) queues. Only in that window do later batches park
-	// behind the bootstrap; an ordinary loading scene whose answers a
-	// client is waiting on is not caught by it (#2294).
-	sceneSnapshotBuilt bool
 	// pendingReceipts are batches parked for this scene while its
 	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
 	// they join the queue behind the bootstrap batch, never ahead of
@@ -358,7 +352,7 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
 // callers may reuse their buffer immediately. A native game frame sent
-// while a built scene snapshot awaits its bootstrap parks behind it
+// while its scene's bootstrap has not queued yet parks behind it
 // (#2294); transport-control frames are the machinery's own and stay
 // immediate.
 /*
@@ -706,7 +700,6 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
-	s.sceneSnapshotBuilt = false
 	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil
