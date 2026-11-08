@@ -25,7 +25,7 @@ import { DeviceDraw } from "./device-draw";
 import { createGeometryUploads } from "./geometry-uploads";
 import type { createParticlePresentation } from "./particles";
 import type { createGpuAnimationResources } from "./animation";
-import { DEFAULT_BLEND, type GeometryPipelineState } from "./pipelines";
+import { DEFAULT_BLEND, type GeometryPipelineState, type SceneSurface } from "./pipelines";
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
@@ -76,15 +76,10 @@ export function createGeometryResources(
 	created: GPUDevice,
 	current: () => GPUDevice,
 	fail: ( error: unknown ) => void,
-	// The geometry pipeline for state; the rgba16float sibling (the HDR
-	// stage's scene intermediate) resolves through the second argument and
-	// the 4x sibling (the MSAA stage) through the fourth.
-	pipelines: (
-		state: GeometryPipelineState,
-		sceneFloat?: boolean,
-		previewCoverage?: boolean,
-		msaa?: boolean
-	) => GPURenderPipeline,
+	// The geometry pipeline for state on a scene surface: the HDR stage's
+	// rgba16float intermediate, the MSAA stage's 4x sibling, or the
+	// preview pass's coverage sibling.
+	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface ) => GPURenderPipeline,
 	// Each draw holds a lease on its images for as long as it binds them.
 	images: ImageLeases,
 	worldSampler: GPUSampler,
@@ -381,7 +376,7 @@ export function createGeometryResources(
 		if ( !meta || !buffers ) throw Error( "Unknown or released sibling draw" );
 		let cached = bindings.get( draw );
 		if ( !cached || cached.source !== draw.binding ) {
-			const pipeline = pipelines( meta.state, floatScene, previewCoverage );
+			const pipeline = pipelines( meta.state, { sceneFloat: floatScene, fullscreenPreview: previewCoverage } );
 			cached = {
 				source: draw.binding,
 				draw: {
@@ -475,7 +470,7 @@ export function createGeometryResources(
 				if ( !meta || meta.water || draw.deferredParticle ) continue;
 				let cached = reflectedBindings.get( draw );
 				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( meta.state, floatScene, undefined, msaaScene );
+					const pipeline = pipelines( meta.state, { sceneFloat: floatScene, msaa: msaaScene } );
 					const binding = geometryBinding(
 						meta.uniform,
 						meta.instances,
@@ -1136,7 +1131,7 @@ export function createGeometryResources(
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),
 					material = slice( materialSlabs.allocate( materialData.byteLength ), materialData );
-				const selected = pipelines( geometryPipelineState( mat ), floatScene, undefined, msaaScene ),
+				const selected = pipelines( geometryPipelineState( mat ), { sceneFloat: floatScene, msaa: msaaScene } ),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const binding = geometryBinding(
 					uniform,
@@ -1372,7 +1367,7 @@ export function createGeometryResources(
 			msaaScene = sceneMsaa;
 			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
-				const pipeline = pipelines( meta.state, sceneFloat, undefined, sceneMsaa );
+				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa } );
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,

@@ -30,6 +30,23 @@ import {
 	validBlend
 } from "@/engine/foundation/rendering/blend-state";
 
+/*
+================
+SceneSurface
+
+The scene target a scene-drawing pipeline renders into: the HDR stage's
+float intermediate (sceneFloat) and the MSAA stage's sample count
+(msaa). Both absent is the native canvas-format, single-sampled target.
+fullscreenPreview selects the geometry family's coverage-alpha sibling
+for the HDR preview pass.
+================
+*/
+export interface SceneSurface {
+	readonly sceneFloat?: boolean;
+	readonly msaa?: boolean;
+	readonly fullscreenPreview?: boolean;
+}
+
 // The pair a material that blends without naming one draws with.
 export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 	source: D3DBLEND_SRCALPHA,
@@ -767,7 +784,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		lightmapSampling( anisotropic: boolean ) {
 			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
 		},
-		sky( sceneFloat = false, msaa = false ) {
+		sky( { sceneFloat = false, msaa = false }: SceneSurface = {} ) {
 			if ( !sceneFloat && !msaa ) return skyPipeline!;
 			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
 			let selected = skyStagePipelines.get( key );
@@ -789,7 +806,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 			return selected;
 		},
 		mips: () => mipPipeline!,
-		image( sceneFloat = false, msaa = false ) {
+		image( { sceneFloat = false, msaa = false }: SceneSurface = {} ) {
 			if ( !sceneFloat && !msaa ) return pipeline!;
 			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
 			let selected = imageStagePipelines.get( key );
@@ -821,9 +838,7 @@ the same rule.
 		*/
 		geometry(
 			state: GeometryPipelineState,
-			sceneFloat = false,
-			fullscreenPreview = false,
-			msaa = false
+			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {}
 		) {
 			const previewCoverage = sceneFloat && fullscreenPreview;
 			const key = geometryPipelineKey( state ) + (sceneFloat ? "|hdr" : "") +

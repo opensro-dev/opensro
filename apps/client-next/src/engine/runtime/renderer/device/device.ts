@@ -24,7 +24,7 @@ import { createGpuTiming } from "./timing";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
-import { createPipelines } from "./pipelines";
+import { createPipelines, type SceneSurface } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
@@ -97,12 +97,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let environmentBuffer: GPUBuffer | null = null,
 		sky: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
 		skyStages = new Map<string, import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw>(),
-		skyFactory:
-			| ((
-				sceneFloat: boolean,
-				msaa: boolean
-			) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw)
-			| null = null;
+		skyFactory: (( surface: SceneSurface ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw) | null =
+			null;
 	let geometry: ReturnType<typeof createGeometryResources> | null = null,
 		animation: ReturnType<typeof createGpuAnimationResources> | undefined,
 		particles: ReturnType<typeof createParticlePresentation> | null = null,
@@ -405,7 +401,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				fail,
 				// The fullscreen image draws in the main pass, so its pipeline
 				// follows the scene format the HDR stage selects.
-				pipeline: () => pipelines.image( hdrOn, msaaOn ),
+				pipeline: () => pipelines.image( { sceneFloat: hdrOn, msaa: msaaOn } ),
 				sampler: pipelines.sampler,
 
 				/*
@@ -506,8 +502,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			HDR stage's float sibling lazily on first use.
 			================
 			*/
-			const skyDraw = ( sceneFloat: boolean, msaa: boolean ) => {
-				const pipeline = pipelines.sky( sceneFloat, msaa );
+			const skyDraw = ( surface: SceneSurface ) => {
+				const pipeline = pipelines.sky( surface );
 				return {
 					pipeline,
 					binding: created.createBindGroup( {
@@ -528,7 +524,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			] ).then( () => {
 				if ( generation === epoch && phase === "starting" ) {
 					skyStages.clear();
-					sky = skyDraw( false, false );
+					sky = skyDraw( {} );
 					skyFactory = skyDraw;
 					phase = "running";
 					geometry!.textureOptions( textureFiltered, textureDetail, anisotropic );
@@ -783,7 +779,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			const key = `${hdrOn ? 1 : 0}${msaaOn ? 1 : 0}`;
 			let draw = skyStages.get( key );
 			if ( !draw ) {
-				draw = skyFactory( hdrOn, msaaOn );
+				draw = skyFactory( { sceneFloat: hdrOn, msaa: msaaOn } );
 				skyStages.set( key, draw );
 			}
 			return draw;
