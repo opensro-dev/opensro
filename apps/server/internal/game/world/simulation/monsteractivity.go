@@ -194,7 +194,7 @@ the stamp alone (#2029).
 func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	current, exists := state.movers.lookupAt(slot, gid)
 	if !exists {
 		current, exists = state.movers.lookup(gid)
