@@ -613,6 +613,21 @@ class GateLevelCapTests(unittest.TestCase):
 	def test_110_lifts_the_cap(self):
 		self.assertEqual(variant.gate_level_cap({variant.LEVEL_CAP_FLAG: "110"}), variant.EXPANSION_LEVEL_CAP)
 
+	def test_port_stock_defaults_to_the_official_stock(self):
+		"""#2846: unset or off keeps each store's official goods."""
+		for value in ("", "0", "off", "OFF", "false", " off "):
+			self.assertFalse(variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value}), value)
+		self.assertFalse(variant.port_stock_enabled({}))
+
+	def test_port_stock_on_asks_for_the_ports_own_goods(self):
+		for value in ("1", "on", "ON", "true", " true "):
+			self.assertTrue(variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value}), value)
+
+	def test_a_port_stock_value_nobody_defined_is_refused(self):
+		for value in ("yes", "90", "110"):
+			with self.assertRaises(ValueError, msg=value):
+				variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value})
+
 	def test_a_value_the_server_refuses_is_refused(self):
 		for value in ("on", "true", "1", "100", "yes"):
 			with self.assertRaises(ValueError, msg=value):
