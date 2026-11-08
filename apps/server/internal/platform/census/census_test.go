@@ -114,6 +114,31 @@ func TestUniquesWindows(t *testing.T) {
 
 /*
 ================
+TestPublicCounts
+
+The public pair (opensro-web#78) is the online read's people number
+and the 7-day window's, derived from the same fixtures the staff
+readings use - never the census itself.
+================
+*/
+func TestPublicCounts(t *testing.T) {
+	now := nowMs()
+	var day int64 = 24 * hourMs
+	spans := []Span{
+		span("s1", "acct-a", "Anna", now-2*hourMs, 0, "ip-a", "net-a", "client-a"),
+		span("s2", "acct-b", "Bert", now-3*day, now-3*day+hourMs, "ip-b", "net-b", "client-b"),
+	}
+	peopleNow, uniquePeople7d, err := testService(spans, nil).PublicCounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if peopleNow != 1 || uniquePeople7d != 2 {
+		t.Fatalf("public counts: got peopleNow=%d uniquePeople7d=%d, want 1/2", peopleNow, uniquePeople7d)
+	}
+}
+
+/*
+================
 TestPersonView
 
 From one character: the whole cluster, both accounts with their

@@ -112,6 +112,9 @@ func installCensusReads(application *gameWorldApplication, ownedShardID string) 
 	}
 	directory := store.DirForShardFromEnv(ownedShardID)
 	service := census.NewService(census.JournalRows(journal), census.ChatLogCounts(directory), time.Now)
+	// The public status answer's people counts read this same
+	// service (opensro-web#78); installPublicAPI runs after us.
+	application.census = service
 	handler, err := census.Handler(service, filepath.Join(directory, "operator-token"))
 	if err != nil {
 		return fmt.Errorf("census reads: %w", err)
