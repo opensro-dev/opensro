@@ -649,7 +649,11 @@ test("the expanded world map has no option and no row; the server's switch owns 
 	for ( const value of [ undefined, {}, { expandedWorldMap: true } ] ) {
 		assert.equal( "expandedWorldMap" in experimentalOptions( value ), false );
 	}
-	assert.ok( !EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => String( row.key ) === "expandedWorldMap" ) ) );
+	assert.ok(
+		!EXPERIMENTAL_TABS.some( tab =>
+			experimentalRows( tab ).some( row => String( row.key ) === "expandedWorldMap" )
+		)
+	);
 });
 
 test("interpolated own movement has no option, no row, and no video slice (#1564)", () => {
