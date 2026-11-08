@@ -105,6 +105,29 @@ def _resolve_game_root() -> Path:
 
 GAME_ROOT = _resolve_game_root()
 EXTRACTED_ROOT = GAME_ROOT / "extracted"
+
+
+# ================
+# _resolve_research_root
+#
+# The reverse-engineering research tree (revtool's database and ledgers,
+# per-target labels and derived analyzer exports): SRO_RESEARCH_ROOT when
+# the operator sets it (absolute only), else research/ beside the game
+# files. It is never inside a checkout, so every worktree shares it.
+# ================
+def _resolve_research_root() -> Path:
+	configured = os.environ.get("SRO_RESEARCH_ROOT", "").strip()
+	if configured:
+		path = Path(configured)
+		if not path.is_absolute():
+			raise RuntimeError(f"SRO_RESEARCH_ROOT must be an absolute path, not {configured!r}")
+		return path.resolve()
+	return GAME_ROOT / "research"
+
+
+RESEARCH_ROOT = _resolve_research_root()
+
+
 def _resolve_generated_root() -> Path:
 	"""SRO_GENERATED_ROOT when set (absolute only), else the main checkout's."""
 	override = os.environ.get("SRO_GENERATED_ROOT")
