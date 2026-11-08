@@ -134,6 +134,9 @@ func (rt *Runtime) CanPlaceTrap(c *enterworld.Character, skill string) ([]wire.F
 	if c == nil || c.DeletePending || !enterworld.CharacterAlive(c) || rt.Defs == nil || rt.PlanInventory == nil {
 		return nil, false
 	}
+	if skill == hwanNiyaSkill {
+		return rt.canPlaceNiyaTrap(c)
+	}
 	for _, rule := range captureRules {
 		if rule.skill != skill {
 			continue
@@ -164,6 +167,12 @@ retirement follows all fallible quest checks and precedes character writes.
 func (rt *Runtime) CaptureQuestTrap(c *enterworld.Character, skill, monster string, retire func() bool) ([]wire.Frame, bool) {
 	if c == nil || c.DeletePending || !enterworld.CharacterAlive(c) || rt.Defs == nil || rt.PlanInventory == nil || retire == nil {
 		return nil, false
+	}
+	if skill == hwanNiyaSkill {
+		if monster != hwanNiyaGeneral {
+			return nil, false
+		}
+		return rt.captureNiya(c, retire)
 	}
 	for _, rule := range captureRules {
 		if rule.skill != skill || rule.monster != monster {

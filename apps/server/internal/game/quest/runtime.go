@@ -90,8 +90,12 @@ type Runtime struct {
 	// HwanLevelFrames builds the frames that announce a raised Blue Berserk
 	// level (port-only, not native); the composition root wires it to the
 	// action lane, which knows the character's world identity. Nil in
-	// detached tests: the level still changes, nothing is announced.
+	// detached tests: the level still rises, nothing is announced.
 	HwanLevelFrames func(c *enterworld.Character) []wire.Frame
+	// SelectedMonster answers the codename and position of the monster the
+	// character has selected (the Mountain Essence acts on it); the composition
+	// root wires it to the action lane. Nil refuses the tool.
+	SelectedMonster func(c *enterworld.Character) (string, simulation.Spawn, bool)
 	// Hwan holds the operator knobs of the Blue Berserk quests (hwanknobs.go).
 	// The zero value is the original behaviour.
 	Hwan HwanKnobs
@@ -390,6 +394,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		acceptanceItems = append(acceptanceItems, rahid6AcceptanceItems(def)...)
 		acceptanceItems = append(acceptanceItems, easteu21AcceptanceItems(def)...)
 		acceptanceItems = append(acceptanceItems, ivy3AcceptanceItems(def)...)
+		acceptanceItems = append(acceptanceItems, specAcceptanceGrants(def)...)
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
@@ -753,7 +758,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 	if len(def.RewardChoices) == 0 && choice != noRewardChoice {
 		return OpResult{}, fmt.Errorf("quest reward: %s offers no reward choice", def.Codename)
 	}
-	if (len(def.RewardItems) != 0 || len(def.RewardChoices) != 0 || collectsItems(def)) && rt.PlanInventory == nil {
+	if (len(def.RewardItems) != 0 || len(def.RewardChoices) != 0 || collectsItems(def) || len(def.ClearOnEnd) != 0) && rt.PlanInventory == nil {
 		return OpResult{}, fmt.Errorf("quest reward: %s requires an item reward owner", def.Codename)
 	}
 	var refusal error
@@ -818,8 +823,11 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			refusal = fmt.Errorf("quest reward: completed quest wire capacity reached")
 			return false
 		}
+		hwanBefore := rt.HwanLevel(character)
 		var inventoryRows []enterworld.InventoryRow
-		if len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def) {
+		// The gold the quest pays for held items is read before they are taken.
+		rewardGold := def.RewardGold + heldItemGold(character, def)
+		if len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def) || len(def.ClearOnEnd) > 0 {
 			count, err := resuscitationExchangeCount(character, def)
 			if err != nil {
 				refusal = err
@@ -846,6 +854,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			consume = append(consume, ivy3CompletionCleanup(character, def)...)
 			consume = append(consume, optionalMissionCleanup(character, def)...)
 			consume = append(consume, questItemCleanup(character, def, consume)...)
+			consume = append(consume, clearOnEndAmounts(character, def)...)
 			if force {
 				consume = clampToHeld(character, consume)
 			}
@@ -905,15 +914,15 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			forgetQuests(character, def.completeForgetsIDs)
 			// The Blue Berserk level is paid with the completion (the reward row's
 			// Hwan column); the character store door is held here.
-			if def.RewardHwanLevel > 0 && character.SetHwanLevel(def.RewardHwanLevel) && rt.HwanLevelFrames != nil {
+			if rt.HwanLevelFrames != nil && rt.HwanLevel(character) > hwanBefore {
 				hwanFrames = rt.HwanLevelFrames(character)
 			}
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
-		if def.RewardGold > 0 || turnInGold > 0 {
+		if rewardGold > 0 || turnInGold > 0 {
 			// The fee leaves after the reward is paid (as the server's
 			// EXINVENTORY_3 talk does), checked above.
-			balance := creditGold(character.Gold, def.RewardGold) - turnInGold
+			balance := creditGold(character.Gold, rewardGold) - turnInGold
 			character.Gold = &balance
 			goldFrame = &wire.Frame{
 				Opcode:  wire.OpPointsUpdate,

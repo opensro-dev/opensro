@@ -146,13 +146,8 @@ func TestInscriptionDeliveryRaisesTheBlueBerserkLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.HwanLevel != 3 || announced != 1 || result.Frames[len(result.Frames)-1].Opcode != 0x3FBF {
-		t.Fatalf("level %d announced %d frames %v", c.HwanLevel, announced, result.Frames)
-	}
-	// A level the character already holds is never lowered.
-	c.HwanLevel = 5
-	if c.SetHwanLevel(4) || c.HwanLevel != 5 {
-		t.Fatal("a quest lowered the Blue Berserk level")
+	if rt.HwanLevel(c) != 3 || announced != 1 || result.Frames[len(result.Frames)-1].Opcode != 0x3FBF {
+		t.Fatalf("level %d announced %d frames %v", rt.HwanLevel(c), announced, result.Frames)
 	}
 }
 

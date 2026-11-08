@@ -38,6 +38,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
 		return game.items.SpawnQuestMonster(game.divisionID, character, request)
 	}
+	quests.SelectedMonster = func(character *enterworld.Character) (string, simulation.Spawn, bool) {
+		return game.items.SelectedMonster(game.divisionID, character)
+	}
 	game.wireQuestProgrammes(quests)
 	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap

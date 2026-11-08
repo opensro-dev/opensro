@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -38,6 +39,9 @@ func applyHwanKnobs(quests *quest.Runtime) error {
 	}
 	if knobs.SunRelicSet {
 		log.Infof("quest: Sun God relic dig chance %d%% (%s)", knobs.SunRelicPercent, quest.EnvHwanSunRelic)
+	}
+	if _, hwan := quests.Defs.ByCodename("QNO_CH_HWAN_1_3"); hwan && !monster.QinShiTombFromEnv() {
+		log.Warnf("quest: the Blue Berserk bell quest (QNO_*_HWAN_1_3) drops from the Ch'in Tomb stone ghosts, and %s is off: the 95 chain cannot pass its third step", monster.EnvQinShiTomb)
 	}
 	if knobs.FastDrop {
 		log.Infof("quest: Alexandria ostracon steps drop %d items per kill (%s)", quest.FastDropCount, quest.EnvHwan3FastDrop)
