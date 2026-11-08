@@ -90,10 +90,12 @@ is therefore the source lane's 27 files, whole.
 
 ## Tightening (2026-11-08, #2929)
 
-Picked from this table: the per-file default dropped from 60 s to 20 s —
-the slowest ordinary file above took 14.6 s in the worse of the two
-profiled runs, so 20 s binds at a third of the old cap with headroom for
-runner jitter — and the run itself gained the 300 s whole-suite wall
-budget the five-minute client budget always implied
-(`SRO_TEST_SUITE_BUDGET_MS` overrides it). The ledger entry above is
-unchanged.
+Picked from this table, and set where this table was measured: the CI
+source lane now runs with a 20 s per-file budget and a 300 s whole-suite
+wall budget (`SRO_TEST_FILE_BUDGET_MS`, `SRO_TEST_SUITE_BUDGET_MS`, set
+in source-linux.yml) — the slowest ordinary file above took 14.6 s in
+the worse of two profiled runs, so 20 s binds at a third of the old cap
+with headroom for runner jitter. The runner's own defaults stay 60 s
+with no suite cap: the full check's runtime lane is unmeasured and
+still slow before the shards land, and a default must not bind what
+nobody has measured. The ledger entry above is unchanged.
