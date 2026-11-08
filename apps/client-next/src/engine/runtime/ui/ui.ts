@@ -537,7 +537,7 @@ import {
 	PARTY_TITLE_MAX_LENGTH,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
-import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { EXPANSION_LEVEL_CAP, NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { createSkillGauge, createGaugePresentation } from "./hud/progression-bars";
 import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui/progression-bars";
 import { shieldGauge, shieldGaugeFill } from "@/engine/foundation/ui/shield-gauge";
@@ -8960,7 +8960,10 @@ export function createUi( ports: UiPorts ) {
 						if ( item ) {
 							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
 							// items refuse a quick sell.
-							if ( itemIsMallItem( item ) || itemIsRare( item, game.levelCap === EXPANSION_LEVEL_CAP ) || item.summon?.state === 2 ) {
+							if (
+								itemIsMallItem( item ) || itemIsRare( item, game.levelCap === EXPANSION_LEVEL_CAP ) ||
+								item.summon?.state === 2
+							) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;
