@@ -15153,11 +15153,12 @@
 				"experimental-render-scale:75": null,
 				"experimental-scroll-down": {
 					"added": [
+						"experimental-ambient-occlusion",
 						"experimental-sky-detail"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "915b7c7541ebb70d",
+					"hash": "75e00883dd38fff0",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-phone-render-cap",

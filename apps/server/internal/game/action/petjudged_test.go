@@ -311,3 +311,34 @@ func TestAdvancePetJudgedAbstainsWhenTheOwnerWarps(t *testing.T) {
 		t.Fatalf("judged warp tick published %d frames, forced-copy %d, and they differ", len(judged), len(copied))
 	}
 }
+
+/*
+================
+TestReadPetTickFactsIntoScratchAllocatesNothing
+
+advancePet feeds the judged tick from the session's own facts
+scratch, so the steady follow tick's fact read allocates nothing at
+all: no fresh container per tick and no door closure. The guard
+above pins the container's size; this one pins the read itself.
+================
+*/
+func TestReadPetTickFactsIntoScratchAllocatesNothing(t *testing.T) {
+	rt, key, _ := petFollowFixture(t)
+	state := rt.petSessionFor(key.division, "benchowner", key.gid)
+	if state == nil {
+		t.Fatal("pet session missing")
+	}
+	restore := enterworld.SuspendRefusalAudit(t)
+	defer restore()
+	facts := &petTickFacts{}
+	read := func() {
+		rt.readPetTickFactsInto(facts, key.division, state.character, key.gid)
+	}
+	read()
+	if !facts.admitted {
+		t.Fatal("fixture pet not admitted")
+	}
+	if allocs := testing.AllocsPerRun(50, read); allocs != 0 {
+		t.Fatalf("fact read into scratch allocates %.0f per call, want 0 (a container or a door closure is back)", allocs)
+	}
+}

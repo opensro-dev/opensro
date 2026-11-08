@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
@@ -77,6 +78,9 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// census is the player census over the connection journal
+	// (port-only, #2717); nil while the journal is off.
+	census *census.Service
 	// mutes is the staff chat mute book (#2671): opened before admission,
 	// reaped on a timer.
 	mutes *moderation.Book
@@ -416,7 +420,7 @@ func newGameWorldApplication(
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
-	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard)
+	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard, application.census)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)

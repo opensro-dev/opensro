@@ -2553,6 +2553,13 @@
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/ambient-occlusion.ts",
+			"functions": [
+				"encode"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/sun-shadow.ts",
 			"functions": [
 				"encode"

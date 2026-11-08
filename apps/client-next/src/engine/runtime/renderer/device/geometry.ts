@@ -136,6 +136,13 @@ export function createGeometryResources(
 		usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 	} );
 	const shadowDummyView = shadowDummy.createView();
+	// Binding 15, the ambient occlusion factor (experimental, #2094):
+	// while the stage is off the draws bind the 1x1 white view (factor
+	// 1, no occlusion) and the gated shader read never samples it;
+	// while it is on, the blurred factor's view (device.ts installs it
+	// through refreshAmbientOcclusion when the view changes).
+	const aoDummyView = white.createView();
+	let aoBoundView = aoDummyView;
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
@@ -263,6 +270,7 @@ export function createGeometryResources(
 				{ binding: 12, resource: waterSampler },
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
+				{ binding: 15, resource: aoBoundView },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -1367,6 +1375,43 @@ export function createGeometryResources(
 			if ( shadowEnabled === enabled ) return;
 			// Bind the selected target before prepare() activates the first frame.
 			shadowEnabled = enabled;
+			for ( const [draw, meta] of metadata ) {
+				DeviceDraw.rebind(
+					meta.selection,
+					geometryBinding(
+						meta.uniform,
+						meta.instances,
+						meta.material,
+						draw.pipeline,
+						meta.clampedSampling,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage
+					)
+				);
+			}
+		},
+		/*
+		================
+		refreshAmbientOcclusion
+
+		The ambient occlusion owner's per-frame answer (experimental,
+		#2094): null while the stage is off or the scene has no size.
+		The swap travels the same identity guard as the cascade's: the
+		owner's blurred view is stable per scene size, so bindings stay
+		valid across frames and only an enable, disable or resize
+		refreshes them; the frame's render bundles ride on that
+		stability. A changed view rebinds every draw through the one
+		geometryBinding funnel.
+		================
+		*/
+		refreshAmbientOcclusion( view: GPUTextureView | null ) {
+			const next = view ?? aoDummyView;
+			if ( next === aoBoundView ) {
+				return;
+			}
+			aoBoundView = next;
 			for ( const [draw, meta] of metadata ) {
 				DeviceDraw.rebind(
 					meta.selection,

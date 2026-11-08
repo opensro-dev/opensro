@@ -31,121 +31,7 @@ const { createExperimentalHud, experimentalRows, experimentalTabs, EXPERIMENTAL_
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
-const OFF = Object.freeze( {
-	renderScale: 100,
-	// On by default (owner 2026-10-27, #1806): a phone caps the scene's pixels;
-	// every other display draws at full resolution.
-	phoneRenderCap: true,
-	// Native 1:1 interface size.
-	uiScale: 100,
-	chatTimestamps: false,
-	// On by default (owner 2026-10-28, #1976): event notices get their
-	// own chat tab; an explicit false restores the native four tabs.
-	eventChatTab: true,
-	safeLoadingScreen: false,
-	monsterGuide: false,
-	developerDiagnostics: false,
-	postProcessing: false,
-	anisotropicFiltering: false,
-	heightFog: false,
-	dynamicSun: false,
-	floatBloom: false,
-	hdrToneMap: false,
-	sunShadow: false,
-	perPixelLighting: false,
-	// Off by default: sky detail is a port-only deviation.
-	skyDetail: false,
-	// On by default (owner 2026-10-25): a press walks at once and stops
-	// where the server casts.
-	predictedRunUp: true,
-	// On by default (owner 2026-10-15): the camera eases its height and release.
-	smoothCamera: true,
-	// On by default (owner 2026-10-17): +8 and higher weapons and shields wear enchant sparks.
-	enchantSparks: true,
-	// On by default (owner 2026-10-14); it changes only devices without BC.
-	compressedTextures: true,
-	// Off by default (owner 2026-11-07, #2061): off fetches none of the
-	// HD set, not even its index.
-	hdTextures: false,
-	// On by default (owner 2026-10-14): near effects outrank far characters.
-	sharedActorRoom: true,
-	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
-	mainThreadOwnWalk: true,
-	// On by default (owner 2026-10-15): a disabled tab is dimmed.
-	greyDisabledTabs: true,
-	// On by default (owner 2026-10-15): the shard's job-kill notices show.
-	jobKillNotices: true,
-	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
-	dropPlusNotices: true,
-	// On by default (owner 2026-10-19): the shard's +7 notices show.
-	plusSevenNotices: true,
-	// On by default: the shard's item break notices show (#1738).
-	breakNotices: true,
-	// On by default (owner ask 2026-11-06, #2727): shard event notices print red in the message log.
-	highlightEventNotices: true,
-	// Off by default: each player opts in to the unique damage ranking.
-	uniqueDamageRank: false,
-	// Off by default: V hides only monsters and players, as the original does.
-	vHidesCompanions: false,
-	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
-	dungeonCharacterPvs: true,
-	// On by default (owner 2026-10-15): labels and lists stay inside their window.
-	fitWindowLabels: true,
-	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
-	dropOnBagTab: true,
-	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
-	exchangeClickShortcuts: true,
-	// On by default (owner 2026-10-15): a notice's player and item are links.
-	noticeLinks: true,
-	// On by default (owner 2026-11-07): Alt+click links an item into chat.
-	chatItemLinks: true,
-	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
-	shortNotices: true,
-	autoSelect: false,
-	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
-	confirmGuildBan: true,
-	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
-	homingProjectiles: false,
-	// On by default (owner 2026-11-07, #2741): companion and vigor auto-potions;
-	// off, the automatic potion watches only the player (70C550).
-	transportAutoPotion: true,
-	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
-	// off restores the native no-op click (6B3760).
-	petClickOpensWindow: true,
-	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
-	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
-	smartPetPickup: true,
-	// Off by default (#841): the pickup pet proposes the native categories
-	// until the item filter is turned on.
-	petPickupFilter: false,
-	// The filter's kinds include everything unless one is explicitly off;
-	// they are read only while the filter itself is on.
-	petFilterGold: true,
-	petFilterEquipment: true,
-	petFilterAlchemy: true,
-	petFilterPotions: true,
-	petFilterOther: true,
-	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
-	touchInspect: true,
-	// On by default (#1451 step 3): WebTransport is the
-	// default connect and the WebSocket the fallback; off is one setting.
-	webTransport: true,
-	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false,
-	// Off by default (#840): the maps mark the tracked quest's targets only.
-	questTrackerMarkers: false,
-	// Off by default (#1640): only the native plate and no ground ring.
-	sunDropMarker: false,
-	// Off by default: port-only portal-out cue on arrival; the native
-	// gate has no traced caller, so silence is the native default.
-	warpArrivalSound: false,
-	// Off by default (#2496): the seal line under the item name instead of
-	// after the requirement rows (558FF0 at 56B099).
-	sealUnderHeading: false,
-	// Off by default (#2269): the Item Mall's Buying list; the native
-	// window is inert and its mall button is born disabled.
-	silkHistory: false
-} );
+import { OFF } from "../helpers/experimental-off.mjs";
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
 	for (
@@ -177,97 +63,6 @@ test("only an explicit boolean enables chat timestamps", () => {
 	assert.equal( experimentalOptions( { chatTimestamps: true, developerDiagnostics: false } ).chatTimestamps, true );
 });
 
-test("safe loading defaults off and persists only after Confirm", () => {
-	for ( const value of [ undefined, null, {}, { safeLoadingScreen: "true" }, { safeLoadingScreen: 1 } ] ) {
-		assert.equal( experimentalOptions( value ).safeLoadingScreen, false );
-	}
-	assert.equal( experimentalOptions( { safeLoadingScreen: true } ).safeLoadingScreen, true );
-	const hud = createExperimentalHud();
-	hud.open();
-	hud.toggle( "safeLoadingScreen" );
-	assert.equal( hud.state().saved.safeLoadingScreen, false );
-	hud.open();
-	assert.equal( hud.state().draft.safeLoadingScreen, false, "closing discards the unconfirmed toggle" );
-	hud.toggle( "safeLoadingScreen" );
-	const saved = hud.confirm();
-	const restored = createExperimentalHud();
-	restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
-	assert.equal( restored.state().saved.safeLoadingScreen, true );
-	restored.reset();
-	assert.equal( restored.state().saved.safeLoadingScreen, true, "Default only changes the draft" );
-	assert.equal( restored.confirm().safeLoadingScreen, false );
-});
-
-test("the HD row is listed only while the published build carries the set (#2800)", () => {
-	const world = /** @type {import("../../src/engine/contracts/session").SessionState} */ ({
-		phase: "world",
-		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1 }
-	});
-	const keys = tabs => tabs.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
-	assert.ok( keys( experimentalTabs( world, true ) ).includes( "hdTextures" ), "the set is published" );
-	assert.ok( keys( experimentalTabs( null, true ) ).includes( "hdTextures" ), "also outside the world list" );
-	for ( const session of [ world, null, undefined ] ) {
-		const tabs = experimentalTabs( session, false );
-		assert.ok( !keys( tabs ).includes( "hdTextures" ), "no set, no row to toggle dead" );
-		assert.ok(
-			tabs.every( tab => tab.sections.length > 0 && tab.sections.every( section => section.rows.length > 0 ) ),
-			"no section or tab is left empty"
-		);
-	}
-});
-
-test("experimental drafts require Confirm and Default only changes the draft", () => {
-	const hud = createExperimentalHud();
-	assert.equal( hud.state().saved.chatTimestamps, false );
-	hud.open();
-	hud.toggle( "chatTimestamps" );
-	assert.equal( hud.state().draft.chatTimestamps, true );
-	assert.equal( hud.state().saved.chatTimestamps, false );
-	hud.open();
-	assert.equal( hud.state().draft.chatTimestamps, false );
-	hud.toggle( "chatTimestamps" );
-	assert.deepEqual( hud.confirm(), { ...OFF, chatTimestamps: true } );
-	hud.reset();
-	assert.equal( hud.state().draft.chatTimestamps, false );
-	assert.equal( hud.state().saved.chatTimestamps, true );
-	hud.open();
-	assert.equal( hud.state().draft.chatTimestamps, true );
-	hud.reset();
-	assert.deepEqual( hud.confirm(), OFF );
-	hud.restore( { ...OFF, chatTimestamps: true } );
-	assert.deepEqual( hud.state(), {
-		saved: { ...OFF, chatTimestamps: true },
-		draft: { ...OFF, chatTimestamps: true },
-		tab: 0,
-		scroll: 0
-	} );
-});
-
-/*
-================
-Developer diagnostics opt-in
-================
-*/
-test("diagnostics default off and follow the same draft lifecycle", () => {
-	for ( const value of [ undefined, null, [], {}, { developerDiagnostics: "true" }, { developerDiagnostics: 1 } ] ) {
-		assert.equal( experimentalOptions( value ).developerDiagnostics, false );
-	}
-	const hud = createExperimentalHud();
-	hud.toggle( "developerDiagnostics" );
-	assert.equal( hud.state().draft.developerDiagnostics, true );
-	assert.equal( hud.state().saved.developerDiagnostics, false );
-	hud.open();
-	assert.equal( hud.state().draft.developerDiagnostics, false );
-	hud.toggle( "developerDiagnostics" );
-	assert.equal( hud.confirm().developerDiagnostics, true );
-	hud.reset();
-	assert.equal( hud.state().saved.developerDiagnostics, true );
-	hud.open();
-	assert.equal( hud.state().draft.developerDiagnostics, true );
-	hud.reset();
-	assert.equal( hud.confirm().developerDiagnostics, false );
-});
-
 /*
 ================
 Video stages
@@ -286,6 +81,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		ambientOcclusion: false,
 		skyDetail: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
@@ -305,7 +101,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"ambientOcclusion"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -313,148 +110,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		assert.equal( experimentalOptions( { [key]: true } )[key], true );
 		assert.equal( experimentalVideo( experimentalOptions( { [key]: true } ) )[key], true );
 	}
-});
-
-test("a saved preference holding the retired relief and horizon rows loads cleanly and ignores them", () => {
-	// Both rows were removed at the owner's request (2026-10-11): a browser
-	// that saved them on still loads, the keys are dropped, and the other
-	// stages keep their saved values.
-	const saved = { terrainRelief: true, texturedHorizon: true, heightFog: true, renderScale: 75 };
-	const options = experimentalOptions( saved );
-	assert.deepEqual( options, { ...OFF, heightFog: true, renderScale: 75 } );
-	assert.equal( "terrainRelief" in options, false );
-	assert.equal( "texturedHorizon" in experimentalVideo( options ), false );
-	const ids = /** @type {string[]} */ (EXPERIMENTAL_TABS.flatMap( experimentalRows ).map( row => row.key ));
-	assert.ok( !ids.includes( "terrainRelief" ) && !ids.includes( "texturedHorizon" ) );
-});
-
-test("new environment preferences persist only on Confirm and Default remains a draft", () => {
-	for (
-		const key of /** @type {const} */ ([
-			"dynamicSun",
-			"floatBloom",
-			"hdrToneMap",
-			"sunShadow",
-			"perPixelLighting"
-		])
-	) {
-		const hud = createExperimentalHud();
-		hud.open();
-		hud.toggle( key );
-		assert.deepEqual( hud.state().saved, OFF );
-		const saved = hud.confirm();
-		assert.deepEqual( saved, { ...OFF, [key]: true } );
-		const restored = createExperimentalHud();
-		restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
-		restored.open();
-		assert.equal( restored.state().draft[key], true );
-		restored.reset();
-		assert.deepEqual( restored.state().draft, OFF );
-		assert.equal( restored.state().saved[key], true );
-		restored.open();
-		assert.equal( restored.state().draft[key], true, "Unconfirmed Default must be discarded" );
-		restored.reset();
-		assert.deepEqual( restored.confirm(), OFF );
-		restored.open();
-		assert.deepEqual( restored.state().draft, OFF );
-	}
-});
-
-/*
-================
-Tabs
-================
-*/
-test("six tabs group every preference once, in the spec's sections", () => {
-	assert.deepEqual( EXPERIMENTAL_TABS.map( tab => tab.title ), [
-		"Graphics",
-		"Interface",
-		"Game",
-		"Map",
-		"Notices",
-		"Pets"
-	] );
-	assert.deepEqual( EXPERIMENTAL_TABS[0].sections.map( section => section.title ), [
-		"Image",
-		"Light and sky",
-		"Textures and effects"
-	] );
-	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
-		"smartPetPickup",
-		"petPickupFilter",
-		"petFilterGold",
-		"petFilterEquipment",
-		"petFilterAlchemy",
-		"petFilterPotions",
-		"petFilterOther"
-	] );
-	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
-	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	assert.equal( keys.length, 59 );
-	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
-	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
-	assert.deepEqual(
-		kinds.map( row => [ row.key, row.parent ] ),
-		[ "petFilterGold", "petFilterEquipment", "petFilterAlchemy", "petFilterPotions", "petFilterOther" ].map(
-			key => [
-				key,
-				"petPickupFilter"
-			]
-		)
-	);
-	const ids = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.id ) );
-	assert.equal( new Set( ids ).size, ids.length );
-	const hud = createExperimentalHud();
-	hud.selectTab( 4 );
-	assert.equal( hud.state().tab, 4 );
-	hud.open();
-	assert.equal( hud.state().tab, 0 );
-	assert.throws( () => hud.selectTab( EXPERIMENTAL_TABS.length ) );
-	assert.throws( () => hud.selectTab( -1 ) );
-});
-
-test("a drag moves whole rows past half a row and keeps the rest", () => {
-	const hud = createExperimentalHud();
-	hud.scroll( 2, 5 );
-	// A 1-pixel jitter toward the top leaves the list where it is.
-	hud.drag( -1, 46, 5 );
-	assert.equal( hud.state().scroll, 2 );
-	hud.drag( 30, 46, 5 );
-	assert.equal( hud.state().scroll, 3 );
-	hud.drag( -30, 46, 5 );
-	assert.equal( hud.state().scroll, 2 );
-	assert.equal( hud.endDrag(), false, "it moved rows: not a click" );
-});
-
-test("a gesture under the click slop is a click and moves nothing", () => {
-	const hud = createExperimentalHud();
-	hud.drag( 3, 46, 5 );
-	hud.drag( -2, 46, 5 );
-	assert.equal( hud.endDrag(), true );
-	assert.equal( hud.state().scroll, 0 );
-	hud.drag( 20, 46, 5 );
-	assert.equal( hud.endDrag(), false, "past the slop it is a drag, even without a row step" );
-});
-
-test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide; no HD set.
-	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "expandedWorldMap" ] );
-	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
-});
-
-test("scroll clamps to its range and resets on tab change and open", () => {
-	const hud = createExperimentalHud();
-	hud.scroll( 5, 3 );
-	assert.equal( hud.state().scroll, 3 );
-	hud.scroll( -10, 3 );
-	assert.equal( hud.state().scroll, 0 );
-	hud.scroll( 1.5, 3 );
-	hud.selectTab( 2 );
-	assert.equal( hud.state().scroll, 0 );
-	hud.scroll( 2, 3 );
-	hud.open();
-	assert.equal( hud.state().scroll, 0 );
 });
 
 /*

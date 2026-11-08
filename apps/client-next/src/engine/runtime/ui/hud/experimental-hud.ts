@@ -164,6 +164,13 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-sky-detail",
 						label: "Sky detail",
 						description: "Drifting clouds, sun glow and rim light."
+					},
+					{
+						// Port-only, not native (#2094).
+						key: "ambientOcclusion",
+						id: "experimental-ambient-occlusion",
+						label: "Ambient occlusion",
+						description: "Shade corners and contact seams from depth."
 					}
 				]
 			},

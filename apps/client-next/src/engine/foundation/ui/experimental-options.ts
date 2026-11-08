@@ -61,6 +61,13 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Port-only, not native (#2094): screen-space ambient occlusion. A
+	// half-resolution depth pass totals how much of each surface's
+	// surroundings the previous frame's depth hides, and the next
+	// frame's surfaces scale their ambient term by it; the diffuse
+	// keeps its direction and the unlit path is untouched. Off by
+	// default; off owns nothing and the frame is the native one.
+	readonly ambientOcclusion: boolean;
 	// Port-only, not native: drifting procedural clouds, the sun's
 	// atmospheric glow and a rim light against the sky (pipelines.ts's
 	// stages.w). Off by default; off is the native gradient and disc.
@@ -466,6 +473,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
+		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
@@ -575,6 +583,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
@@ -600,6 +609,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
+		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,

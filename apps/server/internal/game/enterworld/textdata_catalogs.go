@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/namefilter"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -52,10 +53,13 @@ func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 		return nil, fmt.Errorf("textdata readiness: directory is required")
 	}
 
+	// The shard switch is read once, here at the composition root:
+	// the skill table's tomb position is instance state from this
+	// point, never a parse-time environment read (#2850).
 	catalogs := &TextdataCatalogs{
 		Items:        NewTextdataItems(dir),
 		Levels:       NewTextdataLevels(dir),
-		Skills:       NewTextdataSkills(dir),
+		Skills:       NewTextdataSkillsWithTomb(dir, monster.QinShiTombFromEnv()),
 		MagicOptions: NewTextdataMagicOptions(dir),
 		SetGroups:    NewTextdataSetGroups(dir),
 	}

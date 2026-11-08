@@ -81,10 +81,19 @@ const (
 // instead of captured fresh per owner tick (#2030), measured
 // 45,541 B / 822 allocs; with the tick driver's steps timed as
 // spans instead of per-step timing closures (#2030), measured
-// 39,284 B / 562 allocs.
+// 39,284 B / 562 allocs; with the pet counter judge taking the
+// read guard and composing its frame only on a change instead
+// of through a door closure per pet tick (#2030), measured
+// 27,259 B / 268 allocs; with the mercenary cooldown pass
+// collecting its owner keys into runtime scratch instead of a
+// slice grown from empty every tick (#2030), measured 25,952 B /
+// 263 allocs; with the bond lane's revival walk judging its
+// refusal on door-read facts before bondSource's answer comes
+// home, instead of paying for the escaped SkillDef on every pet
+// owner's tick (#2030), measured 25,150 B / 258 allocs.
 const (
-	tickBudgetBytesPerTick  = 43300
-	tickBudgetAllocsPerTick = 620
+	tickBudgetBytesPerTick  = 27700
+	tickBudgetAllocsPerTick = 284
 )
 
 /*

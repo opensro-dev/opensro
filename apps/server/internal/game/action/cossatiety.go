@@ -41,26 +41,27 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 	// the float32 spill cadence is preserved tick for tick.
 	commit := false
 	draining := false
+	resetSatiety := false
 	var probe companion.SatietyClock
-	rt.deps.Read(key.division, func() {
-		pet := state.character.CompanionByGID(key.gid)
-		if pet == nil || pet.BroodStage != 0 {
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	pet := state.character.CompanionByGID(key.gid)
+	if pet != nil && pet.BroodStage == 0 {
 		ref, valid := rt.cosReference(pet)
 		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
 			commit = true
-			return
+		} else if !valid || !pet.Summoned || pet.CurrentHP == 0 || ref.TidWord>>11 != 3 || ref.SatietyMinutes == 0 {
+			resetSatiety = true
+		} else {
+			draining = true
+			probe = state.satiety
+			after := probe.Advance(pet.GID, nowMs, ref.SatietyMinutes, pet.Satiety)
+			commit = pet.Satiety != after || probe.Exhausted
 		}
-		if !valid || !pet.Summoned || pet.CurrentHP == 0 || ref.TidWord>>11 != 3 || ref.SatietyMinutes == 0 {
-			state.satiety = companion.SatietyClock{}
-			return
-		}
-		draining = true
-		probe = state.satiety
-		after := probe.Advance(pet.GID, nowMs, ref.SatietyMinutes, pet.Satiety)
-		commit = pet.Satiety != after || probe.Exhausted
-	})
+	}
+	guard.Release()
+	if resetSatiety {
+		state.satiety = companion.SatietyClock{}
+	}
 	if !commit {
 		if draining {
 			state.satiety = probe
