@@ -314,6 +314,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		MasteryTotalOverride: deps.MasteryTotalOverride,
 		LevelCap:             deps.LevelCap,
 		StorageAutoStack:     deps.StorageAutoStack,
+		ChatItemLinks:        deps.ChatItemLinks,
 		FastDenReturn:        deps.FastDenReturn,
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,

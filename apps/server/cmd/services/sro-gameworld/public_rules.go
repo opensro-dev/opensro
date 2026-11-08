@@ -50,6 +50,7 @@ var unlistedSettings = map[string]string{
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
@@ -272,6 +273,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
 				Why:    "Owner-approved beta pacing for pets."},
+			{Flag: chat.EnvChatItemLinks, On: chat.ItemLinksFromEnv(),
+				Native: "Chat lines are text only.",
+				Now:    "Alt+click an item while typing to link it in the line; readers hover the link for the item's tooltip.",
+				Why:    "Owner decision 2026-11-07: players show items in chat."},
 			{Flag: action.EnvStorageAutoStack, On: action.StorageAutoStackFromEnv(),
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
