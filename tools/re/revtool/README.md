@@ -122,6 +122,33 @@ These are properties of the data source, not bugs to paper over:
   geometry; rizin rows store a stable ordinal. Use one backend's
   `index` per DB file (meta records `backend=rizin`).
 
+## The contributor seed
+
+Maintainers analyse in Binary Ninja databases that embed the retail
+executable and can never leave their machine. The seed is what ships
+instead (#2830): one xz file per target with only conclusions -
+every function's address and current (overlay-applied) name, plus
+the target's JSONL evidence ledger. No executable bytes, no
+decompiler text: the payload is JSON, and `seed verify` proves no
+16-byte run of the binary's `.text` appears in it. Both seeds are
+~0.2 MB against a 5 MB cap. Released as GitHub release assets;
+`seed-manifest.json` beside the tool pins their hashes.
+
+```
+rem maintainer: build (hashes must agree across DB, ledger, binary)
+py revtool.py --db <overlay.db> --binary SRO_Client.exe seed build --target client
+py revtool.py seed verify revtool-seed-client.xz --binary SRO_Client.exe
+
+rem contributor: rizin + the pinned venv, next to their retail binary
+py revtool.py --binary SRO_Client.exe seed apply revtool-seed-client.xz --rzdb SRO_Client.rzdb
+```
+
+`apply` hand-defines every seed function (`af+` name, one `afb+`
+block to the next start), saves the project and samples the result
+against the seed: client 94,865 of 95,290 rows defined in ~73 s
+(the rest are import thunks rizin already owns), sampled labelled
+names 20/20. Run rizin's own analysis on top for blocks and xrefs.
+
 ## Tests
 
 ```
@@ -129,6 +156,7 @@ py -3 -m unittest tools.re.revtool.test_revtool_cli_contract
 py -3 -m unittest tools.re.revtool.test_revtool_index_and_unpayable
 py -3 -m unittest tools.re.revtool.test_revtool_port
 py -3 -m unittest tools.re.revtool.test_revtool_rizin
+py -3 -m unittest tools.re.revtool.test_revtool_seed
 ```
 
 `test_revtool_rizin.py` runs against a fake rzpipe session — no rizin,

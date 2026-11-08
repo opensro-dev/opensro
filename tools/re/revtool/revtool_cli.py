@@ -32,6 +32,7 @@ from revtool_ingest import cmd_ingest_layout, cmd_reconstruct, cmd_sync
 from revtool_overlay import cmd_find, cmd_view, cmd_xref
 from revtool_paths import DEFAULT_DB, DEFAULT_DUMP, DEFAULT_EVIDENCE_LOCK
 from revtool_pe import cmd_deref, cmd_vtable
+from revtool_seed import cmd_seed_apply, cmd_seed_build, cmd_seed_verify
 from revtool_store import open_db
 from revtool_syntax import ASSERT_STATUS, BASES, TIERS
 
@@ -417,6 +418,37 @@ def build_parser():
 	sp.add_argument("target", help="function name / applied name / address")
 	sp.add_argument("--out", default=None, help="write to a file instead of stdout")
 	sp.set_defaults(handler=cmd_reconstruct)
+
+	sp = sub.add_parser("seed",
+						help="build / verify / apply the contributor seed (#2830)")
+	ssub = sp.add_subparsers(dest="seed_cmd", required=True)
+	sb = ssub.add_parser("build", help="emit the seed for --db's target")
+	sb.add_argument("--target", required=True, choices=("client", "server"))
+	sb.add_argument("--ledger", default=None,
+					help="JSONL evidence ledger (default: <db stem>_symbols.jsonl beside --db)")
+	sb.add_argument("--binary", dest="seed_binary", default=None,
+					help="retail binary to hash + scan (default: the top-level --binary)")
+	sb.add_argument("--out", default=None,
+					help="seed file (default: <data dir>/seed/revtool-seed-<target>.xz)")
+	sb.set_defaults(handler=cmd_seed_build)
+	sv = ssub.add_parser("verify", help="check a seed: format, pin, hash, text-run scan")
+	sv.add_argument("seed", help="seed file")
+	sv.add_argument("--binary", dest="seed_binary", default=None,
+					help="retail binary to hash + scan (default: the top-level --binary)")
+	sv.add_argument("--manifest", default=None,
+					help="pin manifest (default: seed-manifest.json beside revtool)")
+	sv.set_defaults(handler=cmd_seed_verify)
+	sa = ssub.add_parser("apply", help="define + name the seed's functions in rizin, save an .rzdb")
+	sa.add_argument("seed", help="seed file")
+	sa.add_argument("--binary", dest="seed_binary", default=None,
+					help="retail binary (default: the top-level --binary)")
+	sa.add_argument("--rzdb", default=None,
+					help="project to save (default: <seed stem>.rzdb beside the seed)")
+	sa.add_argument("--limit", type=int, default=0,
+					help="apply only the first N functions (dogfood runs)")
+	sa.add_argument("--force", action="store_true",
+					help="replace an existing .rzdb")
+	sa.set_defaults(handler=cmd_seed_apply)
 
 	return p
 
