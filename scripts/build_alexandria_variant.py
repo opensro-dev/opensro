@@ -625,6 +625,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The Blue Berserk chains' quest items follow the item switch and the level cap.
 	from cap110_quest_items import add_quest_items
 	quest_items = add_quest_items(vsro_root, native, out)
+	# The Blue Berserk scrolls, their shop rows, level table and texts follow the item switch.
+	from cap110_blue_berserk import add_blue_berserk
+	blue_berserk = add_blue_berserk(vsro_root, native, out)
 	# The monsters the quests spawn (no nests) follow the quest switch.
 	from cap110_quest_monsters import add_quest_monsters
 	quest_monsters = add_quest_monsters(vsro_root, native, out)
@@ -653,6 +656,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		**later_layers,
 		"worldLayers": world_layers,
 		"questItems": quest_items,
+		"blueBerserk": blue_berserk,
 		"questMonsters": quest_monsters,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
