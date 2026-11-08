@@ -215,6 +215,16 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: []byte{AckResultFail, SubGrantSilk}, Refusal: "silk-grant-refused"}
+	case SubSetBerserk:
+		// The port's /SETBERSERK (action/hwan.go): the ack echoes the level now in force.
+		if len(status) > 0 && status[0] != nil && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				SetGMBerserkLevel(string, string, string, uint8) bool
+			}); ok && owner.SetGMBerserkLevel(divisionID, sender.Name, request.Name, request.BerserkLevel) {
+				return Outcome{Ack: wire.NewWriter(3).U8(AckResultOK).U8(SubSetBerserk).U8(request.BerserkLevel).Payload()}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubSetBerserk}, Refusal: "set-berserk-refused"}
 	case SubSetSpeed:
 		// The port's /SETSPEED (action/gmspeed.go): the ack echoes the percent.
 		if len(status) > 0 && status[0] != nil {

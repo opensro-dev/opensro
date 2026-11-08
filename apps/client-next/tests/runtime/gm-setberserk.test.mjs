@@ -1,0 +1,47 @@
+/*
+===========================================================================
+
+gm-setberserk.test.mjs - the port's /SETBERSERK console command (GM test tooling)
+
+===========================================================================
+*/
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import "../helpers/native-source-loader.mjs";
+
+const { gmRequest, gmReply } = await import( "../../src/engine/foundation/gameplay/gm-command.ts" );
+
+test("/SETBERSERK name level sends subcommand 0xF3, the sized name and the level, in any case", () => {
+	for ( const line of [ "/SETBERSERK Ayla 3", "/setberserk Ayla 3", "/SetBerserk Ayla 3" ] ) {
+		const frame = gmRequest( line );
+		assert.equal( frame?.opcode, 0x75b6, line );
+		assert.deepEqual( [ ...(frame?.payload ?? []) ], [ 0xf3, 4, 0, 65, 121, 108, 97, 3 ], line );
+	}
+	assert.deepEqual( [ ...(gmRequest( "/SETBERSERK Ayla 0" )?.payload ?? []) ].at( -1 ), 0 );
+	assert.deepEqual( [ ...(gmRequest( "/SETBERSERK Ayla 6" )?.payload ?? []) ].at( -1 ), 6 );
+});
+
+test("/SETBERSERK needs a name and a level from 0 to 6", () => {
+	for (
+		const line of [
+			"/SETBERSERK",
+			"/SETBERSERK Ayla",
+			"/SETBERSERK Ayla 7",
+			"/SETBERSERK Ayla -1",
+			"/SETBERSERK Ayla 1.5",
+			"/SETBERSERK Ayla x",
+			"/SETBERSERK Ayla 2 3"
+		]
+	) {
+		assert.equal( gmRequest( line ), null, line );
+	}
+});
+
+test("the /SETBERSERK reply prints the level in force or the refusal", () => {
+	assert.deepEqual( gmReply( Uint8Array.of( 1, 0xf3, 4 ) ), { console: true, text: "-> berserk level set to 4" } );
+	assert.deepEqual( gmReply( Uint8Array.of( 2, 0xf3 ) ), {
+		console: true,
+		text: "Failed. -> berserk level change refused"
+	} );
+	assert.throws( () => gmReply( Uint8Array.of( 1, 0xf3 ) ), /Invalid GM berserk reply/ );
+});

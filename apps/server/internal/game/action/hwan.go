@@ -257,3 +257,44 @@ func (rt *Runtime) hwanCharge(c *enterworld.Character, ref *enterworld.ItemRef, 
 	*result = OpResult{Frames: frames}
 	return true
 }
+
+/*
+================
+SetGMBerserkLevel
+
+The gmcommand port: the GM's /SETBERSERK name level. Port-only test tooling,
+not native: it sets the named character's Blue Berserk level (0 to 6) for the
+life of the shard process, tells that character the new level and its title,
+and leaves the quests alone. Privilege is rechecked inside the store door, as
+SetGMSpeed does.
+================
+*/
+func (rt *Runtime) SetGMBerserkLevel(division, sender, name string, level uint8) bool {
+	if rt == nil || rt.deps == nil || rt.SetHwanLevel == nil || level > 6 {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	gm := rt.findCharacter(division, sender)
+	target := rt.findCharacter(division, name)
+	if gm == nil || target == nil {
+		return false
+	}
+	var frames []wire.Frame
+	if !rt.deps.Update(target, "gm-set-berserk", func() bool {
+		if target.DeletePending || !gm.GMPrivilege || !rt.SetHwanLevel(target, level) {
+			return false
+		}
+		frames = []wire.Frame{HwanLevelFrame(enterworld.ObjectIDForCharacter(target), level)}
+		if level > 0 {
+			frames = append(frames, HwanTitleNotice(target, level))
+		}
+		return true
+	}) {
+		return false
+	}
+	if rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(division, target.Name, frames)
+	}
+	return true
+}

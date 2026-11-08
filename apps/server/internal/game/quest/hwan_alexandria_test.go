@@ -187,3 +187,28 @@ func TestOstraconQuestNeedsItsPredecessorAndTheDropKnobOnlyScalesTheStack(t *tes
 		t.Errorf("knob on with 95 held drops %d, want the remaining 5", got)
 	}
 }
+
+func TestGMLevelOverridesTheQuestsLevelUntilRestart(t *testing.T) {
+	rt, defs := shippedHwanRuntime(t)
+	last, _ := defs.ByCodename("QNO_CH_HWAN_2_6")
+	c := hwanCharacter("CHAR_CH_MAN_ADVENTURER", 100)
+	c.CompletedQuestIds = []uint32{last.RefID}
+	if rt.HwanLevel(c) != 2 {
+		t.Fatalf("quest level %d, want 2", rt.HwanLevel(c))
+	}
+	if !rt.SetGMHwanLevel(c, 6) || rt.HwanLevel(c) != 6 {
+		t.Fatalf("GM level %d, want 6", rt.HwanLevel(c))
+	}
+	if !rt.SetGMHwanLevel(c, 0) || rt.HwanLevel(c) != 0 {
+		t.Fatal("a GM level 0 did not clear the quests' level")
+	}
+	if rt.SetGMHwanLevel(c, 7) || rt.HwanLevel(c) != 0 {
+		t.Fatal("level 7 was accepted")
+	}
+	other := hwanCharacter("CHAR_CH_MAN_ADVENTURER", 100)
+	other.ID = 99
+	other.CompletedQuestIds = []uint32{last.RefID}
+	if rt.HwanLevel(other) != 2 {
+		t.Fatal("one character's override leaked to another")
+	}
+}

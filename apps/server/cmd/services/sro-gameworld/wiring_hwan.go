@@ -61,6 +61,7 @@ port-only 0x3FBF frames tell the owner at world entry and when it rises.
 */
 func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) {
 	game.items.HwanLevel = quests.HwanLevel
+	game.items.SetHwanLevel = quests.SetGMHwanLevel
 	quests.HwanLevelFrames = game.items.HwanLevelFrames
 	halloween := game.deps.EntryEventFrames
 	game.deps.EntryEventFrames = func(division string, character *enterworld.Character) []enterworld.Packet {

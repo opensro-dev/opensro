@@ -98,6 +98,8 @@ type Runtime struct {
 	// character has selected (the Mountain Essence acts on it); the composition
 	// root wires it to the action lane. Nil refuses the tool.
 	SelectedMonster func(c *enterworld.Character) (string, simulation.Spawn, bool)
+	// hwanGM holds the levels /SETBERSERK set (hwan_level.go).
+	hwanGM hwanOverrides
 	// Hwan holds the operator knobs of the Blue Berserk quests (hwanknobs.go).
 	// The zero value is the original behaviour.
 	Hwan HwanKnobs

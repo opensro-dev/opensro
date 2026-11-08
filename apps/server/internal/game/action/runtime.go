@@ -731,6 +731,8 @@ type Runtime struct {
 	// HwanLevel answers a character's Blue Berserk level (the quest owner's
 	// derived value, quest/hwan_level.go); nil is level 0 (hwan.go).
 	HwanLevel func(*enterworld.Character) uint8
+	// SetHwanLevel is the quest owner's /SETBERSERK seat (hwan.go); nil refuses.
+	SetHwanLevel func(*enterworld.Character, uint8) bool
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
 	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
