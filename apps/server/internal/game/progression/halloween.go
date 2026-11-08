@@ -211,8 +211,12 @@ func HalloweenGifts() []HalloweenGift {
 //
 //   - HalloweenBoxDropChancePercent: an ordinary kill's chance to drop
 //     one box while the event runs (a Gourd kill always pays its box).
-//   - HalloweenBoxDailyCap: boxes one character may mint per day, every
-//     source counted; the day resets at 04:00 UTC (HalloweenDayKey).
+//   - HalloweenBoxDailyCap: boxes one account may mint per day from
+//     ordinary kills; the day resets at 04:00 UTC (HalloweenDayKey).
+//   - HalloweenGourdBoxDailyCap: boxes one account may mint per day
+//     from Gourd kills, its own allowance (#2950): ordinary grinding
+//     fills the ordinary cap hours before a wave lands, so a shared
+//     cap paid the wave's Gourds nothing.
 //   - HalloweenHelmetPrice: boxes one helmet costs, about three days at
 //     the cap, so a regular can finish all four colours inside the run.
 //   - HalloweenElixirPrice: boxes one Elixir costs, half a day at the
@@ -221,6 +225,7 @@ func HalloweenGifts() []HalloweenGift {
 const (
 	HalloweenBoxDropChancePercent = 5
 	HalloweenBoxDailyCap          = 20
+	HalloweenGourdBoxDailyCap     = 20
 	HalloweenHelmetPrice          = 60
 	HalloweenElixirPrice          = 10
 )
