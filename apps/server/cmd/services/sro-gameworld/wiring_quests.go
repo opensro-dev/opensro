@@ -164,7 +164,7 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 		facts := game.items.InstancePartyFacts(game.divisionID, character.Name)
 		return quest.InstancePartyFacts{
 			Found: facts.Found, InParty: facts.InParty, Leader: facts.Leader,
-			Shared: facts.Shared, Transported: facts.Transported,
+			Shared: facts.Shared, Transported: facts.Transported, JobSuit: facts.JobSuit,
 		}
 	}
 	quests.InstanceInvite = func(leader *enterworld.Character, call quest.InstanceInviteCall) quest.InstanceInviteOutcome {
@@ -175,6 +175,7 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 			Entry:      call.Entry,
 			DeadlineMs: call.DeadlineMs,
 			Eligible:   call.Eligible,
+			Solo:       call.Solo,
 		})
 		return quest.InstanceInviteOutcome{
 			Opened:   result.OpenStatus == instance.Success,
@@ -194,4 +195,5 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 	quests.RegisterEasteu21Programme()
 	quests.RegisterIvy3Programme()
 	quests.RegisterGoria7Programme()
+	quests.RegisterHwanArenaProgrammes()
 }

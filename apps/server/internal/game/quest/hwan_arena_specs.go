@@ -37,7 +37,7 @@ func hwanArenaSpecs() []QuestSpec {
 			trial := hwanBase(race, chain, "1", race.general, race.general, previous)
 			talk := hwanTalk(trial.Codename)
 			trial.Objective = ObjectiveKill
-			trial.KillMonsterCodenames, trial.KillCount, trial.KillRanks = []string{hwanCommander(race, chain)}, 1, []uint8{0}
+			trial.KillMonsterCodenames, trial.KillCount = []string{hwanCommander(race, chain)}, 1
 			trial.NotAchievedSymbol = talk + "04"
 			trial.CompletePromptSymbol, trial.AchievedNowSymbol = talk+"07", talk+"09"
 			if chain == 2 {

@@ -87,6 +87,8 @@ type Runtime struct {
 	ivy3 ivy3Programme
 	// goria7 is the GORIA 7 programme's state (goria7.go).
 	goria7 goria7Programme
+	// hwan is the Blue Berserk arenas' state (hwan_arena.go).
+	hwan hwanProgramme
 	// HwanLevelFrames builds the frames that announce a raised Blue Berserk
 	// level (port-only, not native); the composition root wires it to the
 	// action lane, which knows the character's world identity. Nil in
@@ -616,6 +618,10 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				continue
 			}
 			if entry, offered := rt.goria7EntryOption(character, def, npcCodename); offered {
+				completes = append(completes, entry)
+				continue
+			}
+			if entry, offered := rt.hwanEntryOption(character, def, npcCodename); offered {
 				completes = append(completes, entry)
 				continue
 			}
