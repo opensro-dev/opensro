@@ -73,14 +73,16 @@ var qinshiTombChainFloor6 = map[string]bool{
 
 /*
 ================
-qinshiTombChainOwned
+QinShiTombChainOwned
 
 Whether the TombChain owns this nest's species on this floor: a
 codename zeroed in one floor's region stays restored in another
-(Snake General nests normally on Floor 3).
+(Snake General nests normally on Floor 3). Exported for the
+catalogue, whose spawn sources must count a chain-owned nest as
+the shard putting the species into the world (#2856).
 ================
 */
-func qinshiTombChainOwned(region uint16, codename string) bool {
+func QinShiTombChainOwned(region uint16, codename string) bool {
 	switch region {
 	case 0x8003:
 		return qinshiTombChainFloor5[codename]
@@ -242,7 +244,7 @@ func (t Template) WithQinShiTomb(textdataDir string) (Template, error) {
 		// The chain nests (Floor 5's guardians and Flame Master, Floor
 		// 6's stage anchors) are spawned by the TombChain, never by the
 		// nest lifecycle: keep the native max count 0 (#2372, #2373).
-		if qinshiTombChainOwned(regionID, ref.Codename) {
+		if QinShiTombChainOwned(regionID, ref.Codename) {
 			nest.MaxCount = 0
 		}
 		if capRow, ok := hiveCaps[key]; ok {
