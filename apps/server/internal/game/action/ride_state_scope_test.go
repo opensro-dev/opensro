@@ -15,8 +15,8 @@ state references absent entity").
 
 #2865: the same message still ended sessions after #1613 (#1620) on the
 live build (console group 2026-11-08: 23 hits, 13 players). The journal's
-newest events are one flag-0 (dismount) 0xB4B5 each - rider 100685 with
-vehicle 0x00C003AD, rider 100837 with vehicle 0x00C00345 - fanning out to
+newest events are one flag-0 (dismount) 0xB4B5 each, naming a player-band
+rider dismounting a COS-band vehicle, fanning out to
 a dozen sessions in regions 23663/23664 within a second, in world and
 entering-world phases. #1620 re-keyed the ACTION lane: every 0xB4B5 now
 travels under its payload rider through BroadcastObservedFrames. The
