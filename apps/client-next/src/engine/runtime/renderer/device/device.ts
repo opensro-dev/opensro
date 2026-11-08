@@ -701,21 +701,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				value.perPixelLighting ? 1 : 0,
 				value.ambientOcclusion ? 1 : 0
 			] );
-			// The HDR stage flips every scene target's format: geometry
-			// re-pipelines, the mirror reformats, the portraits retire.
-			if ( hdrOn !== value.hdrToneMap && phase === "running" ) {
-				hdrOn = value.hdrToneMap;
+			// The HDR stage flips every scene target's format and the MSAA
+			// stage its sample count: geometry re-pipelines and the mirror
+			// reformats once for both, so flipping the two rows together
+			// walks the live draws once. Only the format retires portraits.
+			const hdrChanged = hdrOn !== value.hdrToneMap, msaaChanged = msaaOn !== value.msaa;
+			hdrOn = value.hdrToneMap;
+			msaaOn = value.msaa;
+			if ( (hdrChanged || msaaChanged) && phase === "running" ) {
 				skyStages.clear();
 				geometry?.sceneBindings( hdrOn, msaaOn );
-				ui?.releasePortraits();
-			} else hdrOn = value.hdrToneMap;
-			// The MSAA stage re-pipelines the scene the same way: the shared
-			// draws then render through 4x pipelines into 4x targets.
-			if ( msaaOn !== value.msaa && phase === "running" ) {
-				msaaOn = value.msaa;
-				skyStages.clear();
-				geometry?.sceneBindings( hdrOn, msaaOn );
-			} else msaaOn = value.msaa;
+				if ( hdrChanged ) ui?.releasePortraits();
+			}
 			// The cascade toggling only changes bindings 13/14's view.
 			const shadowWasOn = sunShadowOn;
 			sunShadowOn = value.sunShadow;
