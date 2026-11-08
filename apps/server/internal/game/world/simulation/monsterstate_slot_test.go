@@ -5,8 +5,9 @@ monsterstate_slot_test.go - the carried-slot doors answer as the gid doors do
 
 #2133 dense slots: the behaviour batch carries an actor's mover slot
 and monster slot to dispatch, and the step's doors (Mover,
-MoverGeneration, commitActivity, checkAITimer) read through those
-hints instead of resolving the gid through the storage maps again.
+MoverGeneration, commitActivity, checkAITimer, livePose, the AI
+event drain) read through those hints instead of resolving the gid
+through the storage maps again.
 A hint is only a hint: a slot recycled onto another actor, a cold
 row, a missing mover row and the no-hint sentinel must all answer
 exactly what the gid door answers, and a commit addressed with
@@ -376,5 +377,90 @@ func TestBehaviorActorLiveAtAnswersAsGidProbe(t *testing.T) {
 	}
 	if !ops.Monsters.behaviorActorLive(key, actor.Gid) || ops.Monsters.behaviorActorLive(key, 999999) {
 		t.Fatal("gid probe disagrees with the carried probe")
+	}
+}
+
+/*
+================
+TestSlotLivePoseMatchesGidDoor
+
+livePoseAt through the carried slots answers livePose's pose: on
+the row the mover storage holds, on the synthesized spawn pose of
+an actor with no mover row yet, and not at all for a missing gid.
+Another actor's slots and the no-hint sentinel answer by gid.
+================
+*/
+func TestSlotLivePoseMatchesGidDoor(t *testing.T) {
+	ops, actor := monsterLegFixture(t, passiveTactics())
+	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
+	now := int64(100000)
+
+	want, wantOK := ops.Monsters.livePose(monsterTestDivision, actor.Gid, now)
+	got, gotOK := ops.Monsters.livePoseAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, now)
+	if gotOK != wantOK || got != want {
+		t.Fatalf("livePoseAt differs from livePose:\n got %+v, %v\nwant %+v, %v", got, gotOK, want, wantOK)
+	}
+	got, gotOK = ops.Monsters.livePoseAt(monsterTestDivision, actor.Gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, now)
+	if gotOK != wantOK || got != want {
+		t.Fatal("livePoseAt with sentinel slots differs from livePose")
+	}
+	// Another actor's slots: the gid resolve decides.
+	mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+	mateMoverSlot, mateMonsterSlot := carriedSlots(t, ops, mate.Gid)
+	got, gotOK = ops.Monsters.livePoseAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, now)
+	if gotOK != wantOK || got != want {
+		t.Fatal("livePoseAt with the mate's slots read the wrong actor")
+	}
+	// The mate has no mover row: both doors synthesize the spawn pose.
+	want, wantOK = ops.Monsters.livePose(monsterTestDivision, mate.Gid, now)
+	got, gotOK = ops.Monsters.livePoseAt(monsterTestDivision, mate.Gid, mateMoverSlot, mateMonsterSlot, now)
+	if gotOK != wantOK || got != want {
+		t.Fatalf("synthesized livePoseAt differs:\n got %+v, %v\nwant %+v, %v", got, gotOK, want, wantOK)
+	}
+	if _, ok := ops.Monsters.livePoseAt(monsterTestDivision, 999999, moverSlot, monsterSlot, now); ok {
+		t.Fatal("livePoseAt invented a pose for a missing actor")
+	}
+}
+
+/*
+================
+TestTakeAIEventsAtMatchesGidDoor
+
+The step's event drain through the carried monster slot peeks and
+takes exactly what the gid doors do: the peek copies without
+consuming, the take drains the queue once, and a foreign slot
+still drains the asked actor's queue.
+================
+*/
+func TestTakeAIEventsAtMatchesGidDoor(t *testing.T) {
+	ops, actor := monsterLegFixture(t, passiveTactics())
+	_, monsterSlot := carriedSlots(t, ops, actor.Gid)
+	state := ops.Monsters.division(monsterTestDivision)
+	want := []monsterAIEvent{{Event: 1, Kind: 2, Source: 7}, {Event: 3, Kind: 4, Source: 8}}
+	if state.aiEvents == nil {
+		state.aiEvents = make(map[uint32][]monsterAIEvent)
+	}
+	state.aiEvents[actor.Gid] = append([]monsterAIEvent(nil), want...)
+
+	peeked := ops.Monsters.peekAIEventsAt(monsterTestDivision, actor.Gid, monsterSlot)
+	if len(peeked) != len(want) || peeked[0] != want[0] || peeked[1] != want[1] {
+		t.Fatalf("peekAIEventsAt = %v, want %v", peeked, want)
+	}
+	if got := ops.Monsters.peekAIEvents(monsterTestDivision, actor.Gid); len(got) != len(want) {
+		t.Fatalf("peekAIEventsAt consumed the queue: gid peek now %v", got)
+	}
+	// Another actor's slot: the gid resolve decides, the queue is
+	// still the asked actor's.
+	mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+	_, mateSlot := carriedSlots(t, ops, mate.Gid)
+	got := ops.Monsters.takeAIEventsAt(monsterTestDivision, actor.Gid, mateSlot)
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("takeAIEventsAt with the mate's slot = %v, want %v", got, want)
+	}
+	if again := ops.Monsters.takeAIEvents(monsterTestDivision, actor.Gid); len(again) != 0 {
+		t.Fatalf("takeAIEventsAt did not drain the queue: gid take now %v", again)
+	}
+	if again := ops.Monsters.takeAIEventsAt(monsterTestDivision, 999999, monsterSlot); len(again) != 0 {
+		t.Fatalf("takeAIEventsAt invented events for a missing actor: %v", again)
 	}
 }
