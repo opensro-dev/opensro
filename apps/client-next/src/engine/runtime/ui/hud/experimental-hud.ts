@@ -25,7 +25,9 @@ import type { SessionState } from "@/engine/contracts/session";
 ExperimentalRow
 
 A checkbox or numeric selection: its preference key, control id, label
-and one-line help. Numeric preferences never pass through toggle().
+and one-line help. Numeric preferences never pass through toggle(). A row
+with a parent only acts while its parent is on (the pickup filter's
+kinds): it is drawn indented, and dimmed while the parent is off.
 ================
 */
 export interface ExperimentalRow {
@@ -33,438 +35,540 @@ export interface ExperimentalRow {
 	readonly id: string;
 	readonly label: string;
 	readonly description: string;
+	readonly parent?: ExperimentalKey;
+}
+
+/*
+================
+ExperimentalSection
+
+One titled run of rows inside a tab's list.
+================
+*/
+export interface ExperimentalSection {
+	readonly title: string;
+	readonly rows: readonly ExperimentalRow[];
+}
+
+/*
+================
+ExperimentalTab
+================
+*/
+export interface ExperimentalTab {
+	readonly title: string;
+	readonly sections: readonly ExperimentalSection[];
+}
+
+/*
+================
+experimentalRows
+
+Every row of a tab, its sections in order.
+================
+*/
+export function experimentalRows( tab: ExperimentalTab ): readonly ExperimentalRow[] {
+	return tab.sections.flatMap( section => section.rows );
 }
 
 /*
 ================
 EXPERIMENTAL_TABS
 
-Port-only, not native. The window's tabs, Options style: Image holds the
-frame-wide stages and scene resolution, World the
-atmosphere stages that deviate from the 2005 look, Lighting the direct-light
-stages, Chat and Developer the earlier additions. Pickup holds the item
-filter's kinds (#841); it is appended last so the existing tabs keep the
-indices a reopening window relies on. Jobs (#1849) is appended after it for
-the same reason. Effects holds the port-only image effects the 2005 scene
-never had (sky detail first), and HD (#2061), last, holds the HD set's row:
-every earlier tab already holds the window's seven rows, so each appended
-tab keeps every existing tab's index.
+Port-only, not native. Six tabs by subject - Graphics, Interface, Game,
+Map, Notices, Pets - each one scrolling list of titled sections
+(foundation/ui/experimental-list.ts), so a tab holds any number of rows
+and every title reads in full. Opening the window returns to Graphics.
 ================
 */
-export const EXPERIMENTAL_TABS: readonly {
-	readonly title: string;
-	readonly section: string;
-	readonly rows: readonly ExperimentalRow[];
-}[] = [
+export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 	{
-		title: "Image",
-		section: "Image quality",
-		rows: [
+		title: "Graphics",
+		sections: [
 			{
-				key: "renderScale",
-				id: "experimental-render-scale",
-				label: "Render scale",
-				description: "100% is native; lower values soften the scene."
+				title: "Image",
+				rows: [
+					{
+						key: "renderScale",
+						id: "experimental-render-scale",
+						label: "Render scale",
+						description: "100% is native; lower values soften the scene."
+					},
+					{
+						key: "phoneRenderCap",
+						id: "experimental-phone-render-cap",
+						label: "Phone resolution",
+						description: "Phones: lighter scene while Render scale is 100%."
+					},
+					{
+						key: "uiScale",
+						id: "experimental-ui-scale",
+						label: "UI size",
+						description: "Scale windows and text; 100% is native size."
+					},
+					{
+						key: "postProcessing",
+						id: "experimental-post-processing",
+						label: "Anti-aliasing and color grade",
+						description: "Smooths edges and adjusts color, including UI."
+					},
+					{
+						key: "anisotropicFiltering",
+						id: "experimental-anisotropic-filtering",
+						label: "Anisotropic filtering",
+						description: "Sharper textures viewed at shallow angles."
+					},
+					{
+						key: "floatBloom",
+						id: "experimental-float-bloom",
+						label: "Smooth bloom",
+						description: "Requires Bloom effect in Video options."
+					},
+					{
+						key: "hdrToneMap",
+						id: "experimental-hdr-tone-map",
+						label: "HDR tone map",
+						description: "Float frame with filmic highlight roll-off."
+					}
+				]
 			},
 			{
-				key: "phoneRenderCap",
-				id: "experimental-phone-render-cap",
-				label: "Phone resolution",
-				description: "Phones: lighter scene while Render scale is 100%."
+				title: "Light and sky",
+				rows: [
+					{
+						key: "sunShadow",
+						id: "experimental-sun-shadow",
+						label: "Sun shadows",
+						description: "Scene shadows cast by the sunlight."
+					},
+					{
+						key: "dynamicSun",
+						id: "experimental-dynamic-sun",
+						label: "Moving sunlight",
+						description: "Lighting follows the time of day."
+					},
+					{
+						key: "perPixelLighting",
+						id: "experimental-per-pixel-lighting",
+						label: "Per-pixel character light",
+						description: "Smooth lighting on characters and objects."
+					},
+					{
+						key: "heightFog",
+						id: "experimental-height-fog",
+						label: "Height fog",
+						description: "Distance haze that thins with height."
+					},
+					{
+						key: "skyDetail",
+						id: "experimental-sky-detail",
+						label: "Sky detail",
+						description: "Drifting clouds, sun glow and rim light."
+					},
+					{
+						// Port-only, not native (#2094).
+						key: "ambientOcclusion",
+						id: "experimental-ambient-occlusion",
+						label: "Ambient occlusion",
+						description: "Shade corners and contact seams from depth."
+					},
+					{
+						// Port-only, not native (device/water-refraction.ts).
+						key: "waterRefraction",
+						id: "experimental-water-refraction",
+						label: "Water refraction",
+						description: "Water bends the ground under it and foams at the shore."
+					}
+				]
 			},
 			{
-				key: "uiScale",
-				id: "experimental-ui-scale",
-				label: "UI size",
-				description: "Scale windows and text; 100% is native size."
-			},
-			{
-				key: "postProcessing",
-				id: "experimental-post-processing",
-				label: "Anti-aliasing and color grade",
-				description: "Smooths edges and adjusts color, including UI."
-			},
-			{
-				key: "anisotropicFiltering",
-				id: "experimental-anisotropic-filtering",
-				label: "Anisotropic filtering",
-				description: "Sharper textures viewed at shallow angles."
-			},
-			{
-				key: "floatBloom",
-				id: "experimental-float-bloom",
-				label: "Smooth bloom",
-				description: "Requires Bloom effect in Video options."
-			},
-			{
-				key: "hdrToneMap",
-				id: "experimental-hdr-tone-map",
-				label: "HDR tone map",
-				description: "Float frame with filmic highlight roll-off."
+				title: "Textures and effects",
+				rows: [
+					{
+						key: "enchantSparks",
+						id: "experimental-enchant-sparks",
+						label: "Enhanced item glow",
+						description: "Richer glow and sparks on reinforced gear."
+					},
+					{
+						key: "sharedActorRoom",
+						id: "experimental-shared-actor-room",
+						label: "Effects in crowds",
+						description: "In a crowd, near skill effects draw before far characters."
+					},
+					{
+						key: "compressedTextures",
+						id: "experimental-compressed-textures",
+						label: "Compressed textures",
+						description: "Phones and tablets: less memory. After reload."
+					},
+					{
+						// Port-only, not native (#2061): the row is live, no reload -
+						// switching it on fetches the set's own index and starts its
+						// download; off stops the download and the originals serve.
+						// Listed only while the build carries the set (#2800,
+						// experimentalTabs), so it is never a dead toggle.
+						key: "hdTextures",
+						id: "experimental-hd-textures",
+						label: "HD textures",
+						description: "Sharper world textures; downloads while on."
+					},
+					{
+						key: "dungeonCharacterPvs",
+						id: "experimental-dungeon-character-pvs",
+						label: "Dungeon character PVS",
+						description: "Hide characters in unseen dungeon rooms."
+					}
+				]
 			}
 		]
 	},
 	{
-		title: "World",
-		section: "World and map",
-		rows: [
+		title: "Interface",
+		sections: [
 			{
-				key: "monsterGuide",
-				id: "experimental-monster-guide",
-				label: "Monster hunting guide",
-				description: "Monster portraits and approximate level ranges on M."
+				title: "Windows",
+				rows: [
+					{
+						key: "fitWindowLabels",
+						id: "experimental-fit-window-labels",
+						label: "Fit window labels",
+						description: "Fit long labels and captions; open lists upward."
+					},
+					{
+						key: "greyDisabledTabs",
+						id: "experimental-grey-disabled-tabs",
+						label: "Grey disabled tabs",
+						description: "Dim a window tab you cannot use."
+					},
+					{
+						key: "dropOnBagTab",
+						id: "experimental-drop-on-bag-tab",
+						label: "Drop on bag tabs",
+						description: "Drop an item on a bag tab to move it to that page."
+					},
+					{
+						key: "exchangeClickShortcuts",
+						id: "experimental-exchange-click-shortcuts",
+						label: "Exchange click shortcuts",
+						description: "Ctrl+click, right-click or double-click a bag item to offer it."
+					},
+					{
+						key: "confirmGuildBan",
+						id: "experimental-confirm-guild-ban",
+						label: "Confirm guild ban",
+						description: "Ask before Withdraw bans a guild member."
+					},
+					{
+						key: "touchInspect",
+						id: "experimental-touch-inspect",
+						label: "Tap shows item details",
+						description: "On touch, a tap on an item or skill keeps its tooltip up."
+					}
+				]
 			},
 			{
-				key: "heightFog",
-				id: "experimental-height-fog",
-				label: "Height fog",
-				description: "Distance haze that thins with height."
+				title: "Items and mall",
+				rows: [
+					{
+						key: "sealUnderHeading",
+						id: "experimental-seal-under-heading",
+						label: "Seal line under item name",
+						description: "Show a rare item's seal right under its name."
+					},
+					{
+						key: "silkHistory",
+						id: "experimental-silk-history",
+						label: "Silk charge history",
+						description: "The Item Mall's Buying list: silk spending by period."
+					}
+				]
 			},
 			{
-				key: "compressedTextures",
-				id: "experimental-compressed-textures",
-				label: "Compressed textures",
-				description: "Phones and tablets: less memory. After reload."
+				title: "Chat",
+				rows: [
+					{
+						key: "chatTimestamps",
+						id: "experimental-chat-timestamps",
+						label: "Chat timestamps",
+						description: "Show message time on hover."
+					},
+					{
+						key: "eventChatTab",
+						id: "experimental-event-chat-tab",
+						label: "Event chat tab",
+						description: "Event notices get their own chat tab."
+					},
+					{
+						key: "chatItemLinks",
+						id: "experimental-chat-item-links",
+						label: "Item links in chat",
+						description: "Alt+click an item while typing to link it in chat."
+					}
+				]
 			},
 			{
-				key: "sharedActorRoom",
-				id: "experimental-shared-actor-room",
-				label: "Effects in crowds",
-				description: "In a crowd, near skill effects draw before far characters."
-			},
-			{
-				key: "homingProjectiles",
-				id: "experimental-homing-projectiles",
-				label: "Homing projectiles",
-				description: "Steer straight projectiles toward a moving target."
-			},
-			{
-				key: "sunDropMarker",
-				id: "experimental-sun-drop-marker",
-				label: "Seal of Sun drop marker",
-				description: "Mark your own degree-9+ Sun drops on the ground."
-			},
-			{
-				key: "warpArrivalSound",
-				id: "experimental-warp-arrival-sound",
-				label: "Portal arrival sound",
-				description: "Play the portal-out cue when you arrive."
-			}
-		]
-	},
-	{
-		title: "Lighting",
-		section: "Light and shadows",
-		rows: [
-			{
-				key: "sunShadow",
-				id: "experimental-sun-shadow",
-				label: "Sun shadows",
-				description: "Scene shadows cast by the sunlight."
-			},
-			{
-				// Moved from World (#2105): the window fits seven rows a tab
-				// and the portal arrival sound joins World and map; the
-				// option, its key and its default are unchanged.
-				key: "dynamicSun",
-				id: "experimental-dynamic-sun",
-				label: "Moving sunlight",
-				description: "Lighting follows the time of day."
-			},
-			{
-				key: "perPixelLighting",
-				id: "experimental-per-pixel-lighting",
-				label: "Per-pixel character light",
-				description: "Smooth lighting on characters and objects."
-			},
-			{
-				key: "enchantSparks",
-				id: "experimental-enchant-sparks",
-				label: "Enhanced item glow",
-				description: "Richer glow and sparks on reinforced gear."
-			},
-			{
-				// #2496: this tab holds the other item-look row and has
-				// room; the window fits seven rows a tab.
-				key: "sealUnderHeading",
-				id: "experimental-seal-under-heading",
-				label: "Seal line under item name",
-				description: "Show a rare item's seal right under its name."
-			},
-			{
-				key: "dungeonCharacterPvs",
-				id: "experimental-dungeon-character-pvs",
-				label: "Dungeon character PVS",
-				description: "Hide characters in unseen dungeon rooms."
-			},
-			{
-				// Here for room (#2269): the window fits seven rows a tab
-				// and every other tab holds seven already; the option,
-				// its key and its default are unaffected.
-				key: "silkHistory",
-				id: "experimental-silk-history",
-				label: "Silk charge history",
-				description: "The Item Mall's Buying list: silk spending by period."
+				title: "Other",
+				rows: [
+					{
+						key: "safeLoadingScreen",
+						id: "experimental-safe-loading-screen",
+						label: "Safe loading screen",
+						description: "Hide inappropriate loading images."
+					},
+					{
+						key: "developerDiagnostics",
+						id: "experimental-developer-diagnostics",
+						label: "Developer diagnostics",
+						description: "Show a diagnostics icon beside FPS."
+					}
+				]
 			}
 		]
 	},
 	{
 		title: "Game",
-		section: "Chat and movement",
-		rows: [ {
-			key: "chatTimestamps",
-			id: "experimental-chat-timestamps",
-			label: "Chat timestamps",
-			description: "Show message time on hover."
-		}, {
-			key: "eventChatTab",
-			id: "experimental-event-chat-tab",
-			label: "Event chat tab",
-			description: "Event notices get their own chat tab."
-		}, {
-			key: "predictedRunUp",
-			id: "experimental-predicted-run-up",
-			label: "Predicted run-up",
-			description: "Walk to a far target on press; stop at the cast."
-		}, {
-			key: "smoothCamera",
-			id: "experimental-smooth-camera",
-			label: "Smooth camera",
-			description: "Ease small camera jumps and the return from a wall."
-		}, {
-			key: "mainThreadOwnWalk",
-			id: "experimental-main-thread-own-walk",
-			label: "Instant own movement",
-			description: "Your character starts walking on the click frame."
-		}, {
-			key: "touchInspect",
-			id: "experimental-touch-inspect",
-			label: "Tap shows item details",
-			description: "On touch, a tap on an item or skill keeps its tooltip up."
-		}, {
-			key: "webTransport",
-			id: "experimental-web-transport",
-			label: "WebTransport connection",
-			description: "Connect over QUIC/UDP; falls back to WebSocket."
-		} ]
+		sections: [
+			{
+				title: "Movement and camera",
+				rows: [
+					{
+						key: "predictedRunUp",
+						id: "experimental-predicted-run-up",
+						label: "Predicted run-up",
+						description: "Walk to a far target on press; stop at the cast."
+					},
+					{
+						key: "mainThreadOwnWalk",
+						id: "experimental-main-thread-own-walk",
+						label: "Instant own movement",
+						description: "Your character starts walking on the click frame."
+					},
+					{
+						key: "smoothCamera",
+						id: "experimental-smooth-camera",
+						label: "Smooth camera",
+						description: "Ease small camera jumps and the return from a wall."
+					}
+				]
+			},
+			{
+				title: "Combat",
+				rows: [
+					{
+						key: "autoSelect",
+						id: "experimental-auto-select",
+						label: "Auto Select",
+						description: "Actions window: select the nearest monster."
+					},
+					{
+						key: "homingProjectiles",
+						id: "experimental-homing-projectiles",
+						label: "Homing projectiles",
+						description: "Steer straight projectiles toward a moving target."
+					},
+					{
+						key: "uniqueDamageRank",
+						id: "experimental-unique-damage-rank",
+						label: "Unique damage ranking",
+						description: "When a unique you hit dies, show who did the most."
+					},
+					{
+						key: "vHidesCompanions",
+						id: "experimental-v-hides-companions",
+						label: "V hides pets and transports",
+						description: "Holding V also hides other players' pets and transports."
+					}
+				]
+			},
+			{
+				title: "Sound and connection",
+				rows: [
+					{
+						key: "warpArrivalSound",
+						id: "experimental-warp-arrival-sound",
+						label: "Portal arrival sound",
+						description: "Play the portal-out cue when you arrive."
+					},
+					{
+						key: "webTransport",
+						id: "experimental-web-transport",
+						label: "WebTransport connection",
+						description: "Connect over QUIC/UDP; falls back to WebSocket."
+					}
+				]
+			}
+		]
+	},
+	{
+		title: "Map",
+		sections: [
+			{
+				title: "World map (M)",
+				rows: [
+					{
+						key: "monsterGuide",
+						id: "experimental-monster-guide",
+						label: "Monster hunting guide",
+						description: "Monster portraits and approximate level ranges on M."
+					},
+					{
+						key: "expandedWorldMap",
+						id: "experimental-expanded-world-map",
+						label: "Expanded world map",
+						description: "Show extra town pages and wider overview."
+					}
+				]
+			},
+			{
+				title: "Map and minimap",
+				rows: [
+					{
+						key: "questTrackerMarkers",
+						id: "experimental-quest-tracker-markers",
+						label: "Quest target markers",
+						description: "Show every active quest's target on M and the minimap."
+					}
+				]
+			},
+			{
+				title: "Ground",
+				rows: [
+					{
+						key: "sunDropMarker",
+						id: "experimental-sun-drop-marker",
+						label: "Seal of Sun drop marker",
+						description: "Mark your own degree-9+ Sun drops on the ground."
+					}
+				]
+			}
+		]
 	},
 	{
 		title: "Notices",
-		section: "Shard notices",
-		rows: [ {
-			key: "jobKillNotices",
-			id: "experimental-job-kill-notices",
-			label: "Job kill notices",
-			description: "Show the shard's job kill announcements."
-		}, {
-			key: "dropPlusNotices",
-			id: "experimental-drop-plus-notices",
-			label: "Drop & plus notices",
-			description: "Show the shard's seal drop and +8-or-higher notices."
-		}, {
-			key: "plusSevenNotices",
-			id: "experimental-plus-seven-notices",
-			label: "Plus +7 notices",
-			description: "Show the shard's +7 alchemy announcements."
-		}, {
-			key: "breakNotices",
-			id: "experimental-break-notices",
-			label: "Item break notices",
-			description: "Show the shard's item break announcements."
-		}, {
-			key: "highlightEventNotices",
-			id: "experimental-highlight-event-notices",
-			label: "Highlight event notices",
-			description: "Show the shard's event announcements in red."
-		}, {
-			key: "shortNotices",
-			id: "experimental-short-notices",
-			label: "Short notices",
-			description: "Show notices for up to the original 7 seconds."
-		} ]
-	},
-	{
-		title: "Other",
-		section: "Windows and diagnostics",
-		rows: [ {
-			key: "developerDiagnostics",
-			id: "experimental-developer-diagnostics",
-			label: "Developer diagnostics",
-			description: "Show a diagnostics icon beside FPS."
-		}, {
-			key: "greyDisabledTabs",
-			id: "experimental-grey-disabled-tabs",
-			label: "Grey disabled tabs",
-			description: "Dim a window tab you cannot use."
-		}, {
-			key: "fitWindowLabels",
-			id: "experimental-fit-window-labels",
-			label: "Fit window labels",
-			description: "Fit long labels and captions; open lists upward."
-		}, {
-			key: "dropOnBagTab",
-			id: "experimental-drop-on-bag-tab",
-			label: "Drop on bag tabs",
-			description: "Drop an item on a bag tab to move it to that page."
-		}, {
-			key: "exchangeClickShortcuts",
-			id: "experimental-exchange-click-shortcuts",
-			label: "Exchange click shortcuts",
-			description: "Ctrl+click, right-click or double-click a bag item to offer it."
-		}, {
-			key: "confirmGuildBan",
-			id: "experimental-confirm-guild-ban",
-			label: "Confirm guild ban",
-			description: "Ask before Withdraw bans a guild member."
-		}, {
-			key: "safeLoadingScreen",
-			id: "experimental-safe-loading-screen",
-			label: "Safe loading screen",
-			description: "Hide inappropriate loading images."
-		} ]
+		sections: [
+			{
+				title: "Shard notices",
+				rows: [
+					{
+						key: "jobKillNotices",
+						id: "experimental-job-kill-notices",
+						label: "Job kill notices",
+						description: "Show the shard's job kill announcements."
+					},
+					{
+						key: "dropPlusNotices",
+						id: "experimental-drop-plus-notices",
+						label: "Drop & plus notices",
+						description: "Show the shard's seal drop and +8-or-higher notices."
+					},
+					{
+						key: "plusSevenNotices",
+						id: "experimental-plus-seven-notices",
+						label: "Plus +7 notices",
+						description: "Show the shard's +7 alchemy announcements."
+					},
+					{
+						key: "breakNotices",
+						id: "experimental-break-notices",
+						label: "Item break notices",
+						description: "Show the shard's item break announcements."
+					},
+					{
+						key: "highlightEventNotices",
+						id: "experimental-highlight-event-notices",
+						label: "Highlight event notices",
+						description: "Show the shard's event announcements in red."
+					},
+					{
+						key: "noticeLinks",
+						id: "experimental-notice-links",
+						label: "Links in notices",
+						description: "Hover an item for details; click a name to whisper."
+					},
+					{
+						key: "shortNotices",
+						id: "experimental-short-notices",
+						label: "Short notices",
+						description: "Show notices for up to the original 7 seconds."
+					}
+				]
+			}
+		]
 	},
 	{
 		title: "Pets",
-		section: "Attack pets",
-		rows: [ {
-			key: "transportAutoPotion",
-			id: "experimental-transport-auto-potion",
-			label: "Companion auto-potion",
-			description: "Pet and transport HP and cure settings in the T dialog."
-		}, {
-			key: "petClickOpensWindow",
-			id: "experimental-pet-click-opens-window",
-			label: "Pet panel opens window",
-			description: "Click a pet panel to open its window."
-		}, {
-			key: "petPickupFilter",
-			id: "experimental-pet-pickup-filter",
-			label: "Pickup pet item filter",
-			description: "Choose what the pickup pet collects: Pickup tab."
-		}, {
-			key: "expandedWorldMap",
-			id: "experimental-expanded-world-map",
-			label: "Expanded world map",
-			description: "Show extra town pages and wider overview."
-		}, {
-			key: "vHidesCompanions",
-			id: "experimental-v-hides-companions",
-			label: "V hides pets and transports",
-			description: "Holding V also hides other players' pets and transports."
-		}, {
-			// Moved from Game (#1976): the window fits seven rows a tab
-			// and the Event chat tab row joins Chat and movement; the
-			// option, its key and its default are unchanged.
-			key: "questTrackerMarkers",
-			id: "experimental-quest-tracker-markers",
-			label: "Quest target markers",
-			description: "Show every active quest's target on M and the minimap."
-		}, {
-			// Moved from Notices (#2727): the window fits seven rows a
-			// tab and the event highlight row joins Shard notices; the
-			// option, its key and its default are unchanged.
-			key: "uniqueDamageRank",
-			id: "experimental-unique-damage-rank",
-			label: "Unique damage ranking",
-			description: "When a unique you hit dies, show who did the most."
-		} ]
-	},
-	{
-		title: "Pickup",
-		section: "Pickup pet filter",
-		rows: [ {
-			key: "autoSelect",
-			id: "experimental-auto-select",
-			label: "Auto Select",
-			description: "Actions window: select the nearest monster."
-		}, {
-			key: "smartPetPickup",
-			id: "experimental-smart-pet-pickup",
-			label: "Keep pet gold pickup when full",
-			description: "Keep picking up gold when a full bag refuses an item."
-		}, {
-			key: "petFilterGold",
-			id: "experimental-pet-filter-gold",
-			label: "Gold",
-			description: "Collect gold; only while the item filter is on."
-		}, {
-			key: "petFilterEquipment",
-			id: "experimental-pet-filter-equipment",
-			label: "Equipment",
-			description: "Collect equipment; only while the filter is on."
-		}, {
-			key: "petFilterAlchemy",
-			id: "experimental-pet-filter-alchemy",
-			label: "Alchemy",
-			description: "Elixirs, stones and tablets; only with the filter."
-		}, {
-			key: "petFilterPotions",
-			id: "experimental-pet-filter-potions",
-			label: "Potions",
-			description: "Collect potions; only while the filter is on."
-		}, {
-			key: "petFilterOther",
-			id: "experimental-pet-filter-other",
-			label: "Other items",
-			description: "Scrolls, arrows and the rest; only with the filter."
-		} ]
-	},
-	{
-		title: "Effects",
-		section: "Image effects",
-		rows: [ {
-			key: "skyDetail",
-			id: "experimental-sky-detail",
-			label: "Sky detail",
-			description: "Drifting clouds, sun glow and rim light."
-		}, {
-			// Port-only, not native (#2094): here for room - the Image
-			// and Lighting tabs hold their seven rows already; the
-			// option, its key and its default are unaffected.
-			key: "ambientOcclusion",
-			id: "experimental-ambient-occlusion",
-			label: "Ambient occlusion",
-			description: "Shade corners and contact seams from depth."
-		}, {
-			// Port-only, not native: here for room beside the other image
-			// effects; the option, its key and its default are unaffected.
-			key: "waterRefraction",
-			id: "experimental-water-refraction",
-			label: "Water refraction",
-			description: "Water bends the ground under it and foams at the shore."
-		} ]
-	},
-	{
-		title: "HD",
-		section: "HD textures",
-		rows: [ {
-			// Port-only, not native (#2061): the row is live, no reload -
-			// switching it on fetches the set's own index and starts its
-			// download; off stops the download and the originals serve.
-			// Listed only while the build carries the set (#2800,
-			// experimentalTabs), so it is never a dead toggle.
-			key: "hdTextures",
-			id: "experimental-hd-textures",
-			label: "HD textures",
-			description: "Sharper world textures; downloads while on."
-		} ]
-	},
-	// Chat, appended last so the other tabs keep their indices: the
-	// chat-log links (notice links moved from Notices for room).
-	{
-		title: "Chat",
-		section: "Chat links",
-		rows: [ {
-			key: "noticeLinks",
-			id: "experimental-notice-links",
-			label: "Links in notices",
-			description: "Hover an item for details; click a name to whisper."
-		}, {
-			key: "chatItemLinks",
-			id: "experimental-chat-item-links",
-			label: "Item links in chat",
-			description: "Alt+click an item while typing to link it in chat."
-		} ]
+		sections: [
+			{
+				title: "Companions",
+				rows: [
+					{
+						key: "transportAutoPotion",
+						id: "experimental-transport-auto-potion",
+						label: "Companion auto-potion",
+						description: "Pet and transport HP and cure settings in the T dialog."
+					},
+					{
+						key: "petClickOpensWindow",
+						id: "experimental-pet-click-opens-window",
+						label: "Pet panel opens window",
+						description: "Click a pet panel to open its window."
+					}
+				]
+			},
+			{
+				title: "Pickup pet",
+				rows: [
+					{
+						key: "smartPetPickup",
+						id: "experimental-smart-pet-pickup",
+						label: "Keep pet gold pickup when full",
+						description: "Keep picking up gold when a full bag refuses an item."
+					},
+					{
+						key: "petPickupFilter",
+						id: "experimental-pet-pickup-filter",
+						label: "Pickup pet item filter",
+						description: "Choose what the pickup pet collects."
+					},
+					{
+						key: "petFilterGold",
+						id: "experimental-pet-filter-gold",
+						label: "Gold",
+						description: "Collect gold; only while the item filter is on.",
+						parent: "petPickupFilter"
+					},
+					{
+						key: "petFilterEquipment",
+						id: "experimental-pet-filter-equipment",
+						label: "Equipment",
+						description: "Collect equipment; only while the filter is on.",
+						parent: "petPickupFilter"
+					},
+					{
+						key: "petFilterAlchemy",
+						id: "experimental-pet-filter-alchemy",
+						label: "Alchemy",
+						description: "Elixirs, stones and tablets; only with the filter.",
+						parent: "petPickupFilter"
+					},
+					{
+						key: "petFilterPotions",
+						id: "experimental-pet-filter-potions",
+						label: "Potions",
+						description: "Collect potions; only while the filter is on.",
+						parent: "petPickupFilter"
+					},
+					{
+						key: "petFilterOther",
+						id: "experimental-pet-filter-other",
+						label: "Other items",
+						description: "Scrolls, arrows and the rest; only with the filter.",
+						parent: "petPickupFilter"
+					}
+				]
+			}
+		]
 	}
 ];
 
@@ -478,19 +582,30 @@ Port-only, not native. The shard's published reference is the capability;
 a saved local preference cannot reveal an option the shard has disabled.
 The same rule hides the HD row (#2800): it is listed only while the
 published build carries the set's index (the main pack index certifies
-it; hdAvailable), and a tab left with no rows - the HD tab holds only
-that row - goes with it.
+it; hdAvailable). A section left with no rows goes with it, then a tab
+left with no sections.
 ================
 */
-export function experimentalTabs( session: SessionState | null | undefined, hdAvailable: boolean ) {
-	const tabs = session?.phase === "world" && session.huntingGuide ?
-		EXPERIMENTAL_TABS :
-		EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
-	if ( hdAvailable ) return tabs;
-	return tabs
-		.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "hdTextures" ) }) )
-		.filter( tab => tab.rows.length > 0 );
+export function experimentalTabs(
+	session: SessionState | null | undefined,
+	hdAvailable: boolean
+): readonly ExperimentalTab[] {
+	const guide = session?.phase === "world" && !!session.huntingGuide;
+	const listed = ( row: ExperimentalRow ) =>
+		(guide || row.key !== "monsterGuide") && (hdAvailable || row.key !== "hdTextures");
+	return EXPERIMENTAL_TABS
+		.map( tab => ({
+			...tab,
+			sections: tab.sections
+				.map( section => ({ ...section, rows: section.rows.filter( listed ) }) )
+				.filter( section => section.rows.length > 0 )
+		}) )
+		.filter( tab => tab.sections.length > 0 );
 }
+
+// A press that moved less than this (in pixels, as the platform's touch
+// hold slop) and stepped no row is still a click on the row.
+const EXPERIMENTAL_CLICK_SLOP = 8;
 
 /*
 ================
@@ -498,7 +613,10 @@ createExperimentalHud
 ================
 */
 export function createExperimentalHud() {
-	let saved = experimentalOptions(), draft = saved, tab = 0;
+	// scroll is the list's row step. A drag carries its pixels until they
+	// make whole rows, and remembers how far it travelled for the click test.
+	let saved = experimentalOptions(), draft = saved, tab = 0, scroll = 0;
+	let dragCarry = 0, dragTravel = 0, dragStepped = false;
 	return {
 		/*
 		================
@@ -517,6 +635,7 @@ export function createExperimentalHud() {
 		open() {
 			draft = saved;
 			tab = 0;
+			scroll = 0;
 		},
 		/*
 		================
@@ -561,6 +680,50 @@ export function createExperimentalHud() {
 				throw Error( "Invalid experimental tab" );
 			}
 			tab = index;
+			scroll = 0;
+		},
+		/*
+		================
+		scroll
+
+		Moves the list by delta items, held inside [0, range].
+		================
+		*/
+		scroll( delta: number, range: number ) {
+			scroll = Math.max( 0, Math.min( Math.max( 0, range ), scroll + delta ) );
+		},
+		/*
+		================
+		drag
+
+		A thumb or touch drag: pixels toward the list's end, stepPixels per
+		row. The list moves a whole row once the carry passes half a row
+		either way, so a pixel of jitter never moves it.
+		================
+		*/
+		drag( pixels: number, stepPixels: number, range: number ) {
+			dragCarry += pixels;
+			dragTravel += Math.abs( pixels );
+			const steps = Math.sign( dragCarry ) * Math.floor( Math.abs( dragCarry ) / stepPixels + 0.5 );
+			if ( steps === 0 ) return;
+			dragCarry -= steps * stepPixels;
+			dragStepped = true;
+			scroll = Math.max( 0, Math.min( Math.max( 0, range ), scroll + steps ) );
+		},
+		/*
+		================
+		endDrag
+
+		Ends the drag; true when it was a click: it stayed inside the slop
+		and stepped no row.
+		================
+		*/
+		endDrag() {
+			const click = !dragStepped && dragTravel < EXPERIMENTAL_CLICK_SLOP;
+			dragCarry = 0;
+			dragTravel = 0;
+			dragStepped = false;
+			return click;
 		},
 		/*
 		================
@@ -585,7 +748,7 @@ export function createExperimentalHud() {
 		================
 		*/
 		state() {
-			return { saved, draft, tab };
+			return { saved, draft, tab, scroll };
 		}
 	};
 }
