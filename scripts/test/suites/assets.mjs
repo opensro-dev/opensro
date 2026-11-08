@@ -76,7 +76,9 @@ export default {
 		"scripts/test/assets/memberCompression.test.mjs",
 		"scripts/test/assets/servedSize.test.mjs",
 		"scripts/test/assets/minimapTextureParity.test.mjs",
+		"scripts/test/assets/missionDungeonMinimapCoverage.test.mjs",
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
-		"scripts/test/assets/terrainBlockTextures.test.mjs"
+		"scripts/test/assets/terrainBlockTextures.test.mjs",
+		"scripts/test/assets/hdTextureVariants.test.mjs"
 	]
 };

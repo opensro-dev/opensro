@@ -602,7 +602,8 @@ TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull
 
 The native COS pickup recipient choice and COS ground pickup:
  1. When the rotated party member's player bag is full and they have no pickup
-    pet, the picker's owner receives 0xB69E [2, 8, 0x9C, pickerPet, item].
+    pet, the selection returns 0x1807 and the picker's owner receives
+    0xB69E [2, 8, 0xB4, pickerPet, item] (the bag-full class).
  2. When the rotated party member has a summoned pickup pet with free space,
     the grant spills into that member's pickup pet (0xB06D type 0x11 to the
     member, 0xB69E [1, 8, pickerPet, item] to the picker's owner, and 0x317D
@@ -636,12 +637,13 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 	cmd1 := wire.NewWriter(9).U32(pickerPetGID).U8(wire.CosCommandPickupTag).U32(drop1.Gid).Payload()
 
 	// 1. Peer has no free bag slot (even with a below-cap potion stack at slot 13) and no pickup pet:
-	// Natively the first-empty-slot probe from 0x0D returns 0xFF and refuses with 0x9C without merging.
+	// Natively the first-empty-slot probe from 0x0D returns 0xFF without merging, the pickup-pet
+	// lookup finds none, and the selection's 0x1807 is answered as the bag-full class 0xB4.
 	rt.NextPartyLootMember(testDivision, picker.Name)
 	noPetRes := rt.HandleCosCommand(testDivision, picker, cmd1)
 	assertCosPickupAck(t, noPetRes.Frames, pickerPetGID, drop1.Gid, false)
-	if noPetRes.Frames[0].Payload[2] != cosPickupRetryBackoff || len(noPetRes.Recipients) != 0 || len(rt.Ground.All(testDivision)) != 1 {
-		t.Fatalf("peer without pet full-bag result = %+v, want 0x9C to picker and no peer frame", noPetRes)
+	if noPetRes.Frames[0].Payload[2] != cosPickupBagFull || len(noPetRes.Recipients) != 0 || len(rt.Ground.All(testDivision)) != 1 {
+		t.Fatalf("peer without pet full-bag result = %+v, want 0xB4 to picker and no peer frame", noPetRes)
 	}
 	if peer.MissionInventory[0].StackCount != 3 {
 		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists, as natively)", peer.MissionInventory[0].StackCount)

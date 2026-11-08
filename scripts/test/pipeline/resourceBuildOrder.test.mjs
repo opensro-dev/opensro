@@ -155,7 +155,17 @@ for ( const laneCount of [ 1, 8 ] ) {
 			),
 			"every producer finished before the pack tail began"
 		);
-		assert.deepEqual( events.slice( -2 ), [ "start:packTree", "end:packTree" ], "the final pack tail runs last" );
+		// The HD pack step runs before the final pack tail, so the main
+		// index can certify what this build published (#2812).
+		assert.ok(
+			position( events, "end:buildHdTexturePacks" ) < tail,
+			"the HD pack step finishes before the final pack tail"
+		);
+		assert.deepEqual(
+			events.slice( -2 ),
+			[ "start:packTree", "end:packTree" ],
+			"the final pack tail closes the build"
+		);
 	});
 
 	test(`in-lane chains keep their order (${laneCount} lane(s))`, async () => {
@@ -196,6 +206,19 @@ test("both pack passes get the caller's lists and only the final pass audits and
 	for ( const [request] of withOutdoor.calls.packTree ) {
 		assert.equal( request.groupInputs.includeOutdoorWorld, true );
 	}
+
+	// Only the final pass carries the HD stamp, and it carries this
+	// build's own outcome (#2812): the stub's HD step published a set.
+	assert.equal( withoutOutdoor.calls.packTree[EARLY_PASS][0].hdPublished, undefined );
+	assert.equal( withoutOutdoor.calls.packTree[FINAL_PASS][0].hdPublished, true );
+
+	const hdSkipped = recordingSteps( { buildHdTexturePacks: () => ({ skipped: true }) } );
+	await buildSroResources( hdSkipped.steps, { laneCount: 2, log: () => {} } );
+	assert.equal(
+		hdSkipped.calls.packTree[FINAL_PASS][0].hdPublished,
+		false,
+		"a build that skipped the HD set certifies nothing"
+	);
 });
 
 test("a failed source-image conversion stops the build before any lane", async () => {
@@ -209,13 +232,17 @@ test("a failed source-image conversion stops the build before any lane", async (
 });
 
 // Steps that consume the families' output, or run after the tree is complete.
-// The texture variants re-encode every native texture, the families' included.
+// The texture variants re-encode every native texture, the families' included;
+// the HD variants upscale the world textures the same way, and the HD pack
+// step packs that set behind its own index before the final pack tail, whose
+// stamp certifies what this build published (#2812).
 const AFTER_FAMILIES = [
 	"buildTextureVariants",
-	"buildUiIconAtlas",
+	"buildHdTextureVariants",
 	"buildUiImagePreloadManifest",
 	"buildBackgroundInstallAsset",
-	"packTree"
+	"packTree",
+	"buildHdTexturePacks"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {

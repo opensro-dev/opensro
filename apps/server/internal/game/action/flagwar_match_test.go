@@ -217,6 +217,71 @@ func TestFlagWarMatchShortHouseCancels(t *testing.T) {
 
 /*
 ================
+TestFlagWarMatchStartAdmitsOnlyTheEligible
+
+The native entry admission (flagWarCanEnter) runs per registrant at
+match start: a dead or mounted registrant is not pushed the game
+start, not transferred and takes no seat; the admitted still enter.
+With nobody admitted the instance closes and no match opens.
+================
+*/
+func TestFlagWarMatchStartAdmitsOnlyTheEligible(t *testing.T) {
+	alpha := flagWarPlayer(11, "Alpha", 20)
+	dead := flagWarPlayer(12, "Bravo", 20)
+	*dead.CurrentHP = 0
+	mounted := flagWarPlayer(13, "Charly", 20)
+	mounted.ActiveCOS = &enterworld.CharacterCOS{Summoned: true, Mounted: true}
+	delta := flagWarPlayer(14, "Delta", 20)
+	rig := newFlagWarMatchRuntime(t, alpha, dead, mounted, delta)
+
+	players := []*enterworld.Character{alpha, dead, mounted, delta}
+	registrants := make([]FlagWarRegistrant, 0, len(players))
+	for index, c := range players {
+		registrants = append(registrants, FlagWarRegistrant{
+			Division:    testDivision,
+			CharacterID: c.ID,
+			Name:        c.Name,
+			Gid:         enterworld.ObjectIDForCharacter(c),
+			Seq:         int64(index + 1),
+		})
+	}
+	rig.rt.startFlagWarMatch(registrants)
+
+	match := rig.rt.flagWarMatchFor(testDivision)
+	if match == nil {
+		t.Fatal("no live match after the start")
+	}
+	match.mu.Lock()
+	_, deadIn := match.participants[dead.ID]
+	_, mountedIn := match.participants[mounted.ID]
+	alphaSeat, deltaSeat := match.participants[alpha.ID], match.participants[delta.ID]
+	match.mu.Unlock()
+	if deadIn || mountedIn {
+		t.Fatal("a refused registrant took a seat")
+	}
+	if alphaSeat == nil || deltaSeat == nil || !alphaSeat.entered || !deltaSeat.entered {
+		t.Fatal("an admitted registrant did not enter")
+	}
+	if len(rig.pushed["Bravo"]) != 0 || len(rig.pushed["Charly"]) != 0 {
+		t.Fatalf("a refused registrant was pushed frames: %+v", rig.pushed)
+	}
+	if len(rig.pushed["Alpha"]) == 0 || len(rig.pushed["Delta"]) == 0 {
+		t.Fatalf("an admitted registrant missed the game start: %+v", rig.pushed)
+	}
+
+	refusedRig := newFlagWarMatchRuntime(t, dead, mounted)
+	refused := []FlagWarRegistrant{
+		{Division: testDivision, CharacterID: dead.ID, Name: dead.Name, Gid: enterworld.ObjectIDForCharacter(dead), Seq: 1},
+		{Division: testDivision, CharacterID: mounted.ID, Name: mounted.Name, Gid: enterworld.ObjectIDForCharacter(mounted), Seq: 2},
+	}
+	refusedRig.rt.startFlagWarMatch(refused)
+	if match := refusedRig.rt.flagWarMatchFor(testDivision); match != nil {
+		t.Fatal("a match opened with nobody admitted")
+	}
+}
+
+/*
+================
 TestFlagWarMatchTurnsAwayTheTailPastTheCap
 ================
 */

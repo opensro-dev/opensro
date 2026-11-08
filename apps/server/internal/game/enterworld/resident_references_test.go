@@ -15,8 +15,8 @@ import (
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -26,7 +26,7 @@ TestResidentReferencesMatchBoundedIteration
 */
 func TestResidentReferencesMatchBoundedIteration(t *testing.T) {
 	tier.Long(t, "resident and bounded references agree on every row")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	resident, bounded := NewTextdataItems(dir), NewTextdataItems(dir)
 	sizes := StackSizes{"potion": 2000, "elixir": 50}

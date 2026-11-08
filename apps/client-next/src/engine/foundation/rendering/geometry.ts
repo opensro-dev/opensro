@@ -80,7 +80,13 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 		material.fog &&
 		(!Number.isInteger( material.fog.color ) || material.fog.color < 0 || material.fog.color > 0xffffffff ||
 			![ material.fog.nearPlane, material.fog.farPlane, material.fog.intensity ].every( Number.isFinite ) ||
-			material.fog.nearPlane >= material.fog.farPlane || material.fog.intensity < 0)
+			material.fog.nearPlane >= material.fog.farPlane || material.fog.intensity < 0 ||
+			material.fog.heightFog && ![
+					material.fog.heightFog.unk3,
+					material.fog.heightFog.unk4,
+					material.fog.heightFog.unk5,
+					material.fog.heightFog.unk6
+				].every( Number.isFinite ))
 	) throw Error( "Invalid material fog" );
 	if (
 		material.frames !== undefined &&

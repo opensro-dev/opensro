@@ -77,6 +77,27 @@ function listedFileGone( error: unknown ) {
 
 /*
 ================
+transientAssetFault
+
+Whether a failure's shape is a transient transport or device fault
+rather than a verdict on the content: an error already marked
+transient, an allocation the engine refused (a RangeError naming
+memory, or the bare "out of memory" string the #2299 incident threw -
+the same two shapes the simulation lane names in
+isOutOfMemoryFailure), or an I/O DOMException (NetworkError).
+Decode-shaped DOMExceptions (InvalidStateError) and cancellation
+(AbortError) stay out: those are content and caller facts, not
+transport (#2337).
+================
+*/
+export function transientAssetFault( error: unknown ): boolean {
+	if ( transientAssetFailure( error ) ) return true;
+	if ( error instanceof DOMException ) return error.name === "NetworkError";
+	return /^(RangeError: )?(out of memory|array buffer allocation failed)/i.test( String( error ) );
+}
+
+/*
+================
 createLoader
 
 Own decoders, foreground requests and the background installation scheduler.
@@ -126,8 +147,33 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Foreground downloads in flight. The decoding mark waits for the pipe
 	// to drain: while a download can still deliver, a load is fetching.
 	let activeDownloads = 0;
+	// Stall windows of the downloads in flight, as their restart calls.
+	// A synchronous span (a world decode, a scene pack) parks the
+	// worker's loop for its whole length: no download can be read and no
+	// stall timer can run while it lasts, so when the span ends every
+	// in-flight window restarts (syncWork) - the parked time was never
+	// silence a download could have used (#2862).
+	const stallWindows = new Set<() => void>();
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
+	/*
+	================
+	syncWork
+
+	Run one synchronous stretch (a world decode, a scene pack). The
+	loop is parked for its whole length, so when it ends every
+	in-flight download's stall window restarts: a download whose
+	bytes were only queued behind the stretch must not be killed
+	for the wait.
+	================
+	*/
+	function syncWork<T>( run: () => T ): T {
+		try {
+			return run();
+		} finally {
+			for ( const restart of stallWindows ) restart();
+		}
+	}
 	/*
 	================
 	progress
@@ -255,6 +301,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					return await downloadAttempt( url, limit, signal, range );
 				} catch ( error ) {
 					const transient = error instanceof TypeError || error instanceof NoProgressError ||
+						transientAssetFault( error ) ||
 						(error instanceof Error && "status" in error &&
 							TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
 					const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
@@ -312,23 +359,34 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
-		// received chunk restarts the timer.
+		// received chunk restarts the timer, and so does the end of a
+		// synchronous span that parked the loop (syncWork): silence is
+		// only ever time the worker could have read in.
 		const attempt = new AbortController(), stalled = new NoProgressError( url, DOWNLOAD_NO_PROGRESS_MS );
 		const forward = () => attempt.abort( signal.reason );
 		signal.addEventListener( "abort", forward, { once: true } );
 		let timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
-		const progressed = () => {
+		/*
+		================
+		restart
+
+		Restart the stall window.
+		================
+		*/
+		const restart = () => {
 			clearTimeout( timer );
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
+		stallWindows.add( restart );
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
 			signal.throwIfAborted();
 			throw attempt.signal.reason === stalled ? stalled : error;
 		} finally {
+			stallWindows.delete( restart );
 			clearTimeout( timer );
 			signal.removeEventListener( "abort", forward );
 		}
@@ -371,7 +429,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				response.headers.get( "content-range" ) !== `bytes ${range.start}-${range.end}/${range.total}`)
 		) {
 			void response.body.cancel().catch( () => {} );
-			throw Error( "Invalid asset range response" );
+			// A middlebox that ignores Range - answering 200 with the whole
+			// object, or a 206 naming some other range - is a transport
+			// fact: the read retries, then enters the bounded recovery
+			// marked transient (#2337).
+			throw assetFailure( "Invalid asset range response", true );
 		}
 		const bytes = await readBytes( response.body, limit, {
 			received: size => {
@@ -398,7 +460,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		return bytes;
 	}
-	const packs = createPacks( download, activity );
+	/*
+	================
+	hdAvailability
+
+	The published build's word on the HD set (#2800), as the main pack
+	index carries it, posted to the page that lists the row.
+	================
+	*/
+	function hdAvailability( available: boolean ) {
+		send( { kind: "hd-availability", available }, [] );
+	}
+	const packs = createPacks( download, activity, hdAvailability );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
 	// wait for the answer.
@@ -473,14 +546,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		const job = { id: request.id, bytes: 0, sent: 0, primaryDone: false, decoding: false };
 		jobProgress.set( request.id, job );
+		// Whether the primary bytes carry the pack reader's length-and-digest
+		// guarantee. A decoder refusal means broken content only when they do;
+		// on unverified bytes it means the body arrived wrong (#2337).
+		let primaryVerified = true;
 		try {
 			const url = new URL( request.url );
 			if ( ![ "http:", "https:" ].includes( url.protocol ) || url.username || url.password ) {
 				throw new Error( "Invalid asset URL" );
 			}
+			primaryVerified = url.pathname.startsWith( "/assets/" );
 			let bytes = request.decode === "effect" && effectCatalogParsed ?
 				PARSED_EFFECT_CATALOG :
-				url.pathname.startsWith( "/assets/" ) ?
+				primaryVerified ?
 				await packs.read( url, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
 			job.primaryDone = true;
@@ -527,6 +605,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( total > (128 << 20) ) throw new Error( "World resource transaction exceeds budget" );
 						return resource;
 					}
+					// The decoder's work notes, forwarded as this job's liveness:
+					// each decode call counts from zero, so a per-job base keeps
+					// the forwarded total monotonic across the call sequence.
+					let decodeBase = 0, decodeUnits = 0;
+					/*
+					================
+					noteDecodeWork
+					================
+					*/
+					const noteDecodeWork = ( units: number ) => {
+						const total = decodeBase + units;
+						if ( total <= decodeUnits ) return;
+						decodeUnits = total;
+						if ( !disposed ) send( { kind: "job-decoding-progress", id: request.id, units: total }, [] );
+					};
 					// An outdoor scene names its coordinate anchor and which part it
 					// wants (world.ts WorldDecodeOptions); a terrain part is one region.
 					const hash = new URLSearchParams( url.hash.slice( 1 ) ),
@@ -539,12 +632,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = prepareWorldScene(
-							worlds.decode( terrain, false, {
-								origin,
-								part
-							} )
+						const prepared = syncWork( () =>
+							prepareWorldScene(
+								worlds.decode( terrain, false, {
+									origin,
+									part,
+									onProgress: noteDecodeWork
+								} )
+							)
 						);
+						decodeBase = decodeUnits;
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
 						return;
@@ -598,10 +695,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
-					let scene = worlds.decode( resolved, request.decode === "frontend-world", {
-						origin,
-						part
-					} );
+					// The decode closures below capture the bundle: narrowing
+					// does not reach into them, so name the non-null value.
+					const resolvedBundle = resolved;
+					let scene = syncWork( () =>
+						worlds.decode( resolvedBundle, request.decode === "frontend-world", {
+							origin,
+							part,
+							onProgress: noteDecodeWork
+						} )
+					);
+					decodeBase = decodeUnits;
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {
 						const manifest = JSON.parse(
@@ -620,16 +724,23 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						for ( const prop of manifest.props ) {
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
-							const region = resolved.source.sectorX | (resolved.source.sectorY << 8);
-							const product = worlds.decode( {
-								source: resolved.source,
-								terrain: { blocks: [] },
-								terrainTextures: { tileCatalog: { referencedTiles: [] } },
-								objects: {
-									resources: manifest.resources,
-									placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
-								}
-							}, true );
+							const region = resolvedBundle.source.sectorX | (resolvedBundle.source.sectorY << 8);
+							const product = syncWork( () =>
+								worlds.decode(
+									{
+										source: resolvedBundle.source,
+										terrain: { blocks: [] },
+										terrainTextures: { tileCatalog: { referencedTiles: [] } },
+										objects: {
+											resources: manifest.resources,
+											placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
+										}
+									},
+									true,
+									{ onProgress: noteDecodeWork }
+								)
+							);
+							decodeBase = decodeUnits;
 							added.push(
 								...product.groups.map( group => ({
 									...group,
@@ -654,7 +765,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					}
 					resolved = null;
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-					const prepared = prepareWorldScene( scene ), transfer = worldSceneTransfers( prepared.scene );
+					const prepared = syncWork( () => prepareWorldScene( scene ) ),
+						transfer = worldSceneTransfers( prepared.scene );
 					send( { kind: "world", id: request.id, prepared }, transfer );
 					pending.delete( request.id );
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
@@ -801,11 +913,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		} catch ( error ) {
 			if ( !disposed && pending.get( request.id ) === controller ) {
 				pending.delete( request.id );
+				// A refusal past the primary bytes on a read no digest vouches
+				// for is a transport verdict (the body arrived cut or
+				// substituted), never a content verdict; AssetAbsentError
+				// keeps its own meaning either way (#2337).
+				const unverifiedRefusal = !primaryVerified && job.primaryDone &&
+					!(error instanceof AssetAbsentError);
 				send( {
 					kind: "error",
 					id: request.id,
 					error: String( error ),
-					...(transientAssetFailure( error ) ? { transient: true as const } : {}),
+					...(transientAssetFault( error ) || unverifiedRefusal ? { transient: true as const } : {}),
 					...(error instanceof AssetAbsentError ? { absent: true as const } : {}),
 					// The live-page check is not a manifest file; its own 404 is no news.
 					...(request.decode !== "release" && listedFileGone( error ) ? { stale: true as const } : {})
@@ -836,15 +954,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "cancel" ) {
 				const controller = pending.get( request.id );
-				if ( !controller ) return;
-				controller.abort();
-				pending.delete( request.id );
-				const queued = waiting.findIndex( entry => entry.request.id === request.id );
-				if ( queued >= 0 ) waiting.splice( queued, 1 );
+				if ( controller ) {
+					controller.abort();
+					pending.delete( request.id );
+					const queued = waiting.findIndex( entry => entry.request.id === request.id );
+					if ( queued >= 0 ) waiting.splice( queued, 1 );
+				}
 				// Acknowledged on receipt, not on settlement: an execution
 				// AbortSignal cannot stop (a native decode) may drain long
 				// past the caller's acknowledgement window, but it delivers
 				// nothing more for this id; its slot frees when it settles.
+				// A cancel read after its execution settled is acknowledged
+				// too: the result already crossed, and the caller's slot is
+				// freed by this message - dropping it strands the slot on a
+				// healthy worker (#2871). The caller ignores an
+				// acknowledgement for a job it no longer holds.
 				send( { kind: "released", id: request.id }, [] );
 				return;
 			}
@@ -854,6 +978,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "texture-variant" ) {
 				textureVariant( request.variant );
+				return;
+			}
+			if ( request.kind === "hd-textures" ) {
+				packs.hdTextures( request.format );
 				return;
 			}
 			if (

@@ -197,7 +197,7 @@ func TestBootTickerPushesThroughLiveHub(t *testing.T) {
 		return []simulation.DivisionFrames{{DivisionID: "DIV_A", Frames: []simulation.Frame{sweep}}}
 	}
 
-	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), hook)
+	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), simulation.NamedTickHook{Hook: hook})
 	ticker.Interval = 20 * time.Millisecond // production cadence is 100ms; fast for the test
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -505,5 +505,56 @@ func TestSceneReplacementRejectsOldTickAndChangesVisibilityIdentity(t *testing.T
 			}
 		}
 		old = current
+	}
+}
+
+/*
+================
+TestNewTickerArmsTickTraceOnlyWhenEnabled
+
+SRO_TICK_TRACE is opt-in (#2301): unset or off, the composed
+ticker carries no tracer and every zone point stays a no-op; on,
+the tracer and its sink are wired.
+================
+*/
+func TestNewTickerArmsTickTraceOnlyWhenEnabled(t *testing.T) {
+	t.Setenv(transport.EnvTickTrace, "")
+	if ticker := NewTicker(nil, nil); ticker.Trace != nil || ticker.TraceSink != nil {
+		t.Fatal("unset SRO_TICK_TRACE armed the tick trace")
+	}
+	t.Setenv(transport.EnvTickTrace, "off")
+	if ticker := NewTicker(nil, nil); ticker.Trace != nil || ticker.TraceSink != nil {
+		t.Fatal("SRO_TICK_TRACE=off armed the tick trace")
+	}
+	t.Setenv(transport.EnvTickTrace, "on")
+	if ticker := NewTicker(nil, nil); ticker.Trace == nil || ticker.TraceSink == nil {
+		t.Fatal("SRO_TICK_TRACE=on did not arm the tick trace")
+	}
+}
+
+/*
+================
+TestNewTickerPublishesExactTickZones
+
+The composed ticker always carries the zone ledger (#2824), and the
+hub's metrics publish it as tick_zones keyed "<kind>:<name>" in
+milliseconds - the read sro-tickbudget diffs.
+================
+*/
+func TestNewTickerPublishesExactTickZones(t *testing.T) {
+	srv := startServer(t)
+	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster())
+	if ticker.Zones == nil {
+		t.Fatal("the composed ticker carries no zone ledger")
+	}
+	ticker.Zones.AddStep("probe", 1500*time.Microsecond)
+	ticker.Zones.AddStep("probe", 500*time.Microsecond)
+	ticker.RunTick(100)
+	zones := srv.Hub.Metrics().TickZones
+	if got := zones["step:probe"]; got.Count != 2 || got.TotalMs != 2 {
+		t.Fatalf("tick_zones step:probe = %+v, want 2 runs, 2 ms", got)
+	}
+	if got := zones["phase:total"]; got.Count != 1 {
+		t.Fatalf("tick_zones phase:total = %+v, want the one tick", got)
 	}
 }

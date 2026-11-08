@@ -27,26 +27,15 @@ fixture
 */
 function fixture() {
 	const saved = [];
-	const ui = createUi(
-		{ available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
-		() => {},
-		() => {},
-		() => {},
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		{ saveWindowPositions: value => saved.push( value ) }
-	);
+	const ui = createUi( {
+		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		extensions: { saveWindowPositions: value => saved.push( value ) }
+	} );
 	/** @type {import("../../src/engine/contracts/ui.ts").UiView} */
 	const view = {
 		session: { phase: "world", revision: 1 },
@@ -233,10 +222,11 @@ for ( const restored of [ false, true ] ) {
 			assert.ok( drag.rect.every( Number.isFinite ) );
 			assert.ok( x >= 0 && y >= 0 && width > 0 && height > 0 );
 			assert.ok( x + width <= view.width && y + height <= view.height );
-			assert.ok(
-				!semantics.controls.some( control => control.id === "ext-drag" ),
-				"extra slots start collapsed"
-			);
+			// Since #2408 the compact strip is the touch layout alone: a
+			// fine pointer keeps the native extended bar beside its strip
+			// at any size, fitted into the viewport like the windows.
+			const extDrag = semantics.controls.find( control => control.id === "ext-drag" );
+			assert.ok( extDrag, "a fine pointer keeps the native extended bar at a tiny viewport" );
 			const next = f.ui.step( { ...view }, 200 ) ?? semantics;
 			const nextDrag = next?.controls.find( control => control.id === "guide-drag" );
 			assert.ok( nextDrag );
@@ -244,8 +234,12 @@ for ( const restored of [ false, true ] ) {
 			assert.equal( nextDrag.draggable, false );
 			f.dispose();
 			assert.deepEqual( saved.at( -1 ).windows.gameGuide, nativeOrigin );
-			// An uncreated bar keeps its remembered entry, or the native serializer's previous pair.
-			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, 0 ] : nativeOrigin );
+			// The bar is created at first display now (#2408), so it saves
+			// the origin it was drawn at - never the fitted coordinates.
+			assert.deepEqual(
+				saved.at( -1 ).windows.extendedQuickslot,
+				restored ? [ 0, 0 ] : [ extDrag.rect[0], extDrag.rect[1] ]
+			);
 		} finally {
 			f.dispose();
 		}

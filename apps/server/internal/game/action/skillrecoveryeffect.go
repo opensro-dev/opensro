@@ -75,7 +75,10 @@ func (rt *Runtime) recoveryEffectRecipients(division string, caster *enterworld.
 
 	var out []uint32
 	for _, gid := range vector {
-		player := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid))
+		// The combat copy suffices (#1943): the only read of this copy
+		// is CharacterAlive, a vitals scalar the narrow copy keeps; a
+		// miss falls to the live COS lookup below, never to the copy.
+		player := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, gid))
 		if player == nil {
 			if !resu && rt.characterByCosGID(division, gid) != nil {
 				out = append(out, gid)

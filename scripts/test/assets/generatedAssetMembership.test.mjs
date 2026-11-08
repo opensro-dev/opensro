@@ -31,6 +31,7 @@ import {
 	verifyWebAssetManifestContent
 } from "../../build/webManifest.mjs";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
+import { validateAssetPackIndex } from "../../build/assetPacks.mjs";
 import { collectPackGarbage } from "../../build/assetPackGarbage.mjs";
 import {
 	collectDedicatedModelGroups,
@@ -175,6 +176,91 @@ test("generated pack artifacts are not packed as ordinary assets", async () => {
 
 	assert.deepEqual( forbidden, [] );
 });
+
+// The HD set (#2061) is a separate channel: its subtree, index and packs
+// live under /hd, outside /assets, so the default manifests and precache
+// hold no HD bytes. These two guards teach the audit that shape: an HD
+// path under /assets or in a default manifest fails even if a hand edit
+// registered it, and a published /hd tree must agree with its own index
+// alone. A build without the set (the lane is opt-in) has no /hd at all.
+test("no HD variant is published under /assets or named by the default manifests", async () => {
+	const { webPaths, packIndex } = await loadGeneratedAssetMembership();
+	const stray = [];
+	for ( const publicPath of webPaths ) {
+		if ( isHdPath( publicPath ) ) stray.push( publicPath );
+	}
+	for ( const group of packIndex.groups ) {
+		if ( group.name.startsWith( "texture-variants-hd" ) ) stray.push( `group ${group.name}` );
+		for ( const pack of group.packs ) {
+			if ( isHdPath( pack.path ) ) stray.push( pack.path );
+		}
+	}
+	for ( const asset of packIndex.assets ) {
+		if ( isHdPath( asset.path ) || asset.group.startsWith( "texture-variants-hd" ) ) stray.push( asset.path );
+	}
+
+	assert.deepEqual( stray, [] );
+});
+
+test("the HD subtree, when published, is consistent with its own index alone", async () => {
+	const { publicFiles, statsByPath } = await loadPublicTreeScan();
+	const hdRoot = path.join( publicRoot, "hd" );
+	const hdFiles = publicFiles
+		.filter( ( filePath ) => filePath.startsWith( hdRoot + path.sep ) )
+		.map( ( filePath ) => normalizePublicPath( toPublicAssetPath( filePath ) ) );
+	const hdIndex = await readJson( path.join( hdRoot, "packs", "manifest.json" ) ).catch( ( error ) => {
+		if ( error?.code === "ENOENT" ) return null;
+		throw error;
+	} );
+	if ( !hdIndex ) {
+		assert.deepEqual( hdFiles, [], "HD files published without their index" );
+		return;
+	}
+
+	assert.doesNotThrow( () => validateAssetPackIndex( hdIndex, "/hd" ) );
+	const accounted = new Set( [ "/hd/packs/manifest.json" ] );
+	for ( const group of hdIndex.groups ) {
+		assert.ok(
+			group.name === "texture-variants-hd-bc7" || group.name === "texture-variants-hd-astc",
+			`unexpected HD pack group ${group.name}`
+		);
+		for ( const pack of group.packs ) {
+			const packPath = normalizePublicPath( pack.path );
+			accounted.add( packPath.toLowerCase() );
+			assert.equal(
+				statsByPath.get( path.resolve( path.join( publicRoot, ...packPath.slice( 1 ).split( "/" ) ) ) )?.size,
+				pack.bytes,
+				`${packPath} size`
+			);
+		}
+	}
+	for ( const asset of hdIndex.assets ) {
+		const assetPath = normalizePublicPath( asset.path );
+		accounted.add( assetPath.toLowerCase() );
+		assert.ok( assetPath.startsWith( "/hd/texture-variants/" ), `${assetPath} is not an HD variant path` );
+		assert.ok(
+			statsByPath.has( path.resolve( path.join( publicRoot, ...assetPath.slice( 1 ).split( "/" ) ) ) ),
+			`${assetPath} has no loose file`
+		);
+	}
+	assert.deepEqual(
+		hdFiles.filter( ( publicPath ) => !accounted.has( publicPath.toLowerCase() ) ),
+		[]
+	);
+});
+
+/*
+================
+isHdPath
+
+The HD set's shapes: its /hd subtree, and a BC7 variant path anywhere
+(the BC7 set exists only as HD).
+================
+*/
+function isHdPath( publicPath ) {
+	const lowerPath = publicPath.toLowerCase();
+	return lowerPath.startsWith( "/hd/" ) || lowerPath.includes( "/texture-variants/bc7/" );
+}
 
 test("native texture containers have image-family ownership expectations", () => {
 	assert.equal( expectedPackGroup( "/assets/world/dungeon/wall.texture", new Set() ), "world-textures" );
@@ -468,7 +554,6 @@ function expectedPackGroup( publicPath, uiPreloadImages ) {
 	const lowerPath = publicPath.toLowerCase();
 	if ( REQUIRED_RUNTIME_TEXT_ASSETS.includes( lowerPath ) ) return "game-data";
 	if ( lowerPath.startsWith( "/assets/texture-variants/astc/" ) ) return "texture-variants-astc";
-	if ( lowerPath.startsWith( "/assets/ui-atlas/" ) ) return "ui-atlas";
 
 	if ( uiPreloadImages.has( lowerPath ) ) {
 		return "native-ui";

@@ -4,7 +4,7 @@
 asset-download-recovery.test.mjs - bounded recovery at the asset transport
 
 Exercise the shipping worker with failed fetches and interrupted bodies.
-Mock time keeps backoff deterministic; cancellation and integrity failures
+Mock time keeps backoff deterministic; cancellation and byte-budget failures
 must retain their original meaning. A download that receives nothing for
 15 s, waiting for headers or mid-body, is abandoned and retried as a
 transport failure; any received byte restarts that window.
@@ -16,7 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-const { createLoader } = await import( "../../src/engine/runtime/assets/worker/loader.ts" );
+const { createLoader, transientAssetFault } = await import( "../../src/engine/runtime/assets/worker/loader.ts" );
 
 /*
 ================
@@ -35,7 +35,9 @@ function fixture( t, fetch ) {
 	t.mock.method( globalThis, "fetch", fetch );
 	const messages = [];
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 	} );
@@ -303,7 +305,11 @@ for ( const dispose of [ false, true ] ) {
 			return asset.serve( url, options );
 		} );
 		const loader = createLoader( message => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					message.kind
+				)
+			) {
 				messages.push( message );
 			}
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -339,7 +345,11 @@ for ( const dispose of [ false, true ] ) {
 	} );
 }
 
-test("invalid range stays permanent even when response cleanup rejects", async t => {
+test("invalid range is a transient transport failure even when response cleanup rejects", async t => {
+	// A proxy that answers a ranged read with the wrong shape (here a 206
+	// naming some other range) is a transport fact, not bad content: the
+	// read retries on the download budget and ends marked transient for
+	// the bounded recovery (#2337).
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const asset = packedAsset(), messages = [];
 	let attempts = 0;
@@ -349,18 +359,25 @@ test("invalid range stays permanent even when response cleanup rejects", async t
 		return new Response( failedBody(), { status: 206, headers: { "Content-Range": "bytes 0-9/10" } } );
 	} );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 	await settle();
-	t.mock.timers.tick( 60000 );
+	t.mock.timers.tick( 250 );
 	await settle();
-	assert.equal( attempts, 1 );
+	assert.equal( attempts, 2 );
+	t.mock.timers.tick( 1000 );
+	await settle();
+	assert.equal( attempts, 3 );
+	assert.equal( messages.length, 1 );
 	assert.equal( messages[0].kind, "error" );
 	assert.match( messages[0].error, /Invalid asset range response/ );
+	assert.equal( messages[0].transient, true );
 });
 
 const NO_PROGRESS_MS = 15000;
@@ -512,6 +529,21 @@ test("the caller's cancellation during a stalled request stays a cancellation", 
 	assert.deepEqual( ended, [ "aborted" ], "one attempt, ended by the caller, never retried" );
 });
 
+test("a cancellation that arrives after its job settled is still acknowledged", async t => {
+	// #2871: the execution finishes while the caller's cancel is still
+	// queued (the worker was inside a decode it could not interrupt).
+	// The job leaves the worker's table as it settles, but the caller's
+	// slot is freed by the acknowledgement: dropping the cancel here
+	// strands the slot and reports a healthy worker as unanswering.
+	const { loader, messages } = fixture( t, async () => new Response( Uint8Array.of( 1, 2, 3 ) ) );
+	await settle();
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "bytes" );
+	loader.receive( { kind: "cancel", id: 1 } );
+	await settle();
+	assert.deepEqual( messages[1], { kind: "released", id: 1 } );
+});
+
 test("a stalled body whose cancel never settles still frees the attempt for its retry", async t => {
 	let attempts = 0;
 	const { messages } = fixture( t, async () => {
@@ -643,7 +675,11 @@ test(
 			return Promise.resolve( asset.serve( url, options ) );
 		} );
 		const loader = createLoader( message => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					message.kind
+				)
+			) {
 				messages.push( message );
 			}
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -697,4 +733,253 @@ test("headers just inside the window restart it: the stalled body is abandoned a
 	await settle();
 	assert.equal( attempts, 2 );
 	assert.deepEqual( [ ...new Uint8Array( messages[0].buffer ) ], [ 4, 5, 6 ] );
+});
+
+/*
+================
+errorBody
+
+A body that fails its first read with the given error.
+================
+*/
+function errorBody( error ) {
+	return new ReadableStream( {
+		/*
+		================
+		start
+		================
+		*/
+		start( controller ) {
+			controller.error( error );
+		}
+	} );
+}
+
+test("an allocation refusal mid-body is retried as a transport failure", async t => {
+	// Memory pressure is device state, not content (#2337): the engine's
+	// refusal - a RangeError here, a bare "out of memory" string on the
+	// incident in #2299 - retries like any other transport failure.
+	let attempts = 0;
+	const { messages } = fixture( t, async () => {
+		if ( ++attempts === 1 ) return new Response( errorBody( new RangeError( "Array buffer allocation failed" ) ) );
+		return new Response( Uint8Array.of( 4, 5, 6 ) );
+	} );
+	await settle();
+	t.mock.timers.tick( 250 );
+	await settle();
+	assert.equal( attempts, 2 );
+	assert.equal( messages.length, 1 );
+	assert.deepEqual( [ ...new Uint8Array( messages[0].buffer ) ], [ 4, 5, 6 ] );
+});
+
+test("an I/O DOMException mid-body is retried as a transport failure", async t => {
+	let attempts = 0;
+	const { messages } = fixture( t, async () => {
+		if ( ++attempts === 1 ) {
+			return new Response( errorBody( new DOMException( "the network connection was lost", "NetworkError" ) ) );
+		}
+		return new Response( Uint8Array.of( 4, 5, 6 ) );
+	} );
+	await settle();
+	t.mock.timers.tick( 250 );
+	await settle();
+	assert.equal( attempts, 2 );
+	assert.equal( messages.length, 1 );
+	assert.deepEqual( [ ...new Uint8Array( messages[0].buffer ) ], [ 4, 5, 6 ] );
+});
+
+test("a non-I/O DOMException stays permanent", async t => {
+	// InvalidStateError is the decode surfaces' refusal name; classifying
+	// it transient would retry broken content. Only the I/O shapes are
+	// transport (#2337).
+	let attempts = 0;
+	const { messages } = fixture( t, async () => {
+		attempts++;
+		return new Response( errorBody( new DOMException( "the stream is disturbed", "InvalidStateError" ) ) );
+	} );
+	await settle();
+	t.mock.timers.tick( 60000 );
+	await settle();
+	assert.equal( attempts, 1 );
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "error" );
+	assert.equal( messages[0].transient, undefined );
+});
+
+test("the transient fault classifier names exactly the recoverable shapes", () => {
+	assert.equal( transientAssetFault( new RangeError( "Array buffer allocation failed" ) ), true );
+	assert.equal( transientAssetFault( "out of memory" ), true, "the bare string an engine throws (#2299)" );
+	assert.equal( transientAssetFault( Object.assign( new Error( "marked" ), { transient: true } ) ), true );
+	assert.equal( transientAssetFault( new DOMException( "lost", "NetworkError" ) ), true );
+	assert.equal(
+		transientAssetFault( new Error( "Asset SHA-256 mismatch" ) ),
+		false,
+		"unmarked validation stays out"
+	);
+	assert.equal( transientAssetFault( new TypeError( "Load failed" ) ), false, "the download gate's own term" );
+	assert.equal( transientAssetFault( new DOMException( "cancelled", "AbortError" ) ), false, "cancellation owns it" );
+	assert.equal( transientAssetFault( new DOMException( "disturbed", "InvalidStateError" ) ), false );
+});
+
+test("a middlebox answering a ranged read with 200 is a transient transport failure", async t => {
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const asset = packedAsset(), messages = [];
+	let attempts = 0;
+	t.mock.method( globalThis, "fetch", async url => {
+		if ( url.endsWith( "/manifest.json" ) ) return Response.json( asset.manifest );
+		attempts++;
+		return new Response( "the whole object; the Range header was ignored", { status: 200 } );
+	} );
+	const loader = createLoader( message => {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
+			messages.push( message );
+		}
+	} );
+	t.after( () => loader.dispose() );
+	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
+	await settle();
+	t.mock.timers.tick( 250 );
+	await settle();
+	t.mock.timers.tick( 1000 );
+	await settle();
+	assert.equal( attempts, 3 );
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "error" );
+	assert.match( messages[0].error, /Invalid asset range response/ );
+	assert.equal( messages[0].transient, true );
+});
+
+test("a pack block shorter than its claimed range is a transient transport failure", async t => {
+	// The stream ends cleanly one byte early (a re-framing middlebox), so
+	// only the block's own length check sees the cut (#2337).
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const asset = packedAsset( false ), messages = [];
+	const total = asset.manifest.groups[0].packs[0].bytes;
+	let deliver = () => {};
+	/** @type {Promise<void>} */
+	const delivered = new Promise( resolve => {
+		deliver = resolve;
+	} );
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( !asset.isMember( options ) ) return asset.serve( url, options );
+		const range = /bytes=(\d+)-(\d+)/.exec( options?.headers?.Range ?? "" );
+		assert.ok( range );
+		const [start, end] = range.slice( 1 ).map( Number );
+		return new Response( new Uint8Array( end - start ), {
+			status: 206,
+			headers: { "Content-Range": `bytes ${start}-${end}/${total}` }
+		} );
+	} );
+	const loader = createLoader( message => {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
+			messages.push( message );
+		}
+		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
+	} );
+	t.after( () => loader.dispose() );
+	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
+	await delivered;
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "error" );
+	assert.match( messages[0].error, /Truncated pack block/ );
+	assert.equal( messages[0].transient, true );
+});
+
+test("a decoder failure on unverified bytes is a transient transport failure", async t => {
+	// A loose read carries no digest: three wrong bytes can only mean the
+	// body arrived cut or substituted, so the refusal retries (#2337).
+	const messages = [];
+	let deliver = () => {};
+	/** @type {Promise<void>} */
+	const delivered = new Promise( resolve => {
+		deliver = resolve;
+	} );
+	t.mock.method( globalThis, "fetch", async () => new Response( Uint8Array.of( 1, 2, 3 ) ) );
+	const loader = createLoader( message => {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
+			messages.push( message );
+		}
+		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
+	} );
+	t.after( () => loader.dispose() );
+	loader.receive( { kind: "load", id: 1, url: "https://example.test/tex.dds", decode: "dds", limit: 1024 } );
+	await delivered;
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "error" );
+	assert.match( messages[0].error, /Truncated DDS header/ );
+	assert.equal( messages[0].transient, true );
+});
+
+/*
+================
+ddsPack
+
+A small whole pack holding one three-byte "texture": the manifest's
+digest names those exact bytes, so the pack reader verifies them and
+only the DDS decoder can refuse them.
+================
+*/
+function ddsPack() {
+	const member = Uint8Array.of( 1, 2, 3 );
+	const hash = value => createHash( "sha256" ).update( value ).digest( "hex" );
+	const path = "/assets/tex.dds", packPath = "/assets/packs/tex.bin";
+	const row = {
+		path,
+		offset: 0,
+		length: member.length,
+		mime: "application/octet-stream",
+		sha256: hash( member )
+	};
+	const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: [ row ] } ) );
+	const prefix = Buffer.alloc( 12 );
+	prefix.write( "SROPACK2" );
+	prefix.writeUInt32LE( header.length, 8 );
+	const pack = Buffer.concat( [ prefix, header, member ] );
+	const manifest = {
+		version: 2,
+		groups: [ {
+			name: "test",
+			assetCount: 1,
+			packs: [ { path: packPath, bytes: pack.length, sha256: hash( pack ), assetCount: 1 } ]
+		} ],
+		assets: [ { ...row, packPath } ]
+	};
+	return { manifest, pack, path };
+}
+
+test("a decoder failure on verified bytes stays permanent", async t => {
+	// The same three bytes, but the manifest's digest vouches for them:
+	// the content itself is broken and no retry repairs it (#2337).
+	const asset = ddsPack(), messages = [];
+	let deliver = () => {};
+	/** @type {Promise<void>} */
+	const delivered = new Promise( resolve => {
+		deliver = resolve;
+	} );
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async url => url.endsWith( "/manifest.json" ) ? Response.json( asset.manifest ) : new Response( asset.pack )
+	);
+	const loader = createLoader( message => {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
+			messages.push( message );
+		}
+		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
+	} );
+	t.after( () => loader.dispose() );
+	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, decode: "dds", limit: 1024 } );
+	await delivered;
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "error" );
+	assert.match( messages[0].error, /Truncated DDS header/ );
+	assert.equal( messages[0].transient, undefined );
 });

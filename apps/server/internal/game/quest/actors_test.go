@@ -3,8 +3,8 @@ package quest
 import (
 	"fmt"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 	"path/filepath"
 	"testing"
@@ -39,7 +39,7 @@ func validateQuestActors(def *Definition, codesInMedia map[string]bool) error {
 // all character files a second time on every server startup.
 func TestEveryQuestActorResolvesInPrimaryMedia(t *testing.T) {
 	tier.Long(t, "every quest actor exists in the v1.150 media")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	codes := make(map[string]bool)
 	files, err := filepath.Glob(filepath.Join(dir, "characterdata*.txt"))

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
@@ -30,6 +31,34 @@ import (
 // matches the budget's refill (login_limiter.go) so a retry that lands just
 // as the shard opens is never refused as RATE_LIMITED.
 const loginStartingRetrySeconds = int(loginAttemptRefill / time.Second)
+
+// maintenanceMessageText is the one refusal sentence every surface shows
+// while SRO_MAINTENANCE_MESSAGE is on (title login here, the shard-request
+// refusal below, and the client's admission error): the client pins the
+// same sentence for the MAINTENANCE code its world hop receives.
+const maintenanceMessageText = "The server is under maintenance. Please try again later."
+
+/*
+================
+admissionOffline
+
+The refusal for a shard that is not operating (disabled, or no live
+GameWorld): SHARD_OFFLINE and the message shown today, or - port-only,
+not native, behind SRO_MAINTENANCE_MESSAGE - MAINTENANCE and the
+maintenance sentence, but only while a maintenance window is actually
+open (the gate file exists, #2861): the switch alone made every plain
+restart, boot and crash read as a maintenance. So a release window
+explains itself at login, and a shard that is merely down never does.
+The refusal itself (a 200 login refusal, a 503 shard refusal) is
+identical either way.
+================
+*/
+func (server *Server) admissionOffline() (string, string) {
+	if server.maintenanceMessage && agentapi.MaintenanceGatePresent(server.maintenanceGatePath) {
+		return "MAINTENANCE", maintenanceMessageText
+	}
+	return "SHARD_OFFLINE", "The selected server is not operating."
+}
 
 /*
 ================
@@ -66,12 +95,21 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 ================
 serverRows
 
-The public server list rows of a directory snapshot.
+The public server list rows of a directory snapshot: the enabled,
+public shards. A disabled shard can never hold a lease or admit a
+login, so it is not a row, and a test shard is never public either:
+the development catalog carries one for its fixtures, and no catalog
+a host hands the Agent may leak it onto the title screen. An enabled
+shard with no live GameWorld stays listed, and the title shows it as
+Check.
 ================
 */
 func serverRows(statuses []shard.Status) []serverInfo {
 	rows := make([]serverInfo, 0, len(statuses))
 	for _, status := range statuses {
+		if !status.Enabled || status.Test {
+			continue
+		}
 		rows = append(rows, serverInfo{
 			ID:             status.ID,
 			NativeServerID: status.NativeServerID,
@@ -92,7 +130,7 @@ func serverRows(statuses []shard.Status) []serverInfo {
 OfflineServerList
 
 The /title/servers body this catalog's Agent serves while no GameWorld has
-a lease: every shard listed, none operating, so the title shows each one as
+a lease: every enabled shard listed, none operating, so the title shows each as
 native "Check" (CPSTitle 0x747E1F). The release edge serves it in place of
 the Agent while the Agent itself is down for maintenance.
 ================
@@ -204,7 +242,8 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !definition.Enabled {
-		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")
+		code, message := server.admissionOffline()
+		refuse(5, code, message)
 		return
 	}
 	var status shard.Status
@@ -215,7 +254,8 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !status.Operating {
-		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")
+		code, message := server.admissionOffline()
+		refuse(5, code, message)
 		return
 	}
 	if status.OnlinePlayers >= status.Capacity {
@@ -249,6 +289,57 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// The session carries the stored id, which owns the characters, whatever
 	// case the player typed.
 	accountID, hash, found := server.accounts.Credential(request.ID)
+	blockedReason := ""
+	blockedUntilMs := int64(0)
+	blocked := false
+	compared := false
+	if !found {
+		// A blocked account resolves to no credential. Verify its password
+		// against the real hash so the block refusal (#2271) only follows a
+		// proven password: a wrong password and an unknown id keep the
+		// byte-identical credential refusal, and every refusal path pays
+		// exactly one bcrypt comparison.
+		if store, ok := server.accounts.(blockAuthority); ok {
+			if anyID, anyHash, anyFound := store.CredentialAny(request.ID); anyFound {
+				compared = true
+				if bcrypt.CompareHashAndPassword(anyHash, []byte(request.Password)) == nil {
+					if disabled, reason, untilMs, known := store.Block(anyID); known && disabled {
+						if untilMs > 0 && untilMs <= server.now().UnixMilli() {
+							// The temporary block has run out: clear it and
+							// let the ordinary login proceed below.
+							if store.ClearBlock(r.Context(), anyID) == nil {
+								accountID, hash, found = server.accounts.Credential(request.ID)
+							}
+						} else {
+							blocked, blockedReason, blockedUntilMs = true, reason, untilMs
+						}
+					} else {
+						// Enabled between the two reads: resolve once more
+						// and let the ordinary flow judge the fresh state.
+						accountID, hash, found = server.accounts.Credential(request.ID)
+					}
+				}
+			}
+		}
+	}
+	if blocked {
+		// Proven password, live block: the refusal is not a password
+		// failure, so the failure budget is reset, never fed.
+		server.passwordFailures.update(clientIP(r), request.ID, server.now(), false, true)
+		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "ACCOUNT_BLOCKED", Fields: map[string]string{"claimedAccount": server.loggableAccount(request.ID)}})
+		logLogin("ACCOUNT_BLOCKED", http.StatusOK)
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "nativeTitleStatus": 3, "nativeTitleArgument": 1,
+			"code": "ACCOUNT_BLOCKED", "message": "The account is blocked.",
+			"blockReason": blockedReason, "blockEnd": blockEndText(blockedUntilMs),
+		})
+		return
+	}
+	if compared && !found {
+		passwordRefusal(true)
+		return
+	}
 	if !found {
 		hash = server.dummyHash
 	}
@@ -293,6 +384,22 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"transportUrl":      definition.AdvertisedTransportURL(),
 		"nextScene":         "character-select",
 	})
+}
+
+/*
+================
+blockEndText
+
+The blocked login's BLOCK_TIME argument (#2271): the block end as the
+native title shows it. A permanent block (untilMs 0) has no end to
+show, and the client then appends no BLOCK_TIME line.
+================
+*/
+func blockEndText(untilMs int64) string {
+	if untilMs <= 0 {
+		return ""
+	}
+	return time.UnixMilli(untilMs).UTC().Format("2006-01-02 15:04:05")
 }
 
 /*
@@ -424,6 +531,19 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !operating {
+		offlineCode, _ := server.admissionOffline()
+		if offlineCode == "MAINTENANCE" {
+			// Port-only, not native (admissionOffline): the refusal names
+			// the maintenance as a JSON code, the shape the client's
+			// admission mint reads; off keeps the plain refusal below.
+			code, message := server.admissionOffline()
+			server.logRefusal(r, refusal{Route: r.URL.Path, Code: code, Status: http.StatusServiceUnavailable,
+				Account: account, Shard: shardID, Kind: requestRefusedKind})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"ok": false, "code": code, "message": message,
+			})
+			return
+		}
 		refuse(http.StatusServiceUnavailable, "SHARD_OFFLINE", "shard unavailable")
 		return
 	}

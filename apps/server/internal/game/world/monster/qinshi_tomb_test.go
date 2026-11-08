@@ -15,9 +15,10 @@ controls, remapped DefaultSkillIDs, and uncontaminated retail unique stats.
 package monster
 
 import (
+	"strings"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -68,8 +69,15 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 		if !nest.RetailEvidence || !nest.PolicyPinned || !nest.HasControls || len(nest.HiveKey) != 64 {
 			t.Fatalf("tomb nest %+v missing evidence/controls/hive", nest)
 		}
-		if nest.InstanceLimit() <= 0 {
+		// Chain-owned nests (Floor 5 #2372, Floor 6 #2373) keep the
+		// native limit 0: the TombChain spawns them, the nest lifecycle
+		// never does. The zeroing is region-scoped.
+		chainOwned := QinShiTombChainOwned(nest.RegionID, withTomb.Refs[nest.RefObjID].Codename)
+		if !chainOwned && nest.InstanceLimit() <= 0 {
 			t.Fatalf("tomb nest %+v has non-positive instance limit %d", nest, nest.InstanceLimit())
+		}
+		if chainOwned && nest.InstanceLimit() != 0 {
+			t.Fatalf("chain nest %+v has instance limit %d, want 0", nest, nest.InstanceLimit())
 		}
 		regionCounts[nest.RegionID]++
 	}
@@ -122,12 +130,156 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 
 /*
 ================
+TestQinShiTombOverlayScaleCoherent
+
+The scale column (48, ScaleDenom) is read verbatim by the server's
+spawn record and the client bake's model scale. The two v1.188
+copies of these rows disagree for five snake rows (34, and 500 for
+SNAKEWOMAN, in DBtoMedia against 100 in SR_GameRefData) while every
+clone of those species reads 100 in both; the overlay carries the
+SR_GameRefData value (#2681, the Sarin "too small" report). One
+species keeps one scale across its base and clone rows: no family
+may split again on a re-import.
+================
+*/
+func TestQinShiTombOverlayScaleCoherent(t *testing.T) {
+	seed := TemplateFromParts(
+		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
+		nil,
+	)
+	withTomb, err := seed.WithQinShiTomb("")
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	byCode := map[string]float64{}
+	familyScale := map[string]float64{}
+	for id, ref := range withTomb.Refs {
+		if id == 1933 {
+			continue
+		}
+		byCode[ref.Codename] = ref.ScaleDenom
+		base := ref.Codename
+		for _, suffix := range []string{"_CLON2", "_CLON"} {
+			base = strings.TrimSuffix(base, suffix)
+		}
+		if got, ok := familyScale[base]; ok && got != ref.ScaleDenom {
+			t.Fatalf("tomb family %s splits its scale: %v against %v (at %s)", base, got, ref.ScaleDenom, ref.Codename)
+		}
+		familyScale[base] = ref.ScaleDenom
+	}
+	for _, code := range []string{
+		"MOB_TQ_SNAKEMAN", "MOB_TQ_SNAKEMAN_CLON2", "MOB_TQ_SNAKESLAVE",
+		"MOB_TQ_SNAKEDEMON_CLON2", "MOB_TQ_SNAKEWOMAN",
+	} {
+		if got, ok := byCode[code]; !ok || got != 100 {
+			t.Fatalf("%s scale = %v (present %v), want 100 (SR_GameRefData)", code, got, ok)
+		}
+	}
+}
+
+/*
+================
+TestWithQinShiTombFloor5ChainNestsStayZeroed
+
+Slice A of #2362 (#2372): on Floor 5 the four guardians and the Flame
+Master are chain-owned. Their nest rows keep the native max count 0 so
+the nest lifecycle never spawns them; the TombChain spawns them. Floor 6
+rows joined the chain in slice B (#2373); see the Floor 6 test below.
+================
+*/
+func TestWithQinShiTombFloor5ChainNestsStayZeroed(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
+	base := LoadTemplate(dir)
+	withTomb, err := base.WithQinShiTomb(dir)
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	chainOwned := map[string]bool{
+		"MOB_TQ_EASTGUARDIAN":  true,
+		"MOB_TQ_SOUTHGUARDIAN": true,
+		"MOB_TQ_WESTGUARDIAN":  true,
+		"MOB_TQ_NORTHGUARDIAN": true,
+		"MOB_TQ_FLAMEMASTER":   true,
+	}
+	found := map[string]int{}
+	for _, nest := range withTomb.Nests {
+		ref, ok := withTomb.Refs[nest.RefObjID]
+		if !ok || !chainOwned[ref.Codename] {
+			continue
+		}
+		found[ref.Codename] = nest.MaxCount
+	}
+	if len(found) != len(chainOwned) {
+		t.Fatalf("chain nests found = %v, want all %d Floor 5 chain codenames", found, len(chainOwned))
+	}
+	for codename, maxCount := range found {
+		if maxCount != 0 {
+			t.Fatalf("%s nest maxCount = %d, want 0 (chain-owned, #2372)", codename, maxCount)
+		}
+	}
+}
+
+/*
+================
+TestWithQinShiTombFloor6ChainNestsStayZeroed
+
+Slice B of #2362 (#2373): on Floor 6 (region 0x8002) the four stage
+anchor nests are chain-owned and keep max count 0, like Floor 5. The
+zeroing is region-scoped: SNAKEGENERAL also nests on Floor 3 (region
+0x8005), and that row keeps its restored count - the chain owns the
+Floor 6 stage, not the species.
+================
+*/
+func TestWithQinShiTombFloor6ChainNestsStayZeroed(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
+	base := LoadTemplate(dir)
+	withTomb, err := base.WithQinShiTomb(dir)
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	chainOwned := map[string]bool{
+		"MOB_TQ_BLACKSNAKE":         true,
+		"MOB_TQ_SNAKEGENERAL":       true,
+		"MOB_TQ_TOMBBUGGHOST_CLON2": true,
+		"MOB_TQ_WHITESNAKE":         true,
+	}
+	found := map[string]int{}
+	floor3General := -1
+	for _, nest := range withTomb.Nests {
+		ref, ok := withTomb.Refs[nest.RefObjID]
+		if !ok {
+			continue
+		}
+		if nest.RegionID == 0x8002 && chainOwned[ref.Codename] {
+			found[ref.Codename] = nest.MaxCount
+		}
+		if nest.RegionID == 0x8005 && ref.Codename == "MOB_TQ_SNAKEGENERAL" {
+			floor3General = nest.MaxCount
+		}
+	}
+	if len(found) != len(chainOwned) {
+		t.Fatalf("Floor 6 chain nests found = %v, want all %d stage anchors", found, len(chainOwned))
+	}
+	for codename, maxCount := range found {
+		if maxCount != 0 {
+			t.Fatalf("Floor 6 %s nest maxCount = %d, want 0 (chain-owned, #2373)", codename, maxCount)
+		}
+	}
+	if floor3General <= 0 {
+		t.Fatalf("Floor 3 MOB_TQ_SNAKEGENERAL nest maxCount = %d, want its restored count (zeroing is region-scoped)", floor3General)
+	}
+}
+
+/*
+================
 TestWithQinShiTombAppendsRefsAndFloor1To6Nests
 ================
 */
 func TestWithQinShiTombAppendsRefsAndFloor1To6Nests(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	base := LoadTemplate(dir)
 	if len(base.Refs) == 0 || len(base.Nests) == 0 {
 		t.Fatal("expected non-empty base monster template")

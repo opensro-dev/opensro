@@ -85,6 +85,20 @@ test("HTTP asset delivery revalidates, compresses JSON and bounds partial respon
 	assert.equal( packHead.headers["content-length"], String( pack.length ) );
 	fs.writeFileSync( path.join( root, "assets/absent-000000000000.bin.zst" ), pack );
 	assert.equal( (await get( "/assets/absent-000000000000.bin" )).status, 404 );
+	// The HD set's subtree (#2061) is served by this same path: its index
+	// revalidates like the asset manifest and its packs answer ranges.
+	fs.mkdirSync( path.join( root, "hd/packs" ), { recursive: true } );
+	const hdIndex = JSON.stringify( { format: "sro-asset-pack-index" } );
+	fs.writeFileSync( path.join( root, "hd/packs/manifest.json" ), hdIndex );
+	fs.writeFileSync( path.join( root, "hd/packs/hd-pack.bin" ), pack );
+	const hdFirst = await get( "/hd/packs/manifest.json", { "accept-encoding": "gzip" } );
+	assert.equal( hdFirst.status, 200 );
+	assert.equal( gunzipSync( hdFirst.body ).toString(), hdIndex );
+	const hdRange = await get( "/hd/packs/hd-pack.bin", { range: "bytes=4-7" } );
+	assert.equal( hdRange.status, 206 );
+	assert.deepEqual( hdRange.body, pack.subarray( 4, 8 ) );
+	assert.equal( (await get( "/hd/packs/absent.bin" )).status, 404 );
+	assert.equal( (await get( "/private/secret.txt" )).status, 404 );
 	const first = await get( "/assets/manifest.json", { "accept-encoding": "gzip" } );
 	assert.equal( first.headers["content-encoding"], "gzip" );
 	assert.equal( gunzipSync( first.body ).toString(), body );

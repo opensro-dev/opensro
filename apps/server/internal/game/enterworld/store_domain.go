@@ -6,7 +6,15 @@ import "opensro.online/server/internal/domain"
 // ports because its wire builders consume them. Ownership remains in domain;
 // aliases keep one contract and one pointer/type identity across layers.
 type LetterRecord = domain.LetterRecord
+type LetterDelivery = domain.LetterDelivery
 type LetterStore = domain.LetterStore
+
+const (
+	LetterDeliveryRefused     = domain.LetterDeliveryRefused
+	LetterDeliveryDone        = domain.LetterDeliveryDone
+	LetterDeliveryMailboxFull = domain.LetterDeliveryMailboxFull
+)
+
 type GuildRecord = domain.GuildRecord
 type GuildVote = domain.GuildVote
 type GuildMemberRecord = domain.GuildMemberRecord

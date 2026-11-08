@@ -80,6 +80,8 @@ func TestLetterMailboxPersistsAcrossReopen(t *testing.T) {
 }
 
 func TestLetterDoorRefusesRecordsOutsidePersistedWireBounds(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 	sender := memoTestCharacter("Sender")
@@ -94,13 +96,37 @@ func TestLetterDoorRefusesRecordsOutsidePersistedWireBounds(t *testing.T) {
 		Sender: sender.Name,
 		Body:   strings.Repeat("x", domain.LetterBodyMaxBytes+1),
 	}
-	if s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, oversized) {
-		t.Fatal("oversized letter body crossed the store boundary")
+	if got := s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, oversized); got != domain.LetterDeliveryRefused {
+		t.Fatalf("oversized letter body verdict = %v, want refused", got)
 	}
 
 	valid := enterworld.LetterRecord{Sender: sender.Name, Body: "valid"}
-	if !s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, valid) {
-		t.Fatal("valid letter was refused")
+	if got := s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, valid); got != domain.LetterDeliveryDone {
+		t.Fatalf("valid letter verdict = %v, want delivered", got)
+	}
+}
+
+func TestLetterDoorReportsMailboxFull(t *testing.T) {
+	t.Parallel()
+
+	s := openTest(t, t.TempDir(), newTestClock())
+	defer s.Close()
+	sender := memoTestCharacter("Sender")
+	receiver := memoTestCharacter("Receiver")
+	for _, character := range []*enterworld.Character{sender, receiver} {
+		if err := s.CreateCharacter(testDivision, "test-account", character); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	letter := enterworld.LetterRecord{Sender: sender.Name, Body: "valid"}
+	for i := 0; i < domain.LetterMailboxMaxCount; i++ {
+		if got := s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, letter); got != domain.LetterDeliveryDone {
+			t.Fatalf("delivery %d verdict = %v, want delivered", i, got)
+		}
+	}
+	if got := s.Letters().DeliverLetter(testDivision, sender.ID, receiver.ID, domain.LetterMailboxMaxCount, letter); got != domain.LetterDeliveryMailboxFull {
+		t.Fatalf("over-cap delivery verdict = %v, want mailbox full", got)
 	}
 	if s.Letters().UpdateMailbox(testDivision, receiver.ID, "inject-invalid-letter", func(mailbox []enterworld.LetterRecord) ([]enterworld.LetterRecord, bool) {
 		mailbox[0].ReadFlag = 2

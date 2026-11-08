@@ -38,6 +38,7 @@ export interface SystemNotice {
 	readonly plusSeven?: true;
 	readonly itemBreak?: true;
 	readonly sunDrop?: true;
+	readonly shardEvent?: true;
 }
 /*
 ================
@@ -143,6 +144,25 @@ export const SEAL_NOTICE_COLOR_SUN = 0xffff4517;
 
 /*
 ================
+EVENT_NOTICE_COLOR_ARGB
+
+Port-only, not native (#2727, owner ask 2026-11-06): a shard event
+notice (the shardEvent arm above) prints in this red in the bottom-right
+message log, so an event announcement stands out from ordinary lines.
+The native box has no event colour to adopt: CGInterface_ChatSystem-
+Message 0x67A600 (asm 67A624-67A633) colours only category 6 light blue
+(0xFFBACFF2) and every other category, 7 included, the default
+0xFFDBC99B; the one other appender, CGInterface_PrintColoredNotice
+0x67A6D0, is passed that same beige by every server-driven caller
+(0x75C001, 0x75C0E4, 0x75E298). The red is the client's house red
+(buff-tooltip.ts). It rides the "Highlight event notices" Experimental
+row, on by default at the owner's ask; off restores the native beige.
+================
+*/
+export const EVENT_NOTICE_COLOR_ARGB = 0xffff4a4a;
+
+/*
+================
 sealNoticeColorArgb
 
 The notice colour for an item's seal fields (rarity 2 and the
@@ -198,17 +218,39 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		throw Error( "Invalid server notification length" );
 	}
 	const text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 3, 3 + 2 * n ) );
-	const notice: SystemNotice = { key: "", text, value: 0, notificationBanner: true, bannerOnly: true };
-	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, jobKill: true };
-	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, itemBreak: true };
+	const notice: SystemNotice = { key: "", text, value: 0, bannerOnly: true };
+	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, jobKill: true };
+	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, itemBreak: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) {
-		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) return { ...notice, plusSeven: true };
+		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) {
+			return { ...notice, notificationBanner: true, plusSeven: true };
+		}
+		// Port-only, not native (owner 2026-11-05): a shard event notice
+		// (the Halloween waves) also prints in the bottom-right message log,
+		// under its game tab as a native type-7 line would sort, because a
+		// player who missed the banner has nowhere else to read it. It stays
+		// dropPlus: the drop/plus row has always hidden these too.
+		if ( links && announcedShardEvent( p, 3 + 2 * n ) ) {
+			return {
+				key: "",
+				text,
+				value: 0,
+				nativeType: 7,
+				notificationBanner: true,
+				dropPlus: true,
+				shardEvent: true
+			};
+		}
 		// Port-only, not native: Seal of Sun drop announcements highlight in
 		// gold on the top banner and chat log; Star/Moon and plus notices stay unchanged.
 		const sun = isSunDropNoticeText( text ) ? ({ sunDrop: true } as const) : {};
-		return { ...notice, dropPlus: true, ...sun };
+		// Port-only, not native (owner decision 2026-11-01): a Seal of Star
+		// drop is too common for the top-centre banner, so its line keeps
+		// only the Event chat tab; Moon and Sun drops keep the banner.
+		const banner = sealDropTierFromText( text ) === 0 ? {} : { notificationBanner: true as const };
+		return { ...notice, ...banner, dropPlus: true, ...sun };
 	}
-	return notice;
+	return { ...notice, notificationBanner: true };
 }
 
 /*
@@ -225,6 +267,26 @@ and frames without a readable body stay with dropPlus.
 function announcedPlusSeven( p: Uint8Array, linksOffset: number ): boolean {
 	const body = decodeNoticeLinks( p, linksOffset )?.body;
 	return body !== undefined && body.length >= ITEM_BODY_HEADER_BYTES && body[ITEM_BODY_PLUS_BYTE] === 7;
+}
+
+/*
+================
+announcedShardEvent
+
+Whether a drop/plus frame is a shard event notice: its link section is
+exactly the empty one, a zero name length and a zero body length.
+Every seal drop names its dropper and every plus notice its player and
+item (server announce.go), so only the event notices
+(halloween_waves.go, sent with an empty wire.NoticeLink) read this way.
+decodeNoticeLinks answers null for this section, as it does for a
+malformed one, so the four bytes are read here.
+================
+*/
+const EMPTY_NOTICE_LINKS_BYTES = 4;
+
+function announcedShardEvent( p: Uint8Array, linksOffset: number ): boolean {
+	if ( p.length !== linksOffset + EMPTY_NOTICE_LINKS_BYTES ) return false;
+	return p.subarray( linksOffset ).every( b => b === 0 );
 }
 
 /*

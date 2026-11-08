@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -77,8 +77,8 @@ npcpos identities below it are untouched.
 */
 func TestShippedWorldHasMagicPopMachines(t *testing.T) {
 	tier.Long(t, "the shipped world roster carries its magic-pop machines")
-	licensed.RequireGameData(t)
-	roster := LoadNpcWorldRoster(gamedatatest.TextdataDir(t))
+	clientdata.RequireGameData(t)
+	roster := sharedNpcWorldRoster(gamedatatest.TextdataDir(t))
 	regions, operators := map[uint16]bool{}, map[uint16]bool{}
 	for _, npc := range roster {
 		if npc.Codename == magicPopOperatorCodename {

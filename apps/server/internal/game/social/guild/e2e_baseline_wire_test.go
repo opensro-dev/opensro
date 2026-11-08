@@ -21,6 +21,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"opensro.online/server/internal/game/enterworld"
+	wiretest "opensro.online/server/internal/game/internal"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/transport"
 )
@@ -50,6 +51,7 @@ func framesUntilPong(t *testing.T, c *websocket.Conn) []uint16 {
 		if f.Opcode == transport.OpPong {
 			return opcodes
 		}
+		wiretest.AckRead(t, c, f)
 		opcodes = append(opcodes, f.Opcode)
 	}
 }

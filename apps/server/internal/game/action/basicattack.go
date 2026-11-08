@@ -578,7 +578,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	intent.ActionReach = actionReach
 	if intent.SingleCast {
-		_, alive := rt.resolveCombatTarget(intent.DivisionID, snapshot, intent.TargetGid, nowMs)
+		alive := rt.combatTargetExists(intent.DivisionID, snapshot, intent.TargetGid)
 		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID

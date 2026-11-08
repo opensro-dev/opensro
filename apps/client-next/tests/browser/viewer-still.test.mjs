@@ -3,7 +3,7 @@
 
 viewer-still.test.mjs - the 3D viewer draws one shipped monster as a still
 
-Port-only, not native (docs/VIEWER.md). viewer.html draws Tiger Girl
+Port-only, not native (docs/guides/VIEWER.md). viewer.html draws Tiger Girl
 (refObjId 1954) through the game's renderer into a transparent PNG of the
 requested size: its corners are clear and its middle holds the model. An
 id no catalogue knows fails with the fixed reason and the stage it
@@ -115,17 +115,54 @@ function lookQuery( unknownItem = false ) {
 	return "look=" + Buffer.from( JSON.stringify( look ) ).toString( "base64url" );
 }
 
-test( "a look draws its dressed character, and an unknown item is a bad request", { timeout: 120000 }, async () => {
+test( "a look draws its dressed character, and an unknown item is left off", { timeout: 120000 }, async () => {
 	const { browser, page } = await launchProbeBrowser();
 	try {
 		const still = await viewerOutcome( page, lookQuery() + `&still=1&size=${STILL_SIZE}` );
 		assert.equal( still.reason, undefined, still.reason );
 		assert.equal( still.corner, 0 );
 		assert.ok( still.span > 0.6 && still.span <= 1, String( still.span ) );
-		assert.deepEqual( await viewerOutcome( page, lookQuery( true ) + "&still=1" ), {
-			reason: "bad-request",
-			stage: "model"
-		} );
+		// An item the catalogue cannot type is left off, never a failed
+		// look: the game draws such a wearer without the part (#2772).
+		const partial = await viewerOutcome( page, lookQuery( true ) + `&still=1&size=${STILL_SIZE}` );
+		assert.equal( partial.reason, undefined, partial.reason );
+		assert.equal( partial.corner, 0 );
+		assert.ok( partial.span > 0.6 && partial.span <= 1, String( partial.span ) );
+	} finally {
+		await browser.close();
+	}
+} );
+
+/*
+================
+refusedLookQuery
+
+A leaderboard-shaped look (#2772): the monk body wearing a shoulder
+visual published only for the European male body. The game's assembly
+refuses the part and draws the wearer without it; the viewer must too.
+================
+*/
+function refusedLookQuery() {
+	const look = {
+		bodyRefObjId: 1911,
+		worn: [
+			{ slot: 0, refItemId: 833 },
+			{ slot: 1, refItemId: 12114, plus: 9 },
+			{ slot: 6, refItemId: 194 }
+		],
+		avatar: []
+	};
+	return "look=" + Buffer.from( JSON.stringify( look ) ).toString( "base64url" );
+}
+
+test( "the interactive view draws a look whose part the catalogue refuses", { timeout: 120000 }, async () => {
+	const { browser, page } = await launchProbeBrowser();
+	try {
+		await page.goto( new URL( "viewer.html?" + refusedLookQuery(), CLIENT_NEXT_BASE_URL ).href );
+		const png = await page.evaluate(
+			() => /** @type {Promise<string>} */ (Reflect.get( window, "__viewerStill" ))
+		);
+		assert.ok( png.startsWith( "data:image/png" ), png.slice( 0, 40 ) );
 	} finally {
 		await browser.close();
 	}

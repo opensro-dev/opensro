@@ -40,6 +40,28 @@ export function minimapDungeons( value: unknown ): ReadonlyMap<number, readonly 
 	}
 	return result;
 }
+export function minimapDungeonRooms( value: unknown ): ReadonlyMap<number, readonly string[]> {
+	const data = value as {
+		format: string;
+		version: number;
+		dungeons: { sectorId: number; rooms?: string[]; }[];
+	};
+	if (
+		data?.format !== "sro-mission-dungeon-minimap-manifest" || data.version !== 1 ||
+		!Array.isArray( data.dungeons ) || data.dungeons.length > 32768
+	) throw Error( "Invalid dungeon minimap catalog" );
+	const result = new Map<number, readonly string[]>();
+	for ( const d of data.dungeons ) {
+		if (
+			!Number.isInteger( d.sectorId ) || d.sectorId < 32768 || d.sectorId > 65535 || result.has( d.sectorId ) ||
+			d.rooms !== undefined &&
+				(!Array.isArray( d.rooms ) || d.rooms.length > 4096 ||
+					d.rooms.some( r => typeof r !== "string" || r.length > 256 ))
+		) throw Error( "Invalid dungeon minimap region" );
+		result.set( d.sectorId, d.rooms ?? [] );
+	}
+	return result;
+}
 // The retail art list names each tile's published file: a .texture where the
 // retail DDJ is block compressed, a .png otherwise. Keyed by the path without
 // its extension, lowercase, so a tile resolves whatever it shipped as.
@@ -61,6 +83,24 @@ export function minimapArt( value: unknown ): ReadonlyMap<string, string> {
 		paths.set( key, path );
 	}
 	return paths;
+}
+/*
+================
+minimapWithLaterFloors
+
+Fills the dungeons v1.150 art leaves without floors from the later catalogue.
+A dungeon with retail floors keeps them, so later art never replaces it.
+================
+*/
+export function minimapWithLaterFloors(
+	retail: ReadonlyMap<number, readonly MinimapFloor[]>,
+	later: ReadonlyMap<number, readonly MinimapFloor[]>
+): ReadonlyMap<number, readonly MinimapFloor[]> {
+	const merged = new Map( retail );
+	for ( const [sector, floors] of later ) {
+		if ( !merged.get( sector )?.length ) merged.set( sector, floors );
+	}
+	return merged;
 }
 export function minimapTiles( pose: Pose, zoom: number, floor?: MinimapFloor, art?: ReadonlyMap<string, string> ) {
 	if ( !art ) return [];

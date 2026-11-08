@@ -13,8 +13,8 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
 	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
-	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
-	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED LV <N>"
+	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED Lv <N>" on a new wanted level, and
+	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED Lv <N>"
 	SRO_ALCHEMY_BREAK_NOTICE  "<alias> broke <item>" when a reinforcement destroys the
 	                          item of a character who opted in on the account page
 	                          (#1738, #1604 P7.2); no alias shows "a player",
@@ -120,6 +120,9 @@ const (
 	// announceBreak has its own per-minute bucket and its own channel, so
 	// a run of breaks never starves the other notices.
 	announceBreak
+	// announceHalloweenWave has its own bucket, so a run of drops never
+	// starves a wave's notice (port-only, halloween_waves.go).
+	announceHalloweenWave
 	announceKinds
 )
 
@@ -232,8 +235,10 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 		frame = wire.BreakNotificationFrame(text)
 	}
 	frames := make([]simulation.Frame, 0, 2)
-	for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
-		frames = append(frames, simulation.Frame{Opcode: ref.Opcode, Payload: ref.Payload})
+	if refObjID != 0 {
+		for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
+			frames = append(frames, simulation.Frame{Opcode: ref.Opcode, Payload: ref.Payload})
+		}
 	}
 	frames = append(frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division, Frames: frames})
@@ -620,7 +625,7 @@ func (rt *Runtime) mostWantedLevelNotice(division string, killer *enterworld.Cha
 	if !rt.Announce.MostWanted || jobNames[job] == "" {
 		return nil
 	}
-	return []mostWantedNotice{{division, fmt.Sprintf("[%s] is MOST WANTED LV %d", jobKillAlias(killer, job), level), nowMs}}
+	return []mostWantedNotice{{division, fmt.Sprintf("[%s] is MOST WANTED Lv %d", jobKillAlias(killer, job), level), nowMs}}
 }
 
 /*
@@ -639,9 +644,9 @@ func (rt *Runtime) mostWantedBountyNotice(division string, killer, victim *enter
 		return nil
 	}
 	victimAlias := jobKillAlias(victim, victimJob)
-	text := fmt.Sprintf("Bounty of [%s] MOST WANTED LV %d was claimed", victimAlias, level)
+	text := fmt.Sprintf("Bounty of [%s] MOST WANTED Lv %d was claimed", victimAlias, level)
 	if jobNames[killerJob] != "" {
-		text = fmt.Sprintf("[%s] claimed bounty of [%s] MOST WANTED LV %d", jobKillAlias(killer, killerJob), victimAlias, level)
+		text = fmt.Sprintf("[%s] claimed bounty of [%s] MOST WANTED Lv %d", jobKillAlias(killer, killerJob), victimAlias, level)
 	}
 	return []mostWantedNotice{{division, text, nowMs}}
 }

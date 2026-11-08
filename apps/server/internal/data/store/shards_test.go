@@ -9,6 +9,8 @@ import (
 )
 
 func TestCreateCharacterEnforcesPerShardAccountSlots(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 
@@ -42,6 +44,8 @@ func TestCreateCharacterEnforcesPerShardAccountSlots(t *testing.T) {
 }
 
 func TestDeletePendingCharacterStillOccupiesSlot(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 
@@ -68,6 +72,8 @@ func TestDeletePendingCharacterStillOccupiesSlot(t *testing.T) {
 }
 
 func TestValidateShardStateRefusesUnknownAndOverflow(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 

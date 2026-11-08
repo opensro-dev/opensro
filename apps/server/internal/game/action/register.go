@@ -12,11 +12,13 @@ package action
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
 
@@ -50,6 +52,7 @@ Register
 func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
+	rt.registerCrest(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(opFortressInteraction, rt.hubHandler(hub, rt.HandleFortressInteraction))
@@ -98,7 +101,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpCosRideRequest, rt.hubHandler(hub, rt.HandleCosRide))
 	hub.Handle(opCosCancelRequest, rt.hubHandler(hub, rt.HandleCosCancel))
 	hub.Handle(opCosTerminateRequest, rt.hubHandler(hub, rt.HandleCosTerminate))
-	hub.Handle(wire.OpLocalRebirthRequest, rt.hubHandler(hub, rt.HandleLocalRebirth))
+	hub.Handle(wire.OpLocalRebirthRequest, rt.hubHandlerPrepared(hub, rt.HandleLocalRebirth, rt.prepareLocalRebirth))
 	hub.Handle(wire.OpVisualFlagsRequest, rt.hubHandler(hub, rt.HandleVisualFlags))
 	// 0x745A object select/interact rides its own glue (select.go): its
 	// refusals are silent - the B06D error channel below would be a wrong
@@ -162,6 +165,38 @@ conversation hold no pending answer and stay silent.
 ================
 */
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
+	return rt.hubHandlerPrepared(hub, op, nil)
+}
+
+/*
+================
+opPrepareFunc
+
+The detached half of an operation whose expensive preparation may run
+before the publication gate: it returns the gated publish half, or
+false when this request must run whole under the gate (its preparation
+is entangled with state the gate serializes). Preparation holds no
+uncommitted state: a publish must tolerate the world having moved
+since it was prepared, refusing stale input rather than rolling back
+over a concurrent mutation (rebirth's commit does exactly that).
+================
+*/
+type opPrepareFunc func(divisionID string, character *enterworld.Character, payload []byte) (func() OpResult, bool)
+
+/*
+================
+hubHandlerPrepared
+
+hubHandler with a detached preparation in front of the gate. The
+scene check runs on both sides of the preparation: a scene that
+starts loading while a corpus is built refuses the publish and
+discards it, which is safe because preparation committed nothing.
+A slow preparation is reported under the requestOp.prepare label, so
+a live read can prove the expensive half no longer holds the gate
+(#2143); the gate itself keeps the requestOp label.
+================
+*/
+func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opPrepareFunc) transport.HandlerFunc {
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
 		if !bound {
@@ -172,6 +207,19 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			return
 		}
 
+		var publish func() OpResult
+		if prepare != nil {
+			if _, live := s.SceneRevision(); live {
+				started := time.Now()
+				if fn, ok := prepare(divisionID, character, payload); ok && fn != nil {
+					publish = fn
+					if held := time.Since(started); rt.PublicationHold != nil && held >= simulation.SlowHookThreshold {
+						rt.PublicationHold("requestOp.prepare", held)
+					}
+				}
+			}
+		}
+
 		unlockPublication := rt.LockPublication(divisionID, "requestOp")
 		defer unlockPublication()
 		// Checked under the publication gate: a reset another handler pushes
@@ -180,12 +228,17 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 		if _, live := s.SceneRevision(); !live {
 			// Info, not debug: a client that sends while loading is a bug to see.
 			if refusal := sceneLoadingRefusal(opcode); len(refusal) > 0 {
-				sendFrames(s, refusal)
+				sendSessionAnswer(s, refusal)
 			}
 			log.Infof("action: 0x%04X from %s refused: the scene is loading", opcode, character.Name)
 			return
 		}
-		result := op(divisionID, character, payload)
+		var result OpResult
+		if publish != nil {
+			result = publish()
+		} else {
+			result = op(divisionID, character, payload)
+		}
 		if result.DiagnosticRefusal != "" {
 			log.Debugf(
 				"action: 0x%04X refused for %s: %s",
@@ -243,6 +296,13 @@ func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 		// the way a failed native purchase retires its own pending lane.
 		if payload, err := json.Marshal(mallProjection{Version: 1, Error: "mall is unavailable while entering"}); err == nil {
 			return []wire.Frame{{Opcode: opMallCatalog, Payload: payload}}
+		}
+	case opCrestRegister:
+		// The crest upload waits on its own answer lane (extension
+		// opcode 19); a refused answer retires its pending the way a
+		// failed catalogue read retires its request (crestregister.go).
+		if payload, err := json.Marshal(crestRegisterAnswer{Reason: crestRefusedGeneric}); err == nil {
+			return []wire.Frame{{Opcode: opCrestRegister, Payload: payload}}
 		}
 	}
 	return nil
@@ -343,3 +403,19 @@ sendFrames
 ================
 */
 func sendFrames(s *transport.Session, frames []wire.Frame) { SendFrames(s, frames) }
+
+/*
+================
+sendSessionAnswer
+
+The acting session's own synchronous answer (a result, or the
+refusal for a request the loading gate turned away), on the lane
+that never waits behind the scene's bootstrap
+(transport.SendSceneAnswerBatch).
+================
+*/
+func sendSessionAnswer(s *transport.Session, frames []wire.Frame) {
+	if err := s.SendSceneAnswerBatch(transportFrames(frames)); err != nil {
+		log.Debugf("action: send answer to session %d failed: %v", s.ID, err)
+	}
+}

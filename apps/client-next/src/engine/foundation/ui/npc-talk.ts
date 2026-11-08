@@ -19,6 +19,18 @@ import type { MerchantBranch } from "@/engine/foundation/gameplay/merchant-branc
 
 /*
 ================
+EVENT_EXCHANGE_FUNCTION
+
+The NPC capability bit the event exchange hangs on: 5D9100 tests
+capabilities & 0x40000 at 5D9409 (the prompt becomes the SO-OK line)
+and at 5D96BD (row 0x15 joins the menu). Named once here because the
+runtime UI and the gameplay guard both test it.
+================
+*/
+export const EVENT_EXCHANGE_FUNCTION = 0x40000;
+
+/*
+================
 npcChoiceColor
 
 5D31D0: signed difference of two level bytes. Only SN_ choices consult
@@ -133,6 +145,13 @@ export interface NpcTalkInput {
 	readonly canGacha?: boolean;
 	// canGachaOperator is row 0x28 (5D9750, mask 0x20000): Gori's voucher exchange.
 	readonly canGachaOperator?: boolean;
+	// canEventExchange is row 0x15 (5D9100 tests capability 0x40000 at
+	// 5D96BD and appends it at 5D96CF, right before row 0x16): the
+	// Christmas socks-for-a-gift exchange row (5D6A50 case 0x15).
+	readonly canEventExchange?: boolean;
+	// canWithdrawSkill is row 0x16 (5D9100, capability 0x200): the
+	// herbalist's skill-withdrawal row; the click sends mask 0x200.
+	readonly canWithdrawSkill?: boolean;
 	readonly canReverseReturn?: boolean;
 	// gateRows are a quest exit gate's rows (capability 0x8000000):
 	// 5D9100 appends them after every service row, each action 0x2A.
@@ -188,7 +207,15 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 		rows.push( { text: "", color: normal } );
 	}
 	if ( dialogue ) {
-		for ( const text of wrap( copy( dialogue.prompt ) ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
+		// 5D60C0 kind 5: the prompt formats the item's name, then its count.
+		const item = dialogue.item,
+			promptText = item ?
+				copy( dialogue.prompt ).replace( "%s", copy( "SN_" + item.codename ) ).replace(
+					"%d",
+					String( item.count )
+				) :
+				copy( dialogue.prompt );
+		for ( const text of wrap( promptText ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
 		rows.push( { text: "", color: normal } );
 	}
 	const options: { id: string; label: string; disabled?: boolean; color?: UiQuad["color"]; }[] = dialogue ?
@@ -283,6 +310,15 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						[]),
 					...(input.canFortressTrainer ?
 						[ { id: "npc-fortress-production:trainer", label: copy( "UIIT_STT_FORT_ETC_TRAINING" ) } ] :
+						[]),
+					// 5D96BD appends row 0x15 under capability 0x40000,
+					// immediately before the 0x200 test at 5D96D6.
+					...(input.canEventExchange ?
+						[ { id: "npc-event-exchange", label: copy( "UIIT_MSG_XMAS_EVENT_CHANGE" ) } ] :
+						[]),
+					// 5D9100 appends row 0x16 after the job rows, before 0x27.
+					...(input.canWithdrawSkill ?
+						[ { id: "npc-withdraw", label: copy( "UIIT_MSG_CIRCULATION_WITHDRAW_SKILL" ) } ] :
 						[]),
 					// 5D9100 adds row 0x27 after the fortress rows; 5D6E92 labels it.
 					...(input.canGacha ?

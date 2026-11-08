@@ -51,6 +51,20 @@ func isPersonalQuestPickupItem(item grounditem.Item) bool {
 
 /*
 ================
+isQuestItemTypeID
+
+The quest-item test on the TypeID bits alone (TypeID1=3, TypeID2=3,
+TypeID3=9), with no codename exemption. The manual bag-to-COS transfer
+judges the item's class only; the pickup policy's alchemy exemption
+above stays its own and is not borrowed here.
+================
+*/
+func isQuestItemTypeID(flags uint16) bool {
+	return flags&questNonItemMask == 0 && flags&questClassMask == questClass && flags&questCategoryMask == questCategory && flags&questGroupMask == questItemBand
+}
+
+/*
+================
 partyShareRoster
 
 The share lanes' slice of the reward roster: the picker and its party

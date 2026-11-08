@@ -293,6 +293,135 @@ func TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows(t *testing.T) {
 
 /*
 ================
+TestCloneCharacterStagedSharesFrozenChildren
+
+The store stages one committed copy per save and compares the next
+record against it (store, character_sections.go); the staged copy of
+a quiet record must cost no more than the record shell, so every
+child the previous staged copy already holds in the same value is
+shared with it. The sharing must stay invisible: the copy is still
+value-equal to a full clone and detached from the live record, and a
+child the record moved is copied again, never shared.
+================
+*/
+func TestCloneCharacterStagedSharesFrozenChildren(t *testing.T) {
+	source := clonePopulatedCharacter()
+	previous := CloneCharacter(source)
+
+	staged := CloneCharacterStaged(source, previous)
+	if !reflect.DeepEqual(staged, CloneCharacter(source)) {
+		t.Fatal("the staged copy differs from the full clone")
+	}
+	if staged.MissionInventory == nil || &staged.MissionInventory[0] != &previous.MissionInventory[0] {
+		t.Fatal("the staged copy re-copied the quiet inventory")
+	}
+	if staged.ActiveCOS != previous.ActiveCOS {
+		t.Fatal("the staged copy re-copied the quiet companion")
+	}
+	if staged.Skills == nil || &staged.Skills[0] != &previous.Skills[0] {
+		t.Fatal("the staged copy re-copied the quiet skills")
+	}
+	var shared []string
+	sharedMutableNodes(reflect.ValueOf(source), reflect.ValueOf(staged), "Character", 0, &shared)
+	if len(shared) > 0 {
+		t.Fatalf("the staged copy shares mutable nodes with the record: %s", strings.Join(shared, ", "))
+	}
+
+	// A write through the live record does not cross into the copy
+	// that shares the previous copy's children.
+	source.MissionInventory[0].MagicOptions[0] = 99
+	*source.Level = 99
+	if staged.MissionInventory[0].MagicOptions[0] == 99 || *staged.Level == 99 {
+		t.Fatal("a record write crossed into the staged copy")
+	}
+
+	// The moved children are copied again; the quiet ones stay shared.
+	source.Skills[0] = 77
+	next := CloneCharacterStaged(source, previous)
+	if next.Skills[0] != 77 || &next.Skills[0] == &previous.Skills[0] {
+		t.Fatal("the staged copy shared the moved skills")
+	}
+	if next.MissionInventory[0].MagicOptions[0] != 99 ||
+		&next.MissionInventory[0] == &previous.MissionInventory[0] {
+		t.Fatal("the staged copy shared the moved inventory")
+	}
+	if &next.PetSkillWindows[0] != &previous.PetSkillWindows[0] {
+		t.Fatal("the staged copy lost a quiet child's sharing")
+	}
+
+	// No previous copy stages a plain full clone.
+	fresh := CloneCharacterStaged(source, nil)
+	if !reflect.DeepEqual(fresh, CloneCharacter(source)) {
+		t.Fatal("the previous-less staged copy differs from the full clone")
+	}
+}
+
+/*
+================
+BenchmarkCloneCharacterStaged
+
+One staged copy of a quiet record against its previous staged copy;
+BenchmarkSnapshotFull is the same record's full clone (#2030: most
+saves move a scalar while the record's bulk compares equal).
+================
+*/
+func BenchmarkCloneCharacterStaged(b *testing.B) {
+	c := benchmarkCombatCharacter()
+	previous := CloneCharacter(c)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = CloneCharacterStaged(c, previous)
+	}
+}
+
+/*
+================
+benchmarkTransportCharacter
+
+The combat character riding a full trade transport: a companion
+whose container holds 177 trade rows, the shape that made the
+staging clone the live tick's largest allocator (#2030).
+================
+*/
+func benchmarkTransportCharacter() *Character {
+	c := benchmarkCombatCharacter()
+	container := &COSContainer{}
+	for slot := int64(0); slot < 177; slot++ {
+		container.Rows = append(container.Rows, InventoryRow{Slot: slot, RefObjID: uint32(2000 + slot), Codename: "ITEM_TRADE_BENCH", StackCount: 40, MagicOptions: []uint64{1}})
+	}
+	c.ActiveCOS = &CharacterCOS{GID: 42, Codename: "COS_TRANSPORT_BENCH", Container: container}
+	return c
+}
+
+/*
+================
+BenchmarkCloneCharacterStagedTransport
+================
+*/
+func BenchmarkCloneCharacterStagedTransport(b *testing.B) {
+	c := benchmarkTransportCharacter()
+	previous := CloneCharacter(c)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = CloneCharacterStaged(c, previous)
+	}
+}
+
+/*
+================
+BenchmarkSnapshotTransport
+================
+*/
+func BenchmarkSnapshotTransport(b *testing.B) {
+	c := benchmarkTransportCharacter()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = c.Snapshot()
+	}
+}
+
+/*
+================
 benchmarkCombatCharacter
 
 A character shaped like the tick guard's players (#1943): 13 equipment
@@ -358,6 +487,7 @@ func clonePopulatedCharacter() *Character {
 	mask := int64(7)
 	return &Character{
 		PK:              &PKRecord{DailyCount: 1},
+		Online:          &OnlineRecord{TotalSeconds: 60, Days: []OnlineDay{{Day: 20260101, Seconds: 60}}},
 		EventMembership: &EventMembership{ID: 1},
 		Aggressions:     map[uint32]uint32{1: 1},
 		Mission:         &MissionRuntime{EventGuideStateMask: &mask, EventGuideStateMaskUpdatedAt: "t"},

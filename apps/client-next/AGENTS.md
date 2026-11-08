@@ -85,10 +85,11 @@ declares the probes their page code reads.
 | Scope | Command |
 | --- | --- |
 | Inner loop, after every new module or call edge (about 7 s) | `pnpm --filter @sro/client-next verify:quick` |
-| Every client gate | `pnpm --filter @sro/client-next check` |
-| Unit and architecture tests | `pnpm --filter @sro/client-next test` |
+| The tests that cover a change (a fix's local gate, with `verify:quick`) | `node tools/run-tests.mjs tests/runtime/<file>.test.mjs` |
+| Every client gate (CI runs it on every PR; not a local gate) | `pnpm --filter @sro/client-next check` |
+| Unit and architecture tests (CI) | `pnpm --filter @sro/client-next test` |
 | Browser tests | `pnpm --filter @sro/client-next test:browser` |
-| Frame rate and allocations (goal: 500 fps in every scenario) | `node tools/perf/bench/fps-bench.mjs`; process in [docs/PROFILING.md](../../docs/PROFILING.md) |
+| Frame rate and allocations (goal: 500 fps in every scenario) | `node tools/perf/bench/fps-bench.mjs`; process in [docs/guides/PROFILING.md](../../docs/guides/PROFILING.md) |
 
 `verify:quick` runs the typecheck and the ownership, capability and
 execution-flow gates. A new module, async function, timer, stored callback

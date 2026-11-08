@@ -3,6 +3,7 @@ package gametest
 
 import (
 	"bytes"
+	"encoding/binary"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -41,6 +42,67 @@ func StreamPosition(conn *websocket.Conn) uint32 {
 	streamedMu.Lock()
 	defer streamedMu.Unlock()
 	return streamed[conn]
+}
+
+// ackBytes is the counted-stream batch an ack covers, and ackCadence
+// the most a moved position may wait for one. The browser acks at its
+// drain about once a second (network.ts STREAM_ACK_INTERVAL_MS); an
+// ack per frame here would spend the session's inbound rate budget on
+// acks and clamp real traffic, while a purely time-based batch could
+// strand a parked writer mid-bootstrap (the harness has no tick to
+// revisit it). The byte batch mirrors the byte-based ring gate: an
+// ack goes out at least every ackBytes of counted stream, so the
+// writer is never parked behind more than that, plus the oversized
+// EnterWorld result acks at once whatever its size.
+const (
+	ackBytes   = 1 << 20
+	ackCadence = time.Second
+)
+
+// ackSent is each test client's last acknowledged position, the counted
+// bytes read since, and when the ack went out - across every reader
+// (the batch is per client, not per funnel).
+var (
+	ackMu   sync.Mutex
+	ackSent = map[*websocket.Conn]ackMark{}
+)
+
+type ackMark struct {
+	pos   uint32
+	bytes int
+	at    time.Time
+}
+
+// AckRead records a frame a test client read and acknowledges the applied
+// position, as the browser does at its drain (network.ts acknowledge,
+// #1466), batched as above. The writer parks at the resume ring's bound
+// until the position advances (#2146), so a bootstrap reader that never
+// acks starves on any entry burst past the bound - the oversized
+// EnterWorld result first of all. Every read funnel calls this for every
+// frame it decodes.
+func AckRead(t *testing.T, conn *websocket.Conn, frame transport.Frame) {
+	t.Helper()
+	if !transport.CountsOnStream(frame.Opcode) {
+		return
+	}
+	NoteRead(conn, frame)
+	pos := StreamPosition(conn)
+	now := time.Now()
+	ackMu.Lock()
+	mark := ackSent[conn]
+	mark.bytes += frame.EncodedLen()
+	due := mark.bytes >= ackBytes || pos != mark.pos && now.Sub(mark.at) >= ackCadence
+	if due {
+		mark = ackMark{pos: pos, at: now}
+	}
+	ackSent[conn] = mark
+	ackMu.Unlock()
+	if !due {
+		return
+	}
+	payload := make([]byte, 4)
+	binary.LittleEndian.PutUint32(payload, pos)
+	sendFrame(t, conn, transport.OpStreamAck, payload)
 }
 
 // ActivateWorld crosses the production character-bound -> world-ready edge
@@ -125,7 +187,7 @@ func readFrame(t *testing.T, conn *websocket.Conn, label string) transport.Frame
 	if err != nil {
 		t.Fatalf("%s: decoding ws frame: %v", label, err)
 	}
-	NoteRead(conn, frame)
+	AckRead(t, conn, frame)
 	return frame
 }
 

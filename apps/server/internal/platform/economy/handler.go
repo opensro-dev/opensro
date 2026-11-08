@@ -9,15 +9,15 @@ the shard's economy-token file; without that file every route is 404).
 The one exception is POST /economy/v1/sealcensus, which runs a census
 (census.go). Contract v1 errors are {"error":{"code","message"}} with
 the codes bad_metric, bad_bucket, range_too_wide, no_snapshot,
-no_census, census_running and unauthorized. /economy/v1/trade is not
-served yet (its shape follows with the trade ledger reasons).
+no_census, census_running and unauthorized. /economy/v1/trade answers
+the flows shape folded from the trade reasons alone (queries.go
+foldTrade), for the console's Trade tab.
 
 ===========================================================================
 */
 package economy
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -99,7 +99,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	at, blocks := s.snapshotAt, s.distribution
+	at, blocks, entries := s.snapshotAt, s.distribution, s.rollup
 	s.mu.Unlock()
 	if at.IsZero() {
 		writeError(w, http.StatusServiceUnavailable, queryError{"no_snapshot", "no snapshot has been taken yet"})
@@ -115,7 +115,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, block)
 		return
 	}
-	if route != "series" && route != "flows" && route != "flags" {
+	if route != "series" && route != "flows" && route != "flags" && route != "trade" {
 		http.NotFound(w, r)
 		return
 	}
@@ -124,29 +124,22 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	db, err := openSnapshot(filepath.Join(s.dir, SnapshotFile))
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	defer db.Close()
 	switch route {
 	case "series":
-		s.serveSeries(w, db, q.Get("metric"), win)
+		s.serveSeries(w, entries, q.Get("metric"), win)
 	case "flows":
-		groups, err := readGroups(db, win)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		buckets, reasons := foldFlows(win, groups)
+		buckets, reasons := foldFlows(win, rollupGroups(entries, win))
+		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
+	case "trade":
+		buckets, reasons := foldTrade(win, rollupGroups(entries, win))
 		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
 	case "flags":
-		flags, err := netMintFlags(db, win, win.division)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
+		// The flag's lookback starts netMintWindow days before the
+		// window (#2643); online hours come from the history's
+		// kill_stats, and any read failure degrades the flags to the
+		// raw-total reading instead of failing the route.
+		onlineMs, _ := s.onlineMsByDay(win.from-netMintWindow*bucketSeconds["1d"], win.to)
+		flags := netMintFlags(entries, onlineMs, win, win.division)
 		if flags == nil {
 			flags = []Flag{}
 		}
@@ -191,7 +184,7 @@ func (s *Service) serveMeta(w http.ResponseWriter) {
 Service.serveSeries
 ================
 */
-func (s *Service) serveSeries(w http.ResponseWriter, db *sql.DB, metric string, win window) {
+func (s *Service) serveSeries(w http.ResponseWriter, entries []rollupEntry, metric string, win window) {
 	var points []Point
 	switch {
 	case metric == "gold_total":
@@ -201,12 +194,7 @@ func (s *Service) serveSeries(w http.ResponseWriter, db *sql.DB, metric string, 
 			return
 		}
 	case ledgerMetric(metric):
-		groups, err := readGroups(db, win)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		points = foldSeries(metric, groups)
+		points = foldSeries(metric, rollupGroups(entries, win))
 	default:
 		writeError(w, http.StatusBadRequest, queryError{"bad_metric", "unknown metric"})
 		return

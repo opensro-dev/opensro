@@ -26,6 +26,7 @@ package simulation
 
 import (
 	"sort"
+	"sync"
 
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -47,6 +48,10 @@ const (
 	// monster slot: the batch build has not stamped one yet. The
 	// dispatch read resolves it by gid.
 	behaviorNoMonsterSlot = ^uint32(0)
+
+	// behaviorNoQueueSlot marks an actor ref built without the
+	// drain (a hand-built ref): its queue doors resolve by gid.
+	behaviorNoQueueSlot = ^uint32(0)
 )
 
 /*
@@ -69,23 +74,32 @@ behaviorSlot
 
 One scheduled actor's dense queue row. live is false once the actor
 fires or is removed, until set revives the row; copies naming a dead
-row are stale whatever at they carry.
+row are stale whatever at they carry. moverSlot and monsterSlot are
+the actor's storage slots as the last batch build resolved them,
+carried leg to leg so the next build reads the rows through the
+slots instead of resolving the gid through the storage maps again
+(#2133); the dispatch reads verify each against the gid before use,
+so a row that moved since costs one gid resolve, never a wrong read.
 ================
 */
 type behaviorSlot struct {
-	gid  uint32
-	at   int64
-	live bool
+	gid         uint32
+	at          int64
+	live        bool
+	moverSlot   uint32
+	monsterSlot uint32
 }
 
 /*
 ================
 behaviorQueue
 
-The wheel. byGID maps a gid to its slot and is read on the re-arm
-path and written only when an actor enters or leaves the queue; the
-drain itself walks bucket lists of behaviorCopy and the slot array,
-no map traffic. now is the last drain time and the ring's cursor base.
+The wheel. byGID maps a gid to its slot and is written only when an
+actor enters or leaves the queue; the batch build's re-arm verifies
+the slot the drain carried (setAt) and reads byGID only when the
+carry misses, and the drain itself walks bucket lists of
+behaviorCopy and the slot array, no map traffic. now is the last
+drain time and the ring's cursor base.
 ================
 */
 type behaviorQueue struct {
@@ -151,6 +165,8 @@ behaviorQueue.set
 Schedules gid at at: revive (or take) its slot, stamp the due, place
 a copy. One byGID read for a known actor; the map is written only for
 an actor entering the queue. Copies of earlier dues go stale in place.
+A live slot already holding at keeps the copy it placed: re-placing
+would only stack a duplicate for the next drain to drop (#2136).
 ================
 */
 func (q *behaviorQueue) set(gid uint32, at int64) {
@@ -167,9 +183,65 @@ func (q *behaviorQueue) set(gid uint32, at int64) {
 			q.slots = append(q.slots, behaviorSlot{})
 		}
 		q.byGID[gid] = slot
+		q.slots[slot] = behaviorSlot{moverSlot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot}
+	} else if held := q.slots[slot]; held.live && held.at == at {
+		return
 	}
-	q.slots[slot] = behaviorSlot{gid: gid, at: at, live: true}
+	held := q.slots[slot]
+	q.slots[slot] = behaviorSlot{gid: gid, at: at, live: true, moverSlot: held.moverSlot, monsterSlot: held.monsterSlot}
 	q.place(slot, at)
+}
+
+/*
+================
+behaviorQueue.setAt
+
+set through the ref the drain handed out for the actor (#2133):
+when the ref's queue slot still names the actor the re-arm lands on
+that row with no byGID probe, and the actor's storage slots are
+noted back onto the row for the next leg's drain. A slot recycled
+onto another actor, or the no-queue-slot sentinel, delegates to set
+and notes the slots on the row set resolved, so the schedule is the
+queue's either way.
+================
+*/
+func (q *behaviorQueue) setAt(ref behaviorActorRef, at int64) {
+	slot := ref.queueSlot
+	if slot >= uint32(len(q.slots)) || q.slots[slot].gid != ref.gid {
+		q.set(ref.gid, at)
+		if resolved, ok := q.byGID[ref.gid]; ok {
+			q.slots[resolved].moverSlot = ref.slot
+			q.slots[resolved].monsterSlot = ref.monsterSlot
+		}
+		return
+	}
+	if held := q.slots[slot]; held.live && held.at == at {
+		q.slots[slot].moverSlot = ref.slot
+		q.slots[slot].monsterSlot = ref.monsterSlot
+		return
+	}
+	q.slots[slot] = behaviorSlot{gid: ref.gid, at: at, live: true, moverSlot: ref.slot, monsterSlot: ref.monsterSlot}
+	q.place(slot, at)
+}
+
+/*
+================
+behaviorQueue.removeAt
+
+remove through a carried queue slot, verified against the gid
+before use (#2133): a slot that names another actor delegates to
+remove, so the asked actor retires either way and the slot owner's
+due is never the price of a stale carry.
+================
+*/
+func (q *behaviorQueue) removeAt(queueSlot uint32, gid uint32) {
+	if queueSlot >= uint32(len(q.slots)) || q.slots[queueSlot].gid != gid {
+		q.remove(gid)
+		return
+	}
+	delete(q.byGID, gid)
+	q.slots[queueSlot] = behaviorSlot{}
+	q.free = append(q.free, queueSlot)
 }
 
 /*
@@ -177,7 +249,9 @@ func (q *behaviorQueue) set(gid uint32, at int64) {
 behaviorQueue.remove
 
 Unschedules gid: the slot dies and leaves the queue, staling every
-copy at once.
+copy at once. The row is zeroed, not just stilled: a queue slot a
+drained ref still carries can then never verify for the actor a
+later set recycles the row onto (#2133).
 ================
 */
 func (q *behaviorQueue) remove(gid uint32) {
@@ -186,7 +260,7 @@ func (q *behaviorQueue) remove(gid uint32) {
 		return
 	}
 	delete(q.byGID, gid)
-	q.slots[slot].live = false
+	q.slots[slot] = behaviorSlot{}
 	q.free = append(q.free, slot)
 }
 
@@ -222,7 +296,8 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behavio
 			continue
 		}
 		q.slots[e.slot].live = false
-		*out = append(*out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot})
+		row := q.slots[e.slot]
+		*out = append(*out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 	}
 	return keep
 }
@@ -231,8 +306,9 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behavio
 ================
 behaviorQueue.takeDue
 
-Every actor due by now, as a ref carrying no slots yet (the batch
-build fills them), in no order (callers sort). Their live dues are
+Every actor due by now, as a ref carrying its queue slot and the
+storage slots its queue row noted last leg (the batch build verifies
+and refreshes them), in no order (callers sort). Their live dues are
 consumed: the caller re-arms the ones it keeps (scheduleBehavior) and
 the rest stay unscheduled, exactly the heap's pop contract.
 
@@ -263,7 +339,8 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 			}
 			if e.at <= now {
 				q.slots[e.slot].live = false
-				out = append(out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot})
+				row := q.slots[e.slot]
+				out = append(out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 				continue
 			}
 			migrate = append(migrate, e)
@@ -401,8 +478,25 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 	if s.tryDormant(state, gid, m, now) {
 		return slot
 	}
-	at := now + 1
 	resident, _ := state.instances.hotRow(gid)
+	state.behavior.set(gid, nextBehaviorDue(m, resident, now))
+	return slot
+}
+
+/*
+================
+nextBehaviorDue
+
+When the actor's next behaviour step falls due: the next tick, or
+the pending row's cadence phase when it is armed and no help
+command pends - the activity cadence's own deadline, brought
+forward to the arrival when the mover lands sooner. The gid door
+and the batch build's carried door share it, so both arm the same
+due for the same rows.
+================
+*/
+func nextBehaviorDue(m moverSchedule, resident residentMonster, now int64) int64 {
+	at := now + 1
 	commandPending := resident.help.HasPending()
 	if m.mode == monster.MoverPending && m.activity.Interval != 0 && !commandPending {
 		elapsed := uint32(now) - m.activity.LastCheck
@@ -413,28 +507,69 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 			at = m.arriveMs
 		}
 	}
-	state.behavior.set(gid, at)
-	return slot
+	return at
+}
+
+/*
+================
+MonsterState.scheduleBehaviorCarried
+
+scheduleBehaviorSlot for one ref out of the batch build (#2133):
+the mover schedule reads through the mover slot the ref carried
+(scheduleSlotAt), the resident row through its monster slot, and
+the re-arm lands through the ref's queue slot (setAt), noting the
+resolved storage slots back for the next leg's drain. Every hint
+is verified against the gid before use and delegates to the gid
+resolve on a miss, so the armed due and the ref's slots are
+scheduleBehaviorSlot's either way: ref.slot ends as the mover slot
+the read resolved, behaviorNoMoverSlot when the actor has no mover
+row and still joins the batch, exactly as the build stamped it
+before the carry.
+================
+*/
+func (s *MonsterState) scheduleBehaviorCarried(state *divisionMonsterState, ref *behaviorActorRef, now int64) {
+	gid := ref.gid
+	state.forgetDormant(gid)
+	m, slot, ok := state.movers.scheduleSlotAt(ref.slot, gid)
+	if !ok {
+		state.behavior.removeAt(ref.queueSlot, gid)
+		ref.slot = behaviorNoMoverSlot
+		return
+	}
+	ref.slot = slot
+	if s.tryDormant(state, gid, m, now) {
+		return
+	}
+	resident, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
+	if !hot {
+		resident, _ = state.instances.hotRow(gid)
+	}
+	state.behavior.setAt(*ref, nextBehaviorDue(m, resident, now))
 }
 
 /*
 ================
 behaviorActorRef
 
-One due actor as the batch carries it: its gid, and the mover slot
-the build's schedule read resolved. The slot is a hint for the
-dispatch read (moverStorage.lookupAt), verified against the gid
-before use - remove swaps the last row into the hole, so a carried
-slot can name another actor by dispatch time. behaviorNoMoverSlot
-means no slot was carried. The monster slot is the same hint for
-the actor read (monsterStorage.lookupAt since the hot rows went
-dense, #2133): the build stamps it from the probe it already
-makes, and a recycled slot misses to the gid resolve.
-behaviorNoMonsterSlot means no monster slot was carried.
+One due actor as the batch carries it: its gid, the queue slot the
+drain fired it from, and the mover slot the build's schedule read
+resolved. The slot is a hint for the dispatch read
+(moverStorage.lookupAt), verified against the gid before use -
+remove swaps the last row into the hole, so a carried slot can
+name another actor by dispatch time. behaviorNoMoverSlot means no
+slot was carried. The monster slot is the same hint for the actor
+read (monsterStorage.lookupAt since the hot rows went dense,
+#2133): the drain stamps the queue row's note from last leg, the
+build verifies and refreshes it, and a recycled slot misses to the
+gid resolve. behaviorNoMonsterSlot means no monster slot was
+carried. The queue slot rides back to the re-arm (setAt) and the
+retire (removeAt) so neither resolves the gid through byGID again;
+behaviorNoQueueSlot marks a ref the drain did not build.
 ================
 */
 type behaviorActorRef struct {
 	gid         uint32
+	queueSlot   uint32
 	slot        uint32
 	monsterSlot uint32
 }
@@ -442,11 +577,41 @@ type behaviorActorRef struct {
 /*
 ================
 behaviorBatch
+
+One population's due actors for one leg. actors rides a pooled
+scratch backing (behaviorRefScratch): the leg drops the batch when
+it finishes, and a fresh backing per leg per population was the
+wheel drain's largest steady allocation - the append growth from
+empty, every leg, for every due actor's ref (#2030). The scratch
+returns through MonsterState.releaseBehaviorBatches, which the leg
+(monstertick.go) calls once its batches are dispatched; callers
+that never release (tests, one-shot reads) simply lose the scratch
+to the collector and keep today's caller-owned batches.
 ================
 */
 type behaviorBatch struct {
-	key    populationKey
-	actors []behaviorActorRef
+	key     populationKey
+	actors  []behaviorActorRef
+	scratch *behaviorRefScratch
+}
+
+/*
+================
+behaviorRefScratch
+
+The pooled backing one batch's refs ride on. A ref is three words
+with no pointers, so the backing needs no clearing before reuse.
+================
+*/
+type behaviorRefScratch struct {
+	refs []behaviorActorRef
+}
+
+// behaviorRefScratchPool holds built refs backings, ready for the
+// next batch. A scratch is checked out by behaviorBatchesForDivision
+// and returned by releaseBehaviorBatches once its batch is dead.
+var behaviorRefScratchPool = sync.Pool{
+	New: func() any { return &behaviorRefScratch{} },
 }
 
 /*
@@ -480,24 +645,54 @@ is gone; the mover is then meaningless.
 type behaviorActorSnapshot struct {
 	instance monster.Instance
 	mover    monster.MoverState
-	ok       bool
+	// moverGen is the mover row's commit generation read with the
+	// mover (zero when no row exists yet and the mover was
+	// synthesized): the base generation the step's commits guard on
+	// (#2137 slice 1, CommitMoverGen).
+	moverGen uint64
+	// slot and monsterSlot are the dense storage slots the batch
+	// resolved for this actor, carried from the ref the snapshot was
+	// read through (#2133): the step arms them on its ops so its
+	// doors (monsterpublish.go) read and commit through the verified
+	// hints instead of resolving the gid through the storage maps
+	// again. behaviorNoMoverSlot/behaviorNoMonsterSlot when the
+	// batch carried none.
+	slot        uint32
+	monsterSlot uint32
+	ok          bool
 }
 
 /*
 ================
 MonsterState.behaviorActorLive
 
-The dispatch's existence probe: whether the population still holds
-the actor, without building its instance value. The leg's dispatch
-decides only this; the actor itself is read inside the action lane
-(behaviorActorMover), under the lane's division lock (#2047 review).
+behaviorActorLiveAt with no slot carried: the gid resolve.
 ================
 */
 func (s *MonsterState) behaviorActorLive(key populationKey, gid uint32) bool {
+	return s.behaviorActorLiveAt(key, behaviorActorRef{gid: gid, monsterSlot: behaviorNoMonsterSlot})
+}
+
+/*
+================
+MonsterState.behaviorActorLiveAt
+
+The dispatch's existence probe: whether the population still holds
+the actor, without building its instance value. The leg's dispatch
+decides only this; the actor itself comes from the batch's leg-start
+snapshot (monsterlegsnapshot.go). The probe reads through the
+monster slot the batch carried (monsterStorage.containsAt): a slot
+that still names the actor answers from its place in the dense
+slice, and any other slot resolves by gid, so a despawn between
+build and dispatch drops the actor exactly as the gid probe does
+(#2133).
+================
+*/
+func (s *MonsterState) behaviorActorLiveAt(key populationKey, ref behaviorActorRef) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForLease(key.division, key.lease)
-	return state != nil && state.instances.contains(gid)
+	return state != nil && state.instances.containsAt(ref.monsterSlot, ref.gid)
 }
 
 /*
@@ -510,11 +705,9 @@ locked pass: the step otherwise re-pays the lock, a population scan
 (#2029). The mover half is MonsterState.Mover's value for this
 population - the stored row, or the synthesized spawn mover when no
 row exists yet - so the step continues with exactly what its own read
-would have returned. Called from inside the action lane (or the
-adjacent direct dispatch), never ahead of its lock: a mover set by a
-slower lane while the leg waits for the lock must be the value the
-step starts from, or the step's whole-value commits overwrite it
-(#2047 review).
+would have returned. The leg no longer calls this: it reads
+legSnapshot, whose commit generation drops a commit planned from a
+value a slower lane has since replaced (#2047 review, #2137 slice 1).
 ================
 */
 func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRef) behaviorActorSnapshot {
@@ -524,6 +717,20 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if state == nil {
 		return behaviorActorSnapshot{}
 	}
+	return s.behaviorActorMoverLocked(state, ref)
+}
+
+/*
+================
+MonsterState.behaviorActorMoverLocked
+
+behaviorActorMover's read with the population resolved and s.mu
+held: the leg snapshot (monsterlegsnapshot.go) reads a whole batch
+through this one helper under its single locked pass, so a snapshot
+actor and a dispatch-read actor are the same values by construction.
+================
+*/
+func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref behaviorActorRef) behaviorActorSnapshot {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
 	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
@@ -539,17 +746,18 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if !ok {
 		mover, ok = state.movers.lookup(ref.gid)
 	}
+	gen := state.movers.generationAt(ref.slot, ref.gid)
 	if ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
 	}
 	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
 }
 
 /*
@@ -575,25 +783,32 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			continue
 		}
 		state := s.populationForLease(key.division, key.lease)
-		batch := behaviorBatch{key: key}
-		batch.actors = state.behavior.takeDue(now, batch.actors)
+		scratch := behaviorRefScratchPool.Get().(*behaviorRefScratch)
+		batch := behaviorBatch{key: key, scratch: scratch}
+		batch.actors = state.behavior.takeDue(now, scratch.refs[:0])
 		actors := batch.actors[:0]
 		for _, ref := range batch.actors {
 			gid := ref.gid
-			i, monsterSlot, exists := state.instances.hotRowSlot(gid)
-			if !exists {
-				state.behavior.remove(gid)
-				continue
+			// The row reads through the monster slot the drain
+			// carried (#2133); a slot that no longer names the
+			// actor resolves by gid, as before the carry.
+			i, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
+			if !hot {
+				var exists bool
+				i, ref.monsterSlot, exists = state.instances.hotRowSlot(gid)
+				if !exists {
+					state.behavior.removeAt(ref.queueSlot, gid)
+					continue
+				}
 			}
 			if i.currentHP == 0 && i.ref.Value().MaxHP > 0 {
-				state.behavior.remove(gid)
+				state.behavior.removeAt(ref.queueSlot, gid)
 				continue
 			}
 			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
-			ref.slot = s.scheduleBehaviorSlot(state, gid, now)
-			ref.monsterSlot = monsterSlot
+			s.scheduleBehaviorCarried(state, &ref, now)
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
@@ -601,6 +816,30 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		out = append(out, batch)
 	}
 	return out
+}
+
+/*
+================
+MonsterState.releaseBehaviorBatches
+
+Hands each batch's refs backing back to the scratch pool. The one
+production caller is the leg (monstertick.go), after every batch is
+dispatched: nothing the dispatch or its deferred commits plan from
+keeps a ref - the snapshot and the plans copy the values out - so
+the backings are dead there. A batch whose scratch was already
+returned, or never carried one, is skipped.
+================
+*/
+func (s *MonsterState) releaseBehaviorBatches(batches []behaviorBatch) {
+	for i := range batches {
+		scratch := batches[i].scratch
+		if scratch == nil {
+			continue
+		}
+		scratch.refs = batches[i].actors[:0]
+		batches[i].scratch = nil
+		behaviorRefScratchPool.Put(scratch)
+	}
 }
 
 /*

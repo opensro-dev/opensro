@@ -113,16 +113,21 @@ const (
 	StallErrBusy          uint8 = 0x16
 	StallErrClosedByHost  uint8 = 0x17
 	StallErrHostState     uint8 = 0x2B
-	StallErrStallFull     uint8 = 0x30
-	StallErrRideState     uint8 = 0x34
-	StallErrMurderer      uint8 = 0x39
-	StallErrJob           uint8 = 0x3B
-	StallErrNoCategory    uint8 = 0x42
-	StallErrNetworkTown   uint8 = 0x49
-	StallErrRegisterTown  uint8 = 0x4A
-	StallErrNetworkStale  uint8 = 0x4F
-	StallErrNetworkGold   uint8 = 0x52
-	StallErrNetworkBag    uint8 = 0x53
+	// #2357: the native full-stall refusal word is 0x30 (result
+	// 0x3C30, proven in the native stall module: the add-offer slot
+	// scan finds all ten slots taken). No row of the client's stall
+	// notice category names 0x30, so the refusal prints nothing, as
+	// it does natively. The 0x18 market-full row the port sent for a
+	// while (#2414) is a row the native server never sends here.
+	StallErrStallFull    uint8 = 0x30
+	StallErrRideState    uint8 = 0x34
+	StallErrMurderer     uint8 = 0x39
+	StallErrJob          uint8 = 0x3B
+	StallErrNetworkTown  uint8 = 0x49
+	StallErrRegisterTown uint8 = 0x4A
+	StallErrNetworkStale uint8 = 0x4F
+	StallErrNetworkGold  uint8 = 0x52
+	StallErrNetworkBag   uint8 = 0x53
 )
 
 /*

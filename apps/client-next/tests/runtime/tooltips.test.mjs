@@ -41,6 +41,7 @@ async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
 const { decodeTooltipSkills } = await load( "src/engine/foundation/ui/skill-tooltip-catalog.ts" );
+const { skillParameterFormatters } = await load( "src/engine/foundation/ui/skill-tooltip-params.ts" );
 const { skillTooltip } = await load( "src/engine/foundation/ui/skill-tooltip.ts" );
 const { itemTooltipStats } = await load( "src/engine/foundation/ui/item-tooltip-stats.ts" );
 const { tooltipBubble } = await load( "src/engine/foundation/ui/helper-bubble.ts" );
@@ -460,6 +461,65 @@ test("reported beginner speed scroll uses native effect level and measured toolt
 	assert.equal( bubble.lines[0].rect[0], x );
 });
 
+test("a scroll buff's marked-up description paints as text in both tooltips", () => {
+	// The published description carries raw PML (<sml2>, <br>, <font>).
+	// Natively the composer keeps it raw and the tooltip painter routes
+	// it through the markup interpreter (Text_HasSml2Markup), so no tag
+	// may reach the screen from either the buff or the skill tooltip.
+	const row = [ ...catalog.values() ].find( r =>
+		r.tooltipDescriptionSymbol === "SN_ITEM_ETC_E051123_EVATION_SCROLL_TT_DESC"
+	);
+	assert.ok( row );
+	const raw = text( row.tooltipDescriptionSymbol );
+	assert.ok( raw.includes( "<sml2>" ) && raw.includes( "<font" ), "published text carries the raw markup" );
+	const game = {
+		localGid: 1,
+		attachedEffects: [ { gid: 1, skill: row.id, token: 7, phase: 2, remainingMs: 2516000, receivedAtMs: 1000 } ]
+	};
+	const buffValues = buffTooltip( { kind: "buff", gid: 1, skill: row.id, token: 7 }, game, 1000, catalog, text )
+		.map( r => r.value );
+	const skillValues = skillTooltip(
+		{ id: row.id, catalog, learned: [], progression: { level: 1, skillPoints: 0, masteries: [] } },
+		text,
+		id => String( id )
+	).map( r => r.value );
+	for ( const values of [ buffValues, skillValues ] ) {
+		const joined = values.join( "\n" );
+		assert.ok( !/<\/?(sml2|br|font|strong)>/.test( joined ), joined );
+		assert.ok( joined.includes( "Dodging ability will increase" ), joined );
+		assert.ok( joined.includes( "Dodging ratio 30% increase" ), joined );
+	}
+});
+
+test("every published scroll description renders without raw markup (#2571)", () => {
+	// The done-when of BUG-090 over the built text data: every scroll
+	// description the item, skill and buff tooltips can publish - the
+	// item-side SN_ITEM_*SCROLL*_TT_DESC entries and the scroll rows of
+	// the skill catalogue, whose descriptions all funnel through
+	// tooltipDescription - renders as text, never as raw PML tags, and
+	// none of them makes the interpreter throw.
+	const descriptions = new Map();
+	for ( const [symbol, value] of Object.entries( strings ) ) {
+		if ( symbol.includes( "SCROLL" ) && symbol.endsWith( "_TT_DESC" ) && value ) descriptions.set( symbol, value );
+	}
+	for ( const row of catalog.values() ) {
+		const value = text( row.tooltipDescriptionSymbol );
+		if ( (row.nameSymbol.includes( "SCROLL" ) || row.tooltipDescriptionSymbol.includes( "SCROLL" )) && value ) {
+			descriptions.set( row.tooltipDescriptionSymbol, value );
+		}
+	}
+	// The sweep must not go quietly empty, and the published scroll
+	// text does carry markup it has to survive.
+	assert.ok( descriptions.size >= 50, `scroll descriptions swept: ${descriptions.size}` );
+	assert.ok( [ ...descriptions.values() ].some( value => value.includes( "<sml2>" ) ) );
+	const rawTag = /<\/?(sml2|br|font|strong|p|left|center|right|img)\b[^>]*>/i;
+	for ( const [symbol, value] of descriptions ) {
+		const rows = tooltipDescription( value );
+		assert.ok( rows.length > 0, `${symbol}: description rendered no rows` );
+		for ( const row of rows ) assert.ok( !rawTag.test( row.value ), `${symbol}: raw tag in ${row.value}` );
+	}
+});
+
 /*
 ================
 assertSameBytes
@@ -674,6 +734,84 @@ test("native tooltip parameter cursor consumes complete setv saps and stns block
 			);
 		} else assert.deepEqual( row.directTooltipParams.setValues, [ { code: 0x45325341, value: 20 } ] );
 	}
+});
+/*
+================
+paramRow
+
+A synthetic tooltip row carrying exactly the native parameter blocks a
+test names, in the row view's shape.
+================
+*/
+function paramRow( blocks ) {
+	return {
+		nameSymbol: "SN_SKILL_TEST",
+		directTooltipParams: {
+			nativeParamBlocks: blocks.map( ( [offset, values] ) => ({ offset, tag: 0, values }) ),
+			durationMs: null,
+			multiCount: null,
+			downAttackRatio: null,
+			criticalFlat: 0,
+			criticalRatio: 0,
+			tauntFlat: 0,
+			tauntRatio: 0,
+			knockout: null,
+			rangeIncreaseDeci: null,
+			knockback: null,
+			defense: null,
+			recovery: null,
+			setValues: [],
+			area: null,
+			areas: []
+		}
+	};
+}
+
+// #2273 ASM 0x803b5e..0x803c03 (stns), 0x7faa83..0x7fab03 (hwir),
+// 0x7ff48f..0x7ff546 (saps), 0x7ffe70..0x7fff2d (dmgt), 0x7f9f7d..0x7fa039 (da+reqc).
+test("native tooltip lines the port dropped render from their parameters (#2273)", () => {
+	const direct = skillParameterFormatters( text ).direct;
+	// stns: a start delay prints _01; the periodic shape prints _02 with the
+	// interval in seconds and the damage percent. The two are independent
+	// (0x803bb5 falls through to 0x803bba): with both set, both print.
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 5000, 25, 3000 ] ] ] ) ), [
+		"Damage starts [5] second(s) after petrification",
+		"Every [3] second(s): [25]% damage"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 5000, 0, 3000 ] ] ] ) ), [
+		"Damage starts [5] second(s) after petrification"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 25, 3000 ] ] ] ) ), [
+		"Every [3] second(s): [25]% damage"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 0, 3000 ] ] ] ) ), [] );
+	// hwir: the berserk-gauge chance at values[0]. The native gate
+	// is cmp/jbe (unsigned), so a negative chance prints too (#2628).
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 30 ] ] ] ) ), [
+		"Chance of Obtaining Berserk Gage 30% Increase"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ -5 ] ] ] ) ), [
+		"Chance of Obtaining Berserk Gage -5% Increase"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 0 ] ] ] ) ), [] );
+	// saps: flag bits 4 and 8 print the physical and magical resonance lines.
+	assert.deepEqual( direct( paramRow( [ [ 0x30, [ 12, 25 ] ] ] ) ), [
+		"Phy. skill resonance 25%",
+		"Mag. skill resonance 25%"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x30, [ 4, 25 ] ] ] ) ), [ "Phy. skill resonance 25%" ] );
+	// dmgt: two absorb-rate lines, not the damage-pair text.
+	assert.deepEqual( direct( paramRow( [ [ 0x1a0, [ 30, 40 ] ] ] ) ), [
+		"Absorb Rate 30%",
+		"Absorb Rate 40%"
+	] );
+	// reqc glues its note onto the down-attack row with no separator, and
+	// only when that row prints.
+	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 130 ] ], [ 0x170, [ 1 ] ] ] ) ), [
+		"Down-attack damage 30% Increase(Exclusively use)"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 100 ] ], [ 0x170, [ 1 ] ] ] ) ), [] );
+	assert.deepEqual( direct( paramRow( [ [ 0x170, [ 1 ] ] ] ) ), [] );
 });
 test("Ghost Walk shows its travel distance, the second tele argument, like the original", () => {
 	// Client 7FC6CE..7FC731 prints [edi+4] / 10 under the tele row; the first

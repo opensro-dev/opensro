@@ -17,6 +17,7 @@ import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
+import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
@@ -128,10 +129,33 @@ export function startRuntime(
 	}
 	try {
 		const random = createPresentationRandom( presentationSeed );
-		const runtimeErrors = createRuntimeErrors( message => {
+		// Fetch-shaped failures of the last second, for the offline
+		// burst rule in reportRuntimeIncident (#2559), and when the
+		// last asset_offline was filed: one incident per burst.
+		const fetchFailures: { at: number; source: string; }[] = [];
+		let offlineReportedAt = -Infinity;
+		// One asset_offline per outage window; the window's other fetch
+		// failures are the same outage, never asset failures (#2559).
+		const OFFLINE_REPORT_GAP_MS = 5000;
+		// When the current fetch-failure streak armed its offline
+		// report and when its latest failure arrived (#2869): a burst
+		// only arms the report, and fetch failures still arriving a
+		// full gap later file it. A connection that drops inside the
+		// retry owners' backoff and recovers files nothing.
+		let offlineArmedAt: number | undefined;
+		let lastFetchFailureAt = -Infinity;
+		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
+			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
 			bugReport.note( message );
 			ui.runtimeError( message );
+			// The resource families behind the loading screen file the
+			// same failure as a client incident (#2337), under a code
+			// that names its cause (#2559): reportRuntimeIncident holds
+			// the classification.
+			if ( [ "Frontend", "Characters", "Audio", "Interface", "Assets" ].includes( source ) ) {
+				reportRuntimeIncident( source, error, message );
+			}
 		} );
 		const presentation = own( createPresentation() );
 		let sessionState: SessionState | null = null;
@@ -220,6 +244,149 @@ export function startRuntime(
 		}
 		/*
 		================
+		reportAssetIncident
+
+		Files one terminal asset failure as a client incident (#2337):
+		the asset it was loading ("-" when the failure named none),
+		whether retrying could have helped, and how many automatic
+		retries the failure sequence used. The session adds its phase.
+		================
+		*/
+		function reportAssetIncident(
+			code: string,
+			failure: { error: string; path?: string; transient: boolean; attempts: number; } | undefined
+		) {
+			if ( !failure ) return;
+			sessionCommand( {
+				kind: "client-report",
+				incidentKind: "asset",
+				code,
+				message: `asset=${
+					failure.path ?? "-"
+				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`
+			} );
+		}
+		// What one owner knows about its standing failure beyond the
+		// error text: the asset behind it, its retry facts, and the
+		// stack when the failure was a thrown error.
+		type RuntimeIncidentFacts = {
+			message: string;
+			path?: string | null;
+			attempts?: number;
+			transient?: boolean;
+			stack?: string;
+		};
+		/*
+		================
+		runtimeIncidentFacts
+
+		The facts of the failure the poll just surfaced, from the owner
+		behind the source. Facts count only when they describe that
+		failure (same message): an owner can hold an older failure
+		beside the one now standing. Owners injected by tests may keep
+		no facts at all.
+		================
+		*/
+		function runtimeIncidentFacts( source: string, error: string ): RuntimeIncidentFacts | undefined {
+			const facts: RuntimeIncidentFacts | null | undefined = source === "Characters" ?
+				characters.failure?.() :
+				source === "Audio" ?
+				audio.failure?.() :
+				source === "Interface" ?
+				ui.resourceFailure?.() :
+				source === "Frontend" ?
+				frontend.failure?.() :
+				null;
+			return facts && facts.message === error ? facts : undefined;
+		}
+		/*
+		================
+		reportRuntimeIncident
+
+		Files one runtime error under a code that names its cause
+		(#2559), where fatal_asset_failed once filed everything with
+		constant fields: a network burst or an offline browser arms
+		an asset_offline that only fetch failures still arriving a
+		full OFFLINE_REPORT_GAP_MS later file (#2869) - a drop the
+		retry owners recover inside their backoff files nothing,
+		and a failure arriving more than a full gap after the
+		previous one buries the arm, so a later blink starts a
+		fresh streak instead of filing the old streak's report - a
+		thrown error files runtime_exception with its stack, the
+		asset worker's death stays fatal_asset_failed (it actually
+		stops the session), and everything else files asset_failed
+		with the retry owner's real facts - fields it does not know
+		are dropped, not filled in.
+		================
+		*/
+		function reportRuntimeIncident( source: string, error: string, message: string ) {
+			const facts = runtimeIncidentFacts( source, error );
+			if ( /failed to fetch|networkerror|load failed/i.test( error ) ) {
+				const now = performance.now();
+				// A failure arriving more than a full gap after the
+				// previous one buries any arm an earlier streak left:
+				// nothing runs during the silence to bury it, so the
+				// next failure does - this streak starts fresh, and
+				// only its own burst can arm its own report.
+				if ( now - lastFetchFailureAt > OFFLINE_REPORT_GAP_MS ) {
+					offlineArmedAt = undefined;
+				}
+				fetchFailures.push( { at: now, source } );
+				while ( fetchFailures.length && now - fetchFailures[0]!.at > 1000 ) fetchFailures.shift();
+				const burst = fetchFailures.length >= 3 &&
+					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
+				if ( globalThis.navigator?.onLine === false || burst ) {
+					// Arm on the burst that opens a streak.
+					if ( offlineArmedAt === undefined ) {
+						offlineArmedAt = now;
+					}
+					if (
+						now - offlineArmedAt >= OFFLINE_REPORT_GAP_MS &&
+						now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS
+					) {
+						offlineReportedAt = now;
+						offlineArmedAt = undefined;
+						sessionCommand( {
+							kind: "client-report",
+							incidentKind: "asset",
+							code: "asset_offline",
+							message
+						} );
+					}
+					lastFetchFailureAt = now;
+					return;
+				}
+				lastFetchFailureAt = now;
+			} else if ( facts?.stack ) {
+				sessionCommand( {
+					kind: "client-report",
+					incidentKind: "runtime",
+					code: "runtime_exception",
+					message,
+					stack: facts.stack
+				} );
+				return;
+			}
+			if ( source === "Assets" ) {
+				sessionCommand( {
+					kind: "client-report",
+					incidentKind: "asset",
+					code: "fatal_asset_failed",
+					message: `error=${message}`
+				} );
+				return;
+			}
+			const transient = facts?.transient !== undefined ? ` transient=${facts.transient}` : "";
+			const attempts = facts?.attempts !== undefined ? ` attempts=${facts.attempts}` : "";
+			sessionCommand( {
+				kind: "client-report",
+				incidentKind: "asset",
+				code: "asset_failed",
+				message: `asset=${facts?.path ?? "-"}${transient}${attempts} error=${message}`
+			} );
+		}
+		/*
+		================
 		uiEvent
 		================
 		*/
@@ -240,6 +407,7 @@ export function startRuntime(
 				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
 				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
@@ -366,30 +534,29 @@ export function startRuntime(
 			} )
 		);
 		const ui = own(
-			createUi(
+			createUi( {
 				assets,
-				sessionCommand,
-				renderer.setUi,
-				renderer.setUiTexture,
-				new URL( "/", import.meta.url ).href,
+				commands: sessionCommand,
+				publish: renderer.setUi,
+				texture: renderer.setUiTexture,
+				base: new URL( "/", import.meta.url ).href,
 				apiBase,
-				audio.uiClick,
-				audio.uiSound,
-				() => random.range( 1, 3 ),
-				count => random.range( 0, count ),
-				value => platform.saveGameOptions( value ),
-				( value, commit ) => {
+				clickSound: audio.uiClick,
+				sound: audio.uiSound,
+				loadingVariant: () => random.range( 1, 3 ),
+				chooseTip: count => random.range( 0, count ),
+				saveOptions: value => platform.saveGameOptions( value ),
+				audioPreference: ( value, commit ) => {
 					audio.options( value );
 					if ( commit ) platform.saveAudioOptions( value );
 				},
-				value => platform.saveSightMode( value ),
-				value => platform.saveInputOptions( value ),
-				value => platform.saveVideoOptions( value ),
-				value => platform.saveChatBlocks( value ),
-				value => platform.saveQuickslotOptions( value ),
-				{
+				saveSight: value => platform.saveSightMode( value ),
+				saveBindings: value => platform.saveInputOptions( value ),
+				saveVideo: value => platform.saveVideoOptions( value ),
+				saveBlocks: value => platform.saveChatBlocks( value ),
+				saveQuickslots: value => platform.saveQuickslotOptions( value ),
+				extensions: {
 					bugReport,
-					installIconAtlas: mapping => renderer.setUiAtlas( mapping ),
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
@@ -404,11 +571,12 @@ export function startRuntime(
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
+					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
-			)
+			} )
 		);
 		let lastDockPick = "none";
 		// Deliberate deviation (see world-double-click.ts): a drifted second
@@ -698,6 +866,7 @@ export function startRuntime(
 				pose: game?.pose ?? null,
 				poseAtMs: game?.poseAtMs,
 				revision: game?.movementRevision ?? 0,
+				relocation: game?.movementTransition?.relocation ?? 0,
 				moving: game?.moving ?? false,
 				aim,
 				speedFactor: game?.movementSpeedFactor ?? 1,
@@ -906,7 +1075,6 @@ export function startRuntime(
 			frameWork.begin( now, visible );
 			renderer.setFrameWork?.( frameWork );
 			characters.frameWork( frameWork );
-			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -1034,12 +1202,19 @@ export function startRuntime(
 							followedRoom,
 							presentation.gameplay()?.navigationBlock
 						) === true;
+				// Holding V hides the followed character whole (2570): the ring
+				// belongs to the published body, so it goes with the body,
+				// like the room-culled ring above.
+				const followedBlind = followed !== undefined && input.blindHeld() &&
+					(blindableCharacter( followed, presentation.gameplay()?.localGid ) ||
+						renderer.vHidesCompanions?.() === true &&
+							blindableCompanion( followed, presentation.gameplay()?.localGid ));
 				renderer.setSelectionDecal(
 					frontendState.phase !== "world" || !decal ?
 						null :
 						decal.kind === "ground" ?
 						{ pose: decal.pose, slot: 0 } :
-						followed && !followedHidden ?
+						followed && !followedHidden && !followedBlind ?
 						{
 							pose: {
 								regionId: followed.regionId,
@@ -1169,13 +1344,19 @@ export function startRuntime(
 				// Dungeon visibility depends on admitted navigation ownership. Waiting
 				// for the first visible draw here deadlocks first entry into a dungeon.
 				// Retain admitted navigation while offline, but do not emit a late
-				// navigation command into the disconnected simulation.
+				// navigation command into the disconnected simulation. A page
+				// returning to view hands its return to the step: a slept or
+				// frozen page never ran the admission window it would
+				// otherwise be failed for (#2337).
+				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( sessionState?.phase === "world" || !worldPresented ) {
 					navigation.step(
 						worldPresented ? presentation.gameplay()?.pose ?? null : null,
 						presentation.gameplay()?.navigationRegion,
 						presentation.gameplay()?.navigationFailure,
-						presentation.gameplay()?.navigationRequestId
+						presentation.gameplay()?.navigationRequestId,
+						now,
+						visibleAgain
 					);
 				}
 
@@ -1257,7 +1438,6 @@ export function startRuntime(
 					phase === "connecting" || phase === "entering-world" || phase === "world" ||
 						phase === "reconnecting"
 				);
-				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( visibleAgain || onlineAgain ) {
 					world.retryTransient();
 					navigation.retryTransient();
@@ -1283,7 +1463,6 @@ export function startRuntime(
 				if ( rendered ) {
 					await rendered;
 				}
-				waitMs = visible || admitting ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
@@ -1318,6 +1497,28 @@ export function startRuntime(
 				markStage( "audio" );
 				if ( renderer.phase() === "failed" ) {
 					platform.report( `Renderer failed: ${renderer.error()}` );
+					// #2337: the on-screen renderer error is cut off, so before
+					// disposing, file the full error text and the adapter facts
+					// as an incident. Best-effort: a dead session must not stop
+					// the dispose below.
+					try {
+						const facts = renderer.adapterFacts();
+						const adapter = facts ?
+							`${facts.vendor ?? "-"}/${facts.architecture ?? "-"} features=${
+								facts.features.join( "+" )
+							}` +
+							(facts.degradedPipelines?.length ?
+								` degraded=${facts.degradedPipelines.join( "+" )}` :
+								"") :
+							"unknown";
+						reportAssetIncident( "renderer_failed", {
+							error: `${renderer.error() ?? "renderer failed"} | adapter: ${adapter}`,
+							transient: false,
+							attempts: 0
+						} );
+					} catch {
+						// The session may already be gone; dispose proceeds.
+					}
 					dispose();
 					return;
 				}
@@ -1325,11 +1526,10 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				const cpuMs = performance.now() - cpuStart - waitMs;
+				const cpuMs = performance.now() - cpuStart;
 				sample( cpuHistory, cpuMs );
 				frameWork.recordCpu( cpuMs );
 				frameProbe()?.characterCount( "cpu-ms", cpuMs );
-				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
 				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
@@ -1366,6 +1566,9 @@ export function startRuntime(
 					runtimeErrors.update( "Interface", ui.resourceError() );
 					const assetHealth = assets.health();
 					runtimeErrors.update( "Assets", assetHealth.phase === "failed" ? assetHealth.error : null );
+					runtimeErrors.update( "Frontend", frontendState.error );
+					reportAssetIncident( "world_asset_failed", world.terminalFailure() );
+					reportAssetIncident( "navigation_asset_failed", navigation.terminalFailure() );
 					platform.report( `Replacement runtime: ${renderer.phase()}
 Simulation tick: ${latestSequence}
 Input acknowledged: ${acceptedInput}
@@ -1462,7 +1665,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 ================
 startViewerRuntime
 
-Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+Port-only, not native (docs/guides/VIEWER.md): the embeddable 3D viewer page. It
 creates only the owners one drawn model needs (assets, renderer and the
 character presentation, as startRuntime builds them) and drives
 viewer/viewer.ts by animation frames only while it asks for them: an idle
@@ -1474,6 +1677,10 @@ export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanv
 	const random = createPresentationRandom( 1 );
 	const assets = createAssets();
 	const renderer = createRenderer( canvas, random );
+	// Port-only: as startRuntime, the asset owner learns the device's
+	// texture features once, so a native texture read never waits on an
+	// answer this page would never give (texture-variants.ts, #2772).
+	void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 	const characters = createCharacterPresentation(
 		assets,
 		renderer,

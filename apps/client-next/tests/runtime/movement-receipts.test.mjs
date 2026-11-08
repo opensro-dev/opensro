@@ -322,7 +322,10 @@ test("a receipt lost on a silent link trips the receipt watchdog", async () => {
 	movement.seed( from );
 	movement.navigation( 257, p );
 	movement.request( to, 0 );
-	assert.throws( () => movement.step( 10001 ), /Movement receipt timed out/ );
+	assert.throws(
+		() => movement.step( 10001 ),
+		/Movement receipt timed out: command 1, age 10001 ms, pending 1, gameplay silence 10001 ms/
+	);
 	movement.clear();
 });
 test("a receipt in transit behind a flowing stream does not trip the watchdog", async () => {
@@ -359,6 +362,9 @@ test("the receipt backstop trips even while the stream keeps flowing", async () 
 		movement.noteInboundProgress( now );
 		movement.step( now );
 	}
-	assert.throws( () => movement.step( 90001 ), /Movement receipt timed out/ );
+	assert.throws(
+		() => movement.step( 90001 ),
+		/Movement receipt timed out: command 1, age 90001 ms, pending 1, gameplay silence 1 ms/
+	);
 	movement.clear();
 });

@@ -8,6 +8,7 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
 import {
+	browserDisplayClass,
 	experimentalOptions,
 	experimentalVideo,
 	phoneDisplay,
@@ -29,6 +30,7 @@ import { createCharacters } from "./characters/characters";
 import { createWorldRenderer } from "./world/world";
 import { copyGeometry } from "@/engine/foundation/rendering/geometry";
 import type { Geometry } from "@/engine/contracts/geometry";
+import { createDeviceRecovery, isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
@@ -61,12 +63,10 @@ export function createRenderer(
 	let video = defaultVideoOptions();
 	// Experimental > Video, all off (native) until the saved preference arrives.
 	let experimental = experimentalVideo( experimentalOptions() );
-	// #1806: a phone gets the Phone resolution cap. Read once: the display
-	// class does not change while the page lives.
-	const phone = phoneDisplay( {
-		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
-		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
-	} );
+	// #1806: a phone gets the Phone resolution cap. Read once, through the
+	// one display-class reader the UI runtime also uses: the display class
+	// does not change while the page lives.
+	const phone = phoneDisplay( browserDisplayClass() );
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(
@@ -113,7 +113,8 @@ export function createRenderer(
 	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters( random );
-	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
+	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+	const deviceRecovery = createDeviceRecovery();
 	// The texture features of the first device that learns them; the variant
 	// is chosen once per page. A device lost before it learned them hands over
 	// to its replacement (followFeatures); once no device will, they are empty,
@@ -135,7 +136,16 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
-	let readbackWait = 0;
+	// A memory refusal the frame met (a readback the GPU could not stage,
+	// a target it could not allocate) is the device's to cure: hand it
+	// down so the paced replacement runs instead of ending here (#2866).
+	const frameFailed = ( error: unknown ) => {
+		if ( isOutOfMemoryRefusal( error ) ) {
+			device.fail( error );
+			return;
+		}
+		failure = String( error );
+	};
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
 	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
@@ -160,17 +170,6 @@ export function createRenderer(
 		setFrameWork( value ) {
 			world.frameWork( value );
 			characters.frameWork( value );
-		},
-		/*
-		================
-		readbackWaitMs
-
-		Only the pending visibility query is wait time. Deferred preparation
-		and the second submission remain CPU work in the runtime's budget.
-		================
-		*/
-		readbackWaitMs() {
-			return readbackWait;
 		},
 		/*
 		================
@@ -453,18 +452,6 @@ export function createRenderer(
 			else uiTextures.delete( id );
 			dirtyUi.add( id );
 		},
-		/*
-		================
-		setUiAtlas
-
-		Port-only, not native: the icon atlas mapping the interface's image
-		owner installed (foundation/ui/icon-atlas.ts); the UI device's quad
-		packer reads it every prepare.
-		================
-		*/
-		setUiAtlas( mapping ) {
-			device.uiAtlas( mapping );
-		},
 		characterParticleSnapshot: characters.particleSnapshot,
 		characterParticleTime: characters.particleTime,
 		presentationNight: () => world.night(),
@@ -474,6 +461,23 @@ export function createRenderer(
 		retainCharacterModels: characters.retain,
 		setCharacterAssembly: characters.assembly,
 		characterStats: characters.stats,
+		/*
+		================
+		takeDegradations
+
+		Every character snapshot owner's held-clock reports since the last
+		take: the world's rows and each portrait preview's.
+		================
+		*/
+		takeDegradations() {
+			return [
+				...characters.takeDegradations(),
+				...portrait.takeDegradations(),
+				...partyPortraits.flatMap( child => child.takeDegradations() ),
+				...doll.takeDegradations(),
+				...doll2.takeDegradations()
+			];
+		},
 		presentationCamera: () => presentationCamera,
 		audioListener: () => soundListener,
 		setWeather: value => world.weather( value ),
@@ -568,7 +572,16 @@ export function createRenderer(
 			...(device.gpuTiming() ??
 				{ supported: false, skipped: 0, failed: 0, attempted: 0, completed: 0, omittedPasses: 0, samples: [] })
 		}),
-		phase: () => disposed ? "disposed" : failure ? "failed" : device.phase(),
+		// A failure with attempts left is a device still starting: the runtime
+		// ends the session on "failed", and the simulation is fine (#2337).
+		phase: () =>
+			disposed ?
+				"disposed" :
+				failure ?
+				"failed" :
+				device.phase() === "failed" && device.recoverable() && deviceRecovery.pending() ?
+				"starting" :
+				device.phase(),
 		error: () => failure ?? device.error(),
 		/*
 		================
@@ -576,7 +589,6 @@ export function createRenderer(
 		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
-			readbackWait = 0;
 			probe?.renderBegin();
 			characters.profile( probe );
 			world.profile( probe );
@@ -588,7 +600,8 @@ export function createRenderer(
 			// outlives the command buffers that name it (device/retirement.ts).
 			let open: ReturnType<typeof createDevice> | null = null;
 			try {
-				if ( device.phase() === "failed" && device.recoverable() && recoveries < 3 ) {
+				const nowMs = performance.now();
+				if ( device.phase() === "failed" && device.recoverable() && deviceRecovery.due( nowMs ) ) {
 					// Only renderer state restarts. The runtime's simulation and assets remain owned and live.
 					portraitDepth?.dispose();
 					portraitDepth = null;
@@ -608,19 +621,22 @@ export function createRenderer(
 					characters.invalidate();
 					world.invalidate();
 					device.dispose();
-					recoveries++;
+					deviceRecovery.began();
 					residentUi.clear();
 					residentUiProduct = null;
-					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false, true );
 					followFeatures( device );
 					device.textureOptions( video.records[video.active][8] === 1, video.records[video.active][9]! );
 					device.experimentalVideo( experimental );
 					for ( const id of uiTextures.keys() ) dirtyUi.add( id );
 				}
-				if ( device.phase() === "failed" ) settleFeatures( [] );
+				if ( device.phase() === "failed" && !(device.recoverable() && deviceRecovery.pending()) ) {
+					settleFeatures( [] );
+				}
 				if ( device.phase() !== "running" ) {
 					return;
 				}
+				deviceRecovery.running( nowMs );
 				open = device;
 				open.beginFrame();
 				if ( !surface ) {
@@ -803,6 +819,10 @@ export function createRenderer(
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				const doll2Input = uiProduct?.doll2;
+				// The pet window's doll pauses as the inventory's does: without it,
+				// reopening the window advanced its glows through the whole closed
+				// interval in one frame.
+				if ( !doll2Input ) doll2.pause();
 				if ( doll2Input ) {
 					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
 						w2 = Math.max( 1, Math.ceil( r[2] ) ),
@@ -858,9 +878,9 @@ export function createRenderer(
 						experimental.postProcessing || !!deferredPlan?.query,
 						renderScale
 					);
-				const finishDeferred = ( results?: readonly boolean[] ) => {
+				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred( results );
+					characters.completeDeferred();
 					// The continuation's draws reach the second submit: same rule.
 					return device.geometry()!.singleSampled( staleDraws.live(
 						"deferred-particles",
@@ -879,18 +899,21 @@ export function createRenderer(
 					{
 						asynchronous: deferredPlan.query,
 						prepare: () => {
-							if ( !deferredPlan.query ) return finishDeferred();
-							const query = device.particleQuery(
-								deferredPlan.points,
-								scene.matrix,
-								color,
-								targetSurface.depth()
-							);
-							const started = performance.now();
-							return query.then( results => {
-								readbackWait += performance.now() - started;
-								return finishDeferred( results );
-							} );
+							if ( deferredPlan.query ) {
+								// The answer lands between frames (deliverDeferred):
+								// the frame never waits for the queue to drain (#2573).
+								device.particleQuery(
+									deferredPlan.points,
+									scene.matrix,
+									color,
+									targetSurface.depth()
+								).then( results => {
+									if ( !disposed ) characters.deliverDeferred( results );
+								} ).catch( error => {
+									if ( !disposed ) frameFailed( error );
+								} );
+							}
+							return finishDeferred();
 						}
 					} :
 					undefined;
@@ -985,7 +1008,16 @@ export function createRenderer(
 						sunShadow,
 						casters: shadowOn ?
 							[ ...opaqueDraws, ...(preview ? [] : liveCharacters.filter( draw => !draw.blended )) ] :
-							[]
+							[],
+						// Ambient occlusion (experimental, port-only; #2094):
+						// prepared against the scene and camera like the
+						// bloom stage; preview frames never arm it.
+						ao: device.ambientOcclusion(
+							sceneWidth,
+							sceneHeight,
+							!preview && experimental.ambientOcclusion,
+							scene.camera
+						)
 					},
 					targetSurface
 				);
@@ -996,11 +1028,11 @@ export function createRenderer(
 					const frameDevice = open;
 					open = null;
 					return pending.catch( error => {
-						if ( !disposed ) failure = String( error );
+						if ( !disposed ) frameFailed( error );
 					} ).finally( () => frameDevice.endFrame() );
 				}
 			} catch ( error ) {
-				failure = String( error );
+				frameFailed( error );
 			} finally {
 				open?.endFrame();
 			}

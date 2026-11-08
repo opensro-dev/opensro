@@ -234,6 +234,7 @@ func selectNextFrame(t *testing.T, c *websocket.Conn, what string) transport.Fra
 		if f.Opcode == transport.OpPing || f.Opcode == transport.OpPong {
 			continue
 		}
+		wiretest.AckRead(t, c, f)
 		return f
 	}
 }

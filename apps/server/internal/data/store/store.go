@@ -15,7 +15,7 @@ import (
 	"opensro.online/server/internal/platform/jsonscratch"
 )
 
-// Env configuration (documented in ops/docs/DEPLOYMENT.md).
+// Env configuration (documented in the operator's deployment guide).
 const (
 	// EnvStateDir overrides the authority directory.
 	EnvStateDir = "SRO_AUTHORITY_STATE_DIR"
@@ -80,6 +80,9 @@ type Options struct {
 	// list shows a new character dressed before its first world entry. It is
 	// optional: without it the first enter-world bootstrap grants them.
 	DefaultInventory InventorySeedFunc
+	// InventoryPages stamps the port-only 2.5-page base on a new record
+	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
+	InventoryPages bool
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -176,6 +179,10 @@ type Store struct {
 	// commits their phases (lock_timing.go).
 	mu      timedRWMutex
 	commits commitTiming
+	// checkpoints is the WAL's background checkpointer
+	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
+	// whenever no database was adopted.
+	checkpoints *walCheckpointer
 	// encodeScratch is the commit path's reusable JSON encode buffer
 	// (db_write.go). Every encode through it runs under mu, which is
 	// the scratch's ownership domain; its records are consumed by the
@@ -262,6 +269,8 @@ type Store struct {
 	defaultQuests QuestSeedFunc
 	// defaultInventory is Options.DefaultInventory, used only at creation.
 	defaultInventory InventorySeedFunc
+	// inventoryPages is Options.InventoryPages, used only at creation.
+	inventoryPages bool
 
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
@@ -328,6 +337,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultSkills:    opts.DefaultSkills,
 		defaultQuests:    opts.DefaultQuests,
 		defaultInventory: opts.DefaultInventory,
+		inventoryPages:   opts.InventoryPages,
 		requireStore:     opts.RequireStore,
 		now:              now,
 		writeFile:        writeFileAtomic,
@@ -534,4 +544,8 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 			s.seedLedgerLocked(c)
 		}
 	}
+	// The writer handle adopted above never auto-checkpoints
+	// (configureDB); the background checkpointer copies its WAL
+	// instead (#2142 slice 0).
+	s.checkpoints = startWALCheckpointer(s.dbPath)
 }

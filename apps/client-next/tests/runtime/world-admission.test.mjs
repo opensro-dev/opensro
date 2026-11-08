@@ -260,17 +260,21 @@ test("shared mutable geometry retains per-group isolation while immutable stream
 	assert.equal( moved.scene.groups[1].geometry.positions[0], 0 );
 });
 
-test("failed residency admission consumes the lease but preserves the committed world", () => {
+test("admission past the residency budget consumes the lease and stages the replacement", () => {
 	const value = scene(), bytes = worldSceneBytes( value ), world = createWorldRenderer( bytes + 16 );
 	const geometry = { upload: () => ({}), release() {} }, textures = { upload: () => ({}), release() {} };
 	world.adopt( createWorldLease( transfer( value ) ) );
 	world.prepare( geometry, textures, 1 );
 	const next = scene();
-	next.id = "rejected";
+	next.id = "replacement";
 	const lease = createWorldLease( transfer( next ) );
-	assert.throws( () => world.adopt( lease ), /budget/ );
+	// The budget is a target, not a limit: the lease is consumed, the
+	// committed world stands until the staged replacement completes.
+	world.adopt( lease );
 	assert.throws( () => lease.takeWorld(), /already consumed/ );
 	assert.equal( world.stats().sceneId, "scene" );
+	world.prepare( geometry, textures, 1 );
+	assert.equal( world.stats().sceneId, "replacement" );
 	assert.equal( world.stats().pendingGroups, 0 );
 	world.dispose( geometry, textures );
 });
@@ -350,7 +354,9 @@ export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVarian
 	const loader = createLoader( result => {
 		if ( result.kind === "world" ) throw Error( "fixture transfer failed" );
 		// Liveness notes (progress, job bytes, the decoding mark) are not answers.
-		if ( [ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) return;
+		if (
+			[ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( result.kind )
+		) return;
 		results.push( result );
 		answered();
 	} );

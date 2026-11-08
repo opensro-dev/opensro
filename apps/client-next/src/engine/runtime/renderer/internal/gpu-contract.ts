@@ -98,6 +98,23 @@ tone-maps its unassociated color and composites over the presented UI.
 export interface HdrDraw extends BloomDraw {
 	encodePreview( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
+
+/*
+================
+AmbientOcclusionDraw
+
+The experimental occlusion stage (#2094): view is the blurred factor
+the surfaces sample (their binding 15), stable between resizes;
+encode totals this frame's stored depth into it for the next frame.
+The view is null while the live target has no measurement yet
+(creation, resize, re-enable): the surfaces then keep the white view,
+so the factor is 1 and a fresh target's zero is never sampled.
+================
+*/
+export interface AmbientOcclusionDraw {
+	readonly view: GPUTextureView | null;
+	encode( encoder: GPUCommandEncoder, depth: GPUTextureView ): void;
+}
 /*
 ================
 MsaaDraw
@@ -147,6 +164,7 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly ao?: AmbientOcclusionDraw;
 	readonly msaa?: {
 		/** The 4x colour the scene pass renders into; its resolveTarget is the
 		 * stage chain's own scene view. */
@@ -187,13 +205,17 @@ export interface DeviceOwner extends Disposable {
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
 	msaa( width: number, height: number, enabled: boolean ): MsaaDraw | undefined;
 	sunShadow(): SunShadowOwner;
+	ambientOcclusion(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): AmbientOcclusionDraw | undefined;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
 	readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }>;
 	uiTexture( id: string, image: UiTexture | null ): void;
-	// Port-only, not native: the icon atlas mapping (foundation/ui/icon-atlas.ts).
-	uiAtlas( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ): void;
 	// targetWidth: the frame's physical width, so the UI pass knows its pixels per UI unit.
 	ui( scene: UiScene | null, targetWidth?: number ): readonly UiDraw[];
 	// directional: light along the environment's sun direction this frame
@@ -212,6 +234,10 @@ export interface DeviceOwner extends Disposable {
 	recoverable(): boolean;
 	phase(): RuntimePhase;
 	error(): string | null;
+	/** Record a failure the frame met on this device (device.ts fail): a
+	 * memory refusal becomes recoverable, so the renderer replaces the
+	 * device instead of ending on its own failure (#2866). */
+	fail( error: unknown ): void;
 	commands(): FrameCommands | null;
 	surfaceCommands(): SurfaceCommands | null;
 	format(): GPUTextureFormat;

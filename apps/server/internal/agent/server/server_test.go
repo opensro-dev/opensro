@@ -557,6 +557,14 @@ func TestLoginRefusesDisabledShardExplicitly(t *testing.T) {
 	if body["ok"] != false || body["code"] != "SHARD_OFFLINE" {
 		t.Fatalf("disabled shard login = %#v, want SHARD_OFFLINE", body)
 	}
+	servers := performJSON(t, server.Handler(), http.MethodGet, "/title/servers", "", "")
+	var rows []serverInfo
+	if err := json.Unmarshal(servers.Body.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("disabled shard listed: %+v", rows)
+	}
 }
 
 /*
@@ -737,6 +745,82 @@ func TestLoginRefusesOfflineAndFullShard(t *testing.T) {
 	)
 	if got := decodeObject(t, response)["code"]; got != "SHARD_FULL" {
 		t.Fatalf("full login code = %v", got)
+	}
+}
+
+/*
+================
+TestAdmissionRefusalsNameMaintenance
+
+With the port-only maintenance message switch on and a maintenance
+window open (gate file present), this Agent's refusals for a shard that
+is not operating name the maintenance: the title login code and
+message, and the shard-request refusal as a JSON code the client's
+admission mint can read. Switch off, or no window open, both keep
+today's answers: SHARD_OFFLINE at login and the plain "shard
+unavailable" 503 - a shard that is merely down is not a maintenance
+(#2861).
+================
+*/
+func TestAdmissionRefusalsNameMaintenance(t *testing.T) {
+	maintenance := "The server is under maintenance. Please try again later."
+	loginBody := `{"id":"tester","password":"123123","serverId":"alpha"}`
+
+	// A token from a leased, operating shard (the fixtures share the test
+	// signer and clock, so it verifies on both unleased fixtures below).
+	leased := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
+	publishFixtureLease(t, leased, "alpha", "worker-a", 1, 0)
+	login := performJSON(t, leased.handler, http.MethodPost, "/title/login", loginBody, "")
+	token, _ := decodeObject(t, login)["sessionToken"].(string)
+	if token == "" {
+		t.Fatalf("login = %s", login.Body.String())
+	}
+
+	gatePath := filepath.Join(t.TempDir(), "maintenance-gate.json")
+	if err := os.WriteFile(gatePath, []byte("{\"accounts\":[\"release-probe\"]}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	on := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler(), func(config *Config) {
+		config.MaintenanceMessage = true
+		config.MaintenanceGatePath = gatePath
+	})
+	body := decodeObject(t, performJSON(t, on.handler, http.MethodPost, "/title/login", loginBody, ""))
+	if body["code"] != "MAINTENANCE" || body["message"] != maintenance {
+		t.Fatalf("maintenance login refusal = %#v", body)
+	}
+	refused := performJSON(t, on.handler, http.MethodPost, "/character/list", `{}`, token)
+	if refused.Code != http.StatusServiceUnavailable {
+		t.Fatalf("maintenance shard refusal status = %d", refused.Code)
+	}
+	body = decodeObject(t, refused)
+	if body["ok"] != false || body["code"] != "MAINTENANCE" || body["message"] != maintenance {
+		t.Fatalf("maintenance shard refusal = %#v", body)
+	}
+
+	// The same switch with no window open (no gate file) answers
+	// SHARD_OFFLINE: a shard that is merely down or still loading is
+	// not a maintenance, and never files as one (#2861).
+	down := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler(), func(config *Config) {
+		config.MaintenanceMessage = true
+		config.MaintenanceGatePath = filepath.Join(t.TempDir(), "maintenance-gate.json")
+	})
+	body = decodeObject(t, performJSON(t, down.handler, http.MethodPost, "/title/login", loginBody, ""))
+	if body["code"] != "SHARD_OFFLINE" || body["message"] != "The selected server is not operating." {
+		t.Fatalf("no-window login refusal = %#v", body)
+	}
+	refused = performJSON(t, down.handler, http.MethodPost, "/character/list", `{}`, token)
+	if refused.Code != http.StatusServiceUnavailable || refused.Body.String() != "shard unavailable\n" {
+		t.Fatalf("no-window shard refusal = %d %q", refused.Code, refused.Body.String())
+	}
+
+	off := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
+	body = decodeObject(t, performJSON(t, off.handler, http.MethodPost, "/title/login", loginBody, ""))
+	if body["code"] != "SHARD_OFFLINE" || body["message"] != "The selected server is not operating." {
+		t.Fatalf("default login refusal = %#v", body)
+	}
+	refused = performJSON(t, off.handler, http.MethodPost, "/character/list", `{}`, token)
+	if refused.Code != http.StatusServiceUnavailable || refused.Body.String() != "shard unavailable\n" {
+		t.Fatalf("default shard refusal = %d %q", refused.Code, refused.Body.String())
 	}
 }
 

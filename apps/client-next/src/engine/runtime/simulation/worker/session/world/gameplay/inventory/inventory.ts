@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
 	nativeStackIdentity,
@@ -21,7 +22,7 @@ import {
 	sameStackIdentity,
 	stackable
 } from "@/engine/foundation/gameplay/container-transfer";
-import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
+import { INVENTORY_TRANSACTION_TIMEOUT, type Degradation } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -47,7 +48,7 @@ import {
 	type StorageRoom,
 	storageWireType
 } from "@/engine/foundation/gameplay/storage-room";
-import { createAlchemy } from "./alchemy/alchemy";
+import { createAlchemy, stoneDesignatedAttribute } from "./alchemy/alchemy";
 import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
 import { gachaPrizes } from "@/engine/foundation/gameplay/gacha-catalog";
@@ -86,14 +87,13 @@ import {
 } from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
-// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
-// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
-// its bag size at world entry. The server sends it only with
-// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+// Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
+// grows the bag live when a paid expansion completes and announces the new
+// size here, in the same session, with no world entry in between.
 const STORAGE_CAPACITY_OPCODE = 0x3092;
 const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
@@ -102,6 +102,12 @@ const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 // retires it on the pet's next tick, then the answer crosses the network. The
 // shared 10 s wait left one second for both, and a long walk ended sessions.
 const COS_PICKUP_ANSWER_MS = 15000;
+// An open answer is ordered behind the inbound stream: while frames still
+// arrive it is in transit, not lost. A full answer window past the last
+// frame - or this hard limit from the first frame seen - ends the wait
+// (#2148; the movement receipt rule of #1978 on the item lane).
+const INBOUND_HOLD_MS = 10000;
+const INBOUND_LIMIT_MS = 90000;
 /*
 ================
 createInventory
@@ -134,8 +140,11 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
-			// The latest deadline references may reach, fixed by the first hold.
-			referenceLimit?: number;
+			// The latest deadline an inbound hold may reach, fixed by the first hold.
+			answerLimit?: number;
+			// When the first reference hold reached this request (#2148): the
+			// timeout report stamps how long before the deadline it landed.
+			firstHeldAt?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -151,7 +160,7 @@ export function createInventory(
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
-	let timedOut = false, timedOutRequest = "";
+	let timedOut = false, timedOutRequest = "", timedOutDetail = "";
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
 	let shopCompletionRevision = 0;
@@ -212,10 +221,15 @@ presentShop
 		readonly atMs: number;
 	}[] = [];
 	const FLASH_RETENTION_MS = 2000;
+	// Skipped cosmetic steps for the world's degraded reports, bounded the
+	// way entities bounds its queue (the world reports each code once).
+	const MAX_PENDING_DEGRADATIONS = 64;
+	let degradations: Degradation[] = [];
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
 	const icons = new Map<number, string>();
+	const codenames = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
 	let gachaRows: {
@@ -243,6 +257,7 @@ present
 			name: names.get( item.refObjId ) ?? item.name,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
+			nativeFields: tooltip?.fields,
 			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass )
 		};
 		presentations.set( item, result );
@@ -329,6 +344,17 @@ slot
 			throw new Error( "Invalid inventory slot" );
 		}
 		return n;
+	}
+	/*
+================
+degrade
+
+Records a skipped cosmetic step for the world's degraded reports; the
+queue is bounded so an undrained owner cannot grow it.
+================
+	*/
+	function degrade( degradation: Degradation ) {
+		if ( degradations.length < MAX_PENDING_DEGRADATIONS ) degradations.push( degradation );
 	}
 	/*
 ================
@@ -432,7 +458,26 @@ timeoutMessage
 	*/
 	function timeoutMessage(): string {
 		const request = timedOutRequest ? " (" + timedOutRequest + ")" : "";
-		return "Inventory transaction timed out" + request + "; reconnect to resynchronize";
+		const detail = timedOutDetail ? "; " + timedOutDetail : "";
+		return "Inventory transaction timed out" + request + detail + "; reconnect to resynchronize";
+	}
+	/*
+================
+holdAnswer
+
+An open answer waits behind the inbound stream (the reference frames, or
+any frame at all): its deadline reaches until, never past the limit the
+first hold fixed - a stream that never ends must not keep an answer open
+forever. The mall's open request rides the same stream and holds with it.
+================
+	*/
+	function holdAnswer( now: number, until: number, limit: number ) {
+		if ( pending ) {
+			const answerLimit = pending.answerLimit ?? limit;
+			const deadline = Math.max( pending.deadline, Math.min( until, answerLimit ) );
+			pending = { ...pending, deadline, answerLimit, firstHeldAt: pending.firstHeldAt ?? now };
+		}
+		mall.holdUntil( now, until, limit );
 	}
 	/*
 ================
@@ -563,6 +608,17 @@ purchaseMall
 		},
 		/*
 ================
+inquireMallSilkHistory
+================
+		*/
+		inquireMallSilkHistory( period: number, now: number ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const frame = mall.inquireSilkHistory( period, now );
+			send( frame );
+			return frame;
+		},
+		/*
+================
 takeBindingMoves
 ================
 		*/
@@ -613,13 +669,26 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 ================
 takeExchangeNotice
 
-The exchange line the last 0x3645 raised, once.
+The exchange line the last 0x3645 or 0x3272 raised, once.
 ================
 		*/
 		takeExchangeNotice(): SystemNotice | null {
 			const notice = exchangeNotice;
 			exchangeNotice = null;
 			return notice;
+		},
+		/*
+================
+takeDegradations
+
+The skipped cosmetic steps since the last take, for the world's
+degraded reports.
+================
+		*/
+		takeDegradations(): Degradation[] {
+			const taken = degradations;
+			degradations = [];
+			return taken;
 		},
 		/*
 ================
@@ -723,6 +792,7 @@ bootstrap
 				refItemSnapshot?: {
 					icon?: string;
 					name?: string;
+					codename?: string;
 					nativeFields?: { useCooldownDuration528?: number; };
 					descriptionSymbol?: string;
 					refObjId: number;
@@ -745,6 +815,7 @@ bootstrap
 			equipmentSlotCount = b.equipmentSlotCount;
 			names.clear();
 			icons.clear();
+			codenames.clear();
 			objRefs.clear();
 			for (
 				const row of (value as { refObjSnapshot?: { refObjId: number; tidWord: number; }[]; }).refObjSnapshot ??
@@ -758,6 +829,7 @@ bootstrap
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			error = null;
 			for ( const r of b.refItemSnapshot ?? [] ) {
 				const tooltip = itemTooltipReference( r.nativeFields, r.descriptionSymbol );
@@ -773,6 +845,7 @@ bootstrap
 				useCooldowns.set( r.refObjId, cooldown );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
+				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
@@ -821,6 +894,7 @@ exchange's, else the category-1 notice code it raised (0 for none).
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
 				published = null;
 			}
+			if ( outcome.message ) exchangeNotice = outcome.message;
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
 		},
@@ -940,9 +1014,22 @@ exchangeCommand
 				send( exchange );
 				return exchange;
 			}
+			// 625980 names the designated attribute's change apart from
+			// an assimilated one, so the start remembers which attribute
+			// the used stone designates (its codename names it).
+			let designated: string | undefined;
+			if ( command.kind === "alchemy-start" ) {
+				for ( const slot of command.slots.slice( 1 ) ) {
+					designated = stoneDesignatedAttribute(
+						command.mode,
+						codenames.get( slots.get( slot )?.refObjId ?? -1 )
+					);
+					if ( designated ) break;
+				}
+			}
 			const frame = command.kind === "gacha-open" ?
 				gacha.open( command.gid ) :
-				alchemy.start( command.mode, command.slots, slots, now, command.quantity );
+				alchemy.start( command.mode, command.slots, slots, now, command.quantity, designated );
 			send( frame );
 			return frame;
 		},
@@ -1554,20 +1641,28 @@ fixes limit, and later frames cannot move it: a stream that never ends must
 not keep an answer open forever.
 ================
 		*/
-		holdForReferences( until: number, limit: number ) {
-			if ( pending ) {
-				const referenceLimit = pending.referenceLimit ?? limit;
-				const deadline = Math.max( pending.deadline, Math.min( until, referenceLimit ) );
-				pending = { ...pending, deadline, referenceLimit };
-			}
-			mall.holdUntil( until, limit );
+		holdForReferences( now: number, until: number, limit: number ) {
+			holdAnswer( now, until, limit );
+		},
+		/*
+================
+noteInboundProgress
+
+Every frame, whichever owner answers it (gameplay's receive wrapper),
+proves the inbound stream is delivering: an answer still missing is
+ordered behind what has not been consumed yet, not lost. The wait ends a
+full window after the stream falls silent, or at the hard limit.
+================
+		*/
+		noteInboundProgress( now: number ) {
+			holdAnswer( now, now + INBOUND_HOLD_MS, now + INBOUND_LIMIT_MS );
 		},
 		/*
 ================
 use
 ================
 		*/
-		use( n: number, now = 0, context?: CosItemUseContext, message?: string ) {
+		use( n: number, now = 0, context?: CosItemUseContext, message?: string, links: readonly ChatLinkRef[] = [] ) {
 			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
@@ -1580,7 +1675,7 @@ use
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
 				isGlobalChatItem( item.typeFlags ) ?
-				globalChatTail( message ?? "" ) :
+				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
 			p.set( tail, 3 );
@@ -1653,6 +1748,10 @@ receive
 			}
 			if ( op === MALL_BALANCE_CONTROL ) {
 				mall.balance( p );
+				return true;
+			}
+			if ( op === MALL_SILK_HISTORY_CONTROL ) {
+				mall.silkHistoryAnswer( p );
 				return true;
 			}
 			if ( op === 15 ) {
@@ -1806,7 +1905,15 @@ receive
 					previousDurability: old.durability,
 					// 0xB651 is a magic or attribute stone's answer.
 					...(op === 0xb651 && flags & 0x10 && next ?
-						{ stone: { before: present( old ), after: present( { ...next, slot: n } ) } } :
+						{
+							stone: {
+								before: present( old ),
+								after: present( { ...next, slot: n } ),
+								...(alchemy.state().designated ?
+									{ designated: alchemy.state().designated } :
+									{})
+							}
+						} :
 						{})
 				};
 				for ( const cue of alchemy.result( n, flags, null, detail ) ) play( cue );
@@ -1817,7 +1924,23 @@ receive
 				const n = p[0]!;
 				if ( n >= 0x3d ) return true;
 				const item = slots.get( n );
-				if ( !item ) throw Error( "Durability result references absent item" );
+				if ( !item ) {
+					// The frame is a fixed five bytes and fully read; what it
+					// names is only a held item's durability, its repair sound
+					// and flash. INFERENCE (no native trace of the empty-slot
+					// arm): 77C300 writes the value on the slot's item object,
+					// so an empty slot has nothing to write and the update is
+					// dropped. The port degrades instead of ending the session
+					// (production "Durability result references absent item",
+					// #2877: repair answers naming bag slots this client no
+					// longer held, replayed on re-entry).
+					degrade( {
+						code: "durability-unknown-slot",
+						message: "Durability result for unheld slot " + n,
+						frame: { opcode: op, payload: p }
+					} );
+					return true;
+				}
 				const value = new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 1, true ),
 					old = item.durability | 0;
 				const cue = value > old ?
@@ -2136,12 +2259,12 @@ receive
 					}
 					applyMove( p[o + 1]!, p[o + 2]!, v.getUint16( o + 3, true ) );
 				}
-			} else if ( p[1] === 6 && p[2] === 254 ) {
+			} else if ( (p[1] === 6 || p[1] === 0x1c) && p[2] === 254 ) {
 				if ( p.length !== 7 ) throw Error( "Invalid gold pickup result" );
 				// Amount granted, not a bag slot or the absolute balance.
 				// 30B3 type 1 owns the balance; gameplay prints the gain notice;
 				// ANI_PICK owns sound, avoiding duplicates.
-			} else if ( p[1] === 6 && p[2] !== 254 ) {
+			} else if ( (p[1] === 6 || p[1] === 0x1c) && p[2] !== 254 ) {
 				const n = slot( p[2]! );
 				if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
 					throw Error( "Pickup references a non-bag slot" );
@@ -2151,19 +2274,28 @@ receive
 				else next.delete( n );
 			} else if ( p[1] === 14 || p[1] === 15 ) {
 				if ( p.length < 4 ) throw Error( "Truncated quest inventory result" );
-				const n = slot( p[2]! );
-				if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
-					throw Error( "Quest item references non-bag slot" );
-				}
-				if ( p[1] === 15 ) {
-					if ( p.length !== 4 || !next.has( n ) ) throw Error( "Invalid quest item removal" );
-					next.delete( n );
+				if ( p[1] === 14 && p[2] === 254 ) {
+					if ( p.length !== 7 ) throw Error( "Invalid quest gold grant result" );
+					// A gold heap granted at the gold slot: the amount, not a
+					// bag row - 30B3 type 1 owns the balance and gameplay
+					// prints the gain notice, as on the pickup gold arm.
 				} else {
-					const item = body( p, 4 );
-					if ( !item ) throw Error( "Empty quest item grant" );
-					const old = next.get( n );
-					if ( old && old.refObjId !== item.refObjId ) throw Error( "Quest grant overwrites another item" );
-					next.set( n, { ...item, slot: n } );
+					const n = slot( p[2]! );
+					if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
+						throw Error( "Quest item references non-bag slot" );
+					}
+					if ( p[1] === 15 ) {
+						if ( p.length !== 4 || !next.has( n ) ) throw Error( "Invalid quest item removal" );
+						next.delete( n );
+					} else {
+						const item = body( p, 4 );
+						if ( !item ) throw Error( "Empty quest item grant" );
+						const old = next.get( n );
+						if ( old && old.refObjId !== item.refObjId ) {
+							throw Error( "Quest grant overwrites another item" );
+						}
+						next.set( n, { ...item, slot: n } );
+					}
 				}
 			} else if ( p[1] === 7 ) {
 				if ( p.length !== 3 ) {
@@ -2269,7 +2401,15 @@ step
 			// Native replies have no transaction ID. After timeout a late response
 			// could acknowledge a new request, so reconnect instead of reopening it.
 			if ( timedOut || pending && now >= pending.deadline ) {
-				if ( !timedOut && pending ) timedOutRequest = describeRequest( pending );
+				if ( !timedOut && pending ) {
+					timedOutRequest = describeRequest( pending );
+					// Was the reference stream holding this answer open, and
+					// since when (#2148)? A held-past-cap timeout and a
+					// never-held one read identically without the stamp.
+					timedOutDetail = pending.firstHeldAt === undefined ?
+						"held=0" :
+						`held=1 firstHoldAgeMs=${Math.round( now - pending.firstHeldAt )}`;
+				}
 				timedOut = true;
 				throw Error( timeoutMessage(), { cause: INVENTORY_TRANSACTION_TIMEOUT } );
 			}
@@ -2284,6 +2424,7 @@ state
 		state() {
 			return {
 				itemMall: mall.state(),
+				itemMallSilkHistory: mall.silkHistory(),
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
@@ -2339,6 +2480,7 @@ clear
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			objRefs.clear();
 			names.clear();
 			icons.clear();

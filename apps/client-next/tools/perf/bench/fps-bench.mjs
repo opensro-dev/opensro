@@ -115,6 +115,18 @@ const LOCATIONS = [ {
 		startYawRadians: 0
 	},
 	scenarios: [ "still", "drag", "move" ]
+}, {
+	// Qin-Shi Tomb floor 3 (0x8005, the 59 MB floor): a Snake Woman nest
+	// field, for the cave-lag profile (#2788). The pose is a shipped nest
+	// point, so the character stands where the floor's monsters spawn.
+	name: "tomb",
+	fixture: {
+		id: "fps-bench-qinshi-tomb-f3",
+		movementMode: 3,
+		start: { regionId: 0x8005, x: 14122.1, y: 667.43, z: -174.86 },
+		startYawRadians: 0
+	},
+	scenarios: [ "still", "drag", "move" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +

@@ -35,165 +35,41 @@ export const PET_DESIGN = {
 			"name": "Bear",
 			"role": "Defense",
 			"codenamePrefix": "COS_P_BEAR",
-			"hpPercent": 220,
 			"physicalPercent": 65,
 			"magicalPercent": 20,
 			"defensePercent": 100,
 			"magicDefensePercent": 100,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 20
-				},
-				{
-					"level": 10,
-					"hp": 185
-				},
-				{
-					"level": 20,
-					"hp": 245
-				},
-				{
-					"level": 40,
-					"hp": 390
-				},
-				{
-					"level": 60,
-					"hp": 1025
-				},
-				{
-					"level": 80,
-					"hp": 5000
-				},
-				{
-					"level": 90,
-					"hp": 11000
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Wolf",
 			"role": "Attack",
 			"codenamePrefix": "COS_P_WOLF",
-			"hpPercent": 100,
 			"physicalPercent": 130,
 			"magicalPercent": 25,
 			"defensePercent": 70,
 			"magicDefensePercent": 70,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 16
-				},
-				{
-					"level": 10,
-					"hp": 165
-				},
-				{
-					"level": 20,
-					"hp": 235
-				},
-				{
-					"level": 40,
-					"hp": 350
-				},
-				{
-					"level": 60,
-					"hp": 900
-				},
-				{
-					"level": 80,
-					"hp": 4500
-				},
-				{
-					"level": 90,
-					"hp": 8100
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Penguin",
 			"role": "Magic",
 			"codenamePrefix": "COS_P_PENGUIN",
-			"hpPercent": 70,
 			"physicalPercent": 35,
 			"magicalPercent": 160,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": true,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": true
 		},
 		{
 			"name": "Crow",
 			"role": "Support",
 			"codenamePrefix": "COS_P_RAVEN",
-			"hpPercent": 90,
 			"physicalPercent": 55,
 			"magicalPercent": 95,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": false
 		}
 	],
 	"skills": [
@@ -6326,7 +6202,7 @@ export const PET_DESIGN = {
 			"theme": "Area control",
 			"option": 1,
 			"name": "Blizzard I",
-			"effect": "Ice storm lasts 4 seconds. Magical damage {v}% each second; radius 5 m; maximum 8 targets.",
+			"effect": "Creates a 5 m ice storm for 5 seconds. Deals {v}% magical damage each second to up to 8 enemies.",
 			"trigger": "Timer",
 			"cooldown": 20,
 			"cooldownUnit": "s",
@@ -6337,7 +6213,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Radius 7 m. Applies frostbite slow.",
-			"rank3": "Enemies present for all four pulses are frozen; native resistance applies.",
+			"rank3": "Enemies present for all five pulses are frozen; native resistance applies.",
 			"animation": "attack2",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_colda_point_b.ddj",
@@ -6352,7 +6228,7 @@ export const PET_DESIGN = {
 			"theme": "Area control",
 			"option": 2,
 			"name": "Blizzard II",
-			"effect": "Ice storm lasts 4 seconds. Magical damage {v}% each second; radius 5 m; maximum 8 targets. Radius 7 m. Applies frostbite slow.",
+			"effect": "Creates a 7 m ice storm for 5 seconds. Deals {v}% magical damage each second and applies frostbite slow to up to 8 enemies.",
 			"trigger": "Timer",
 			"cooldown": 20,
 			"cooldownUnit": "s",
@@ -6363,7 +6239,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Radius 7 m. Applies frostbite slow.",
-			"rank3": "Enemies present for all four pulses are frozen; native resistance applies.",
+			"rank3": "Enemies present for all five pulses are frozen; native resistance applies.",
 			"animation": "attack2",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_colda_point_b.ddj",
@@ -6378,7 +6254,7 @@ export const PET_DESIGN = {
 			"theme": "Area control",
 			"option": 3,
 			"name": "Blizzard III",
-			"effect": "Ice storm lasts 4 seconds. Magical damage {v}% each second; radius 5 m; maximum 8 targets. Radius 7 m. Applies frostbite slow. Enemies present for all four pulses are frozen; native resistance applies.",
+			"effect": "Creates a 7 m ice storm for 5 seconds. Deals {v}% magical damage each second and slows up to 8 enemies. Enemies present for all five pulses are frozen; resistance applies.",
 			"trigger": "Timer",
 			"cooldown": 20,
 			"cooldownUnit": "s",
@@ -6389,7 +6265,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Radius 7 m. Applies frostbite slow.",
-			"rank3": "Enemies present for all four pulses are frozen; native resistance applies.",
+			"rank3": "Enemies present for all five pulses are frozen; native resistance applies.",
 			"animation": "attack2",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_colda_point_b.ddj",

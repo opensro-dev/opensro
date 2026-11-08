@@ -115,7 +115,12 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			"towns": game.items.OperatorTowns(), "storage": authority.Health()}, nil
 	}
 	control := playerOperationControl{hub: hub, authority: authority, shard: shard}
+	var muteChat, unmuteChat, kick func(agentapi.PlayerOperation) (any, error)
+	if game.mutes != nil {
+		muteChat, unmuteChat, kick = conductOperations(game, game.mutes, shard, read)
+	}
 	return api.InstallPlayerOperations(agentapi.PlayerOperations{
+		MuteChat: muteChat, UnmuteChat: unmuteChat, Kick: kick,
 		Token: strings.TrimSpace(string(bytes)), AuditPath: filepath.Join(state, "operator-audit.jsonl"), Read: read,
 		ClearPK: func(request agentapi.PlayerOperation) (any, error) {
 			if err := control.run(request.Character, "PK clear", func() error {
@@ -178,6 +183,14 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			}
 			if err := control.run(request.Character, "rescue", func() error {
 				return game.items.OperatorRescue(shard, request.Character, request.Town)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
+		RemoveCrest: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "crest removal", func() error {
+				return game.items.OperatorRemoveCrest(shard, request.Operator, request.Character, request.Crest)
 			}); err != nil {
 				return nil, err
 			}

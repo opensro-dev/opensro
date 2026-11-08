@@ -76,8 +76,10 @@ packPublicTree
 
 request.groupInputs feeds collectAssetPackGroups (the caller's ui-preload
 and minimap lists, and whether an outdoor lane ran). request.retireSidecars
-is true only for a full build. request.timed wraps each step for the
-caller's timing log. Returns every step's result.
+is true only for a full build. request.hdPublished is the caller's own HD
+step outcome for the index stamp (#2812); callers that run no HD step
+(the standalone repack) leave it unset. request.timed wraps each step for
+the caller's timing log. Returns every step's result.
 ================
 */
 export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
@@ -96,7 +98,12 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 	requireRuntimeTextAssets( groups.flatMap( group => group.files ) );
 	const assetPacks = await timed(
 		"assetPacks",
-		() => steps.buildPacks( { targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES, groups } )
+		() =>
+			steps.buildPacks( {
+				targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES,
+				groups,
+				hdPublished: request.hdPublished
+			} )
 	);
 	const missing = missingPackFiles( assetPacks, publicRoot, steps.packFileExists );
 	if ( missing.length > 0 ) {

@@ -3,9 +3,11 @@
 
 sox-presentation.test.mjs - seal tooltip style and authored bow effect identity
 
-The requested reference places the seal below the heading. Native style 3
-selects bold for the heading, seal and magic attributes. Effect tests compile
-the published programs, including their moving BAN paths, without substitutes.
+558FF0 appends the seal after the requirement rows (#2496, asm-verified on
+375e8682); the under-heading place is the Experimental sealUnderHeading row.
+Native style 3 selects bold for the heading, seal and magic attributes.
+Effect tests compile the published programs, including their moving BAN
+paths, without substitutes.
 
 ===========================================================================
 */
@@ -87,23 +89,35 @@ function bow( tier ) {
 	};
 }
 
-test("all three seals follow the bold heading and precede ordinary equipment details", () => {
+test("all three seals follow the requirement rows and precede the magic rows", () => {
 	const seals = [ "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ];
 	for ( const [tier, seal] of seals.entries() ) {
 		const rows = itemTooltip( bow( tier ), { level: 24, masteries: [] }, symbol => symbol );
 		const visible = rows.filter( row => row.value.trim() );
 		assert.equal( visible[0].value, "Bronz Bow" );
 		assert.equal( visible[0].strong, true );
-		assert.equal( visible[1].value, seal );
-		assert.equal( visible[1].strong, true );
-		assert.equal( visible[1].color, visible[0].color );
+		const sealRow = visible.find( row => row.value === seal );
+		assert.ok( sealRow );
+		assert.equal( sealRow.strong, true );
+		assert.equal( sealRow.color, visible[0].color );
 		assert.equal( visible.filter( row => row.value === seal ).length, 1 );
 		const kind = visible.find( row => row.value.startsWith( "UIIT_STT_WEAPON_TYPE" ) );
 		const requirement = visible.find( row => row.value === "PARAM_REQ_LV 8" );
 		const magic = visible.find( row => row.value.startsWith( "PARAM_STR 3" ) );
 		assert.ok( kind && requirement && magic );
+		// 56B099: 568500's requirements, then 558FF0's seal, then the magic rows.
+		assert.ok( visible.indexOf( requirement ) < visible.indexOf( sealRow ) );
+		assert.ok( visible.indexOf( sealRow ) < visible.indexOf( magic ) );
 		assert.ok( !kind.strong && !requirement.strong, "ordinary details retain normal weight" );
 		assert.equal( magic.strong, true );
+		// The Experimental opt-in keeps the seal under the heading instead.
+		const headed = itemTooltip(
+			bow( tier ),
+			{ level: 24, masteries: [] },
+			symbol => symbol,
+			{ sealUnderHeading: true }
+		).filter( row => row.value.trim() );
+		assert.equal( headed[1].value, seal );
 	}
 });
 

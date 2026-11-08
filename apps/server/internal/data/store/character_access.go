@@ -46,6 +46,24 @@ func (s *Store) ReadState(fn func()) {
 	fn()
 }
 
+/*
+================
+ReadLock / ReadUnlock
+
+The read door's two halves, for callers that hold the door as a
+guard value (enterworld.Deps.AcquireRead, #2030) instead of handing
+the door a closure. The lock is the same store read lock ReadState
+runs between; ReadUnlock must pair with exactly one ReadLock.
+================
+*/
+func (s *Store) ReadLock() {
+	s.mu.RLock()
+}
+
+func (s *Store) ReadUnlock() {
+	s.mu.RUnlock()
+}
+
 // ReadCharacters is the READ door, symmetric with the commit door: fn
 // runs under the store lock with the division's records, so field reads
 // cannot race a Mutate closure's writes. fn must be short and must not
@@ -470,7 +488,7 @@ func (door storeLetterDoor) DeliverLetter(
 	senderID, receiverID int64,
 	maxCount int,
 	letter domain.LetterRecord,
-) bool {
+) domain.LetterDelivery {
 	s := door.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -479,12 +497,17 @@ func (door storeLetterDoor) DeliverLetter(
 	receiver := s.characterByIDLocked(divisionID, receiverID)
 	if sender == nil || receiver == nil || sender.DeletePending || receiver.DeletePending ||
 		letter.Sender != sender.Name || validateLetterRecord(letter) != nil {
-		return false
+		return domain.LetterDeliveryRefused
 	}
 	live := s.mailboxes[divisionID][receiverID]
-	if maxCount < 1 || maxCount > domain.LetterMailboxMaxCount ||
-		len(live) >= maxCount || len(live) >= domain.LetterMailboxMaxCount {
-		return false
+	if maxCount < 1 || maxCount > domain.LetterMailboxMaxCount {
+		return domain.LetterDeliveryRefused
+	}
+	// Fullness is counted here, on the same locked read that appends:
+	// the lane answers the sender's "mailbox full" line from this
+	// verdict and must not re-read the mailbox outside the door.
+	if len(live) >= maxCount || len(live) >= domain.LetterMailboxMaxCount {
+		return domain.LetterDeliveryMailboxFull
 	}
 	next := make([]domain.LetterRecord, len(live), len(live)+1)
 	copy(next, live)
@@ -495,7 +518,7 @@ func (door storeLetterDoor) DeliverLetter(
 	s.mailboxes[divisionID][receiverID] = next
 	s.changes.mailboxes[mailboxKey{division: divisionID, charID: receiverID}] = true
 	s.commitLocked("letter-send")
-	return true
+	return domain.LetterDeliveryDone
 }
 
 /*

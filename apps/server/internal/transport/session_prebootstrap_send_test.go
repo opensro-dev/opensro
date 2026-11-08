@@ -1,0 +1,235 @@
+/*
+===========================================================================
+
+session_prebootstrap_send_test.go - nothing precedes the bootstrap
+
+Review test for #2332 (opensro2): the entry gate now opens between
+Build and publish, so producers that resolve the entering session by
+its early BindCharacter identity and publish outside the receipt lane
+(action.SendFrames -> SendBatch, and Session.Send) must not reach the
+queue ahead of the scene bootstrap either. Post-Build commits are real
+state the snapshot lacks, so like receipts they belong behind it.
+
+===========================================================================
+*/
+package transport
+
+import (
+	"testing"
+)
+
+/*
+================
+TestDirectSendWaitsBehindTheBootstrap
+
+A receipt parks; a direct batch and a direct send issued in the same
+loading window must join the queue behind the bootstrap too, in the
+order they were issued - never ahead of it.
+================
+*/
+func TestDirectSendWaitsBehindTheBootstrap(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const reset, receipt, directBatch, directSend = 0x366a, 0xb06d, 0x3417, 0x3b29
+	queueOpcodes := func() []uint16 {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		out := make([]uint16, len(session.queue))
+		for i, frame := range session.queue {
+			out[i] = frame.Opcode
+		}
+		return out
+	}
+
+	session.BeginSceneAdmission()
+	revision, valid := session.SceneReceiptRevision()
+	if !valid {
+		t.Fatal("receipt revision must be valid while loading")
+	}
+	if err := session.SendSceneReceiptBatch(revision, []Frame{{Opcode: receipt, Payload: []byte{1}}}); err != nil {
+		t.Fatal(err)
+	}
+	// The SendFrames path (PushCharacterFrames & friends) and a plain
+	// Send, issued while the bootstrap is still being encoded.
+	if err := session.SendBatch([]Frame{{Opcode: directBatch, Payload: []byte{2}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Send(directSend, []byte{3}); err != nil {
+		t.Fatal(err)
+	}
+	if got := queueOpcodes(); len(got) != 0 {
+		t.Fatalf("frames reached the queue before the bootstrap: %v", got)
+	}
+	if err := session.SendSceneReset([]Frame{{Opcode: reset, Payload: []byte{9}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []uint16{reset, receipt, directBatch, directSend}
+	got := queueOpcodes()
+	if len(got) != len(want) {
+		t.Fatalf("queue = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}
+
+/*
+================
+TestPrebootstrapMachineryAndAdmissionAnswerStayImmediate
+
+The park fences game traffic only: a transport-control frame and the
+admission answer batch (the EnterWorld result and what rides with a
+refusal) reach the queue at once, ahead of any parked game frame.
+================
+*/
+func TestPrebootstrapMachineryAndAdmissionAnswerStayImmediate(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const game = 0x3417
+
+	session.BeginSceneAdmission()
+	if err := session.Send(game, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Send(OpPong, []byte{2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SendBatch([]Frame{{Opcode: OpEnterWorldResult, Payload: []byte{3}}, {Opcode: game, Payload: []byte{4}}}); err != nil {
+		t.Fatal(err)
+	}
+	session.mu.Lock()
+	got := make([]uint16, len(session.queue))
+	for i, frame := range session.queue {
+		got[i] = frame.Opcode
+	}
+	parked := session.pendingFrames
+	session.mu.Unlock()
+	want := []uint16{OpPong, OpEnterWorldResult, game}
+	if len(got) != len(want) || parked != 1 {
+		t.Fatalf("queue = %v parked = %d, want %v with 1 parked", got, parked, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}
+
+/*
+================
+TestResetBornLoadAnswersAtOnce
+
+A scene load born from its own reset batch (a recall, a relocation)
+queues its bootstrap as it begins, so nothing needs to park behind
+it: a send after the batch answers at once, behind the batch.
+================
+*/
+func TestResetBornLoadAnswersAtOnce(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const reset, early = 0x366a, 0x3417
+	queueOpcodes := func() []uint16 {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		out := make([]uint16, len(session.queue))
+		for i, frame := range session.queue {
+			out[i] = frame.Opcode
+		}
+		return out
+	}
+
+	if err := session.SendSceneReset([]Frame{{Opcode: reset, Payload: []byte{9}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Send(early, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	want := []uint16{reset, early}
+	got := queueOpcodes()
+	if len(got) != len(want) {
+		t.Fatalf("queue = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}
+
+/*
+================
+TestAdmissionParksFromItsStart
+
+The fence covers the whole admission, not only the encode after the
+snapshot is built: a producer that resolves the entering session by
+its kept binding (a re-entry whose entity is still live) and delivers
+while the bootstrap is still being built must land behind the answer
+too. Live, vitals receipts reached re-entering clients ahead of
+their EnterWorld answer this way and the client refused them
+("Native packet 0x33a6 before EnterWorld", #2872).
+================
+*/
+func TestAdmissionParksFromItsStart(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const reset, receipt, directBatch, directSend = 0x366a, 0x33a6, 0x3417, 0x3b29
+	queueOpcodes := func() []uint16 {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		out := make([]uint16, len(session.queue))
+		for i, frame := range session.queue {
+			out[i] = frame.Opcode
+		}
+		return out
+	}
+
+	// No snapshot exists yet: the enter lane is still building it.
+	session.BeginSceneAdmission()
+	revision, valid := session.SceneReceiptRevision()
+	if !valid {
+		t.Fatal("receipt revision must be valid while loading")
+	}
+	if err := session.SendSceneReceiptBatch(revision, []Frame{{Opcode: receipt, Payload: []byte{1}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SendBatch([]Frame{{Opcode: directBatch, Payload: []byte{2}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Send(directSend, []byte{3}); err != nil {
+		t.Fatal(err)
+	}
+	if got := queueOpcodes(); len(got) != 0 {
+		t.Fatalf("frames reached the queue before the bootstrap: %v", got)
+	}
+	if err := session.SendSceneReset([]Frame{{Opcode: reset, Payload: []byte{9}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []uint16{reset, receipt, directBatch, directSend}
+	got := queueOpcodes()
+	if len(got) != len(want) {
+		t.Fatalf("queue = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}

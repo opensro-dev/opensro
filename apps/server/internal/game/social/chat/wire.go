@@ -57,6 +57,12 @@ const (
 	// {u16 len + ANSI sender name, sized wide text} (the narrow-name
 	// slot and the type-4 arm).
 	OpChatBroadcast uint16 = 0x3667
+
+	// chatTypeNotice is the 0x3667 server notice channel.
+	chatTypeNotice uint8 = 7
+
+	// MaxChatNoticeUnits is the client's limit on a server notice.
+	MaxChatNoticeUnits = 100
 	// OpChatHistory is a browser extension, not a retail opcode: the beta
 	// public transcript replayed at world admission, one frame of
 	// {u8 version=2, u8 count, count x (u64 sentAt Unix ms, u16 length,
@@ -147,6 +153,8 @@ type Request struct {
 	Second     uint8
 	TargetName string
 	Message    string
+	// Links rides only when the item-link switch is on (itemlinks.go).
+	Links []LinkRef
 }
 
 // DecodeChatRequest strict-decodes the client
@@ -165,6 +173,28 @@ type Request struct {
 // opposite arm (or a forward-queue index check with no v1.150
 // equivalent). Rejected.
 func DecodeChatRequest(payload []byte) (Request, error) {
+	return decodeChatRequest(payload, false)
+}
+
+/*
+================
+DecodeChatRequestWithLinks
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): the native body, then an
+optional item-link block (itemlinks.go). Bytes after the block are an
+error, as trailing bytes are natively.
+================
+*/
+func DecodeChatRequestWithLinks(payload []byte) (Request, error) {
+	return decodeChatRequest(payload, true)
+}
+
+/*
+================
+decodeChatRequest
+================
+*/
+func decodeChatRequest(payload []byte, links bool) (Request, error) {
 	reader := wire.NewReader(payload)
 	chatType, err := reader.U8()
 	if err != nil {
@@ -200,6 +230,11 @@ func DecodeChatRequest(payload []byte) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
+	if links && reader.Done() != nil {
+		if request.Links, err = DecodeLinkRefs(reader); err != nil {
+			return Request{}, err
+		}
+	}
 	if err := reader.Done(); err != nil {
 		return Request{}, err
 	}
@@ -231,6 +266,25 @@ func EncodeChatAckSuccess(chatType, second uint8) []byte {
 // the low byte fits the client's single-byte read.
 func EncodeChatAckError(errCode, chatType, second uint8) []byte {
 	return []byte{ChatAckResultError, errCode, chatType, second}
+}
+
+/*
+================
+EncodeChatNotice
+
+The 0x3667 channel 7 body: {u8 7, u16 wcharCount + UTF-16LE text}. The
+client shows it in the top banner and caps it at MaxChatNoticeUnits.
+================
+*/
+func EncodeChatNotice(message string) []byte {
+	units := utf16.Encode([]rune(message))
+	if len(units) > MaxChatNoticeUnits {
+		units = units[:MaxChatNoticeUnits]
+	}
+	writer := wire.NewWriter(3 + len(units)*2)
+	writer.U8(chatTypeNotice)
+	writeSizedWideString(writer, units)
+	return writer.Payload()
 }
 
 // EncodeChatBroadcastGid renders the 0x3667 gid-authored body for types
@@ -277,6 +331,27 @@ The inverse of EncodeChatBroadcastNamed, for the server's own payloads
 ================
 */
 func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, message string, ok bool) {
+	return decodeNamed(payload, true)
+}
+
+/*
+================
+decodeNamedHead
+
+DecodeChatBroadcastNamed without the trailing-byte check: a line that
+carries an item-link tail (itemlinks.go) still yields its head.
+================
+*/
+func decodeNamedHead(payload []byte) (chatType uint8, senderName, message string, ok bool) {
+	return decodeNamed(payload, false)
+}
+
+/*
+================
+decodeNamed
+================
+*/
+func decodeNamed(payload []byte, strict bool) (chatType uint8, senderName, message string, ok bool) {
 	reader := wire.NewReader(payload)
 	chatType, err := reader.U8()
 	if err != nil {
@@ -295,7 +370,7 @@ func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, messa
 		return 0, "", "", false
 	}
 	text, err := reader.Bytes(int(wideCount) * 2)
-	if err != nil || reader.Done() != nil {
+	if err != nil || (strict && reader.Done() != nil) {
 		return 0, "", "", false
 	}
 	units := make([]uint16, wideCount)

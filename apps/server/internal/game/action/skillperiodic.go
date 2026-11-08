@@ -245,7 +245,7 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 		} else {
 			result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
 		}
-		if _, ok := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now); !ok {
+		if !rt.combatTargetExists(effect.Division, snapshot, effect.TargetGID) {
 			live = false
 		}
 	}

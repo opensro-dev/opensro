@@ -79,7 +79,7 @@ export default defineConfig( ( { mode } ) => {
 			} :
 			{
 				outDir: "temp/artifacts/dist",
-				// viewer.html is the embeddable 3D viewer (docs/VIEWER.md), a second
+				// viewer.html is the embeddable 3D viewer (docs/guides/VIEWER.md), a second
 				// page beside the game's.
 				rolldownOptions: {
 					input: {

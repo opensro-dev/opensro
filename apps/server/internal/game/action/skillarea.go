@@ -542,7 +542,7 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 	if area.MaxTargets == 0 || !validShape {
 		return nil
 	}
-	if _, ok := rt.resolveCombatTarget(division, c, primary.gid, nowMs); !ok {
+	if !rt.combatTargetExists(division, c, primary.gid) {
 		return nil
 	}
 	lease, exists := rt.areaPopulation(division, c, primary)

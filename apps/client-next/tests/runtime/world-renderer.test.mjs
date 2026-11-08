@@ -914,7 +914,7 @@ test("admission copies caller metadata and validates optional geometry before mu
 	assert.throws( () => f.world.scene( invalid ), /attributes/ );
 	assert.equal( f.prepare().draws.length, 1 );
 });
-test("residency budget includes both current and pending scenes", async () => {
+test("admission past the residency budget sheds the displaced scene and keeps loading", async () => {
 	const { worldSceneBytes } = await import(
 		sourceFileUrl( path.join( root, "src/engine/foundation/rendering/world-scene.ts" ) ).href
 	);
@@ -935,8 +935,66 @@ test("residency budget includes both current and pending scenes", async () => {
 		images = { upload() {}, release() {} };
 	world.scene( a );
 	world.prepare( geometry, images, 1 );
-	assert.throws( () => world.scene( b ), /budget/ );
+	assert.equal( world.stats().sceneId, "A" );
+	// The budget is a target, not a limit: the over-budget scene is admitted
+	// and the displaced one is shed, where admission used to fail the load.
+	world.scene( b );
 	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 1 );
+	assert.equal( world.stats().sceneId, "B" );
+	world.dispose( geometry, images );
+});
+
+test("streaming scenes and a texture past the residency budget evicts and keeps loading", async () => {
+	const { worldSceneBytes } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/rendering/world-scene.ts" ) ).href
+	);
+	const limit = worldSceneBytes( scene( "A" ) );
+	const world = createWorldRenderer( limit ), uploads = [], releases = [];
+	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
+		upload( data ) {
+			const draw = { data };
+			uploads.push( draw );
+			return draw;
+		},
+		/*
+		================
+		release
+		================
+		*/
+		release( draw ) {
+			releases.push( draw );
+		}
+	};
+	const images = { upload: () => ({}), release() {} };
+	world.scene( scene( "A" ) );
+	world.prepare( geometry, images, 1 );
+	assert.equal( world.stats().sceneId, "A" );
+	// B is admitted past the budget; C and D then displace the pendings
+	// before any frame promotes them. No admission fails the load.
+	world.scene( scene( "B" ) );
+	world.scene( scene( "C" ) );
+	world.scene( scene( "D" ) );
+	world.prepare( geometry, images, 1 );
+	assert.equal( world.stats().sceneId, "D", "the newest streamed scene became current" );
+	assert.equal( world.stats().residentGroups, 1, "only the current scene keeps its groups" );
+	assert.equal( uploads.length, 2, "the displaced scenes were shed before any upload" );
+	assert.ok( releases.includes( uploads[0] ), "the replaced scene's draw was released" );
+	// A texture past the budget is admitted too, not failed.
+	let closed = false;
+	world.texture( "over-budget", {
+		width: 64,
+		height: 64,
+		close() {
+			closed = true;
+		}
+	} );
+	assert.equal( closed, false, "the over-budget texture was kept" );
+	world.dispose( geometry, images );
 });
 
 test("LOD selection keeps GPU resources and restores stitched edge heights", async () => {

@@ -3,7 +3,7 @@
 
 maintenance_gate.go - who may enter the world during a maintenance release
 
-A maintenance release (ops/release coordinated.py) upgrades the database and
+A maintenance release upgrades the database and
 deploys the new server and client with players kept out until the release
 is confirmed, so a failed release can restore the database without losing
 anyone's play. The release tool writes a gate file naming the accounts that
@@ -64,4 +64,25 @@ func maintenanceAdmits(path, accountID string) bool {
 		}
 	}
 	return false
+}
+
+/*
+================
+MaintenanceGatePresent
+
+Whether a maintenance window is open right now: the gate file exists
+at path. Every other gate reader keeps this one's fail-closed rule (a
+file that cannot be read or decoded still counts as a window - only
+existence is read here, never the listed accounts), so the Agent's
+not-operating refusals name the maintenance only while the release
+actually holds the gate shut (#2861). No path, or no file at it: no
+window.
+================
+*/
+func MaintenanceGatePresent(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }

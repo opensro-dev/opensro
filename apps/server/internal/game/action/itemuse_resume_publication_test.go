@@ -258,7 +258,10 @@ func newPublicationHarness(t *testing.T, refill bool, quantity int64) *publicati
 	enterworld.RegisterEnterWorld(srv.Hub, deps)
 	enterworld.RegisterGameReady(srv.Hub, deps)
 	srv.Hub.Handle(publicationFence, func(s *transport.Session, opcode uint16, payload []byte) {
-		if err := s.Send(opcode, payload); err != nil {
+		// The fence is the harness's own synchronous answer to its
+		// probe, so it takes the answer lane: parked behind a loading
+		// scene's bootstrap it could not prove dispatch order at all.
+		if err := s.SendSceneAnswerBatch([]transport.Frame{{Opcode: opcode, Payload: payload}}); err != nil {
 			panic(err)
 		}
 	})

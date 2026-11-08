@@ -269,6 +269,15 @@ type StatusResponse struct {
 	// beta setting replaces the native rule (CH 300, EU min(2 x level,
 	// 240)); omitted when native. It is the value the client receives.
 	MasteryTotalOverride int `json:"masteryTotalOverride,omitempty"`
+	// People and UniquePlayers7d are the player census's counts:
+	// people online now and unique people over the last 7 days, the
+	// same clustering the operator census reads (console#9 part 4,
+	// opensro-web#78). Null while the connection journal is off
+	// (SRO_CONNECTION_JOURNAL), so a counted zero still prints;
+	// callers show people while they are numbers and sessions
+	// otherwise - the two never mix in one figure.
+	People          *int `json:"people"`
+	UniquePlayers7d *int `json:"uniquePlayers7d"`
 }
 
 // ScheduleEvent is one event the server runs. Kind is "fortress" (the
@@ -337,17 +346,28 @@ type Gear struct {
 // player reached its level, recorded only at the milestone levels (20, 30
 // ... 90) and only since tracking began; otherwise null.
 type RankingRow struct {
-	Rank        int     `json:"rank"`
-	Name        string  `json:"name"`
-	Race        string  `json:"race"`
-	Gender      string  `json:"gender"`
-	Level       int64   `json:"level"`
-	ExpPercent  float64 `json:"expPercent"`
-	ReachedAt   *string `json:"reachedAt"`
-	Guild       string  `json:"guild,omitempty"`
-	Job         string  `json:"job,omitempty"`
-	UniqueKills int     `json:"uniqueKills"`
-	Gear        Gear    `json:"gear"`
+	Rank       int     `json:"rank"`
+	Name       string  `json:"name"`
+	Race       string  `json:"race"`
+	Gender     string  `json:"gender"`
+	Level      int64   `json:"level"`
+	ExpPercent float64 `json:"expPercent"`
+	ReachedAt  *string `json:"reachedAt"`
+	Guild      string  `json:"guild,omitempty"`
+	Job        string  `json:"job,omitempty"`
+	JobLevel   uint8   `json:"jobLevel,omitempty"`
+	JobExp     uint32  `json:"jobExp,omitempty"`
+	// PKKills is the PK board's value: the native PK state's total
+	// murder count (PKRecord.TotalCount), not the penalty level the
+	// count feeds (#2675). Zero - and absent - for a character who
+	// has never murdered.
+	PKKills     int  `json:"pkKills,omitempty"`
+	UniqueKills int  `json:"uniqueKills"`
+	Gear        Gear `json:"gear"`
+	// OnlineSeconds is the character's credited time in the world, all
+	// time and for the rolling UTC week (the by=online board's keys).
+	OnlineSeconds     int64 `json:"onlineSeconds,omitempty"`
+	OnlineWeekSeconds int64 `json:"onlineWeekSeconds,omitempty"`
 }
 
 // RankingsResponse is GET /public/v1/rankings: one page of 50.
@@ -369,6 +389,7 @@ type RulesResponse struct {
 
 // GuildsResponse is GET /public/v1/guilds: one page of 50 (guilds.go).
 type GuildsResponse struct {
+	Sort        string     `json:"sort" doc:"The ordering: level (default), or power - total gear points of members who are not hidden (#2675)."`
 	Page        int        `json:"page" doc:"1-based page number."`
 	Pages       int        `json:"pages" doc:"Pages in the full list (at least 1)."`
 	Total       int        `json:"total" doc:"Guilds matching the query."`
@@ -379,12 +400,16 @@ type GuildsResponse struct {
 
 // GuildRow is one guild on the list.
 type GuildRow struct {
-	Rank     int      `json:"rank" doc:"Place on the full list: level, then members, then name."`
-	Name     string   `json:"name"`
-	Level    int      `json:"level" doc:"Guild level, 1 to 5."`
-	Members  int      `json:"members"`
-	Master   string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
-	Union    []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
-	Fortress *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
-	Founded  *string  `json:"founded,omitempty" doc:"When the guild was founded (RFC 3339, UTC); absent when it predates the record."`
+	Rank    int    `json:"rank" doc:"Place on the full list: level, then members, then name."`
+	Name    string `json:"name"`
+	Level   int    `json:"level" doc:"Guild level, 1 to 5."`
+	Members int    `json:"members"`
+	// GearPoints is the guild-power board's value: the gear points
+	// (rankings.go's site-only score) of every member who is not
+	// hidden, summed. A hidden member's gear never reaches it (#2675).
+	GearPoints int      `json:"gearPoints"`
+	Master     string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
+	Union      []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
+	Fortress   *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
+	Founded    *string  `json:"founded,omitempty" doc:"When the guild was founded (RFC 3339, UTC); absent when it predates the record."`
 }

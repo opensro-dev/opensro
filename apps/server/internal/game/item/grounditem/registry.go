@@ -88,6 +88,9 @@ type Item struct {
 	Heading    uint16
 	// OwnerJID is the temporary native pickup reservation. Zero is public.
 	OwnerJID uint32
+	// ForgeBound marks a GM-forged item on the ground plane (port only,
+	// issue #1980): pickup restores the mark, so a bound drop stays bound.
+	ForgeBound bool
 	// DroppedBy records the character that dropped or earned it.
 	DroppedBy string
 	// DroppedAt is when the drop hit the ground; the fixture-policy expiry
@@ -164,6 +167,11 @@ type Registry struct {
 	// it to skip re-persisting ground rows on commits that never touched
 	// the ground plane.
 	revision uint64
+	// divRevisions counts the same mutations per division, so a reader
+	// cached on one division (the ground scope cache) rebuilds only when
+	// its own division moved - under the one global counter, any
+	// division's drop rebuilt every division's copy (#2030).
+	divRevisions map[string]uint64
 	// changes stamps every gid a mutation touched, for the store's
 	// commit to persist only those rows (changes.go).
 	changes changeJournal
@@ -180,6 +188,37 @@ func (r *Registry) Revision() uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.revision
+}
+
+/*
+================
+bumpLocked
+
+One content mutation in one division: the global counter moves (the
+commit door's skip test reads it) and the division's own counter
+moves with it, so a per-division cache rebuilds only for its own
+division's edits. Callers hold the lock.
+================
+*/
+func (r *Registry) bumpLocked(divisionID string) {
+	r.revision++
+	if r.divRevisions == nil {
+		r.divRevisions = make(map[string]uint64)
+	}
+	r.divRevisions[divisionID]++
+}
+
+// DivisionRevision reports one division's mutation counter, with
+// Revision's guarantee for that division's content alone.
+/*
+================
+DivisionRevision
+================
+*/
+func (r *Registry) DivisionRevision(divisionID string) uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.divRevisions[divisionID]
 }
 
 // NewRegistry returns an empty Registry.
@@ -230,7 +269,7 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 		return Item{}
 	}
 	r.counter = slot
-	r.revision++
+	r.bumpLocked(divisionID)
 	item.Gid = GidBase + slot
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
@@ -319,7 +358,7 @@ func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 		return Item{}, false
 	}
 	delete(items, gid)
-	r.revision++
+	r.bumpLocked(divisionID)
 	r.stampLocked(divisionID, gid)
 	return item, true
 }
@@ -347,7 +386,7 @@ func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bo
 	}
 	item.StackCount = count
 	items[gid] = item
-	r.revision++
+	r.bumpLocked(divisionID)
 	r.stampLocked(divisionID, gid)
 	return true
 }
@@ -376,7 +415,7 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 		delete(items, gid)
 	}
 	if len(expired) > 0 {
-		r.revision++
+		r.bumpLocked(divisionID)
 		for _, item := range expired {
 			r.stampLocked(divisionID, item.Gid)
 		}
@@ -433,7 +472,7 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 		released = append(released, item)
 	}
 	if len(released) > 0 {
-		r.revision++
+		r.bumpLocked(divisionID)
 		for _, item := range released {
 			r.stampLocked(divisionID, item.Gid)
 		}
@@ -461,6 +500,37 @@ func (r *Registry) DivisionIDs() []string {
 		out = append(out, divisionID)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// Codenames returns the division's distinct item codenames in entity
+// id order (first sighting wins), read under the lock without copying
+// a single entry: the bootstrap's reference seam needs the names of
+// what lies on the ground, never the drops themselves, and the deep
+// copy All pays per entry (magic options, the summon record) was
+// bought for two fields (#2030).
+/*
+================
+Codenames
+================
+*/
+func (r *Registry) Codenames(divisionID string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	items := r.byDivision[divisionID]
+	// Distinct codenames are a small fraction of a division's drops;
+	// the seen set grows to them, never to the division's size.
+	seen := map[string]bool{}
+	var out []string
+	for _, gid := range sortedGids(items) {
+		codename := items[gid].Codename
+		if codename == "" || seen[codename] {
+			continue
+		}
+		seen[codename] = true
+		out = append(out, codename)
+	}
 	return out
 }
 
@@ -530,7 +600,7 @@ func (r *Registry) Clear(divisionID string) {
 	defer r.mu.Unlock()
 
 	if items, ok := r.byDivision[divisionID]; ok && len(items) > 0 {
-		r.revision++
+		r.bumpLocked(divisionID)
 		// Every gid of the vanished division is a delete.
 		for gid := range items {
 			r.stampLocked(divisionID, gid)

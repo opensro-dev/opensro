@@ -180,8 +180,14 @@ func TestFollowRetaliationBypassesClosedGatesAndRemovalRetiresTimers(t *testing.
 	if len(frames) == 0 || current.Mode() != monster.MoverChasing || current.TargetGID() != attacker.Gid || current.FollowLeaderGID() != 0 {
 		t.Fatal("FOLLOW blocked immediate retaliation")
 	}
-	if before != followTimers(s, child.Gid) {
-		t.Fatal("retaliation consumed FOLLOW timers")
+	// FOLLOW owns Timers 0 and 7. A tactics row with a trace boundary also
+	// runs the pursuit classifier on Timer 6 when the chase starts, as the
+	// reference server does; that timer is the chase's, not FOLLOW's.
+	after := followTimers(s, child.Gid)
+	for _, id := range []monster.AITimerID{0, 7} {
+		if before.GetTimer(id) != after.GetTimer(id) {
+			t.Fatalf("retaliation consumed FOLLOW timer %d", id)
+		}
 	}
 	if !s.Defeat("summon", child.Gid, time.UnixMilli(now+3)) {
 		t.Fatal("child removal refused")
@@ -240,6 +246,60 @@ func TestRejectedFollowPlansPreservePacketsAndBothTimers(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+/*
+================
+TestFollowLeaderReadingSharedPerLeg
+
+One leg's followers of one leader share the first follower's
+leader reading (#2136): moving the stored leader between the two
+prepares does not change the second plan's leader, the commit
+built on the shared reading rejects - it re-reads the leader -
+and the next leg's prepare reads the moved leader fresh.
+================
+*/
+func TestFollowLeaderReadingSharedPerLeg(t *testing.T) {
+	ops, parent, child, now := followFixture(t)
+	s := ops.Monsters
+	var other monster.Instance
+	found := false
+	for _, instance := range s.MaterializedInstances("summon") {
+		if instance.Gid != parent.Gid && instance.Gid != child.Gid {
+			other, found = instance, true
+		}
+	}
+	if !found {
+		t.Fatal("summon wave holds no second follower")
+	}
+	mover, _ := s.Mover("summon", child.Gid)
+	first, ok := s.prepareFollow("summon", child, mover, now)
+	if !ok || !first.leaderExists {
+		t.Fatal("first follower snapshot refused")
+	}
+	leader, _ := s.Mover("summon", parent.Gid)
+	leader.Pose.X += 25
+	if !s.CommitMover("summon", parent.Gid, leader) {
+		t.Fatal("leader move refused")
+	}
+	otherMover, _ := s.Mover("summon", other.Gid)
+	second, ok := s.prepareFollow("summon", other, otherMover, now)
+	if !ok || !second.leaderExists {
+		t.Fatal("second follower snapshot refused")
+	}
+	if second.leader != first.leader || second.leaderHP != first.leaderHP || second.leaderRadius != first.leaderRadius {
+		t.Fatal("second follower re-read the leader inside one leg")
+	}
+	if frames, accepted := s.commitFollow(second, otherMover, nil); accepted || len(frames) != 0 {
+		t.Fatal("commit on the shared reading accepted a moved leader")
+	}
+	next, ok := s.prepareFollow("summon", other, otherMover, now+1)
+	if !ok {
+		t.Fatal("next leg snapshot refused")
+	}
+	if stored, _ := s.Mover("summon", parent.Gid); next.leader != stored {
+		t.Fatal("next leg did not re-read the leader")
 	}
 }
 

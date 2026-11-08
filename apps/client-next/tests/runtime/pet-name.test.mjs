@@ -150,7 +150,11 @@ test("the Name button shows only for an unnamed pet; a valid name is confirmed, 
 	f.ui.event( { kind: "edit", id: "pet-name", value: "Fluffy", start: 6, end: 6, composing: false } );
 	f.ui.event( { kind: "activate", id: "pet-name-ok" } );
 	assert.ok( !step().includes( "pet-name" ), "the confirm replaced the name box" );
-	assert.equal( commands.length, 0, "nothing is sent before the confirm" );
+	assert.equal(
+		commands.some( c => c.kind === "gameplay" && c.command.kind === "cos-name" ),
+		false,
+		"no rename is sent before the confirm; summon state probes are independent"
+	);
 	f.ui.event( { kind: "activate", id: "pet-name-ok" } );
 	step();
 	assert.deepEqual( commands.at( -1 ), { kind: "gameplay", command: { kind: "cos-name", gid: 7, name: "Fluffy" } } );

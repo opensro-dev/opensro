@@ -3,13 +3,14 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 33 to schema 34, layout 11. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 39 to schema 40, layout 12. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
 source the empty fortress production table of layout 8, every layout 8
-source the empty unique-kill table of layout 9, and every layout 10
-source the empty name-reservation table of layout 11. Existing tables and
+source the empty unique-kill table of layout 9, every layout 10
+source the empty name-reservation table of layout 11, and every layout 11
+source the empty silk-history table of layout 12. Existing tables and
 their records survive unchanged; the new record fields are optional. The
 role repair makes each guild master the sole commander
 (guild_leader_role.go); it also runs on a current store that needs it.
@@ -59,7 +60,14 @@ const preStoredPetCastsVersion = 30
 const preBreakNoticeVersion = 31
 const preRenameVersion = 32
 const preHalloweenVersion = 33
+const preMostWantedExpiryVersion = 34
+const preHalloweenAccountVersion = 35
+const preOnlineRecordVersion = 36
+const preAcademyBuffVersion = 37
+const preSilkHistoryVersion = 38
+const preWantedDecayVersion = 39
 const preNameReservationLayoutVersion = 10
+const preSilkHistoryLayoutVersion = 11
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -214,6 +222,56 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
+	case preMostWantedExpiryVersion:
+		// Schema 34 ran at layout 11 and has no wanted-level lapse; its
+		// streaks read unchanged and lapse at their next level.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preHalloweenAccountVersion:
+		// Schema 35 ran at layout 11 and counted Halloween boxes per
+		// character; the account plane starts absent and is seeded from
+		// those counts at first load (#2547). Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preOnlineRecordVersion:
+		// Schema 36 ran at layout 11 and has no time-online record; its
+		// characters read unchanged and start counting at their next
+		// login (#2675). Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preAcademyBuffVersion:
+		// Schema 37 ran at layout 11 and has no Academy cumulated-buff
+		// state on its camp members; they read with no buff held
+		// (#2270). Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preSilkHistoryVersion:
+		// Schema 38 ran at layout 11 and has no silk-history table; its
+		// wallet movements were never recorded and its records read
+		// unchanged (#2269).
+		if layout < preSilkHistoryLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preWantedDecayVersion:
+		// Schema 39 ran at layout 12 and stamped the wanted level's
+		// seven-day lapse; under the decay that stamp is unread and a
+		// streak is stamped fresh at its first judging door, so no
+		// saved streak decays early (#2721). It also has no forge-bound
+		// mark on its item rows; its items read unbound (#1980).
+		// Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
 	case preAcademyHonorVersion, preMergedPetVersion:
 		// Schema 26 ran at layouts 5 through 10 and has no training-camp
 		// honor/evaluation fields or disband timestamp; its records read
@@ -267,6 +325,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	}
 	if sourceLayout <= preNameReservationLayoutVersion {
 		added = append(added, "name_reservations")
+	}
+	if sourceLayout <= preSilkHistoryLayoutVersion {
+		added = append(added, "silk_history")
 	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
@@ -362,6 +423,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	}
 	if sourceLayout <= preNameReservationLayoutVersion {
 		if _, err := tx.Exec(nameReservationsSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout <= preSilkHistoryLayoutVersion {
+		if _, err := tx.Exec(silkHistorySchema); err != nil {
 			return backupPath, err
 		}
 	}

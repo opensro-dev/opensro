@@ -11,8 +11,9 @@ Dispose cancels any requests still owned by this module.
 ===========================================================================
 */
 
+import type { HudData } from "../frame/frame-contract";
 import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gameplay/portal";
-import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
+import { decodeTooltipMasteries } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { tradeGoldBases } from "@/engine/foundation/gameplay/specialty-deal";
@@ -23,25 +24,22 @@ import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matc
 import { createTooltipSkillDecoder } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import { decodeActionSlots, type ActionSlot } from "@/engine/foundation/ui/action-layout";
+import { decodeMapLabels, decodeMapIcons, decodeWorldMapLayout, nativeLayout } from "@/engine/foundation/ui/world-map";
 import {
-	decodeMapLabels,
-	decodeMapIcons,
-	decodeWorldMapLayout,
-	nativeLayout,
-	type WorldMapLayout,
-	type MapLabel,
-	type MapIcon
-} from "@/engine/foundation/ui/world-map";
-import { creationNameRules, NAME_FILTER_GUILD, type NameRules } from "@/engine/foundation/ui/character-create";
+	creationNameRules,
+	NAME_FILTER_CHAT,
+	NAME_FILTER_GUILD,
+	type NameRules
+} from "@/engine/foundation/ui/character-create";
 import { decodeSkillUi, type SkillUi } from "@/engine/foundation/ui/skill-layout";
 import { equipmentSocket } from "@/engine/foundation/ui/inventory-layout";
 import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/message-tips";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
-import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
-import { decodeFortressMap, type FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
+import { decodeCosReferences } from "@/engine/foundation/ui/cos-command";
+import { decodeFortressMap } from "@/engine/foundation/gameplay/fortress-map";
 import { decodeCommandTable } from "@/engine/foundation/ui/debug-commands";
-import { decodeCameraDataRows, type CameraDataRow } from "@/engine/foundation/ui/camera-waypoints";
+import { decodeCameraDataRows } from "@/engine/foundation/ui/camera-waypoints";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
 const TOOLTIP_ROWS_PER_STEP = 1024;
@@ -58,64 +56,6 @@ type Load = { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "read
 	kind: "failed";
 	message: string;
 } | { kind: "disposed"; };
-/*
-================
-HudData
-================
-*/
-interface HudData {
-	readonly withdrawalPage: AuthoredLayout;
-	readonly stallPricePage: AuthoredLayout;
-	readonly stallTextPage: AuthoredLayout;
-	readonly cosReferences: ReadonlyMap<number, CosReference>;
-	// The battle aide's fortress map; null in a build that publishes none.
-	readonly fortressMap: FortressMapCatalog | null;
-	readonly portals: PortalCatalog;
-	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
-	readonly masteryCosts: Readonly<Record<number, number>>;
-	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
-	// levelgold.txt column 2 by level: the trade scale's basis (649050).
-	readonly tradeGoldBases: Readonly<Record<number, number>>;
-	readonly mallNotify: MallNotify;
-	// config\command.txt: the debug console's command names by id (68D9C0).
-	readonly commandTable: ReadonlyMap<string, number>;
-	// config\cameradata.txt rows: the /cw* waypoint store's keyframes (#1716).
-	readonly cameraDataRows: readonly CameraDataRow[];
-	readonly jobExpThresholds: JobExpThresholds;
-	readonly extended: readonly AuthoredLayout[];
-	readonly countries: Readonly<Record<number, number>>;
-	readonly tooltipSkills: TooltipSkillCatalog;
-	readonly mapLayout: WorldMapLayout;
-	readonly mapIcons: readonly MapIcon[];
-	readonly actions: readonly ActionSlot[];
-	readonly mapLabels: readonly MapLabel[];
-	readonly expandedMapIcons: readonly MapIcon[];
-	readonly expandedMapLabels: readonly MapLabel[];
-	readonly nameRules: NameRules;
-	// The same filter's guild-name column (790A30).
-	readonly guildNameRules: NameRules;
-	readonly skillUi: SkillUi;
-	readonly popupArt: {
-		readonly tab: string;
-		readonly blocked: string;
-		readonly portrait: string;
-		readonly sockets: Readonly<Record<number, string>>;
-	};
-	readonly warmPaths: readonly string[];
-	readonly windows: Readonly<Record<string, AuthoredLayout>>;
-	readonly tips: readonly MessageTip[];
-	readonly targets: Readonly<Record<string, AuthoredLayout>>;
-	readonly root: AuthoredLayout;
-	readonly player: AuthoredLayout;
-	readonly bar: AuthoredLayout;
-	readonly minimap: AuthoredLayout;
-	readonly map: AuthoredLayout;
-	readonly chat: AuthoredLayout;
-	readonly status: AuthoredLayout;
-	readonly regionCodes: Readonly<Record<string, string>>;
-	readonly zones: Readonly<Record<string, string>>;
-	readonly strings: Readonly<Record<string, string>>;
-}
 // Polled requests are children of the existing UI/asset lifetime. Layout and text
 // share admission and cancellation; neither can outlive its HUD.
 /*
@@ -223,6 +163,8 @@ export function createHudResources(
 		"ifquestslot",
 		"ifquestslotmain",
 		"ifquestslotsub",
+		"ifquestinfo",
+		"ifquestinfoslot",
 		"ifpartymatch",
 		"ifpartymatchregister",
 		"ifpartymatchreqjoin",
@@ -423,7 +365,8 @@ export function createHudResources(
 							else if ( i === layouts.length + 4 ) {
 								value = [
 									creationNameRules( r.buffer ),
-									creationNameRules( r.buffer, NAME_FILTER_GUILD )
+									creationNameRules( r.buffer, NAME_FILTER_GUILD ),
+									creationNameRules( r.buffer, NAME_FILTER_CHAT )
 								];
 							} else if ( i === layouts.length + 2 ) value = decodeMessageTips( raw );
 							else if ( i === layouts.length + 3 ) value = decodeSkillUi( raw );
@@ -501,6 +444,7 @@ export function createHudResources(
 					expandedMapLabels,
 					nameRules: (values[layouts.length + 4] as readonly NameRules[])[0]!,
 					guildNameRules: (values[layouts.length + 4] as readonly NameRules[])[1]!,
+					chatRules: (values[layouts.length + 4] as readonly NameRules[])[2]!,
 					skillUi: values[layouts.length + 3] as SkillUi,
 					popupArt: {
 						tab: "/assets/images/Media_extracted/interface/ifcommon/com_tab_on.png",

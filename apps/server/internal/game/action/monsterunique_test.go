@@ -22,8 +22,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -33,7 +33,7 @@ installLootReferences
 */
 func installLootReferences(t *testing.T, rt *Runtime) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	source := rt.deps.ItemReferences().(staticItemSource)
@@ -270,6 +270,7 @@ func TestSpecialReturnScrollPickupAndTimedActivation(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { sent = append(sent, frames...) }
 	clock.Advance(time.Minute)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if c.NativeTeleportMode != 0 || !saw(sent, enterworld.OpcodeResetClient) {
 		t.Fatal("special return did not complete")
 	}
@@ -338,6 +339,28 @@ func TestPharaohGearRateAppliesOnlyToTombElitesAndUniques(t *testing.T) {
 	} {
 		if got := rt.pharaohGearRate(c.mob); got != c.want {
 			t.Fatalf("%s = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+/*
+================
+TestPharaohGearRateReadsTheRarityNibble
+
+The catalogue hands PharaohGearRate the raw grade byte, party flag
+(0x10) included, while the runtime hands it Instance.Rarity, which drops
+the flag. Both must reach the same verdict, or the site publishes a gear
+rate the server does not roll (or the reverse).
+================
+*/
+func TestPharaohGearRateReadsTheRarityNibble(t *testing.T) {
+	rt := &Runtime{}
+	for _, grade := range []uint8{0, 1, 3, 6, 8} {
+		for _, flagged := range []uint8{grade, grade | 0x10} {
+			mob := monster.Instance{Ref: monster.MonsterRef{PharaohGearRate: 5, MonsterType: flagged}}
+			if got, want := PharaohGearRate(flagged, 5), rt.pharaohGearRate(mob); got != want {
+				t.Fatalf("grade %#x: catalogue verdict %d, runtime verdict %d", flagged, got, want)
+			}
 		}
 	}
 }

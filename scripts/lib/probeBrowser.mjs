@@ -125,7 +125,7 @@ export async function launchProbeBrowser( {
 	viewport = { width: 1600, height: 900 },
 	deviceScaleFactor,
 	extraBrowserArgs = [],
-	executablePath,
+	executablePath = process.env.SRO_PROBE_CHROME_EXECUTABLE,
 	userDataDir
 } = {} ) {
 	const extraArgs = (process.env.SRO_PROBE_EXTRA_CHROME_ARGS ?? "")

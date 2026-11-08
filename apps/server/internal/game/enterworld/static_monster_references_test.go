@@ -13,13 +13,103 @@ the cached reference file instead (#369), and a login repeats none of them.
 package enterworld
 
 import (
+	"encoding/json"
+	"net/http/httptest"
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
+
+/*
+================
+TestPublishedStructureUpgradeReferences
+
+Publishing default variants preserves meaningful zero, leaves missing rows
+absent, and never mutates the source catalog shared with later logins.
+================
+*/
+func TestPublishedStructureUpgradeReferences(t *testing.T) {
+	source := BrowserReferenceSources{
+		Skills: oneSkillCatalogue{},
+		Monsters: []RefObjRow{
+			{RefObjID: 1, Kind: "structure"}, {RefObjID: 2, Kind: "structure"},
+			{RefObjID: 3, Kind: "structure"}, {RefObjID: 4, Kind: "monster"},
+		},
+		FortressUpgradeRefs: map[uint32]uint32{1: 2, 2: 0, 4: 1},
+	}
+	refs, err := NewBrowserReferences(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	refs.ServeHTTP(response, httptest.NewRequest("GET", refs.Path, nil))
+	var body struct {
+		Rows []RefObjRow `json:"refObjSnapshot"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Rows) != len(source.Monsters) {
+		t.Fatalf("published %d rows", len(body.Rows))
+	}
+	for i, row := range body.Rows {
+		if source.Monsters[i].FortressUpgradeRef != nil {
+			t.Fatal("publication mutated the source catalog")
+		}
+		if i < 2 {
+			if row.FortressUpgradeRef == nil || *row.FortressUpgradeRef != source.FortressUpgradeRefs[row.RefObjID] {
+				t.Fatalf("lost upgrade target for row %d: %+v", row.RefObjID, row)
+			}
+		} else if row.FortressUpgradeRef != nil {
+			t.Fatalf("unexpected target on row %d", row.RefObjID)
+		}
+	}
+	source.FortressUpgradeRefs[1] = 3
+	changed, err := NewBrowserReferences(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.SHA256 == refs.SHA256 {
+		t.Fatal("changing an upgrade target did not invalidate the reference cache")
+	}
+}
+
+/*
+================
+TestPublicReferencesIncludeUnplacedStructureRanks
+
+Production publishes the rank reached by an upgrade even when it has no
+starting nest. The login then omits these rows instead of duplicating them.
+================
+*/
+func TestPublicReferencesIncludeUnplacedStructureRanks(t *testing.T) {
+	const current, upgraded = uint32(9100), uint32(9101)
+	registry := simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
+		current:  {RefObjID: current, Structure: true, TypeID4: 4, NameStrID: "SN_EMPTY_POSITION"},
+		upgraded: {RefObjID: upgraded, Structure: true, TypeID4: 4, Level: 1, NameStrID: "SN_RAISED_POSITION"},
+	}, nil))
+	rows := PublicMonsterRefObjRows(registry)
+	if len(rows) != 2 || rows[0].RefObjID != current || rows[1].RefObjID != upgraded ||
+		rows[0].Kind != "structure" || rows[1].Level != 1 || rows[1].NameStrID != "SN_RAISED_POSITION" {
+		t.Fatalf("structure catalog lost an unplaced rank: %+v", rows)
+	}
+	refs, err := NewBrowserReferences(BrowserReferenceSources{
+		Skills: oneSkillCatalogue{}, Monsters: rows, FortressUpgradeRefs: map[uint32]uint32{current: upgraded},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	character := chinaSpearman()
+	deps := testDeps(character)
+	deps.RefObjSnapshot = func() []RefObjRow { return rows }
+	deps.BrowserReferences = refs
+	if got := Build(deps, BootstrapRequest{CharacterName: character.Name}).RefObjSnapshot; len(got) != 0 {
+		t.Fatalf("login duplicates public structure rows: %+v", got)
+	}
+}
 
 /*
 ================
@@ -117,13 +207,13 @@ its trade appearance (861720) picks a skin pool by.
 ================
 */
 func TestEveryCreatableMonsterIsPublished(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	template := monster.LoadTemplate(gamedatatest.TextdataDir(t))
 	rows := PublicMonsterRefObjRows(simulation.NewMonsterState(template))
 	byName := map[string]RefObjRow{}
 	byID := map[uint32]bool{}
 	for _, row := range rows {
-		if row.Kind != "monster" || row.Name == "" || row.NameStrID == "" {
+		if (row.Kind != "monster" && row.Kind != "structure") || row.Name == "" || row.NameStrID == "" {
 			t.Fatalf("published row %+v lacks the browser's monster fields", row)
 		}
 		byName[row.Codename] = row

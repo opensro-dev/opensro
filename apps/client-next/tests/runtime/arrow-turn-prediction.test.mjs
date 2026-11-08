@@ -46,6 +46,7 @@ function flatView() {
 		available: () => true,
 		block: () => 0,
 		floor: () => undefined,
+		room: () => undefined,
 		pick: () => null,
 		clip: ( _from, to, query ) => {
 			if ( query ) query.status = 0;
@@ -123,6 +124,7 @@ function play( keys, endMs = 3000 ) {
 			aim: s.movementAim,
 			speedFactor: s.movementSpeedFactor ?? 1,
 			turnRate: s.movementTurnRate ?? 0,
+			relocation: 0,
 			walkPredictable: s.walkPredictable === true,
 			walkHeld: s.walkHeld === true,
 			holding: s.moveHeld === true,
@@ -214,6 +216,7 @@ test("between answers the predicted walk itself curves with the turn", () => {
 		aim: undefined,
 		speedFactor: 1,
 		turnRate: 0,
+		relocation: 0,
 		walkPredictable: true,
 		walkHeld: false,
 		holding: false,

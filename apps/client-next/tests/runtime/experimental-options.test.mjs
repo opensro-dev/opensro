@@ -17,6 +17,7 @@ const experimentalModule = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
 const {
+	browserDisplayClass,
 	experimentalGameplay,
 	experimentalOptions,
 	experimentalVideo,
@@ -26,111 +27,11 @@ const {
 	sceneRenderScale,
 	uiScaleFactor
 } = experimentalModule;
-const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
+const { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
-const OFF = Object.freeze( {
-	renderScale: 100,
-	// On by default (owner 2026-10-27, #1806): a phone caps the scene's pixels;
-	// every other display draws at full resolution.
-	phoneRenderCap: true,
-	// Native 1:1 interface size.
-	uiScale: 100,
-	chatTimestamps: false,
-	// On by default (owner 2026-10-28, #1976): event notices get their
-	// own chat tab; an explicit false restores the native four tabs.
-	eventChatTab: true,
-	safeLoadingScreen: false,
-	monsterGuide: false,
-	developerDiagnostics: false,
-	postProcessing: false,
-	anisotropicFiltering: false,
-	heightFog: false,
-	dynamicSun: false,
-	floatBloom: false,
-	hdrToneMap: false,
-	sunShadow: false,
-	perPixelLighting: false,
-	// Off by default: the multisampled scene is a port-only deviation.
-	msaa: false,
-	// On by default (owner 2026-10-25): a press walks at once and stops
-	// where the server casts.
-	predictedRunUp: true,
-	// On by default (owner 2026-10-15): the camera eases its height and release.
-	smoothCamera: true,
-	// On by default (owner 2026-10-17): +8 and higher weapons and shields wear enchant sparks.
-	enchantSparks: true,
-	// On by default (owner 2026-10-14); it changes only devices without BC.
-	compressedTextures: true,
-	// On by default (owner 2026-10-14): near effects outrank far characters.
-	sharedActorRoom: true,
-	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
-	mainThreadOwnWalk: true,
-	// On by default (owner 2026-10-15): a disabled tab is dimmed.
-	greyDisabledTabs: true,
-	// On by default (owner 2026-10-15): the shard's job-kill notices show.
-	jobKillNotices: true,
-	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
-	dropPlusNotices: true,
-	// On by default (owner 2026-10-19): the shard's +7 notices show.
-	plusSevenNotices: true,
-	// On by default: the shard's item break notices show (#1738).
-	breakNotices: true,
-	// Off by default: each player opts in to the unique damage ranking.
-	uniqueDamageRank: false,
-	// Off by default: V hides only monsters and players, as the original does.
-	vHidesCompanions: false,
-	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
-	dungeonCharacterPvs: true,
-	// On by default (owner 2026-10-15): labels and lists stay inside their window.
-	fitWindowLabels: true,
-	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
-	dropOnBagTab: true,
-	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
-	exchangeClickShortcuts: true,
-	// On by default (owner 2026-10-15): a notice's player and item are links.
-	noticeLinks: true,
-	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
-	shortNotices: true,
-	attackPetTraining: false,
-	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
-	confirmGuildBan: true,
-	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
-	homingProjectiles: false,
-	// Off by default: the automatic potion watches only the player (70C550).
-	transportAutoPotion: false,
-	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
-	// off restores the native no-op click (6B3760).
-	petClickOpensWindow: true,
-	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
-	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
-	smartPetPickup: true,
-	// Off by default (#841): the pickup pet proposes the native categories
-	// until the item filter is turned on.
-	petPickupFilter: false,
-	// The filter's kinds include everything unless one is explicitly off;
-	// they are read only while the filter itself is on.
-	petFilterGold: true,
-	petFilterEquipment: true,
-	petFilterAlchemy: true,
-	petFilterPotions: true,
-	petFilterOther: true,
-	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
-	touchInspect: true,
-	// On by default (#1451 step 3): WebTransport is the
-	// default connect and the WebSocket the fallback; off is one setting.
-	webTransport: true,
-	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false,
-	// Off by default (#840): the maps mark the tracked quest's targets only.
-	questTrackerMarkers: false,
-	// Off by default (#1640): only the native plate and no ground ring.
-	sunDropMarker: false,
-	// Off by default: port-only portal-out cue on arrival; the native
-	// gate has no traced caller, so silence is the native default.
-	warpArrivalSound: false
-} );
+import { OFF } from "../helpers/experimental-off.mjs";
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
 	for (
@@ -141,83 +42,25 @@ test("touch inspection defaults on and only an explicit false turns it off", () 
 	assert.equal( experimentalOptions( { touchInspect: false } ).touchInspect, false );
 });
 
+test("companion auto-potion defaults on; a saved record without the key keeps its other choices", () => {
+	for (
+		const value of [ undefined, null, {}, { transportAutoPotion: true }, { transportAutoPotion: "false" } ]
+	) {
+		assert.equal( experimentalOptions( value ).transportAutoPotion, true, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { transportAutoPotion: false } ).transportAutoPotion, false );
+	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, confirmGuildBan: false } );
+	assert.equal( saved.transportAutoPotion, true );
+	assert.equal( saved.chatTimestamps, true );
+	assert.equal( saved.skyDetail, true );
+	assert.equal( saved.confirmGuildBan, false );
+});
+
 test("only an explicit boolean enables chat timestamps", () => {
 	for ( const value of [ undefined, null, [], {}, true, { chatTimestamps: "true" }, { chatTimestamps: 1 } ] ) {
 		assert.equal( experimentalOptions( value ).chatTimestamps, false );
 	}
 	assert.equal( experimentalOptions( { chatTimestamps: true, developerDiagnostics: false } ).chatTimestamps, true );
-});
-
-test("safe loading defaults off and persists only after Confirm", () => {
-	for ( const value of [ undefined, null, {}, { safeLoadingScreen: "true" }, { safeLoadingScreen: 1 } ] ) {
-		assert.equal( experimentalOptions( value ).safeLoadingScreen, false );
-	}
-	assert.equal( experimentalOptions( { safeLoadingScreen: true } ).safeLoadingScreen, true );
-	const hud = createExperimentalHud();
-	hud.open();
-	hud.toggle( "safeLoadingScreen" );
-	assert.equal( hud.state().saved.safeLoadingScreen, false );
-	hud.open();
-	assert.equal( hud.state().draft.safeLoadingScreen, false, "closing discards the unconfirmed toggle" );
-	hud.toggle( "safeLoadingScreen" );
-	const saved = hud.confirm();
-	const restored = createExperimentalHud();
-	restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
-	assert.equal( restored.state().saved.safeLoadingScreen, true );
-	restored.reset();
-	assert.equal( restored.state().saved.safeLoadingScreen, true, "Default only changes the draft" );
-	assert.equal( restored.confirm().safeLoadingScreen, false );
-});
-
-test("experimental drafts require Confirm and Default only changes the draft", () => {
-	const hud = createExperimentalHud();
-	assert.equal( hud.state().saved.chatTimestamps, false );
-	hud.open();
-	hud.toggle( "chatTimestamps" );
-	assert.equal( hud.state().draft.chatTimestamps, true );
-	assert.equal( hud.state().saved.chatTimestamps, false );
-	hud.open();
-	assert.equal( hud.state().draft.chatTimestamps, false );
-	hud.toggle( "chatTimestamps" );
-	assert.deepEqual( hud.confirm(), { ...OFF, chatTimestamps: true } );
-	hud.reset();
-	assert.equal( hud.state().draft.chatTimestamps, false );
-	assert.equal( hud.state().saved.chatTimestamps, true );
-	hud.open();
-	assert.equal( hud.state().draft.chatTimestamps, true );
-	hud.reset();
-	assert.deepEqual( hud.confirm(), OFF );
-	hud.restore( { ...OFF, chatTimestamps: true } );
-	assert.deepEqual( hud.state(), {
-		saved: { ...OFF, chatTimestamps: true },
-		draft: { ...OFF, chatTimestamps: true },
-		tab: 0
-	} );
-});
-
-/*
-================
-Developer diagnostics opt-in
-================
-*/
-test("diagnostics default off and follow the same draft lifecycle", () => {
-	for ( const value of [ undefined, null, [], {}, { developerDiagnostics: "true" }, { developerDiagnostics: 1 } ] ) {
-		assert.equal( experimentalOptions( value ).developerDiagnostics, false );
-	}
-	const hud = createExperimentalHud();
-	hud.toggle( "developerDiagnostics" );
-	assert.equal( hud.state().draft.developerDiagnostics, true );
-	assert.equal( hud.state().saved.developerDiagnostics, false );
-	hud.open();
-	assert.equal( hud.state().draft.developerDiagnostics, false );
-	hud.toggle( "developerDiagnostics" );
-	assert.equal( hud.confirm().developerDiagnostics, true );
-	hud.reset();
-	assert.equal( hud.state().saved.developerDiagnostics, true );
-	hud.open();
-	assert.equal( hud.state().draft.developerDiagnostics, true );
-	hud.reset();
-	assert.equal( hud.confirm().developerDiagnostics, false );
 });
 
 /*
@@ -239,6 +82,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		sunShadow: false,
 		perPixelLighting: false,
 		msaa: false,
+		ambientOcclusion: false,
+		skyDetail: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -257,7 +102,9 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"ambientOcclusion",
+			"msaa"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -265,83 +112,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		assert.equal( experimentalOptions( { [key]: true } )[key], true );
 		assert.equal( experimentalVideo( experimentalOptions( { [key]: true } ) )[key], true );
 	}
-});
-
-test("a saved preference holding the retired relief and horizon rows loads cleanly and ignores them", () => {
-	// Both rows were removed at the owner's request (2026-10-11): a browser
-	// that saved them on still loads, the keys are dropped, and the other
-	// stages keep their saved values.
-	const saved = { terrainRelief: true, texturedHorizon: true, heightFog: true, renderScale: 75 };
-	const options = experimentalOptions( saved );
-	assert.deepEqual( options, { ...OFF, heightFog: true, renderScale: 75 } );
-	assert.equal( "terrainRelief" in options, false );
-	assert.equal( "texturedHorizon" in experimentalVideo( options ), false );
-	const ids = /** @type {string[]} */ (EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).map( row => row.key ));
-	assert.ok( !ids.includes( "terrainRelief" ) && !ids.includes( "texturedHorizon" ) );
-});
-
-test("new environment preferences persist only on Confirm and Default remains a draft", () => {
-	for (
-		const key of /** @type {const} */ ([
-			"dynamicSun",
-			"floatBloom",
-			"hdrToneMap",
-			"sunShadow",
-			"perPixelLighting"
-		])
-	) {
-		const hud = createExperimentalHud();
-		hud.open();
-		hud.toggle( key );
-		assert.deepEqual( hud.state().saved, OFF );
-		const saved = hud.confirm();
-		assert.deepEqual( saved, { ...OFF, [key]: true } );
-		const restored = createExperimentalHud();
-		restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
-		restored.open();
-		assert.equal( restored.state().draft[key], true );
-		restored.reset();
-		assert.deepEqual( restored.state().draft, OFF );
-		assert.equal( restored.state().saved[key], true );
-		restored.open();
-		assert.equal( restored.state().draft[key], true, "Unconfirmed Default must be discarded" );
-		restored.reset();
-		assert.deepEqual( restored.confirm(), OFF );
-		restored.open();
-		assert.deepEqual( restored.state().draft, OFF );
-	}
-});
-
-/*
-================
-Tabs
-================
-*/
-test("the window's tabs cover every preference once and Open returns to Image", () => {
-	assert.deepEqual(
-		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
-	);
-	// Lighting keeps the direct-light stages, the moving sun among them;
-	// MSAA rides there as a render stage; render scale joins Image without
-	// changing the indices used to reopen the existing tabs.
-	assert.deepEqual(
-		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "msaa", "enchantSparks", "dungeonCharacterPvs" ]
-	);
-	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
-	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
-	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	assert.deepEqual( keys, Object.keys( OFF ).sort() );
-	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );
-	assert.equal( new Set( ids ).size, ids.length );
-	const hud = createExperimentalHud();
-	hud.selectTab( 4 );
-	assert.equal( hud.state().tab, 4 );
-	hud.open();
-	assert.equal( hud.state().tab, 0 );
-	assert.throws( () => hud.selectTab( EXPERIMENTAL_TABS.length ) );
-	assert.throws( () => hud.selectTab( -1 ) );
 });
 
 /*
@@ -378,6 +148,31 @@ test("a phone is a coarse pointer on a short screen; touch laptops and tablets a
 	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 768 } ), false, "tablet" );
 	assert.equal( phoneDisplay( { coarsePointer: false, shortSide: 402 } ), false, "fine pointer" );
 	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 0 } ), false, "no screen reported" );
+});
+
+test("the browser display class reports the pointer, and a host without matchMedia reads as fine", () => {
+	// Node has no matchMedia: the missing query reads as a fine pointer, the
+	// same default the renderer used before the shared reader existed, so a
+	// test that wants touch stubs a coarse matchMedia (below).
+	// The stubs answer the one question the source asks (`.matches`).
+	assert.equal( browserDisplayClass().coarsePointer, false );
+	const media = globalThis.matchMedia, screen = globalThis.screen;
+	const stub = /** @param {boolean} matches */ ( matches ) => /** @type {typeof globalThis.matchMedia} */ (
+		/** @type {unknown} */ (() => ({ matches, media: "(pointer: coarse)" }))
+	);
+	try {
+		globalThis.matchMedia = stub( false );
+		globalThis.screen = /** @type {typeof globalThis.screen} */ ({ width: 1920, height: 1080 });
+		const fine = browserDisplayClass();
+		assert.deepEqual( fine, { coarsePointer: false, shortSide: 1080 } );
+		globalThis.matchMedia = stub( true );
+		globalThis.screen = /** @type {typeof globalThis.screen} */ ({ width: 854, height: 393 });
+		assert.deepEqual( browserDisplayClass(), { coarsePointer: true, shortSide: 393 } );
+	} finally {
+		globalThis.matchMedia = media;
+		globalThis.screen = screen;
+	}
+	assert.equal( browserDisplayClass().coarsePointer, false, "the stub is gone again" );
 });
 
 test("phone resolution defaults on and only an explicit false turns it off", () => {
@@ -547,6 +342,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -565,6 +361,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -644,6 +441,13 @@ test("compressed textures are on unless explicitly false, and the stored reader 
 	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
 	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
+});
+
+test("HD textures are off unless explicitly true, so an old profile never downloads the set", () => {
+	for ( const value of [ undefined, null, {}, { hdTextures: 1 }, { hdTextures: "true" }, { hdTextures: false } ] ) {
+		assert.equal( experimentalOptions( value ).hdTextures, false, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { hdTextures: true } ).hdTextures, true );
 });
 
 test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
@@ -881,4 +685,23 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+});
+
+test("attack-pet training has no experimental toggle or saved opt-out", () => {
+	for ( const enabled of [ false, true ] ) {
+		assert.equal(
+			Object.hasOwn( experimentalOptions( { attackPetTraining: enabled } ), "attackPetTraining" ),
+			false
+		);
+	}
+	assert.equal(
+		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		false
+	);
+});
+
+test("item links in chat are on unless explicitly false", () => {
+	assert.equal( experimentalOptions( {} ).chatItemLinks, true );
+	assert.equal( experimentalOptions( { chatItemLinks: false } ).chatItemLinks, false );
+	assert.equal( experimentalOptions( { chatItemLinks: "no" } ).chatItemLinks, true );
 });

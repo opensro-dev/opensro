@@ -57,7 +57,7 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	priced := map[string]uint64{
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
+		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09":         2000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,
@@ -75,6 +75,12 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// shardShops appends the X-Large potions the same way (SRO_JANGAN_XL_POTIONS).
+		xl, err := commerce.JanganXLPotionGoodsFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		extra = append(extra, xl...)
 		shard, err := commerce.LoadWithExtraGoods(dir, items, extra)
 		if err != nil {
 			t.Fatal(err)

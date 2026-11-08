@@ -33,19 +33,23 @@ func TestSnapshotCompanionKeepsThePetOwnerView(t *testing.T) {
 			{Slot: 6, Codename: "ITEM_WEAPON", MagicOptions: []uint64{7}},
 			{Slot: JobSuitSlot, Codename: "ITEM_CAPE", MagicOptions: []uint64{5}},
 			{Slot: 13, Codename: "ITEM_ETC_PLAIN", MagicOptions: []uint64{8}},
-			{Slot: 14, Codename: "ITEM_COS_P_WOLF", Summon: &CharacterCOS{GID: 7001, Codename: "COS_P_WOLF", CurrentHP: 90, Summoned: true}},
+			{Slot: 14, Codename: "ITEM_COS_P_WOLF", Summon: &CharacterCOS{GID: 7001, Codename: "COS_P_WOLF", CurrentHP: 90, Summoned: true,
+				Container: &COSContainer{Capacity: 2, Rows: []InventoryRow{{Slot: 0, Codename: "ITEM_PET_FOOD"}}}}},
 			{Slot: 15, Codename: "ITEM_COS_P_CROW", Summon: &CharacterCOS{GID: 7002, Codename: "COS_P_CROW", CurrentHP: 80}},
 		},
 		AvatarInventory: &AvatarInventory{Rows: []InventoryRow{{Slot: 0, Codename: "ITEM_AVATAR"}}},
-		ActiveCOS:       &CharacterCOS{GID: 7003, Codename: "COS_ACTIVE", CurrentHP: 70, Summoned: true},
-		CapturedCOS:     &CharacterCOS{GID: 7004, Codename: "COS_CAPTURED", CurrentHP: 60},
-		Mercenaries:     []*CharacterCOS{{GID: 7005, Codename: "COS_MERC", CurrentHP: 55}},
-		Brood:           []*CharacterCOS{{GID: 7006, Codename: "COS_BROOD", CurrentHP: 44}},
-		CurrentHP:       &hp,
-		Gold:            &gold,
-		GuildID:         &guild,
-		Aggressions:     map[uint32]uint32{4: 30},
-		Skills:          []uint32{1},
+		ActiveCOS: &CharacterCOS{GID: 7003, Codename: "COS_ACTIVE", CurrentHP: 70, Summoned: true,
+			Container: &COSContainer{Capacity: 3, Rows: []InventoryRow{{Slot: 0, Codename: "ITEM_TRADE_GOODS", StackCount: 40,
+				MagicOptions: []uint64{9}, Summon: &CharacterCOS{GID: 7999, Codename: "COS_NESTED"}}}},
+			Rentals: []COSRental{{Kind: 5, ID: 7003, RemainingSeconds: 3600}}},
+		CapturedCOS: &CharacterCOS{GID: 7004, Codename: "COS_CAPTURED", CurrentHP: 60},
+		Mercenaries: []*CharacterCOS{{GID: 7005, Codename: "COS_MERC", CurrentHP: 55}},
+		Brood:       []*CharacterCOS{{GID: 7006, Codename: "COS_BROOD", CurrentHP: 44}},
+		CurrentHP:   &hp,
+		Gold:        &gold,
+		GuildID:     &guild,
+		Aggressions: map[uint32]uint32{4: 30},
+		Skills:      []uint32{1},
 	}
 
 	full := character.Snapshot()
@@ -83,12 +87,40 @@ func TestSnapshotCompanionKeepsThePetOwnerView(t *testing.T) {
 	if narrow.Gold != nil || len(narrow.Skills) != 0 {
 		t.Fatal("view carried an unread child (gold, skills)")
 	}
+	// The companions ride without their deep children: no reader of
+	// the view reads a pet's rentals or (the active one excepted) its
+	// container, and cloning the transport's 177 trade rows per pet
+	// copy was the copy's bulk. The active companion's container
+	// rides as cargo values only - the caravan verdict weighs each
+	// row's codename, stack and type - so its rows keep those and
+	// drop their own deep children. The full copy keeps everything
+	// (CloneCOS is not narrowed).
+	if narrow.ActiveCOS.Rentals != nil {
+		t.Fatal("view carried the active companion's rentals")
+	}
+	if narrow.ActiveCOS.Container == nil || len(narrow.ActiveCOS.Container.Rows) != 1 ||
+		narrow.ActiveCOS.Container.Rows[0].Codename != "ITEM_TRADE_GOODS" ||
+		narrow.ActiveCOS.Container.Rows[0].StackCount != 40 {
+		t.Fatalf("view lost the caravan cargo facts: %+v", narrow.ActiveCOS.Container)
+	}
+	if row := narrow.ActiveCOS.Container.Rows[0]; row.MagicOptions != nil || row.Summon != nil {
+		t.Fatal("view carried a cargo row's deep children")
+	}
+	if got := narrow.CompanionByGID(7001); got == nil || got.Container != nil {
+		t.Fatal("view carried a row companion's container")
+	}
+	if full.ActiveCOS.Container == nil || len(full.ActiveCOS.Container.Rows) != 1 || len(full.ActiveCOS.Rentals) != 1 ||
+		full.ActiveCOS.Container.Rows[0].MagicOptions[0] != 9 || full.ActiveCOS.Container.Rows[0].Summon.GID != 7999 {
+		t.Fatal("the full copy lost the companion's container, rentals or row children")
+	}
 
 	character.MissionInventory[4].Summon.CurrentHP = 1
 	character.ActiveCOS.CurrentHP = 2
+	character.ActiveCOS.Container.Rows[0].StackCount = 1
 	character.Aggressions[4] = 0
 	*character.GuildID = 1
 	if narrow.MissionInventory[2].Summon.CurrentHP != 80 || narrow.ActiveCOS.CurrentHP != 70 ||
+		narrow.ActiveCOS.Container.Rows[0].StackCount != 40 ||
 		narrow.Aggressions[4] != 30 || *narrow.GuildID != 77 {
 		t.Fatal("view shares state with the source")
 	}

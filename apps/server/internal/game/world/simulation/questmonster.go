@@ -33,7 +33,8 @@ FixedPosition says the quest named Position; otherwise the action owner
 fills it with the player's live pose.
 LifetimeMs, when set, is the quest's own removal timer (the Hidden
 Treasure script registers one of 300 s whose handler sends the monster
-to life state 3).
+to life state 3). TacticsFrom, when set, gives the monster that nest's own
+hostility and skills, for a monster with no summon tactics row.
 ================
 */
 type QuestMonsterSpawn struct {
@@ -46,6 +47,7 @@ type QuestMonsterSpawn struct {
 	RadiusMin     float64
 	RadiusSpan    float64
 	LifetimeMs    int64
+	TacticsFrom   *monster.NestRow
 }
 
 /*
@@ -102,6 +104,12 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 			actor.Nest.SightRange = float64(tactics.Controls.SightRange)
 			actor.Nest.Aggressive = tactics.Controls.AggressType == 0
 		}
+	}
+	if from := request.TacticsFrom; from != nil {
+		actor.Nest.NativeTacticsFlags, actor.Nest.TargetPolicy = from.NativeTacticsFlags, from.TargetPolicy
+		actor.Nest.Controls, actor.Nest.HasControls = from.Controls, from.HasControls
+		actor.Nest.ConditionalSkills = from.ConditionalSkills
+		actor.Nest.SightRange, actor.Nest.Aggressive = from.SightRange, from.Aggressive
 	}
 	mover := monster.NewSpawnMover(actor, request.NowMs)
 	mover.Activity = monster.NewActivityCadence(uint32(request.NowMs), s.randomWord())

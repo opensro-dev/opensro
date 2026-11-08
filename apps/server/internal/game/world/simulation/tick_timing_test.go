@@ -13,7 +13,6 @@ package simulation
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -33,7 +32,7 @@ func (c *fakeTickClock) advance(elapsed time.Duration) { c.now = c.now.Add(elaps
 timedTicker
 ================
 */
-func timedTicker(clock *fakeTickClock, hooks ...TickHook) (*Ticker, *[]TickTiming) {
+func timedTicker(clock *fakeTickClock, hooks ...NamedTickHook) (*Ticker, *[]TickTiming) {
 	got := &[]TickTiming{}
 	ticker := &Ticker{
 		Source: emptySessionSource{}, Push: discardPusher{}, Now: clock.Now, Hooks: hooks,
@@ -51,7 +50,12 @@ func TestTickReportsPhasesAndNamesSlowHooks(t *testing.T) {
 	clock := &fakeTickClock{now: time.UnixMilli(1000)}
 	fast := func(int64) []DivisionFrames { clock.advance(time.Millisecond); return nil }
 	slow := func(int64) []DivisionFrames { clock.advance(150 * time.Millisecond); return nil }
-	ticker, got := timedTicker(clock, fast, slow)
+	// The slow hook is an anonymous closure on purpose: its registered
+	// name, not its runtime name (<constructor>.funcN), is reported
+	// (#2294).
+	ticker, got := timedTicker(clock,
+		NamedTickHook{Hook: fast},
+		NamedTickHook{Name: "skill-objects", Hook: slow})
 	ticker.RunTick(0)
 	if len(*got) != 1 {
 		t.Fatalf("observer saw %d ticks, want 1", len(*got))
@@ -61,7 +65,7 @@ func TestTickReportsPhasesAndNamesSlowHooks(t *testing.T) {
 		timing.BeforeHooks != 0 || timing.Divisions != 0 {
 		t.Fatalf("phases = %+v", timing)
 	}
-	if len(timing.SlowHooks) != 1 || !strings.Contains(timing.SlowHooks[0].Name, "TestTickReportsPhasesAndNamesSlowHooks") ||
+	if len(timing.SlowHooks) != 1 || timing.SlowHooks[0].Name != "skill-objects" ||
 		timing.SlowHooks[0].Elapsed != 150*time.Millisecond {
 		t.Fatalf("slow hooks = %+v", timing.SlowHooks)
 	}
@@ -79,7 +83,7 @@ func TestCancelledScheduledTickHasNoNegativePhase(t *testing.T) {
 	clock := &fakeTickClock{now: time.UnixMilli(1000)}
 	before := func(int64) []DivisionFrames { clock.advance(20 * time.Millisecond); return nil }
 	ticker, got := timedTicker(clock)
-	ticker.BeforeHooks = []TickHook{before}
+	ticker.BeforeHooks = []NamedTickHook{{Hook: before}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	ticker.runScheduledTick(ctx, 0, nil)
@@ -104,7 +108,7 @@ func TestPanickingSlowHookIsStillCounted(t *testing.T) {
 		clock.advance(200 * time.Millisecond)
 		panic("hook failure")
 	}
-	ticker, got := timedTicker(clock, panics)
+	ticker, got := timedTicker(clock, NamedTickHook{Hook: panics})
 	ticker.RunTick(0)
 	if len(*got) != 1 || len((*got)[0].SlowHooks) != 1 || (*got)[0].SlowHooks[0].Elapsed != 200*time.Millisecond {
 		t.Fatalf("panicking slow hook lost: %+v", *got)
@@ -167,5 +171,121 @@ func TestStepTimerNamesSlowSteps(t *testing.T) {
 	zero.Time("unwired", func() { ran = true })
 	if !ran {
 		t.Fatal("the zero StepTimer did not run its step")
+	}
+}
+
+/*
+================
+TestStepTimerBeginEndMatchesTime
+
+The span must record exactly what Time records - the total, the slow
+names and the zone's open and close around them - for a fast step, a
+slow step and a panicking one.
+================
+*/
+func TestStepTimerBeginEndMatchesTime(t *testing.T) {
+	record := func(spans bool) []string {
+		clock := time.UnixMilli(0)
+		var events []string
+		steps := StepTimer{
+			Now: func() time.Time { return clock },
+			Total: func(name string, elapsed time.Duration) {
+				events = append(events, "total:"+name+":"+elapsed.String())
+			},
+			Slow: func(name string, elapsed time.Duration) {
+				events = append(events, "slow:"+name+":"+elapsed.String())
+			},
+			Zone: func(name string) func() {
+				events = append(events, "open:"+name)
+				return func() { events = append(events, "close:"+name) }
+			},
+		}
+		step := func(name string, body func()) {
+			if spans {
+				span := steps.Begin(name)
+				defer span.End()
+				body()
+				return
+			}
+			steps.Time(name, body)
+		}
+		step("fast", func() { clock = clock.Add(10 * time.Millisecond) })
+		step("slow", func() { clock = clock.Add(150 * time.Millisecond) })
+		func() {
+			defer func() { _ = recover() }()
+			step("panics", func() {
+				clock = clock.Add(SlowHookThreshold)
+				panic("step failed")
+			})
+		}()
+		return events
+	}
+	viaTime, viaSpans := record(false), record(true)
+	if len(viaTime) != len(viaSpans) {
+		t.Fatalf("span events %v, Time events %v", viaSpans, viaTime)
+	}
+	for i := range viaTime {
+		if viaTime[i] != viaSpans[i] {
+			t.Fatalf("event %d: span %q, Time %q (span %v, Time %v)", i, viaSpans[i], viaTime[i], viaSpans, viaTime)
+		}
+	}
+	var zero StepTimer
+	unwired := zero.Begin("unwired")
+	unwired.End()
+}
+
+/*
+================
+TestStepSpanEndRecordsOnce
+
+A span ended explicitly and again by a deferred backstop records
+once: the driver defers gate.End beside its explicit end so a
+panicking gate wait still records, and the calm path must not
+double-count the wait or close the zone twice.
+================
+*/
+func TestStepSpanEndRecordsOnce(t *testing.T) {
+	clock := time.UnixMilli(0)
+	totals, zones := 0, 0
+	steps := StepTimer{
+		Now:   func() time.Time { return clock },
+		Total: func(string, time.Duration) { totals++ },
+		Zone: func(string) func() {
+			return func() { zones++ }
+		},
+	}
+	span := steps.Begin("step")
+	clock = clock.Add(10 * time.Millisecond)
+	span.End()
+	span.End()
+	if totals != 1 || zones != 1 {
+		t.Fatalf("double End recorded totals=%d zones=%d, want 1 and 1", totals, zones)
+	}
+}
+
+// spanAllocTimer / spanAllocSink keep TestStepSpanBeginEndAllocatesNothing's
+// measured pair free of capture boxes of its own.
+var spanAllocTimer = &StepTimer{
+	Now:   func() time.Time { return time.UnixMilli(0) },
+	Total: func(string, time.Duration) {},
+}
+
+var spanAllocSink StepSpan
+
+/*
+================
+TestStepSpanBeginEndAllocatesNothing
+
+Retiring Time's per-step closure box on the tick path is the span's
+whole reason to exist (#2030); pin the pair at zero allocations.
+================
+*/
+func TestStepSpanBeginEndAllocatesNothing(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		spanAllocSink = spanAllocTimer.Begin("step")
+		spanAllocSink.End()
+	})
+	if allocs != 0 {
+		t.Fatalf("Begin/End allocated %v per run, want 0", allocs)
 	}
 }

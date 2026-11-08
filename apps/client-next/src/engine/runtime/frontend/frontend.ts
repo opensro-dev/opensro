@@ -11,10 +11,28 @@ import { createFrontendStage } from "./stage/stage";
 import { createCharacterDialog } from "./dialog/dialog";
 import { createCreation } from "./creation/creation";
 import { characterStatus } from "@/engine/foundation/ui/character-status";
+import {
+	createEntryVisibility,
+	entryVisibilityBegin,
+	entryVisibilityEnd,
+	entryVisibilitySetHidden,
+	entryVisibilityTotal
+} from "@/engine/foundation/session/entry-visibility";
 import { selectedDockCamera } from "@/engine/foundation/rendering/dock-camera";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SessionState, CharacterOperationCommand, SessionCommand } from "@/engine/contracts/session";
+/*
+================
+pageHidden
+
+Whether the page is hidden right now; a runtime without a document
+(tests) is never hidden.
+================
+*/
+function pageHidden(): boolean {
+	return globalThis.document?.hidden === true;
+}
 /*
 ================
 createFrontend
@@ -33,6 +51,9 @@ export function createFrontend(
 		camera = createFrontendCamera(),
 		stage = createFrontendStage( assets, renderer, base );
 	const dialog = createCharacterDialog( send );
+	// How long the page was hidden during the current entry attempt
+	// (entry-visibility.ts), for the world_entry_rejected incident (#2558).
+	const visibility = createEntryVisibility();
 	let status: ReturnType<typeof characterStatus> | undefined, statusUntil = 0;
 	const creation = createCreation( assets, base, send, messageSound );
 	let race: 0 | 1 = 0;
@@ -57,6 +78,24 @@ export function createFrontend(
 		*/
 		reveal() {
 			flow.reveal();
+		},
+		/*
+		================
+		failure
+
+		The stage failure as facts for the incident report (#2559): the
+		text the flow failed with, and the caught error's stack when the
+		stage threw one.
+		================
+		*/
+		failure() {
+			const error = stage.error();
+			if ( !error ) return null;
+			const cause = stage.cause();
+			return {
+				message: error,
+				stack: cause instanceof Error && cause.stack ? cause.stack.slice( 0, 8192 ) : undefined
+			};
 		},
 		/*
 		================
@@ -203,6 +242,16 @@ export function createFrontend(
 					message: degradation.message
 				} );
 			}
+			// Held character clocks reach the Agent the same way: the renderer
+			// owns the snapshot rows that hold them, this owner owns the sender.
+			for ( const degradation of renderer.takeDegradations?.() ?? [] ) {
+				send( {
+					kind: "client-report",
+					incidentKind: "degraded",
+					code: degradation.code,
+					message: degradation.message
+				} );
+			}
 			const delta = last ? Math.max( 0, (now - last) / 1000 ) : 0;
 			last = now;
 			if ( authenticated && session?.phase === "signed-out" ) {
@@ -261,20 +310,40 @@ export function createFrontend(
 				flow.resumeWorld();
 			}
 			if ( session?.phase === "connecting" || session?.phase === "entering-world" ) entering = true;
+			// The entry's hidden time runs on the step clock: steps stop
+			// while the page is hidden, so a span closes at the first
+			// visible step - within a frame of the truth, and exact
+			// enough to tell a backgrounded tab from a stalled device.
+			if ( (entering || entryPending) && !visibility.tracking ) {
+				entryVisibilityBegin( visibility, now, pageHidden() );
+			} else if ( !(entering || entryPending) && visibility.tracking ) {
+				entryVisibilityEnd( visibility, now );
+			}
+			if ( visibility.tracking ) entryVisibilitySetHidden( visibility, pageHidden(), now );
 			if (
 				(entering || entryPending || flow.snapshot().phase === "loading-world") && session?.error &&
 				session.revision > entryRevision && session.phase === "character-select"
 			) {
 				// The player sees only "(S2)": report the stage and the session's
 				// reason, so a refused entry is never silent (client-report).
+				// A maintenance refusal is a designed answer, not an incident:
+				// the typed refusal the mint carried files it apart (#2557).
 				send( {
 					kind: "client-report",
 					incidentKind: "runtime",
-					code: "world_entry_rejected",
-					message: `Entry rejected (S2) at ${flow.snapshot().phase}/${
-						entryPending ? "pending" : entering ? "entering" : "loading"
-					}: ${session.error}`
+					code: session.entryFailure?.refusal === "MAINTENANCE" ?
+						"world_entry_maintenance" :
+						"world_entry_rejected",
+					message:
+						`Entry rejected (S2) at ${flow.snapshot().phase}/${
+							entryPending ? "pending" : entering ? "entering" : "loading"
+						}: ${session.error}` +
+						(session.entryFailure ?
+							` (stage ${session.entryFailure.stage}; ${session.entryFailure.bytesReceived} bytes in ${session.entryFailure.framesReceived} frames received)` :
+							""),
+					tabHiddenMs: Math.round( entryVisibilityTotal( visibility, now ) )
 				} );
+				entryVisibilityEnd( visibility, now );
 				entryPending = false;
 				entering = false;
 				flow.entryRejected();

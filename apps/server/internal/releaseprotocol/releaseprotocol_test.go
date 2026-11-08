@@ -96,7 +96,7 @@ TestEveryReleasedProtocolNamesDistinctContracts
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
 	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract}) {
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract, Chat: ChatContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -252,5 +252,67 @@ func TestAClientThatReadsTheNarrowSourceBlockIsRefused(t *testing.T) {
 	}
 	if MovementContract < readsTheFloatedSource {
 		t.Fatalf("MovementContract = %d; this build sends the floated source block", MovementContract)
+	}
+}
+
+/*
+================
+TestAClientWithoutTheWantedStateIsRefused
+
+A protocol-11 browser is never sent the port-only 0x3FBA most-wanted
+state for the buff-board row, so a streak holder never sees the row
+that explains the streak (#1849). It decodes nothing wrong, but the
+display the rule promises depends on the frame, so it must be refused
+with 426 and told to reload.
+================
+*/
+func TestAClientWithoutTheWantedStateIsRefused(t *testing.T) {
+	const showsTheWantedState = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Wanted >= showsTheWantedState {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (wanted %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Wanted, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[11]; !ok || refused == 0 {
+		t.Fatal("the protocol-11 client is not in the history this test refuses")
+	}
+	if WantedContract < showsTheWantedState {
+		t.Fatalf("WantedContract = %d; this build sends the wanted state", WantedContract)
+	}
+}
+
+/*
+================
+TestAClientWithoutChatLinksIsRefused
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): a protocol-13 browser reads
+a player line that carries an item-link tail as trailing bytes and fails
+the session, so it is refused with 426 and told to reload.
+================
+*/
+func TestAClientWithoutChatLinksIsRefused(t *testing.T) {
+	const readsChatLinks = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Chat >= readsChatLinks {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (chat %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Chat, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[13]; !ok || refused == 0 {
+		t.Fatal("the protocol-13 client is not in the history this test refuses")
+	}
+	if ChatContract < readsChatLinks || Current != 14 {
+		t.Fatalf("ChatContract = %d, Current = %d; this build sends link tails at 14", ChatContract, Current)
 	}
 }

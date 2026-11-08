@@ -3,11 +3,12 @@
 
 queries.go - the ledger's bucketed series, flows and flags (contract v1)
 
-Every answer reads the newest snapshot's economy_ledger, grouped by
-bucket, reason and direction in one query; the metric is folded from
-those groups here. A mint sums the gains of mint reasons, a burn the
-losses of burn reasons; transfers and unattributed changes count in
-neither. Amounts are decimal strings.
+Every answer folds the newest snapshot's hourly rollup (rollup.go) by
+bucket, reason and direction; the metric is folded from those groups
+here. readGroups is the same grouping asked of the ledger directly,
+kept as the fold's reference. A mint sums the gains of mint reasons, a
+burn the losses of burn reasons; transfers and unattributed changes
+count in neither. Amounts are decimal strings.
 
 ===========================================================================
 */
@@ -103,7 +104,9 @@ parseWindow
 
 The bucket (default 1d), to (default now), from (default: the most
 buckets that end at to), refused when the buckets it touches exceed
-maxBuckets.
+maxBuckets. The contract is whole buckets: from is floored to its
+bucket's first second and to raised to its bucket's last, so every
+answer counts the buckets it touches whole, never a cut of one.
 ================
 */
 func parseWindow(bucket, from, to, division string, now time.Time) (window, error) {
@@ -130,6 +133,10 @@ func parseWindow(bucket, from, to, division string, now time.Time) (window, erro
 	if w.from > w.to {
 		return window{}, queryError{"bad_bucket", "from is after to"}
 	}
+	// Whole buckets are the contract (see the banner): align before
+	// the width check counts the buckets the window touches.
+	w.from = w.from / w.size * w.size
+	w.to = (w.to/w.size+1)*w.size - 1
 	if w.to/size-w.from/size+1 > maxBuckets {
 		return window{}, queryError{"range_too_wide", fmt.Sprintf("more than %d buckets", maxBuckets)}
 	}
@@ -375,6 +382,44 @@ func foldFlows(w window, groups []group) (buckets []int64, reasons map[string][]
 	return buckets, reasons
 }
 
+// tradeReasonNames are the reasons a caravan trade sale writes: the
+// seller's credit, the party shares paid beside it and a thief's den
+// sale (domain/economy.go economyMemberReasons). No other ledger
+// reason is a caravan sale.
+var tradeReasonNames = []string{"trade_sale_credit", "trade_party_share", "thief_den_sale"}
+
+/*
+================
+foldTrade
+
+foldFlows of the trade reasons alone, for /economy/v1/trade: caravan
+trade sales by bucket (and division, through the window). Every trade
+reason is present in every answer, "0" where it moved nothing, so the
+console's Trade tab reads an empty window as zeros, not as missing
+rows; a window with no sale at all is the honest answer, since the
+reasons above are the only ones a trade sale can write.
+================
+*/
+func foldTrade(w window, groups []group) (buckets []int64, reasons map[string][]string) {
+	trade := make([]group, 0, len(groups))
+	for _, g := range groups {
+		if slices.Contains(tradeReasonNames, g.reason) {
+			trade = append(trade, g)
+		}
+	}
+	buckets, reasons = foldFlows(w, trade)
+	for _, name := range tradeReasonNames {
+		if reasons[name] == nil {
+			zeroes := make([]string, len(buckets))
+			for i := range zeroes {
+				zeroes[i] = "0"
+			}
+			reasons[name] = zeroes
+		}
+	}
+	return buckets, reasons
+}
+
 /*
 ================
 Flag
@@ -389,7 +434,19 @@ type Flag struct {
 	Ref       *string `json:"ref"`
 	Value     string  `json:"value"`
 	Threshold string  `json:"threshold"`
+	// Basis states how Value and Threshold are measured:
+	// flagBasisPerOnlineHour compares gold per online hour, the
+	// growth-proof reading; flagBasisDailyTotal is the raw day total,
+	// kept (and labelled) when there is no online-hour data to
+	// normalise by (#2643).
+	Basis string `json:"basis,omitempty"`
 }
+
+// The flagBasis values a net_mint_p95 Flag can carry (#2643).
+const (
+	flagBasisPerOnlineHour = "per_online_hour"
+	flagBasisDailyTotal    = "daily_total"
+)
 
 /*
 ================
@@ -400,37 +457,82 @@ netMintWindow days with ledger rows before it, once that many exist (a
 day with no change at all has no point and is skipped). A flag only: no
 rule acts. The day nets come from 1d groups starting netMintWindow days
 before the window.
+
+The comparison is in gold minted per online hour (#2643): on a growing
+shard the raw day total breaks its own record most days (the percentile
+of seven earlier totals sits just under yesterday's, so every new
+record flags), while mint per hour stays flat under ordinary growth and
+still jumps when minting per hour of play doubles. onlineMs maps a day
+start (unix seconds, the kill_stats day_s key) to that day's summed
+online milliseconds and is whole-shard: kill_stats has no division
+column, so only the whole-shard division is normalised. A day whose
+own day - or any of the window's - has no online-hour data falls back
+to the raw-total comparison; either way the flag's Basis says which
+reading it is.
 ================
 */
-func netMintFlags(db *sql.DB, w window, division string) ([]Flag, error) {
+func netMintFlags(entries []rollupEntry, onlineMs map[int64]int64, w window, division string) []Flag {
 	days := window{bucket: "1d", size: bucketSeconds["1d"], from: w.from - netMintWindow*bucketSeconds["1d"], to: w.to, division: division}
-	groups, err := readGroups(db, days)
-	if err != nil {
-		return nil, err
-	}
-	points := foldSeries("gold_net", groups)
+	points := foldSeries("gold_net", rollupGroups(entries, days))
 	var flags []Flag
 	for i, point := range points {
 		if point.T < w.from || i < netMintWindow {
 			continue
 		}
-		var earlier []int64
+		value, _ := strconv.ParseInt(point.Sum, 10, 64)
+		priors := make([]int64, 0, netMintWindow)
 		for _, prior := range points[i-netMintWindow : i] {
-			value, _ := strconv.ParseInt(prior.Sum, 10, 64)
-			earlier = append(earlier, value)
+			priorValue, _ := strconv.ParseInt(prior.Sum, 10, 64)
+			priors = append(priors, priorValue)
+		}
+		basis := flagBasisDailyTotal
+		compared, earlier := value, priors
+		if division == "" {
+			dayRate, ok := mintPerOnlineHour(value, onlineMs[point.T])
+			if ok {
+				rates := make([]int64, 0, netMintWindow)
+				for j, prior := range priors {
+					rate, has := mintPerOnlineHour(prior, onlineMs[points[i-netMintWindow+j].T])
+					if !has {
+						rates = nil
+						break
+					}
+					rates = append(rates, rate)
+				}
+				if rates != nil {
+					basis, compared, earlier = flagBasisPerOnlineHour, dayRate, rates
+				}
+			}
 		}
 		slices.Sort(earlier)
 		threshold := percentile(earlier, 0.95)
-		value, _ := strconv.ParseInt(point.Sum, 10, 64)
-		if value <= threshold {
+		if compared <= threshold {
 			continue
 		}
 		flags = append(flags, Flag{
 			ID: fmt.Sprintf("net_mint_p95:%s:%d", division, point.T), Rule: "net_mint_p95", At: point.T,
-			Division: division, Value: point.Sum, Threshold: decimal(threshold),
+			Division: division, Value: decimal(compared), Threshold: decimal(threshold), Basis: basis,
 		})
 	}
-	return flags, nil
+	return flags
+}
+
+/*
+================
+mintPerOnlineHour
+
+The day's net mint per whole online hour of play, 3600-seconds
+normalised so the value stays a plain gold-per-hour figure. ok is
+false when the day has no online-hour data (the caller falls back to
+the raw-total rule).
+================
+*/
+func mintPerOnlineHour(netMint, onlineMs int64) (int64, bool) {
+	hours := onlineMs / 3600000
+	if hours <= 0 {
+		return 0, false
+	}
+	return netMint / hours, true
 }
 
 /*

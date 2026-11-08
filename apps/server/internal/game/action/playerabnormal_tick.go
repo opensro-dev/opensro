@@ -76,6 +76,56 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 
 /*
 ================
+rideStateRoute
+
+One 0xB4B5 ride state travelling under its rider, away from the
+shared publication it was found in.
+================
+*/
+type rideStateRoute struct {
+	gid    uint32
+	frames []simulation.Frame
+}
+
+/*
+================
+splitRideStates
+
+Partition a shared publication into the frames every viewer of its
+source may take and the 0xB4B5 ride states inside it. A ride state
+names its rider and the client applies it with no absent-actor arm
+(ride_state_scope_test.go), so each ride state travels under its
+payload rider, keyed exactly as the action lane's frameSourceGID keys
+it: the tick router then admits it only to viewers gated on the rider,
+never to viewers gated on the shared source alone. A publication whose
+source already is the rider gets its ride states back under the same
+key and the tick's coalescing folds them in again. A ride state whose
+payload does not decode stays with the shared frames, as the action
+lane's fallback keeps it under the caller's source.
+================
+*/
+func splitRideStates(in []simulation.Frame) ([]simulation.Frame, []rideStateRoute) {
+	shared := make([]simulation.Frame, 0, len(in))
+	var rides []rideStateRoute
+	for _, f := range in {
+		rider, ok := uint32(0), false
+		if f.Opcode == wire.OpCosRideState {
+			rider, ok = wire.CosRideStateRider(f.Payload)
+		}
+		if !ok {
+			shared = append(shared, f)
+			continue
+		}
+		if len(rides) == 0 || rides[len(rides)-1].gid != rider {
+			rides = append(rides, rideStateRoute{gid: rider})
+		}
+		rides[len(rides)-1].frames = append(rides[len(rides)-1].frames, f)
+	}
+	return shared, rides
+}
+
+/*
+================
 playerAbnormalDivisionFrames
 
 Keep shared, victim-only and credited-source publications in separate routes.
@@ -95,12 +145,23 @@ func playerAbnormalDivisionFrames(division string, actorID int64, frames playerA
 		if frames.exceptActor {
 			except = actorID
 		}
-		out = append(out, simulation.DivisionFrames{
-			DivisionID:        division,
-			SourceGID:         frames.sourceGID,
-			ExceptCharacterID: except,
-			Frames:            convert(frames.public),
-		})
+		shared, rides := splitRideStates(convert(frames.public))
+		for _, ride := range rides {
+			out = append(out, simulation.DivisionFrames{
+				DivisionID:        division,
+				SourceGID:         ride.gid,
+				ExceptCharacterID: except,
+				Frames:            ride.frames,
+			})
+		}
+		if len(shared) > 0 {
+			out = append(out, simulation.DivisionFrames{
+				DivisionID:        division,
+				SourceGID:         frames.sourceGID,
+				ExceptCharacterID: except,
+				Frames:            shared,
+			})
+		}
 	}
 	if len(frames.actor) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: actorID, Frames: convert(frames.actor)})

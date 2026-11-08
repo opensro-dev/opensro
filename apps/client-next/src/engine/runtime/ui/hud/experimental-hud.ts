@@ -44,7 +44,11 @@ frame-wide stages and scene resolution, World the
 atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
 filter's kinds (#841); it is appended last so the existing tabs keep the
-indices a reopening window relies on.
+indices a reopening window relies on. Jobs (#1849) is appended after it for
+the same reason. Effects holds the port-only image effects the 2005 scene
+never had (sky detail first), and HD (#2061), last, holds the HD set's row:
+every earlier tab already holds the window's seven rows, so each appended
+tab keeps every existing tab's index.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -174,22 +178,33 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Smooth lighting on characters and objects."
 			},
 			{
-				key: "msaa",
-				id: "experimental-msaa",
-				label: "MSAA 4x",
-				description: "Scene edges smooth through 4x multisampling."
-			},
-			{
 				key: "enchantSparks",
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",
 				description: "Richer glow and sparks on reinforced gear."
 			},
 			{
+				// #2496: this tab holds the other item-look row and has
+				// room; the window fits seven rows a tab.
+				key: "sealUnderHeading",
+				id: "experimental-seal-under-heading",
+				label: "Seal line under item name",
+				description: "Show a rare item's seal right under its name."
+			},
+			{
 				key: "dungeonCharacterPvs",
 				id: "experimental-dungeon-character-pvs",
 				label: "Dungeon character PVS",
 				description: "Hide characters in unseen dungeon rooms."
+			},
+			{
+				// Here for room (#2269): the window fits seven rows a tab
+				// and every other tab holds seven already; the option,
+				// its key and its default are unaffected.
+				key: "silkHistory",
+				id: "experimental-silk-history",
+				label: "Silk charge history",
+				description: "The Item Mall's Buying list: silk spending by period."
 			}
 		]
 	},
@@ -257,15 +272,10 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Item break notices",
 			description: "Show the shard's item break announcements."
 		}, {
-			key: "uniqueDamageRank",
-			id: "experimental-unique-damage-rank",
-			label: "Unique damage ranking",
-			description: "When a unique you hit dies, show who did the most."
-		}, {
-			key: "noticeLinks",
-			id: "experimental-notice-links",
-			label: "Links in notices",
-			description: "Hover an item for details; click a name to whisper."
+			key: "highlightEventNotices",
+			id: "experimental-highlight-event-notices",
+			label: "Highlight event notices",
+			description: "Show the shard's event announcements in red."
 		}, {
 			key: "shortNotices",
 			id: "experimental-short-notices",
@@ -317,15 +327,10 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pets",
 		section: "Attack pets",
 		rows: [ {
-			key: "attackPetTraining",
-			id: "experimental-attack-pet-training",
-			label: "Attack-pet training",
-			description: "Pet skills and gear; requires server opt-in."
-		}, {
 			key: "transportAutoPotion",
 			id: "experimental-transport-auto-potion",
-			label: "Transport auto-potion",
-			description: "Heal your transport at your auto-potion HP %."
+			label: "Companion auto-potion",
+			description: "Pet and transport HP and cure settings in the T dialog."
 		}, {
 			key: "petClickOpensWindow",
 			id: "experimental-pet-click-opens-window",
@@ -354,12 +359,25 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-quest-tracker-markers",
 			label: "Quest target markers",
 			description: "Show every active quest's target on M and the minimap."
+		}, {
+			// Moved from Notices (#2727): the window fits seven rows a
+			// tab and the event highlight row joins Shard notices; the
+			// option, its key and its default are unchanged.
+			key: "uniqueDamageRank",
+			id: "experimental-unique-damage-rank",
+			label: "Unique damage ranking",
+			description: "When a unique you hit dies, show who did the most."
 		} ]
 	},
 	{
 		title: "Pickup",
 		section: "Pickup pet filter",
 		rows: [ {
+			key: "autoSelect",
+			id: "experimental-auto-select",
+			label: "Auto Select",
+			description: "Actions window: select the nearest monster."
+		}, {
 			key: "smartPetPickup",
 			id: "experimental-smart-pet-pickup",
 			label: "Keep pet gold pickup when full",
@@ -390,6 +408,63 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
 		} ]
+	},
+	{
+		title: "Effects",
+		section: "Image effects",
+		rows: [ {
+			key: "skyDetail",
+			id: "experimental-sky-detail",
+			label: "Sky detail",
+			description: "Drifting clouds, sun glow and rim light."
+		}, {
+			// Port-only, not native (#2094): here for room - the Image
+			// and Lighting tabs hold their seven rows already; the
+			// option, its key and its default are unaffected.
+			key: "ambientOcclusion",
+			id: "experimental-ambient-occlusion",
+			label: "Ambient occlusion",
+			description: "Shade corners and contact seams from depth."
+		}, {
+			// Port-only, not native: here for room - the Image and
+			// Lighting tabs hold their seven rows already.
+			key: "msaa",
+			id: "experimental-msaa",
+			label: "MSAA 4x",
+			description: "Scene edges smooth through 4x multisampling."
+		} ]
+	},
+	{
+		title: "HD",
+		section: "HD textures",
+		rows: [ {
+			// Port-only, not native (#2061): the row is live, no reload -
+			// switching it on fetches the set's own index and starts its
+			// download; off stops the download and the originals serve.
+			// Listed only while the build carries the set (#2800,
+			// experimentalTabs), so it is never a dead toggle.
+			key: "hdTextures",
+			id: "experimental-hd-textures",
+			label: "HD textures",
+			description: "Sharper world textures; downloads while on."
+		} ]
+	},
+	// Chat, appended last so the other tabs keep their indices: the
+	// chat-log links (notice links moved from Notices for room).
+	{
+		title: "Chat",
+		section: "Chat links",
+		rows: [ {
+			key: "noticeLinks",
+			id: "experimental-notice-links",
+			label: "Links in notices",
+			description: "Hover an item for details; click a name to whisper."
+		}, {
+			key: "chatItemLinks",
+			id: "experimental-chat-item-links",
+			label: "Item links in chat",
+			description: "Alt+click an item while typing to link it in chat."
+		} ]
 	}
 ];
 
@@ -401,11 +476,20 @@ experimentalTabs
 
 Port-only, not native. The shard's published reference is the capability;
 a saved local preference cannot reveal an option the shard has disabled.
+The same rule hides the HD row (#2800): it is listed only while the
+published build carries the set's index (the main pack index certifies
+it; hdAvailable), and a tab left with no rows - the HD tab holds only
+that row - goes with it.
 ================
 */
-export function experimentalTabs( session: SessionState | null | undefined ) {
-	if ( session?.phase === "world" && session.huntingGuide ) return EXPERIMENTAL_TABS;
-	return EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
+export function experimentalTabs( session: SessionState | null | undefined, hdAvailable: boolean ) {
+	const tabs = session?.phase === "world" && session.huntingGuide ?
+		EXPERIMENTAL_TABS :
+		EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
+	if ( hdAvailable ) return tabs;
+	return tabs
+		.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "hdTextures" ) }) )
+		.filter( tab => tab.rows.length > 0 );
 }
 
 /*

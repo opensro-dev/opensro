@@ -102,7 +102,10 @@ export function dungeonNavigation( manifest: DungeonManifest, regionId: number )
 		if ( u8() ) take( 16 );
 		if ( u8() ) take( 28 );
 		str();
-		u32();
+		// CRTDunBlock_ReadFromArchive (AD8090) reads the room index
+		// (+0x12C, CRTDunBlock_GetRoomIndex ACFB60) before the floor
+		// index (+0x130); 0xFFFFFFFF names no room.
+		const room = u32();
 		const floor = u32();
 		const adjacent = Array.from( { length: count( 4096 ) }, () => u32() );
 		if ( adjacent.some( n => n >= nb ) ) throw new Error( "Invalid dungeon adjacency" );
@@ -142,7 +145,7 @@ export function dungeonNavigation( manifest: DungeonManifest, regionId: number )
 				else meshes = objectNavigation( row );
 				decoded.set( key, meshes );
 			}
-			for ( const mesh of meshes ) objects.push( { x, y, z, yaw, mesh, block: i, floor, obstacles } );
+			for ( const mesh of meshes ) objects.push( { x, y, z, yaw, mesh, block: i, floor, room, obstacles } );
 		}
 	}
 	if ( o !== offsets[2] ) throw new Error( "Dungeon block section length" );

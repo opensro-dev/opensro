@@ -109,6 +109,13 @@ mixGain
 		disposed = false,
 		epoch = 0,
 		failure: string | null = null,
+		// The asset the standing failure came from, when it names one:
+		// a decode error without its file cannot be acted on (#2559).
+		failurePath: string | null = null,
+		// Whether the standing failure is one bounded transport retries
+		// already spent themselves on, as the asset owner reported it
+		// (#2863): the incident names its cause, or stays silent on it.
+		failureTransient: boolean | undefined = undefined,
 		job: {
 			id: number;
 			path: string;
@@ -302,7 +309,7 @@ stepAmbient
 			].map( row => row.path )
 		)
 	];
-	const uiRetryAt = new Map<string, number>();
+	const retryAt = new Map<string, number>();
 	let uiSequence = 0, clock = 0, uiActive = false;
 	// 8FAA30 passes null position. A88C2A skips A89190's per-sound
 	// weighting for that branch; A88F16 installed the master volume alone.
@@ -514,6 +521,8 @@ unlock
 			}
 			context.resume().catch( error => {
 				failure = String( error );
+				failurePath = null;
+				failureTransient = undefined;
 			} );
 		},
 		/*
@@ -592,10 +601,13 @@ step
 						const reject = ( error: unknown ) => {
 							decoding.delete( path );
 							if ( generation === epoch && !disposed ) {
-								if ( uiPaths.includes( path ) || preparation.paths().includes( path ) ) {
-									uiRetryAt.set( path, clock + 2 );
-								}
+								// The bytes arrived and would not decode: a
+								// content verdict the standing error keeps,
+								// while the path backs off like any failure.
+								retryAt.set( path, clock + 2 );
 								failure = String( error );
+								failurePath = path;
+								failureTransient = false;
 								for ( const [id, event] of pending ) {
 									if ( event.path === path ) {
 										pending.delete( id );
@@ -636,22 +648,35 @@ step
 									// Decode succeeded, but live voices own the available capacity.
 									// Remember preparation and retry demand after those voices can end.
 									preparedPaths.add( path );
-									uiRetryAt.set( path, clock + RESIDENCY_RETRY_SECONDS );
+									retryAt.set( path, clock + RESIDENCY_RETRY_SECONDS );
 									return;
 								}
 								buffers.set( path, buffer );
 								preparedPaths.add( path );
-								uiRetryAt.delete( path );
+								retryAt.delete( path );
 								resident += bytes;
 							} ).catch( reject );
 						} catch ( error ) {
 							reject( error );
 						}
 					} else if ( result.kind === "error" ) {
-						if ( uiPaths.includes( path ) || preparation.paths().includes( path ) ) {
-							uiRetryAt.set( path, clock + 2 );
+						retryAt.set( path, clock + 2 );
+						// A transient fault on a world sound is a cue that
+						// did not play, not a session failure (#2863): the
+						// loader already spent its bounded retries, so the
+						// cue drops, the path backs off, and a later cue
+						// tries again. The critical sets (the UI kit, the
+						// prepared combat sounds, which gate entry) and
+						// every permanent failure keep the standing error:
+						// entry depends on them, or the asset is broken.
+						if (
+							result.transient !== true || uiPaths.includes( path ) ||
+							preparation.paths().includes( path )
+						) {
+							failure = result.error;
+							failurePath = path;
+							failureTransient = result.transient === true;
 						}
-						failure = result.error;
 						for ( const [id, event] of pending ) {
 							if ( event.path === path ) {
 								pending.delete( id );
@@ -673,7 +698,7 @@ step
 				if ( !buffer ) {
 					if (
 						!job && decoding.size < MAX_DECODES && !decoding.has( event.path ) &&
-						(uiRetryAt.get( event.path ) ?? 0) <= clock && assets.available() > 0
+						(retryAt.get( event.path ) ?? 0) <= clock && assets.available() > 0
 					) {
 						job = {
 							id: assets.request( new URL( event.path, origin ).href, SOUND_INPUT_BYTES ),
@@ -733,9 +758,7 @@ step
 				const path = [
 					...candidates,
 					...(uiActive ? uiPaths.filter( path => !preparedPaths.has( path ) ) : [])
-				].find( path =>
-					!buffers.has( path ) && !decoding.has( path ) && (uiRetryAt.get( path ) ?? 0) <= clock
-				);
+				].find( path => !buffers.has( path ) && !decoding.has( path ) && (retryAt.get( path ) ?? 0) <= clock );
 				if ( path ) job = { id: assets.request( new URL( path, origin ).href, SOUND_INPUT_BYTES ), path };
 			}
 		},
@@ -763,6 +786,23 @@ snapshot
 			};
 		},
 		error: () => preparation.error() ?? failure ?? ambientFailure ?? music.error(),
+		/*
+		================
+		failure
+
+		The standing decode/take failure with the asset that produced
+		it (#2559): error() keeps the bare text for the HUD line, this
+		names the file for the incident report.
+		================
+		*/
+		failure: () =>
+			failure ?
+				{
+					path: failurePath,
+					message: failure,
+					...(failureTransient !== undefined ? { transient: failureTransient } : {})
+				} :
+				null,
 		/*
 ================
 captureAudio
@@ -797,6 +837,8 @@ reset
 			pending.clear();
 			seen.clear();
 			failure = null;
+			failurePath = null;
+			failureTransient = undefined;
 			for ( const source of voices ) {
 				source.stop();
 			}

@@ -15,7 +15,7 @@ The job file repeats each default in its variable block (for a manual
 
 Port-only beta rules (SRO_BETA_*) default native here (#606): off, rate 1,
 no bands. A deployment names its own beta values in its environment; ours
-are ops/release/shard-settings.json, which deploy.py passes to sro-nomad.
+are config/shard-settings.json, which the release passes to sro-nomad.
 
 ===========================================================================
 */
@@ -81,7 +81,10 @@ type Setting struct {
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
-	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off"},
+	// The catalogue publishes the expansion's derived pet-gear drops
+	// while it runs (items.json's petGear rows, droptables.json's
+	// petGear rule), so it is a catalogue setting (#2542).
+	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
@@ -98,7 +101,9 @@ var Settings = []Setting{
 	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
-	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	// Server only: the catalogue publishes the set items themselves and
+	// no set-bonus table, so nothing it publishes changes (#2542).
+	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off"},
 	// Port-only, not native: the degree-11 equipment and skill tiers
 	// (#1745). Consumed at build time, not at runtime: the variant build's
 	// import tools (cap110_item_import.py, cap110_skill_import.py) read
@@ -106,6 +111,12 @@ var Settings = []Setting{
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
+	// Port-only, not native: the later client's mall avatars (outfits, hats,
+	// attachments). Cosmetic, so the owner approved it on by default
+	// (2026-11-04). Build time only, like the two above: mall_avatar_import.py
+	// reads it when the server data is built and skips when the later client
+	// is absent.
+	{Env: "SRO_MALL_AVATARS", NomadVar: "mall_avatars", Default: "on"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
@@ -119,15 +130,36 @@ var Settings = []Setting{
 	// consumer refuses the same pairing at load). "off" is native.
 	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
-	// many times as often (1 is native; 2 to 20). Server only: the site's drop
-	// lists describe the native rule.
-	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
+	// many times as often (1 is native; 2 to 20). The catalogue models it
+	// on the tomb monsters' drop counts, so it is a catalogue setting.
+	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1", Catalogue: true},
+	// Port-only, not native: the Halloween Day event (#2124). Off is native.
+	// The catalogue publishes its window, box drop and exchange while it
+	// runs (#2540), so the event and window rows are catalogue settings;
+	// the helmet seal outlives the event and stays server-only.
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
+	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
+	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
+	// passes it to the Agent too (agentVariables), so the two can never
+	// answer different codes in the same window. Both read it with
+	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
+	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
+	// Port-only, not native: every pet bag holds five pages of 28 slots
+	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// native: a grab pet holds 28 slots and a transport its authored size.
+	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
+	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
+	// native: chat lines are text only. The limit is a tunable (game/tunables).
+	{Env: "SRO_CHAT_ITEM_LINKS", NomadVar: "chat_item_links", Default: "off"},
+	{Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", NomadVar: "chat_item_links_per_message", Default: "1"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.
@@ -160,8 +192,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
-	// (port-only, not native; off is native, #1518).
-	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
+	// (port-only, not native; off is native, #1518). Server only: the
+	// catalogue publishes no arrival timing; the shard rules page states
+	// the grace instead (#2542).
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off"},
 	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
 	// the running lower one; the replaced ticket's remaining time moves
 	// the new ticket's end later (#1624, port-only, not native; "off"
@@ -174,6 +208,10 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// Owner, 2026-11-08: the connection census - staff census reads and
+	// the public people counts (#2716/#2717, opensro-web#78; port-only,
+	// not native; "off" opens no journal and installs no census route).
+	{Env: "SRO_CONNECTION_JOURNAL", NomadVar: "connection_journal", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -184,13 +222,17 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
+	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
+	// (#2475). Off (native) until the carrying release turns it on.
+	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
-	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only); the site
-	// publishes the pool's odds, so the catalogue reads the setting too.
-	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on", Catalogue: true},
+	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only). Server
+	// only: the catalogue publishes no Magic Pop pool, so nothing it
+	// publishes changes; a pool export is its own change (#2542).
+	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.
@@ -206,6 +248,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Decision record, 2026-11-04 (#2538): one counting-only cycle
+	// measures Sun drops and their recipients before any Sun knob is
+	// considered. Count-only and off by default: nothing counts.
+	{Env: "SRO_SUN_DROP_COUNT", NomadVar: "sun_drop_count", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
 	// +11 and above. Off is the plain line, byte for byte.
@@ -248,6 +294,10 @@ var Settings = []Setting{
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
+	// Port-only GM item forge (issue #1980): off is native; test shards
+	// enable it. Forged items are bound, so an enabled shard can only
+	// mint items its GMs cannot move into the economy.
+	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
@@ -258,11 +308,18 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2769): port-only, not native - a character's
+	// inventory base is 2.5 pages from creation instead of the native one
+	// page the expansion quests then grow. On by the owner's call; "off"
+	// is native. Existing records keep whatever capacity they hold.
+	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
-	// ops/release/shard-settings.json.
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
-		Catalogue: true, Validation: ValueBetaGrowthBands},
+	// config/shard-settings.json. The catalogue prices quest rewards
+	// with the bands (BuildQuests' paidExp and paidSkillExp) but does
+	// not publish the band table (#2542).
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "", Catalogue: true,
+		Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,
 		Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
@@ -273,14 +330,24 @@ var Settings = []Setting{
 	// elixirs off the smith. On by default (it extends the extra goods);
 	// off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
+	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
+	// potion merchant, at Hotan's native price of 900. On by default;
+	// off restores the native Jangan shop.
+	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
 	// Owner, 2026-10-15: a fixed ambush per caravan star (2/3/4/7/10).
 	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
-	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
+	// Owner, 2026-10-15: thief and hunter monsters move faster (20% then;
+	// 30% since #2474, 2026-11-04).
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job monsters attack as soon as they
+	// spawn (no spawn hold) and their damage is doubled.
+	{Env: "SRO_JOB_MONSTER_AGGRESSION", NomadVar: "job_monster_aggression", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job trade transports move 30% faster.
+	{Env: "SRO_JOB_TRANSPORT_SPEED", NomadVar: "job_transport_speed", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off").
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
@@ -308,7 +375,6 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_INSTANT_INVENTORY_EXPANSION", NomadVar: "instant_inventory_expansion", Default: "on"},
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off", Catalogue: true,
 		Validation: ValueSwitch},
@@ -341,6 +407,11 @@ var Settings = []Setting{
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
 	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "off", Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2719): the Ch'in Tomb cave's authored 6-8 second
+	// respawn delays keep it feeling empty; when on, respawning cave nests
+	// (regions 32770-32775) draw over 1-3 seconds instead. Nests and drops
+	// are unchanged. "off" is native.
+	{Env: "SRO_JANGAN_CAVE_RESPAWN", NomadVar: "jangan_cave_respawn", Default: "off"},
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native. The catalogue
 	// publishes the caps the shard runs, so it reads the setting too.
@@ -355,6 +426,11 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: hide Alexandria's degree-11 shop goods
+	// (#2842). The original game sold them there, so "off" is native;
+	// "on" is for operators who want degree-11 gear from grinding only.
+	// The catalogue's shop lists follow it.
+	{Env: "SRO_ALEXANDRIA_HIDE_D11_GOODS", NomadVar: "alexandria_hide_d11_goods", Default: "off", Catalogue: true},
 	// Port-only, not native: WebTransport as a public endpoint (epic
 	// #1451). "off" keeps the loopback/development transport; "on" lets
 	// the GameWorld serve WT publicly under its explicit TLS pair and

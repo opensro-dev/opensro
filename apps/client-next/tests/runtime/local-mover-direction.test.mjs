@@ -50,6 +50,7 @@ function wallView( wallX ) {
 		available: () => true,
 		block: () => 0,
 		floor: () => undefined,
+		room: () => undefined,
 		pick: query => query.ray.miss ? null : { ...query.ray.target },
 		clip: ( _from, to, query ) => {
 			if ( query ) query.status = 0;
@@ -211,6 +212,7 @@ function play( { clicks, factor = 1, endMs = 6000, wallX = WALL_X } ) {
 				p?.direction && { kind: "direction", heading: p.direction.heading },
 			speedFactor: p?.direction?.factor ?? 1,
 			turnRate: 0,
+			relocation: 0,
 			walkPredictable: true,
 			walkHeld: false,
 			holding: false,
@@ -372,6 +374,7 @@ test("a miss within 5 degrees of the worker's own direction walk starts no predi
 		aim: { kind: "direction", heading: 0 },
 		speedFactor: 1,
 		turnRate: 0,
+		relocation: 0,
 		walkPredictable: true,
 		walkHeld: false,
 		holding: false,

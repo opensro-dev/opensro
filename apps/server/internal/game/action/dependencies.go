@@ -72,9 +72,17 @@ type Dependencies interface {
 	UpdateDeferred(character *domain.Character, label string, update func() bool) bool
 	UpdateManyDeferred(characters []*domain.Character, label string, update func() bool) bool
 	SettleTrade(characters []*domain.Character, label string, update func(*domain.TradeRewardPool) bool) bool
+	// HalloweenAccount is the account's daily Halloween box count
+	// (port-only, #2547): the live record, read or mutated only inside
+	// a kill settlement's door.
+	HalloweenAccount(accountID string) *domain.HalloweenBoxAccount
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())
+	// AcquireRead holds the read door as a value (enterworld
+	// Deps.AcquireRead): the per-tick pet judges read their facts
+	// through it without a door closure per call (#2030).
+	AcquireRead(divisionID string) enterworld.ReadGuard
 	ItemReferences() enterworld.ItemRefSource
 	LevelData() enterworld.LevelDataSource
 	SkillData() enterworld.SkillDataSource

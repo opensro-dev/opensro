@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -120,8 +120,8 @@ TestShippedSkillConsumableLifecycle
 ================
 */
 func TestShippedSkillConsumableLifecycle(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	for _, code := range []string{"ITEM_ETC_SPEED_UP_BASIC", "ITEM_MALL_MOVE_SPEED_UP_50", "ITEM_MALL_MOVE_SPEED_UP_100"} {

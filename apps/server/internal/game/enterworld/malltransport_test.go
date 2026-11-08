@@ -10,8 +10,8 @@ package enterworld
 import (
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -25,7 +25,7 @@ flag off) every row is native.
 ================
 */
 func TestMallTransportsMoveHalfAgainAsFast(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	native := NewTextdataItems(gamedatatest.TextdataDir(t))
 	native.once.Do(native.load)
 	fast := NewTextdataItems(gamedatatest.TextdataDir(t))

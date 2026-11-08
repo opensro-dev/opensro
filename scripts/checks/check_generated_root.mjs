@@ -5,7 +5,7 @@ check_generated_root.mjs - one owner for where the built asset tree lives
 
 The repository-root generated tree (client-public, intermediate,
 observatory) is resolved by scripts/lib/generatedRoot.mjs, its Python twin
-scripts/sro_paths.py and its Go test twin testsupport/licensed. They resolve
+scripts/sro_paths.py and its Go test twin testsupport/clientdata. They resolve
 the main checkout's tree (or SRO_GENERATED_ROOT), so a worktree reads the
 shared build without a junction. A path built anywhere else ("../../.generated/client-public",
 path.join( root, ".generated", "client-public" )) would ignore that and
@@ -35,7 +35,7 @@ const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url )
 const ALLOWED = new Set( [
 	"scripts/lib/generatedRoot.mjs",
 	"scripts/sro_paths.py",
-	"apps/server/internal/testsupport/licensed/licensed.go",
+	"apps/server/internal/testsupport/clientdata/clientdata.go",
 	"scripts/checks/check_generated_root.mjs",
 	"scripts/test/pipeline/generatedRoot.test.mjs",
 	// gameRelativePath() turns an absolute path into a game-relative one; its
@@ -51,7 +51,7 @@ const ROOT_VARIABLE_OWNERS = new Set( [
 	"scripts/lib/generatedRoot.mjs",
 	"scripts/build/world/paths.mjs",
 	"scripts/sro_paths.py",
-	"apps/server/internal/testsupport/licensed/licensed.go",
+	"apps/server/internal/testsupport/clientdata/clientdata.go",
 	"apps/server/internal/gamedata/resolve.go",
 	"scripts/checks/check_generated_root.mjs"
 ] );
@@ -150,7 +150,7 @@ function main() {
 	if ( violations.length ) {
 		console.error( "generated-root: these build a generated-tree path or read a root variable outside its owner." );
 		console.error(
-			"Use scripts/lib/generatedRoot.mjs (JS), sro_paths.py (Python) or licensed.ClientPublicRoot (Go):"
+			"Use scripts/lib/generatedRoot.mjs (JS), sro_paths.py (Python) or clientdata.ClientPublicRoot (Go):"
 		);
 		for ( const violation of violations ) console.error( "  " + violation );
 		process.exit( 1 );

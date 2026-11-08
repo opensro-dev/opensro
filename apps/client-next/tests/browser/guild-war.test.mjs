@@ -71,22 +71,22 @@ test(
 					}
 				};
 				let platform;
-				const ui = createUi(
+				const ui = createUi( {
 					assets,
-					c => commands.push( c ),
-					s => {
+					commands: c => commands.push( c ),
+					publish: s => {
 						scene = s;
 						renderer.setUi( s );
 					},
-					( id, image ) => renderer.setUiTexture( id, image ),
-					location.origin,
-					"http://fixture.invalid",
-					() => {},
-					() => {},
-					() => 1,
-					() => 0,
-					value => platform.saveGameOptions( value )
-				);
+					texture: ( id, image ) => renderer.setUiTexture( id, image ),
+					base: location.origin,
+					apiBase: "http://fixture.invalid",
+					clickSound: () => {},
+					sound: () => {},
+					loadingVariant: () => 1,
+					chooseTip: () => 0,
+					saveOptions: value => platform.saveGameOptions( value )
+				} );
 				platform = createPlatform(
 					document.querySelector( "canvas" ),
 					document.querySelector( "output" ),

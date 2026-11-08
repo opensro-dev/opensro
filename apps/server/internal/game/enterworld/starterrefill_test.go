@@ -7,7 +7,13 @@ starterrefill_test.go - the beta's HP/MP potion refill
 */
 package enterworld
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	log "github.com/sirupsen/logrus"
+	testhook "github.com/sirupsen/logrus/hooks/test"
+)
 
 /*
 ================
@@ -94,5 +100,42 @@ func TestStarterRefillLeavesAFullBag(t *testing.T) {
 	before := len(character.MissionInventory)
 	if RefillStarterPotions(character, testRefills()) != 0 || len(character.MissionInventory) != before {
 		t.Fatal("a full bag received potions")
+	}
+}
+
+/*
+================
+TestStarterRefillFullBagLogsInfoNotWarn
+
+#2441: a full bag at starter refill is the player's own outcome, so
+the line logs at info; warnings are reserved for faults (a refill
+item missing from itemdata still warns).
+================
+*/
+func TestStarterRefillFullBagLogsInfoNotWarn(t *testing.T) {
+	hook := testhook.NewGlobal()
+	defer hook.Reset()
+
+	level := int64(1)
+	character := &Character{Name: "Full", Level: &level}
+	for slot := int64(13); slot < 45; slot++ {
+		character.MissionInventory = append(character.MissionInventory, InventoryRow{Slot: slot, RefObjID: 1000, StackCount: 1})
+	}
+	if RefillStarterPotions(character, testRefills()) != 0 {
+		t.Fatal("a full bag received potions")
+	}
+
+	lines := 0
+	for _, entry := range hook.AllEntries() {
+		if !strings.Contains(entry.Message, "has no free bag slot for starter refill") {
+			continue
+		}
+		if entry.Level != log.InfoLevel {
+			t.Fatalf("refill refusal logged at %s, want info", entry.Level)
+		}
+		lines++
+	}
+	if lines != 2 {
+		t.Fatalf("refill refusal lines = %d, want 2 (one per family)", lines)
 	}
 }

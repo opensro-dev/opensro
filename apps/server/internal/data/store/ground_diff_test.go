@@ -119,6 +119,8 @@ diffed by gid.
 ================
 */
 func TestGroundDiffWritesOnlyChangedRows(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	base := groundPlane(livePlaneRows)
 	if written, deleted := applyGroundDiff(t, s, nil, base); written != livePlaneRows || deleted != 0 {
@@ -164,6 +166,8 @@ table is exactly the registry's snapshot.
 ================
 */
 func TestGroundDiffPersistsTheLiveRegistry(t *testing.T) {
+	t.Parallel()
+
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	r := grounditem.NewRegistry()
@@ -225,5 +229,45 @@ func BenchmarkGroundCommit(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+const groundChurnRows = 256
+
+/*
+================
+BenchmarkGroundDiffManyChanged
+
+The churn shape W3 (#1943) removes overhead from: not the 1,600-row
+plane scan but hundreds of rows changing in one commit - a trade
+burst settling, a drop storm despawning. 256 rows flip StackCount
+between two planes, so every timed pass writes all 256 through
+writeGroundDiffTx. Before W3 each of those writes paid tx.Exec's
+statement prepare; the number to watch against the baseline is
+ns/op and allocs/op on this bench plus BenchmarkGroundCommit/diff.
+================
+*/
+func BenchmarkGroundDiffManyChanged(b *testing.B) {
+	s := openTest(b, b.TempDir(), newTestClock())
+	base := groundPlane(livePlaneRows)
+	applyGroundDiff(b, s, nil, base)
+	planes := [2]map[string][]domain.GroundItemRecord{base, clonePlane(base)}
+	for i := 0; i < groundChurnRows; i++ {
+		planes[1][testDivision][i].StackCount = 9
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		committed, next := planes[n%2], planes[(n+1)%2]
+		tx, err := s.db.Begin()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, _, err := writeGroundDiffTx(tx, &s.encodeScratch, committed, next); err != nil {
+			b.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

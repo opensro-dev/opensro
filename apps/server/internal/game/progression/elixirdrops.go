@@ -6,15 +6,16 @@ elixirdrops.go - elixirs only from the shop (port-only, not native)
 Port-only, not native, beta balance (owner 2026-10-13). With
 SRO_ELIXIR_DROPS_OFF on, no monster drops an elixir: assigned drops, the
 consumable mix's elixir family and a unique's recipe stage all pick
-nothing where they would have picked one. The Jangan blacksmith sells all
-eight at 1,000,000 gold (SRO_SHOP_EXTRA_GOODS, commerce/extragoods.go), so
+nothing where they would have picked one. Jangan sells the four B grade
+elixirs at 1,000,000 gold (SRO_SHOP_EXTRA_GOODS, commerce/extragoods.go), so
 that setting must list them while this one is on, or elixirs would have no
 source at all. Quest rewards are not drops and are unchanged. Off, every
 drop rolls exactly as before.
 
 An elixir is the alchemy family of type IDs 3/3/10/1. v1.150's itemdata
 holds exactly eight items of it: ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_
-{WEAPON,SHIELD,ARMOR,ACCESSARY}_{A,B}.
+{WEAPON,SHIELD,ARMOR,ACCESSARY}_{A,B}. The rule stops all eight dropping. The
+shop leaves out the A grade, whose icon the client does not ship.
 
 ===========================================================================
 */
@@ -33,13 +34,9 @@ const EnvElixirDropsOff = "SRO_ELIXIR_DROPS_OFF"
 // etc item).
 var elixirTypeIDs = [3]int64{3, 10, 1}
 
-// elixirCodenames are every item of elixirTypeIDs in v1.150's itemdata,
-// the goods the shop must sell while drops are off.
+// elixirCodenames are the goods the shop must sell while drops are off: one
+// elixir for each equipment family, the B grade.
 var elixirCodenames = []string{
-	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A",
-	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A",
-	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A",
-	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A",
 	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B",
 	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B",
 	"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B",
@@ -93,8 +90,8 @@ func (e ElixirDrops) Excludes(typeIDs [4]int64) bool {
 ================
 ElixirDrops.CheckSource
 
-With drops off, every elixir must be sold: sold reports whether the shop
-lists a codename. An unsold elixir stops the boot naming both settings.
+With drops off, every elixirCodenames row must be sold: sold reports whether
+the shop lists a codename. An unsold one stops the boot naming both settings.
 ================
 */
 func (e ElixirDrops) CheckSource(sold func(codename string) bool, shopSetting string) error {

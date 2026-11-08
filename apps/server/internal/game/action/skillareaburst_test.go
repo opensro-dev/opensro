@@ -198,18 +198,47 @@ TestAreaBurstBuildsTheRewardRosterOnlyForAKill
 #2030 strike gate, burst site: a burst whose monster victims all
 survive their plans doors the caster, the player victims and the COS
 owners and builds no reward roster; a victim whose plan can kill
-keeps the roster-wide door. The roster builder alone reads the
-division's parties on this lane, so party reads witness the build,
-as in the area lane's pin.
+keeps the roster-wide door.
+
+The witness is the roster build's own product: the character list
+the burst hands its door. Two bystanders stand in the division
+outside the cast; only a division-wide roster build can put them on
+that list - the narrow door holds the caster, the player victims
+and the COS owners alone, and player victims are population players,
+never character-source records, so the bystanders cannot leak in as
+victims. The older witness could pass for the wrong reason: the
+party callback is also read by the share lanes (partyShareRoster),
+so counting its calls never isolated this build. The area lane's
+pin (TestAreaStrikeBuildsTheRewardRosterOnlyForAKill) witnesses the
+same way.
 ================
 */
 func TestAreaBurstBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
-	rt, c, skill, monsters := boomingFixture(t, []float64{3, 30}, true)
-	builds := 0
-	rt.RewardParties = func(division string) []RewardParty {
-		builds++
-		return nil
+	doorNames := func(rt *Runtime) *[]string {
+		names := &[]string{}
+		rt.deps.(*enterworld.Deps).UpdateCharacters = func(characters []*enterworld.Character, label string, update func() bool) bool {
+			if label == "player-area-burst" {
+				for _, character := range characters {
+					*names = append(*names, character.Name)
+				}
+			}
+			return update()
+		}
+		return names
 	}
+	addBystanders := func(rt *Runtime, c *enterworld.Character) (string, string) {
+		bystanderA := *c
+		bystanderA.ID, bystanderA.Name = 4, "burst-bystander-a"
+		bystanderB := *c
+		bystanderB.ID, bystanderB.Name = 5, "burst-bystander-b"
+		door := rt.deps.(*enterworld.Deps).Characters.(*storeDoor)
+		door.inner = enterworld.StaticCharacterSource{testDivision: {c, &bystanderA, &bystanderB}}
+		return bystanderA.Name, bystanderB.Name
+	}
+
+	rt, c, skill, monsters := boomingFixture(t, []float64{3, 30}, true)
+	nameA, nameB := addBystanders(rt, c)
+	doored := doorNames(rt)
 	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
 	if open, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok || open.Payload[0] != 1 {
 		t.Fatalf("burst refused: %+v", out)
@@ -217,19 +246,18 @@ func TestAreaBurstBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
 	if after, _ := rt.Monsters.Get(testDivision, monsters[0].Gid); after.CurrentHP == monsters[0].CurrentHP {
 		t.Fatal("the burst did not land")
 	}
-	if builds != 0 {
-		t.Fatalf("a burst that cannot kill built the reward roster (%d builds)", builds)
+	for _, name := range *doored {
+		if name == nameA || name == nameB {
+			t.Fatalf("a burst that cannot kill built the reward roster (door held %v)", *doored)
+		}
 	}
 	if got := rt.surpriseFatalCount.Load(); got != 0 {
 		t.Fatalf("a plain burst counted %d surprise fatals", got)
 	}
 
 	rt2, c2, skill2, slain := boomingFixtureHP(t, 1, []float64{3}, true)
-	builds2 := 0
-	rt2.RewardParties = func(division string) []RewardParty {
-		builds2++
-		return nil
-	}
+	nameA2, nameB2 := addBystanders(rt2, c2)
+	doored2 := doorNames(rt2)
 	out2 := rt2.HandleTargetInteract(testDivision, c2, wire.SkillAction{ActionId: skill2.ID}.Encode())
 	if open, ok := findFrame(out2.Frames, wire.OpSkillCastResult); !ok || open.Payload[0] != 1 {
 		t.Fatalf("killing burst refused: %+v", out2)
@@ -237,8 +265,12 @@ func TestAreaBurstBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
 	if after, found := rt2.Monsters.Get(testDivision, slain[0].Gid); found && after.CurrentHP != 0 {
 		t.Fatal("the killing burst left its victim alive")
 	}
-	if builds2 == 0 {
-		t.Fatal("a killing burst never built the reward roster")
+	held := map[string]bool{}
+	for _, name := range *doored2 {
+		held[name] = true
+	}
+	if !held[nameA2] || !held[nameB2] {
+		t.Fatalf("a killing burst never built the reward roster (door held %v)", *doored2)
 	}
 	if got := rt2.surpriseFatalCount.Load(); got != 0 {
 		t.Fatalf("a killing burst counted %d surprise fatals", got)

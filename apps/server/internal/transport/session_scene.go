@@ -11,8 +11,8 @@ game-ready; private authority receipts may follow a bootstrap while loading.
 package transport
 
 import (
+	"errors"
 	"slices"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -116,7 +116,10 @@ func (s *Session) SceneReceiptRevision() (uint64, bool) {
 
 // BeginSceneAdmission suspends visibility before bootstrap construction can
 // publish a character's division binding. SendSceneReset later publishes the
-// complete bootstrap; only game-ready releases scene producers again.
+// complete bootstrap; only game-ready releases scene producers again. The
+// bootstrap fence opens here too: from admission until that bootstrap (or
+// its refusal) queues, game batches for the scene park behind it
+// (bootstrapParkOpenLocked).
 /*
 ================
 BeginSceneAdmission
@@ -126,8 +129,9 @@ func (s *Session) BeginSceneAdmission() {
 	s.mu.Lock()
 	s.sceneRevision++
 	s.sceneLoading = true
-	s.sceneLoadingSince = time.Now()
+	s.sceneLoadingSince = s.now()
 	s.sceneBootstrapEnqueued = false
+	s.dropPendingReceiptsLocked()
 	s.clearObservedLocked()
 	revision := s.sceneRevision
 	s.mu.Unlock()
@@ -255,7 +259,23 @@ the active-scene requirement for SendSceneBatch or visibility publication.
 ================
 */
 func (s *Session) SendSceneReceiptBatch(revision uint64, frames []Frame) error {
-	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, allowLoading: true})
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, allowLoading: true, parkBehindBootstrap: true})
+}
+
+/*
+================
+SendSceneAnswerBatch
+
+The acting session's own synchronous answer - above all a loading
+refusal, which retires a pending the client is blocked on. It never
+parks behind the scene's bootstrap (#1478): the client could only
+send the command while it held a world on this transport, so the
+answer reaches a bound client, and holding it for a bootstrap that
+may be wedged would hang the pending to its watchdog instead.
+================
+*/
+func (s *Session) SendSceneAnswerBatch(frames []Frame) error {
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{})
 }
 
 /*
@@ -280,8 +300,45 @@ has no answer on the wire at all, which is the wedged-entry signature.
 */
 func (s *Session) MarkSceneBootstrapEnqueued() {
 	s.mu.Lock()
+	// A refusal (or any non-reset bootstrap answer) leaves no snapshot
+	// for parked receipts to follow; they belong to the refused scene.
+	s.dropPendingReceiptsLocked()
 	s.sceneBootstrapEnqueued = true
 	s.mu.Unlock()
+}
+
+/*
+================
+Session::bootstrapParkOpenLocked
+
+Whether a batch arriving now must wait behind this scene's bootstrap:
+the scene is still loading and no bootstrap or refusal has queued
+yet. The window runs from BeginSceneAdmission - before the enter
+lane has built anything, since a producer that resolves the session
+by its kept binding can already deliver then (#2872) - until the
+bootstrap batch queues. A scene born from its own reset batch (a
+recall, a relocation) queues that batch as it begins, so the window
+never opens for it and its answers stay immediate. Caller holds s.mu.
+================
+*/
+func (s *Session) bootstrapParkOpenLocked() bool {
+	return s.sceneLoading && !s.sceneBootstrapEnqueued
+}
+
+/*
+================
+Session::dropPendingReceiptsLocked
+
+Discards receipts parked behind a bootstrap that will not queue and
+returns their bytes to the queue budget. Caller holds s.mu.
+================
+*/
+func (s *Session) dropPendingReceiptsLocked() {
+	if s.pendingBytes == 0 {
+		return
+	}
+	s.queueBytes -= s.pendingBytes
+	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 }
 
 // Initial admission still owns WorldBound hooks; scene-ready only releases
@@ -331,13 +388,40 @@ func (s *Session) OnSceneReady(fn func()) {
 // admission path for the EnterWorld result and its native bootstrap stream.
 //
 // The batch remains bounded by both configured frame and byte limits. Payloads
-// are copied before publication, exactly as in Send.
+// are copied before publication, exactly as in Send. A batch of native game
+// frames sent while its scene's bootstrap has not queued yet parks
+// behind it (#2294); a batch carrying a transport-control frame (the admission
+// answer itself, machinery traffic) stays immediate.
 /*
 ================
 SendBatch
 ================
 */
-func (s *Session) SendBatch(frames []Frame) error { return s.sendSceneBatch(frames, nil, false) }
+func (s *Session) SendBatch(frames []Frame) error {
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{parkBehindBootstrap: directBatchWaitsBehindBootstrap(frames)})
+}
+
+/*
+================
+directBatchWaitsBehindBootstrap
+
+A direct batch parks behind a not-yet-queued bootstrap only when it is
+game traffic end to end. Any transport-control frame in the batch -
+above all the EnterWorld result that answers an admission, refusal
+included - keeps the whole batch immediate and in order.
+================
+*/
+func directBatchWaitsBehindBootstrap(frames []Frame) bool {
+	if len(frames) == 0 {
+		return false
+	}
+	for _, frame := range frames {
+		if frame.IsControl() {
+			return false
+		}
+	}
+	return true
+}
 
 /*
 ================
@@ -346,6 +430,20 @@ sendSceneBatch
 */
 func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) error {
 	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: revision, reset: reset})
+}
+
+/*
+================
+pendingReceipt
+
+One batch parked behind a scene whose bootstrap is not queued yet: a
+private receipt or a direct game-frame send, as copied frames and the
+scope changes they carry, in arrival order.
+================
+*/
+type pendingReceipt struct {
+	frames  []Frame
+	changes []ObjectScopeChange
 }
 
 /*
@@ -365,6 +463,10 @@ type sceneBatchOptions struct {
 	unobservedGID uint32
 	changes       []ObjectScopeChange
 	allowLoading  bool
+	// parkBehindBootstrap marks a batch the bootstrap may precede:
+	// private receipts and direct game-frame batches. Scene-visibility
+	// batches keep the loading drop instead.
+	parkBehindBootstrap bool
 }
 
 /*
@@ -425,7 +527,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		s.mu.Unlock()
 		return ErrSessionClosed
 	}
-	if len(s.queue) > s.hub.cfg.OutboundQueue-len(frames) ||
+	if len(s.queue)+s.pendingFrames > s.hub.cfg.OutboundQueue-len(frames) ||
 		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-batchBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
@@ -448,35 +550,63 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		// is the moment the scene has an answer on the wire.
 		s.sceneBootstrapEnqueued = true
 	}
-	for _, frame := range frames {
-		s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})
+	// A batch accepted while its scene's bootstrap is not queued yet
+	// waits behind it (#2294): the bootstrap is the snapshot, and
+	// work committed against the scene must follow it on the wire,
+	// never precede it. The window runs from the scene's admission
+	// until the bootstrap queues (bootstrapParkOpenLocked).
+	if options.parkBehindBootstrap && s.bootstrapParkOpenLocked() {
+		copied := make([]Frame, len(frames))
+		for i, frame := range frames {
+			copied[i] = Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current}
+		}
+		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: copied, changes: changes})
+		s.pendingFrames += len(copied)
+		s.pendingBytes += batchBytes
+		s.queueBytes += batchBytes
+		s.mu.Unlock()
+		return nil
 	}
-	for _, change := range changes {
-		if change.GID == 0 {
-			continue
+	enqueue := func(batch []Frame, batchChanges []ObjectScopeChange) {
+		for _, frame := range batch {
+			s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})
 		}
-		if change.Visible {
-			if s.observedObjects == nil {
-				s.observedObjects = make(map[uint32]struct{})
+		for _, change := range batchChanges {
+			if change.GID == 0 {
+				continue
 			}
-			s.observedObjects[change.GID] = struct{}{}
-			s.publishedStale = true
-		} else {
-			delete(s.observedObjects, change.GID)
-			s.publishedStale = true
-			// Reliable removal takes priority over queued loss-tolerant motion.
-			// Retire that motion here so it cannot follow the despawn on WS.
-			kept := s.lossyKeys[:0]
-			for _, slot := range s.lossyKeys {
-				if slot.Key == uint64(change.GID) && (slot.Opcode == OpObjectSourceMove || slot.Opcode == OpObjectSourceCorrection) {
-					s.lossyBytes -= s.lossy[slot].EncodedLen()
-					delete(s.lossy, slot)
-				} else {
-					kept = append(kept, slot)
+			if change.Visible {
+				if s.observedObjects == nil {
+					s.observedObjects = make(map[uint32]struct{})
 				}
+				s.observedObjects[change.GID] = struct{}{}
+				s.publishedStale = true
+			} else {
+				delete(s.observedObjects, change.GID)
+				s.publishedStale = true
+				// Reliable removal takes priority over queued loss-tolerant motion.
+				// Retire that motion here so it cannot follow the despawn on WS.
+				kept := s.lossyKeys[:0]
+				for _, slot := range s.lossyKeys {
+					if slot.Key == uint64(change.GID) && (slot.Opcode == OpObjectSourceMove || slot.Opcode == OpObjectSourceCorrection) {
+						s.lossyBytes -= s.lossy[slot].EncodedLen()
+						delete(s.lossy, slot)
+					} else {
+						kept = append(kept, slot)
+					}
+				}
+				s.lossyKeys = kept
 			}
-			s.lossyKeys = kept
 		}
+	}
+	enqueue(frames, changes)
+	if options.reset {
+		// The bootstrap is queued; everything parked behind it lands
+		// now, in arrival order. Their bytes were counted at park.
+		for _, parked := range s.pendingReceipts {
+			enqueue(parked.frames, parked.changes)
+		}
+		s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	}
 	s.queueBytes += batchBytes
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
@@ -509,9 +639,17 @@ func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []
 	conn := s.conn
 	s.mu.Unlock()
 	if conn != nil && conn.SupportsUnreliable() {
-		if err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload}); err == nil {
+		err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload})
+		if err == nil {
 			s.hub.metrics.datagramsOut.Add(1)
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
+			return nil
+		}
+		if errors.Is(err, errDatagramDropped) {
+			// The peer is not draining its datagram queue; the frame is
+			// superseded state on a loss-tolerant lane, so it drops here
+			// instead of parking this caller behind the stall (#2142).
+			s.hub.metrics.datagramsDropped.Add(1)
 			return nil
 		}
 	}

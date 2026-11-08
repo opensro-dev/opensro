@@ -9,6 +9,8 @@ import (
 )
 
 func TestCreateCharacterSeedsRacialBaseSkills(t *testing.T) {
+	t.Parallel()
+
 	t.Run("racial seeds are distinct", func(t *testing.T) {
 		store := openTest(t, t.TempDir(), newTestClock())
 		chinese := &enterworld.Character{Name: "chfresh", ModelCodename: "CHAR_CH_MAN_01"}
@@ -79,6 +81,8 @@ func TestCreateCharacterSeedsRacialBaseSkills(t *testing.T) {
 }
 
 func TestSkillsRoundTripThroughStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	first, err := Open(dir, Options{DefaultSkills: testSkillSeeder})
 	if err != nil {

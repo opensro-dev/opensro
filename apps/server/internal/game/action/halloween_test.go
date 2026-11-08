@@ -12,6 +12,7 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -51,12 +53,18 @@ func halloweenTestItems() staticItemSource {
 		RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD", TypeIDs: [4]int64{3, 1, 13, 0},
 		NameStrID:    "SN_ITEM_ETC_E050526_M_EGHEAD",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
+		CanDrop:      true, CanDropOnDeath: true,
 	}
 	items["ITEM_ETC_E071030_W_EGHEAD"] = &enterworld.ItemRef{
 		RefObjID: 23459, Codename: "ITEM_ETC_E071030_W_EGHEAD", TypeIDs: [4]int64{3, 1, 13, 0},
 		NameStrID:    "SN_ITEM_ETC_E050526_W_EGHEAD",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
+		CanDrop:      true, CanDropOnDeath: true,
 	}
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"] = etc(3911, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A"] = etc(3912, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A"] = etc(3913, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A"] = etc(3914, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", 50)
 	return items
 }
 
@@ -120,7 +128,7 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
 	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("no-box exchange", frames, err)
 	}
 
@@ -132,22 +140,72 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) < 2 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("granted exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 1 {
 		t.Fatal("granted exchange bag", c.MissionInventory)
 	}
 
-	// A roll into the grain band pays ten potions, not one.
+	// A roll into the grain band pays a stack of twenty, not one.
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 1)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	rt.DropRoll = func() (uint32, error) { return 22527, nil } // roll 55 of 80: the HP potion band (48, 61]
+	rt.DropRoll = func() (uint32, error) { return 19660, nil } // roll 60 of 100: the HP potion band (56, 63]
 	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
-	if err != nil || bagCount(c, "ITEM_ETC_HP_SPOTION_01") != 10 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+	if err != nil || bagCount(c, "ITEM_ETC_HP_SPOTION_01") != 20 ||
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("grain exchange", frames, err, c.MissionInventory)
+	}
+}
+
+/*
+================
+TestHalloweenExchangeSpendsEveryBox
+
+One click turns the whole bag of boxes into gifts and the banner counts
+them; a bag that fills part way keeps the remaining boxes and says so.
+================
+*/
+func TestHalloweenExchangeSpendsEveryBox(t *testing.T) {
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 3), halloweenBoxRow(21, 2)}
+	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+	rt.DropRoll = func() (uint32, error) { return 0, nil }
+	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("exchange all", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 5 {
+		t.Fatal("exchange all bag", c.MissionInventory)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenGiftsDoneBanner, 5))) {
+		t.Fatal("exchange all banner", frames)
+	}
+
+	// One free row holds fifty scrolls: the run stops there, the other
+	// boxes stay and the banner names them.
+	c = testCharacter()
+	c.MissionInventory = nil
+	potion := halloweenTestItems()["ITEM_ETC_HP_SPOTION_01"]
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagEnd(c))-1; slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: potion.RefObjID, Codename: potion.Codename,
+			TypeFlags: potion.TypeFlags(), StackCount: 50,
+		})
+	}
+	c.MissionInventory[0] = halloweenBoxRow(c.MissionInventory[0].Slot, 60)
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	rt.DropRoll = func() (uint32, error) { return 0, nil }
+	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("partial exchange", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 10 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 50 {
+		t.Fatal("partial exchange bag", c.MissionInventory)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenGiftsLeftBanner, 50, 10))) {
+		t.Fatal("partial exchange banner", frames)
 	}
 }
 
@@ -174,7 +232,7 @@ func TestHalloweenExchangeFullBagRefusesBeforeTouchingTheBox(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkBagFull)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkBagFull)) {
 		t.Fatal("full-bag exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 1 {
@@ -204,18 +262,19 @@ func TestHalloweenEventIsInvisibleWhileOffOrAway(t *testing.T) {
 		t.Fatal("cleanup ran with no window configured")
 	}
 
-	// On, inside the window: So-ok offers the exchange row and the four
-	// helmets of the (default male) fixture's sex; others do not.
+	// On, inside the window: So-ok offers the exchange row, the four
+	// helmets of the (default male) fixture's sex and the four Elixirs;
+	// others do not.
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
 	options := rt.HalloweenTalkOptions(halloweenSoOkCodename, c)
-	if len(options) != 5 {
+	if len(options) != 9 {
 		t.Fatal("halloween talk options", options)
 	}
 	option := options[0]
 	if !option.Immediate || option.TitleSymbol != halloweenTalkOption || option.PromptSymbol != halloweenTalkPrompt {
 		t.Fatal("halloween exchange row", option)
 	}
-	if options[1].Codename != HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_M_EGHEAD" ||
+	if options[1].Codename != HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_M_EGHEAD" ||
 		options[1].TitleSymbol != "SN_ITEM_ETC_E050526_M_EGHEAD" {
 		t.Fatal("halloween helmet row", options[1])
 	}
@@ -260,6 +319,43 @@ companion, a mercenary and the bags riding inside bag and avatar summon
 rows all give theirs up, and every other row stays.
 ================
 */
+/*
+================
+TestHalloweenBoxNeverEntersAWarehouse
+
+The shipped Jewel Box row (3862) carries CanBorrow 0 (itemdata
+token 19, verified in the generated textdata), so the warehouse
+door refuses it at any time, event or not - which is why the
+event-end sweep needs no storage arm (#2590). Both warehouses run
+the one door: account storage refuses in storageMutation, and the
+guild move reaches the same mutation through applyGuildStorageMove.
+The helmet rows beside it carry 255 and pass, so the refusal is
+the box row's own property.
+================
+*/
+func TestHalloweenBoxNeverEntersAWarehouse(t *testing.T) {
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{
+		halloweenBoxRow(20, 5),
+		{Slot: 21, RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD",
+			TypeFlags: wire.PackTypeFlags(3, 1, 13, 0), StackCount: 1},
+	}
+	items := halloweenTestItems()
+	// As shipped: the box row's canBorrow field reads 0.
+	items[progression.HalloweenBoxCodename].NativeFields =
+		items[progression.HalloweenBoxCodename].NativeFields.With("canBorrow", 0)
+	rt, _ := newTestRuntime(c, items)
+
+	box, _ := bagOf(c).At(20)
+	if rt.storableItem(box) {
+		t.Fatal("jewel box entered the warehouse")
+	}
+	helmet, _ := bagOf(c).At(21)
+	if !rt.storableItem(helmet) {
+		t.Fatal("storable helmet refused by the warehouse")
+	}
+}
+
 func TestHalloweenCleanupSweepsEveryContainer(t *testing.T) {
 	bag := func() *domain.COSContainer {
 		return &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{
@@ -343,21 +439,24 @@ TestHalloweenBoxDropCapAndGourd
 
 The daily cap gates the rolled drop and the Gourd alike; a Gourd kill
 pays on a losing draw, and a day that has rolled over at 04:00 UTC
-opens the cap again. The count lands on the winner per committed box
-and restarts when the settlement crosses the reset.
+opens the cap again. The count lands on the winner's account per
+committed box, restarts when the settlement crosses the reset, and
+the mint that reaches the cap names its owner exactly once.
 ================
 */
 func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	c := testCharacter()
+	c.AccountID = "cap-account"
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
 	ordinary := monster.Instance{Ref: monster.MonsterRef{MonsterType: 0}}
 	gourd := monster.Instance{Ref: monster.MonsterRef{Codename: halloweenGourdCodename, MonsterType: 0}}
 	at := simulation.Spawn{}
 	inside := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
+	account := rt.deps.HalloweenAccount(c.AccountID)
 
 	// At the cap for the current day nothing mints, gourd included.
-	c.HalloweenBoxDay = progression.HalloweenDayKey(inside)
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap
+	account.Day = progression.HalloweenDayKey(inside)
+	account.Count = progression.HalloweenBoxDailyCap
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	if _, ok := rt.halloweenBoxDrop(c, ordinary, at, c.Name, inside); ok {
 		t.Fatal("a capped winner minted a box")
@@ -367,7 +466,7 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	}
 
 	// One under the cap: the gourd pays even on a losing draw.
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap - 1
+	account.Count = progression.HalloweenBoxDailyCap - 1
 	rt.DropRoll = func() (uint32, error) { return 32767, nil }
 	box, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside)
 	if !ok || box.Codename != progression.HalloweenBoxCodename {
@@ -376,28 +475,236 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 
 	// The next day (after the 04:00 reset) the cap opens again.
 	nextDay := time.Date(1970, 1, 2, 4, 0, 0, 0, time.UTC)
-	c.HalloweenBoxDay = progression.HalloweenDayKey(inside)
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap
+	account.Day = progression.HalloweenDayKey(inside)
+	account.Count = progression.HalloweenBoxDailyCap
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	if _, ok := rt.halloweenBoxDrop(c, ordinary, at, c.Name, nextDay); !ok {
 		t.Fatal("the cap stayed shut after the reset")
 	}
 
-	// Counting: two boxes land, then a settlement across 04:00 UTC
-	// restarts the day before its box lands (reset crossed mid-wave).
+	// Counting: two boxes land on the winner's account, then a
+	// settlement across 04:00 UTC restarts the day before its box
+	// lands (reset crossed mid-wave).
 	winner := testCharacter()
-	rt.countHalloweenBoxes(winner, []grounditem.Item{
-		{Codename: progression.HalloweenBoxCodename},
-		{Codename: progression.HalloweenBoxCodename},
-		{Codename: "ITEM_ETC_HP_POTION_01"},
-	}, inside.UnixMilli())
-	if winner.HalloweenBoxCount != 2 || winner.HalloweenBoxDay != progression.HalloweenDayKey(inside) {
-		t.Fatal("count after two boxes", winner.HalloweenBoxDay, winner.HalloweenBoxCount)
+	winner.AccountID = "count-account"
+	owners := map[uint32]*enterworld.Character{enterworld.ObjectIDForCharacter(winner): winner}
+	winnerBox := grounditem.Item{Codename: progression.HalloweenBoxCodename, OwnerJID: enterworld.ObjectIDForCharacter(winner)}
+	counted := rt.deps.HalloweenAccount(winner.AccountID)
+	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{
+		winnerBox, winnerBox, {Codename: "ITEM_ETC_HP_POTION_01"},
+	}, inside.UnixMilli()); len(reached) != 0 {
+		t.Fatal("reached the cap at two boxes", reached)
 	}
-	rt.countHalloweenBoxes(winner, []grounditem.Item{{Codename: progression.HalloweenBoxCodename}},
+	if counted.Count != 2 || counted.Day != progression.HalloweenDayKey(inside) {
+		t.Fatal("count after two boxes", counted.Day, counted.Count)
+	}
+	rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox},
 		time.Date(1970, 1, 2, 4, 0, 1, 0, time.UTC).UnixMilli())
-	if winner.HalloweenBoxCount != 1 || winner.HalloweenBoxDay != progression.HalloweenDayKey(nextDay) {
-		t.Fatal("count across the reset", winner.HalloweenBoxDay, winner.HalloweenBoxCount)
+	if counted.Count != 1 || counted.Day != progression.HalloweenDayKey(nextDay) {
+		t.Fatal("count across the reset", counted.Day, counted.Count)
+	}
+
+	// The mint that reaches the cap names its owner once; the next
+	// settlement the same day names nobody.
+	counted.Day, counted.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
+	reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli())
+	if len(reached) != 1 || reached[0] != winner {
+		t.Fatal("cap mint did not name the winner", reached)
+	}
+	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli()); len(reached) != 0 {
+		t.Fatal("cap named twice in one day", reached)
+	}
+}
+
+/*
+================
+TestHalloweenGourdBoxesPayEveryDamager
+
+#2547: the Gourd pays every character who damaged it. The winner is
+skipped (its box came from the drop), a damager at their account cap
+gets nothing, a zero-damage name on the contribution list gets
+nothing, a GM-spawned Gourd pays nobody, and two characters of one
+account cannot both be promised the account's last box in one kill:
+the winner's planned box takes it, so the same-account damager waits.
+================
+*/
+func TestHalloweenGourdBoxesPayEveryDamager(t *testing.T) {
+	winner := testCharacter()
+	winner.AccountID = "shared-account"
+	rt, _ := halloweenRuntime(t, winner, halloweenTestWindow)
+	inside := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
+	gourd := monster.Instance{Ref: monster.MonsterRef{Codename: halloweenGourdCodename, MonsterType: 0}}
+	at := simulation.Spawn{}
+
+	damager := func(id int64, name, account string) *enterworld.Character {
+		c := testCharacter()
+		c.ID, c.Name, c.AccountID = id, name, account
+		return c
+	}
+	sameAccount := damager(4, "alt", "shared-account")
+	other := damager(5, "helper", "helper-account")
+	capped := damager(6, "full", "full-account")
+	actors := map[uint32]rewardActor{}
+	for _, c := range []*enterworld.Character{winner, sameAccount, other, capped} {
+		actors[enterworld.ObjectIDForCharacter(c)] = rewardActor{character: c}
+	}
+	contributions := []simulation.MonsterContribution{
+		{CreditGID: enterworld.ObjectIDForCharacter(winner), Damage: 6},
+		{CreditGID: enterworld.ObjectIDForCharacter(sameAccount), Damage: 3},
+		{CreditGID: enterworld.ObjectIDForCharacter(other), Damage: 2},
+		{CreditGID: enterworld.ObjectIDForCharacter(capped), Damage: 2},
+		{CreditGID: 99, Damage: 0},
+	}
+
+	// The winner's account sits one under the cap with the winner's
+	// own box already promised in the plan.
+	shared := rt.deps.HalloweenAccount("shared-account")
+	shared.Day, shared.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
+	rt.deps.HalloweenAccount("full-account").Day = progression.HalloweenDayKey(inside)
+	rt.deps.HalloweenAccount("full-account").Count = progression.HalloweenBoxDailyCap
+	planned := []grounditem.Item{{Codename: progression.HalloweenBoxCodename, OwnerJID: enterworld.ObjectIDForCharacter(winner)}}
+	boxes := rt.halloweenGourdBoxes(winner, gourd, planned, contributions, actors, at, inside)
+	if len(boxes) != 1 || boxes[0].OwnerJID != enterworld.ObjectIDForCharacter(other) ||
+		boxes[0].Codename != progression.HalloweenBoxCodename {
+		t.Fatal("gourd paid the wrong damagers", boxes)
+	}
+
+	// A GM-spawned Gourd is conjured, not hunted: nobody is paid.
+	gourd.GMSpawned = true
+	if boxes := rt.halloweenGourdBoxes(winner, gourd, nil, contributions, actors, at, inside); len(boxes) != 0 {
+		t.Fatal("a GM-spawned gourd paid damagers", boxes)
+	}
+}
+
+/*
+================
+TestHalloweenGourdSettlementPaysDamagers
+
+#2547 through a real settlement: the winner and one damager each
+leave with an assigned box and one count on their own account; when
+the damager's next box reaches their account cap, the cap message
+goes to the damager once and only once; past the cap the Gourd pays
+neither of them; and with the event off nothing mints or counts.
+================
+*/
+func TestHalloweenGourdSettlementPaysDamagers(t *testing.T) {
+	rt, clock, winner, target := newCombatTestRuntime(t, 11)
+	winner.AccountID = "winner-account"
+	damager := testCharacter()
+	damager.ID, damager.Name, damager.AccountID = 4, "helper", "damager-account"
+	level := int64(1)
+	damager.Level, damager.MaxLevel = &level, &level
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {winner, damager}}
+	items := rt.deps.ItemReferences().(staticItemSource)
+	items[progression.HalloweenBoxCodename] = &enterworld.ItemRef{
+		RefObjID: 3862, Codename: progression.HalloweenBoxCodename, TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	t.Setenv(progression.EnvHalloweenEvent, "on")
+	t.Setenv(progression.EnvHalloweenEventWindow, halloweenTestWindow)
+	rt.Halloween = progression.HalloweenEventFromEnv()
+	// The combat fixture nils the roll (monsterloot.go returns no plan
+	// at all without one); a constant draw keeps the plan deterministic.
+	rt.DropRoll = constantDropRoll(0)
+
+	target.Ref.Codename = halloweenGourdCodename
+	impact := simulation.MonsterDamageResult{
+		Fatal:    true,
+		Instance: target,
+		Contributions: []simulation.MonsterContribution{
+			{CreditGID: enterworld.ObjectIDForCharacter(winner), Damage: 6},
+			{CreditGID: enterworld.ObjectIDForCharacter(damager), Damage: 5},
+		},
+	}
+	settle := func() monsterSettlement {
+		roster := rt.monsterRewardRoster(testDivision, winner, clock.NowMs())
+		return rt.settleMonsterInsideDoorCounted(testDivision, winner, roster, impact, monster.Pose{}, clock.NowMs(), true)
+	}
+	boxesOf := func(settlement monsterSettlement) []grounditem.Item {
+		var boxes []grounditem.Item
+		for _, drop := range settlement.drops {
+			if drop.Codename == progression.HalloweenBoxCodename {
+				boxes = append(boxes, drop)
+			}
+		}
+		return boxes
+	}
+	winnerAccount := rt.deps.HalloweenAccount("winner-account")
+	damagerAccount := rt.deps.HalloweenAccount("damager-account")
+
+	first := settle()
+	boxes := boxesOf(first)
+	if len(boxes) != 2 {
+		t.Fatalf("first gourd paid %d boxes, want winner and damager", len(boxes))
+	}
+	owners := map[uint32]bool{}
+	for _, box := range boxes {
+		owners[box.OwnerJID] = true
+	}
+	if !owners[enterworld.ObjectIDForCharacter(winner)] || !owners[enterworld.ObjectIDForCharacter(damager)] {
+		t.Fatal("first gourd boxes carry the wrong owners", boxes)
+	}
+	if winnerAccount.Count != 1 || damagerAccount.Count != 1 {
+		t.Fatal("counts after the first gourd", winnerAccount.Count, damagerAccount.Count)
+	}
+	if len(first.others) != 0 {
+		t.Fatal("a cap message before the cap", first.others)
+	}
+
+	// The damager's next box reaches their cap: the message goes to
+	// the damager, once.
+	damagerAccount.Count = progression.HalloweenBoxDailyCap - 1
+	second := settle()
+	if len(boxesOf(second)) != 2 || damagerAccount.Count != progression.HalloweenBoxDailyCap {
+		t.Fatal("second gourd miscounted", boxesOf(second), damagerAccount.Count)
+	}
+	var capFrames []wire.Frame
+	for _, other := range second.others {
+		if other.CharacterID == damager.ID {
+			capFrames = append(capFrames, other.Frames...)
+		}
+	}
+	wantPayload := chat.EncodeChatNotice(fmt.Sprintf(halloweenBoxCapBanner, progression.HalloweenBoxDailyCap))
+	if len(capFrames) != 1 || capFrames[0].Opcode != chat.OpChatBroadcast || !bytes.Equal(capFrames[0].Payload, wantPayload) {
+		t.Fatal("cap message to the damager", capFrames)
+	}
+
+	// Past the cap the Gourd pays neither account again, and the
+	// message does not repeat.
+	winnerAccount.Count = progression.HalloweenBoxDailyCap
+	third := settle()
+	if len(boxesOf(third)) != 0 {
+		t.Fatal("a capped gourd paid out", boxesOf(third))
+	}
+	for _, other := range third.others {
+		if other.CharacterID == damager.ID {
+			t.Fatal("the cap message repeated", third.others)
+		}
+	}
+
+	// With the event off, nothing mints and nothing counts.
+	off, offClock, offWinner, offTarget := newCombatTestRuntime(t, 11)
+	off.DropRoll = constantDropRoll(0)
+	offWinner.AccountID = "off-account"
+	offTarget.Ref.Codename = halloweenGourdCodename
+	offItems := off.deps.ItemReferences().(staticItemSource)
+	offItems[progression.HalloweenBoxCodename] = items[progression.HalloweenBoxCodename]
+	offImpact := simulation.MonsterDamageResult{
+		Fatal:    true,
+		Instance: offTarget,
+		Contributions: []simulation.MonsterContribution{
+			{CreditGID: enterworld.ObjectIDForCharacter(offWinner), Damage: 6},
+		},
+	}
+	roster := off.monsterRewardRoster(testDivision, offWinner, offClock.NowMs())
+	settlement := off.settleMonsterInsideDoorCounted(testDivision, offWinner, roster, offImpact, monster.Pose{}, offClock.NowMs(), true)
+	for _, drop := range settlement.drops {
+		if drop.Codename == progression.HalloweenBoxCodename {
+			t.Fatal("a box minted with the event off", settlement.drops)
+		}
+	}
+	if got := off.deps.HalloweenAccount("off-account"); got.Count != 0 {
+		t.Fatal("a box counted with the event off", got)
 	}
 }
 
@@ -411,16 +718,19 @@ same way, and a fit grant consumes the price and lands the helmet.
 ================
 */
 func TestHalloweenHelmetExchange(t *testing.T) {
-	service := HalloweenHelmetServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
+	service := HalloweenPrizeServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
 
 	// Too few boxes: the no-box line, nothing moved.
 	c := testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 59)}
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
-	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || len(frames) != 2 ||
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("short helmet exchange", frames, err)
+	}
+	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice("That prize costs 60 Jewel Boxes. You have 59.")) {
+		t.Fatal("short helmet banner", frames[0])
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 59 {
 		t.Fatal("short helmet exchange touched the boxes", c.MissionInventory)
@@ -430,8 +740,8 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60), halloweenBoxRow(21, 5)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
-	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("helmet exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 5 || bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 1 {
@@ -443,52 +753,211 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD")
-	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_W_EGHEAD")
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("cross-sex helmet exchange", frames, err)
 	}
 	female := int64(enterworld.GenderFemale)
 	c.Gender = &female
 	c.ModelCodename = "CHAR_CH_WOMAN_ADVENTURER"
 	options := rt.HalloweenTalkOptions(halloweenSoOkCodename, c)
-	if len(options) != 5 || options[1].Codename != HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD" {
+	if len(options) != 9 || options[1].Codename != HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_W_EGHEAD" {
 		t.Fatal("female helmet rows", options)
 	}
 }
 
 /*
 ================
-TestHalloweenHelmetSealBothSettings
+TestHalloweenElixirPrizeSale
 
-The seal (its own switch, on after the event) refuses the helmet at
-the trade table and the warehouse while on, and every door behaves
-natively while off.
+Ten boxes (half a day at the cap) buy the exact Elixir the picked row
+names: short of the price the refusal's banner names the price and the
+bag is untouched, a full bag refuses the same untouched way, and the
+rows carry no sex filter — a female character buys one too (#2548).
 ================
 */
-func TestHalloweenHelmetSealBothSettings(t *testing.T) {
+func TestHalloweenElixirPrizeSale(t *testing.T) {
+	service := HalloweenPrizeServicePrefix + "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"
+	price := int64(progression.HalloweenElixirPrice)
+
+	// Short of the price: the no-box line, the banner names the price,
+	// nothing moved.
 	c := testCharacter()
-	helmetRow := enterworld.InventoryRow{
-		Slot: 20, RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD",
-		TypeFlags: wire.PackTypeFlags(3, 1, 13, 0), StackCount: 1,
-	}
-	c.MissionInventory = []enterworld.InventoryRow{helmetRow}
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price-1)}
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-	t.Setenv(progression.EnvHalloweenHelmetSeal, "on")
-	rt.HalloweenHelmetSeal = progression.HalloweenHelmetSealFromEnv()
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+		t.Fatal("short Elixir sale", frames, err)
+	}
+	want := fmt.Sprintf(halloweenPrizeShortBanner, progression.HalloweenElixirPrice, price-1)
+	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice(want)) {
+		t.Fatalf("short Elixir sale banner %q, want %q", frames[0].Payload, want)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != int(price-1) ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		t.Fatal("short Elixir sale touched the bag", c.MissionInventory)
+	}
 
-	item, _ := bagOf(c).At(20)
-	if rt.storableItem(item) {
-		t.Fatal("sealed helmet entered the warehouse")
+	// At the price: ten leave, the Elixir lands, the banner names ten.
+	c = testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price+5)}
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("Elixir sale", frames, err)
 	}
-	if _, code := rt.exchangeOfferable(c, 20); code == 0 {
-		t.Fatal("sealed helmet reached the trade table")
+	if !bytes.Equal(frames[len(frames)-2].Payload,
+		chat.EncodeChatNotice(fmt.Sprintf(halloweenPrizeDoneBanner, progression.HalloweenElixirPrice))) {
+		t.Fatal("Elixir sale spent banner", frames)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 5 ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+		t.Fatal("Elixir sale bag", c.MissionInventory)
 	}
 
-	rt.HalloweenHelmetSeal = progression.HalloweenHelmetSeal{}
-	if !rt.storableItem(item) {
-		t.Fatal("unsealed helmet refused by the warehouse")
+	// A full bag refuses with the boxes untouched (the grant is planned
+	// against the bag as it stands, boxes still in it).
+	c = testCharacter()
+	c.MissionInventory = nil
+	potion := halloweenTestItems()["ITEM_ETC_HP_SPOTION_01"]
+	end := inventory.BagEnd(c)
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(end); slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: potion.RefObjID, Codename: potion.Codename,
+			TypeFlags: potion.TypeFlags(), StackCount: 50,
+		})
 	}
-	if _, code := rt.exchangeOfferable(c, 20); code != 0 {
-		t.Fatal("unsealed helmet refused by the trade table", code)
+	c.MissionInventory[0] = halloweenBoxRow(c.MissionInventory[0].Slot, price)
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkBagFull)) {
+		t.Fatal("full-bag Elixir sale", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != int(price) ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		t.Fatal("full-bag Elixir refusal touched the bag", c.MissionInventory)
+	}
+
+	// No sex filter on the Elixir rows: a female character is offered
+	// them and can buy.
+	female := int64(enterworld.GenderFemale)
+	c = testCharacter()
+	c.Gender = &female
+	c.ModelCodename = "CHAR_CH_WOMAN_ADVENTURER"
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price)}
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	offered := false
+	for _, option := range rt.HalloweenTalkOptions(halloweenSoOkCodename, c) {
+		if option.Codename == service {
+			offered = true
+		}
+	}
+	if !offered {
+		t.Fatal("Elixir row not offered to a female character")
+	}
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("female Elixir sale", frames, err)
+	}
+	if bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+		t.Fatal("female Elixir sale bag", c.MissionInventory)
+	}
+}
+
+/*
+================
+TestHalloweenPriceAndGiftShownAtEveryBoxCount
+
+The owner-facing matrix: with 0, 1, 59 and 60 boxes, a helmet row click
+always shows the price (the short banner names the price and the holding,
+the granted banner names the price spent) and the gift row always shows
+a result (the no-box line at zero, the granted line and the counting
+banner above it). Nothing moves on a refusal.
+================
+*/
+func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
+	helmetService := HalloweenPrizeServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
+
+	// Helmet rows, short of the price: the banner states the price and
+	// the holding, the no-box line closes, the bag is untouched.
+	for _, held := range []int64{0, 1, 59} {
+		c := testCharacter()
+		if held > 0 {
+			c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, held)}
+		}
+		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+		frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, helmetService)
+		if err != nil || len(frames) != 2 {
+			t.Fatalf("helmet at %d boxes: %v %v", held, frames, err)
+		}
+		want := fmt.Sprintf(halloweenPrizeShortBanner, progression.HalloweenHelmetPrice, held)
+		if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice(want)) {
+			t.Fatalf("helmet at %d boxes: banner %q, want %q", held, frames[0].Payload, want)
+		}
+		if !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+			t.Fatalf("helmet at %d boxes: answer is not the no-box line", held)
+		}
+		if got := bagCount(c, progression.HalloweenBoxCodename); got != int(held) {
+			t.Fatalf("helmet at %d boxes: bag holds %d after a refusal", held, got)
+		}
+		if bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 0 {
+			t.Fatalf("helmet at %d boxes: a helmet landed on a refusal", held)
+		}
+	}
+
+	// Helmet row at the exact price: the helmet lands, every box leaves,
+	// and the banner names the price spent.
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, progression.HalloweenHelmetPrice)}
+	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, helmetService)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatalf("helmet at the price: %v %v", frames, err)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenPrizeDoneBanner, progression.HalloweenHelmetPrice))) {
+		t.Fatal("helmet at the price: the spent banner is missing", frames)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 1 {
+		t.Fatal("helmet at the price: bag", c.MissionInventory)
+	}
+
+	// Gift row across the same counts: zero shows the no-box line alone;
+	// every other count spends the whole bag and the banner counts gifts.
+	gifts := []struct {
+		boxes int64
+		want  string
+	}{
+		{0, ""},
+		{1, fmt.Sprintf(halloweenGiftsDoneBanner, 1)},
+		{59, fmt.Sprintf(halloweenGiftsDoneBanner, 59)},
+		{60, fmt.Sprintf(halloweenGiftsDoneBanner, 60)},
+	}
+	for _, tc := range gifts {
+		c := testCharacter()
+		if tc.boxes > 0 {
+			c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, tc.boxes)}
+		}
+		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+		rt.DropRoll = func() (uint32, error) { return 0, nil }
+		frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+		if err != nil {
+			t.Fatalf("gifts at %d boxes: %v", tc.boxes, err)
+		}
+		if tc.want == "" {
+			if len(frames) != 1 || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+				t.Fatalf("gifts at 0 boxes: %v", frames)
+			}
+			continue
+		}
+		if !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+			t.Fatalf("gifts at %d boxes: answer is not the granted line", tc.boxes)
+		}
+		if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(tc.want)) {
+			t.Fatalf("gifts at %d boxes: banner %q, want %q", tc.boxes, frames[len(frames)-2].Payload, tc.want)
+		}
+		if bagCount(c, progression.HalloweenBoxCodename) != 0 ||
+			bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != int(tc.boxes) {
+			t.Fatalf("gifts at %d boxes: bag %v", tc.boxes, c.MissionInventory)
+		}
 	}
 }

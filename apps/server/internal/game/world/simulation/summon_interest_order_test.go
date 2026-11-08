@@ -45,7 +45,7 @@ func TestSummonEntersShownMonstersAfterTheBeforeHook(t *testing.T) {
 	ticker.Monsters = ops
 	var child uint32
 	seen := map[int64]bool{}
-	ticker.BeforeHooks = []TickHook{func(at int64) []DivisionFrames {
+	ticker.BeforeHooks = []NamedTickHook{{Hook: func(at int64) []DivisionFrames {
 		registry.AdvanceSummons(at)
 		for _, actor := range registry.MaterializedInstances("summon") {
 			if actor.SummonerGID == parent.Gid {
@@ -61,7 +61,7 @@ func TestSummonEntersShownMonstersAfterTheBeforeHook(t *testing.T) {
 			return nil
 		}
 		return []DivisionFrames{{DivisionID: "summon", SourceGID: child, Frames: []Frame{{Opcode: wire.OpEndedEffectInstances, Payload: []byte{1}}}}}
-	}}
+	}}}
 	ticker.RunTick(*now)
 	ticker.RunTick(*now + 500)
 	ticker.RunTick(*now + 600)

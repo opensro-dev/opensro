@@ -20,13 +20,17 @@ import { createTextureMotion } from "@/engine/foundation/rendering/texture-motio
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
 
-
 /*
 ================
 createModelMaterialClocks
+
+One owner id owns one material row. Producers hand every model instance
+its own owner, so two actors on one id are a producer bug: the renderer
+steps the owner's row once and carries on, while a test that passes
+assertUniqueOwners keeps the throw as its assertion.
 ================
 */
-export function createModelMaterialClocks() {
+export function createModelMaterialClocks( assertUniqueOwners = false ) {
 	const rows = new Map<
 		number,
 		{
@@ -66,7 +70,10 @@ export function createModelMaterialClocks() {
 				}
 				if ( !active ) continue;
 				const id = actor.modifierId ?? actor.gid;
-				if ( keep.has( id ) ) throw Error( "Duplicate material instance owner" );
+				if ( keep.has( id ) ) {
+					if ( assertUniqueOwners ) throw Error( "Duplicate material instance owner" );
+					continue;
+				}
 				keep.add( id );
 				let row = rows.get( id );
 				if ( !row || row.model !== resource ) {
@@ -87,7 +94,9 @@ export function createModelMaterialClocks() {
 									m?.uvAtlas ?
 									createTextureAtlas( m.uvAtlas ) :
 									undefined,
-								pulse: m?.textureFactorPulse ? createTextureFactorPulse( m.textureFactorPulse ) : undefined,
+								pulse: m?.textureFactorPulse ?
+									createTextureFactorPulse( m.textureFactorPulse ) :
+									undefined,
 								flags: m?.colorTimeline?.flags ?? 0,
 								colorChanged: false,
 								textureChanged: false,

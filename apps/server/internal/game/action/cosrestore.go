@@ -76,6 +76,14 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 				continue
 			}
 			pet.InventorySlot = uint8(row.Slot)
+			// The five-page rule raises a retained bag on restore; it is
+			// never lowered, so every row survives the change either way.
+			if pet.Container != nil {
+				if raised := rt.petInventoryCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
+					pet.Container.Capacity = raised
+					changed = true
+				}
+			}
 			if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand && pet.CurrentHP > ref.MaxHP {
 				pet.CurrentHP = ref.MaxHP
 				changed = true
@@ -116,8 +124,13 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 		// (itemuse.go) was saved without its cargo bag; it
 		// comes back with the authored one.
 		if pet.Container == nil && ref.InventoryCapacity > 0 {
-			pet.Container = &domain.COSContainer{Capacity: ref.InventoryCapacity}
+			pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(ref.InventoryCapacity)}
 			changed = true
+		} else if pet.Container != nil {
+			if raised := rt.petInventoryCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
+				pet.Container.Capacity = raised
+				changed = true
+			}
 		}
 		changed = changed || !pet.Mounted
 		pet.Mounted = true

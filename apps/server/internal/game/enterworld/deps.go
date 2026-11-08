@@ -66,6 +66,11 @@ type refObjSnapshotCache struct {
 
 type Deps struct {
 	BrowserReferences *BrowserReferences
+	// SiegeStructUpgrades is the resolved siege structure upgrade
+	// table the bootstrap publishes (fortress_upgrades.go); the
+	// composition root resolves it once from the boot textdata, and
+	// fixtures leave it empty.
+	SiegeStructUpgrades []SiegeStructUpgradeRow
 	// refObjCache memoizes the filtered RefObj snapshot; installed by
 	// NewDevDepsWithRoster, nil in fixtures (see refObjSnapshotCache).
 	refObjCache *refObjSnapshotCache
@@ -101,6 +106,19 @@ type Deps struct {
 	// slow-entry log. Zero means the production default; tests set it
 	// so a held gate trips the abandonment without waiting it out.
 	GateWaitBound time.Duration
+	// EncodeEntryPayload renders the browser entry payload for one
+	// built bootstrap result (browserEntryPayload); nil uses it with
+	// BrowserReferences. A test seam: the entry handler now encodes
+	// after releasing the publication gate, and a test proves the
+	// gate is free while the encoder runs.
+	EncodeEntryPayload func(result *BootstrapResult) ([]byte, error)
+	// InventoryPages publishes the port-only SRO_INVENTORY_PAGES rule
+	// (inventory_pages.go): world entry presents and adopts the 2.5-page
+	// base; false is native.
+	InventoryPages bool
+	// ChatItemLinks publishes the port-only SRO_CHAT_ITEM_LINKS rule as its
+	// per-line link limit (game/social/chat itemlinks.go); 0 is native.
+	ChatItemLinks int64
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -168,6 +186,12 @@ type Deps struct {
 	// zero on the client: CIFMagicStateBoard_OnUpdate (6E6AA0) does not retire
 	// a kind-3 pet-skill window solely because its timer reached zero.
 	TrackTimedWindows func(divisionID, characterName string)
+	// TrackMostWanted hands a character holding a Most Wanted streak to
+	// the action runtime's tick sweep (port-only, #1849), which sends
+	// the entry wanted state and enforces the level's seven-day lapse.
+	// Without it a relogged holder's buff-board row would never appear
+	// and a lapsed level would outlive its seven days.
+	TrackMostWanted func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
 	ExtraMagicOptionIDs func() []uint32
@@ -215,7 +239,22 @@ type Deps struct {
 	QueueRename func(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error)
 	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
 	fixtureJobRankings map[string]domain.JobRankings
-	ReadCharacter      func(divisionID string, read func())
+	// HalloweenAccountRecord is the account's daily Halloween box count
+	// (store halloweenboxes.go, port-only #2547): the live record, read
+	// or mutated only inside a write door. Nil keeps the records in
+	// fixtureHalloweenBoxes below.
+	HalloweenAccountRecord func(accountID string) *domain.HalloweenBoxAccount
+	// fixtureHalloweenBoxes is HalloweenAccount's store when no authority
+	// is wired.
+	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
+	ReadCharacter         func(divisionID string, read func())
+	// ReadLock and ReadUnlock are the two halves of the read door the
+	// callback above runs between, exposed so a per-tick reader can
+	// hold the door as a value (AcquireRead) instead of boxing a
+	// closure per call (#2030). Both nil reads unguarded, as the
+	// callback does when ReadCharacter is unset.
+	ReadLock   func(divisionID string)
+	ReadUnlock func(divisionID string)
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
@@ -255,6 +294,10 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	) []Packet
+	// EntryEventFrames are a running event's notices for a login (not a
+	// re-entry): port-only, action/halloween_waves.go; nil or empty sends
+	// nothing.
+	EntryEventFrames func(divisionID string, character *Character) []Packet
 
 	Letters       LetterStore
 	Guilds        GuildStore
@@ -577,6 +620,30 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 
 /*
 ================
+HalloweenAccount
+
+Production supplies the authority's account record. The in-memory
+fallback is for isolated gameplay fixtures, which do not run a durable
+authority; it keeps one record per account id for the fixture's life.
+================
+*/
+func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
+	if d.HalloweenAccountRecord != nil {
+		return d.HalloweenAccountRecord(accountID)
+	}
+	if d.fixtureHalloweenBoxes == nil {
+		d.fixtureHalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
+	}
+	record := d.fixtureHalloweenBoxes[accountID]
+	if record == nil {
+		record = &domain.HalloweenBoxAccount{}
+		d.fixtureHalloweenBoxes[accountID] = record
+	}
+	return record
+}
+
+/*
+================
 WeekRankings
 ================
 */
@@ -599,6 +666,51 @@ func (d *Deps) Read(divisionID string, read func()) {
 		return
 	}
 	read()
+}
+
+/*
+================
+ReadGuard
+
+The read door held as a value instead of a callback: a caller that
+reads a handful of scalars every tick (the pet judges, #2030) takes
+the door on the stack and releases it in line, instead of boxing a
+closure and its captures on every call. The guard holds the same
+store read lock the callback door runs between; a Deps without the
+lock pair reads unguarded, exactly as the callback does when
+ReadCharacter is unset.
+================
+*/
+type ReadGuard struct {
+	deps     *Deps
+	division string
+}
+
+/*
+================
+AcquireRead
+================
+*/
+func (d *Deps) AcquireRead(divisionID string) ReadGuard {
+	if d.ReadLock != nil {
+		d.ReadLock(divisionID)
+	}
+	return ReadGuard{deps: d, division: divisionID}
+}
+
+/*
+================
+Release
+
+Releasing twice is a no-op, so a guard released early and again on
+the way out cannot unlock a door it no longer holds.
+================
+*/
+func (g *ReadGuard) Release() {
+	if g.deps != nil && g.deps.ReadUnlock != nil {
+		g.deps.ReadUnlock(g.division)
+	}
+	g.deps = nil
 }
 
 // ReentryPackets rebuilds the native reset/character/object-list
@@ -646,6 +758,9 @@ type PreparedReentry struct {
 	// InventorySize is the capacity the packets present; the committing
 	// owner adopts it on the live record (domain.AdoptInventorySize).
 	InventorySize uint8
+	// InventoryBase is the inventory-pages floor the packets present
+	// (zero native); the committing owner raises the live record to it.
+	InventoryBase uint8
 }
 
 /*
@@ -668,6 +783,11 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	// after preparation succeeds. Login adoption would re-enter that lock.
 	projection.AdoptEntrySpawn = nil
 	snapshot.PresentInventoryExpansion()
+	var inventoryBase uint8
+	if d.InventoryPages {
+		snapshot.RaiseInventoryFloor(domain.InventoryPagesBase)
+		inventoryBase = domain.InventoryPagesBase
+	}
 	result := buildCharacterProjection(&projection, divisionID, snapshot)
 	packets, ok := d.encodeReentry(result)
 	if !ok {
@@ -676,7 +796,22 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	spawn := result.LocalPlayerEntry.StartProfile
 	return PreparedReentry{Packets: packets, Spawn: simulation.Spawn{
 		RegionID: uint16(spawn.RegionID), X: spawn.X, Y: spawn.Y, Z: spawn.Z, Angle: uint16(spawn.Angle),
-	}, InventorySize: snapshot.InventoryCapacity()}, true
+	}, InventorySize: snapshot.InventoryCapacity(), InventoryBase: inventoryBase}, true
+}
+
+/*
+================
+entryPayload
+
+The one browser-entry-payload encode, shared by the enter handler and
+the re-entry prepares; EncodeEntryPayload replaces it in tests.
+================
+*/
+func (d *Deps) entryPayload(result *BootstrapResult) ([]byte, error) {
+	if d != nil && d.EncodeEntryPayload != nil {
+		return d.EncodeEntryPayload(result)
+	}
+	return browserEntryPayload(result, d.BrowserReferences)
 }
 
 /*
@@ -691,7 +826,7 @@ func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 	if len(result.Packets) == 0 || result.Packets[0].NativeOpcode != OpcodeResetClient {
 		return nil, false
 	}
-	payload, err := browserEntryPayload(result, d.BrowserReferences)
+	payload, err := d.entryPayload(result)
 	if err != nil {
 		return nil, false
 	}
@@ -722,6 +857,9 @@ func (d *Deps) adoptEncodedInventory(result *BootstrapResult) {
 	presented := result.Character.InventoryCapacity()
 	d.Mutate(owner, "inventory-expansion", func() {
 		owner.AdoptInventorySize(presented)
+		if d.InventoryPages {
+			owner.RaiseInventoryFloor(domain.InventoryPagesBase)
+		}
 	})
 	result.inventoryOwner = nil
 }
@@ -759,6 +897,7 @@ func (d *Deps) Validate() error {
 	require("ExtraRefItemCodenames", d.ExtraRefItemCodenames == nil)
 	require("StaticRefItemCodenames", d.StaticRefItemCodenames == nil)
 	require("TrackTimedWindows", d.TrackTimedWindows == nil)
+	require("TrackMostWanted", d.TrackMostWanted == nil)
 	require("SpawnTerrainHeight", d.SpawnTerrainHeight == nil)
 	require("SpawnSurfaceHeight", d.SpawnSurfaceHeight == nil)
 	require("RelocateStrandedSpawn", d.RelocateStrandedSpawn == nil)

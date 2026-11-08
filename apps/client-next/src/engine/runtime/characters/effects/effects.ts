@@ -18,7 +18,8 @@ lifecycles that belong in separate owners (see the size ledger).
 import {
 	createPenguinBolts,
 	penguinEffectActors,
-	PENGUIN_EFFECT_SOUND
+	PENGUIN_EFFECT_SOUND,
+	PENGUIN_BLIZZARD_SECONDS
 } from "@/engine/foundation/animation/penguin-effects";
 import {
 	PET_BOND_TRANSFER_SOUND,
@@ -405,6 +406,20 @@ export function createCharacterEffects(
 	// actors the last step drew: the frame probe's evidence that a crowd
 	// stays under EFFECT_ACTOR_BUDGET.
 	let budgetGaveWay = 0, budgetActors = 0;
+	/*
+	================
+	refuse
+
+	Record an effect this port cannot play, and say so once. A refused
+	effect is skipped, never fatal: one skill's unsupported operation
+	must not end the session for everyone who sees the cast (#2440).
+	================
+	*/
+	function refuse( entry: string ): void {
+		if ( unsupported.has( entry ) ) return;
+		unsupported.add( entry );
+		console.warn( `[SRO effects] skipped unsupported effect: ${entry}` );
+	}
 	/*
 	================
 	adoptCast
@@ -804,7 +819,7 @@ export function createCharacterEffects(
 	function spawnAt( visual: EffectVisual, pose: CharacterActor["pose"], at: number, path?: string ) {
 		const model = path ? modelFor( path ) : undefined;
 		if ( path && !model ) {
-			unsupported.add( path );
+			refuse( path );
 			return;
 		}
 		if ( active.size >= 2048 ) throw Error( "Moving effect residual population exceeds budget" );
@@ -883,9 +898,11 @@ export function createCharacterEffects(
 			}
 			if (
 				stage.move !== "MOV_NONE" || script.kind === "unsupported" ||
-				![ "AT_LOOP", "AT_ONE_FOLLOW", "AT_SOURCE", "AT_TARGET", "AT_TARGET_F" ].includes( stage.action )
+				![ "AT_LOOP", "AT_ONE_FOLLOW", "AT_SOURCE", "AT_TARGET", "AT_TARGET_F", "AT_STOP" ].includes(
+					stage.action
+				)
 			) {
-				unsupported.add(
+				refuse(
 					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: ${stage.action}/${stage.move}/${
 						script.kind === "unsupported" ? script.operation : script.kind
 					} (${stage.resource})`
@@ -904,13 +921,28 @@ export function createCharacterEffects(
 			if ( !stage.resource ) continue;
 			const model = modelFor( stage.resource );
 			if ( !model ) {
-				unsupported.add( stage.resource );
+				refuse( stage.resource );
 				continue;
 			}
-			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
+			// The action switch (table 8DCF1C) routes AT_STOP into the same
+			// visual build as the other attached statics (8DCC64), through
+			// the +0x54 binding like AT_TARGET; the sound above is the
+			// 8DCE2B tail that runs after creation.
+			const binding = stageBinding(
+					stage,
+					stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" || stage.action === "AT_STOP"
+				),
 				offset = binding.offset;
-			if ( !Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ) {
-				throw Error( "Invalid attached effect instance count" );
+			// 8DCA40 consumes the authored count (+0x9) as the creation-loop
+			// bound (8DCDBB): the Qin-Shi tomb trap buffs author 0, which
+			// runs the loop below zero times and is refused nowhere. A count
+			// the byte cannot hold is logged; one stage never ends the
+			// session (#2440).
+			if ( !Number.isInteger( stage.count ) || stage.count < 0 || stage.count > 128 ) {
+				refuse(
+					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: invalid count ${stage.count} (${stage.resource})`
+				);
+				continue;
 			}
 			for ( let i = 0; i < stage.count; i++ ) {
 				if ( script.kind === "mover" ) {
@@ -1144,9 +1176,11 @@ export function createCharacterEffects(
 				}
 				return admitted;
 			}
-			// Launch sockets the hold below sampled this step, keyed by callback,
-			// stage and source. The launch reuses them: one sample per launch.
+			// Sockets the hold below sampled this step, keyed by callback, stage
+			// and actor. The admission reuses them: one sample per launch, at
+			// either end of a mover.
 			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
+			const landingSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
 			/*
 			================
 			launchKey
@@ -1159,12 +1193,14 @@ export function createCharacterEffects(
 			================
 			moverSourceCold
 
-			True when a mover stage this callback starts launches from a bone on a
+			True when a mover stage this callback starts touches a bone on a
 			resident actor that cannot be posed yet: its model, or the mount it
-			rides, is still loading. The admission below would otherwise drop the
-			mover as unsupported. A returning mover leaves its victims; every other
-			mover leaves the caster. Target sockets are not probed here: they are
-			sampled live at launch and again at each retarget.
+			rides, is still loading. The admission below would otherwise drop
+			the mover as unsupported. A returning mover leaves its victims and
+			lands on the caster; every other mover leaves the caster and lands
+			on its targets. Both ends are probed, because the admission reads
+			the launch bone and captures the landing bone into the flight: a
+			cold bone at either end refuses the mover the same way (#2440).
 			================
 			*/
 			function moverSourceCold(
@@ -1178,19 +1214,37 @@ export function createCharacterEffects(
 				for ( let index = 0; index < record.stages.length; index++ ) {
 					const stage = record.stages[index]!;
 					if ( (stage.phase ?? "SHOT") !== trigger.phase || stage.startEvent !== trigger.event ) continue;
-					if ( !stage.bone || stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ) continue;
+					if ( stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ) continue;
 					const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
 					const mover = returning || stage.action === "AT_MOV_1TAR" || stage.action === "AT_MOV_SPLASH" ||
 						stage.action === "AT_MOV_OPTION";
 					if ( !mover ) continue;
-					const sources = returning ?
-						[ ...new Set( [ cast.target, ...(cast.results?.map( row => row.target ) ?? []) ] ) ] :
-						[ cast.caster ];
-					for ( const gid of sources ) {
-						if ( !byGid.has( gid ) ) continue;
-						const pose = socket( gid, stage.bone, stage.offset, trigger );
-						launchSockets.set( launchKey( trigger, index, gid ), pose );
-						if ( !pose ) cold = true;
+					if ( stage.bone ) {
+						const sources = returning ?
+							[ ...new Set( [ cast.target, ...(cast.results?.map( row => row.target ) ?? []) ] ) ] :
+							[ cast.caster ];
+						for ( const gid of sources ) {
+							if ( !byGid.has( gid ) ) continue;
+							const pose = socket( gid, stage.bone, stage.offset, trigger );
+							launchSockets.set( launchKey( trigger, index, gid ), pose );
+							if ( !pose ) cold = true;
+						}
+					}
+					// A radial mover reads no landing bone; every other mover
+					// captures its launch destination's bone, so a cold landing
+					// bone holds the callback exactly like a cold launch bone
+					// does. Only the launch destination is probed: later chain
+					// hops and distributed rows sample live, as they always did.
+					if ( stage.targetBone && stage.action !== "AT_MOV_OPTION" ) {
+						const destination = returning ? cast.caster : cast.target;
+						if ( byGid.has( destination ) ) {
+							const pose = socket( destination, stage.targetBone, stage.targetOffset ?? [ 0, 0, 0 ], {
+								...trigger,
+								sampleCurrent: true
+							} );
+							landingSockets.set( launchKey( trigger, index, destination ), pose );
+							if ( !pose ) cold = true;
+						}
 					}
 				}
 				return cold;
@@ -1403,7 +1457,7 @@ export function createCharacterEffects(
 							if ( !persistent.has( key ) ) {
 								const record = catalog[String( effectId | 0 )] ?? catalog[String( effectId )];
 								if ( !record ) {
-									unsupported.add( "state:" + effectId.toString( 16 ) );
+									refuse( "state:" + effectId.toString( 16 ) );
 									continue;
 								}
 								const actors: CharacterActor[] = [];
@@ -1528,7 +1582,7 @@ export function createCharacterEffects(
 						seen.add( key );
 						const record = catalog[String( cast.skill )];
 						if ( !record ) {
-							unsupported.add( `skill:${cast.skill}` );
+							refuse( `skill:${cast.skill}` );
 							continue;
 						}
 						for ( let index = 0; index < record.stages.length; index++ ) {
@@ -1552,7 +1606,14 @@ export function createCharacterEffects(
 								script.kind === "camera" && !script.arrival &&
 								byGid.get( cast.caster )?.kind !== "player"
 							) cameraEvents.push( { ...script, atMs: Math.trunc( now * 1000 ) } );
+							// Cast action 5 (AT_SOURCE) runs 8DE824, not the
+							// AT_ONE_FOLLOW/AT_LOOP block: it initializes each
+							// effect on the cast's target-side entity - that
+							// entity's +0x7C position, +0x88 yaw and +0x54 socket
+							// binding. With MOV_NONE there is no flight, so the
+							// static lands on the target like an AT_TARGET static.
 							const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
+							const sourceStatic = stage.action === "AT_SOURCE" && stage.move === "MOV_NONE";
 							// 8DE7A4 gives AT_TARGET_F's EFP to the target's decoration
 							// owner. It ignores mover fields and survives caster cleanup.
 							const targetFollow = stage.action === "AT_TARGET_F";
@@ -1566,7 +1627,7 @@ export function createCharacterEffects(
 							// effect on the target, as MOV_NONE is.
 							const flying = distributed || radial || returning ||
 								!targetFollow && targetLocal && (stage.movement?.startSpeed ?? 0) !== 0;
-							const staticTarget = targetLocal && !targetFollow && !flying;
+							const staticTarget = (targetLocal || sourceStatic) && !targetFollow && !flying;
 							const resultStage = impactIndex( cast.skill, trigger.phase, trigger.event );
 							const resultTargets = cast.results?.filter( row =>
 								resultStage < 0 || castResultAt( row.impacts, resultStage )
@@ -1583,7 +1644,7 @@ export function createCharacterEffects(
 							for ( const dispatch of targets ) {
 								const targetGid = dispatch.target;
 								const entity = byGid.get(
-									returning || targetLocal ?
+									returning || sourceStatic || targetLocal ?
 										targetGid :
 										flying || !stage.damageEvent ?
 										cast.caster :
@@ -1611,6 +1672,12 @@ export function createCharacterEffects(
 									} );
 								}
 								if ( !stage.resource ) {
+									continue;
+								}
+								// 8DE398 consumes the authored count (+0x9) as the
+								// creation-loop bound: zero iterations create
+								// nothing, and the value is refused nowhere (#2471).
+								if ( stage.count === 0 ) {
 									continue;
 								}
 								const caster = byGid.get( cast.caster );
@@ -1667,10 +1734,11 @@ export function createCharacterEffects(
 									undefined;
 								const targetOffset = stage.targetOffset ?? [ 0, 0, 0 ];
 								const targetSocket = flying && !radial && !targetLocal && target && stage.targetBone ?
-									socket?.( target.gid, stage.targetBone, targetOffset, {
-										...trigger,
-										sampleCurrent: true
-									} ) :
+									landingSockets.get( launchKey( trigger, index, target.gid ) ) ??
+										socket?.( target.gid, stage.targetBone, targetOffset, {
+											...trigger,
+											sampleCurrent: true
+										} ) :
 									undefined;
 								const supportedFlight = flying && target &&
 									(targetLocal || !stage.bone || sourceSocket) &&
@@ -1692,12 +1760,15 @@ export function createCharacterEffects(
 											"AT_LOOP",
 											"AT_STOP",
 											"AT_TARGET",
-											"AT_TARGET_F"
+											"AT_TARGET_F",
+											"AT_SOURCE"
 										].includes(
 											stage.action
 										) || !targetFollow && !staticTarget && stage.move !== "MOV_NONE" ||
 											(stage.bone &&
-												![ "AT_ONE_FOLLOW", "AT_LOOP", "AT_STOP" ].includes( stage.action ) &&
+												![ "AT_ONE_FOLLOW", "AT_LOOP", "AT_STOP", "AT_SOURCE" ].includes(
+													stage.action
+												) &&
 												!targetLocal))) ||
 									script.kind === "unsupported" ||
 									(!Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ||
@@ -1718,7 +1789,7 @@ export function createCharacterEffects(
 											`region-space:${pose.regionId}/${target.regionId}` :
 											null
 									].filter( value => value !== null );
-									unsupported.add(
+									refuse(
 										`${cast.skill}/${trigger.phase}/${trigger.event}/${index}: ${stage.action}/${stage.move}/${
 											script.kind === "unsupported" ? script.operation : script.kind
 										} (${stage.resource})${details.length ? ` [${details.join( ", " )}]` : ""}`
@@ -1753,22 +1824,24 @@ export function createCharacterEffects(
 												victimFacing ?? nativeHeadingYaw( pose.angle )
 											);
 									if ( !source ) {
-										unsupported.add( `anchor-height:${entity.refObjId}` );
+										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
 									}
 									if ( staticTarget ) {
 										// 8DE67A..8DE69E: the static effect sits on the target's
 										// binding but takes the caster's m_fYaw (+0x88). The caster
 										// always exists natively; a port without its row keeps the
-										// target's heading.
+										// target's heading. An AT_SOURCE static differs: 8DE824
+										// initializes on the target-side entity itself, so the
+										// heading is that entity's own +0x88 (pose.angle).
 										const anchor = stageAnchor(
 											entity,
 											stageBinding( stage, true ),
 											trigger,
-											nativeHeadingYaw( casterAngle ?? pose.angle )
+											nativeHeadingYaw( sourceStatic ? pose.angle : casterAngle ?? pose.angle )
 										);
 										if ( !anchor ) {
-											unsupported.add( `anchor-height:${entity.refObjId}` );
+											refuse( `anchor-height:${entity.refObjId}` );
 											continue;
 										}
 										source = anchor;
@@ -1779,20 +1852,20 @@ export function createCharacterEffects(
 										holder.height === undefined &&
 										(targetFollow ? stage.targetAddHeight : stage.addHeight)
 									) {
-										unsupported.add( `anchor-height:${entity.refObjId}` );
+										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
 									}
 									if ( rotation && caster ) {
 										const anchor = presentation.get( entity.gid )?.effectAnchor;
 										if ( !anchor ) {
-											unsupported.add( `hit-anchor:${entity.refObjId}` );
+											refuse( `hit-anchor:${entity.refObjId}` );
 											continue;
 										}
 										let [ax, ay, az] = anchor.offset;
 										if ( anchor.bone ) {
 											const joint = socket?.( entity.gid, anchor.bone, [ 0, 0, 0 ], trigger );
 											if ( !joint ) {
-												unsupported.add( `hit-socket:${entity.refObjId}/${anchor.bone}` );
+												refuse( `hit-socket:${entity.refObjId}/${anchor.bone}` );
 												continue;
 											}
 											ax += joint.x - entity.x;
@@ -1815,7 +1888,7 @@ export function createCharacterEffects(
 											}
 										}
 										if ( !projectileSpace( entity.regionId, caster.regionId ) ) {
-											unsupported.add( "hit-anchor:region-space" );
+											refuse( "hit-anchor:region-space" );
 											continue;
 										}
 										const [dx, dz] = worldDelta( entity, caster ),
@@ -1975,7 +2048,7 @@ export function createCharacterEffects(
 											}
 											const child = modelFor( path );
 											if ( !child ) {
-												unsupported.add( path );
+												refuse( path );
 												continue;
 											}
 											const fade = !flight && index === 0 ? 3 : 0;
@@ -2078,7 +2151,7 @@ export function createCharacterEffects(
 												stageAttachment( holder, stageBinding( stage, true ), stage.resource ) :
 												(stage.bone ||
 														[ "AT_ONE_FOLLOW", "AT_LOOP" ].includes( stage.action )) &&
-													!supportedFlight && !targetLocal ?
+													!supportedFlight && !targetLocal && !sourceStatic ?
 												{
 													...stageAttachment(
 														holder,
@@ -2591,7 +2664,7 @@ export function createCharacterEffects(
 					record ??= namedCatalog[reference.codename];
 					if ( !record ) {
 						if ( firework ) {
-							unsupported.add( `item:${reference.codename}: missing retail named effect record` );
+							refuse( `item:${reference.codename}: missing retail named effect record` );
 						}
 						external.delete( id );
 						continue;
@@ -2623,7 +2696,7 @@ export function createCharacterEffects(
 						if ( stage.resource ) {
 							const model = modelFor( stage.resource );
 							if ( !model ) {
-								unsupported.add( stage.resource );
+								refuse( stage.resource );
 								admitted = false;
 							} else if ( !ready( model.glb ) ) admitted = false;
 						}
@@ -3284,7 +3357,7 @@ export function createCharacterEffects(
 												!endpoint || !projectileSpace( sample.pose.regionId, endpoint.regionId )
 											) {
 												if ( entity && !endpoint ) {
-													unsupported.add( `chain-socket:${entity.refObjId}/${route.bone}` );
+													refuse( `chain-socket:${entity.refObjId}/${route.bone}` );
 												}
 												if ( visual.impact ) {
 													impactEvents.push( {
@@ -3379,7 +3452,7 @@ export function createCharacterEffects(
 								}
 								const arrival = flight.arrivalResource ? modelFor( flight.arrivalResource ) : undefined;
 								if ( !arrival?.clips.length ) {
-									if ( flight.arrivalResource ) unsupported.add( flight.arrivalResource );
+									if ( flight.arrivalResource ) refuse( flight.arrivalResource );
 									active.delete( gid );
 									continue;
 								}
@@ -3545,10 +3618,8 @@ export function createCharacterEffects(
 					}
 				}
 				// Attack pet Challenging Roar I / II / III (action 16 / 17 / 18 on COS):
-				// 0.0s -> 1.0s: progressively brightening golden-crimson aura glow and
-				// Dynamic point light follows the dedicated pet-roar buildup.
-				// After 1s the ring expands to the tier's radius at its effective skill level.
-				// Only the server decides taunt victims.
+				// Port-only storyboard: rise .25s, roar .5s, full reach 1s, recover 1.4s.
+				// Server taunt timing and victim selection remain authoritative.
 				roarAppearances.clear();
 				for ( const entity of entities ) {
 					if (
@@ -3587,223 +3658,89 @@ export function createCharacterEffects(
 					}
 				}
 				const auraModel = "/assets/effects/challenging-roar-aura",
-					shockwaveModel = "/assets/effects/challenging-roar-shockwave";
-				for ( const [gid, roar] of [ ...roars ] ) {
-					const host = presentation.get( gid );
+					shockwaveModel = "/assets/effects/bear-roar-ring",
+					debrisModel = "/assets/effects/bear-roar-debris";
+				for ( const [gid, roar] of roars ) {
 					const entity = byGid.get( gid );
 					if ( !entity || entity.emote?.revision !== roar.revision ) {
 						roars.delete( gid );
 						continue;
 					}
-					const bearPose = host?.pose ?? (entity ?
-						{
-							regionId: entity.regionId,
-							x: entity.x,
-							y: entity.y,
-							z: entity.z,
-							yaw: nativeHeadingYaw( entity.heading )
-						} :
-						roar.originPose);
 					const elapsed = Math.max( 0, now - roar.startedAt );
-					if ( elapsed >= 2.25 ) {
-						// Keep the consumed revision until the entity leaves or a new emote arrives.
+					if ( elapsed >= 1.4 ) continue;
+					const bearPose = presentation.get( gid )?.pose ?? roar.originPose;
+					if ( elapsed < .5 ) {
+						roar.originPose = { ...bearPose };
 						continue;
 					}
-					const targetRadiusMeters = roar.radiusMeters;
-					const targetRadiusUnits = targetRadiusMeters * 10;
-					if ( elapsed < 1.0 ) {
-						// Phase 1 (0.0s -> 1.0s): glow gets progressively brighter over 1 second.
-						const p = Math.min( 1, elapsed / 1.0 );
-						const glow = p * (0.25 + 0.75 * p);
-						roar.originPose = { ...bearPose };
-						roarAppearances.set( gid, {
-							pointLight: {
-								pose: {
-									regionId: bearPose.regionId,
-									x: bearPose.x,
-									y: bearPose.y + 18,
-									z: bearPose.z
-								},
-								ambient: [ 1.95 * glow, 1.22 * glow, 0.38 * glow ],
-								diffuse: [ 2.85 * glow, 1.78 * glow, 0.56 * glow ],
-								range: 45 + 205 * glow,
-								attenuation: 0.35
-							},
-							materialTint: [
-								1.0,
-								1.0 - 0.08 * glow,
-								1.0 - 0.32 * glow
-							],
-							scale: 1.0 + 0.08 * Math.sin( p * Math.PI * 0.65 )
+					const age = elapsed - .5;
+					if ( !roar.released ) {
+						roar.released = true;
+						if ( age < .25 ) {
+							play( {
+								id: `pet-roar:${gid}:${roar.revision}`,
+								path: PET_ROAR_SOUND,
+								gain: .8,
+								...audioPosition( bearPose ),
+								expires: now + .25
+							} );
+						}
+					}
+					if ( age < .40 && ready( auraModel ) ) {
+						result.push( {
+							gid: roar.auraHeadGid,
+							model: auraModel,
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: 1 + age * 1.5,
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: .8 * (1 - age / .4),
+							materialTint: [ 1, .78, .35 ],
+							pose: bearPose,
+							attachment: { gid, bone: "Bip01 Head", offset: [ 0, 0, 0 ], rootIfMissing: true }
 						} );
-						if ( ready( auraModel ) ) {
-							result.push( {
-								gid: roar.auraBodyGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: true,
-								scale: 0.55 + 0.90 * glow,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.03 + 0.22 * glow,
-								materialTint: [
-									0.85 + 0.15 * glow,
-									0.42 + 0.53 * glow,
-									0.12 + 0.66 * glow
-								],
-								effectRotation: { axis: "y", angle: radians( elapsed * 3.4 ) },
-								pose: bearPose,
-								attachment: { gid, bone: "", root: true, offset: [ 0, 0, 0 ], ground: true }
-							} );
-							result.push( {
-								gid: roar.auraHeadGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: true,
-								scale: 0.30 + 0.65 * glow,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.02 + 0.12 * p * p,
-								materialTint: [ 1.0, 0.88 + 0.12 * p, 0.55 + 0.40 * p ],
-								effectRotation: { axis: "y", angle: radians( -elapsed * 5.2 ) },
-								pose: bearPose,
-								attachment: { gid, bone: "Bip01 Head", offset: [ 0, 0, 0 ], rootIfMissing: true }
-							} );
-						}
-					} else {
-						// Phase 2 (1.0s -> 2.25s): release the 25m (250-unit) shockwave!
-						if ( !roar.released ) {
-							roar.released = true;
-							roar.originPose = { ...bearPose };
-							if ( elapsed - 1 < .25 ) {
-								play( {
-									id: `pet-roar:${gid}:${roar.revision}`,
-									path: PET_ROAR_SOUND,
-									gain: .8,
-									...audioPosition( bearPose ),
-									expires: now + .25
-								} );
-							}
-							cameraEvents.push( {
-								atMs: Math.trunc( now * 1000 ),
-								amplitude: roar.action === 18 ? 200 : 50,
-								durationMs: 500,
-								periodMs: roar.action === 18 ? 25 : 20
-							} );
-						}
-						const shockElapsed = elapsed - 1.0;
-						if ( shockElapsed < 0.65 ) {
-							const decay = Math.pow( 1 - shockElapsed / 0.65, 1.8 );
-							roarAppearances.set( gid, {
-								pointLight: {
-									pose: {
-										regionId: roar.originPose.regionId,
-										x: roar.originPose.x,
-										y: roar.originPose.y + 16,
-										z: roar.originPose.z
-									},
-									ambient: [ 2.60 * decay, 1.75 * decay, 0.68 * decay ],
-									diffuse: [ 3.40 * decay, 2.25 * decay, 0.90 * decay ],
-									range: 250 + 60 * (1 - decay),
-									attenuation: 0.30
-								},
-								materialTint: [
-									1.0,
-									1.0 - 0.06 * decay,
-									1.0 - 0.24 * decay
-								],
-								scale: 1.0 + 0.05 * decay
-							} );
-						}
-						if ( shockElapsed < 0.40 && ready( auraModel ) ) {
-							const burstU = shockElapsed / 0.40;
-							result.push( {
-								gid: roar.auraBodyGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: false,
-								scale: 1.45 + 0.85 * burstU,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.12 * Math.pow( 1 - burstU, 1.6 ),
-								materialTint: [ 1.0, 0.92, 0.72 ],
-								effectRotation: { axis: "y", angle: radians( elapsed * 4.2 ) },
-								pose: roar.originPose
-							} );
-						}
-						if ( shockElapsed < 0.90 && ready( shockwaveModel ) ) {
-							const u1 = Math.min( 1, shockElapsed / 0.90 );
-							const ease1 = 1 - Math.pow( 1 - u1, 2.3 );
-							const primaryRadiusUnits = 6 + (targetRadiusUnits - 6) * ease1;
-							result.push( {
-								gid: roar.shockPrimaryGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed,
-								loop: false,
-								scale: primaryRadiusUnits,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: Math.max( 0, (1 - Math.pow( u1, 1.65 )) * 0.45 ),
-								materialTint: [
-									1.0,
-									0.96 - 0.22 * u1,
-									0.82 - 0.48 * u1
-								],
-								effectRotation: { axis: "y", angle: radians( shockElapsed * 2.2 ) },
-								pose: roar.originPose
-							} );
-						}
-						if ( shockElapsed >= 0.08 && shockElapsed < 1.03 && ready( shockwaveModel ) ) {
-							const u2 = Math.min( 1, (shockElapsed - 0.08) / 0.95 );
-							const ease2 = 1 - Math.pow( 1 - u2, 2.1 );
-							const secondaryRadiusUnits = 4 + (targetRadiusUnits - 4) * ease2;
-							result.push( {
-								gid: roar.shockSecondaryGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed - 0.08,
-								loop: false,
-								scale: secondaryRadiusUnits,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: Math.max( 0, (1 - Math.pow( u2, 1.45 )) * 0.30 ),
-								materialTint: [ 1.0, 0.62 - 0.18 * u2, 0.24 ],
-								effectRotation: { axis: "y", angle: radians( -shockElapsed * 1.8 ) },
-								pose: {
-									...roar.originPose,
-									y: roar.originPose.y + 0.6
-								}
-							} );
-						}
-						if ( shockElapsed < 0.45 && ready( shockwaveModel ) ) {
-							const uCore = shockElapsed / 0.45;
-							result.push( {
-								gid: roar.shockCoreGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed,
-								loop: false,
-								scale: 8 + 97 * (1 - Math.pow( 1 - uCore, 2.0 )),
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: (1 - uCore) * 0.25,
-								materialTint: [ 1.0, 0.95, 0.80 ],
-								pose: {
-									...roar.originPose,
-									y: roar.originPose.y + 1.1
-								}
-							} );
-						}
+					}
+					if ( ready( debrisModel ) ) {
+						result.push( {
+							gid: roar.auraBodyGid,
+							model: debrisModel,
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: roar.radiusMeters / 30,
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: Math.min( 1, age / .08 ) * Math.min( 1, (.9 - age) / .4 ),
+							pose: roar.originPose,
+							attachment: { gid, bone: "", root: true, ground: true, offset: [ 0, 1, 0 ] }
+						} );
+					}
+					for (
+						const [index, ringGid] of [ roar.shockPrimaryGid, roar.shockSecondaryGid, roar.shockCoreGid ]
+							.entries()
+					) {
+						const ringAge = age - index * .09;
+						if ( ringAge < 0 || !ready( shockwaveModel ) ) continue;
+						const progress = Math.min( 1, ringAge / .5 );
+						result.push( {
+							gid: ringGid,
+							model: shockwaveModel,
+							clip: "effect",
+							time: ringAge,
+							loop: false,
+							scale: 8 + (roar.radiusMeters * 10 - 8) * (1 - Math.pow( 1 - progress, 1.5 )),
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: .8 * Math.min( 1, (.9 - age) / .4 ) * (1 - index * .2),
+							materialTint: [ 1, .78, .32 ],
+							pose: { ...roar.originPose, y: roar.originPose.y + 1 },
+							attachment: { gid, bone: "", root: true, ground: true, offset: [ 0, 1, 0 ] }
+						} );
 					}
 				}
 				// Port-only wolf skill signals (server petwolfkit.go / petwolfvisual.go),
@@ -3819,7 +3756,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xd6)
+						!(action >= 0xd0 && action <= 0xd6) && !(entity.kind === "cos" && action >= 34 && action <= 36)
 					) {
 						continue;
 					}
@@ -3844,21 +3781,27 @@ export function createCharacterEffects(
 				for ( const [gid, skill] of [ ...wolfSkills ] ) {
 					const entity = byGid.get( gid );
 					const elapsed = Math.max( 0, now - skill.startedAt );
-					const frost = skill.action >= 0xd0 && skill.action <= 0xd6;
+					const penguinCasting = skill.action >= 34 && skill.action <= 36;
+					const frost = skill.action >= 0xd0 && skill.action <= 0xd6 || penguinCasting;
+					const lifetime = skill.action >= 0xd3 && skill.action <= 0xd5 ?
+						PENGUIN_BLIZZARD_SECONDS :
+						penguinCasting ?
+						1.25 :
+						WOLF_EFFECT_SECONDS;
 					// Ground frost outlives its victim; retain the latched pose for its bounded lifetime.
 					if (
 						!frost && (!entity || entity.emote?.revision !== skill.revision) ||
-						!entity && elapsed >= WOLF_EFFECT_SECONDS
+						!entity && elapsed >= lifetime
 					) {
 						wolfSkills.delete( gid );
 						continue;
 					}
 					const parts = frost ? [] : wolfEffectParts( skill.action );
-					const kind = skill.action >= 0xd0 && skill.action <= 0xd6 ?
+					const kind = penguinCasting ? "follow" : skill.action >= 0xd0 && skill.action <= 0xd6 ?
 						"victim" :
 						wolfEffectKind( skill.action );
 					// Keep the consumed revision until the entity leaves or a new emote arrives.
-					if ( elapsed >= WOLF_EFFECT_SECONDS ) continue;
+					if ( elapsed >= lifetime ) continue;
 					const live = presentation.get( gid )?.pose ?? skill.pose;
 					// Victims keep where they were struck; a dead monster may already be gone.
 					const pose = kind === "victim" ? skill.pose : live;
@@ -4212,11 +4155,20 @@ export function createCharacterEffects(
 			budgetGaveWay = 0;
 			return taken;
 		},
-		error: () =>
-			loadFailure ?? failure ??
-				(unsupported.size ?
-					`Unsupported native effect resources/operations: ${[ ...unsupported ].join( ", " )}` :
-					null),
+		// Refused effects are skipped and logged by refuse(); they never
+		// surface here. Only a failed load or an explicit failure does.
+		error: () => loadFailure ?? failure ?? null,
+		/*
+		================
+		unsupported
+
+		Every effect refuse() has skipped so far, for diagnostics and
+		probes: what was skipped, and why, without ending the session.
+		================
+		*/
+		unsupported() {
+			return [ ...unsupported ];
+		},
 		/*
 		================
 		reset

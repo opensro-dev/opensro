@@ -27,7 +27,6 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -35,18 +34,24 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/townarea"
+	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
-	monster.EnvTrainingDummy:        "GM-only training targets",
-	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	action.EnvGMItemForge:               "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:            "GM-only training targets",
+	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
+	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
+	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
+	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
@@ -76,12 +81,19 @@ var unlistedSettings = map[string]string{
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	// Cosmetic item rows the variant build imports; the GameWorld reads no
+	// such switch, the items simply exist in the built data.
+	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
 	// Staff telemetry (#1691): name-free seal counts by degree and tier
 	// for the staff console; players never meet it.
-	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
+	economy.EnvSealCensus:            "staff seal census telemetry, not a rule players meet",
+	connjournal.EnvConnectionJournal: "the staff connection census, not a rule players meet",
+	// Staff telemetry (#2538): the Sun counting cycle measures supply
+	// before any Sun knob; players never meet it.
+	action.EnvSunDropCount: "staff Sun drop counting for one measurement cycle, not a rule players meet",
 }
 
 /*
@@ -109,7 +121,10 @@ func publicRules() publicstats.RulesResponse {
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
+	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
+	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -153,10 +168,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The world is the v1.150 map; Alexandria is not part of it.",
 				Now:    "The Alexandria city is open, with its gates, ferry and townspeople.",
 				Why:    "Optional Alexandria expansion, imported from a later client."},
+			{Flag: commerce.EnvAlexandriaHideD11Goods, On: hideAlexandriaD11,
+				Native: "Alexandria's smith, armourer and accessory shops sell degree-11 gear and alchemy, as the original game's shops did.",
+				Now:    "Degree-11 goods are hidden from Alexandria's shops; degree-11 gear comes from monster drops only.",
+				Why:    "An operator choice for shards that want degree-11 gear earned by grinding, not bought."},
 			{Flag: companion.EnvAttackPetExpansion, On: companion.AttackPetExpansionEnabled(),
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
+				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
+				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
+				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -239,8 +262,8 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
-				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
-				Why:    "A helmet the event paid was never meant to reach a market."},
+				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
+				Why:    "A helmet the event paid was never meant to reach another player."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -253,18 +276,22 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
 				Why:    "Testers spend their time on the systems under test, not on walking."},
-			{Flag: quest.EnvInstantInventoryExpansion, On: quest.InstantInventoryExpansionFromEnv(),
-				Native: "A bigger bag takes effect at the next world entry.",
-				Now:    "A bigger bag takes effect at once.",
-				Why:    "Relogging to see new slots read as a bug."},
 			{Flag: companion.EnvPetPacing, On: companion.PoliciesFromEnv().Pacing,
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
 				Why:    "Owner-approved beta pacing for pets."},
+			{Flag: chat.EnvChatItemLinks, On: chat.ItemLinksFromEnv(),
+				Native: "Chat lines are text only.",
+				Now:    "Alt+click an item while typing to link it in the line; readers hover the link for the item's tooltip.",
+				Why:    "Owner decision 2026-11-07: players show items in chat."},
 			{Flag: action.EnvStorageAutoStack, On: action.StorageAutoStackFromEnv(),
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
+				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
+				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
+				Why:    "Owner decision 2026-11-07 (#2769): players found the expansion quests not worth half a page."},
 			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
 				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
 				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
@@ -286,6 +313,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
 				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
+			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
+				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",
+				Now:    "Jangan's potion merchant also sells X-Large HP and MP potions at Hotan's price of 900 gold.",
+				Why:    "The owner's convenience set: the endgame potions in the starting town."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
@@ -328,8 +359,16 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta so a bigger cargo draws a clearly bigger ambush; the original returns with one setting."},
 			{Flag: monster.EnvJobMonsterSpeed, On: monster.JobMonsterSpeedFromEnv(),
 				Native: "Thief and hunter monsters move at their original speed.",
-				Now:    "Thief and hunter monsters walk and run 20% faster.",
+				Now:    "Thief and hunter monsters walk and run 30% faster.",
 				Why:    "Requested for the beta so job ambushes keep up with a transport; the original returns with one setting."},
+			{Flag: monster.EnvJobMonsterAggression, On: monster.JobMonsterAggressionFromEnv(),
+				Native: "Thief and hunter monsters wait out the ordinary spawn hold before they can attack, and hit for their authored damage.",
+				Now:    "Thief and hunter monsters attack as soon as they spawn, and their damage is doubled.",
+				Why:    "Owner request (#2474) so a trade-run ambush is a threat from the first second; the original returns with one setting."},
+			{Flag: enterworld.EnvJobTransportSpeed, On: enterworld.JobTransportSpeedFromEnv(),
+				Native: "Job trade transports move at their original speed.",
+				Now:    "Job trade transports walk and run 30% faster.",
+				Why:    "Owner request (#2474) so a loaded transport is not run down as easily; the original returns with one setting."},
 			{Flag: action.EnvTransportFollow, On: action.TransportFollowFromEnv(),
 				Native: "A trade transport you step off stays where it stands, and you cannot walk more than 100 m away from it.",
 				Now:    "A trade transport you step off follows you on foot, like a pet.",
@@ -385,6 +424,12 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
 				Now:    "Trader and hunter suits hide worn armour too.",
 				Why:    "Requested for the beta, so every job suit reads clearly; the original look returns with one setting."},
+			{Flag: action.EnvJobSuitTiers, On: action.JobSuitTiersFromEnv(),
+				Native: "A job suit shows your job and gates job play; it grants no stats.",
+				Now: "While you wear a job suit, your job level grants a tier: tier 1 at job level 1, then at 2, 3, 5 and 7. " +
+					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
+					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
+				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
 			{Flag: action.EnvMoonlitThiefSuit, On: action.MoonlitThiefSuitFromEnv(),
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",
@@ -449,7 +494,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
+				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above: a Star's stays in the Event chat lines, while a Moon's and a Sun's also show in the top-centre banner; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvSealBoard, On: action.SealBoardFromEnv(),

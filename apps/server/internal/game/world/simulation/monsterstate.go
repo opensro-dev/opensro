@@ -45,13 +45,22 @@ type divisionMonsterState struct {
 	abnormalActive   map[uint32]struct{}          // active-only abnormal tick index; blocks live on instances
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
-	instances        monsterStorage
+	// followLeaderMemo is one leg's resolved leader reading per
+	// summoner gid (monsterfollow_transaction.go): the followers of
+	// one leader share the first follower's reading within the leg,
+	// stamped by followLeaderStamp. The follow commit re-reads the
+	// leader, so a leader that moved mid-leg rejects the late
+	// followers' commits rather than being followed from a stale
+	// row; the next leg's stamp re-reads fresh.
+	followLeaderMemo  map[uint32]followLeaderFacts
+	followLeaderStamp int64
+	instances         monsterStorage
 	// interestMemo holds populationInterestGIDs results per viewer
-	// interest block. Reconciled block membership has already absorbed
-	// the instant, so an entry lives until a mover crosses a block edge
-	// or the actors or static lists change (interestMemoStamp).
-	interestMemoStamp interestMemoStamp
-	interestMemo      map[worldgeom.InterestBlock][]uint32
+	// interest block (interestMemoEntry). Reconciled block membership
+	// has already absorbed the instant, so an entry lives until a
+	// mover crosses one of its own block's edges or the actors or
+	// static lists change.
+	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
 	// interestStatics is byRegion without the gids that have a mover,
 	// rebuilt when interestStaticsStamp stops matching.
 	interestStatics      map[uint16][]uint32
@@ -130,6 +139,13 @@ type MonsterState struct {
 	// bandits is built once from the immutable template (BanditTables).
 	banditsOnce sync.Once
 	bandits     *monster.BanditTables
+	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
+	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
+	tombChain *TombChain
+	// legViews holds dispatched leg-start snapshot views for the next
+	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
+	legViewMu sync.Mutex
+	legViews  []*legSnapshot
 }
 
 /*
@@ -250,6 +266,26 @@ CreatableRefs
 */
 func (s *MonsterState) CreatableRefs() []monster.MonsterRef {
 	return s.template.CreatableRefs()
+}
+
+/*
+================
+StructureRefs
+
+Every static fortress reference, including upgrade ranks with no starting
+nest. The browser must know these before a replacement roster arrives.
+This reads immutable catalog data, not live population state.
+================
+*/
+func (s *MonsterState) StructureRefs() []monster.MonsterRef {
+	var refs []monster.MonsterRef
+	for _, ref := range s.template.Refs {
+		if ref.Structure {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool { return refs[i].RefObjID < refs[j].RefObjID })
+	return refs
 }
 
 // Reference reads the immutable catalog, including rows without a nest.
@@ -449,6 +485,9 @@ func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity b
 		s.sampleHiveDensity(state, snapshot, nowMs)
 	}
 	s.runDueHiveTicks(state, nowMs)
+	if s.tombChain != nil {
+		s.tombChain.tickLocked(s, state, nowMs)
+	}
 	state.populationTicked = true
 }
 

@@ -258,6 +258,7 @@ test("CIFApprenticeShipSlot button 18 enforces strict > for leader and >= for se
 		entryLevel: 80,
 		model: 1907,
 		offline: false,
+		announced: false,
 		honor: 0,
 		location: ""
 	};
@@ -320,6 +321,7 @@ test("Academy UI disband, kick, compulsory graduate, leave and Judge graduation 
 		entryLevel: 80,
 		model: 1907,
 		offline: false,
+		announced: false,
 		honor: 0,
 		location: ""
 	};

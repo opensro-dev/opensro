@@ -19,6 +19,26 @@ export const fontAtlas = JSON.parse(
 );
 /*
 ================
+uiPorts
+
+The one place tests build the ports record createUi reads (#2516):
+fixture base URLs and dropped callbacks by default, overridden per test.
+================
+*/
+export function uiPorts( assets, overrides = {} ) {
+	return {
+		assets,
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		...overrides
+	};
+}
+
+/*
+================
 uiFixture
 ================
 */
@@ -32,19 +52,25 @@ export function uiFixture(
 	saveOptions = () => {},
 	extensions = {},
 	// published is path -> bytes served in place of the generated tree's file,
-	// for a catalog the shared tree has not published yet.
+	// for a catalog the shared tree has not published yet, or path ->
+	// { error } for a load that fails transiently (a stalled download).
 	published = {}
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
 	let nextId = 0;
-	const ui = createUi(
+	const ui = createUi( uiPorts(
 		{
 			available: () => 8,
+			// The fixture's published build carries the HD set (#2800), so
+			// the Experimental HD row is listed in fixture scenes.
+			hdAvailable: () => true,
 			take: id => {
 				const bytes = pending.get( id );
 				if ( bytes?.path && hold( bytes.path ) ) return null;
 				pending.delete( id );
-				return bytes?.absent ?
+				return bytes?.error ?
+					{ kind: "error", id, error: bytes.error } :
+					bytes?.absent ?
 					{ kind: "error", id, error: "absent", absent: true } :
 					bytes?.image ?
 					{ kind: "image", id, image: bytes.image } :
@@ -59,6 +85,10 @@ export function uiFixture(
 			request: url => {
 				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
 				requested.push( path );
+				if ( published[path]?.error ) {
+					pending.set( id, { path, error: published[path].error } );
+					return id;
+				}
 				try {
 					const bytes = published[path] ?? readFileSync( CLIENT_PUBLIC_ROOT + path );
 					// A native .texture is container bytes the UI decodes itself (#414).
@@ -86,34 +116,29 @@ export function uiFixture(
 			},
 			cancel: id => pending.delete( id )
 		},
-		commands,
-		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
-		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
-		/*
+		{
+			commands,
+			// Scenes are recorded as drawn: text runs expanded into the glyph quads the
+			// GPU packer writes (text-run.ts), so assertions read painted glyphs.
+			/*
 		================
 		recordProduct
 		================
 		*/
-		s => {
-			products.push( s );
-			scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
-		},
-		( ...args ) => textures.push( args ),
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		kind => sounds.push( kind ),
-		undefined,
-		undefined,
-		saveOptions,
-		audioPreference,
-		saveSight,
-		saveBindings,
-		saveVideo,
-		undefined,
-		undefined,
-		extensions
-	);
+			publish: s => {
+				products.push( s );
+				scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
+			},
+			texture: ( ...args ) => textures.push( args ),
+			sound: kind => sounds.push( kind ),
+			saveOptions,
+			audioPreference,
+			saveSight,
+			saveBindings,
+			saveVideo,
+			extensions
+		}
+	) );
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },

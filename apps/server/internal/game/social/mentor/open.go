@@ -153,6 +153,7 @@ func (r *InviteRuntime) handleOpen(s *transport.Session, opcode uint16, payload 
 		}
 		return
 	}
+	r.hydrateBuffCamp(divisionID, opened.Camp.ID, opened.Members)
 	rows := r.campWireRows(divisionID, opened.Members)
 	_ = s.Send(OpTCOpenAnswer, EncodeOpenAckB2EC(enterworld.ObjectIDForCharacter(actor), opened.Camp.Subject,
 		opened.Camp.Contents, rows))

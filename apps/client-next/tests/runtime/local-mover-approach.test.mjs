@@ -44,6 +44,7 @@ function flatView() {
 		available: () => true,
 		block: () => 0,
 		floor: () => undefined,
+		room: () => undefined,
 		pick: query => ({ ...query.ray.target }),
 		clip: ( _from, to ) => to,
 		surface: pose => pose
@@ -151,6 +152,7 @@ function play( clicks, endMs = 5000 ) {
 			aim: p?.aim,
 			speedFactor: 1,
 			turnRate: 0,
+			relocation: 0,
 			walkPredictable: true,
 			walkHeld: false,
 			holding: false,

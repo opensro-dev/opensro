@@ -37,3 +37,28 @@ under its own operator guard.
 func (api *API) InstallSettings(path string, handler http.Handler) {
 	api.settingsPath, api.settings = path, handler
 }
+
+/*
+================
+InstallChatLog
+
+The staff console's moderation chat search (game/social/chatlog), under
+its own operator guard.
+================
+*/
+func (api *API) InstallChatLog(path string, handler http.Handler) {
+	api.chatLogPath, api.chatLog = path, handler
+}
+
+/*
+================
+InstallCensus
+
+The staff console's player census (platform/census, port-only), under
+its own operator guard. Installed only while the census journal runs
+(SRO_CONNECTION_JOURNAL); otherwise the routes are absent.
+================
+*/
+func (api *API) InstallCensus(path string, handler http.Handler) {
+	api.censusPath, api.census = path, handler
+}

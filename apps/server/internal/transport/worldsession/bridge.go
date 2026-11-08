@@ -115,7 +115,7 @@ owner appends to ticker.Hooks after this call run behind the sample.
 func NewTicker(
 	hub *transport.Hub,
 	roster []simulation.NpcDef,
-	hooks ...simulation.TickHook,
+	hooks ...simulation.NamedTickHook,
 ) *simulation.Ticker {
 	bridge := New(hub)
 	// The ticker bridge owns the resume registry (resume.go): a resumed
@@ -129,9 +129,50 @@ func NewTicker(
 	ticker := simulation.NewTicker(bridge, bridge)
 	ticker.Roster = append([]simulation.NpcDef(nil), roster...)
 	ticker.Hooks = append(ticker.Hooks, hooks...)
-	ticker.Hooks = append(ticker.Hooks, tickDurationHook(hub, ticker))
+	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "tick-duration", Hook: tickDurationHook(hub, ticker)})
 	ticker.PhaseObserver = tickPhaseObserver(hub)
+	// Exact per-zone tick totals (#2824), always on: the budget read
+	// for #2150 diffs two /transport/metrics snapshots of tick_zones.
+	ticker.Zones = simulation.NewZoneLedger()
+	if hub != nil {
+		hub.SetTickZoneMetrics(tickZoneMetrics(ticker.Zones))
+	}
+	// Slow-tick zone timelines (#2301): armed only by SRO_TICK_TRACE,
+	// otherwise every zone point answers the shared no-op and the
+	// tick pays the nil checks. The sink hands each slow tick's
+	// rendered trace to the hub's writer (directory enabled at boot
+	// in wiring.go, beside the spike journal).
+	if transport.TickTraceEnabled() {
+		ticker.Trace = simulation.NewTickTracer()
+		ticker.TraceSink = func(trace simulation.TickTrace) {
+			if hub != nil {
+				hub.RecordTickTrace(trace.JSON)
+			}
+		}
+	}
 	return ticker
+}
+
+/*
+==================
+tickZoneMetrics
+
+The tick_zones provider: the ledger's rows keyed "<kind>:<name>", in
+milliseconds.
+==================
+*/
+func tickZoneMetrics(ledger *simulation.ZoneLedger) func() map[string]transport.TickZone {
+	return func() map[string]transport.TickZone {
+		rows := ledger.Snapshot()
+		out := make(map[string]transport.TickZone, len(rows))
+		for _, row := range rows {
+			out[row.Kind+":"+row.Name] = transport.TickZone{
+				Count:   row.Count,
+				TotalMs: float64(row.Total) / float64(time.Millisecond),
+			}
+		}
+		return out
+	}
 }
 
 /*

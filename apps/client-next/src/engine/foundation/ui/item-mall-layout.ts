@@ -300,7 +300,9 @@ mallQuestionLayout
 
 528920 configures reservation and bulk confirmations. 52859D creates worn
 name/cost pairs at y=100 with a 16-pixel pitch; the sentinel row anchors the
-native total, points, buttons and final height.
+native total, points, buttons and final height. On the two boxes that draw
+a total row (worn 529846, basket 529BE7) the total control (+0x89C) is
+captioned UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL.
 ================
 */
 export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "basket", count: number ) {
@@ -332,6 +334,41 @@ export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "baske
 		rowStart: ROW_START,
 		rowPitch: ROW_PITCH,
 		totalY: kind === "basket" ? 74 : totalY + 4,
-		pointY: kind === "basket" ? 92 : totalY + 22
+		pointY: kind === "basket" ? 92 : totalY + 22,
+		totalCaption: kind === "worn" || kind === "basket" ?
+			"UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" :
+			undefined
 	};
+}
+
+/*
+================
+mallSilkPeriodTexts
+
+The Buying list's period combo entries, in the order CIFSilkBuyList
+OnCreate (0x6CED10) appends them: 1 day, 7 days, 1 month, 3 months. The
+index is the inquiry's whole input (contracts/item-mall.ts).
+================
+*/
+export const mallSilkPeriodTexts = [
+	"UIIT_CTL_SILK_INQUIRY_ONEDAY",
+	"UIIT_CTL_SILK_INQUIRY_WEEK",
+	"UIIT_CTL_SILK_INQUIRY_MONTH",
+	"UIIT_CTL_SILK_INQUIRY_THREE_MONTH"
+] as const;
+
+/*
+================
+mallSilkHistoryDate
+
+One history row's date, "YYYY-MM-DD HH:MM" in local time. The native
+window never renders a row (its inquiry is an empty stub, 0x6CE6F0), so
+the column format is the port's recorded inference (#2269).
+================
+*/
+export function mallSilkHistoryDate( atSeconds: number ): string {
+	const date = new Date( atSeconds * 1000 );
+	const pad = ( value: number ) => String( value ).padStart( 2, "0" );
+	return `${date.getFullYear()}-${pad( date.getMonth() + 1 )}-${pad( date.getDate() )} ` +
+		`${pad( date.getHours() )}:${pad( date.getMinutes() )}`;
 }

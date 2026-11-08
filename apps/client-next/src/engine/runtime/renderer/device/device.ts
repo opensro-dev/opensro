@@ -12,8 +12,10 @@ import {
 	reportedGpuFeatures
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
+import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
+import { createAmbientOcclusion } from "./ambient-occlusion";
 import { createMsaa } from "./msaa";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
@@ -26,6 +28,7 @@ import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import { isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -72,9 +75,12 @@ function gpuFacts( adapter: GPUAdapter, device?: GPUDevice | null ): GpuFacts {
 createDevice
 
 Initialize one device generation and grant checked capabilities after its pipelines are ready.
+`recovering` marks a replacement for a lost device: the adapter can be
+missing for a moment during a GPU reset, where on a first start it means
+this machine has no WebGPU.
 ================
 */
-export function createDevice( timingEnabled = false, gpuAnimationEnabled = true ): DeviceOwner {
+export function createDevice( timingEnabled = false, gpuAnimationEnabled = true, recovering = false ): DeviceOwner {
 	let textureFiltered = true, textureDetail = DEFAULT_TEXTURE_DETAIL;
 	// Experimental > Image / World / Lighting. All off is the native frame:
 	// the plain copy to the swapchain, retail samplers, env.stages zero and
@@ -106,6 +112,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
 	let msaaStage: ReturnType<typeof createMsaa> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
@@ -133,7 +140,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		texturesKnown = resolve;
 	} );
 	const fail = ( error: unknown, canRecover = false ) => {
-		if ( !canRecover ) texturesKnown( [] );
+		// A memory refusal takes the recovery path however it arrived:
+		// the builders' promise catches below see it as a rejected
+		// DOMException long after `retryable` cleared (#2866).
+		const recover = canRecover || isOutOfMemoryRefusal( error );
+		if ( !recover ) texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}
@@ -141,12 +152,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		// rejecting a format or usage) and then every consequence ("createView:
 		// texture is not valid"); the report must name the cause (BUG-022).
 		if ( phase === "failed" ) return;
-		recoverable = canRecover;
+		recoverable = recover;
 		failure = String( error );
 		phase = "failed";
 	};
 	// The adapter's features and limits for bug reports (gpuFacts above).
 	let facts: GpuFacts | null = null;
+	// A rejected request for the device says the GPU is unavailable now, not
+	// that it never will be (#2337: requestDevice rejects after a GPU reset).
+	// Failures past that point are the device's own and stay permanent.
+	let retryable = true;
 	if ( !navigator.gpu ) {
 		fail( "WebGPU is unavailable" );
 	} else {
@@ -155,6 +170,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				return null;
 			}
 			if ( !adapter ) {
+				retryable = recovering;
 				throw new Error( "No WebGPU adapter" );
 			}
 			facts = gpuFacts( adapter );
@@ -170,6 +186,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			}
 			return adapter.requestDevice( { requiredFeatures } );
 		} ).then( created => {
+			retryable = false;
 			if ( !created ) {
 				return;
 			}
@@ -189,7 +206,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				// running first: a loss seen while running was the browser's, even
 				// with reason "destroyed" (Chrome destroys a page's device after a
 				// GPU-process or driver reset). The renderer recreates the device
-				// (renderer.ts, at most three times) instead of ending the session.
+				// (device-recovery.ts paces eight attempts, renewed after a
+				// stable minute) instead of ending the session.
 				if ( phase === "running" || phase === "starting" ) {
 					fail( `Device lost (${info.reason}): ${info.message}`, true );
 				}
@@ -202,7 +220,13 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					degradedPipelines.add( label.startsWith( "flare-" ) ? "flare-visibility" : label );
 					return;
 				}
-				fail( message );
+				// Out of GPU memory is the one uncaptured error a new device can
+				// cure: it starts empty. Validation errors would only repeat.
+				fail(
+					message,
+					isOutOfMemoryRefusal( event.error ) ||
+						(typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError)
+				);
 			} );
 
 			/*
@@ -244,15 +268,20 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				================
 				*/
 				createBundleEncoder: ( depth = true, scene = false ) =>
-					current().createRenderBundleEncoder( {
-						label: "retained-scene",
-						// Scene bundles execute into the frame's scene target: the
-						// canvas format, or the HDR stage's float intermediate, at
-						// the MSAA stage's sample count when that row is on.
-						colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
-						...(depth ? { depthStencilFormat: "depth24plus" as const } : {}),
-						...(scene && msaaOn ? { sampleCount: 4 } : {})
-					} ),
+					// Single use by construction (bundle-encoder.ts): a recorder
+					// that kept a finished encoder fails here, in the frame's
+					// own terms, not as a backend validation error (#2560).
+					createSingleUseBundleEncoder(
+						current().createRenderBundleEncoder( {
+							label: "retained-scene",
+							// Scene bundles execute into the frame's scene target: the
+							// canvas format, or the HDR stage's float intermediate, at
+							// the MSAA stage's sample count when that row is on.
+							colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
+							...(depth ? { depthStencilFormat: "depth24plus" as const } : {}),
+							...(scene && msaaOn ? { sampleCount: 4 } : {})
+						} )
+					),
 				/*
 				================
 				createEncoder
@@ -463,6 +492,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			occlusion = createAmbientOcclusion( created, retirement.retire );
 			msaaStage = createMsaa( created, retirement.retire );
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -506,7 +536,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					geometry!.refreshShadowBindings( sunShadowOn );
 				}
 			} ).catch( fail );
-		} ).catch( fail );
+		} ).catch( error => fail( error, retryable ) );
 	}
 	return {
 		/*
@@ -557,6 +587,28 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		hdr( width, height, enabled ) {
 			if ( phase !== "running" || !hdr ) throw Error( "HDR device is not ready" );
 			return hdr.prepare( width, height, enabled && hdrOn );
+		},
+		/*
+		================
+		ambientOcclusion
+
+		The experimental occlusion owner (port-only, not native; #2094):
+		prepared per frame against the scene size and camera, and its
+		blurred view installed as geometry binding 15 whenever the
+		answer changes (enable, disable, resize) through the geometry
+		owner's refresh seam. While off it owns nothing.
+		================
+		*/
+		ambientOcclusion(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
+			if ( phase !== "running" || !occlusion ) throw Error( "Ambient occlusion device is not ready" );
+			const draw = occlusion.prepare( width, height, enabled, camera );
+			geometry?.refreshAmbientOcclusion( draw?.view ?? null );
+			return draw;
 		},
 		/*
 		================
@@ -643,14 +695,15 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			stages.set( [
 				value.heightFog ? 1 : 0,
 				value.dynamicSun ? 1 : 0,
-				// z and w were terrain relief and textured horizon, removed at the
-				// owner's request (2026-10-11); the shaders no longer read them.
+				// z was terrain relief, removed at the owner's request
+				// (2026-10-11); w was the textured horizon, and now gates the
+				// port-only sky detail (clouds, glow, rim).
 				0,
-				0,
+				value.skyDetail ? 1 : 0,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,
-				0
+				value.ambientOcclusion ? 1 : 0
 			] );
 			// The HDR stage flips every scene target's format: geometry
 			// re-pipelines, the mirror reformats, the portraits retire.
@@ -707,15 +760,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		================
 		*/
 		uiTexture: ( id, image ) => ui?.texture( id, image ),
-		/*
-		================
-		uiAtlas
-
-		Port-only, not native: install or clear the icon atlas mapping; the
-		UI packer remaps the icons it maps into their sheet.
-		================
-		*/
-		uiAtlas: ( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ) => ui?.atlas( mapping ),
 		/*
 		================
 		ui
@@ -836,6 +880,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		error: () => failure,
 		/*
 		================
+		fail
+
+		Record a failure the renderer met while driving this device.
+		================
+		*/
+		fail: ( error: unknown ) => fail( error ),
+		/*
+		================
 		gpuTiming
 
 		Read completed GPU measurements without taking ownership of pending queries.
@@ -914,6 +966,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			occlusion?.dispose();
+			occlusion = null;
 			msaaStage?.dispose();
 			msaaStage = null;
 			finish?.dispose();

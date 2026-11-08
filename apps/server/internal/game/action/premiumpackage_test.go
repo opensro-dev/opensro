@@ -18,8 +18,8 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -32,7 +32,7 @@ with the shipped items and skills.
 */
 func goldTimeRuntime(t *testing.T) (*Runtime, *enterworld.Character, *fakeClock, *enterworld.ItemRef) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	pack, ok := items.ItemRefByCodename("ITEM_MALL_PREMIUM_GOLDTIME")

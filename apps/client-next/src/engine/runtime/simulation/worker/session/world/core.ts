@@ -21,6 +21,7 @@ import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
+	capturedMonsterCos,
 	cosInteraction,
 	hoverAttack,
 	petCosAttack,
@@ -64,6 +65,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
+		structure: refObjId => entities.structureReference( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
 		npcs: () => entities.npcs()
 	} );
@@ -115,6 +117,18 @@ when the local player is mounted, as a monster attack is), or nothing.
 		const target = entities.read( gid ), context = nameContext(), local = entities.read( gameplay.localIdentity() );
 		if ( !target || !context || !local ) return undefined;
 		if ( !cosInteraction( target, context, alt, { entity: entities.read, rider: entities.rider } ) ) {
+			// 693E50: of this function's silent refusals, a band-6 capture
+			// monster is the one native answers - with a chat system line
+			// (ChatSystemMessage channel 0), not a centre notice. The local
+			// player's own COS never reaches the print: 6935F0 leaves it
+			// alone first, which is cosInteraction's first refusal above.
+			if ( capturedMonsterCos( target ) && target.ownerGid !== local.gid ) {
+				gameplay.notice( {
+					key: "UIIT_MSG_QUEST_ERR_CAPTUREMONSTER_ATTACK",
+					value: 0,
+					nativeType: 0
+				} );
+			}
 			return undefined;
 		}
 		return { kind: local.mountedOn ? "cos-attack" : "attack", gid };
@@ -493,6 +507,7 @@ the entry continues it like the one after a world transfer.
 		},
 		receive,
 		outstandingSince: gameplay.outstandingSince,
+		outstandingLane: gameplay.outstandingLane,
 		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
@@ -523,6 +538,11 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				const gid = gameplay.pickupNearest( entities.groundItems() );
 				if ( !gid ) return;
 				command = { kind: "pickup", gid };
+			}
+			if ( command.kind === "select-nearest-monster" ) {
+				const gid = gameplay.selectNearestMonster( entities.monsters() );
+				if ( !gid ) return;
+				command = { kind: "select", gid };
 			}
 			if ( command.kind === "player-interact" ) {
 				const attack = playerAttack( command.gid, command.alt );
@@ -621,7 +641,7 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
-		takeDegradations: () => entities.takeDegradations(),
+		takeDegradations: () => [ ...entities.takeDegradations(), ...gameplay.takeDegradations() ],
 		readyRevision: () => pendingTravel?.revision ?? 0,
 		/*
 ================

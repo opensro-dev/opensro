@@ -5,6 +5,8 @@ dock-preview.ts - roster and character creation presentation lifetime
 
 Owns committed preview outfits, body shape and deletion transitions. Shared
 presentation outputs stay with the frame owner; world actors never enter here.
+A roster character wears its items' glows: native 8EADC0, vtable slot 7 of
+CPSCharacterSelect::SCharacterInfo, runs 8EAA90 and its 8EA960.
 
 ===========================================================================
 */
@@ -18,6 +20,8 @@ import {
 	type DressCatalog
 } from "@/engine/foundation/animation/equipment-appearance";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
+import type { createModelEmission } from "@/engine/foundation/animation/model-emission";
+import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { advanceBodyShape, bodyVolumeIndex, type BodyShapeBlend } from "@/engine/foundation/animation/body-shape";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
 import { previewIdle } from "@/engine/foundation/animation/preview-idle";
@@ -42,6 +46,7 @@ interface DockPreviewOwners {
 		retainWanted( paths: readonly string[] ): void;
 	};
 	readonly scenery: ReturnType<typeof createSceneryEmission>;
+	readonly modelEmission: ReturnType<typeof createModelEmission>;
 	readonly lizardGid: number;
 }
 
@@ -81,7 +86,7 @@ The fields this phase borrows from the shared presentation output owner.
 */
 type DockPreviewOutput = Pick<
 	PresentationOutput,
-	"previewReady" | "dockReady" | "displayed" | "failure" | "cameraTarget"
+	"previewReady" | "dockReady" | "displayed" | "failure" | "failureCause" | "cameraTarget"
 >;
 
 /*
@@ -90,8 +95,11 @@ createDockPreview
 ================
 */
 export function createDockPreview( owners: DockPreviewOwners ) {
-	const { renderer, resources, scenery, lizardGid } = owners;
-	const previewWear = new Map<number, { resource: Resource; keys: readonly string[]; }>();
+	const { renderer, resources, scenery, modelEmission, lizardGid } = owners;
+	const previewWear = new Map<
+		number,
+		{ resource: Resource; keys: readonly string[]; model: string; particles: readonly ModelParticle[]; }
+	>();
 	const dockStates = new Map<
 		number,
 		{ deleted: boolean; started: number; transition: string | null; previous?: CharacterActor; }
@@ -118,6 +126,7 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 			if ( dock || preview ) {
 				if ( previewDisplay ) resources.plan( previewDisplay.paths );
 				const actors: CharacterActor[] = [];
+				const glowHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[] = [];
 				// Dock and creation actors are dressed through the item catalog
 				// (roster.json, manifest 0); none exists before it is resident.
 				// The gecko needs no catalog and is admitted meanwhile.
@@ -165,9 +174,12 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 						// for an entire equipped actor at once can never fit.
 						if ( !paths.map( path => resources.ready( path ) ).every( Boolean ) ) continue;
 						const { heightScale, volumeScale, ...assemblyLoadout } = row.visualLoadout;
-						previewWear.set( row.id, { resource, keys: wear } );
 						const model = (preview ? "creation:" : "dock:") + row.id + ":" +
 							JSON.stringify( assemblyLoadout ) + (wear.length ? ":" + JSON.stringify( wear ) : "");
+						// Each frame assembles a new array, and a new array restarts its
+						// emitters: an unchanged outfit keeps the one it began with.
+						const particles = oldWear?.model === model ? oldWear.particles : assembly.particles;
+						previewWear.set( row.id, { resource, keys: wear, model, particles } );
 						renderer.setCharacterAssembly( model, resource.previewGlb, parts );
 						let clip = previewIdle(
 								resource.previewClips,
@@ -251,8 +263,12 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 							}
 						} );
 						if ( preview ) previewDisplay = { actor: actors.at( -1 )!, paths };
+						// The creation pass runs no particle query (renderer.ts deferredPlan),
+						// so only the roster can draw these effects.
+						else if ( particles.length ) glowHolders.push( { actor: actors.at( -1 )!, particles } );
 					} catch ( error ) {
 						output.failure = String( error );
+						output.failureCause = error;
 					}
 				}
 				for ( const id of previewWear.keys() ) {
@@ -339,6 +355,9 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 					} );
 				}
 				output.displayed = new Map( actors.map( actor => [ actor.gid, actor ] ) );
+				actors.push(
+					...modelEmission.step( glowHolders, seconds, resources.ready, CHARACTER_ACTORS - actors.length )
+				);
 				actors.push(
 					...scenery.step(
 						renderer.scenery?.() ?? null,

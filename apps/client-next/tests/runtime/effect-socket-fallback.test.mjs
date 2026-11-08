@@ -206,6 +206,7 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 				health: () => ({ phase: "running" }),
 				install: () => {},
 				textureFeatures() {},
+				hdTextures() {},
 				dispose: () => jobs.clear(),
 				/*
 				================
@@ -305,7 +306,8 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 		assert.deepEqual( step( 2 ), [] );
 		// A caster whose model is still loading holds the callback while its
 		// cast lives (native compounds load synchronously), then launches from
-		// the posed marker; only a model still cold when the cast ends reports.
+		// the posed marker. A model still cold when the cast ends is skipped
+		// and reported in the diagnostics, never as a session error (#2440).
 		actors[0].model = "cold";
 		cast.token = 2;
 		assert.deepEqual( step( 3, [ { cast, phase: "SHOT", event: 1, at: 3 } ] ), [] );
@@ -320,9 +322,8 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 		cast.token = 3;
 		assert.deepEqual( step( 5, [ { cast, phase: "SHOT", event: 1, at: 5 } ] ), [] );
 		step( 5.1, [], { ...gameplay, casts: [] } );
-		const error = effects.error();
-		assert.ok( error );
-		assert.match( error, /source-socket:1\/ai_end/ );
+		assert.equal( effects.error(), null );
+		assert.ok( effects.unsupported().some( entry => /source-socket:1\/ai_end/.test( entry ) ) );
 		effects.dispose();
 	});
 }
