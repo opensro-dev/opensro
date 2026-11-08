@@ -24,7 +24,7 @@ import { createGpuTiming } from "./timing";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
-import { createPipelines, type SceneSurface } from "./pipelines";
+import { createPipelines, sceneStageKey, type SceneSurface } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
@@ -774,12 +774,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		*/
 		sky: () => {
-			if ( !skyFactory ) return sky;
-			if ( !hdrOn && !msaaOn ) return sky;
-			const key = `${hdrOn ? 1 : 0}${msaaOn ? 1 : 0}`;
+			if ( !skyFactory || (!hdrOn && !msaaOn) ) return sky;
+			const surface = { sceneFloat: hdrOn, msaa: msaaOn }, key = sceneStageKey( surface );
 			let draw = skyStages.get( key );
 			if ( !draw ) {
-				draw = skyFactory( { sceneFloat: hdrOn, msaa: msaaOn } );
+				draw = skyFactory( surface );
 				skyStages.set( key, draw );
 			}
 			return draw;

@@ -47,6 +47,18 @@ export interface SceneSurface {
 	readonly fullscreenPreview?: boolean;
 }
 
+/*
+================
+sceneStageKey
+
+The one cache key for a surface's stage pair: the sky and image pipeline
+families here and the device's sky draws (device.ts) key by it.
+================
+*/
+export function sceneStageKey( { sceneFloat = false, msaa = false }: SceneSurface ) {
+	return (sceneFloat ? "hdr" : "ldr") + (msaa ? "|msaa" : "");
+}
+
 // The pair a material that blends without naming one draws with.
 export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 	source: D3DBLEND_SRCALPHA,
@@ -319,6 +331,35 @@ fn skyNoise(p:vec2f)->f32{
 	// lazily-filled map keyed by the pair.
 	const skyStagePipelines = new Map<string, GPURenderPipeline>(),
 		imageStagePipelines = new Map<string, GPURenderPipeline>();
+	/*
+	================
+	stageSibling
+
+	The sky or fullscreen image pipeline for a non-native scene surface,
+	compiled on first use into its family's map. Both families share one
+	shape: a fullscreen draw that never tests or writes depth.
+	================
+	*/
+	function stageSibling(
+		family: Map<string, GPURenderPipeline>,
+		module: GPUShaderModule,
+		{ sceneFloat = false, msaa = false }: SceneSurface
+	) {
+		const key = sceneStageKey( { sceneFloat, msaa } );
+		let selected = family.get( key );
+		if ( !selected ) {
+			selected = created.createRenderPipeline( {
+				layout: "auto",
+				vertex: { module, entryPoint: "vs" },
+				fragment: { module, entryPoint: "fs", targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ] },
+				primitive: { topology: "triangle-list" },
+				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+				multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
+			} );
+			family.set( key, selected );
+		}
+		return selected;
+	}
 	const geometryShader = created.createShaderModule( {
 		code: environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
@@ -784,48 +825,14 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		lightmapSampling( anisotropic: boolean ) {
 			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
 		},
-		sky( { sceneFloat = false, msaa = false }: SceneSurface = {} ) {
-			if ( !sceneFloat && !msaa ) return skyPipeline!;
-			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
-			let selected = skyStagePipelines.get( key );
-			if ( !selected ) {
-				selected = created.createRenderPipeline( {
-					layout: "auto",
-					vertex: { module: skyShader, entryPoint: "vs" },
-					fragment: {
-						module: skyShader,
-						entryPoint: "fs",
-						targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ]
-					},
-					primitive: { topology: "triangle-list" },
-					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
-					multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
-				} );
-				skyStagePipelines.set( key, selected );
-			}
-			return selected;
+		sky( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return skyPipeline!;
+			return stageSibling( skyStagePipelines, skyShader, surface );
 		},
 		mips: () => mipPipeline!,
-		image( { sceneFloat = false, msaa = false }: SceneSurface = {} ) {
-			if ( !sceneFloat && !msaa ) return pipeline!;
-			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
-			let selected = imageStagePipelines.get( key );
-			if ( !selected ) {
-				selected = created.createRenderPipeline( {
-					layout: "auto",
-					vertex: { module: shader, entryPoint: "vs" },
-					fragment: {
-						module: shader,
-						entryPoint: "fs",
-						targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ]
-					},
-					primitive: { topology: "triangle-list" },
-					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
-					multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
-				} );
-				imageStagePipelines.set( key, selected );
-			}
-			return selected;
+		image( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return pipeline!;
+			return stageSibling( imageStagePipelines, shader, surface );
 		},
 		/*
 ================
