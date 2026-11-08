@@ -130,6 +130,88 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 
 /*
 ================
+TestQinShiTombFloor5BossesKeepV1188Stats
+
+#2947 (decided 2026-11-08): iSRO-R doubles the Floor 5 guardians' and
+Flame Master's HP and types them 8; the shard keeps the v1.188 rows.
+Every unique gate reads monster type 3 (simulation's spawn/kill
+notices, RecordUniqueKiller's kill records, unique_states.go's
+tracker), so a re-import landing the iSRO-R values would silently
+un-unique the floor's bosses. The pins break first.
+================
+*/
+func TestQinShiTombFloor5BossesKeepV1188Stats(t *testing.T) {
+	seed := TemplateFromParts(
+		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
+		nil,
+	)
+	withTomb, err := seed.WithQinShiTomb("")
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	for _, want := range []struct {
+		id    uint32
+		code  string
+		level uint8
+		hp    uint32
+	}{
+		{14833, "MOB_TQ_NORTHGUARDIAN", 98, 11026132},
+		{14834, "MOB_TQ_SOUTHGUARDIAN", 98, 8396659},
+		{14835, "MOB_TQ_WESTGUARDIAN", 99, 8802116},
+		{14836, "MOB_TQ_EASTGUARDIAN", 99, 8802116},
+		{14838, "MOB_TQ_FLAMEMASTER", 100, 23045889},
+	} {
+		ref, ok := withTomb.Refs[want.id]
+		if !ok || ref.Codename != want.code {
+			t.Fatalf("ref %d = %+v, ok=%v; want %s", want.id, ref, ok, want.code)
+		}
+		if ref.Level != want.level || ref.MaxHP != want.hp || ref.MonsterType != 3 {
+			t.Fatalf("%s = Lvl %d HP %d type %d, want Lvl %d HP %d type 3",
+				want.code, ref.Level, ref.MaxHP, ref.MonsterType, want.level, want.hp)
+		}
+	}
+}
+
+/*
+================
+TestQinShiTombGeneralsKeepThreeSkills
+
+#2947 (decided 2026-11-08): iSRO-R gives the Tomb and Snake Generals
+a fourth skill (its 31183 / 31187). Those skill rows exist nowhere in
+the shipped skill data - the v1.150 skill shards carry no tomb skills
+at all and the tomb skill overlay holds no fourth General skill - so
+the cherry-pick does not ship and the three-skill sets stay pinned.
+================
+*/
+func TestQinShiTombGeneralsKeepThreeSkills(t *testing.T) {
+	seed := TemplateFromParts(
+		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
+		nil,
+	)
+	withTomb, err := seed.WithQinShiTomb("")
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	for _, want := range []struct {
+		id     uint32
+		code   string
+		skills [10]uint32
+	}{
+		{14825, "MOB_TQ_TOMBGENERAL", [10]uint32{10653, 10654, 10655}},
+		{14829, "MOB_TQ_SNAKEGENERAL", [10]uint32{10665, 10666, 10667}},
+	} {
+		ref, ok := withTomb.Refs[want.id]
+		if !ok || ref.Codename != want.code {
+			t.Fatalf("ref %d = %+v, ok=%v; want %s", want.id, ref, ok, want.code)
+		}
+		if ref.DefaultSkillIDs != want.skills {
+			t.Fatalf("%s skills = %v, want %v", want.code, ref.DefaultSkillIDs, want.skills)
+		}
+	}
+}
+
+/*
+================
 TestQinShiTombOverlayScaleCoherent
 
 The scale column (48, ScaleDenom) is read verbatim by the server's
