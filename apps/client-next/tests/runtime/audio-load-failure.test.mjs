@@ -21,13 +21,62 @@ const BUFF_END = "/assets/audio/sfx/prim/snd/ui/buf_disappear.wav";
 
 /*
 ================
+Source
+
+One played voice, as the audio owner drives it.
+================
+*/
+class Source {
+	loopEnd = 0;
+	started = false;
+	stopped = false;
+	/** @type {null | (() => void)} */
+	onended = null;
+	buffer = null;
+	loop = false;
+	/*
+	================
+	connect
+	================
+	*/
+	connect() {}
+	/*
+	================
+	disconnect
+	================
+	*/
+	disconnect() {}
+	/*
+	================
+	start
+	================
+	*/
+	start() {
+		this.started = true;
+	}
+	/*
+	================
+	stop
+	================
+	*/
+	stop() {
+		this.stopped = true;
+		this.onended?.();
+	}
+}
+
+/*
+================
 fixture
 
 One audio owner over a scripted asset owner: outcomes maps a path to
-the take() results its requests answer with, in order; bytes when the
+the error results its requests answer with, in order; bytes when the
 script runs out. Requests are logged by path.
 ================
 */
+/**
+ * @param {Map<string, { kind: "error"; error: string; transient?: true; }[]>} outcomes
+ */
 function fixture( outcomes ) {
 	const sources = [],
 		decoded = { length: 4399, sampleRate: 22050, numberOfChannels: 1 },
@@ -39,58 +88,130 @@ function fixture( outcomes ) {
 		state = "running";
 		destination = {};
 		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		/*
+		================
+		resume
+		================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+		================
+		decodeAudioData
+		================
+		*/
 		decodeAudioData() {
 			return Promise.resolve( decoded );
 		}
+		/*
+		================
+		createBufferSource
+		================
+		*/
 		createBufferSource() {
-			const source = {
-				...node(),
-				loopEnd: 0,
-				start() {
-					this.started = true;
-				},
-				stop() {
-					this.stopped = true;
-					this.onended?.();
-				}
-			};
+			const source = new Source();
 			sources.push( source );
 			return source;
 		}
+		/*
+		================
+		createGain
+		================
+		*/
 		createGain() {
 			return { ...node(), gain: {} };
 		}
+		/*
+		================
+		createPanner
+		================
+		*/
 		createPanner() {
 			return { ...node(), positionX: {}, positionY: {}, positionZ: {} };
 		}
 	}
-	const originalContext = globalThis.AudioContext;
-	globalThis.AudioContext = Context;
+	const previous = Object.getOwnPropertyDescriptor( globalThis, "AudioContext" );
+	Object.defineProperty( globalThis, "AudioContext", { value: Context, configurable: true } );
+	/** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */
 	const assets = {
+		progress: () => null,
+		health: () => ({ phase: "running" }),
 		available: () => 4,
+		/*
+		================
+		request
+		================
+		*/
 		request( url ) {
 			const path = new URL( url ).pathname;
 			requests.push( path );
 			pending.set( ++next, path );
 			return next;
 		},
+		/*
+		================
+		take
+		================
+		*/
 		take( id ) {
 			const path = pending.get( id );
 			if ( !path ) return null;
 			pending.delete( id );
 			const scripted = outcomes.get( path );
-			if ( scripted && scripted.length ) return { id, ...scripted.shift() };
+			if ( scripted && scripted.length ) {
+				const result = scripted.shift();
+				if ( result ) {
+					return {
+						kind: "error",
+						id,
+						error: result.error,
+						...(result.transient ? { transient: true } : {})
+					};
+				}
+			}
 			return { kind: "bytes", id, buffer: new ArrayBuffer( 4 ) };
 		},
+		/*
+		================
+		textureFeatures
+		================
+		*/
+		textureFeatures() {},
+		/*
+		================
+		hdTextures
+		================
+		*/
+		hdTextures() {},
+		/*
+		================
+		cancel
+		================
+		*/
 		cancel( id ) {
 			pending.delete( id );
-		}
+		},
+		/*
+		================
+		install
+		================
+		*/
+		install() {},
+		/*
+		================
+		dispose
+		================
+		*/
+		dispose() {}
 	};
 	const audio = createAudio( assets, "http://fixture.invalid", createPresentationRandom( 1 ) );
 	audio.unlock();
@@ -98,10 +219,15 @@ function fixture( outcomes ) {
 		audio,
 		sources,
 		requests,
+		/*
+		================
+		restore
+		================
+		*/
 		restore() {
 			audio.dispose();
-			if ( originalContext ) globalThis.AudioContext = originalContext;
-			else delete globalThis.AudioContext;
+			if ( previous ) Object.defineProperty( globalThis, "AudioContext", previous );
+			else Reflect.deleteProperty( globalThis, "AudioContext" );
 		}
 	};
 }
