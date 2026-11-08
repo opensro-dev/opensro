@@ -173,3 +173,89 @@ func TestStepTimerNamesSlowSteps(t *testing.T) {
 		t.Fatal("the zero StepTimer did not run its step")
 	}
 }
+
+/*
+================
+TestStepTimerBeginEndMatchesTime
+
+The span must record exactly what Time records - the total, the slow
+names and the zone's open and close around them - for a fast step, a
+slow step and a panicking one.
+================
+*/
+func TestStepTimerBeginEndMatchesTime(t *testing.T) {
+	record := func(spans bool) []string {
+		clock := time.UnixMilli(0)
+		var events []string
+		steps := StepTimer{
+			Now: func() time.Time { return clock },
+			Total: func(name string, elapsed time.Duration) {
+				events = append(events, "total:"+name+":"+elapsed.String())
+			},
+			Slow: func(name string, elapsed time.Duration) {
+				events = append(events, "slow:"+name+":"+elapsed.String())
+			},
+			Zone: func(name string) func() {
+				events = append(events, "open:"+name)
+				return func() { events = append(events, "close:"+name) }
+			},
+		}
+		step := func(name string, body func()) {
+			if spans {
+				span := steps.Begin(name)
+				defer span.End()
+				body()
+				return
+			}
+			steps.Time(name, body)
+		}
+		step("fast", func() { clock = clock.Add(10 * time.Millisecond) })
+		step("slow", func() { clock = clock.Add(150 * time.Millisecond) })
+		func() {
+			defer func() { _ = recover() }()
+			step("panics", func() {
+				clock = clock.Add(SlowHookThreshold)
+				panic("step failed")
+			})
+		}()
+		return events
+	}
+	viaTime, viaSpans := record(false), record(true)
+	if len(viaTime) != len(viaSpans) {
+		t.Fatalf("span events %v, Time events %v", viaSpans, viaTime)
+	}
+	for i := range viaTime {
+		if viaTime[i] != viaSpans[i] {
+			t.Fatalf("event %d: span %q, Time %q (span %v, Time %v)", i, viaSpans[i], viaTime[i], viaSpans, viaTime)
+		}
+	}
+	var zero StepTimer
+	zero.Begin("unwired").End()
+}
+
+// spanAllocTimer / spanAllocSink keep TestStepSpanBeginEndAllocatesNothing's
+// measured pair free of capture boxes of its own.
+var spanAllocTimer = &StepTimer{
+	Now:   func() time.Time { return time.UnixMilli(0) },
+	Total: func(string, time.Duration) {},
+}
+
+var spanAllocSink StepSpan
+
+/*
+================
+TestStepSpanBeginEndAllocatesNothing
+
+Retiring Time's per-step closure box on the tick path is the span's
+whole reason to exist (#2030); pin the pair at zero allocations.
+================
+*/
+func TestStepSpanBeginEndAllocatesNothing(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		spanAllocSink = spanAllocTimer.Begin("step")
+		spanAllocSink.End()
+	})
+	if allocs != 0 {
+		t.Fatalf("Begin/End allocated %v per run, want 0", allocs)
+	}
+}
