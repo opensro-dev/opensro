@@ -92,6 +92,11 @@ export function uiFixture(
 					{ kind: "error", id, error: "absent", absent: true } :
 					bytes?.image ?
 					{ kind: "image", id, image: bytes.image } :
+					bytes?.servedBytes ?
+					// The tree's bytes are read-only and shared per process:
+					// hand out the buffer itself, not a copy, so a pure
+					// decode keyed on it (the skill catalogue) runs once.
+					{ kind: "bytes", id, buffer: bytes.servedBytes } :
 					bytes ?
 					{
 						kind: "bytes",
@@ -111,7 +116,7 @@ export function uiFixture(
 					const bytes = published[path] ?? readServedBytes( path );
 					// A native .texture is container bytes the UI decodes itself (#414).
 					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) || path.endsWith( ".texture" ) ) {
-						pending.set( id, bytes );
+						pending.set( id, published[path] ? bytes : { servedBytes: bytes } );
 					} else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {
 							path,
