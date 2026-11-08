@@ -37,7 +37,7 @@ func (s *MonsterState) moverStuckAt(divisionID string, gid uint32, slot, monster
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
 	if !state.instances.containsAt(monsterSlot, gid) {
 		return false
 	}

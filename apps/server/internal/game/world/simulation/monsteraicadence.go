@@ -19,16 +19,17 @@ checkAITimer through the monster slot the behaviour batch carried
 for the actor (#2133): the instance read goes through the verified
 hint and falls back to the gid resolve when the hint no longer
 names the gid, so the timer verdict is checkAITimer's either way.
-The timer bank itself is keyed by gid as before - only the
-instance locate changes. The check reads the timer facts (hit
-points, nest tactics flags) off the resident row instead of
-expanding the full Instance (#2029): the facts are all it uses.
+The population membership test rides the same hint
+(populationForObjectAt); the timer bank itself is keyed by gid as
+before. The check reads the timer facts (hit points, nest
+tactics flags) off the resident row instead of expanding the full
+Instance (#2029): the facts are all it uses.
 ================
 */
 func (s *MonsterState) checkAITimerAt(divisionID string, gid uint32, monsterSlot uint32, id monster.AITimerID, nowMs int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(divisionID, gid)
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
 	hp, tacticsFlags, ok := state.instances.timerFactsAt(monsterSlot, gid)
 	if !ok || hp == 0 {
 		return false
