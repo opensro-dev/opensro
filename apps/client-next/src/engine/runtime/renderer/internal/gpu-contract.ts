@@ -125,8 +125,12 @@ its scene attachment and resolves into the stage chain's own scene view.
 ================
 */
 export interface MsaaDraw {
+	// The 4x colour the scene pass renders into; its resolveTarget is the
+	// stage chain's own scene view.
 	readonly view: GPUTextureView;
+	// The 4x depth of the scene pass.
 	readonly depth: GPUTextureView;
+	// The samples' minimum into the scene's single-sampled depth.
 	resolveDepth( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
 /*
@@ -165,14 +169,7 @@ export interface ExperimentalFrame {
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
 	readonly ao?: AmbientOcclusionDraw;
-	readonly msaa?: {
-		/** The 4x colour the scene pass renders into; its resolveTarget is the
-		 * stage chain's own scene view. */
-		readonly view: GPUTextureView;
-		/** The 4x depth of the scene pass. */
-		readonly depth: GPUTextureView;
-		resolveDepth( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
-	};
+	readonly msaa?: MsaaDraw;
 }
 /*
 ================
