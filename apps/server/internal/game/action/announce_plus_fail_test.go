@@ -150,3 +150,73 @@ func TestPlusFailCaps(t *testing.T) {
 		t.Fatalf("the window did not reopen: %v", got)
 	}
 }
+
+/*
+================
+TestPlusFailReportsABucketDroppedLine
+
+The kind's shard bucket full is not a post: the caller folds the
+destroyed item's break line into the failure line only when the
+failure line actually went out, so a bucket-dropped failure leaves
+the break line to carry the destroy (#2852 follow-up).
+================
+*/
+func TestPlusFailReportsABucketDroppedLine(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.Announce.PlusFail = true
+	rt.Announce.PlusFailMin = announcePlusFailMinDefault
+	rt.Announce.Break = true
+	for i := 0; i < announcementsPerMinute; i++ {
+		rt.announce(testDivision, announcePlusFail, "filler", wire.NoticeLink{}, 0, 0)
+	}
+	if got := drainedNotices(t, rt); len(got) != announcementsPerMinute {
+		t.Fatalf("bucket fill drained %d notices, want %d", len(got), announcementsPerMinute)
+	}
+	character := breakCharacter("leChiffre")
+	if rt.announcePlusFail(testDivision, character, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, true, false, 0), 0) {
+		t.Fatal("a bucket-dropped failure line reported itself posted")
+	}
+	rt.announceBreak(testDivision, character, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, true, false, 0), 0)
+	if got := drainedNotices(t, rt); len(got) != 1 {
+		t.Fatalf("the destroyed item got %v, want its one break line", got)
+	}
+}
+
+/*
+================
+TestPlusFailQuietCapPerCharacter
+
+The failure line keeps #1738's per-character window, shared with the
+break line: a second failure inside it is silent (and a destroy in it
+gets no second line either), another character is unaffected, and
+the window reopening lets the first character post again.
+================
+*/
+func TestPlusFailQuietCapPerCharacter(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.Announce.PlusFail = true
+	rt.Announce.PlusFailMin = announcePlusFailMinDefault
+	rt.Announce.Break = true
+	first := breakCharacter("leChiffre")
+	second := breakCharacter("someoneElse")
+	second.Name = "someoneElse"
+	if !rt.announcePlusFail(testDivision, first, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, false, false, 0), 0) {
+		t.Fatal("the first failure line did not post")
+	}
+	if rt.announcePlusFail(testDivision, first, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, false, false, 0), 1000) {
+		t.Fatal("a second failure inside the window posted")
+	}
+	rt.announceBreak(testDivision, first, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, true, false, 0), 2000)
+	if got := drainedNotices(t, rt); len(got) != 1 {
+		t.Fatalf("%v, want the one failure line inside the window", got)
+	}
+	if !rt.announcePlusFail(testDivision, second, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, false, false, 0), 2000) {
+		t.Fatal("another character's failure line was quieted")
+	}
+	if !rt.announcePlusFail(testDivision, first, "ITEM_CH_SWORD_01_A_RARE", failedAt(8, false, false, 0), breakNoticePerCharacterMs) {
+		t.Fatal("the first character stayed quiet past the window")
+	}
+	if got := drainedNotices(t, rt); len(got) != 2 {
+		t.Fatalf("%v, want the two lines after the window", got)
+	}
+}
