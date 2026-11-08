@@ -66,6 +66,9 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_ROUTE_HOTAN_PERCENT":           "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_SAMARKAND_PERCENT":       "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT":  "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_THIEF_PERCENT":       "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_HUNTER_PERCENT":      "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT":      "shown in the trade tiers rule",
 	"SRO_THIEF_PARTY_PERCENT_EACH":            "shown in the thief party bonus rule",
 	"SRO_THIEF_PARTY_PERCENT_CAP":             "shown in the thief party bonus rule",
 	"SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER": "shown in the trade job bonus rule",
@@ -414,7 +417,11 @@ func publicRules() publicstats.RulesResponse {
 					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits, the trade-scale menu and the stars in the transport's bag follow them). " +
 					fmt.Sprintf("Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +%d%%, Hotan +%d%%, Samarkand +%d%%, Constantinople +%d%%.",
 						settings.Int(tunables.TradeRouteDonwhangPercent), settings.Int(tunables.TradeRouteHotanPercent),
-						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)),
+						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)) +
+					fmt.Sprintf(" A 5-star caravan is a target: everyone nearby sees its stars over the transport. A thief who sells a 5-star load earns +%d%% more gold, "+
+						"hunters escorting a trader's 5-star sale earn +%d%% more gold, and a hunter who kills a thief caught attacking a 5-star caravan earns +%d%% more job experience.",
+						settings.Int(tunables.TradeFiveStarThiefPercent), settings.Int(tunables.TradeFiveStarHunterPercent),
+						settings.Int(tunables.TradeFiveStarBountyPercent)),
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
 			{Flag: action.EnvTeleportGrace, On: action.TeleportGraceFromEnv(),
 				Native: "Only a revival makes you briefly untouchable; a scroll, gate or move arrives as attackable as you left.",
