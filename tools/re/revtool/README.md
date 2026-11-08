@@ -50,6 +50,9 @@ These are properties of the data source, not bugs to paper over:
 * Argument names are rizin's (`arg_8h`), so overlay locals/bindings
   recorded against BN variable names do not attach until names
   coincide.
+* `view --lines A:B` is a function-local 1-based range under this
+  backend (the dump backend's are whole-dump line numbers), since
+  rizin text is fetched per function. The flag itself is unchanged.
 * `start_byte`/`start_line` in the functions table are dump
   geometry; rizin rows store a stable ordinal. Use one backend's
   `index` per DB file (meta records `backend=rizin`).
