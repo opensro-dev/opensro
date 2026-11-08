@@ -711,7 +711,7 @@ import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layou
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
-import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
+import { expandedWorldMapOn, worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
 	minimapAreaName,
@@ -28250,7 +28250,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// An open map wants every tile a drag can reveal, even when it opened
 			// before its warm build ran.
 			if ( panel === "Map" ) {
-				const expandedMap = experimental.state().saved.expandedWorldMap;
+				const expandedMap = expandedWorldMapOn( game );
 				paths.push(
 					...worldMapImagePaths(
 						expandedMap ? hud.data()?.expandedMapIcons : hud.data()?.mapIcons,

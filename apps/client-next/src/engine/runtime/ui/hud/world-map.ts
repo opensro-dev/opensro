@@ -25,6 +25,7 @@ import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
 import {
 	worldMapDemand,
+	expandedWorldMapOn,
 	MAP_LOCAL_MARKER,
 	worldMapDungeonPose,
 	worldMapPageAt,
@@ -394,7 +395,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			let hover = input.hover;
 			// The current map is a world-lifetime resource, not a popup-lifetime
 			// resource. Closing M must not release the image and flash on the next open.
-			const expandedMap = experimental.state().saved.expandedWorldMap;
+			const expandedMap = expandedWorldMapOn( game );
 			mapLayout = expandedMap ? hudData?.mapLayout : undefined;
 			const mapIcons = expandedMap ? hudData?.expandedMapIcons : hudData?.mapIcons;
 			const mapLabels = expandedMap ? hudData?.expandedMapLabels : hudData?.mapLabels;

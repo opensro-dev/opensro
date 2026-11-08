@@ -114,7 +114,6 @@ export const OFF = Object.freeze( {
 	// default connect and the WebSocket the fallback; off is one setting.
 	webTransport: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.

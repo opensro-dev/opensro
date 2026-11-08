@@ -45,7 +45,6 @@ import (
 	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/tunables"
-	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
@@ -313,12 +312,9 @@ func newGameplayPlane(
 	appendGroundObjectRows(deps, items)
 
 	water := movement.NewAuthorityValidator(worldAuthorityDir)
-	// Port-only, not native: Alexandria's regions exist only with SRO_ALEXANDRIA.
-	hiddenAlexandria, err := alexandria.Hidden(devPaths.TextdataDir)
-	if err != nil {
+	if err := wireAlexandria(water, deps, devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	water.HideAlexandria(hiddenAlexandria)
 	if err := water.ValidateSecurityAssets(); err != nil {
 		return nil, err
 	}
