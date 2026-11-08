@@ -312,6 +312,10 @@ def open_db(path):
 	# Many agents share one DB, so a plain connect() will throw "database is locked"
 	# under concurrent writes. A generous busy timeout makes writers queue instead of
 	# failing, and WAL lets readers proceed while one writer holds the write lock.
+	# A first run on a fresh data dir creates the directory: commands that
+	# never touch the overlay (seed verify/apply) must still start.
+	parent = os.path.dirname(os.path.abspath(path))
+	os.makedirs(parent, exist_ok=True)
 	con = sqlite3.connect(path, timeout=30.0)
 	con.execute("PRAGMA busy_timeout=30000")
 	try:
