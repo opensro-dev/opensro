@@ -896,7 +896,7 @@ func (t *TextdataSkills) parse(shards []string) {
 		return
 	}
 	if t.tomb {
-		// Port-only, not native: append the 230 Qin-Shi Emperor Tomb monster
+		// Port-only, not native: append the 238 Qin-Shi Emperor Tomb monster
 		// skills mapped into the v1.150 skill ID gaps (monster/qinshi_tomb.go).
 		parseRows(monster.SplitTabbedText(qinshiTombSkillDataTSV))
 	}

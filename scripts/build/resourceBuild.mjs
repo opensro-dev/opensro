@@ -71,7 +71,9 @@ import {
 	buildWorldRegionCatalog,
 	loadOutdoorWorldRegionResourceGroup
 } from "./world/index.mjs";
-import { rebuildRoot } from "./world/paths.mjs";
+import { publicRoot, rebuildRoot } from "./world/paths.mjs";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
@@ -138,6 +140,97 @@ async function buildHdTexturePacksStep() {
 		return { skipped: true };
 	}
 	return buildHdTexturePacks();
+}
+
+// The later client's dungeon floor pages (#2661) live under this catalogue;
+// the client asks for exactly it and the images it names.
+const LATER_DUNGEON_MAP_CATALOG = "/assets/data/later-dungeon-map.json";
+
+/*
+================
+laterDungeonMapImportPlan
+
+What the dungeon-map step does with one environment: run the importer
+against SRO_VSRO_ROOT's folder (the later-client importers' own
+convention), or skip with the one line the build prints. archiveThere
+says the folder holds a Media.pk2; the importer verifies the archive
+against its pin before reading a byte, so a wrong archive fails the
+build rather than slipping in (#2956).
+================
+*/
+export function laterDungeonMapImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_VSRO_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later dungeon maps: skipped (SRO_VSRO_ROOT is not set; the M window keeps the plain world map)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later dungeon maps: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_vsro_dungeon_maps.py", "--vsro-root", root ] };
+}
+
+/*
+================
+laterDungeonMapPublicPaths
+
+The public paths one import publishes, read back from its own catalogue
+so the publication ledger claims exactly what the client will ask for:
+the catalogue, one stitched page per floor, and the gate sign icon.
+================
+*/
+export function laterDungeonMapPublicPaths( catalog ) {
+	const paths = [ LATER_DUNGEON_MAP_CATALOG ];
+	if ( catalog && typeof catalog.imageRoot === "string" ) {
+		for ( const map of catalog.maps ?? [] ) {
+			if ( typeof map?.image === "string" && map.image ) paths.push( catalog.imageRoot + map.image + ".png" );
+		}
+		if ( typeof catalog.signIcon === "string" && catalog.signIcon ) {
+			paths.push( catalog.imageRoot + catalog.signIcon + ".png" );
+		}
+	}
+	return paths;
+}
+
+/*
+================
+importLaterDungeonMapsStep
+
+The M window's dungeon floor pages are native in the later client only
+(#2661), so the build imports them from the pinned archive when one is
+configured and never commits the art: the catalogue and its stitched
+pages land in the loose public tree after the preload sweep and the
+texture variants, in time for the final pack tail, and the step claims
+them for the publication ledger. Without the archive the build says so
+in one line and ships the plain world map.
+================
+*/
+async function importLaterDungeonMapsStep() {
+	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterDungeonMapImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[dungeon-maps] later-client dungeon map import",
+		cwd: rebuildRoot,
+		context: [
+			"The dungeon floor pages are native to the later client (#2661); the build imports them " +
+			"from the pinned VSRO archive (SRO_VSRO_ROOT) and publishes them with the other loose assets."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const catalog = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "data", "later-dungeon-map.json" ), "utf8" )
+	);
+	claimPublicPaths( laterDungeonMapPublicPaths( catalog ) );
+	return { maps: Array.isArray( catalog.maps ) ? catalog.maps.length : 0 };
 }
 
 // The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
@@ -221,6 +314,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildTextureVariants,
 	buildHdTextureVariants: buildHdTextureVariantsStep,
 	buildHdTexturePacks: buildHdTexturePacksStep,
+	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	packTree: packPublicTree
 } );
 
@@ -598,6 +692,11 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// a first HD build stamps, and a build that skipped the set does not,
 	// however stale an hd/ tree the disk holds.
 	const hdTexturePacks = await timed( "hdTexturePacks", () => steps.buildHdTexturePacks() );
+	// The later client's dungeon floor pages (#2661, #2956): imported loose
+	// into the public tree after the preload sweep and the texture variants,
+	// so they join this build's packs without entering either. The import
+	// verifies the pinned archive itself (import_vsro_dungeon_maps.py).
+	const laterDungeonMaps = await timed( "laterDungeonMaps", () => steps.importLaterDungeonMaps() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -669,6 +768,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		textureVariants,
 		hdTextureVariants,
 		hdTexturePacks,
+		laterDungeonMaps,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

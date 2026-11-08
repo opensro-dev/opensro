@@ -29,8 +29,8 @@ TestTradeTierForGold
 ================
 */
 func TestTradeTierForGold(t *testing.T) {
-	for value, want := range map[uint64]uint8{0: 0, 1: 1, 4_999_999: 1, 9_999_999: 1, 10_000_000: 2, 19_999_999: 2,
-		20_000_000: 3, 35_000_000: 4, 49_999_999: 4, 50_000_000: 5, 900_000_000: 5} {
+	for value, want := range map[uint64]uint8{0: 0, 1: 1, 5_896_079: 1, 5_896_080: 2, 11_792_159: 2,
+		11_792_160: 3, 20_761_407: 3, 20_761_408: 4, 29_495_679: 4, 29_495_680: 5, 900_000_000: 5} {
 		if got := TradeTierForGold(value); got != want {
 			t.Fatalf("%d: tier %d, want %d", value, got, want)
 		}
@@ -41,20 +41,26 @@ func TestTradeTierForGold(t *testing.T) {
 ================
 TestFullTransportsReachTheirStars
 
-A full bag of 40-stacks under SRO_TRADE_TIERS' factor: the level-120
-transport (177 slots) reaches 5 stars, the level-105 (159) and level-90
-(141) 4. At the native 348 every one of them is 1 star.
+A full bag of 40-stacks under SRO_TRADE_TIERS' factor: every transport -
+the ordinary 101-slot one and the item-mall level-90/105/120 ones
+(141/159/177 slots) - reaches 5 stars (#2791, owner 2026-11-08), and one
+stack short of a brim-full ordinary transport is 4. At the native 348
+every one of them is 1 star.
 ================
 */
 func TestFullTransportsReachTheirStars(t *testing.T) {
-	full := func(slots, price uint64) uint64 { return slots * 40 * price }
-	for slots, want := range map[uint64]uint8{177: 5, 159: 4, 141: 4} {
-		if got := TradeTierForGold(full(slots, 348*enterworld.TradeGoodsPriceFactor)); got != want {
-			t.Fatalf("a full %d-slot transport: %d stars, want %d", slots, got, want)
+	scaled := uint64(348 * enterworld.TradeGoodsPriceFactor)
+	full := func(slots uint64) uint64 { return slots * 40 * scaled }
+	for _, slots := range []uint64{101, 141, 159, 177} {
+		if got := TradeTierForGold(full(slots)); got != 5 {
+			t.Fatalf("a full %d-slot transport: %d stars, want 5", slots, got)
 		}
-		if got := TradeTierForGold(full(slots, 348)); got != 1 {
+		if got := TradeTierForGold(slots * 40 * 348); got != 1 {
 			t.Fatalf("a full %d-slot transport at the native price: %d stars, want 1", slots, got)
 		}
+	}
+	if got := TradeTierForGold(full(101) - 40*scaled); got != 4 {
+		t.Fatalf("one stack short of a full 101-slot transport: %d stars, want 4", got)
 	}
 }
 
@@ -148,8 +154,9 @@ func TestJanganRouteRaisesTheSaleProfit(t *testing.T) {
 TestCaravanTierFollowsCargoGold
 
 A full horse (101 stacks of 40 goods) at the shipped reference price 348 is
-about 1.4M, one star; at SRO_TRADE_TIERS' scaled 7,308 it is about 29.5M,
-three stars. Off, the native units rule applies.
+about 1.4M, one star; at SRO_TRADE_TIERS' scaled 7,308 it is 29,524,320 -
+the brim-full ordinary transport, five stars (#2791). Off, the native
+units rule applies.
 ================
 */
 func TestCaravanTierFollowsCargoGold(t *testing.T) {
@@ -179,10 +186,10 @@ func TestCaravanTierFollowsCargoGold(t *testing.T) {
 		t.Fatalf("on, unscaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
 	}
 	full(348 * enterworld.TradeGoodsPriceFactor)
-	if tier, stars := rt.caravanTier(c); tier != 3 || stars != 3 || rt.cargoGoldValue(c) != 101*40*348*enterworld.TradeGoodsPriceFactor {
+	if tier, stars := rt.caravanTier(c); tier != 5 || stars != 5 || rt.cargoGoldValue(c) != 101*40*348*enterworld.TradeGoodsPriceFactor {
 		t.Fatalf("on, scaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
 	}
-	if level() != 3 {
-		t.Fatalf("on, scaled: trade level %d, want the gold tier 3", level())
+	if level() != 5 {
+		t.Fatalf("on, scaled: trade level %d, want the gold tier 5", level())
 	}
 }

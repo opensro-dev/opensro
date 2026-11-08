@@ -228,6 +228,14 @@ func TestMoverStorageScheduleMatchesLookup(t *testing.T) {
 			m, exists := s.lookup(probe)
 			got, ok := s.schedule(probe)
 			want := moverSchedule{mode: m.Mode(), activity: m.Activity, arriveMs: m.ArriveMs, regionID: m.Pose.RegionID}
+			if _, pending := m.PendingSnapshot(); !pending {
+				// The idle gate's facts ride live rows only (#2136).
+				want.deadlineMs = m.BehaviorDeadlineMs
+				want.idleEntryPending = m.IdleEntryPending()
+				want.controlMode = m.ControlMode()
+				want.targetGID = m.TargetGID()
+				want.stuck = m.Stuck()
+			}
 			if ok != exists || got != want {
 				t.Fatalf("step %d gid %d: schedule = %+v %v, want %+v %v", step, probe, got, ok, want, exists)
 			}

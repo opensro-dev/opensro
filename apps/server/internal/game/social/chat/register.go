@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/social/chatlog"
+	"opensro.online/server/internal/game/social/chatreport"
 	"opensro.online/server/internal/transport"
 )
 
@@ -66,6 +67,20 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		// Native admission precedes decoding and all publication/mutation.
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
+		}
+		// Port-only, not native (#2959): a /report line is consumed
+		// whole - the reporter gets the ack and one notice line, and
+		// nothing reaches the room, the transcript or the feed. With
+		// no intake wired the line falls through as ordinary chat.
+		if rt.Reports != nil {
+			if request, err := DecodeChatRequestWithLinks(payload); err == nil {
+				reporter := chatreport.Reporter{AccountID: character.AccountID, Character: character.Name, Division: divisionID}
+				if answer, handled := rt.Reports.File(reporter, request.Message); handled {
+					_ = s.Send(OpChatAck, EncodeChatAckSuccess(request.ChatType, request.Second))
+					_ = s.Send(OpChatBroadcast, EncodeChatNotice(answer))
+					return
+				}
+			}
 		}
 		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls, Links: rt.ItemLinks}, divisionID, character, payload)
 		// Port-only, not native: a shadow-muted author's lines reach only

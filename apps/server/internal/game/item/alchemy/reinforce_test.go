@@ -135,6 +135,47 @@ func TestReinforceNeverDestroysACashItem(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReinforceOutcomeCarriesTheAttemptedPlus
+
+#2852: the outcome names the plus the attempt started from (From) and
+marks the failure an Immortal option saved, because by the time an
+announcer reads the outcome the item's own plus is already reset.
+================
+*/
+func TestReinforceOutcomeCarriesTheAttemptedPlus(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		plus    uint8
+		magic   []uint64
+		draws   []uint32
+		from    uint8
+		success bool
+		destroy bool
+		saved   bool
+	}{
+		{"success from +8", 8, nil, []uint32{9}, 8, true, false, false},
+		{"destroyed from +8", 8, nil, []uint32{99, 49}, 8, false, true, false},
+		{"saved from +8", 8, []uint64{1<<32 | 2, 2<<32 | 4}, []uint32{99, 0}, 8, false, false, true},
+		{"dropped from +3", 3, nil, []uint32{99}, 3, false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, items := fixture()
+			items[0].Plus = tc.plus
+			items[0].MagicOptions = tc.magic
+			r, err := c.Reinforce(items, []uint8{13, 14}, 0, sequence(t, tc.draws...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.From != tc.from || r.Success != tc.success || r.Destroyed != tc.destroy || r.ImmortalSaved != tc.saved {
+				t.Fatalf("outcome %+v, want From %d, success %v, destroyed %v, saved %v",
+					r, tc.from, tc.success, tc.destroy, tc.saved)
+			}
+		})
+	}
+}
+
 func TestReinforceNoPartialPlanOnRefusalOrRandomFailure(t *testing.T) {
 	c, items := fixture()
 	before := clone(items)

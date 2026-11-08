@@ -321,10 +321,12 @@ its nest respawns it. This is why monsters never walk into a
 town.
 ================
 */
-func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
+func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, slot, monsterSlot uint32, nowMs int64) {
 	// Only the region is weighed, so read the pose, not the whole
-	// validated mover value the planner steps already paid for.
-	pose, ok := ops.Monsters.livePose(divisionID, gid, nowMs)
+	// validated mover value the planner steps already paid for. The
+	// step's carried slots ride along (#2133); the door verifies
+	// them, so the pose is the gid read's either way.
+	pose, ok := ops.Monsters.livePoseAt(divisionID, gid, slot, monsterSlot, nowMs)
 	if ok && SafeZoneRegion(pose.RegionID) {
 		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
 	}

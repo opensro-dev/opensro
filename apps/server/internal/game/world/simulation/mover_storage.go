@@ -488,6 +488,24 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 
 /*
 ================
+livePoseAtSlot
+
+livePoseAt through a slot carried from the behaviour batch build,
+verified against the gid before use (#2133): a hit reads the row in
+its slot; a miss (the row moved, or the hint is the no-slot
+sentinel) delegates to livePoseAt, so the answer is the storage's
+either way.
+================
+*/
+func (s *moverStorage) livePoseAtSlot(slot uint32, gid uint32, nowMs int64, ground monster.GroundResolver) (monster.Pose, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return s.livePoseAt(gid, nowMs, ground)
+	}
+	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
+}
+
+/*
+================
 livePoses
 
 Every row's livePoseAt, in slot order: a population scan that reads
@@ -581,6 +599,14 @@ type moverSchedule struct {
 	activity monster.ActivityCadence
 	arriveMs int64
 	regionID uint16
+	// The idle gate's facts (#2136): an idle row's decision deadline
+	// and the latches that keep its step awake. Live rows only; a
+	// pending row's zeros keep the pending cadence branch.
+	deadlineMs       int64
+	idleEntryPending bool
+	controlMode      monster.ControlMode
+	targetGID        uint32
+	stuck            bool
 }
 
 /*
@@ -632,7 +658,9 @@ func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	r := s.slots[slot].rec
 	if r.live != nil {
 		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
-			regionID: r.live.Pose.RegionID}
+			regionID: r.live.Pose.RegionID, deadlineMs: r.live.BehaviorDeadlineMs,
+			idleEntryPending: r.live.IdleEntryPending(), controlMode: r.live.ControlMode(),
+			targetGID: r.live.TargetGID(), stuck: r.live.Stuck()}
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending

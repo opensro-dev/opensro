@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
@@ -162,12 +164,16 @@ One field's share of a wave: the Gourds close to the field's anchor nest,
 then the ring of its own mobs just outside them, as hostile as that nest.
 A ground refusal drops one monster, never the wave. The leaving is
 staggered by spawn order (halloweenWaveLifetimeMs), so the field drains
-over about a minute instead of expiring in one tick.
+over about a minute instead of expiring in one tick. Every landing is
+logged with its anchor and its spawned/refused counts (#2950): the
+2026-11-08 wave left no trace in the log, so a field that landed
+nothing was indistinguishable from one nobody watched.
 ================
 */
 func (rt *Runtime) spawnHalloweenField(population simulation.WorldPopulation, field string, nowMs int64) {
 	nest, found := rt.Monsters.FieldNest(field)
 	if !found {
+		log.Warnf("halloween wave: field %s has no anchor nest; nothing landed", field)
 		return
 	}
 	request := simulation.QuestMonsterSpawn{
@@ -178,19 +184,31 @@ func (rt *Runtime) spawnHalloweenField(population simulation.WorldPopulation, fi
 	index := 0
 	gourd := request
 	gourd.Codename, gourd.RadiusSpan = halloweenGourdCodename, progression.HalloweenWaveGourdRadius
+	gourds, gourdsRefused := 0, 0
 	for range progression.HalloweenWaveGourdsPerField {
 		gourd.LifetimeMs = halloweenWaveLifetimeMs(index)
-		rt.Monsters.SpawnQuestMonster(gourd)
+		if rt.Monsters.SpawnQuestMonster(gourd) {
+			gourds++
+		} else {
+			gourdsRefused++
+		}
 		index++
 	}
 	ring := request
 	ring.Codename, ring.TacticsFrom = field, &nest
 	ring.RadiusMin, ring.RadiusSpan = progression.HalloweenWaveRingRadius, progression.HalloweenWaveRingDepth
+	ringMobs, ringRefused := 0, 0
 	for range progression.HalloweenWaveRingPerField {
 		ring.LifetimeMs = halloweenWaveLifetimeMs(index)
-		rt.Monsters.SpawnQuestMonster(ring)
+		if rt.Monsters.SpawnQuestMonster(ring) {
+			ringMobs++
+		} else {
+			ringRefused++
+		}
 		index++
 	}
+	log.Infof("halloween wave: field %s landed at region %d (%.0f, %.0f): %d gourds (%d refused), %d ring mobs (%d refused)",
+		field, nest.RegionID, nest.X, nest.Z, gourds, gourdsRefused, ringMobs, ringRefused)
 }
 
 /*

@@ -9,7 +9,7 @@ variable item: the deployer's SRO_STAFF_DISCORD_WEBHOOK is read here
 (configuredStaffWebhook), kept or removed against the stored item
 (keepStaffWebhook), written by desiredVariables, and rendered by the job
 template into secrets/staff-webhook with change_mode noop. Changing it
-alone never needs the GameWorld stopped (planVariables, onlyItemDiffers).
+alone never needs the GameWorld stopped (planVariables, onlyItemsDiffer).
 
 ===========================================================================
 */
@@ -61,7 +61,7 @@ keepStaffWebhook
 The GameWorld's staff webhook, kept the way keepBugReportWebhook keeps the
 Agent's: a deploy that names none keeps the stored one, "off" removes it.
 Its template is change_mode noop and the GameWorld reads the file at every
-post, so changing it never needs the job stopped (onlyItemDiffers).
+post, so changing it never needs the job stopped (onlyItemsDiffer).
 ================
 */
 func keepStaffWebhook(items nomad.VariableItems, existing *nomad.Variable, off bool) nomad.VariableItems {

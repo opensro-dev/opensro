@@ -137,6 +137,9 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	// broken is the destroyed item's codename, read from the bag before
 	// the commit: a destroyed item is not in outcome.Items (#1738).
 	var broken string
+	// target is the reinforced item's codename, read the same way: a
+	// failure notice names it whether or not it survived (#2852).
+	var target string
 	committed := rt.deps.Update(character, "alchemy", func() bool {
 		// Reinforcement and stones share the same living-character admission
 		// as compound/dissolve. Keep this inside the inventory transaction so
@@ -157,9 +160,10 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 		}
 		frames = alchemy.ResultFrames(op, before, result)
 		outcome = result
-		if result.Destroyed {
-			for _, item := range before {
-				if item.Slot == result.Target {
+		for _, item := range before {
+			if item.Slot == result.Target {
+				target = item.Codename
+				if result.Destroyed {
 					broken = item.Codename
 				}
 			}
@@ -176,7 +180,11 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	}
 	if op == alchemy.OpReinforceResult {
 		rt.announcePlus(division, character.Name, outcome, rt.Now().UnixMilli())
-		rt.announceBreak(division, character, broken, outcome, rt.Now().UnixMilli())
+		// A destroyed item the failure notice already announced folds
+		// into that one line; the break line stays for the rest (#2852).
+		if failAnnounced := rt.announcePlusFail(division, character, target, outcome, rt.Now().UnixMilli()); !failAnnounced || !outcome.Destroyed {
+			rt.announceBreak(division, character, broken, outcome, rt.Now().UnixMilli())
+		}
 	}
 	return frames
 }

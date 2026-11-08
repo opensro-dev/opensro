@@ -55,6 +55,7 @@ var unlistedSettings = map[string]string{
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
+	action.EnvAnnouncePlusFailMin:     "shown in the failed-reinforcement notice rule",
 	// Client presentation values (uiTuning): the Short notices row is a
 	// player's own Experimental choice, and the chat wait is the port's.
 	"SRO_SHORT_NOTICE_SHOW_MS":           "timing of a player's own Experimental Short notices row",
@@ -66,6 +67,9 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_ROUTE_HOTAN_PERCENT":           "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_SAMARKAND_PERCENT":       "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT":  "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_THIEF_PERCENT":       "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_HUNTER_PERCENT":      "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT":      "shown in the trade tiers rule",
 	"SRO_THIEF_PARTY_PERCENT_EACH":            "shown in the thief party bonus rule",
 	"SRO_THIEF_PARTY_PERCENT_CAP":             "shown in the thief party bonus rule",
 	"SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER": "shown in the trade job bonus rule",
@@ -414,7 +418,11 @@ func publicRules() publicstats.RulesResponse {
 					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits, the trade-scale menu and the stars in the transport's bag follow them). " +
 					fmt.Sprintf("Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +%d%%, Hotan +%d%%, Samarkand +%d%%, Constantinople +%d%%.",
 						settings.Int(tunables.TradeRouteDonwhangPercent), settings.Int(tunables.TradeRouteHotanPercent),
-						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)),
+						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)) +
+					fmt.Sprintf(" A 5-star caravan is a target: everyone nearby sees its stars over the transport. A thief who sells a 5-star load earns +%d%% more gold, "+
+						"hunters escorting a trader's 5-star sale earn +%d%% more gold, and a hunter who kills a thief caught attacking a 5-star caravan earns +%d%% more job experience.",
+						settings.Int(tunables.TradeFiveStarThiefPercent), settings.Int(tunables.TradeFiveStarHunterPercent),
+						settings.Int(tunables.TradeFiveStarBountyPercent)),
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
 			{Flag: action.EnvTeleportGrace, On: action.TeleportGraceFromEnv(),
 				Native: "Only a revival makes you briefly untouchable; a scroll, gate or move arrives as attackable as you left.",
@@ -521,6 +529,15 @@ func publicRules() publicstats.RulesResponse {
 				Native: "An item destroyed by reinforcement is not announced.",
 				Now:    "Everyone sees the destroyed item of a player who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
 				Why:    "Owner-approved vote (#1604 P7.2); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
+			{Flag: action.EnvAnnounceGachaWin, On: action.AnnouncementsFromEnv().GachaWin,
+				Native: "A Magic Pop win shows the winner a banner naming the prize, and no one learns who won.",
+				Now:    "Everyone also sees \"<player> won <prize> xN from Magic Pang\" in the Event chat lines; the winner's banner is unchanged.",
+				Why:    "Owner report (#2852); the original banner-only win returns with one setting."},
+			{Flag: action.EnvAnnouncePlusFail, On: action.AnnouncementsFromEnv().PlusFail,
+				Native: "A failed reinforcement is private.",
+				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for players who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
+					action.AnnouncementsFromEnv().PlusFailMin),
+				Why: "Owner report (#2852), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),
