@@ -534,6 +534,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
+	// own shops (commerce/alexandriashops.go; port-only, not native).
+	// False is native: the original game sold them there (#2842).
+	AlexandriaHideD11Goods bool
 	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.

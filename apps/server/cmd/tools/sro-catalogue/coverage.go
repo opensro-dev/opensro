@@ -62,6 +62,7 @@ var catalogueReaders = map[string]string{
 	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",
 	"SRO_STACK_SIZES":                        "shardItems reads it (enterworld.StackSizesFromEnv) into items.json's stack caps",
 	"SRO_ALEXANDRIA":                         "BuildNpcs' roster reads it (simulation.LoadNpcWorldRoster hides the city while off, alexandria.Hidden)",
+	"SRO_ALEXANDRIA_HIDE_D11_GOODS":          "shardShops reads it (commerce.AlexandriaHideD11GoodsFromEnv) to withhold Alexandria's degree-11 goods from the shops",
 }
 
 // catalogueExempt lists every other shard setting with the reason it

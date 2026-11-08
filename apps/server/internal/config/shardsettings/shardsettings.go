@@ -422,6 +422,11 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: hide Alexandria's degree-11 shop goods
+	// (#2842). The original game sold them there, so "off" is native;
+	// "on" is for operators who want degree-11 gear from grinding only.
+	// The catalogue's shop lists follow it.
+	{Env: "SRO_ALEXANDRIA_HIDE_D11_GOODS", NomadVar: "alexandria_hide_d11_goods", Default: "off", Catalogue: true},
 	// Port-only, not native: WebTransport as a public endpoint (epic
 	// #1451). "off" keeps the loopback/development transport; "on" lets
 	// the GameWorld serve WT publicly under its explicit TLS pair and
