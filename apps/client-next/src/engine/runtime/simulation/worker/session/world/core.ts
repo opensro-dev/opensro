@@ -65,6 +65,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
+		structure: refObjId => entities.structureReference( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
 		npcs: () => entities.npcs()
 	} );
@@ -506,6 +507,7 @@ the entry continues it like the one after a world transfer.
 		},
 		receive,
 		outstandingSince: gameplay.outstandingSince,
+		outstandingLane: gameplay.outstandingLane,
 		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
@@ -639,7 +641,7 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
-		takeDegradations: () => entities.takeDegradations(),
+		takeDegradations: () => [ ...entities.takeDegradations(), ...gameplay.takeDegradations() ],
 		readyRevision: () => pendingTravel?.revision ?? 0,
 		/*
 ================

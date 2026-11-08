@@ -143,6 +143,13 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 			return err
 		}
 	}
+	if record, err := halloweenBoxesRecord(s.meta.HalloweenBoxes); err != nil {
+		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, record); err != nil {
+			return err
+		}
+	}
 
 	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
@@ -588,7 +595,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		// Sections moved but the bytes did not (a nil slice became an
 		// empty one): refresh the staged copy so the next commit's
 		// comparison starts clean instead of re-encoding forever.
-		w.stagedRows[key] = domain.CloneCharacter(c)
+		w.stagedRows[key] = domain.CloneCharacterStaged(c, w.committedRows[key])
 		w.rows.skipped++
 		return nil
 	}
@@ -596,7 +603,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		return err
 	}
 	w.staged[key] = digest
-	w.stagedRows[key] = domain.CloneCharacter(c)
+	w.stagedRows[key] = domain.CloneCharacterStaged(c, w.committedRows[key])
 	w.rows.written++
 	return nil
 }

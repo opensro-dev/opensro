@@ -63,10 +63,37 @@ const (
 // with the pet tick (#2046) and then the brood tick taking the companion
 // copy instead of the whole owner record (#2030), measured 98,010 B /
 // 1,380 allocs; with that copy narrowed to the pet-owner view (#2030),
-// measured 83,925 B / 1,324 allocs.
+// measured 83,925 B / 1,324 allocs; with the pet tick's idle satiety
+// and crow-recharge update doors judged under the read door and the
+// waiting cast verdict pricing from its prepared snapshot (#2139),
+// measured 68,183 B / 1,056 allocs; with the elemental eligibility
+// walk's refusal judged on door-read facts instead of the pet-owner
+// copy (#2030), measured 66,296 B / 997 allocs; with the judged pet
+// tick's facts slimmed to the lane's eight scalar reads instead of
+// a copied companion record (#2030), measured 56,978 B / 974 allocs
+// (bytes only: the facts container was one allocation either way);
+// with the four elemental lanes judging one armed facts capture and
+// sharing one owner snapshot per owner tick (#2030), measured
+// 54,405 B / 902 allocs; with the crow-brood tick judging on
+// door-read facts and taking the owner copy only on a tick that
+// fires a brood event (#2030), measured 48,993 B / 858 allocs;
+// with the elemental walk's armed facts recycled across ticks
+// instead of captured fresh per owner tick (#2030), measured
+// 45,541 B / 822 allocs; with the tick driver's steps timed as
+// spans instead of per-step timing closures (#2030), measured
+// 39,284 B / 562 allocs; with the pet counter judge taking the
+// read guard and composing its frame only on a change instead
+// of through a door closure per pet tick (#2030), measured
+// 27,259 B / 268 allocs; with the mercenary cooldown pass
+// collecting its owner keys into runtime scratch instead of a
+// slice grown from empty every tick (#2030), measured 25,952 B /
+// 263 allocs; with the bond lane's revival walk judging its
+// refusal on door-read facts before bondSource's answer comes
+// home, instead of paying for the escaped SkillDef on every pet
+// owner's tick (#2030), measured 25,150 B / 258 allocs.
 const (
-	tickBudgetBytesPerTick  = 92300
-	tickBudgetAllocsPerTick = 1456
+	tickBudgetBytesPerTick  = 27700
+	tickBudgetAllocsPerTick = 284
 )
 
 /*

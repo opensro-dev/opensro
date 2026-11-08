@@ -15,6 +15,7 @@ controls, remapped DefaultSkillIDs, and uncontaminated retail unique stats.
 package monster
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/clientdata"
@@ -71,7 +72,7 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 		// Chain-owned nests (Floor 5 #2372, Floor 6 #2373) keep the
 		// native limit 0: the TombChain spawns them, the nest lifecycle
 		// never does. The zeroing is region-scoped.
-		chainOwned := qinshiTombChainOwned(nest.RegionID, withTomb.Refs[nest.RefObjID].Codename)
+		chainOwned := QinShiTombChainOwned(nest.RegionID, withTomb.Refs[nest.RefObjID].Codename)
 		if !chainOwned && nest.InstanceLimit() <= 0 {
 			t.Fatalf("tomb nest %+v has non-positive instance limit %d", nest, nest.InstanceLimit())
 		}
@@ -124,6 +125,55 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 	}
 	if whitesnake.Level != 100 || whitesnake.MaxHP != 250008449 || whitesnake.ExpToGive != 81063918 {
 		t.Fatalf("MOB_TQ_WHITESNAKE stats = Lvl %d HP %d Exp %d, want Lvl 100 HP 250008449 Exp 81063918", whitesnake.Level, whitesnake.MaxHP, whitesnake.ExpToGive)
+	}
+}
+
+/*
+================
+TestQinShiTombOverlayScaleCoherent
+
+The scale column (48, ScaleDenom) is read verbatim by the server's
+spawn record and the client bake's model scale. The two v1.188
+copies of these rows disagree for five snake rows (34, and 500 for
+SNAKEWOMAN, in DBtoMedia against 100 in SR_GameRefData) while every
+clone of those species reads 100 in both; the overlay carries the
+SR_GameRefData value (#2681, the Sarin "too small" report). One
+species keeps one scale across its base and clone rows: no family
+may split again on a re-import.
+================
+*/
+func TestQinShiTombOverlayScaleCoherent(t *testing.T) {
+	seed := TemplateFromParts(
+		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
+		nil,
+	)
+	withTomb, err := seed.WithQinShiTomb("")
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	byCode := map[string]float64{}
+	familyScale := map[string]float64{}
+	for id, ref := range withTomb.Refs {
+		if id == 1933 {
+			continue
+		}
+		byCode[ref.Codename] = ref.ScaleDenom
+		base := ref.Codename
+		for _, suffix := range []string{"_CLON2", "_CLON"} {
+			base = strings.TrimSuffix(base, suffix)
+		}
+		if got, ok := familyScale[base]; ok && got != ref.ScaleDenom {
+			t.Fatalf("tomb family %s splits its scale: %v against %v (at %s)", base, got, ref.ScaleDenom, ref.Codename)
+		}
+		familyScale[base] = ref.ScaleDenom
+	}
+	for _, code := range []string{
+		"MOB_TQ_SNAKEMAN", "MOB_TQ_SNAKEMAN_CLON2", "MOB_TQ_SNAKESLAVE",
+		"MOB_TQ_SNAKEDEMON_CLON2", "MOB_TQ_SNAKEWOMAN",
+	} {
+		if got, ok := byCode[code]; !ok || got != 100 {
+			t.Fatalf("%s scale = %v (present %v), want 100 (SR_GameRefData)", code, got, ok)
+		}
 	}
 }
 

@@ -54,7 +54,10 @@ for ( const leader of [ true, false ] ) {
 		================
 		*/
 		function draw() {
-			for ( let i = 0; i < 20; i++ ) frame = f.ui.step( f.state, now += 100 ) ?? frame;
+			// One step per draw: the fixture settles pending assets and the
+			// skill catalogue inside a step, so extra steps only repaint the
+			// same settled frame (20 steps cost ~28 s of this file's ~36 s).
+			frame = f.ui.step( f.state, now += 100 ) ?? frame;
 			assert.ok( frame );
 			return frame;
 		}

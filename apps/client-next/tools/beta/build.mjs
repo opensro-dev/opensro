@@ -247,7 +247,7 @@ export async function buildBeta(
 	const manifest = {
 		format: "sro-beta-release-v1",
 		// The release protocol compiled into this build; release admission
-		// compares it with the declared one (ops/release/client_bundle.py).
+		// compares it with the declared one (the release's client bundler).
 		protocol: RELEASE_PROTOCOL,
 		assetSchema: ASSET_SCHEMA,
 		sourceHash: inputHash,
@@ -374,6 +374,41 @@ export async function buildBeta(
 	if (
 		sha( await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) ) ) !== manifest.assetAuthorityHash
 	) throw Error( "Asset publication changed during freeze; package not accepted" );
+	// The HD set (#2061) ships behind its own index beside the default one,
+	// under the same audience classification (policy.mjs). A build without
+	// the set has no /hd routes and the client reads the missing index as
+	// an empty set. Members get no routes of their own: the client reads
+	// them through the pack reader, as with the ASTC variants.
+	const hdAuthority = await readFile( path.join( assetRoot, "hd/packs/manifest.json" ) ).catch( error => {
+		if ( error?.code === "ENOENT" ) return null;
+		throw error;
+	} );
+	if ( hdAuthority ) {
+		const hdIndex = publicIndex( JSON.parse( hdAuthority ) );
+		for ( const group of hdIndex.groups ) {
+			for ( const pack of group.packs ) {
+				console.log( "[beta] hd pack", group.name, pack.path );
+				const resolve = n => path.join( assetRoot, safeName( n.slice( 1 ) ) );
+				let bytes = await readFile( resolve( pack.path ) );
+				if ( bytes.length !== pack.bytes || sha( bytes ) !== pack.sha256 ) {
+					throw Error( "HD publication pack drift " + pack.path );
+				}
+				const members = hdIndex.assets.filter( a => a.packPath === pack.path );
+				bytes = projectPack( pack, bytes, members );
+				const file = "payload/" + pack.sha256 + ".bin";
+				await add( file, bytes, "data" );
+				route( { url: pack.path, file, length: bytes.length, mime: "application/octet-stream" } );
+			}
+		}
+		const hdIndexBytes = Buffer.from( JSON.stringify( hdIndex ) );
+		await add( "hd-publication.json", hdIndexBytes, "data" );
+		route( {
+			url: "/hd/packs/manifest.json",
+			file: "hd-publication.json",
+			length: hdIndexBytes.length,
+			mime: "application/json"
+		} );
+	}
 	// Required runtime metadata is derived from this release's published members.
 	// A loose development sidecar cannot be assumed to survive pack projection.
 	if ( !manifest.routes.some( row => row.url === BACKGROUND_INSTALL_PUBLIC_PATH ) ) {

@@ -206,6 +206,14 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 			shown = make(map[uint32]bool)
 			state.shownPeers[viewer.SessionID] = shown
 		}
+		if state.peerReferences == nil {
+			state.peerReferences = make(map[string]map[uint32]bool)
+		}
+		sentReferences := state.peerReferences[viewer.SessionID]
+		if sentReferences == nil {
+			sentReferences = make(map[uint32]bool)
+			state.peerReferences[viewer.SessionID] = sentReferences
+		}
 
 		clear(liveGids)
 		candidates = index.candidates(&viewer, viewer.World.LiveSpawnAt(nowMs), candidates)
@@ -224,10 +232,12 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 			appearance.Walk, appearance.Run = peer.World.MovementSpeeds()
 			// The row's items resolve only through references the viewer
 			// holds, and the peer may have acquired them after the viewer's
-			// bootstrap: they ride ahead of the row.
+			// bootstrap: they ride ahead of the row. Only the ones the
+			// viewer has not been sent ride (freshReferenceIDs): the rest
+			// are already in the viewer's session reference table.
 			var frames []Frame
 			if t.ItemReferences != nil {
-				frames = t.ItemReferences(appearance.ItemIDs())
+				frames = t.ItemReferences(freshReferenceIDs(sentReferences, appearance.ItemIDs()))
 			}
 			frames = append(frames, Frame{
 				ScopeGID: gid, ScopeVisible: true,
@@ -270,9 +280,39 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 		if !live[sessionID] {
 			delete(state.shownPeers, sessionID)
 			delete(state.peerPaths, sessionID)
+			delete(state.peerReferences, sessionID)
 		}
 	}
 	state.peerVisibilityValid = true
+}
+
+/*
+================
+freshReferenceIDs
+
+The demanded ids the viewer has not been sent yet, each marked sent.
+A viewer's client keeps every reference row for the whole session
+(the client contract, core.ts: "References stay: a re-entry does not
+resend the item snapshot"), so a row needs to cross to a viewer once,
+however many shown peers wear it and however often a peer is evicted
+and shown again. Without this record a crowded square re-sent each
+peer's full item set on every show - the ~150 KB reference frames
+every 1.5 s to one viewer in the 2026-11-05 stall journal (#2148),
+ahead of which that viewer's inventory answer queued for 8.8 s.
+First-show order is untouched: the fresh rows still ride ahead of
+the spawn row that names them, in the same pushed batch.
+================
+*/
+func freshReferenceIDs(sent map[uint32]bool, ids []uint32) []uint32 {
+	fresh := make([]uint32, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 || sent[id] {
+			continue
+		}
+		sent[id] = true
+		fresh = append(fresh, id)
+	}
+	return fresh
 }
 
 /*

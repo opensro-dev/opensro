@@ -7,7 +7,6 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { petGear } = await import( "../../src/engine/foundation/ui/pet-gear.ts" );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
 const { itemSlotOverlays } = await import( "../../src/engine/foundation/ui/item-slot-effects.ts" );
@@ -36,7 +35,10 @@ test("all seals keep the pet footer, scale whites and use yellow rare headings a
 		};
 		const rows = itemTooltip( item, { masteries: [] }, key => key );
 		assert.equal( rows[0].color, 0xffffd953 );
-		assert.equal( rows[2].value, [ "", "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][seal] );
+		assert.equal(
+			rows.find( row => row.value.startsWith( "PARAM_RARE_" ) )?.value,
+			[ "", "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][seal]
+		);
 		assert.equal( rows.at( -1 )?.value, "Pet" );
 		assert.ok(
 			itemSlotOverlays( item, [ 0, 0, 32, 32 ], 0, 0 ).some( overlay =>
@@ -81,7 +83,6 @@ test("equipped sealed pet gear draws the same animated rare shine as inventory",
 		}
 	} );
 	f.ui.step( f.state, 0 );
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { attackPetTraining: true } ) } );
 	f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
 	f.ui.step( f.state, 0 );
 	f.ui.event( { kind: "activate", id: "cos-tab:1" } );

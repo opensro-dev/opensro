@@ -38,6 +38,20 @@ var ErrFull = errors.New("union: every slot is taken")
 // ErrMember is a join of a guild already in a union.
 var ErrMember = errors.New("union: guild already in a union")
 
+// CrestRefusal is the closed reason a crest change made no change
+// (the domain.GuildRefusal posture): the caller still needs to tell a
+// guild standing in no union from one that merely holds no crest,
+// and a crest set over one already standing from a set that landed.
+type CrestRefusal uint8
+
+const (
+	CrestRefusalNone CrestRefusal = iota
+	CrestRefusalNoUnion
+	CrestRefusalNotMasterGuild
+	CrestRefusalNoCrest
+	CrestRefusalHasCrest
+)
+
 /*
 ================
 Authority
@@ -258,6 +272,142 @@ func (a *Authority) Remove(divisionID string, guildID int64) (before domain.Alli
 	delete(state.byGuild, guildID)
 	state.unions[id] = after
 	return before, false, nil
+}
+
+/*
+================
+ClearCrest
+
+Erases the crest of the union the guild stands in (#2282), saving
+before it returns. Only the union's master guild (the leading slot)
+may erase it, and only while a crest stands; the refusal names which
+gate held. The record is returned as it stands after the call either
+way.
+================
+*/
+func (a *Authority) ClearCrest(divisionID string, guildID int64) (record domain.AllianceRecord, refusal CrestRefusal, err error) {
+	if a == nil || guildID == 0 {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	id, ok := state.byGuild[guildID]
+	if !ok {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	record = state.unions[id]
+	if record.Guilds[0] != guildID {
+		return record, CrestRefusalNotMasterGuild, nil
+	}
+	if record.Crest == 0 {
+		return record, CrestRefusalNoCrest, nil
+	}
+	record.Crest = 0
+	if err := a.saveLocked(divisionID, record, true); err != nil {
+		return record, CrestRefusalNone, err
+	}
+	state.unions[id] = record
+	return record, CrestRefusalNone, nil
+}
+
+/*
+================
+CrestState
+
+The record of the union the guild stands in, read only (#2282): the
+register lane probes the standing revision here, then commits
+against it through SetCrest. The refusal names the union's own
+gates in ClearCrest's order - no union, then not its master guild.
+================
+*/
+func (a *Authority) CrestState(divisionID string, guildID int64) (record domain.AllianceRecord, refusal CrestRefusal) {
+	if a == nil || guildID == 0 {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	id, ok := state.byGuild[guildID]
+	if !ok {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion
+	}
+	record = state.unions[id]
+	if record.Guilds[0] != guildID {
+		return record, CrestRefusalNotMasterGuild
+	}
+	return record, CrestRefusalNone
+}
+
+/*
+================
+SetCrest
+
+Stands a new crest on the union the guild leads (#2282), saving
+before it returns. expected is the revision the caller probed: the
+set lands only while the union still shows exactly it - a crest
+that landed meanwhile (or one long standing) answers
+CrestRefusalHasCrest, so two masters racing one union cannot trade
+arts silently. The record is returned as it stands after the call.
+================
+*/
+func (a *Authority) SetCrest(divisionID string, guildID int64, expected, revision uint32) (record domain.AllianceRecord, refusal CrestRefusal, err error) {
+	if a == nil || guildID == 0 {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	id, ok := state.byGuild[guildID]
+	if !ok {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	record = state.unions[id]
+	if record.Guilds[0] != guildID {
+		return record, CrestRefusalNotMasterGuild, nil
+	}
+	if record.Crest != expected {
+		return record, CrestRefusalHasCrest, nil
+	}
+	record.Crest = revision
+	if err := a.saveLocked(divisionID, record, true); err != nil {
+		return record, CrestRefusalNone, err
+	}
+	state.unions[id] = record
+	return record, CrestRefusalNone, nil
+}
+
+/*
+================
+RemoveCrest
+
+The staff clear (#2282): erases the crest of the union the guild
+stands in, whoever leads it - the operator credential is the
+authority here, so only standing in no union at all refuses. Saves
+before it returns and answers the record it left.
+================
+*/
+func (a *Authority) RemoveCrest(divisionID string, guildID int64) (record domain.AllianceRecord, refusal CrestRefusal, err error) {
+	if a == nil || guildID == 0 {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	id, ok := state.byGuild[guildID]
+	if !ok {
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
+	}
+	record = state.unions[id]
+	if record.Crest == 0 {
+		return record, CrestRefusalNoCrest, nil
+	}
+	record.Crest = 0
+	if err := a.saveLocked(divisionID, record, true); err != nil {
+		return record, CrestRefusalNone, err
+	}
+	state.unions[id] = record
+	return record, CrestRefusalNone, nil
 }
 
 /*

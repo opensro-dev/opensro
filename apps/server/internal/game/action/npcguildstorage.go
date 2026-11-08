@@ -250,6 +250,18 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	if personal == wire.MoveTypeStorageGoldDeposit || personal == wire.MoveTypeStorageGoldWithdraw {
 		gid, _ = rt.storageSession(division, c.Name)
 	}
+	// Port-only (forge.go, issue #1980): a bound forged item never enters
+	// the GUILD warehouse - another member's withdraw would move it into
+	// the economy. The personal warehouse stays open to it (the owner's
+	// own round-trip), so the refusal lives here, not in storableItem,
+	// and ahead of the session gates: the caller's own bag is no secret.
+	if personal == wire.MoveTypeStorageDeposit {
+		if snapshot := rt.characterSnapshot(division, c); snapshot != nil {
+			if row, present := bagOf(snapshot).At(q.SourceSlot); present && row.ForgeBound {
+				return failureResult(errCodeInvalidStorageTarget)
+			}
+		}
+	}
 	if store == nil || !rt.holdsGuildStorage(division, c, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}

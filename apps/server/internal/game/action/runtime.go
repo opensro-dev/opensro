@@ -32,8 +32,10 @@ import (
 	"opensro.online/server/internal/game/namefilter"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
+	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -75,6 +77,11 @@ type Runtime struct {
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
+	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
+	// off is native: a retired client command the server does not honor).
+	GMItemForge bool
+	// forgeStamps holds each GM's /FORGE rate-limit window (forge.go).
+	forgeStamps sync.Map
 	// FlagWar is the Capture the Flag schedule (native; flagwar.go):
 	// SRO_FLAGWAR_START_UTC and SRO_FLAGWAR_MIN_PLAYERS, wired from env.
 	FlagWar FlagWarSettings
@@ -125,8 +132,11 @@ type Runtime struct {
 	returnGeneration atomic.Uint64
 	// surpriseFatalCount counts strikes that killed under a plan that
 	// could not kill: the roster gate's invariant made audible (#2030).
-	surpriseFatalCount  atomic.Uint64
-	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	surpriseFatalCount atomic.Uint64
+	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// arrivalLane holds the due return arrivals the tick handed off
+	// for the return lane to complete (returnscroll.go).
+	arrivalLane         returnArrivalLane
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
@@ -170,6 +180,13 @@ type Runtime struct {
 	// the checked producer boundary.
 	effects         *statuseffect.Registry
 	periodicEffects linkedpulse.Registry
+
+	// entrySpawnCache is the tick's shared spawn projection per owner
+	// (activeeffect.go SpawnEntrySkills): entrySpawnMu owns the map and
+	// the cached rows' remaining-time refresh. The entry bootstrap does
+	// not use it; EntrySkills still builds a fresh projection per call.
+	entrySpawnMu    sync.Mutex
+	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
 
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
@@ -305,6 +322,11 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// mercenaryKeys is the cooldown pass's owner-key scratch
+	// (mercenary_clock.go): refilled under petMu on every pass and
+	// consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is serial and nothing retains it.
+	mercenaryKeys []petOwnerKey
 	// cosOwners is the pet gid to owner index (cosownerindex.go):
 	// whose pet a gid is, without walking the division's characters.
 	cosOwners  cosOwnerIndex
@@ -343,6 +365,16 @@ type Runtime struct {
 	// differential test sets it, to the full copy. Nil is the narrow
 	// copy.
 	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// elementalFacts holds each pet owner's armed elemental-walk facts
+	// (petwolf.go, #2030), keyed by division and lower-cased owner name.
+	// advancePetInDivision arms one entry per owner tick and clears it
+	// after the wolf lane; elementalFactsMu owns the map and the
+	// recycle list - an entry itself is read and written under its
+	// division's lane. elementalFactsFree holds cleared captures for
+	// the next arm to reset and reuse (takeElementalFacts).
+	elementalFactsMu   sync.Mutex
+	elementalFacts     map[petOwnerKey]*elementalWalkFacts
+	elementalFactsFree []*elementalWalkFacts
 	// castCopy, when set, replaces the press/release cast copy
 	// (characterSnapshotCast); only the cast-copy differential tests
 	// set it, to the full or the combat copy. Nil is the cast copy.
@@ -391,8 +423,9 @@ type Runtime struct {
 
 	// DropCap bounds the ordinary items one kill leaves once DropPassRate has
 	// grown its capacity: a uniform random subset survives. Gold heaps and a
-	// unique's prepass are never cut. 0 leaves every planned item (port-only,
-	// not native; the closed-beta growth switch sets it).
+	// unique's own first round (prepass plus its native assigned round) are
+	// never cut. 0 leaves every planned item (port-only, not native; the
+	// closed-beta growth switch sets it).
 	DropCap int
 
 	// DropMix gives named item families their own beta drop rate in place
@@ -455,6 +488,12 @@ type Runtime struct {
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
 
+	// SunDrops counts Sun drops for the #2538 measurement cycle
+	// (sundrops.go; port-only, not native, count-only). Nil, the
+	// default, counts nothing; the composition root installs the
+	// counter only when EnvSunDropCount is on.
+	SunDrops SunDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool
@@ -475,6 +514,9 @@ type Runtime struct {
 	// pacing (MostWantedTestStreakStepFromEnv); set with MostWantedTest.
 	MostWantedTestStreakStep int64
 	mostWantedPairs          mostWantedPairs
+	// mostWantedHolders tracks the live streak holders the tick sweep
+	// owes an entry state frame or a lapse (mostwantedstate.go).
+	mostWantedHolders mostWantedHolderIndex
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool
@@ -486,6 +528,9 @@ type Runtime struct {
 	// Most Wanted like a player kill (mostwanted.go; port-only, not
 	// native). False is native.
 	MostWantedCOSKills bool
+	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
+	// job level (jobsuitbuff.go; port-only, not native). False is native.
+	JobSuitTiers bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
@@ -494,6 +539,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
+	// own shops (commerce/alexandriashops.go; port-only, not native).
+	// False is native: the original game sold them there (#2842).
+	AlexandriaHideD11Goods bool
 	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
@@ -511,6 +560,11 @@ type Runtime struct {
 	// KillStatsFlush receives the drained rollup (the economy history
 	// in the cmd wiring); nil keeps the rows in memory.
 	KillStatsFlush func(rows []KillStatRow) error
+	// OnlineSessions reads the session views of the characters entered
+	// in the world at the accrual instant (killstats.go, #2479): online
+	// time counts them, never the division roster of everyone who
+	// exists. Installed by the cmd wiring; nil accrues nobody.
+	OnlineSessions func() []simulation.SessionView
 	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
@@ -539,6 +593,10 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
+	// PetInventoryPages gives every pet bag five pages (companion
+	// PetInventorySlots; port-only, not native; owner 2026-11-07).
+	// False is native.
+	PetInventoryPages bool
 	// Port-only: DB-configured chance of extra pet gear per admitted normal equipment drop.
 	PetGearDropFactor float64
 	PetGearAffixes    []companion.AffixDef
@@ -662,6 +720,19 @@ type Runtime struct {
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
 
+	// TrainingCampKill is the Academy cumulated-buff kill hook (#2270). The
+	// group reward loop calls it for each member's share before the grant:
+	// it accumulates the member's saved buff (or drains a received row for
+	// the bonus it returns, folded into the grant) and returns the private
+	// academy frames for that member's own session. Nil leaves
+	// cumulated-buff earning off (a unit runtime carries no camp door).
+	TrainingCampKill func(
+		divisionID string,
+		character *enterworld.Character,
+		exp, skillExp, monsterBaseExp int64,
+		nowMs int64,
+	) (bonusExp, bonusSkillExp int64, frames []wire.Frame)
+
 	// RefundExperience is the stat authority's door-free refund of EXP lost
 	// at death (a resurrection's share). Unlike UpdateExperience it is not a
 	// gain, so the growth rates never scale it. Nil grants no refund.
@@ -702,6 +773,14 @@ type Runtime struct {
 	// RecordSilkGrant journals each committed grant.
 	SilkWallet      SilkWallet
 	RecordSilkGrant func(SilkGrant)
+	// Crests is the uploaded-crest store (crestregister.go,
+	// internal/game/social/crest): the register lane's image sink and
+	// the /marks/ resolver's index. Nil refuses every crest upload
+	// and every staff crest removal - register items have no source.
+	Crests *crest.Store
+	// RecordCrestChange journals each committed crest change or
+	// staff removal (crestregister.go), beside RecordSilkGrant.
+	RecordCrestChange func(CrestChange)
 	// RecordUniqueKill queues each announced unique kill for the community
 	// site's record (port-only). It runs inside the character door, so it
 	// must only enqueue: the store write happens on its own goroutine.
@@ -742,6 +821,9 @@ type Runtime struct {
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
 	ChatShadowMuted func(accountID string) bool
+	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
+	// Global Chatting line (globalchat.go); nil keeps the native tail.
+	ChatItemLinks *chat.ItemLinks
 	// ModerationLog keeps the Global Chatting line for the staff
 	// (chatlog, port-only, not native), muted lines included and
 	// marked. Record only queues the line; nil keeps no log.

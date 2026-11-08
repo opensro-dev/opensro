@@ -37,6 +37,13 @@ LOCK_ENV = [
 	"SRO_REBUILD_LOCK_MODE",
 ]
 
+# Bounds for waits on child processes exiting. None of these carries a
+# verdict - the state assertions do - so each only names a genuinely
+# wedged child. 120 s matches the wait_for / waiting_marker deadlines: on
+# a saturated box a correct child can take seconds to be scheduled, and a
+# 30 s release wait fired as a failure under load (#2619).
+WEDGED_CHILD_WAIT_S = 120
+
 DRIVER = """
 import os, sys
 sys.path.insert(0, os.environ['SRO_TEST_SCRIPTS_DIR'])
@@ -60,7 +67,7 @@ class RebuildLockModesTest(unittest.TestCase):
 			if child.poll() is None:
 				child.kill()
 		for child in self.children:
-			child.wait(timeout=30)
+			child.wait(timeout=WEDGED_CHILD_WAIT_S)
 			if child.stdout:
 				child.stdout.close()
 		shutil.rmtree(self.lock_dir, ignore_errors=True)
@@ -125,7 +132,7 @@ class RebuildLockModesTest(unittest.TestCase):
 	def release(self, child: subprocess.Popen) -> None:
 		child.stdin.write("\n")
 		child.stdin.close()
-		self.assertEqual(child.wait(timeout=30), 0)
+		self.assertEqual(child.wait(timeout=WEDGED_CHILD_WAIT_S), 0)
 
 	def waiting_marker(self, child: subprocess.Popen) -> None:
 		# A writer publishes waiting/<token>.json before it queues: the
@@ -171,7 +178,7 @@ class RebuildLockModesTest(unittest.TestCase):
 	def blocked(self, mode: str) -> None:
 		child = self.queued(mode)
 		child.kill()
-		child.wait(timeout=30)
+		child.wait(timeout=WEDGED_CHILD_WAIT_S)
 
 	def test_two_readers_hold_at_once(self) -> None:
 		first = self.start("read", hold=True)
@@ -188,7 +195,7 @@ class RebuildLockModesTest(unittest.TestCase):
 		self.release(reader)
 		writer = self.start("write")
 		self.entered(writer)
-		writer.wait(timeout=30)
+		writer.wait(timeout=WEDGED_CHILD_WAIT_S)
 
 	def test_a_reader_queues_behind_a_waiting_writer(self) -> None:
 		reader = self.start("read", hold=True)
@@ -225,10 +232,10 @@ class RebuildLockModesTest(unittest.TestCase):
 		self.entered(reader)
 		self.blocked("write")
 		reader.kill()
-		reader.wait(timeout=30)
+		reader.wait(timeout=WEDGED_CHILD_WAIT_S)
 		writer = self.start("write")
 		self.entered(writer)
-		writer.wait(timeout=30)
+		writer.wait(timeout=WEDGED_CHILD_WAIT_S)
 
 	def test_a_writer_refuses_to_nest_inside_a_read_hold(self) -> None:
 		script = """
@@ -255,7 +262,7 @@ print('DONE', flush=True)
 		})
 		run = subprocess.run(
 			[sys.executable, "-B", "-c", script],
-			cwd=SCRIPTS_DIR.parent, env=env, capture_output=True, text=True, timeout=60,
+			cwd=SCRIPTS_DIR.parent, env=env, capture_output=True, text=True, timeout=WEDGED_CHILD_WAIT_S,
 		)
 		self.assertEqual(run.returncode, 0, run.stderr)
 		self.assertIn("REFUSED", run.stdout)
@@ -317,7 +324,7 @@ class RebuildLockMutexRaceTest(unittest.TestCase):
 				self.assertEqual(reader.stdout.readline().strip(), "open")
 				rebuild_lock.release_state_mutex(lock_dir, str(token))
 			finally:
-				reader.wait(timeout=30)
+				reader.wait(timeout=WEDGED_CHILD_WAIT_S)
 				reader.stdout.close()
 			self.assertFalse((lock_dir / "mutex").exists(), "the released mutex is gone")
 			# And it is free: the next claim succeeds at once.
@@ -340,6 +347,28 @@ class RebuildLockMutexRaceTest(unittest.TestCase):
 			self.assertEqual(len(live), 1, "the unreadable claim blocks")
 			self.assertIn("writer-token.json", str(live[0]["label"]))
 			self.assertTrue((waiting / "writer-token.json").exists(), "a live claim is never reaped")
+
+	def test_publish_retries_when_parent_removed_mid_publish(self) -> None:
+		# The empty-state releases remove the whole state directory; a
+		# publish landing inside that removal re-creates its parent and
+		# publishes again instead of failing the claim it serves (#2820).
+		# The removal is injected at the atomic replace, not timed.
+		with tempfile.TemporaryDirectory() as tmp:
+			target = Path(tmp) / "mutex" / "owner.json"
+			record = {"token": "test-token", "pid": os.getpid()}
+			real_replace = os.replace
+			replaces = []
+
+			def removing_replace(source: object, destination: object) -> None:
+				replaces.append(1)
+				if len(replaces) == 1:
+					shutil.rmtree(Path(tmp) / "mutex")
+				real_replace(source, destination)
+
+			with unittest.mock.patch("os.replace", removing_replace):
+				rebuild_lock.write_state_file(target, record)
+			self.assertEqual(len(replaces), 2, "the publish retried after the removal")
+			self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["token"], "test-token")
 
 
 if __name__ == "__main__":

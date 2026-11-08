@@ -367,6 +367,7 @@ that reached the worker.
 		owners.input.blindHeld = () => false;
 		owners.input.altHeld = () => false;
 		owners.assets.progress = () => 0;
+		owners.assets.hdTextures = () => {};
 		owners["bug-report"].movement = () => {};
 		globalThis.__runtimeOwners = owners;
 		globalThis.__runtimeCalls = [];
@@ -547,6 +548,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.input.blindHeld = () => false;
 	owners.input.altHeld = () => false;
 	owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 	owners["bug-report"].movement = () => {};
 	globalThis.__runtimeOwners = owners;
 	globalThis.__runtimeCalls = [];
@@ -561,7 +563,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	const runtime = startRuntime( {}, {} );
 	try {
 		const calls = globalThis.__runtimeCalls ?? [];
-		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[1];
+		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[0].commands;
 		const uiEvent = defined( calls.find( call => call.owner === "platform" ) ).args[5];
 		const drive = async now => {
 			defined( callback )( now );
@@ -662,7 +664,7 @@ dispose
 	const runtime = startRuntime( {}, {} );
 	try {
 		const call = (globalThis.__runtimeCalls ?? []).find( recorded => recorded.owner === "ui" );
-		const extensions = defined( call ).args.at( -1 );
+		const extensions = defined( call ).args[0].extensions;
 		assert.equal(
 			typeof extensions.setWorldFieldOfView,
 			"function",
@@ -822,13 +824,77 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		assert.equal( assetReports().length, 1, "the same episode is not filed twice" );
 		characterError = "Missing height";
 		await frame();
-		assert.equal( assetReports().length, 2, "a fatal resource failure files beside the stream lanes" );
+		assert.equal( assetReports().length, 2, "a resource failure files beside the stream lanes" );
 		assert.deepEqual( assetReports()[1], {
 			kind: "client-report",
 			incidentKind: "asset",
-			code: "fatal_asset_failed",
-			message: "asset=- transient=false attempts=0 error=Characters: Missing height"
+			code: "asset_failed",
+			message: "asset=- error=Characters: Missing height"
 		} );
+		// A thrown error files as runtime_exception with its stack (#2559).
+		owners.characters.failure = () => ({
+			path: null,
+			message: "InternalError: too much recursion",
+			stack: "recursion stack"
+		});
+		characterError = "InternalError: too much recursion";
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "runtime",
+			code: "runtime_exception",
+			message: "Characters: InternalError: too much recursion",
+			stack: "recursion stack"
+		} );
+		// An audio decode failure names its file (#2559).
+		owners.audio.error = () => "EncodingError: Unable to decode audio data";
+		owners.audio.failure = () => ({
+			path: "/assets/audio/ui_click.ogg",
+			message: "EncodingError: Unable to decode audio data"
+		});
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "asset_failed",
+			message: "asset=/assets/audio/ui_click.ogg error=Audio: EncodingError: Unable to decode audio data"
+		} );
+		// A UI image failure carries the retry owner's facts (#2559).
+		owners.ui.resourceError = () => "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode";
+		owners.ui.resourceFailure = () => ({
+			path: "/assets/ui/panel.ddj",
+			attempts: 3,
+			transient: true,
+			message: "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
+		});
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "asset_failed",
+			message: "asset=/assets/ui/panel.ddj transient=true attempts=3 " +
+				"error=Interface: UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
+		} );
+		// The fetch-burst and asset_offline discipline (#2869) lives
+		// in runtime-offline.test.mjs, its own runtime and clock.
+		// The asset worker's death still stops the session: fatal
+		// (#2559). It dies mid-frame here: healthy at the frame's
+		// opening check, failed by the report poll in the same frame -
+		// a worker already dead at the opening check throws instead.
+		let healthReads = 0;
+		owners.assets.health = () =>
+			++healthReads === 1 ?
+				{ phase: "running" } :
+				{ phase: "failed", error: "Asset worker failed" };
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "fatal_asset_failed",
+			message: "error=Assets: Asset worker failed"
+		} );
+		owners.assets.health = () => ({ phase: "running" });
+		const episodeStart = assetReports().length;
 		navigationHandouts.push( {
 			error: "Error: Asset HTTP 404",
 			path: "/assets/world/world-region-catalog.json",
@@ -842,13 +908,13 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			attempts: 8
 		} );
 		await frame();
-		assert.equal( assetReports().length, 4, "a later episode files again under its own facts" );
-		assert.equal( assetReports()[2].code, "world_asset_failed" );
-		assert.equal( assetReports()[3].code, "navigation_asset_failed" );
+		assert.equal( assetReports().length, episodeStart + 2, "a later episode files again under its own facts" );
+		assert.equal( assetReports()[episodeStart].code, "world_asset_failed" );
+		assert.equal( assetReports()[episodeStart + 1].code, "navigation_asset_failed" );
 		rendererError = "D3D12 device removed (DXGI_ERROR_DEVICE_HUNG): the GPU device instance has been suspended";
 		await frame();
-		assert.equal( assetReports().length, 5, "the renderer failure files before dispose" );
-		assert.deepEqual( assetReports()[4], {
+		assert.equal( assetReports().length, episodeStart + 3, "the renderer failure files before dispose" );
+		assert.deepEqual( assetReports()[episodeStart + 2], {
 			kind: "client-report",
 			incidentKind: "asset",
 			code: "renderer_failed",

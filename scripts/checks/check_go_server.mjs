@@ -38,7 +38,11 @@ Tiers. The everyday gate runs the tests with -short: whole-catalogue and
 brute-force evidence sweeps (marked tier.Long, internal/testsupport/tier)
 skip there, and every package's tests must finish inside
 TEST_BUDGET_SECONDS; a package over it fails the gate unless the shrinking
-ledger scripts/checks/go-test-budget.txt names it. `--long`
+ledger scripts/checks/go-test-budget.txt names it. A green run that trips
+the budget first re-measures the offenders alone (one package worker, no
+test cache) and judges those times, so a busy box cannot fail an all-green
+run (#2582); SRO_GO_BUDGET_REMEASURE=off restores judging the full run's
+wall times directly. `--long`
 (check:server:long, and every release freeze) runs only the test steps,
 without -short, so the sweeps run; neither tier needs a hosted CI.
 SRO_GO_GATES=label,label runs only the named steps (CI spreads the gate
@@ -73,6 +77,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
+import { budgetOffenders, overBudgetPackages, packageTestTimes, soloVerdicts } from "./goTestBudget.mjs";
 import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
@@ -83,6 +88,10 @@ const packageParallelism = positiveInteger(
 	Math.max( 2, Math.floor( os.availableParallelism() / 2 ) )
 );
 const testCache = process.env.SRO_GO_TEST_CACHE !== "off";
+// A green run that trips the test budget re-measures the offenders alone
+// before it may reject them (withinTestBudget); off judges the full run's
+// wall times directly.
+const budgetRemeasure = process.env.SRO_GO_BUDGET_REMEASURE !== "off";
 const startedAt = performance.now();
 const lintModfile = "tools/golangci-lint/go.mod";
 const STEP_ENVIRONMENT = [
@@ -199,7 +208,10 @@ const steps = selectSteps(
 			args: testArgs,
 			accept: longTier ? undefined : withinTestBudget,
 			select: () => true,
-			keys: [ ...testKeys, `=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
+			keys: [
+				...testKeys,
+				`=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )} remeasure=${budgetRemeasure}`
+			]
 		},
 		{
 			label: "race",
@@ -224,7 +236,7 @@ const steps = selectSteps(
 			command: "go",
 			args: [ "run", "./cmd/operations/sro-release-contract" ],
 			accept: matchesDeclaredServerContract,
-			select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
+			select: ( file ) => isModuleGo( file ) || file === "apps/server/config/compatibility.json",
 			keys: [ toolchain, stepEnvironment ]
 		}
 	] )
@@ -264,28 +276,82 @@ Accepts the everyday test output when every package that ran finished
 inside TEST_BUDGET_SECONDS, or is still named in the budget ledger. Cached
 packages ("(cached)") cost nothing and are not timed. Prints every package
 over budget, ledger or not, so the ledger can only shrink.
+
+A green run that still trips the budget has usually measured the box, not
+the packages: parallel suites on one machine inflate every wall time
+together (#2582). The offenders are then re-measured alone
+(remeasureOffenders) and the budget judges those solo times instead; a
+package still over budget alone is rejected with its solo time as the
+evidence. SRO_GO_BUDGET_REMEASURE=off judges the full run's times
+directly, the original behaviour.
 ================
 */
-function withinTestBudget( output ) {
-	const over = [];
-	for ( const match of output.matchAll( /^ok\s+(\S+)\s+([0-9.]+)s/gm ) ) {
-		const seconds = Number( match[2] );
-		if ( seconds > TEST_BUDGET_SECONDS ) over.push( { pkg: match[1], seconds } );
-	}
-	for ( const { pkg, seconds } of over ) {
+async function withinTestBudget( output ) {
+	for ( const { pkg, seconds } of overBudgetPackages( output, TEST_BUDGET_SECONDS ) ) {
 		const listed = budgetLedger.includes( pkg );
 		console.log(
 			`test budget: ${pkg} took ${seconds}s (budget ${TEST_BUDGET_SECONDS}s)${listed ? ", in ledger" : ""}`
 		);
 	}
-	const offenders = over.filter( ( { pkg } ) => !budgetLedger.includes( pkg ) );
-	if ( offenders.length ) {
+	const offenders = budgetOffenders( output, TEST_BUDGET_SECONDS, budgetLedger );
+	if ( offenders.length === 0 ) {
+		return true;
+	}
+	if ( budgetRemeasure ) {
+		const solo = await remeasureOffenders( offenders );
+		if ( solo !== null ) {
+			return solo;
+		}
+	}
+	console.log(
+		`test budget: ${offenders.length} package(s) over ${TEST_BUDGET_SECONDS}s; make them faster or move ` +
+			"evidence sweeps to tier.Long (internal/testsupport/tier)"
+	);
+	return false;
+}
+
+/*
+================
+remeasureOffenders
+
+Runs the offenders' packages alone - one package worker, no test cache -
+and judges their solo times against the budget. Returns null when the
+re-measure itself produced no verdict (its run failed), leaving the full
+run's times to judge as before; the re-measure's output tail is printed
+either way it fails, so the evidence is never silent. Prints each
+offender's two times when it does judge.
+================
+*/
+/**
+ * @param {{ pkg: string, seconds: number }[]} offenders
+ * @returns {Promise<boolean | null>}
+ */
+async function remeasureOffenders( offenders ) {
+	const packages = offenders.map( ( { pkg } ) => pkg );
+	console.log(
+		`test budget: re-measuring ${packages.length} package(s) alone (-p=1, -count=1); ` +
+			"a busy box inflates the full run's wall times together"
+	);
+	const rerun = await runStep(
+		"tests (budget re-measure)",
+		"go",
+		[ "test", "-p=1", ...tierArgs, "-count=1", ...packages ],
+		undefined
+	);
+	if ( !rerun.ok ) {
+		console.log( "test budget: the re-measure run failed; judging the full run's times" );
+		console.log( rerun.output.split( "\n" ).slice( -40 ).join( "\n" ) );
+		return null;
+	}
+	const verdicts = soloVerdicts( offenders, packageTestTimes( rerun.output ), TEST_BUDGET_SECONDS );
+	for ( const { pkg, seconds, solo } of verdicts ) {
 		console.log(
-			`test budget: ${offenders.length} package(s) over ${TEST_BUDGET_SECONDS}s; make them faster or move ` +
-				"evidence sweeps to tier.Long (internal/testsupport/tier)"
+			`test budget: ${pkg} took ${seconds}s in the full run, ${
+				solo === undefined ? "no solo time" : `${solo}s alone`
+			}`
 		);
 	}
-	return offenders.length === 0;
+	return verdicts.every( ( { fits } ) => fits );
 }
 
 /*
@@ -476,8 +542,7 @@ field; anything else (extra, missing or different) is a failed step.
 ================
 */
 function matchesDeclaredServerContract( output ) {
-	const declared =
-		JSON.parse( readFileSync( path.join( serverRoot, "ops/release/compatibility.json" ), "utf8" ) ).server;
+	const declared = JSON.parse( readFileSync( path.join( serverRoot, "config/compatibility.json" ), "utf8" ) ).server;
 	// The step's output also carries Go's own progress ("go: downloading ..."
 	// on a cold module cache): the contract is the one JSON line it prints.
 	const line = output.split( /\r?\n/ ).reverse().find( ( row ) => row.trim().startsWith( "{" ) );
@@ -568,7 +633,7 @@ runStep
  * @param {string} label
  * @param {string} command
  * @param {string[]} args
- * @param {((output: string) => boolean) | undefined} accept
+ * @param {((output: string) => boolean | Promise<boolean>) | undefined} accept
  * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
  */
 function runStep( label, command, args, accept ) {
@@ -585,8 +650,8 @@ function runStep( label, command, args, accept ) {
 		child.on( "error", ( error ) => {
 			output += String( error );
 		} );
-		child.on( "close", ( code, signal ) => {
-			const ok = code === 0 && (accept === undefined || accept( output ));
+		child.on( "close", async ( code, signal ) => {
+			const ok = code === 0 && (accept === undefined || await accept( output ));
 			resolve( { label, ok, code, signal, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
 		} );
 	} );

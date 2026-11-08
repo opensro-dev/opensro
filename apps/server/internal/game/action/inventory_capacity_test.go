@@ -89,7 +89,7 @@ func TestGachaRequiresPresentedInventoryCapacity(t *testing.T) {
 			if reason != "" || draws != 1 || character.MissionInventory[0].RefObjID != rt.GachaCatalog.WinCard.RefObjID {
 				t.Fatalf("presented slot did not produce the winning card: %s %+v", reason, frames)
 			}
-			assertOpcodes(t, frames, 0x3645, 0xb053)
+			assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
 		})
 	}
 }

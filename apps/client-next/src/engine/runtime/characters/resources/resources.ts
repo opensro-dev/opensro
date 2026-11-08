@@ -13,7 +13,7 @@ import {
 } from "@/engine/foundation/animation/character-budget";
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { decodeNativeClip } from "@/engine/foundation/animation/native-clip";
-import { withBearRoar, withWolfHowl, withWolfRend } from "@/engine/foundation/animation/bear-roar";
+import { withBearRoar, withWolfHowl, withWolfRend, withPenguinBlizzard } from "@/engine/foundation/animation/bear-roar";
 import { createProceduralEffect } from "./procedural-effects";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { CharacterModel } from "@/engine/contracts/character";
@@ -230,6 +230,8 @@ export function createCharacterResources(
 						withBearRoar( result.model ) :
 						/\/npc\/cos\/p_wolf(_white)?_0[12]\.glb$/i.test( completed.path ) ?
 						withWolfRend( withWolfHowl( result.model ) ) :
+						/\/npc\/cos\/p_penguin0[12]\.glb$/i.test( completed.path ) ?
+						withPenguinBlizzard( result.model ) :
 						result.model;
 					try {
 						costs.set( completed.path, characterBytes( model, result.images ) );

@@ -12,8 +12,10 @@ import {
 	reportedGpuFeatures
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
+import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
+import { createAmbientOcclusion } from "./ambient-occlusion";
 import { createWaterRefraction } from "./water-refraction";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
@@ -25,12 +27,8 @@ import { createUiResources } from "./ui";
 import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
-import {
-	ENVIRONMENT_CAMERA_OFFSET,
-	ENVIRONMENT_STAGES2_OFFSET,
-	ENVIRONMENT_STAGES_OFFSET,
-	ENVIRONMENT_UNIFORM_BYTES
-} from "./environment-block";
+import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import { isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -88,9 +86,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	// the plain copy to the swapchain, retail samplers, env.stages zero and
 	// env.stages2 zero.
 	let finishEnabled = false, anisotropic = false, bloomFloat = false, hdrOn = false, sunShadowOn = false;
-	// The camera vec4 written per frame (near, far, 0, 0).
-	const cameraValues = new Float32Array( 4 );
 	const stages = new Float32Array( 8 );
+	/*
+	================
+	sceneFormat
+
+	The format every scene target renders in: the canvas format, or the
+	HDR stage's float intermediate while that stage is on.
+	================
+	*/
+	const sceneFormat = (): GPUTextureFormat => hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat();
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
@@ -108,6 +113,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
 	let waterStage: ReturnType<typeof createWaterRefraction> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
@@ -135,7 +141,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		texturesKnown = resolve;
 	} );
 	const fail = ( error: unknown, canRecover = false ) => {
-		if ( !canRecover ) texturesKnown( [] );
+		// A memory refusal takes the recovery path however it arrived:
+		// the builders' promise catches below see it as a rejected
+		// DOMException long after `retryable` cleared (#2866).
+		const recover = canRecover || isOutOfMemoryRefusal( error );
+		if ( !recover ) texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}
@@ -143,7 +153,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		// rejecting a format or usage) and then every consequence ("createView:
 		// texture is not valid"); the report must name the cause (BUG-022).
 		if ( phase === "failed" ) return;
-		recoverable = canRecover;
+		recoverable = recover;
 		failure = String( error );
 		phase = "failed";
 	};
@@ -215,7 +225,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				// cure: it starts empty. Validation errors would only repeat.
 				fail(
 					message,
-					typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError
+					isOutOfMemoryRefusal( event.error ) ||
+						(typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError)
 				);
 			} );
 
@@ -258,13 +269,17 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				================
 				*/
 				createBundleEncoder: ( depth = true, scene = false ) =>
-					current().createRenderBundleEncoder( {
-						label: "retained-scene",
-						// Scene bundles execute into the frame's scene target: the
-						// canvas format, or the HDR stage's float intermediate.
-						colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
-						...(depth ? { depthStencilFormat: "depth24plus" as const } : {})
-					} ),
+					// Single use by construction (bundle-encoder.ts): a recorder
+					// that kept a finished encoder fails here, in the frame's
+					// own terms, not as a backend validation error (#2560).
+					createSingleUseBundleEncoder(
+						current().createRenderBundleEncoder( {
+							label: "retained-scene",
+							// Scene bundles execute into the frame's scene target.
+							colorFormats: [ scene ? sceneFormat() : navigator.gpu.getPreferredCanvasFormat() ],
+							...(depth ? { depthStencilFormat: "depth24plus" as const } : {})
+						} )
+					),
 				/*
 				================
 				createEncoder
@@ -463,9 +478,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				retirement.retire,
 				pipelines.lightmapSampling
 			);
-			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), () => (
-				hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat()
-			), retirement.retire );
+			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), sceneFormat, retirement.retire );
 
 			thunder = createThunder( created, navigator.gpu.getPreferredCanvasFormat() );
 
@@ -475,6 +488,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			occlusion = createAmbientOcclusion( created, retirement.retire );
 			waterStage = createWaterRefraction( created, retirement.retire );
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -571,21 +585,47 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		},
 		/*
 		================
-		waterRefraction
+		ambientOcclusion
 
-		Prepare the refracted water stage's copy targets (port-only,
-		device/water-refraction.ts); the renderer installs their views into
-		the geometry bindings each frame it draws them.
+		The experimental occlusion owner (port-only, not native; #2094):
+		prepared per frame against the scene size and camera, and its
+		blurred view installed as geometry binding 15 whenever the
+		answer changes (enable, disable, resize) through the geometry
+		owner's refresh seam. While off it owns nothing.
 		================
 		*/
-		waterRefraction( width, height, enabled ) {
+		ambientOcclusion(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
+			if ( phase !== "running" || !occlusion ) throw Error( "Ambient occlusion device is not ready" );
+			const draw = occlusion.prepare( width, height, enabled, camera );
+			geometry?.refreshAmbientOcclusion( draw?.view ?? null );
+			return draw;
+		},
+		/*
+		================
+		waterRefraction
+
+		The experimental refracted water stage (port-only, not native;
+		device/water-refraction.ts): its copy targets prepared per frame in
+		the scene format against the camera's near/far, and their views
+		installed as geometry bindings 16/17 whenever they change. While
+		off it owns nothing and the bindings fall back to the white view.
+		================
+		*/
+		waterRefraction(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
 			if ( phase !== "running" || !waterStage ) throw Error( "Water refraction device is not ready" );
-			return waterStage.prepare(
-				width,
-				height,
-				hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat(),
-				enabled
-			);
+			const stage = waterStage.prepare( width, height, sceneFormat(), enabled, camera );
+			geometry?.refreshWaterRefraction( stage?.colourView ?? null, stage?.depthView ?? null );
+			return stage;
 		},
 		/*
 		================
@@ -652,14 +692,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			stages.set( [
 				value.heightFog ? 1 : 0,
 				value.dynamicSun ? 1 : 0,
-				// z and w were terrain relief and textured horizon, removed at the
-				// owner's request (2026-10-11); the shaders no longer read them.
-				0,
-				0,
+				// z was terrain relief, removed at the owner's request
+				// (2026-10-11), and now gates the port-only water refraction;
+				// w was the textured horizon, and now gates the port-only sky
+				// detail (clouds, glow, rim).
+				value.waterRefraction ? 1 : 0,
+				value.skyDetail ? 1 : 0,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,
-				value.waterRefraction ? 1 : 0
+				value.ambientOcclusion ? 1 : 0
 			] );
 			// The HDR stage flips every scene target's format: geometry
 			// re-pipelines, the mirror reformats, the portraits retire.
@@ -759,7 +801,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		Publish the frame transform and environment uniforms together.
 		================
 		*/
-		worldView( transform, environment, shadowEnabled = true, directional = false, camera?: readonly number[] ) {
+		worldView( transform, environment, shadowEnabled = true, directional = false ) {
 			if ( phase === "running" ) {
 				// Preview scenes have no cascade; keep the saved preference for world re-entry.
 				stages[5] = sunShadowOn && shadowEnabled ? 1 : 0;
@@ -771,12 +813,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 					environment.byteOffset,
 					environment.byteLength
 				);
-				// The camera's near and far for the shaders' depth linearisation.
-				if ( camera ) {
-					cameraValues[0] = camera[0] ?? 1;
-					cameraValues[1] = camera[1] ?? cameraValues[0] + 499;
-					device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_CAMERA_OFFSET, cameraValues );
-				}
 				// The viewer's studio light uses the sun-direction stage's switch for
 				// its own frames only; the saved Experimental choice is kept.
 				const dynamicSun = stages[1]!;
@@ -825,6 +861,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		*/
 		error: () => failure,
+		/*
+		================
+		fail
+
+		Record a failure the renderer met while driving this device.
+		================
+		*/
+		fail: ( error: unknown ) => fail( error ),
 		/*
 		================
 		gpuTiming
@@ -905,6 +949,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			occlusion?.dispose();
+			occlusion = null;
 			waterStage?.dispose();
 			waterStage = null;
 			finish?.dispose();

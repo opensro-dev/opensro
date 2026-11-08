@@ -210,6 +210,74 @@ test("serving adapter exposes only exact routes, retains caching and refuses sou
 	) assert.equal( (await fetch( server.url + name )).status, 404 );
 });
 
+/*
+================
+TestPackManifestValidators
+
+The pack manifest is the one large route on a stable name (#2821): it
+must carry a validator so a repeat visit revalidates instead of
+re-downloading, it must never ride the immutable year, and each
+representation (identity, gzip) revalidates on the ETag that
+representation issued. The content-hashed pack beside it keeps the
+immutable year and its ranges.
+================
+*/
+test("pack manifest revalidates on its issued ETag and packs stay immutable", async t => {
+	const { compressRoutes } = await import( "../../tools/beta/compression.mjs" );
+	const f = await fixture( t );
+	await compressRoutes( f.packageRoot, f.m );
+	const packEntry = defined( f.m.files.find( e => e.path === "runtime-text.bin" ) );
+	f.m.routes.push( {
+		url: "/assets/packs/runtime-text-1f20cbd1ac41.bin",
+		file: packEntry.path,
+		offset: 0,
+		length: packEntry.length,
+		mime: "application/octet-stream"
+	} );
+	f.m.releaseId = releaseIdentity( f.m );
+	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
+	const server = await serveBeta( { root: f.packageRoot } );
+	t.after( () => server.close() );
+	const url = server.url + "/assets/packs/manifest.json";
+	const first = await fetch( url, { headers: { "accept-encoding": "identity" } } );
+	assert.equal( first.status, 200 );
+	assert.equal( first.headers.get( "content-encoding" ), null );
+	assert.equal( first.headers.get( "cache-control" ), "no-cache" );
+	const etag = defined( first.headers.get( "etag" ) );
+	await first.arrayBuffer();
+	const cached = await fetch( url, {
+		headers: { "accept-encoding": "identity", "if-none-match": etag }
+	} );
+	assert.equal( cached.status, 304 );
+	assert.equal( (await cached.arrayBuffer()).byteLength, 0 );
+	const gz = await fetch( url, { headers: { "accept-encoding": "gzip" } } );
+	assert.equal( gz.headers.get( "content-encoding" ), "gzip" );
+	assert.match( gz.headers.get( "vary" ) ?? "", /Accept-Encoding/ );
+	assert.equal( gz.headers.get( "cache-control" ), "no-cache" );
+	const gzEtag = defined( gz.headers.get( "etag" ) );
+	assert.notEqual( gzEtag, etag );
+	await gz.arrayBuffer();
+	const gzCached = await fetch( url, {
+		headers: { "accept-encoding": "gzip", "if-none-match": gzEtag }
+	} );
+	assert.equal( gzCached.status, 304 );
+	assert.equal( (await gzCached.arrayBuffer()).byteLength, 0 );
+	const pack = await fetch( server.url + "/assets/packs/runtime-text-1f20cbd1ac41.bin" );
+	assert.equal( pack.status, 200 );
+	assert.equal( pack.headers.get( "cache-control" ), "public, max-age=31536000, immutable" );
+	const packEtag = defined( pack.headers.get( "etag" ) );
+	await pack.arrayBuffer();
+	const packCached = await fetch( server.url + "/assets/packs/runtime-text-1f20cbd1ac41.bin", {
+		headers: { "if-none-match": packEtag }
+	} );
+	assert.equal( packCached.status, 304 );
+	const partial = await fetch( server.url + "/assets/packs/runtime-text-1f20cbd1ac41.bin", {
+		headers: { range: "bytes=0-7" }
+	} );
+	assert.equal( partial.status, 206 );
+	await partial.arrayBuffer();
+});
+
 test("compiler keeps main and worker maps private, drops beta branches and excludes environment secrets", async t => {
 	const { buildApplication } = await import( "../../tools/beta/build.mjs" );
 	const { symbolicate } = await import( "../../tools/beta/symbolicate.mjs" );

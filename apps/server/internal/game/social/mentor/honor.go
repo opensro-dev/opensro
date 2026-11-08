@@ -170,6 +170,10 @@ func (r *InviteRuntime) handleDisband(s *transport.Session, opcode uint16, paylo
 	case domain.TrainingCampDisbandAccepted:
 		_ = s.Send(OpTCDisbandAnswer, encodeResultAck())
 		r.broadcastCampStatus(divisionID, res.MembersBefore, EncodeCampDisband3AC5())
+		for _, member := range res.MembersBefore {
+			r.clearBuffOnMembershipEnd(divisionID, res.Camp.ID, member, BuffStateRemoval)
+		}
+		r.dropBuffCamp(divisionID, res.Camp.ID)
 		if r.SyncMasterHonorBuffs != nil {
 			r.SyncMasterHonorBuffs(divisionID, actor.ID, 0)
 		}
@@ -219,6 +223,7 @@ func (r *InviteRuntime) handleLeave(s *transport.Session, opcode uint16, payload
 		leaverGID := enterworld.ObjectIDForCharacter(actor)
 		leavePush := EncodeCampMemberLeave3AC5(leaverGID, 1)
 		r.broadcastCampStatus(divisionID, res.MembersBefore, leavePush)
+		r.clearBuffOnMembershipEnd(divisionID, res.Camp.ID, res.RemovedMember, BuffStateRemoval)
 		log.Debugf("mentor: %s left academy (camp %d)", actor.Name, res.Camp.ID)
 	case domain.TrainingCampLeaveDead:
 		_ = s.Send(OpTCLeaveAnswer, encodeResultError(ErrTCDead))
@@ -285,6 +290,7 @@ func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload 
 		}
 		kickPush := EncodeCampMemberLeave3AC5(targetGID, 2)
 		r.broadcastCampStatus(divisionID, res.MembersBefore, kickPush)
+		r.clearBuffOnMembershipEnd(divisionID, res.Camp.ID, res.RemovedMember, BuffStateRemoval)
 		log.Debugf("mentor: %s kicked %s from academy (camp %d)", actor.Name, targetName, res.Camp.ID)
 	case domain.TrainingCampKickDead:
 		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCDead))
@@ -327,6 +333,7 @@ func (r *InviteRuntime) handleGraduate(s *transport.Session, opcode uint16, payl
 		gradGID := enterworld.ObjectIDForCharacter(actor)
 		gradPush := EncodeCampMemberGraduate3AC5(gradGID, 0)
 		r.broadcastCampStatus(divisionID, res.MembersBefore, gradPush)
+		r.clearBuffOnMembershipEnd(divisionID, res.Camp.ID, res.Graduate, BuffStateGraduated)
 		r.publishGraduationUpdates(divisionID, res)
 		if res.AwardedExp {
 			// The EXP grant rides behind the status-4 broadcast. The native
@@ -386,6 +393,7 @@ func (r *InviteRuntime) handleCompulsoryGraduate(s *transport.Session, opcode ui
 		}
 		gradPush := EncodeCampMemberGraduate3AC5(targetGID, 1)
 		r.broadcastCampStatus(divisionID, res.MembersBefore, gradPush)
+		r.clearBuffOnMembershipEnd(divisionID, res.Camp.ID, res.Graduate, BuffStateGraduated)
 		r.publishGraduationUpdates(divisionID, res)
 		if res.AwardedExp && target != nil {
 			if bonus := BonusGraduateExp(res.Graduate.JoinLevel, r.LevelData); bonus > 0 && r.GrantGraduateExperience != nil {
@@ -540,5 +548,9 @@ func (r *InviteRuntime) NotifyMemberLevel(divisionID string, character *enterwor
 		return
 	}
 	gid := enterworld.ObjectIDForCharacter(character)
-	r.broadcastCampStatus(divisionID, members, EncodeCampMemberLevelUpdate3AC5(gid, characterLevel(character)))
+	level := characterLevel(character)
+	r.broadcastCampStatus(divisionID, members, EncodeCampMemberLevelUpdate3AC5(gid, level))
+	if level >= buffLevelCap {
+		r.clearBuffOnLevelCap(divisionID, character)
+	}
 }

@@ -18,6 +18,7 @@ package chat
 
 import (
 	"encoding/binary"
+	"opensro.online/server/internal/game/item/wire"
 	"sync"
 	"time"
 
@@ -39,6 +40,9 @@ time it was published, in Unix milliseconds.
 type publicLine struct {
 	payload  []byte
 	sentAtMs int64
+	// prelude is the line's item reference frames (itemlinks.go), sent
+	// ahead of it live and ahead of the replayed history.
+	prelude []wire.Frame
 }
 
 /*
@@ -70,6 +74,9 @@ type Runtime struct {
 	Unions UnionView
 	// Stalls answers stall chat; set by wiring before the hub serves.
 	Stalls StallView
+	// ItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch (itemlinks.go):
+	// nil keeps the native lane. Set by wiring before the hub serves.
+	ItemLinks *ItemLinks
 	// Feed receives every published public line for the website
 	// (chatfeed, port-only); nil keeps the transcript in-game only.
 	Feed *chatfeed.Feed
@@ -100,6 +107,9 @@ func (rt *Runtime) WorldBound(session *transport.Session, division string) {
 		return
 	}
 	if rows := rt.history[division]; len(rows) != 0 {
+		for _, row := range rows {
+			sendPrelude(session, row.prelude)
+		}
 		if err := session.Send(OpChatHistory, encodeChatHistory(rows)); err != nil {
 			return
 		}
@@ -127,10 +137,12 @@ line to its author too: the native acknowledgement echoes the requested
 channel and therefore cannot describe a beta remap from All to Global.
 author is the sender's character name, threaded from the handler: the
 payload carries only the display name, and the feed's identity must never
-be decoded back out of it.
+be decoded back out of it. text is the line as the feed stores it
+(Outcome.PlainText: item-link markers replaced by labels).
 ================
 */
-func (rt *Runtime) publish(division, author string, payload []byte) {
+func (rt *Runtime) publish(division, author, text string, line publicLine) {
+	payload := line.payload
 	if len(payload) == 0 || payload[0] != ChatTypeGlobal {
 		return
 	}
@@ -141,13 +153,14 @@ func (rt *Runtime) publish(division, author string, payload []byte) {
 		copy(rows, rows[1:])
 		rows = rows[:publicHistoryLimit-1]
 	}
-	rows = append(rows, publicLine{payload: append([]byte(nil), payload...), sentAtMs: rt.now().UnixMilli()})
+	rows = append(rows, publicLine{payload: append([]byte(nil), payload...), sentAtMs: rt.now().UnixMilli(), prelude: line.prelude})
 	rt.history[division] = rows
-	if _, name, text, ok := DecodeChatBroadcastNamed(payload); ok {
+	if _, name, _, ok := decodeNamedHead(payload); ok {
 		rt.Feed.Record(division, chatfeed.KindChat, author, name, text)
 	}
 	for _, member := range rt.members {
 		if member.division == division && member.session.WorldReady() && !member.session.Evicted() {
+			sendPrelude(member.session, line.prelude)
 			_ = member.session.Send(OpChatBroadcast, payload)
 		}
 	}

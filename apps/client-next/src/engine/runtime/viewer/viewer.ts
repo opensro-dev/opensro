@@ -189,24 +189,27 @@ function viewerEntity( request: ViewerRequest | null, gid = VIEWER_GID ): Entity
 dressedEntity
 
 The look's body wearing its items, each typed from the catalogue (the
-weapon's type word picks the armed idle, actor-motion.ts). Null when the
-catalogue lacks an item: the look names something the game does not have.
+weapon's type word picks the armed idle, actor-motion.ts). An item the
+catalogue cannot type is left off, never a failed look: the game draws
+such a wearer with the part refused (actor-appearance.ts falls back to
+the body), and published looks name real items the catalogue lacks
+(#2772).
 ================
 */
 function dressedEntity(
 	body: EntityState,
 	look: ViewerLook,
 	itemType: ( refObjId: number ) => number | undefined
-): EntityState | null {
+): EntityState {
 	const equipment: EntityEquipment[] = [], avatars: EntityEquipment[] = [];
 	for ( const item of look.worn ) {
 		const typeFlags = itemType( item.refItemId );
-		if ( typeFlags === undefined ) return null;
+		if ( typeFlags === undefined ) continue;
 		equipment.push( { slot: item.slot, refObjId: item.refItemId, typeFlags, plus: item.plus } );
 	}
 	for ( const item of look.avatar ) {
 		const typeFlags = itemType( item.refItemId );
-		if ( typeFlags === undefined ) return null;
+		if ( typeFlags === undefined ) continue;
 		avatars.push( { slot: item.slot, refObjId: item.refItemId, typeFlags, plus: 0 } );
 	}
 	return { ...body, equipment, avatars };
@@ -291,8 +294,9 @@ createViewer
 
 Parses the request and returns the per-frame step. frame() answers
 whether it wants another frame; once it says no the runtime disposes the
-owners. A look whose body or items the catalogue lacks fails
-"bad-request" ("unknown-monster" names a monster request's id).
+owners. A look whose body the catalogue lacks fails "bad-request"
+("unknown-monster" names a monster request's id); items it cannot type
+are left off (dressedEntity).
 ================
 */
 export function createViewer( host: ViewerHost ) {
@@ -534,6 +538,12 @@ export function createViewer( host: ViewerHost ) {
 			if ( finished && !shown ) return stopped();
 			elapsed += last < 0 ? 0 : Math.min( Math.max( now - last, 0 ), MAX_FRAME_STEP_MS );
 			last = now;
+			// A latched presentation failure never fails the draw early:
+			// the first failure is sticky across a batch and may belong
+			// to an earlier monster, per-path loads keep retrying behind
+			// it, and a refused part still draws the wearer without it
+			// (actor-appearance.ts falls back). Only the timeout names a
+			// failure asset-load (#2772).
 			if ( !finished && elapsed > VIEWER_TIMEOUT_MS ) {
 				fail( host.characters.error() ? "asset-load" : "timeout" );
 				return stopped();
@@ -551,22 +561,9 @@ export function createViewer( host: ViewerHost ) {
 				return stopped();
 			}
 			if ( !dressed && known && request?.kind === "look" ) {
-				const worn = dressedEntity( entity, request.look, refObjId => host.characters.itemType( refObjId ) );
-				if ( !worn ) {
-					fail( "bad-request" );
-					return stopped();
-				}
-				entity = worn;
+				entity = dressedEntity( entity, request.look, refObjId => host.characters.itemType( refObjId ) );
 				entities = [ entity ];
 				dressed = true;
-			}
-			// A still gets the whole timeout window even with a latched
-			// failure: the first failure is sticky across a batch and may
-			// belong to an earlier monster, while per-path loads keep
-			// retrying behind it. Interactive views fail immediately.
-			if ( host.characters.error() && !request?.still ) {
-				fail( "asset-load" );
-				return stopped();
 			}
 			const seconds = elapsed / 1000;
 			host.characters.step( entities, null, seconds );

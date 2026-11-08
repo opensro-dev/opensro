@@ -189,6 +189,10 @@ export interface ChatLine {
 	// Port-only: the player and item a drop/plus notice names
 	// (foundation/gameplay/notice-links.ts), linked in the chat log.
 	readonly notice?: { readonly name?: string; readonly item?: InventoryItem; };
+	// Port-only (SRO_CHAT_ITEM_LINKS): the items a player line links, link i
+	// for the i-th marker (foundation/gameplay/chat-item-links.ts); undefined
+	// where a body could not be decoded.
+	readonly links?: readonly (InventoryItem | undefined)[];
 }
 /*
 ================
@@ -357,6 +361,7 @@ export type GameplayCommand =
 		readonly kind: "mall-buy";
 		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
 	}
+	| { readonly kind: "mall-silk-inquire"; readonly period: number; }
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -374,7 +379,14 @@ export type GameplayCommand =
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
 	| { readonly kind: "quest-reward"; readonly refId: number; }
-	| { readonly kind: "chat"; readonly channel: number; readonly text: string; readonly target?: string; }
+	| {
+		readonly kind: "chat";
+		readonly channel: number;
+		readonly text: string;
+		readonly target?: string;
+		// Port-only (SRO_CHAT_ITEM_LINKS): where each linked item is.
+		readonly links?: readonly import("@/engine/foundation/gameplay/chat-item-links").ChatLinkRef[];
+	}
 	// The premium chat commands (count-job.ts); a reverse return's second
 	// command carries its point.
 	| {
@@ -446,6 +458,8 @@ export type GameplayCommand =
 		readonly targetSlot?: number;
 		// The Global Chatting window's line (CIFGlobalChatItem_OnSend 6D1EE0).
 		readonly message?: string;
+		// Port-only (SRO_CHAT_ITEM_LINKS): the line's item links.
+		readonly links?: readonly import("@/engine/foundation/gameplay/chat-item-links").ChatLinkRef[];
 		// The reverse return scroll's point (6971B0 message box 0x1E).
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
@@ -453,6 +467,18 @@ export type GameplayCommand =
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
+		// The crest delete's confirmed use (#2282): the confirm box
+		// (0x16/0x19) already asked, so the use goes out as composed.
+		readonly crestDelete?: boolean;
+	}
+	| {
+		readonly kind: "crest-register";
+		readonly slot: number;
+		readonly crestKind: import("@/engine/foundation/gameplay/crest-register").CrestRegisterKind;
+		// The picked image's raw bytes (owner's 2026-11-07 contract,
+		// #2282): the worker base64s them onto the crest upload lane;
+		// the server alone judges and re-encodes them.
+		readonly image: Uint8Array;
 	}
 	| {
 		readonly kind: "navigation";
@@ -464,6 +490,7 @@ export type GameplayCommand =
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "npc-withdraw"; }
+	| { readonly kind: "npc-event-exchange"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
@@ -501,6 +528,10 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	// The reference row's authored itemdata fields (the same record
+	// the tooltip reference carries), so activation rules can read
+	// them - the mall-use gate reads canUse (token 24).
+	readonly nativeFields?: Readonly<Record<string, number>>;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;
@@ -747,9 +778,12 @@ Presentation owns the derived skillIndex; it never travels back to simulation.
 */
 export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
+	readonly itemMallSilkHistory?: import("./item-mall").MallSilkHistoryState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	// Port-only most-wanted state of the local player (most-wanted.ts).
+	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];
@@ -759,6 +793,10 @@ export interface GameplayState extends MoverPublication {
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
+	// The greeting symbol a firing 0xB47C exchange answer left on the
+	// talk window (75D030), or null: while it stands the prompt is that
+	// symbol and the talk capabilities read as cleared.
+	readonly npcEventGreeting?: string | null;
 	// Hiding CIFNpcWindow does not release the selected NPC or its service lock.
 	readonly npcWindow?: { readonly hidden: boolean; readonly revision: number; };
 	readonly restorationRevision?: number;
@@ -801,6 +839,9 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_STORAGE_AUTO_STACK rule, published at world
 	// entry: storage quick moves prefer a matching stack (storage-panel.ts).
 	readonly storageAutoStack?: boolean;
+	// The server's port-only SRO_CHAT_ITEM_LINKS rule as its per-line link
+	// limit, published at world entry; absent is off (chat-item-links.ts).
+	readonly chatItemLinks?: number;
 	// The shard's client tuning from the world-entry bootstrap (port-only, ui-tuning.ts).
 	readonly uiTuning?: import("@/engine/foundation/ui/ui-tuning").UiTuning;
 	// The server's port-only SRO_TRADE_TIERS rule, published at world entry:
@@ -898,6 +939,7 @@ export interface GameplayState extends MoverPublication {
 		readonly error: string | null;
 	};
 	readonly navigationFloor?: number;
+	readonly navigationRoom?: number;
 	readonly minimapFloors?: Readonly<Record<string, number | undefined>>;
 	readonly navigationRequestId?: number;
 	readonly navigationFailure?: { readonly region: number; readonly requestId?: number; readonly error: string; };

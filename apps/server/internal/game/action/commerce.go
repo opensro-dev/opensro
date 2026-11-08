@@ -51,6 +51,13 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	// Sun supply is drop-side only, forever. Do not make this conditional
 	// again - withholding here is the rule, not a leftover of the gate.
 	c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunShopExcluded(ref) })
+	// Port-only, not native (commerce/alexandriashops.go): an operator
+	// who wants degree-11 gear from grinding only hides Alexandria's
+	// degree-11 shop goods; off - the default - sells the native stock
+	// the original game sold there (#2842).
+	if rt.AlexandriaHideD11Goods {
+		c.WithholdAlexandriaD11()
+	}
 	if rt.TradeTiers {
 		// Port-only, not native: the shops price trade goods with their
 		// scaled references (SRO_TRADE_TIERS).
@@ -458,17 +465,26 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || !isCOS && q.SourceSlot < inventory.EquipmentSlotEnd {
 				return false
 			}
-			// Port-only, not native (halloween.go): a sealed event
-			// helmet is never sold, however sellable its row is.
-			if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+			// Port-only (forge.go, issue #1980): a bound forged item
+			// cannot be sold to a merchant, from bag or COS bag alike.
+			if item.ForgeBound {
+				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
+			// Port-only, not native (halloween.go): the seal leaves the
+			// merchant open. A sealed event helmet may be sold; the sale
+			// destroys it (the bag row drops) and the item classes a
+			// helmet row carries keep it out of the buyback bench
+			// (commerceNoBuyback), so it never reaches another player.
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false
 			}
-			admitted := commerceSaleAdmitted(ref)
-			if !admitted || !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
+			if !commerceSaleAdmitted(ref) {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
+			if !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
 				return false
 			}
 			if code := rt.tradeAdmission(division, c, npc, item); code != 0 {
@@ -569,7 +585,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if payout.character.ID != c.ID {
 				setGold(payout.character, goldOf(payout.character)+uint64(payout.Gold))
 			}
-			experience, _ := rt.addJobExperience(payout.character, payout.Experience)
+			experience, _ := rt.addJobExperience(division, payout.character, payout.Experience)
 			if payout.character.ID == c.ID {
 				frames = append(frames, experience...)
 			} else {

@@ -171,6 +171,165 @@ func hasBroodFrom(c *enterworld.Character, gid uint32) bool {
 
 /*
 ================
+crowRechargeRow
+
+The crow's recharge row at now, and whether it moves the stored row.
+Pure on the live pet, so a tick judges it under the read door and
+only a moving row opens the update door (#2139).
+================
+*/
+func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
+	row := companion.AdvanceCharges(live.Training.Rows[1], now)
+	for _, def := range companion.SkillsForPet(live) {
+		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
+			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
+		}
+	}
+	return row, row != live.Training.Rows[1]
+}
+
+/*
+================
+crowBroodPetFacts
+
+One brood pet's judge inputs, read off the live record under the
+character door: the values the lifecycle's remove and hatch verdicts
+weigh (stage, deadline, life). The child-session half of those
+verdicts (a lost session removes) is answered outside the door.
+================
+*/
+type crowBroodPetFacts struct {
+	gid   uint32
+	stage uint8
+	until int64
+	hp    uint32
+}
+
+/*
+================
+crowBroodFacts
+
+What one crow-brood tick decides, read off the live record
+(#2030): whether this gid runs the lifecycle at all, whether any
+brood event (a removal, a hatch) fires this tick, and the stage-2
+clones the combat-order step answers for. The events themselves
+re-derive under their doors on the copy path; the facts only keep
+a tick that fires nothing off the owner copy.
+================
+*/
+type crowBroodFacts struct {
+	crow   bool
+	events bool
+	stage2 []uint32
+}
+
+/*
+================
+crowBroodJudge
+
+advanceCrowBrood's facts door (#2030): the lifecycle below runs on
+the companion copy, but most ticks fire nothing - the eggs wait on
+their timers, the clones live out theirs - so the tick first judges
+on the live record whether anything can move. The door read
+collects the source verdict and each brood pet's timer facts; the
+child-session facts are session state, answered by petSessionFor
+outside the character door as the copy path answers them (a lost
+session removes; a follower child's position feeds its broodAt).
+An event, or the forced-copy seam, abstains to the copy path, whose
+doors re-derive every event from the live record as before.
+================
+*/
+func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64) (crowBroodFacts, bool) {
+	if rt.companionCopy != nil {
+		return crowBroodFacts{}, false
+	}
+	var facts crowBroodFacts
+	// The brood facts ride a stack array, not a grown slice: the
+	// record's Brood never exceeds BroodLimit rows (castCrowBrood
+	// refuses the cast that would), so the judge allocates nothing
+	// on the door (#2030).
+	var pets [companion.BroodLimit]crowBroodPetFacts
+	petCount := 0
+	valid := false
+	judged := false
+	guard := rt.deps.AcquireRead(key.division)
+	judged = true
+	live := state.character
+	source := crowBroodSource(live, key.gid)
+	facts.crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+	if facts.crow {
+		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 &&
+			enterworld.CharacterAlive(live) && !rt.inTown(key.division, live)
+		for _, pet := range live.Brood {
+			if pet.BroodSource != key.gid {
+				continue
+			}
+			pets[petCount] = crowBroodPetFacts{gid: pet.GID, stage: pet.BroodStage, until: pet.BroodUntil, hp: pet.CurrentHP}
+			petCount++
+		}
+	}
+	guard.Release()
+	if !judged || !facts.crow {
+		return facts, judged
+	}
+	for _, pet := range pets[:petCount] {
+		child := rt.petSessionFor(key.division, key.name, pet.gid)
+		if child != nil && child.follower != nil {
+			child.broodAt = child.follower.Position(now)
+		}
+		remove := !valid || child == nil || pet.hp == 0 || pet.stage == 2 && now >= pet.until
+		hatch := !remove && pet.stage == 1 && now >= pet.until
+		if remove || hatch {
+			facts.events = true
+		}
+		if pet.stage == 2 {
+			facts.stage2 = append(facts.stage2, pet.gid)
+		}
+	}
+	return facts, true
+}
+
+/*
+================
+crowBroodRecharge
+
+The crow's recharge, judged and committed on the live pet: the row
+is pure on the live record, so a tick reads it under the read door
+and opens the update door only on a tick whose row actually moves
+(#2139); the door re-derives the same row. Returns its frames.
+================
+*/
+func (rt *Runtime) crowBroodRecharge(key petOwnerKey, state *petSession, now int64) []wire.Frame {
+	recharges := false
+	rt.deps.Read(key.division, func() {
+		live := state.character.CompanionByGID(key.gid)
+		if live == nil {
+			return
+		}
+		_, recharges = crowRechargeRow(live, now)
+	})
+	if !recharges {
+		return nil
+	}
+	var reuse []wire.Frame
+	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
+		live := state.character.CompanionByGID(key.gid)
+		if live == nil {
+			return false
+		}
+		row, changed := crowRechargeRow(live, now)
+		if !changed {
+			return false
+		}
+		live.Training.Rows[1] = row
+		reuse = rt.petTrainingStateFrames(live, now)
+		return true
+	})
+	return reuse
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -181,6 +340,34 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	state := rt.petSessionFor(key.division, key.name, key.gid)
 	if state == nil {
 		return nil
+	}
+	// The tick judges on door-read facts first (#2030): a tick that
+	// fires no brood event takes no owner copy at all - the recharge
+	// and the stage-2 combat orders run on the facts, in the copy
+	// path's own order. An event or an abstention falls through to
+	// the copy path below, unchanged.
+	if facts, judged := rt.crowBroodJudge(key, state, now); judged {
+		if !facts.crow {
+			return nil
+		}
+		if !facts.events {
+			reuse := rt.crowBroodRecharge(key, state, now)
+			var output []wire.Frame
+			for _, gid := range facts.stage2 {
+				child := rt.petSessionFor(key.division, key.name, gid)
+				if child == nil {
+					continue
+				}
+				childKey := petOwnerKey{division: key.division, name: key.name, gid: gid}
+				if state.combat == nil {
+					rt.cancelPetCombat(childKey, child, now)
+				} else if child.combat == nil || child.combat.target != state.combat.target {
+					rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), gid, state.combat.target, now)
+				}
+			}
+			state.public = append(state.public, output...)
+			return append(simFrames(output), simFrames(reuse)...)
+		}
 	}
 	// Runs for every pet per tick: copy the owner only when the check
 	// below would let this gid through - every other pet (and every
@@ -206,25 +393,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
 	}
 	var output []wire.Frame
-	var reuse []wire.Frame
-	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
-		live := state.character.CompanionByGID(key.gid)
-		if live == nil {
-			return false
-		}
-		row := companion.AdvanceCharges(live.Training.Rows[1], now)
-		for _, def := range companion.SkillsForPet(live) {
-			if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-				row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
-			}
-		}
-		if row == live.Training.Rows[1] {
-			return false
-		}
-		live.Training.Rows[1] = row
-		reuse = rt.petTrainingStateFrames(live, now)
-		return true
-	})
+	reuse := rt.crowBroodRecharge(key, state, now)
 	if snapshot == nil {
 		return simFrames(reuse)
 	}

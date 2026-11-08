@@ -16,6 +16,7 @@ type hubMetrics struct {
 
 	handshakeBusy             atomic.Uint64
 	accountSessionEvictions   atomic.Uint64
+	clientSessionRefusals     atomic.Uint64
 	handshakeHelloTimeout     atomic.Uint64
 	handshakeReadFailed       atomic.Uint64
 	handshakeProtocolRejected atomic.Uint64
@@ -51,6 +52,7 @@ type hubMetrics struct {
 	bytesOut              atomic.Uint64
 	datagramsOut          atomic.Uint64
 	datagramBytesOut      atomic.Uint64
+	datagramsDropped      atomic.Uint64
 	writeErrors           atomic.Uint64
 	enterWorldAuthRefused atomic.Uint64
 	unhandledFrames       atomic.Uint64
@@ -95,6 +97,7 @@ type Metrics struct {
 
 	HandshakeRejectedBusy     uint64  `json:"handshake_rejected_busy"`
 	AccountSessionEvictions   uint64  `json:"account_session_evictions"`
+	ClientSessionRefusals     uint64  `json:"client_session_refusals"`
 	HandshakeHelloTimeout     uint64  `json:"handshake_hello_timeout"`
 	HandshakeReadFailed       uint64  `json:"handshake_read_failed"`
 	HandshakeProtocolRejected uint64  `json:"handshake_protocol_rejected"`
@@ -128,12 +131,20 @@ type Metrics struct {
 
 	// FramesIn counts every inbound frame accepted by a session read loop,
 	// including frames later dropped by rate limiting.
-	FramesIn              uint64 `json:"frames_in"`
-	BytesIn               uint64 `json:"bytes_in"`
-	FramesOut             uint64 `json:"frames_out"`
-	BytesOut              uint64 `json:"bytes_out"`
-	DatagramsOut          uint64 `json:"datagrams_out"`
-	DatagramBytesOut      uint64 `json:"datagram_bytes_out"`
+	FramesIn         uint64 `json:"frames_in"`
+	BytesIn          uint64 `json:"bytes_in"`
+	FramesOut        uint64 `json:"frames_out"`
+	BytesOut         uint64 `json:"bytes_out"`
+	DatagramsOut     uint64 `json:"datagrams_out"`
+	DatagramBytesOut uint64 `json:"datagram_bytes_out"`
+	// DatagramsDropped counts loss-tolerant frames dropped at a full
+	// per-connection datagram queue (#2142); DatagramsOut counts the
+	// frames the datagram lane accepted.
+	DatagramsDropped uint64 `json:"datagrams_dropped"`
+	// DatagramsSendFailed counts, over the live connections, the
+	// datagram sends a peer refused after its frame was accepted
+	// (the drain in conn_wt.go): loss the drop counter cannot see.
+	DatagramsSendFailed   uint64 `json:"datagrams_send_failed"`
 	WriteErrors           uint64 `json:"write_errors"`
 	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
 	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
@@ -197,6 +208,10 @@ type Metrics struct {
 	// StoreLock is the authority store's lock waits, write holds and commit
 	// phases (store/lock_timing.go), when the GameWorld installed them.
 	StoreLock any `json:"store_lock,omitempty"`
+	// TickZones is every tick zone's exact cumulative count and time
+	// since boot, keyed "<kind>:<name>" (simulation/zone_ledger.go,
+	// #2824): two snapshots give each zone's milliseconds per tick.
+	TickZones map[string]TickZone `json:"tick_zones,omitempty"`
 	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
 	// goroutines since start (runtime_stats.go).
 	Runtime RuntimeStats `json:"runtime"`
@@ -224,6 +239,31 @@ the transport never imports the store that counts.
 */
 func (h *Hub) SetEconomyMetrics(read func() map[string]uint64) {
 	h.economyMetrics.Store(&read)
+}
+
+/*
+==================
+TickZone
+
+One tick zone's totals in tick_zones: how many times it ran and its
+summed wall time, both cumulative since boot.
+==================
+*/
+type TickZone struct {
+	Count   uint64  `json:"count"`
+	TotalMs float64 `json:"total_ms"`
+}
+
+/*
+==================
+SetTickZoneMetrics
+
+Installs the provider of the tick_zones block, as SetNavigationMetrics
+does: the transport never imports the simulation that times the zones.
+==================
+*/
+func (h *Hub) SetTickZoneMetrics(read func() map[string]TickZone) {
+	h.tickZoneMetrics.Store(&read)
 }
 
 /*
@@ -276,8 +316,9 @@ func (h *Hub) Metrics() Metrics {
 	detached := 0
 	queueDepth := 0
 	queueBytes := 0
+	datagramSendFailures := uint64(0)
 	for _, session := range sessions {
-		isAttached, depth, bytes := session.metricsSnapshot()
+		isAttached, depth, bytes, failures := session.metricsSnapshot()
 		if isAttached {
 			attached++
 		} else {
@@ -285,6 +326,7 @@ func (h *Hub) Metrics() Metrics {
 		}
 		queueDepth += depth
 		queueBytes += bytes
+		datagramSendFailures += failures
 	}
 	metrics := Metrics{
 		WTOk:                   h.metrics.wtOK.Load(),
@@ -299,6 +341,7 @@ func (h *Hub) Metrics() Metrics {
 
 		HandshakeRejectedBusy:     h.metrics.handshakeBusy.Load(),
 		AccountSessionEvictions:   h.metrics.accountSessionEvictions.Load(),
+		ClientSessionRefusals:     h.metrics.clientSessionRefusals.Load(),
 		HandshakeHelloTimeout:     h.metrics.handshakeHelloTimeout.Load(),
 		HandshakeReadFailed:       h.metrics.handshakeReadFailed.Load(),
 		HandshakeProtocolRejected: h.metrics.handshakeProtocolRejected.Load(),
@@ -329,6 +372,8 @@ func (h *Hub) Metrics() Metrics {
 		BytesOut:                   h.metrics.bytesOut.Load(),
 		DatagramsOut:               h.metrics.datagramsOut.Load(),
 		DatagramBytesOut:           h.metrics.datagramBytesOut.Load(),
+		DatagramsDropped:           h.metrics.datagramsDropped.Load(),
+		DatagramsSendFailed:        datagramSendFailures,
 		WriteErrors:                h.metrics.writeErrors.Load(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),
@@ -360,6 +405,9 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.storeLockMetrics.Load(); read != nil && *read != nil {
 		metrics.StoreLock = (*read)()
+	}
+	if read := h.tickZoneMetrics.Load(); read != nil && *read != nil {
+		metrics.TickZones = (*read)()
 	}
 	if read := h.placementMetrics.Load(); read != nil && *read != nil {
 		if counts := (*read)(); len(counts) > 0 {

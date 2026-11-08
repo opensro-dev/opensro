@@ -26,6 +26,9 @@ type PresenceView interface {
 type Outcome struct {
 	Ack     []byte
 	Refusal string
+	// ExtraAcks are 0xB5B6 bodies register.go sends after Ack, in order
+	// (/FORGE help answers one guide line per key; most commands have none).
+	ExtraAcks [][]byte
 	// PrivilegeDenied marks a command from a character without GMPrivilege:
 	// silent on the wire, but an operator audit event (register.go).
 	PrivilegeDenied bool
@@ -222,6 +225,24 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: []byte{AckResultFail, SubSetSpeed}, Refusal: "set-speed-refused"}
+	case SubForge:
+		// The port's /FORGE (action/forge.go): the owner answers guide
+		// lines - one for a forged item, one per key for /forge help.
+		// The first line rides Ack, the rest ride ExtraAcks in order.
+		if len(status) > 0 && status[0] != nil {
+			if owner, ok := status[0].(interface {
+				ForgeGMItem(string, string, string) ([]string, bool)
+			}); ok {
+				if lines, forged := owner.ForgeGMItem(divisionID, sender.Name, request.Forge); forged && len(lines) > 0 {
+					outcome := Outcome{Ack: EncodeAckGuide(SubForge, lines[0])}
+					for _, line := range lines[1:] {
+						outcome.ExtraAcks = append(outcome.ExtraAcks, EncodeAckGuide(SubForge, line))
+					}
+					return outcome
+				}
+			}
+		}
+		return Outcome{Ack: EncodeAckFail(SubForge), Refusal: "forge-refused"}
 	default:
 		// Every command this server cannot honor: the faithful result-2
 		// refusal, no state touched.

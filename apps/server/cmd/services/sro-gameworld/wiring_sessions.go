@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/community"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
 
@@ -164,6 +165,13 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)
 	if bound {
+		// Port-only (#2675): the session's last time-online credit. The
+		// record's anchor makes this safe against an evicted duplicate
+		// session closing after its replacement: only un-credited time
+		// remains to count.
+		game.deps.MutateCharacter(character, "online-credit", func() {
+			character.CreditOnline(game.items.Now().UnixMilli())
+		})
 		game.items.EndCommerceSession(divisionID, character, session.ID)
 		game.items.AbandonExchange(divisionID, character.Name)
 		game.items.AbandonStall(divisionID, character.Name)
@@ -171,5 +179,35 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 		authorityStore.ReleaseCommittedCopy(divisionID, character.ID)
+	}
+}
+
+/*
+================
+creditOnlineSessions
+
+Port-only (#2675): the periodic time-online credit, one tick pass over
+the entered sessions. Each entered character is credited from its
+record's anchor through the tick's deferred door, so a crash loses at
+most one tick's un-credited span and the batched commit stays the only
+write. Duplicate sessions of one character credit once: the anchor
+moves with the first credit. Sub-second remainders stay in the anchor
+(domain CreditOnline), so no pass needs its own throttle.
+================
+*/
+func (game *gameplayPlane) creditOnlineSessions(views []simulation.SessionView, nowMs int64) {
+	seen := make(map[int64]bool)
+	for _, view := range views {
+		if view.DivisionID != game.divisionID || view.CharacterID == 0 || seen[view.CharacterID] {
+			continue
+		}
+		seen[view.CharacterID] = true
+		character := game.deps.CharacterByID(game.divisionID, view.CharacterID)
+		if character == nil {
+			continue
+		}
+		game.deps.UpdateDeferred(character, "online-credit", func() bool {
+			return character.CreditOnlinePeriodic(nowMs)
+		})
 	}
 }

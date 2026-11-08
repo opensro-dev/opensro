@@ -28,6 +28,8 @@ held it answers, and a rename and a new character publish fresh indexes.
 ================
 */
 func TestCharacterLookupsAnswerInsideADoor(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := &domain.Character{Name: "Seeker"}
 	if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {

@@ -22,6 +22,19 @@ const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 export const MAP_LOCAL_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_character.png";
 const WORLD_TILE_SIZE = 128;
 const WORLD_TILE_REGIONS = 4;
+// 575660 measures map points from this sector, in 192-unit sectors.
+const WORLD_MAP_ORIGIN_SECTOR_X = 0x87;
+const WORLD_MAP_ORIGIN_SECTOR_Z = 0x5c;
+const WORLD_MAP_SECTOR_UNITS = 192;
+const WORLD_MAP_POSE_SCALE = 10;
+const DUNGEON_REGION_MASK = 0x7fff;
+// 5757EB: Donwhang Stone Cave is dungeon 1 (floats at BD929C and BD9298).
+const DONWHANG_CAVE_DUNGEON = 1;
+const DONWHANG_CAVE_MAP_POINT = [ 2465, 2693 ] as const;
+// 575827: every Ch'in Tomb floor, dungeons 2 to 7 (BD9294 and BD9290).
+const TOMB_FIRST_DUNGEON = 2;
+const TOMB_LAST_DUNGEON = 7;
+const TOMB_MAP_POINT = [ 7200, 2102 ] as const;
 
 /*
 ================
@@ -240,6 +253,37 @@ function worldMapTownPages() {
 		}
 	] as const;
 }
+/*
+================
+worldMapDungeonPose
+
+The outdoor pose of a dungeon's place on the world map, or null when the
+client has none. 575660 stores this point at +618C and only 57A570 reads it,
+to centre the view, so it moves the map and never the player's sign.
+================
+*/
+export function worldMapDungeonPose( regionId: number ): Pose | null {
+	if ( featuresAt( regionId ).worldMap ) return null;
+	const dungeon = regionId & DUNGEON_REGION_MASK;
+	const point = dungeon === DONWHANG_CAVE_DUNGEON ?
+		DONWHANG_CAVE_MAP_POINT :
+		dungeon >= TOMB_FIRST_DUNGEON && dungeon <= TOMB_LAST_DUNGEON ?
+		TOMB_MAP_POINT :
+		null;
+	if ( !point ) return null;
+	const x = WORLD_MAP_ORIGIN_SECTOR_X * WORLD_MAP_SECTOR_UNITS + point[0],
+		z = WORLD_MAP_ORIGIN_SECTOR_Z * WORLD_MAP_SECTOR_UNITS + point[1],
+		sectorColumn = Math.floor( x / WORLD_MAP_SECTOR_UNITS ),
+		sectorRow = Math.floor( z / WORLD_MAP_SECTOR_UNITS );
+	return {
+		regionId: (sectorRow << 8) | sectorColumn,
+		x: (x - sectorColumn * WORLD_MAP_SECTOR_UNITS) * WORLD_MAP_POSE_SCALE,
+		y: 0,
+		z: (z - sectorRow * WORLD_MAP_SECTOR_UNITS) * WORLD_MAP_POSE_SCALE,
+		angle: 0
+	};
+}
+
 /*
 ================
 worldMapPageAt

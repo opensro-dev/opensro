@@ -262,10 +262,15 @@ type LockTiming struct {
 	// CheckpointCycles ran, CheckpointBusyCycles ended still busy
 	// behind a reader, and CheckpointBusyStreak is the current run of
 	// those - a growing streak with a growing WALBytes is a starved
-	// checkpoint.
+	// checkpoint. CheckpointResets counts the TRUNCATE resets the lane
+	// took when a drained file stood past its ceiling
+	// (wal_checkpoint.go); CheckpointResetBusy is a reset a reader
+	// refused, retried by a later cycle.
 	CheckpointCycles     int64 `json:"checkpoint_cycles"`
 	CheckpointBusyCycles int64 `json:"checkpoint_busy_cycles"`
 	CheckpointBusyStreak int64 `json:"checkpoint_busy_streak"`
+	CheckpointResets     int64 `json:"checkpoint_resets"`
+	CheckpointResetBusy  int64 `json:"checkpoint_reset_busy"`
 }
 
 /*
@@ -298,6 +303,8 @@ func (s *Store) LockTiming() LockTiming {
 		out.CheckpointCycles = c.cycles.Load()
 		out.CheckpointBusyCycles = c.busyCycles.Load()
 		out.CheckpointBusyStreak = c.busyStreak.Load()
+		out.CheckpointResets = c.resets.Load()
+		out.CheckpointResetBusy = c.resetBusy.Load()
 	}
 	return out
 }

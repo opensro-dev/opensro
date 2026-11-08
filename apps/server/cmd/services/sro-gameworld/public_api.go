@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/transport"
 	"opensro.online/server/internal/transport/worldsession"
@@ -73,7 +74,7 @@ Wires the recorder and starts the listener. A listener that cannot start is
 logged and skipped: the site API never stops the game from booting.
 ================
 */
-func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *store.Store, shard string, sealBoard *sealboard.Service) *publicAPI {
+func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *store.Store, shard string, sealBoard *sealboard.Service, censusService *census.Service) *publicAPI {
 	api := &publicAPI{kills: make(chan domain.UniqueKill, uniqueKillQueue), done: make(chan struct{})}
 	go api.recordKills(authority, shard)
 	gameplay.items.RecordUniqueKill = func(division string, kill domain.UniqueKill) {
@@ -88,7 +89,7 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 		log.Infof("public api: disabled (%s=off)", publicstats.EnvAddr)
 		return api
 	}
-	service := publicstats.New(publicSources(gameplay, hub, authority, shard, sealBoard))
+	service := publicstats.New(publicSources(gameplay, hub, authority, shard, sealBoard, censusService))
 	if err := service.Start(addr); err != nil {
 		log.WithError(err).Warn("public api: listener not started; the community site reads its cache")
 		return api
@@ -342,7 +343,7 @@ A builder of its own so a test can hold each wiring (the unique names
 went unwired once, and every name printed as its codename).
 ================
 */
-func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store.Store, shard string, sealBoard *sealboard.Service) publicstats.Sources {
+func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store.Store, shard string, sealBoard *sealboard.Service, censusService *census.Service) publicstats.Sources {
 	bridge := worldsession.New(hub)
 	monsters := gameplay.deps.MonsterState
 	startedAt := time.Now()
@@ -465,6 +466,19 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 	if sealBoard != nil {
 		sources.SealCounts = sealBoard.Counts
 		sources.SealCountingSince = sealBoard.CountingSince
+	}
+	// The player census's public counts (console#9 part 4,
+	// opensro-web#78): a nil service - the connection journal off -
+	// leaves the status fields omitted, and a failed read counts as
+	// unavailable beside them.
+	if censusService != nil {
+		sources.CensusPeople = func() (int, int, bool) {
+			peopleNow, uniquePeople7d, err := censusService.PublicCounts()
+			if err != nil {
+				return 0, 0, false
+			}
+			return peopleNow, uniquePeople7d, true
+		}
 	}
 	return sources
 }

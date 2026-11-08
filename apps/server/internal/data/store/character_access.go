@@ -46,6 +46,24 @@ func (s *Store) ReadState(fn func()) {
 	fn()
 }
 
+/*
+================
+ReadLock / ReadUnlock
+
+The read door's two halves, for callers that hold the door as a
+guard value (enterworld.Deps.AcquireRead, #2030) instead of handing
+the door a closure. The lock is the same store read lock ReadState
+runs between; ReadUnlock must pair with exactly one ReadLock.
+================
+*/
+func (s *Store) ReadLock() {
+	s.mu.RLock()
+}
+
+func (s *Store) ReadUnlock() {
+	s.mu.RUnlock()
+}
+
 // ReadCharacters is the READ door, symmetric with the commit door: fn
 // runs under the store lock with the division's records, so field reads
 // cannot race a Mutate closure's writes. fn must be short and must not

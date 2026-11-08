@@ -70,12 +70,15 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
 // Port-only: the experimental refracted water stage (device/water-refraction.ts).
 const waterRefraction = runtime + "renderer/device/water-refraction.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/guides/VIEWER.md).
 const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
+// The device's bundle-encoder wrapper: finishes the raw encoder it wraps (#2560).
+const bundleEncoder = runtime + "renderer/device/bundle-encoder.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 // Slabs of geometry's small buffers (uniforms, instances, vertex and index ranges).
@@ -101,6 +104,7 @@ const deviceInternals = [
 	shadows,
 	sunShadow,
 	hdr,
+	ambientOcclusion,
 	waterRefraction
 ];
 export const rules = {
@@ -369,16 +373,19 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( hdr );
+// The experimental occlusion owner (#2094): it totals the frame's
+// stored depth into the half-resolution factor the surfaces sample.
 for (
 	const name of [
 		"createShaderModule",
 		"createRenderPipeline",
-		"createSampler",
 		"createTexture",
 		"createBindGroup",
+		"createBuffer",
+		"writeBuffer",
 		"beginRenderPass"
 	]
-) rules[name].push( waterRefraction );
+) rules[name].push( ambientOcclusion, waterRefraction );
 for (
 	const name of [
 		"createShaderModule",
@@ -415,6 +422,9 @@ for (
 ) rules[name].push( particleQuery );
 for ( const name of [ "createBuffer", "createCommandEncoder", "submit", "finish", "mapAsync", "getMappedRange" ] ) {
 	rules[name].push( portraitReadback );
+}
+for ( const name of [ "finish" ] ) {
+	rules[name].push( bundleEncoder );
 }
 /*
 ================

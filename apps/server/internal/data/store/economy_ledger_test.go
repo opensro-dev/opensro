@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -122,6 +123,8 @@ door that moves no gold writes none.
 ================
 */
 func TestDoorGoldChangesBecomeLedgerRows(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerOne", 1000)
 	setGoldIn(s, c, "shop-transaction", 700)
@@ -165,6 +168,8 @@ A two-character door (an exchange) writes each side's change.
 ================
 */
 func TestTransferWritesBothSides(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	a := newLedgerCharacter(t, s, "LedgerA", 500)
 	b := newLedgerCharacter(t, s, "LedgerB", 100)
@@ -199,6 +204,8 @@ are party shares. A thief's sale at the den is its own reason.
 ================
 */
 func TestTradeSettlementNamesSellerAndShares(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	seller := newLedgerCharacter(t, s, "LedgerSeller", 100)
 	share := newLedgerCharacter(t, s, "LedgerShare", 100)
@@ -235,6 +242,8 @@ names the door that made it, and none is written before the flush.
 ================
 */
 func TestTickBatchKeepsEachDoorsLabel(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerTick", 100)
 	s.BeginTickBatch()
@@ -270,6 +279,8 @@ the next successful commit writes the row once.
 ================
 */
 func TestFailedCommitKeepsTheRowPending(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerFail", 100)
 	s.FailCommits(errors.New("disk failure"))
@@ -302,6 +313,8 @@ transaction, and a later door does not count the change again.
 ================
 */
 func TestOwnTransactionDoorWritesItsRow(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerStore", 500)
 	if _, err := s.TransactStorage(c, func(next *domain.Character, storage *domain.AccountStorage) error {
@@ -331,6 +344,8 @@ empty ledger, its records untouched, and the next door writes rows.
 ================
 */
 func TestLedgerUpgradeAddsTheTable(t *testing.T) {
+	tier.Long(t, "a schema-24 layout-9 authority upgrades to 25/10 with an empty ledger")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerUp", 40)
@@ -376,6 +391,8 @@ transfer on both sides: the ledger mints nothing for it.
 ================
 */
 func TestMostWantedBountyIsATransfer(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	killer := newLedgerCharacter(t, s, "LedgerKiller", 100)
 	victim := newLedgerCharacter(t, s, "LedgerVictim", 500)

@@ -124,6 +124,55 @@ test("camera eligibility follows the BSR per-mesh collision flag without removin
 	assert.equal( cameraCollisionParts( createWorldDecoder().decode( bundle ) ).length, 6 );
 });
 
+test("decode reports monotonic work units so a long city decode can prove it is alive", () => {
+	const mesh = {
+		sourcePath: "part0.bms",
+		headerOffsets: [ 0, 0, 0, 0, 0, 0, 0, 0 ],
+		metadata: { materialName: "shared" },
+		positions: [ -10, -10, 30, 10, -10, 30, 0, 10, 30 ],
+		normals: [ 0, 0, 1, 0, 0, 1, 0, 0, 1 ],
+		uvs: [ 0, 0, 1, 0, 0, 1 ],
+		indices: [ 0, 1, 2 ],
+		bounds: { min: [ -10, -10, 30 ], max: [ 10, 10, 30 ] }
+	};
+	const bundle = {
+		source: { sectorX: 1, sectorY: 1 },
+		terrain: { blocks: [] },
+		terrainTextures: { tileCatalog: { referencedTiles: [] } },
+		objects: {
+			placements: Array.from( { length: 3000 }, ( _, i ) => ({
+				objectId: 1,
+				uid: i,
+				regionId: "257",
+				position: { x: i % 97, y: 0, z: Math.floor( i / 97 ) },
+				yaw: 0
+			}) ),
+			resources: {
+				meshes: [ mesh ],
+				bsr: [ {
+					objectId: 1,
+					sourcePath: "tree.bsr",
+					meshPaths: [ "part0.bms" ],
+					materialPaths: [ "shared.bmt" ]
+				} ],
+				materialSets: [ {
+					sourcePath: "shared.bmt",
+					materials: [ { name: "shared", flags: 0, colors: { diffuse: [ 1, 1, 1, 1 ] } } ]
+				} ]
+			}
+		}
+	};
+	/** @type {number[]} */
+	const notes = [];
+	createWorldDecoder().decode( bundle, false, { onProgress: units => notes.push( units ) } );
+	assert.ok( notes.length >= 2, "a 3000-placement decode must report progress more than once" );
+	assert.ok(
+		notes.every( ( units, i ) => i === 0 || units > notes[i - 1] ),
+		"progress units must increase monotonically"
+	);
+	assert.ok( notes[notes.length - 1] <= 3000, "units must not exceed the placements processed" );
+});
+
 test("a lightmapped mesh carries its lightmap texture and second UV set; a broken UV set drops the mesh", () => {
 	const mesh = ( lightmapUvs ) => ({
 		sourcePath: "room.bms",

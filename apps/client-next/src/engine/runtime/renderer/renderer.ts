@@ -8,6 +8,7 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
 import {
+	browserDisplayClass,
 	experimentalOptions,
 	experimentalVideo,
 	phoneDisplay,
@@ -29,7 +30,7 @@ import { createCharacters } from "./characters/characters";
 import { createWorldRenderer } from "./world/world";
 import { copyGeometry } from "@/engine/foundation/rendering/geometry";
 import type { Geometry } from "@/engine/contracts/geometry";
-import { createDeviceRecovery } from "@/engine/foundation/rendering/device-recovery";
+import { createDeviceRecovery, isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
@@ -62,12 +63,10 @@ export function createRenderer(
 	let video = defaultVideoOptions();
 	// Experimental > Video, all off (native) until the saved preference arrives.
 	let experimental = experimentalVideo( experimentalOptions() );
-	// #1806: a phone gets the Phone resolution cap. Read once: the display
-	// class does not change while the page lives.
-	const phone = phoneDisplay( {
-		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
-		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
-	} );
+	// #1806: a phone gets the Phone resolution cap. Read once, through the
+	// one display-class reader the UI runtime also uses: the display class
+	// does not change while the page lives.
+	const phone = phoneDisplay( browserDisplayClass() );
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(
@@ -137,7 +136,16 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
-	let readbackWait = 0;
+	// A memory refusal the frame met (a readback the GPU could not stage,
+	// a target it could not allocate) is the device's to cure: hand it
+	// down so the paced replacement runs instead of ending here (#2866).
+	const frameFailed = ( error: unknown ) => {
+		if ( isOutOfMemoryRefusal( error ) ) {
+			device.fail( error );
+			return;
+		}
+		failure = String( error );
+	};
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
 	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
@@ -162,17 +170,6 @@ export function createRenderer(
 		setFrameWork( value ) {
 			world.frameWork( value );
 			characters.frameWork( value );
-		},
-		/*
-		================
-		readbackWaitMs
-
-		Only the pending visibility query is wait time. Deferred preparation
-		and the second submission remain CPU work in the runtime's budget.
-		================
-		*/
-		readbackWaitMs() {
-			return readbackWait;
 		},
 		/*
 		================
@@ -591,7 +588,6 @@ export function createRenderer(
 		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
-			readbackWait = 0;
 			probe?.renderBegin();
 			characters.profile( probe );
 			world.profile( probe );
@@ -695,13 +691,7 @@ export function createRenderer(
 					scene.environment.set( viewerLight.direction, ENVIRONMENT_SUN_DIRECTION );
 				}
 				const shadowOn = experimental.sunShadow && !preview;
-				device.worldView(
-					scene.matrix,
-					scene.environment,
-					shadowOn,
-					viewerLight !== null,
-					[ scene.camera.near, scene.camera.far ]
-				);
+				device.worldView( scene.matrix, scene.environment, shadowOn, viewerLight !== null );
 				presentationCamera = {
 					regionId: scene.originRegion,
 					x: scene.camera.eye[0],
@@ -826,6 +816,10 @@ export function createRenderer(
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				const doll2Input = uiProduct?.doll2;
+				// The pet window's doll pauses as the inventory's does: without it,
+				// reopening the window advanced its glows through the whole closed
+				// interval in one frame.
+				if ( !doll2Input ) doll2.pause();
 				if ( doll2Input ) {
 					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
 						w2 = Math.max( 1, Math.ceil( r[2] ) ),
@@ -878,12 +872,15 @@ export function createRenderer(
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
 						viewport,
-						experimental.postProcessing || !!deferredPlan?.query || experimental.waterRefraction,
+						// The refraction stage samples the frame: the canvas
+						// texture cannot be bound, the retained frame can.
+						experimental.postProcessing || !!deferredPlan?.query ||
+							(experimental.waterRefraction && !preview),
 						renderScale
 					);
-				const finishDeferred = ( results?: readonly boolean[] ) => {
+				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred( results );
+					characters.completeDeferred();
 					// The continuation's draws reach the second submit: same rule.
 					return staleDraws.live(
 						"deferred-particles",
@@ -902,52 +899,34 @@ export function createRenderer(
 					{
 						asynchronous: deferredPlan.query,
 						prepare: () => {
-							if ( !deferredPlan.query ) return finishDeferred();
-							const query = device.particleQuery(
-								deferredPlan.points,
-								scene.matrix,
-								color,
-								targetSurface.depth()
-							);
-							const started = performance.now();
-							return query.then( results => {
-								readbackWait += performance.now() - started;
-								return finishDeferred( results );
-							} );
+							if ( deferredPlan.query ) {
+								// The answer lands between frames (deliverDeferred):
+								// the frame never waits for the queue to drain (#2573).
+								device.particleQuery(
+									deferredPlan.points,
+									scene.matrix,
+									color,
+									targetSurface.depth()
+								).then( results => {
+									if ( !disposed ) characters.deliverDeferred( results );
+								} ).catch( error => {
+									if ( !disposed ) frameFailed( error );
+								} );
+							}
+							return finishDeferred();
 						}
 					} :
 					undefined;
 				// Each owner's list is checked under its own name.
 				// Slices keep the scene's terrain/transparent boundaries exact.
-				const waterOn = experimental.waterRefraction,
-					waterDraws: GeometryDraw[] = [];
-				// Port-only water refraction: the blended water surfaces leave
-				// the main pass and the refraction stage redraws them (the
-				// opaque water family - the ice - stays where it is).
-				const withoutWater = ( draws: readonly GeometryDraw[] ) =>
-					waterOn ?
-						draws.filter( draw => {
-							if ( draw.water && draw.blended ) {
-								waterDraws.push( draw );
-								return false;
-							}
-							return true;
-						} ) :
-						draws;
-				const terrainDraws = withoutWater(
-						staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) )
+				const terrainDraws = staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
+					opaqueDraws = staleDraws.live(
+						"world-opaque",
+						scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
 					),
-					opaqueDraws = withoutWater(
-						staleDraws.live(
-							"world-opaque",
-							scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
-						)
-					),
-					transparentDraws = withoutWater(
-						staleDraws.live(
-							"world-transparent",
-							scene.draws.slice( scene.transparentStart )
-						)
+					transparentDraws = staleDraws.live(
+						"world-transparent",
+						scene.draws.slice( scene.transparentStart )
 					),
 					liveCharacters = staleDraws.live( "characters", characterDraws ),
 					liveShadows = staleDraws.live( "character-shadows", shadowDraws );
@@ -962,25 +941,35 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
-				const refraction = device.waterRefraction( sceneWidth, sceneHeight, waterOn );
-				device.geometry()!.refractionViews( refraction?.colourView ?? null, refraction?.depthView ?? null );
-				const pending = frame!.draw(
-					scaled ? targetSurface.frameView() : color,
-					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
-					staleDraws.single( "mesh", meshDraw ?? undefined ),
-					surface.depth(),
-					[
+				const opaqueWorld = [
 						...terrainDraws,
 						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
 						...staleDraws.live( "sun-markers", scene.sunMarkerDraws ?? [] ),
 						...liveShadows,
 						...opaqueDraws,
-						...(preview ? [] : liveCharacters.filter( draw => !draw.blended )),
+						...(preview ? [] : liveCharacters.filter( draw => !draw.blended ))
+					],
+					transparentWorld = [
 						...transparentDraws,
 						...staleDraws.live( "decals", scene.decalDraws ?? [] ),
 						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
 						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
-					],
+					];
+				// Experimental > Effects > Water refraction (port-only, not
+				// native): armed like the occlusion stage, never for preview
+				// frames, and only with a scene depth to copy.
+				const refraction = device.waterRefraction(
+					sceneWidth,
+					sceneHeight,
+					experimental.waterRefraction && !preview && !!surface.depth(),
+					scene.camera
+				);
+				const pending = frame!.draw(
+					scaled ? targetSurface.frameView() : color,
+					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
+					staleDraws.single( "mesh", meshDraw ?? undefined ),
+					surface.depth(),
+					[ ...opaqueWorld, ...transparentWorld ],
 					device.ui( projectedUi, viewport.width ),
 					preview ? device.geometry()!.hdrPreview( liveCharacters ) : [],
 					scene.flares && video.records[video.active][10] === 1 ?
@@ -1009,9 +998,7 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
-						water: refraction && waterDraws.length ?
-							{ draws: waterDraws, stage: refraction } :
-							undefined,
+						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
 						sceneScale: scaled ?
 							{
 								view: color,
@@ -1029,7 +1016,16 @@ export function createRenderer(
 						sunShadow,
 						casters: shadowOn ?
 							[ ...opaqueDraws, ...(preview ? [] : liveCharacters.filter( draw => !draw.blended )) ] :
-							[]
+							[],
+						// Ambient occlusion (experimental, port-only; #2094):
+						// prepared against the scene and camera like the
+						// bloom stage; preview frames never arm it.
+						ao: device.ambientOcclusion(
+							sceneWidth,
+							sceneHeight,
+							!preview && experimental.ambientOcclusion,
+							scene.camera
+						)
 					},
 					targetSurface
 				);
@@ -1040,11 +1036,11 @@ export function createRenderer(
 					const frameDevice = open;
 					open = null;
 					return pending.catch( error => {
-						if ( !disposed ) failure = String( error );
+						if ( !disposed ) frameFailed( error );
 					} ).finally( () => frameDevice.endFrame() );
 				}
 			} catch ( error ) {
-				failure = String( error );
+				frameFailed( error );
 			} finally {
 				open?.endFrame();
 			}

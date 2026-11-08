@@ -26,6 +26,10 @@ const PREVIEW_NEAR = 0.01;
 const PREVIEW_FAR = 500000;
 const DOLL_ASPECT = 176 / 318;
 const EMPTY_DRAWS: readonly GeometryDraw[] = Object.freeze( [] );
+// Worn glows whose start the doll remembers. A glow missing for a frame (the
+// world's particle budget, a program still loading) keeps its start; past this
+// many, the ones not shown this frame are forgotten.
+const MAX_GLOW_BIRTHS = 64;
 // Actor fields the HUD preview replaces; the rest decide what is drawn.
 const OVERRIDDEN_ROOT = new Set( [
 	"animationLod",
@@ -143,6 +147,8 @@ export function createPortrait(
 	// The doll clock: seconds the doll has been drawn since its model or gid last
 	// changed, and the frame time it last advanced to (undefined while at rest).
 	let drawn = 0, drawnAt: number | undefined;
+	// The doll clock at which each worn glow (by gid) first showed, and on which model.
+	const glowBirths = new Map<number, { readonly model: string; readonly birth: number; }>();
 	let borrowed: readonly PortraitPart[] = [];
 	let empty = true;
 	// The retained HUD result: owned copies of every input that decides the
@@ -269,6 +275,7 @@ export function createPortrait(
 			if ( bodyChanged || identity !== value.actor.gid ) {
 				drawn = 0;
 				drawnAt = undefined;
+				glowBirths.clear();
 				identity = value.actor.gid;
 				if ( bodyChanged ) {
 					preview.actors( [] );
@@ -290,6 +297,22 @@ export function createPortrait(
 				if ( drawnAt !== undefined ) drawn += Math.max( 0, seconds - drawnAt );
 				drawnAt = seconds;
 			}
+			// A worn glow is a fresh attachment (ApplyWeaponGlow 8EA960) whose
+			// effect starts at its own zero. Handed the doll's age instead, a glow
+			// equipped late replayed that whole age in one frame. Wearing an item
+			// again gives its glow new gids (model-emission.ts), so a gid that
+			// skipped frames is the same glow and keeps its start.
+			for ( const child of value.children ?? [] ) {
+				if ( !child.effect ) continue;
+				const known = glowBirths.get( child.actor.gid );
+				if ( known?.model !== child.actor.model ) {
+					glowBirths.set( child.actor.gid, { model: child.actor.model, birth: drawn } );
+				}
+			}
+			if ( glowBirths.size > MAX_GLOW_BIRTHS ) {
+				const shown = new Set( (value.children ?? []).map( child => child.actor.gid ) );
+				for ( const gid of glowBirths.keys() ) if ( !shown.has( gid ) ) glowBirths.delete( gid );
+			}
 			const actor: CharacterActor = {
 				...value.actor,
 				animationLod: undefined,
@@ -310,7 +333,7 @@ export function createPortrait(
 				...(value.children ?? []).map( child => ({
 					...child.actor,
 					pose: actor.pose,
-					time: actor.time,
+					time: Math.max( 0, actor.time - (glowBirths.get( child.actor.gid )?.birth ?? 0) ),
 					opacity: 1,
 					layers: undefined,
 					animationLod: undefined,

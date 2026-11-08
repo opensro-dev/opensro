@@ -138,6 +138,46 @@ func TestProvisioningAccountLifecycle(t *testing.T) {
 	}
 }
 
+func TestProvisioningBlockLifecycle(t *testing.T) {
+	api := startAPI(t)
+	if status, _ := call(t, api, testToken, "POST", "/v1/accounts", map[string]string{"id": "hunter", "password": "correct horse"}); status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+	if status, body := call(t, api, "", "PUT", "/v1/accounts/hunter/block", map[string]any{"reason": "chargeback review"}); status != http.StatusUnauthorized || body["code"] != "UNAUTHORIZED" {
+		t.Fatalf("block without token = %d %v", status, body)
+	}
+	if status, _ := call(t, api, testToken, "PUT", "/v1/accounts/hunter/block", map[string]any{"reason": "chargeback review", "untilMs": 1893456000000}); status != http.StatusNoContent {
+		t.Fatalf("block = %d", status)
+	}
+	status, body := call(t, api, testToken, "GET", "/v1/accounts/hunter", nil)
+	if status != http.StatusOK || body["disabled"] != true ||
+		body["blockReason"] != "chargeback review" || body["blockUntilMs"] != float64(1893456000000) {
+		t.Fatalf("lookup = %d %v", status, body)
+	}
+	if _, body := call(t, api, testToken, "POST", "/v1/accounts/hunter/verify", map[string]string{"password": "correct horse"}); body["valid"] != false {
+		t.Fatal("blocked account verified")
+	}
+	if status, body := call(t, api, testToken, "PUT", "/v1/accounts/hunter/block", map[string]any{"reason": "bad # reason"}); status != http.StatusBadRequest || body["code"] != "INVALID_BLOCK" {
+		t.Fatalf("separator reason = %d %v", status, body)
+	}
+	if status, body := call(t, api, testToken, "PUT", "/v1/accounts/ghost/block", map[string]any{"reason": "fair reason"}); status != http.StatusNotFound || body["code"] != "ACCOUNT_NOT_FOUND" {
+		t.Fatalf("block ghost = %d %v", status, body)
+	}
+	if status, _ := call(t, api, testToken, "DELETE", "/v1/accounts/hunter/block", nil); status != http.StatusNoContent {
+		t.Fatalf("clear = %d", status)
+	}
+	status, body = call(t, api, testToken, "GET", "/v1/accounts/hunter", nil)
+	if status != http.StatusOK || body["disabled"] != false || body["blockReason"] != nil {
+		t.Fatalf("lookup after clear = %d %v", status, body)
+	}
+	if _, body := call(t, api, testToken, "POST", "/v1/accounts/hunter/verify", map[string]string{"password": "correct horse"}); body["valid"] != true {
+		t.Fatal("cleared account refused")
+	}
+	if status, body := call(t, api, testToken, "DELETE", "/v1/accounts/ghost/block", nil); status != http.StatusNotFound || body["code"] != "ACCOUNT_NOT_FOUND" {
+		t.Fatalf("clear ghost = %d %v", status, body)
+	}
+}
+
 func TestProvisioningRejectsBadInput(t *testing.T) {
 	api := startAPI(t)
 	cases := []struct {

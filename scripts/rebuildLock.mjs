@@ -61,9 +61,10 @@ const MUTEX_SPIN_MS = 10000;
 const MUTEX_SPIN_SLEEP_MS = 15;
 // A Python contender's open() never grants delete sharing on Windows, so a
 // removal that lands while it reads a record fails with EPERM or EBUSY.
-// The mutex release retries those with a linear backoff (15 ms, 30 ms, ...):
-// 30 tries bound it near 7 s, far past any read.
-const REMOVE_RETRIES = 30;
+// Every removal of shared state retries until REMOVE_RETRY_MS - the budget
+// rebuild_lock.py's remove_state_path gives the same race - and then raises:
+// far past any read, never silent (#2787).
+const REMOVE_RETRY_MS = 10000;
 const persistentLocks = new Map();
 
 export const GENERATED_ASSETS_LOCK_NAME = "generated-assets";
@@ -269,7 +270,7 @@ async function acquireRebuildLock( { name, label, mode, timeoutMs, pollMs, stale
 			if ( blocker ) {
 				return { acquired: false, blocker };
 			}
-			await rm( myWaitingPath, { force: true } );
+			await removeStatePath( myWaitingPath );
 			waitingPublished = false;
 			await writeStateFile( writerPath, { ...record, mode: "write" } );
 			await writeStateFile( ownerPath, { ...record, mode: "write" } );
@@ -340,7 +341,7 @@ async function acquireRebuildLock( { name, label, mode, timeoutMs, pollMs, stale
 
 		if ( now >= deadline ) {
 			if ( waitingPublished ) {
-				await rm( myWaitingPath, { force: true } );
+				await removeStatePath( myWaitingPath );
 			}
 			const blocker = inspection?.blocker;
 			throw new Error(
@@ -377,11 +378,11 @@ async function releaseUnderMutex( lockDir, staleMs, hold ) {
 	}
 	try {
 		if ( hold.mode === "read" ) {
-			await rm( hold.myReaderPath, { force: true } );
+			await removeStatePath( hold.myReaderPath );
 		} else {
 			const writer = await readStateFile( hold.writerPath );
 			if ( writer?.record?.token === hold.token ) {
-				await rm( hold.writerPath, { force: true } );
+				await removeStatePath( hold.writerPath );
 			}
 			// The mirror goes before the inspection below: inspectState
 			// treats a mirror without its claim file as a writer (the
@@ -389,7 +390,7 @@ async function releaseUnderMutex( lockDir, staleMs, hold ) {
 			// live release into a phantom hold.
 			const owner = await readStateFile( hold.ownerPath );
 			if ( owner?.record?.token === hold.token ) {
-				await rm( hold.ownerPath, { force: true } );
+				await removeStatePath( hold.ownerPath );
 			}
 		}
 		const state = await inspectState( lockDir, staleMs );
@@ -397,12 +398,12 @@ async function releaseUnderMutex( lockDir, staleMs, hold ) {
 		if ( !state.writer && firstReader ) {
 			await writeStateFile( hold.ownerPath, { ...firstReader, mode: "read" } );
 		} else if ( !state.writer ) {
-			await rm( hold.ownerPath, { force: true } );
+			await removeStatePath( hold.ownerPath );
 		}
 		if ( !state.writer && state.readers.length === 0 && state.waiting.length === 0 ) {
 			// Still holding the mutex inside the directory being removed;
 			// contenders re-create it on demand (every access ensures it).
-			await rm( lockDir, { recursive: true, force: true } );
+			await removeStatePath( lockDir );
 			return;
 		}
 	} finally {
@@ -455,7 +456,7 @@ export async function inspectState( lockDir, staleMs, { reap = true } = {} ) {
 	const writerFile = await readStateFile( path.join( lockDir, "writer.json" ) );
 	if ( writerFile ) {
 		if ( isStaleRecord( writerFile, staleMs ) ) {
-			if ( reap ) await rm( path.join( lockDir, "writer.json" ), { force: true } );
+			if ( reap ) await removeStatePath( path.join( lockDir, "writer.json" ) );
 		} else {
 			state.writer = writerFile.record;
 		}
@@ -471,7 +472,7 @@ export async function inspectState( lockDir, staleMs, { reap = true } = {} ) {
 			// A legacy holder (no mode), or a writer mirror whose claim file
 			// is gone: either way it excludes everyone while it is live.
 			if ( isStaleRecord( ownerFile, staleMs ) ) {
-				if ( reap ) await rm( path.join( lockDir, "owner.json" ), { force: true } );
+				if ( reap ) await removeStatePath( path.join( lockDir, "owner.json" ) );
 			} else if ( owner ) {
 				state.writer = owner;
 			}
@@ -499,7 +500,7 @@ async function inspectClaimDir( dir, staleMs, reap ) {
 		const file = await readStateFile( path.join( dir, name ) );
 		if ( !file ) continue;
 		if ( isStaleRecord( file, staleMs ) ) {
-			if ( reap ) await rm( path.join( dir, name ), { force: true } );
+			if ( reap ) await removeStatePath( path.join( dir, name ) );
 		} else if ( file.record ) {
 			live.push( file.record );
 		}
@@ -542,6 +543,36 @@ export function isDeletePendingClaimError( error, platform = process.platform ) 
 
 /*
 ================
+removeStatePath
+
+Removes one piece of shared lock state - a record, a claim directory,
+the state directory itself - retrying while another process holds it
+open. Windows refuses to delete a file another process has open, and a
+Python contender's open() never grants delete sharing, so a removal
+that lands while it reads a record fails with EPERM or EBUSY (#2787);
+the read lasts milliseconds, so the removal waits it out and returns
+at once once it lands. After REMOVE_RETRY_MS the last error raises: a
+removal never fails silently. Mirrors remove_state_path in
+rebuild_lock.py, which gives the same race the same budget.
+================
+*/
+async function removeStatePath( target ) {
+	const giveUpAt = Date.now() + REMOVE_RETRY_MS;
+	for ( ;; ) {
+		try {
+			await rm( target, { recursive: true, force: true } );
+			return;
+		} catch ( error ) {
+			if ( Date.now() >= giveUpAt ) {
+				throw error;
+			}
+		}
+		await sleep( MUTEX_SPIN_SLEEP_MS );
+	}
+}
+
+/*
+================
 acquireStateMutex
 
 mkdir is the claim; the owner record only publishes who holds it, for
@@ -556,7 +587,19 @@ async function acquireStateMutex( lockDir, deadline ) {
 	const spinUntil = Math.min( deadline, Date.now() + MUTEX_SPIN_MS );
 
 	for ( ;; ) {
-		await mkdir( lockDir, { recursive: true } );
+		try {
+			await mkdir( lockDir, { recursive: true } );
+		} catch ( error ) {
+			// Windows: an idle release's removal of the state directory
+			// is still pending while a handle is open on it; the name
+			// exists but is not yet a directory again. The next round
+			// finds it gone (the Python claim ensures the same way).
+			if ( (isDeletePendingClaimError( error ) || error?.code === "ENOENT") && Date.now() < spinUntil ) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
+			throw error;
+		}
 		try {
 			await mkdir( mutexDir );
 		} catch ( error ) {
@@ -573,7 +616,7 @@ async function acquireStateMutex( lockDir, deadline ) {
 			}
 			const ownerFile = await readStateFile( mutexOwnerPath );
 			if ( ownerFile && isStaleRecord( ownerFile, MUTEX_STALE_MS ) ) {
-				await rm( mutexDir, { recursive: true, force: true } );
+				await removeStatePath( mutexDir );
 				continue;
 			}
 			// An unpublished mutex claim gets only a brief grace: its owner
@@ -582,7 +625,7 @@ async function acquireStateMutex( lockDir, deadline ) {
 				try {
 					const metadata = await stat( mutexDir );
 					if ( Date.now() - metadata.mtimeMs > 5000 ) {
-						await rm( mutexDir, { recursive: true, force: true } );
+						await removeStatePath( mutexDir );
 						continue;
 					}
 				} catch ( error ) {
@@ -609,12 +652,7 @@ async function acquireStateMutex( lockDir, deadline ) {
 			async release() {
 				const current = await readStateFile( mutexOwnerPath );
 				if ( current?.record?.token === token ) {
-					await rm( mutexDir, {
-						recursive: true,
-						force: true,
-						maxRetries: REMOVE_RETRIES,
-						retryDelay: MUTEX_SPIN_SLEEP_MS
-					} );
+					await removeStatePath( mutexDir );
 				}
 			}
 		};
@@ -665,18 +703,35 @@ async function readStateFile( filePath ) {
 ================
 writeStateFile
 
-Atomic publish (write-temp-then-rename) so contenders never read a partial
-record, exactly as the single-owner protocol published owner.json.
+Atomic publish (write-temp-then-replace) so contenders never read a partial
+record, exactly as the single-owner protocol published owner.json. The
+empty-state releases remove the whole state directory, and a publish
+landing inside that removal re-creates its parent and tries again inside
+the spin budget instead of failing the claim it serves (the Python
+publisher retries the same window).
 ================
 */
 async function writeStateFile( filePath, record ) {
-	await mkdir( path.dirname( filePath ), { recursive: true } );
-	const temporary = `${filePath}.${record.token}.${Date.now()}.tmp`;
-	try {
-		await writeFile( temporary, `${JSON.stringify( record, null, 2 )}\n`, "utf8" );
-		await rename( temporary, filePath );
-	} finally {
-		await rm( temporary, { force: true } );
+	const giveUpAt = Date.now() + MUTEX_SPIN_MS;
+	for ( ;; ) {
+		const temporary = `${filePath}.${record.token}.${Date.now()}.tmp`;
+		try {
+			await mkdir( path.dirname( filePath ), { recursive: true } );
+			await writeFile( temporary, `${JSON.stringify( record, null, 2 )}\n`, "utf8" );
+			await rename( temporary, filePath );
+			return;
+		} catch ( error ) {
+			if (
+				(error?.code === "ENOENT" || isDeletePendingClaimError( error )) &&
+				Date.now() < giveUpAt
+			) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
+			throw error;
+		} finally {
+			await rm( temporary, { force: true } );
+		}
 	}
 }
 

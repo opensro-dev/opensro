@@ -174,7 +174,12 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).
+	// The port-only inventory-pages base rides the same presentation: the
+	// encoded entry shows it, and the live record adopts it on encode.
 	presented := character.PresentInventoryExpansion()
+	if deps.InventoryPages {
+		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
+	}
 	result := buildCharacterProjection(deps, divisionID, character)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
@@ -296,6 +301,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		AvatarMagicOptions:   buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:    siegeFortressRows(deps),
+		SiegeStructUpgrades:  deps.SiegeStructUpgrades,
 		GameWorldData:        DefaultGameWorldDataRows(),
 		AvatarItems:          avatarItems,
 		EquipItems:           equipItems,
@@ -308,6 +314,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		MasteryTotalOverride: deps.MasteryTotalOverride,
 		LevelCap:             deps.LevelCap,
 		StorageAutoStack:     deps.StorageAutoStack,
+		ChatItemLinks:        deps.ChatItemLinks,
 		FastDenReturn:        deps.FastDenReturn,
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
@@ -537,6 +544,11 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	packets = append(packets, countJobPackets(character, deps.clock().UnixMilli())...)
 	if (len(character.PetSkillWindows) > 0 || len(character.ParamJobs) > 0) && deps.TrackTimedWindows != nil {
 		deps.TrackTimedWindows(divisionID, character.Name)
+	}
+	// Port-only (#1849): a streak holder joins the Most Wanted sweep,
+	// which sends its entry state and watches the level's lapse.
+	if character.MostWanted != nil && deps.TrackMostWanted != nil {
+		deps.TrackMostWanted(divisionID, character.Name)
 	}
 	return packets, nil
 }

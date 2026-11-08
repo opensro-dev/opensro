@@ -168,6 +168,20 @@ func (rt *Runtime) HandleItemUse(
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
 
+	// The native use door refuses while the character interacts with a
+	// stall, as its keeper or as a visitor, before the item is read
+	// (ErrCodeCantUseItemWhileInteract). An open exchange is a
+	// different interaction state and keeps its uses.
+	if rt.Stalls.Keeping(divisionID, character.Name) {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+	if _, visiting := rt.Stalls.Visiting(divisionID, character.Name); visiting {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+
+	// Port-only (SRO_CHAT_ITEM_LINKS): a Global Chatting line's warehouse
+	// links are read here, before the door that holds the store's lock.
+	globalChatStorage := rt.globalChatStorageLinks(divisionID, character, request, tail)
 	result := itemUseFailure(wire.ErrCodeInvalidRequest)
 	// A use that revives the player publishes after its commit (revivalFrames
 	// rebinds the resident region, which reads the committed character).
@@ -177,6 +191,9 @@ func (rt *Runtime) HandleItemUse(
 	// this door closes, then the scroll is spent (namechange.go).
 	var queuedName string
 	var queuedNowMs int64
+	// A crest delete the closure admitted: the crest clears after this
+	// door closes, then the item is spent (crestdelete.go).
+	var crestDelete string
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -359,6 +376,13 @@ func (rt *Runtime) HandleItemUse(
 			queuedNowMs = nowMs
 			return false
 		}
+		if family == itemUseCrestDelete {
+			// The guild and union doors take their own locks, so they
+			// cannot run inside this character door: admit here, clear
+			// and spend after the door closes (finishCrestDeleteUse).
+			crestDelete = rt.admitCrestDeleteUse(character, ref, tail, &result)
+			return false
+		}
 		if family == itemUseGenderTool {
 			return rt.useGenderTool(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
@@ -371,7 +395,7 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseGlobalChat {
 			return rt.useGlobalChatting(globalChatUse{division: divisionID, character: character, row: rowIndex,
-				request: request}, tail, &result, &after)
+				request: request, storage: globalChatStorage}, tail, &result, &after)
 		}
 		if family == itemUseWarehouseTicket {
 			if len(tail) != 0 || rt.storageAuthority == nil {
@@ -556,7 +580,7 @@ func (rt *Runtime) HandleItemUse(
 			// (+0x224) for everything but pets, so a transport carries a
 			// cargo bag of its authored size; a riding horse authors none.
 			if cosRef.InventoryCapacity > 0 {
-				pet.Container = &domain.COSContainer{Capacity: cosRef.InventoryCapacity}
+				pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(cosRef.InventoryCapacity)}
 			}
 			// Validate the complete private record before inventory debit. Native
 			// summoning automatically binds both riding and transport vehicles.
@@ -768,6 +792,9 @@ func (rt *Runtime) HandleItemUse(
 	}
 	if queuedName != "" {
 		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
+	}
+	if crestDelete != "" {
+		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
 	}
 	return result
 }

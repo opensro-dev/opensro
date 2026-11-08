@@ -9,6 +9,7 @@
     },
     "scripts": {
         "dev": "pnpm --filter @sro/client-next dev",
+        "local": "node scripts/local/run.mjs",
         "dev:lag": "pnpm --filter @sro/client-next dev:lag",
         "preview": "pnpm --filter @sro/client-next preview",
         "build": "node scripts/task.mjs build",
@@ -30,6 +31,6 @@
         "fast-check": "4.10.2",
         "playwright-core": "^1.63.0",
         "typescript": "catalog:",
-        "vite": "^8.3.1"
+        "vite": "^8.3.3"
     }
 }

@@ -107,6 +107,7 @@ export function createEntities(
 			tidWord: number;
 			name?: string;
 			level?: number;
+			fortressUpgradeRef?: number;
 			maxHp?: number;
 			countryByte9c?: number;
 			sexSelector1ac?: number;
@@ -142,8 +143,9 @@ export function createEntities(
 	let events: WorldEvent[] = [], staged: WorldEvent[] | null = null, remaining = 0, stagedBytes = 0;
 	// Cosmetic steps skipped since the world owner last took them (Degradation).
 	let degradations: Degradation[] = [];
-	// Only locally sampled coordinates are replaceable. Wire state/lifecycle
-	// events remain reliable barriers; never mutate an already offered batch.
+	// The queued state slot of each entity (queueState): a newer row of the
+	// gid replaces it. Lifecycle events and natives are barriers that clear
+	// it; an already offered batch is never mutated.
 	const pendingPoses = new Map<number, { index: number; size: number; }>();
 	// The queued gameplay snapshot a newer one merges into (supersedeGameplay).
 	let pendingGameplay: { index: number; size: number; } | undefined;
@@ -377,28 +379,60 @@ export function createEntities(
 	*/
 	function samplePose( entity: EntityState ) {
 		entity = withBlock( entity );
-		const event: WorldEvent = { kind: "state", entity },
-			pending = pendingPoses.get( entity.gid ),
-			size = cost( event );
-		if ( pending === undefined ) {
-			append( event, size );
-			pendingPoses.set( entity.gid, { index: events.length - 1, size } );
-		} else {
-			const nextBytes = bytes - pending.size + size;
-			if ( nextBytes + stagedBytes > journalByteLimit ) {
-				// The pose replaces a queued one, but the queue behind a
-				// stalled consumer is already past its budget: compact,
-				// then queue this pose on its own.
-				dropQueuedJournal();
-				append( event, size );
-				pendingPoses.set( entity.gid, { index: events.length - 1, size } );
-			} else {
-				events[pending.index] = event;
-				bytes = nextBytes;
-				pending.size = size;
-			}
-		}
+		queueState( { kind: "state", entity } );
 		entities.set( entity.gid, entity );
+	}
+	/*
+	================
+	queueState
+
+	A state event is the entity's whole row, and every consumer keeps only
+	the newest row of a batch: presentation.apply sets the gid's entry,
+	characters.receiveLifecycle and weather want the gid once. So a newer
+	state of an entity replaces its state still queued (unoffered) behind
+	an unacknowledged batch, sampled pose or wire state alike.
+
+	Each state used to queue on its own. A busy town's walking monsters
+	publish about 125 states a second, each with its own fresh path
+	(~30 KB in the budget): a consumer that stopped acknowledging for 4.5 s
+	filled the 32 MiB bound with ~1000 states of a few hundred entities and
+	the journal compacted into a resync (#2868, 12 hits on the live build,
+	"state":1017 of 1105 dropped). Coalesced, the queue holds one row per
+	entity and the bound tracks the world's size, not the stall's length.
+
+	Barriers stay barriers: a spawn, despawn, reset or native clears the
+	gid's (or every) pending slot in append, so a row never moves across a
+	lifecycle edge or an undecoded opcode. One more: a non-title state
+	retires a stall booth (presentation-auxiliary receiveBooths), so a
+	title-mode row never replaces a queued non-title one. A replaced row is
+	costed against its own graph (cost), never the batch's shared set, so
+	replacing one never uncounts a value another event still carries.
+	================
+	*/
+	function queueState( event: Extract<WorldEvent, { kind: "state"; }> ) {
+		const gid = event.entity.gid, pending = pendingPoses.get( gid ), size = cost( event );
+		const queued = pending && events[pending.index];
+		const retiresBooth = ( state: EntityState ) => state.appearanceState?.[6] !== STALL_TITLE_MODE;
+		const replaceable = pending !== undefined && queued?.kind === "state" &&
+			(!retiresBooth( queued.entity ) || retiresBooth( event.entity ));
+		if ( !replaceable ) {
+			append( event, size );
+			pendingPoses.set( gid, { index: events.length - 1, size } );
+			return;
+		}
+		const nextBytes = bytes - pending.size + size;
+		if ( nextBytes + stagedBytes > journalByteLimit ) {
+			// The row replaces a queued one, but the queue behind a stalled
+			// consumer is already past its budget: compact, then queue this
+			// row on its own.
+			dropQueuedJournal();
+			append( event, size );
+			pendingPoses.set( gid, { index: events.length - 1, size } );
+			return;
+		}
+		events[pending.index] = event;
+		bytes = nextBytes;
+		pending.size = size;
 	}
 	/*
 	================
@@ -523,7 +557,8 @@ export function createEntities(
 				}
 			}
 		}
-		append( event );
+		if ( event.kind === "state" ) queueState( event );
+		else append( event );
 		if ( event.kind === "spawn" || event.kind === "despawn" ) lifecycle?.( event );
 	}
 	/*
@@ -662,6 +697,25 @@ export function createEntities(
 		},
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;
+		},
+		/*
+		================
+		structureReference
+
+		Fortress service replies name a zone, not a visible actor. Resolve
+		its structure through the catalog even when it is outside view.
+		================
+		*/
+		structureReference( refObjId: number ) {
+			const reference = refs.get( refObjId );
+			if ( reference?.kind !== "structure" ) return undefined;
+			const upgraded = refs.get( reference.fortressUpgradeRef ?? refObjId );
+			return {
+				name: reference.name,
+				tidWord: reference.tidWord,
+				level: reference.level ?? 0,
+				upgradeName: upgraded?.kind === "structure" ? upgraded.name : undefined
+			};
 		},
 		/*
 		================
@@ -807,10 +861,16 @@ export function createEntities(
 					row.kind === "cos" && (!Number.isInteger( row.tidWord ) || row.tidWord < 0 || row.tidWord > 65535)
 				) throw new Error( "Missing COS type authority" );
 				for (
-					const [field, max] of [ [ "level", 255 ], [ "maxHp", 0xffffffff ], [
-						"countryByte9c",
-						255
-					], [ "sexSelector1ac", 255 ] ] as const
+					const [field, max] of [
+						[ "level", 255 ],
+						[ "maxHp", 0xffffffff ],
+						[
+							"countryByte9c",
+							255
+						],
+						[ "sexSelector1ac", 255 ],
+						[ "fortressUpgradeRef", 0xffffffff ]
+					] as const
 				) {
 					if (
 						row[field] !== undefined &&
@@ -850,6 +910,7 @@ export function createEntities(
 					tidWord: row.tidWord ?? 0,
 					name: row.name,
 					level: row.level,
+					fortressUpgradeRef: row.fortressUpgradeRef,
 					maxHp: row.maxHp,
 					countryByte9c: row.countryByte9c,
 					sexSelector1ac: row.sexSelector1ac,
@@ -1370,7 +1431,16 @@ export function createEntities(
 					removalTail = data.slice( count * 4 );
 					return;
 				}
-				if ( !staged || remaining <= 0 ) {
+				if ( !staged ) {
+					// #2882: a chunk can outlive its bracket (the bracket was
+					// split away by a reset, or this is a replayed tail after
+					// the finalize). Native 0x77BDC0 appends into the
+					// persistent key-0 buffer that the next start (0x77BD30)
+					// rewinds, so stray bytes are never consumed; drop the
+					// chunk instead of killing the session.
+					return;
+				}
+				if ( remaining <= 0 ) {
 					throw new Error( "Unexpected object-list chunk" );
 				}
 				// Reserve raw payload capacity before spawn can copy an unknown family.
@@ -1646,13 +1716,20 @@ export function createEntities(
 					// with terrain before core passes it to the actual mover.
 					// Native 775B50/775CB0 pass wire XYZ to that mover's controller.
 					const localMover = source?.kind === "local-player" || entity.kind === "local-player";
-					if ( localMover && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
+					// A correction naming the mount names the same mover (85E000
+					// resolves the rider's active mover). The mount's row is not
+					// exempt above: its entity-motion arbitration never walked
+					// the rider's surface, so it re-seats the wire height at the
+					// terrain below a deck the rider stands on (#2574).
+					const localMount = frame.opcode === 0xb2f5 && !localMover &&
+						entities.get( ownGid )?.mountedOn === entity.gid;
+					if ( (localMover || localMount) && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
 					apply( {
 						kind: "state",
 						entity: Object.freeze( {
 							...entity,
 							movementRevision: (entity.movementRevision ?? 0) + 1,
-							...(localMover ?
+							...((localMover || localMount) ?
 								{
 									...corrected,
 									...(frame.opcode === 0xb2f5 ? { moving: false, movementPath: undefined } : {})

@@ -13,6 +13,7 @@ on the arms are the handlers the printers follow.
 
 ===========================================================================
 */
+import { MASTER_RELEASE_VOTE } from "./guild-manager";
 import { guildWarProposalReply } from "./guild-war";
 import { withVoteBallot, withVoteCandidates } from "./guild-vote";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
@@ -170,7 +171,21 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 			next = { ...next, notice: resolution.kind === "notice" ? resolution.notice : undefined };
 		}
 	} else if ( op === 0x32c4 ) {
-		next = { ...next, guild: guildBlock( lane ) };
+		const guild = guildBlock( lane );
+		next = { ...next, guild };
+		// 75FDC3 calls 82D030: the master-release vote's ID gates the
+		// Event Guide dialog (75FE5D), not its remaining time.
+		if ( guild.votes?.find( vote => vote.kind === MASTER_RELEASE_VOTE )?.id ) {
+			next = {
+				...next,
+				notice: {
+					key: "",
+					value: 0,
+					bannerOnly: true,
+					dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_MASTERRELEASE_NOTICE" ] }
+				}
+			};
+		}
 	} else if ( op === 0x3a6c ) {
 		// 7603D0: 1 opens a vote, 3 closes it (1 elected, 2 broken), 4 moves
 		// a ballot, 5 restates the time; 2 is an assert in v1.150.
@@ -462,12 +477,14 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 				const members = [ ...guild.members, row ];
 				assertUniqueRosterRows( members, 250 );
 				guild = { ...guild, members };
-				// 5F3340 @5f34ce: a member first seen online prints the join
-				// line (guide 67a600 @5f353a). Native discriminates through
-				// its seen-names set (832330/8323f0) on the repaint path;
-				// the port's append is the same player-visible event
-				// (2281-plan section 4).
-				if ( row.offline === 0 ) {
+				// 5F3340 @5f34ce: the join line prints for the member whose
+				// name the join event just cached (762040 @76239a writes it
+				// via 8323F0 before the insert; the repaint's compare
+				// @5f347e hits and prints @5f353a). The local player's own
+				// row never goes through that event - it arrives with the
+				// cold roster - so a self append stays silent, and a later
+				// online flip prints CONNECT on the type-6 arm instead.
+				if ( row.offline === 0 && row.name !== next.localName ) {
 					next = {
 						...next,
 						notice: {
@@ -691,6 +708,21 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 					error: null,
 					unresolvedNotice: undefined,
 					notice: { key: "UIIT_MSG_MRELEASEERR_NOTVOTETIME", value: 0, nativeType: 0 }
+				};
+			} else if ( op === 0xb140 && code === 0x45 ) {
+				// 760A55: no compensation is owing; the refusal raises the
+				// EVENTGUIDE dialog, as the (16, 0x43) suggestions box does.
+				// Every other carrier dispatches the byte and stays silent.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_GUILDWAR_NOTCOMPENSATION" ] }
+					}
 				};
 			} else {
 				// 75CC50 reads the ballot's and the candidate request's refusals

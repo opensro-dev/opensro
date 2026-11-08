@@ -161,6 +161,12 @@ const (
 // guild onto a guildless character.
 const OpGuildInfo uint16 = 0x32C4
 
+// OpCrestUpdate is the S->C 0x34F3 crest update frame: a type-1 row
+// restates one guild's crest, a type-2 row one union's crest for each
+// named member guild (crestupdate.go). Emitted from real store state
+// on a committed crest change.
+const OpCrestUpdate uint16 = 0x34F3
+
 // S->C opcodes the mutator handlers emit - always from REAL store state,
 // never empty or synthetic, and always presence-targeted (never division
 // broadcast).

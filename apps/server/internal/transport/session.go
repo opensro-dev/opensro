@@ -88,12 +88,6 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
-	// sceneSnapshotBuilt marks the narrow window after the enter lane
-	// has built this scene's snapshot and before its bootstrap (or
-	// refusal) queues. Only in that window do later batches park
-	// behind the bootstrap; an ordinary loading scene whose answers a
-	// client is waiting on is not caught by it (#2294).
-	sceneSnapshotBuilt bool
 	// pendingReceipts are batches parked for this scene while its
 	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
 	// they join the queue behind the bootstrap batch, never ahead of
@@ -154,14 +148,24 @@ type Session struct {
 	// (the legacy HELLO-time verifier) or none is pending.
 	admissionCommit func() error
 	lastRecv        time.Time
-	readCancel      context.CancelFunc
+	// lastSent is when the writer last put a frame on the wire; the
+	// keepalive proves the wire off it when the session goes quiet
+	// outbound (#2148, keepalive.go).
+	lastSent   time.Time
+	readCancel context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
 	// it ("" until an OpTransportReport arrives). History reads both;
 	// they describe how the session got here, never how it behaves.
-	transport   string
-	fallback    string
+	transport string
+	fallback  string
+	// clientAddr and userAgent are the client facts of the latest
+	// attach (clientaddr.go): the real client address and the accept
+	// request's User-Agent. The connection census (#2716) reads them at
+	// world entry; a resume replaces them with its own attachment's.
+	clientAddr  string
+	userAgent   string
 	expireTimer *time.Timer
 	drainTimer  *time.Timer // CloseWhenDrained's cap; stopped once the session closes
 
@@ -228,6 +232,22 @@ func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 	return s
 }
 
+/*
+================
+now
+
+The session's clock: its hub's (the wall clock unless a test drove
+it manual, #2445). A session a test built without a hub reads the
+wall clock, as every stamp did before the hub had one.
+================
+*/
+func (s *Session) now() time.Time {
+	if s.hub == nil || s.hub.now == nil {
+		return time.Now()
+	}
+	return s.hub.now()
+}
+
 // Kind reports the current transport ("webtransport", "websocket") or
 // "detached".
 /*
@@ -280,17 +300,20 @@ func (s *Session) RemoteAddr() string {
 	return s.conn.RemoteAddr()
 }
 
-// metricsSnapshot returns the two session-local gauges used by Hub.Metrics.
+// metricsSnapshot returns the session-local gauges used by Hub.Metrics.
 // It deliberately exposes no mutable queue storage.
 /*
 ================
 metricsSnapshot
 ================
 */
-func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int) {
+func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int, datagramSendFailures uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes
+	if reporter, ok := s.conn.(datagramSendFailureReporter); ok {
+		datagramSendFailures = reporter.DatagramSendFailures()
+	}
+	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes, datagramSendFailures
 }
 
 // Done is closed when the session is torn down for good.
@@ -329,7 +352,7 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
 // callers may reuse their buffer immediately. A native game frame sent
-// while a built scene snapshot awaits its bootstrap parks behind it
+// while its scene's bootstrap has not queued yet parks behind it
 // (#2294); transport-control frames are the machinery's own and stay
 // immediate.
 /*
@@ -415,6 +438,13 @@ func (s *Session) SendUnreliable(opcode uint16, payload []byte) error {
 		if err == nil {
 			s.hub.metrics.datagramsOut.Add(1)
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
+			return nil
+		}
+		if errors.Is(err, errDatagramDropped) {
+			// The peer is not draining its datagram queue. The frame is
+			// loss-tolerant, so it drops here; rerouting it onto the
+			// reliable lane would queue it behind the same stall (#2142).
+			s.hub.metrics.datagramsDropped.Add(1)
 			return nil
 		}
 		// Datagram refused (too big for the path MTU, or transient): the
@@ -522,10 +552,17 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	// previous connection reported says nothing about this one (#1449).
 	s.transport = conn.Kind()
 	s.fallback = ""
-	s.lastRecv = time.Now()
+	// The census facts likewise belong to this attachment (conn already
+	// resolved its real client address at accept, clientaddr.go).
+	s.clientAddr = conn.RemoteAddr()
+	s.userAgent = ""
+	if facter, ok := conn.(clientFacter); ok {
+		s.userAgent = facter.ClientUserAgent()
+	}
+	s.lastRecv = s.now()
 	// The new attachment starts with a clean ack clock: it gets the
 	// full park bound to acknowledge what the ring re-sends.
-	s.lastStreamAck = time.Now()
+	s.lastStreamAck = s.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
 	s.pushFront(Frame{Opcode: OpWelcome, Payload: EncodeWelcome(Welcome{
@@ -542,9 +579,17 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.mu.Unlock()
 
 	go s.readLoop(conn, gen, ctx)
-	log.WithFields(log.Fields{
+	fields := log.Fields{
 		"session": s.ID, "kind": conn.Kind(), "remote": conn.RemoteAddr(), "resumed": resumed,
-	}).Info("transport: session attached")
+	}
+	// The admitted account names the player on the server half of the
+	// incident join (#2558): admission is recorded before attach
+	// (hub.go), and a session attached without one (in-process use)
+	// has no account to name.
+	if account := s.account.Load(); account != nil {
+		fields["account"] = *account
+	}
+	log.WithFields(fields).Info("transport: session attached")
 	return nil
 }
 
@@ -655,7 +700,6 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
-	s.sceneSnapshotBuilt = false
 	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil
@@ -805,6 +849,9 @@ func (s *Session) writeLoop() {
 			s.detachGen(gen, err)
 			continue
 		}
+		s.mu.Lock()
+		s.lastSent = s.now()
+		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
 			s.mu.Lock()
@@ -854,7 +901,7 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 		s.mu.Lock()
 		current := !s.closed && gen == s.gen
 		if current {
-			s.lastRecv = time.Now()
+			s.lastRecv = s.now()
 		}
 		s.mu.Unlock()
 		if !current {

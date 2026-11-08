@@ -8,9 +8,9 @@ receipt matches. A timed-out purchase requires resynchronization, never retry.
 
 ===========================================================================
 */
-import type { MallState } from "@/engine/contracts/item-mall";
+import type { MallSilkHistoryState, MallState } from "@/engine/contracts/item-mall";
 import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
-import { MALL_CATALOG_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MALL_CATALOG_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { mallProjection } from "@/engine/foundation/gameplay/item-mall-catalog";
 import { mallPurchasePayload, type MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 
@@ -40,6 +40,45 @@ function mallBalance( payload: Uint8Array ): { silk: number; giftSilk: number; p
 	return { silk: row.silk as number, giftSilk: row.giftSilk as number, points: row.points as number };
 }
 
+// The Buying list's periods, the native combo's order: 1 day, 7 days,
+// 1 month, 3 months (CIFSilkBuyList OnCreate 0x6CED10). The server maps
+// the index to days; the wire carries the index only.
+const SILK_HISTORY_PERIODS = 4;
+// The server's answer cap (action mallSilkHistoryLimit).
+const SILK_HISTORY_MAX_ROWS = 100;
+
+/*
+================
+decodeSilkHistory
+
+Strictly decode a history answer: exactly version, period, total and rows,
+each row exactly at and charged. The caller drops answers that do not
+match the outstanding inquiry.
+================
+*/
+function decodeSilkHistory( payload: Uint8Array ): MallSilkHistoryState {
+	const decoded: unknown = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( payload ) );
+	if ( !decoded || typeof decoded !== "object" || Array.isArray( decoded ) ) throw Error( "Invalid silk history" );
+	const row = decoded as Record<string, unknown>;
+	const keys = Object.keys( row ).sort().join( "," );
+	const uint = ( value: unknown ) =>
+		typeof value === "number" && Number.isInteger( value ) && value >= 0 && value <= MAX_BALANCE;
+	if (
+		keys !== "period,rows,total,version" || row.version !== 1 || !uint( row.period ) ||
+		(row.period as number) >= SILK_HISTORY_PERIODS || !uint( row.total ) || !Array.isArray( row.rows ) ||
+		row.rows.length > SILK_HISTORY_MAX_ROWS
+	) throw Error( "Invalid silk history" );
+	const rows = row.rows.map( entry => {
+		if ( !entry || typeof entry !== "object" || Array.isArray( entry ) ) throw Error( "Invalid silk history" );
+		const use = entry as Record<string, unknown>;
+		if ( Object.keys( use ).sort().join( "," ) !== "at,charged" || !uint( use.at ) || !uint( use.charged ) ) {
+			throw Error( "Invalid silk history" );
+		}
+		return { at: use.at as number, charged: use.charged as number };
+	} );
+	return { period: row.period as number, total: row.total as number, rows, pending: false };
+}
+
 /*
 ================
 createMall
@@ -57,6 +96,11 @@ export function createMall() {
 	let firstHeldAt: number | undefined;
 	let revision = 0;
 	let expired = false;
+	// The Buying list's last inquiry. Its lane is deliberately outside the
+	// purchase request above: a lost history answer must never expire the
+	// session, so step() only unpends it.
+	let silk: MallSilkHistoryState | undefined;
+	let silkDeadline = 0;
 
 	return {
 		/*
@@ -106,8 +150,26 @@ export function createMall() {
   ================
   */
 		projection( payload: Uint8Array ): unknown {
-			if ( !request || staged || expired ) throw Error( "Unexpected mall projection" );
+			// A projection answers the one outstanding request. One that
+			// arrives when no request is outstanding - a scene reset at
+			// the next bootstrap retired it, or a resume re-delivered an
+			// answer already applied - belongs to a scene the client has
+			// left: set it aside, never end the session over it (#2864).
+			// The same holds behind a staged purchase delivery, whose
+			// receipt is still owed.
+			if ( !request || staged ) return undefined;
+			if ( expired ) throw Error( "Unexpected mall projection" );
 			const decoded = mallProjection( payload );
+			if ( decoded.error !== undefined ) {
+				// The entering refusal retires a catalogue request with
+				// its reason shown. A purchase waits on its own receipt
+				// lane and is never retired by it.
+				if ( request === "catalog" ) {
+					state = { ...decoded.state, error: decoded.error, revision: ++revision };
+					request = null;
+				}
+				return undefined;
+			}
 			if ( request === "catalog" ) {
 				if ( decoded.items !== undefined ) throw Error( "Unsolicited mall delivery" );
 				state = { ...decoded.state, revision: ++revision };
@@ -180,6 +242,49 @@ export function createMall() {
 		},
 		/*
   ================
+  inquireSilkHistory
+
+  Ask for one period's recorded uses. Re-asking supersedes the outstanding
+  inquiry; the answer's period echo is what accepts it. Asking again for
+  the same period keeps its rows on screen while it pends.
+  ================
+  */
+		inquireSilkHistory( period: number, now: number ) {
+			if ( !Number.isInteger( period ) || period < 0 || period >= SILK_HISTORY_PERIODS ) {
+				throw Error( "Invalid silk history period" );
+			}
+			const keep = silk?.period === period ? silk : undefined;
+			silk = { period, total: keep?.total ?? 0, rows: keep?.rows ?? [], pending: true };
+			silkDeadline = now + REQUEST_TIMEOUT_MS;
+			const payload = new TextEncoder().encode( JSON.stringify( { period } ) );
+			return { opcode: MALL_SILK_HISTORY_CONTROL, payload };
+		},
+		/*
+  ================
+  silkHistoryAnswer
+
+  A history answer (MALL_SILK_HISTORY_CONTROL). One arriving with no
+  inquiry outstanding, or echoing a superseded period, is dropped: the
+  newest inquiry owns the window. A malformed answer still throws, as
+  every wire violation in this session does.
+  ================
+  */
+		silkHistoryAnswer( payload: Uint8Array ) {
+			const answer = decodeSilkHistory( payload );
+			if ( !silk?.pending || answer.period !== silk.period ) return;
+			silk = answer;
+			silkDeadline = 0;
+		},
+		/*
+  ================
+  silkHistory
+  ================
+  */
+		silkHistory() {
+			return silk;
+		},
+		/*
+  ================
   holdUntil
   ================
   */
@@ -195,6 +300,10 @@ export function createMall() {
   ================
   */
 		step( now: number ) {
+			if ( silk?.pending && now >= silkDeadline ) {
+				silk = { ...silk, pending: false };
+				silkDeadline = 0;
+			}
 			if ( request && now >= deadline ) expired = true;
 			// The purchase lane's answer is an item result: a lost one resumes the
 			// session as an inventory transaction does (world.ts lostAnswer).
@@ -239,6 +348,8 @@ export function createMall() {
 			deadline = 0;
 			revision = 0;
 			expired = false;
+			silk = undefined;
+			silkDeadline = 0;
 		}
 	};
 }

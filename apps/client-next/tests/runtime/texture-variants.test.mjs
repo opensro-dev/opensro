@@ -27,7 +27,12 @@ load
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
-const { chooseTextureVariant, textureVariantPath } = await load( "src/engine/foundation/assets/texture-variants.ts" );
+const {
+	chooseHdTextureVariant,
+	chooseTextureVariant,
+	hdTextureVariantPath,
+	textureVariantPath
+} = await load( "src/engine/foundation/assets/texture-variants.ts" );
 const {
 	decodeNativeTexture,
 	decodeNativeSurface,
@@ -137,13 +142,18 @@ owner
 An asset owner over a fake worker, with the switch saved as given.
 ================
 */
-function owner( t, compressedTextures ) {
+function owner( t, compressedTextures, hdTextures = false ) {
 	const saved = Object.getOwnPropertyDescriptor( globalThis, "Worker" ),
 		storage = Object.getOwnPropertyDescriptor( globalThis, "localStorage" );
 	const messages = [];
+	let worker = null;
 	Object.defineProperty( globalThis, "Worker", {
 		configurable: true,
 		value: class {
+			constructor() {
+				worker = this;
+			}
+			onmessage = null;
 			postMessage( message ) {
 				messages.push( message );
 			}
@@ -153,7 +163,8 @@ function owner( t, compressedTextures ) {
 	Object.defineProperty( globalThis, "localStorage", {
 		configurable: true,
 		value: {
-			getItem: key => key === EXPERIMENTAL_STORAGE_KEY ? JSON.stringify( { compressedTextures } ) : null
+			getItem: key =>
+				key === EXPERIMENTAL_STORAGE_KEY ? JSON.stringify( { compressedTextures, hdTextures } ) : null
 		}
 	} );
 	t.after( () => {
@@ -166,7 +177,13 @@ function owner( t, compressedTextures ) {
 	} );
 	const assets = createAssets();
 	t.after( () => assets.dispose() );
-	return { assets, variants: () => messages.filter( message => message.kind === "texture-variant" ) };
+	return {
+		assets,
+		variants: () => messages.filter( message => message.kind === "texture-variant" ),
+		hd: () => messages.filter( message => message.kind === "hd-textures" ),
+		// The worker's word on the published build (#2800), as it arrives.
+		tellAvailable: available => worker.onmessage( { data: { kind: "hd-availability", available } } )
+	};
 }
 
 test("with the switch off the worker is told at once; with it on, when the device's features arrive", t => {
@@ -185,4 +202,88 @@ test("a device that samples BC is never served a variant, even with the switch o
 	const pc = owner( t, true );
 	pc.assets.textureFeatures( [ BC, ETC2, ASTC ] );
 	assert.deepEqual( pc.variants(), [ { kind: "texture-variant", variant: null } ] );
+});
+
+test("the HD choice serves BC7 to a BC device, ASTC to an ASTC one, and nothing while off", () => {
+	assert.equal( chooseHdTextureVariant( new Set( [ BC, ASTC ] ), false ), null, "the row off is native" );
+	assert.equal( chooseHdTextureVariant( new Set( [ BC, ASTC ] ), true ), "bc7", "BC wins where it is sampled" );
+	assert.equal( chooseHdTextureVariant( new Set( [ ASTC ] ), true ), "astc" );
+	assert.equal( chooseHdTextureVariant( new Set( [ ETC2 ] ), true ), null, "no set is published for it" );
+	assert.equal( chooseHdTextureVariant( new Set(), true ), null, "the retail textures stay the fallback" );
+});
+
+test("HD variants mirror native texture paths under the /hd root, and nothing else has one", () => {
+	assert.equal(
+		hdTextureVariantPath( "/assets/world/stone.texture", "bc7" ),
+		"/hd/texture-variants/bc7/world/stone.texture"
+	);
+	assert.equal(
+		hdTextureVariantPath( "/assets/world/stone.texture", "astc" ),
+		"/hd/texture-variants/astc/world/stone.texture"
+	);
+	assert.equal( hdTextureVariantPath( "/assets/world/stone.png", "bc7" ), null );
+	assert.equal( hdTextureVariantPath( "/assets/texture-variants/astc/world/stone.texture", "astc" ), null );
+	assert.equal( hdTextureVariantPath( "/hd/texture-variants/bc7/world/stone.texture", "bc7" ), null );
+	assert.equal( hdTextureVariantPath( "/other/stone.texture", "bc7" ), null );
+});
+
+test("with the HD row on the worker is told the format once the set is known published, and a live toggle re-tells it", t => {
+	const pc = owner( t, true, true );
+	assert.deepEqual( pc.hd(), [], "nothing is sent before the device is known" );
+	pc.assets.textureFeatures( [ BC, ASTC ] );
+	assert.deepEqual(
+		pc.hd(),
+		[ { kind: "hd-textures", format: null } ],
+		"the device is known but the build has not certified a set"
+	);
+	pc.tellAvailable( true );
+	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" }
+	] );
+	pc.assets.hdTextures( false );
+	pc.assets.hdTextures( true );
+	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" },
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" }
+	] );
+	const phone = owner( t, true, true );
+	phone.assets.textureFeatures( [ ASTC ] );
+	phone.tellAvailable( true );
+	assert.deepEqual( phone.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "astc" }
+	] );
+});
+
+test("a saved HD row does nothing while the published build carries no set (#2800)", t => {
+	const pc = owner( t, true, true );
+	assert.equal( pc.assets.hdAvailable(), false, "no word from the build yet" );
+	pc.assets.textureFeatures( [ BC, ASTC ] );
+	pc.tellAvailable( false );
+	assert.deepEqual(
+		pc.hd(),
+		[ { kind: "hd-textures", format: null } ],
+		"the worker is never told a format, so it fetches nothing of the set"
+	);
+	assert.equal( pc.assets.hdAvailable(), false );
+	pc.tellAvailable( true );
+	assert.equal( pc.assets.hdAvailable(), true, "the row appears the day a set is published" );
+	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" }
+	] );
+});
+
+test("with the HD row off the worker hears null once the features arrive, and never a format", t => {
+	const off = owner( t, true, false );
+	off.assets.textureFeatures( [ BC, ASTC ] );
+	assert.deepEqual( off.hd(), [ { kind: "hd-textures", format: null } ] );
+	off.assets.hdTextures( false );
+	assert.deepEqual( off.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: null }
+	] );
 });

@@ -83,6 +83,20 @@ type InviteRuntime struct {
 	mu              sync.Mutex
 	pendingByTarget map[string]PendingInvite
 
+	// buffMu guards the cumulated-buff ledger (buff.go): the live
+	// per-member buff state the kill path mutates inside the fatal-hit
+	// door, where the authority door cannot be taken. The camp door
+	// stays the durable owner; the ledger is its hot copy, flushed
+	// through WriteMemberBuffs at every lifecycle point and minute.
+	buffMu sync.Mutex
+	// buffFlushMu serialises flushBuffCamp's door writes so two flushes
+	// never land an older snapshot after a newer one. It is taken before
+	// buffMu and is never held by the kill path (see flushBuffCamp).
+	buffFlushMu     sync.Mutex
+	buffLedger      map[buffLedgerKey]*buffLedgerEntry
+	buffCampOf      map[buffCharKey]int64
+	buffPulseMinute int64
+
 	// PeerPending reports another lane's unanswered proposal for a
 	// player. A player holds one at a time (the native transaction
 	// manager), so this lane then refuses. The type-9 prompt is a plain
@@ -172,6 +186,7 @@ func (r *InviteRuntime) Register(hub *transport.Hub) {
 	hub.Handle(OpTCGraduateRequest, r.handleGraduate)
 	hub.Handle(OpTCCompulsoryGraduateRequest, r.handleCompulsoryGraduate)
 	hub.Handle(OpTCHonorRankRequest, r.handleHonorRank)
+	hub.Handle(OpTCPassBuffRequest, r.handlePassBuff)
 }
 
 /*
@@ -608,6 +623,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 	}
 	campID := admission.Camp.ID
 	joined := admission.Members
+	r.hydrateBuffCamp(divisionID, campID, joined)
 	rows := r.campWireRows(divisionID, joined)
 	joinerWireRow := r.memberWireRow(divisionID, joinerRow)
 	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(joinerWireRow.MemberID, admission.Camp.EvaluationRank, admission.Camp.Subject, admission.Camp.Contents, rows))
@@ -688,6 +704,7 @@ func (r *InviteRuntime) WorldBound(s *transport.Session, divisionID string, char
 	rows := r.campWireRows(divisionID, members)
 	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(enterworld.ObjectIDForCharacter(character), camp.EvaluationRank, camp.Subject, camp.Contents, rows))
 	r.broadcastCampStatus(divisionID, otherCampMembers(members, character.ID), EncodeCampMemberOnlineUpdate3AC5(enterworld.ObjectIDForCharacter(character), false))
+	r.buffEntrySends(s, divisionID, character, campID, members)
 	if r.SyncMasterHonorBuffs != nil {
 		evalRank := uint8(0)
 		if camp.MasterCharID == character.ID {
@@ -730,6 +747,7 @@ func (r *InviteRuntime) SessionClosed(s *transport.Session) {
 			}
 		}
 	}
+	r.buffExitFlush(divisionID, character)
 	if r.DropPendingInvite(divisionID, character.Name) {
 		log.Debugf("mentor: %s disconnected; pending TC invitation dropped", character.Name)
 	}

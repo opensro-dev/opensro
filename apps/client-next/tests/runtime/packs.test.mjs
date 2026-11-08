@@ -7,8 +7,9 @@ Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
 modules the client ships, not a per-test bundle.
 
-The transient-failure class (#2337) is pinned in packs-recovery.test.mjs;
-both suites share tests/helpers/packs-fixture.mjs.
+The transient-failure class (#2337) is pinned in packs-recovery.test.mjs
+and the HD set (#2061) in packs-hd.test.mjs; the suites share
+tests/helpers/packs-fixture.mjs.
 
 ===========================================================================
 */

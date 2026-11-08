@@ -92,6 +92,11 @@ type Item struct {
 	// supplied by an owner. Its DB allocation/load lifecycle is not implemented
 	// by this field. A newly split row starts at zero; RefObjID is not a substitute.
 	RecordID uint64
+	// ForgeBound marks a GM-forged item (port only, issue #1980): it
+	// refuses trade, NPC sale, stall offer and player drop, and it is
+	// part of stack identity (tradegoods.go) so a merge can never pour
+	// bound quantity into an unbound row.
+	ForgeBound bool
 }
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06

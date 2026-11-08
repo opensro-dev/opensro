@@ -67,6 +67,8 @@ Kept on the tick clock for this tick's TickTiming.
 */
 func (t *Ticker) flushCommit() {
 	if t.Commit.Flush != nil {
+		span := t.zone(ZoneKindPhase, "commit")
 		t.clock.commit = t.Commit.Flush()
+		span.End()
 	}
 }

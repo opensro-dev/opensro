@@ -648,6 +648,13 @@ func (deployment *deployment) agentVariables() map[string]any {
 		),
 		"bug_report_directory": deployment.BugReports.Directory,
 		"maintenance_message":  deployment.PortOnly.maintenanceMessage(),
+		// deploy.py MAINTENANCE_GATE, the same file the GameWorld jobs
+		// carry: the Agent names a not-operating refusal MAINTENANCE
+		// only while this gate file exists (#2861).
+		"maintenance_gate_path": slashPath(filepath.Join(
+			deployment.StateDir,
+			"maintenance-gate.json",
+		)),
 	})
 }
 

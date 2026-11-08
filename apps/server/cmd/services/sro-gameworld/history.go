@@ -57,3 +57,28 @@ func silkGrantEvent(grant action.SilkGrant) history.Event {
 		Fields: map[string]string{"grantor": grant.Grantor, "amount": strconv.FormatUint(uint64(grant.Amount), 10),
 			"balance": strconv.FormatUint(uint64(grant.Balance), 10)}}
 }
+
+/*
+================
+crestChangeEvent
+
+One committed crest change as an audit event (#2282, owner
+contract): the character, the guild, and the old and new payload
+hashes - an upload by the crest's master, or a staff removal
+(Code "operator").
+================
+*/
+func crestChangeEvent(change action.CrestChange) history.Event {
+	message := change.Character + " registered the " + change.Kind + " crest at revision " +
+		strconv.FormatUint(uint64(change.NewRevision), 10)
+	if change.Source == "operator" {
+		message = change.Operator + " removed the " + change.Kind + " crest"
+	}
+	return history.Event{Kind: "crest_change", Category: "operator", Code: change.Source, Shard: change.Division,
+		Character: change.Character, Message: message,
+		Fields: map[string]string{"guild": strconv.FormatInt(change.GuildID, 10),
+			"alliance": strconv.FormatInt(change.AllianceID, 10),
+			"oldHash":  change.OldHash, "newHash": change.NewHash,
+			"oldRevision": strconv.FormatUint(uint64(change.OldRevision), 10),
+			"newRevision": strconv.FormatUint(uint64(change.NewRevision), 10)}}
+}

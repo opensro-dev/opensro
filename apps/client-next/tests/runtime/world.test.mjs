@@ -38,6 +38,7 @@ const { createEntities } = await load( "src/engine/runtime/simulation/worker/ses
 const { createWorldSession } = await load( "src/engine/runtime/simulation/worker/session/world/world.ts" );
 const { outOfMemoryFailure } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
 const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/session/http/http.ts" );
+const { equipmentBand } = await load( "src/engine/foundation/gameplay/peer-appearance.ts" );
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
 
@@ -172,16 +173,48 @@ test("stalled presentation retains one sampled pose per mover without dropping l
 	owner.step( 9616 );
 	owner.ack( inflight.sequence );
 	const next = owner.take();
-	assert.equal( next.events.length, 141, "84,000 sampled poses collapse to 140 plus reliable death" );
+	assert.equal( next.events.length, 140, "84,000 sampled poses and the death collapse to one row per mover" );
 	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === 1 );
-	assert.equal( states.length, 2 );
-	assert.notEqual( states[0].entity.appearanceState?.[0], 2 );
-	assert.equal( states[1].entity.appearanceState[0], 2 );
+	// The death is the mover's newest row (#2868): it replaces the queued
+	// pose and is never lost behind it.
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[0], 2 );
 	assert.equal( next.events.find( e => e.entity?.gid === 2 ).entity.x, owner.read( 2 ).x );
 	owner.ack( next.sequence );
 	owner.step( 9632 );
 	const after = flush( owner );
 	assert.equal( after.events.length, 139 );
+	owner.dispose();
+});
+
+test("a stalled consumer coalesces one entity's states into one row and never compacts (#2868)", () => {
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	for ( const row of rows ) owner.receive( row );
+	const spawn = flush( owner ).events.find( e => e.kind === "spawn" ).entity;
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( spawn.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	// The live failure: about 1000 states queued behind a batch the main
+	// thread did not acknowledge for 4.5 s filled the 32 MiB bound and
+	// compacted ("state":1017 of 1105 dropped). Before the fix every
+	// state queued on its own and this flood compacted.
+	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
+	const inflight = owner.take();
+	for ( let i = 0; i < 200000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	owner.receive( packet( 4 ) );
+	assert.equal( owner.resyncs(), 0, "no compaction: the queue holds one row per entity" );
+	assert.deepEqual( owner.takeDegradations().filter( d => d.code === "world-journal-resync" ), [] );
+	owner.ack( inflight.sequence );
+	const next = owner.take();
+	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === spawn.gid );
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[2], 4, "the newest row wins" );
 	owner.dispose();
 });
 
@@ -197,8 +230,9 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 	assert.equal( owner.synchronized(), true );
 	assert.ok( p.read( spawn.gid ) );
 	// The consumer stalls: one batch is taken and not acknowledged while
-	// the wire keeps producing state behind it - a hidden or frozen tab,
-	// the 2026-10-24 backlog deaths. The queue used to throw at 32 MiB.
+	// the wire keeps producing lifecycle changes behind it - a hidden or
+	// frozen tab, the 2026-10-24 backlog deaths. The queue used to throw
+	// at 32 MiB.
 	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
 	const inflight = owner.take();
 	const packet = value => {
@@ -208,15 +242,23 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// On its return the consumer applies the stalled batch as offered,
 	// acks it, and the next take is the rebuilt world on a new epoch.
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized" ]
 	);
 	assert.equal( resync.events[2].entity.gid, spawn.gid );
@@ -250,7 +292,7 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 	const notice = marker => ({ kind: "native", opcode: 0x300c, payload: Uint8Array.of( marker ) });
 	// The consumer stalls on an unacknowledged batch (which carries one
 	// native of its own) while two more one-shots queue behind it; a
-	// state flood then compacts the queue (#1482). The rebuilt snapshot
+	// lifecycle flood then compacts the queue (#1482). The rebuilt snapshot
 	// supersedes the flood, never the one-shots.
 	owner.publish( notice( 0 ) );
 	const inflight = owner.take();
@@ -263,15 +305,23 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// A native queued behind the drop is newer than the kept ones.
 	owner.publish( notice( 3 ) );
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized", "native", "native", "native" ]
 	);
 	assert.equal( p.apply( resync ), true );
@@ -379,6 +429,39 @@ test("grouped removal count, incomplete data and operation bounds remain enforce
 	owner.receive( { opcode: 0x30cb, payload: Uint8Array.of( 2, 0, 0 ) } );
 	owner.receive( { opcode: 0x3417, payload: new Uint8Array() } );
 	owner.receive( { opcode: 0x330a, payload: new Uint8Array() } );
+	owner.dispose();
+});
+test("object-list chunks without an open bracket are dropped instead of killing the session", () => {
+	// #2882: this exact 27-byte chunk arrived with no bracket open (the
+	// bracket was split away before it, or it is a replayed tail after the
+	// finalize) and "Unexpected object-list chunk" killed the session.
+	// Native 0x77BDC0 appends into the persistent key-0 buffer that the
+	// next start (0x77BD30) rewinds, so stray bytes are never consumed.
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	const stray = Uint8Array.from(
+		Buffer.from( "b8050000008e6905006f5d05c08a439e3374454d6833448a590000", "hex" )
+	);
+	assert.doesNotThrow( () => owner.receive( { opcode: 0x3417, payload: stray } ) );
+	assert.equal( owner.count(), 0 );
+	assert.equal( owner.take(), null );
+	for ( const row of rows ) owner.receive( row );
+	flush( owner );
+	assert.equal( owner.count(), 1, "the next well-formed bracket still commits" );
+	assert.doesNotThrow(
+		() => owner.receive( rows[1] ),
+		"a replayed copy of the committed chunk after finalize is dropped too"
+	);
+	assert.equal( owner.count(), 1 );
+	assert.equal( owner.take(), null );
+	owner.receive( { opcode: 0x30cb, payload: Uint8Array.of( 1, 1, 0 ) } );
+	owner.receive( rows[1] );
+	assert.throws(
+		() => owner.receive( rows[1] ),
+		/Unexpected object-list chunk/,
+		"a chunk past the declared count of an open bracket still throws"
+	);
 	owner.dispose();
 });
 test("server-pinned monster rows commit atomically and synchronize only after acknowledgement", () => {
@@ -1087,28 +1170,84 @@ test("a fresh entry retries a stalled admission and enters", async t => {
 	await settle();
 	world.step( 3 );
 	assert.deepEqual( mints, [ "transport", "enterworld" ] );
-	// The EnterWorld answer never comes: a full admission window of
+	// The EnterWorld answer never comes: a full answer window of
 	// silence fails the attempt, but the entry itself retries instead
 	// of rejecting back to character select (#1416).
-	world.step( 10004 );
+	world.step( 60004 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( world.status().error, "World connection timed out" );
-	world.step( 10254 );
+	world.step( 60254 );
 	await settle();
-	world.step( 10255 );
+	world.step( 60255 );
 	assert.equal( sockets.length, 2 );
 	const second = sockets[1];
 	second.onopen();
 	second.receive( 2, welcome() );
-	world.step( 10256 );
+	world.step( 60256 );
 	await settle();
-	world.step( 10257 );
+	world.step( 60257 );
 	second.receive( 7, entered() );
 	for ( const row of rows ) second.receive( row.opcode, row.payload );
-	world.step( 10258 );
+	world.step( 60258 );
 	flush( world );
-	world.step( 10259 );
+	world.step( 60259 );
 	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+});
+
+/*
+================
+a slow EnterWorld answer outlives the old admission window (#2867)
+
+The EnterWorld answer is one multi-megabyte record. On the
+WebTransport path its chunks prove the link as they land, but on the
+socket a WebSocket message is atomic: no byte of the answer is
+visible until the whole record lands, and the server's loading pings
+queue behind it on the same ordered stream. A slow socket therefore
+showed total silence well past the ten-second admission window, the
+entry tore down a healthy answer mid-flight, retried into the same
+download and gave up to character select with "World connection
+timed out" - the world_entry_rejected reports of #2867, whose server
+log shows each socket closing exactly one admission window after
+the entry was presented. The answer wait now runs to the transport's
+own idle bound, so an answer still streaming at half a minute lands.
+================
+*/
+test("a slow EnterWorld answer outlives the old admission window", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	// Thirty seconds without one visible byte: the old admission
+	// window failed this attempt at ten. The entry is still waiting.
+	world.step( 30003 );
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().error, undefined );
+	// The answer lands whole, as a socket message does, and the entry
+	// binds on the same attempt: no retry, no rejection.
+	socket.receive( 7, entered() );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	world.step( 30004 );
+	flush( world );
+	world.step( 30005 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().error, undefined );
 });
@@ -1424,6 +1563,162 @@ for ( const row of peerFixture.scenarios ) {
 		assert.equal( owner.count(), 0 );
 	});
 }
+test("player churn keeps the world registries flat (#2299)", () => {
+	const row = peerFixture.scenarios[0];
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: row.modelRefObjId, kind: "player" } ],
+		refItemSnapshot: row.equipment ?? []
+	} );
+	flush( owner );
+	const POPULATION = 60, CYCLES = 20000;
+	/*
+	================
+	playerSpawnFrame
+
+	A peer spawn (0x30D7) encoded field for field the way
+	decodePeerAppearance reads it, wearing the fixture's first items so
+	every arrival carries real equipment state.
+	================
+	*/
+	function playerSpawnFrame( gid ) {
+		const bytes = [];
+		const u8 = ( n ) => bytes.push( n & 255 );
+		const u16 = ( n ) => {
+			const b = Buffer.alloc( 2 );
+			b.writeUInt16LE( n );
+			bytes.push( ...b );
+		};
+		const u32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeUInt32LE( n >>> 0 );
+			bytes.push( ...b );
+		};
+		const f32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeFloatLE( n );
+			bytes.push( ...b );
+		};
+		const str = ( s ) => {
+			u16( s.length );
+			for ( const c of s ) bytes.push( c.charCodeAt( 0 ) );
+		};
+		u32( row.modelRefObjId );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		const worn = (row.equipment ?? []).slice( 0, 3 );
+		u8( worn.length );
+		for ( const item of worn ) {
+			u32( item.refObjId );
+			if ( equipmentBand( item.typeFlags ) ) u8( 1 );
+		}
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u32( gid );
+		u16( 25256 );
+		f32( 10 );
+		f32( 20 );
+		f32( 1 );
+		u16( 0 );
+		u8( 0 );
+		u8( 1 );
+		u8( 0 );
+		u16( 0 );
+		u8( 1 );
+		u8( 0 );
+		u8( 0 );
+		f32( 5 );
+		f32( 16 );
+		f32( 1 );
+		u8( 0 );
+		str( "P" + gid );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		str( "" );
+		u32( 0 );
+		str( "" );
+		u32( 0 );
+		u32( 0 );
+		u32( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		return { opcode: 0x30d7, payload: Uint8Array.from( bytes ) };
+	}
+	/*
+	================
+	gidFrame
+
+	A one-gid frame: a despawn (0x36AB) or a speed update (0x376F), the
+	two packets a busy area applies to other players all session long.
+	================
+	*/
+	function gidFrame( opcode, gid ) {
+		const payload = new Uint8Array( opcode === 0x376f ? 12 : 4 ),
+			v = new DataView( payload.buffer );
+		v.setUint32( 0, gid, true );
+		if ( opcode === 0x376f ) {
+			v.setFloat32( 4, 6.5, true );
+			v.setFloat32( 8, 17.5, true );
+		}
+		return { opcode, payload };
+	}
+	let nextGid = 1000, firstRetired = 0;
+	const alive = [];
+	/*
+	================
+	spawnOne / retireOne
+
+	One arrival and one departure, so the visible population holds at
+	POPULATION while identities churn under it.
+	================
+	*/
+	function spawnOne() {
+		const gid = nextGid++;
+		owner.receive( playerSpawnFrame( gid ) );
+		alive.push( gid );
+	}
+	function retireOne() {
+		const gid = alive.shift();
+		if ( !firstRetired ) firstRetired = gid;
+		owner.receive( gidFrame( 0x36ab, gid ) );
+	}
+	for ( let i = 0; i < POPULATION; i++ ) spawnOne();
+	flush( owner );
+	assert.equal( owner.count(), POPULATION );
+	// Retention is judged on the registries themselves: every structure
+	// that can hold a player past its despawn roots in the entity table
+	// or the journal, and both are observable here. (A heap reading
+	// cannot separate retention from uncollected churn garbage in this
+	// harness; the GC-forced probe behind this test read a flat
+	// 17.6 MB across 40,000 of these cycles.)
+	for ( let cycle = 0; cycle < CYCLES; cycle++ ) {
+		retireOne();
+		spawnOne();
+		owner.receive( gidFrame( 0x376f, alive[cycle % POPULATION] ) );
+		if ( cycle % 50 === 49 ) flush( owner );
+		if ( cycle % 5000 === 4999 ) assert.equal( owner.count(), POPULATION );
+	}
+	flush( owner );
+	assert.equal( owner.count(), POPULATION, "population holds while identities churn" );
+	assert.equal( owner.read( firstRetired ), undefined, "a retired player leaves no entity behind" );
+	while ( alive.length ) retireOne();
+	flush( owner );
+	assert.equal( owner.count(), 0, "every registry entry leaves with its player" );
+	assert.equal( owner.take(), null, "the journal holds nothing back after the last departure" );
+	owner.dispose();
+});
+
 test("retail ordered equipment replacement and clear-by-slot accept zero and absent references", () => {
 	const row = peerFixture.scenarios[1], owner = createEntities();
 	owner.bootstrap( {
@@ -2304,6 +2599,57 @@ test("production core LIFE stops a nonlocal monster and rejects late advisory tr
 	core.dispose();
 });
 
+test("a fatal deferred tick labels the mover, and the LIFE frame behind it kills and stops it in the same commit", async () => {
+	const { createWorldCore } = await load( "src/engine/runtime/simulation/worker/session/world/core.ts" );
+	const core = createWorldCore( () => {} );
+	core.bootstrap( bootstrap );
+	flush( core );
+	for ( const row of rows ) core.receive( row, 0 );
+	flush( core );
+	const gid = fixture.expect.gid, move = Buffer.alloc( 14 );
+	move.writeUInt32LE( gid );
+	move[4] = 1;
+	move.writeUInt16LE( 25256, 5 );
+	move.writeInt16LE( 1000, 7 );
+	move.writeInt16LE( 1000, 11 );
+	core.receive( { opcode: 0xb738, payload: move }, 1 );
+	core.step( 16 );
+	assert.ok( flush( core ).events.some( e => e.kind === "state" && e.entity.gid === gid && e.entity.moving ) );
+	// The server's fatal-share broadcast (server action/linkeddamage.go):
+	// the deferred tick with its death byte first, the life frames behind
+	// it. Native enters the death state and stops the mover inside the
+	// tick handler (client 0x775790); here the tick only labels, and the
+	// LIFE frame in the same broadcast owns the death and the stop, so
+	// both land at the same presented instant.
+	const tick = Buffer.alloc( 11 );
+	tick[0] = 1;
+	tick.writeUInt32LE( 9001, 1 );
+	tick[5] = 0x80;
+	tick.writeUInt32LE( gid, 6 );
+	tick[10] = 1;
+	const tickFrame = Buffer.concat( [ tick, Buffer.from( [ 25, 0, 0 ] ) ] );
+	core.receive( { opcode: 0xb3c6, payload: tickFrame }, 20 );
+	core.step( 24 );
+	const labelled = flush( core );
+	assert.ok(
+		labelled.events.some( e =>
+			e.kind === "gameplay" && e.state.environmentalDamage?.some( d => d.gid === gid && d.damage === 25 )
+		),
+		"the fatal tick published its damage label"
+	);
+	const alive = labelled.events.filter( e => e.kind === "state" && e.entity.gid === gid ).at( -1 )?.entity;
+	assert.equal( alive?.moving, true, "the tick alone stopped the mover" );
+	assert.notEqual( alive?.appearanceState[0], 2, "the tick alone killed the mover" );
+	const life = Buffer.alloc( 6 );
+	life.writeUInt32LE( gid );
+	life[5] = 2;
+	core.receive( { opcode: 0x3122, payload: life }, 24 );
+	const dead = flush( core ).events.find( e => e.kind === "state" && e.entity.gid === gid ).entity;
+	assert.equal( dead.appearanceState[0], 2 );
+	assert.equal( dead.moving, false );
+	core.dispose();
+});
+
 test("monster LIFE preserves native impact displacement but stops cast-owned rush", () => {
 	for ( const kind of [ 4, 5, 8 ] ) {
 		const owner = createEntities();
@@ -2859,10 +3205,14 @@ for ( const queuedReceipt of [ true, false ] ) {
 		assert.equal( world.status().phase, "reconnecting" );
 		assert.equal( incidents.length, 1 );
 		// Nothing at all arrived for 12 s while the move waited: the link
-		// stalled (#1418), so the incident names the link, not the move.
+		// stalled (#1418), so the incident names the link and the lane
+		// that waited (#2148), not the move's own watchdog.
 		assert.equal( incidents[0].code, "transport_stalled" );
 		assert.equal( incidents[0].category, "unknown" );
-		assert.match( incidents[0].message, /Transport stalled: a request waited 12001 ms with no frame arriving/ );
+		assert.match(
+			incidents[0].message,
+			/Transport stalled: the movement lane waited 12001 ms with no frame arriving/
+		);
 		assert.throws( () => world.command( { kind: "move", destination } ), /not ready/ );
 		world.step( 12256 );
 		await settle();
@@ -2981,7 +3331,7 @@ test("a stalled link is named and resumed at 8 s, before the receipt watchdog", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8000 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8000 ms with no frame arriving/ );
 });
 
 /*
@@ -3030,7 +3380,7 @@ test("a frozen tab's backlog ages on the event clock in the stall incident", asy
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 	const age = /last inbound (\d+) ms ago/.exec( incidents[0].message );
 	assert.ok( age, "the incident ages the last frame" );
 	assert.ok(
@@ -3073,7 +3423,7 @@ test("a frame landing in the request's own step does not prove the link alive", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 });
 
 /*
@@ -3633,7 +3983,8 @@ a silent socket still times out
 
 Byte liveness must not keep a dead wire alive: with the EnterWorld
 answer never arriving at all, the entry deadline still fires on the
-socket exactly as before (#2311).
+socket exactly as before (#2311) - at the answer wait's own bound
+(#2867), not instantly and not never.
 ================
 */
 test("a silent socket still times out", async t => {
@@ -3651,9 +4002,9 @@ test("a silent socket still times out", async t => {
 	world.step( 3 );
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
-	world.step( 9999 );
+	world.step( 59999 );
 	assert.equal( world.status().phase, "entering-world", "inside the window" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
 	world.dispose();
 });
@@ -3686,7 +4037,7 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
 	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const evidence = world.status().entryFailure;
 	assert.equal( evidence?.stage, "entering-world" );
@@ -3697,13 +4048,13 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	// would inherit the first WELCOME and report a streaming wire for a
 	// server that never answered.
 	assert.equal( world.status().phase, "reconnecting" );
-	world.step( 10300 );
+	world.step( 60300 );
 	await settle();
-	world.step( 10301 );
+	world.step( 60301 );
 	await settle();
 	assert.equal( world.status().phase, "connecting", "the retry is under way" );
 	assert.equal( sockets.length, 2, "the retry opened its own socket" );
-	world.step( 21000 );
+	world.step( 71000 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const silent = world.status().entryFailure;
 	assert.equal( silent?.stage, "connecting" );
@@ -3711,24 +4062,24 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
 	// The next attempt starts clean, and a world that binds keeps no
 	// failure evidence.
-	world.step( 21600 );
+	world.step( 71600 );
 	await settle();
 	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
-	world.step( 21601 );
+	world.step( 71601 );
 	await settle();
 	const third = sockets[2];
 	third.onopen();
 	third.receive( 2, welcome() );
-	world.step( 21602 );
+	world.step( 71602 );
 	await settle();
-	world.step( 21603 );
+	world.step( 71603 );
 	await settle();
 	third.receive( 7, entered() );
 	for ( const row of rows ) third.receive( row.opcode, row.payload );
-	world.step( 21604 );
+	world.step( 71604 );
 	const batch = world.take();
 	world.ack( batch.sequence );
-	world.step( 21605 );
+	world.step( 71605 );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
 	world.dispose();
@@ -3763,9 +4114,9 @@ test("a record that stops streaming still times out", async t => {
 	await settle();
 	world.step( 4000 );
 	assert.equal( world.status().phase, "entering-world", "the third bought its window" );
-	world.step( 13999 );
+	world.step( 63999 );
 	assert.equal( world.status().phase, "entering-world", "window from the last byte still open" );
-	world.step( 14010 );
+	world.step( 64010 );
 	assert.equal( world.status().phase, "reconnecting", "silence after the bytes still fails" );
 	assert.equal( sockets.length, 0, "the retry has not run yet" );
 	world.dispose();

@@ -10,6 +10,14 @@ mip generation, and the samplers they bind.
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import {
+	WATER_BEHIND_WEIGHT,
+	WATER_REFLECTION_MIX,
+	WATER_REFRACTION_STRENGTH,
+	WATER_SHORE_BAND,
+	WATER_SHORE_FOAM,
+	WATER_SKIN_BLENDED
+} from "./water-refraction";
+import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
 	D3DBLEND_BOTHSRCALPHA,
@@ -62,9 +70,10 @@ const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
 // native flat fog return stands.
 
 // Port-only, not native: the second experimental stages vec4 (byte 368 of
-// the environment block; env.stages2 in WGSL) switches the three lighting
+// the environment block; env.stages2 in WGSL) switches the lighting
 // stages of the 2026-10-08 wave: x the HDR intermediate with its tone map,
-// y the sun shadow cascade, z per-pixel character and object lighting.
+// y the sun shadow cascade, z per-pixel character and object lighting,
+// w the ambient occlusion of the previous frame's depth (#2094).
 //
 // HDR - the scene renders into an rgba16float intermediate and the
 // presentation applies a filmic tone map. The 2005 frame is authored
@@ -249,7 +258,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 	// device never compiles them. The float target format is the one owner.
 	const SCENE_FLOAT_FORMAT: GPUTextureFormat = "rgba16float";
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f,camera:vec4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -258,7 +267,33 @@ struct SkyOut {@builtin(position) position:vec4f,@location(0) ray:vec3f}
  let p=array<vec2f,6>(vec2f(-1,1),vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1))[i];
  var o:SkyOut;o.position=vec4f(p,1,1);o.ray=env.forward.xyz+p.x*env.right.xyz+p.y*env.up.xyz;return o;
 }
-@fragment fn fs(o:SkyOut)->@location(0) vec4f {return vec4f(mix(env.horizon.rgb,env.zenith.rgb,clamp(normalize(o.ray).y*env.zenith.w,0,1)),1);}`
+fn skyHash(p:vec2f)->f32{
+ let q=fract(p*vec2f(123.34,456.21));
+ return fract(q.x*q.y*(q.x+q.y)*7857.13);
+}
+fn skyNoise(p:vec2f)->f32{
+ let i=floor(p);
+ let f=fract(p);
+ let u=f*f*(3.0-2.0*f);
+ return mix(mix(skyHash(i),skyHash(i+vec2f(1,0)),u.x),mix(skyHash(i+vec2f(0,1)),skyHash(i+vec2f(1,1)),u.x),u.y);
+}
+@fragment fn fs(o:SkyOut)->@location(0) vec4f{
+ let ray=normalize(o.ray);
+ var colour=mix(env.horizon.rgb,env.zenith.rgb,clamp(ray.y*env.zenith.w,0,1));
+ // Port-only sky detail (stages.w): drifting procedural clouds and the
+ // sun's atmospheric glow, off the native gradient and the authored disc.
+ if(env.stages.w>0.5){
+  if(ray.y>0.01){
+   let at=ray.xz/ray.y*3.0+vec2f(env.skyTime.y*0.02,0.0);
+   let cloud=skyNoise(at)*0.5+skyNoise(at*2.3)*0.3+skyNoise(at*5.1)*0.2;
+   let cover=smoothstep(0.55,0.75,cloud)*smoothstep(0.42,0.12,ray.y);
+   colour=mix(colour,mix(colour*0.9+vec3f(0.1),clamp(env.sun.rgb,vec3f(0),vec3f(1))*0.4+vec3f(0.6),0.5),cover*0.75);
+  }
+  let sunAmount=pow(max(0.0,dot(ray,normalize(env.sunDirection.xyz))),64.0);
+  colour+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*sunAmount*0.35;
+ }
+ return vec4f(colour,1);
+}`
 	} );
 	const preparedSky = created.createRenderPipelineAsync( {
 		layout: "auto",
@@ -322,12 +357,24 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
-// Port-only water refraction (device/water-refraction.ts): the frame's own
-// colour and depth before the water drew, copied for the water's fragment.
-@group(0) @binding(15) var sceneBehind:texture_2d<f32>;
-// The stage's depth copy is r32float (a depth attachment cannot be
-// resolved), so this reads a plain float texture, not a depth view.
-@group(0) @binding(16) var sceneBehindDepth:texture_2d<f32>;
+// The ambient occlusion factor (experimental, #2094): the blurred
+// half-resolution total of the previous frame's depth, written by
+// ambient-occlusion.ts after the scene. While the stage is off every
+// draw binds a 1x1 white view and the gated read below never samples
+// it, so the native frame is untouched.
+// Port-only water refraction (device/water-refraction.ts): the frame's
+// colour before the blended water drew, and the view-space depth behind
+// each pixel (r32float: a depth attachment cannot be sampled while
+// attached). While the row is off every draw binds the 1x1 white view
+// and the stage-gated branch below never samples either.
+@group(0) @binding(16) var sceneBehind:texture_2d<f32>;
+@group(0) @binding(17) var sceneBehindDepth:texture_2d<f32>;
+@group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
+fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
+ let size=vec2i(textureDimensions(ambientOcclusionMap));
+ let px=clamp(vec2i(fragCoord*0.5),vec2i(0),size-vec2i(1));
+ return textureLoad(ambientOcclusionMap,px,0).r;
+}
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -368,6 +415,14 @@ struct WaterPass {matrix:mat4x4f,plane:vec4f,bump:vec4f,projection:vec4f}
 // 8BA130: stage 0 bump clamps; stage 1 reflection wraps. Both filter linearly.
 @group(0) @binding(11) var waterBumpSampler:sampler;
 @group(0) @binding(12) var waterMirrorSampler:sampler;
+// The water's bump offset: the dudv pair of stage 0's bump map, turned by
+// the pass's bump matrix. 8BA130 cell corners use bump UV (0,1)..(1,0);
+// ordinary water tiles four times. Water without a bump map is flat.
+fn waterBumpOffset(uv:vec2f)->vec2f{
+ if(material.reflection.w<0.5){return vec2f(0);}
+ let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+ return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
+}
 struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
@@ -437,9 +492,7 @@ fn shadeGeometry(input:Out)->vec4f {
  var objectLightmap=vec3f(1);
  if(material.stagePolicy.z>0.5){objectLightmap=textureSample(sphereMap,waterBumpSampler,input.maskUV,0).rgb;}
  var waterColor=vec3f(0);
- if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;var offset=vec2f(0);
- // 8BA130 cell corners use bump UV (0,1)..(1,0); ordinary water tiles four times.
- if(material.reflection.w>0.5){let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;offset=vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));}
+ if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;let offset=waterBumpOffset(input.uv);
  waterColor=textureSampleLevel(waterMirror,waterMirrorSampler,projected*waterPass.projection.xy+waterPass.projection.zw+offset,0).rgb;}
  let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
  if(material.skin.w>0){let k=material.skin.w;
@@ -463,6 +516,13 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
 		let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  var surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
+ // Port-only sky detail (stages.w): a rim light against the sky; additive
+ // on the lit surface, never on the unlit path (options.y) where it would
+ // double the diffuse.
+ if(env.stages.w>0.5&&material.options.y<0.5){
+  let rim=pow(1.0-abs(dot(normalize(input.normal),env.forward.xyz)),3.0);
+  surfaceLight+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*rim*0.25;
+ }
  // Per-pixel character lighting (experimental): the retail vs_1_1 path
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same
@@ -481,6 +541,18 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   sunShade=mix(1.0,sunShadowFactor(vec3f(input.worldXZ.x,input.worldY,input.worldXZ.y)),${SUN_SHADOW_STRENGTH});
   let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
   surfaceLight=ambientTerm+(surfaceLight-ambientTerm)*sunShade;
+ }
+// Ambient occlusion (experimental, #2094): the previous frame's depth
+// scales the ambient term only, under the cascade's admissions
+// (reflection.z world-space receivers, never water or sky) and never
+// in the mirror capture, whose positions are the reflection's, not
+// the scene's. The vertex-lit path's illumination was saturated at
+// the vertex; the same decomposition the cascade applies stands.
+var occlusion=1.0;
+if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.skin.w==0.0&&waterPass.plane.w<0.5){
+  occlusion=ambientOcclusionFactor(input.position.xy);
+  let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
+  surfaceLight=surfaceLight-ambientTerm+ambientTerm*occlusion;
  }
  // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
  // the resource. Its DIFFUSE is the vertex colour as lit, or unlit the
@@ -539,7 +611,15 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let fogApplies=(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5;
  var fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),fogApplies);
  var fogColor=fogSource.rgb;var terrainFogColor=env.terrainFog.rgb;
- if(env.stages.x>0.5){
+ // A dungeon block's fog is the retail vertex shader's, not the ramp above:
+ // the smaller of an exp2 distance term and a height term (dungeon-fog.ts).
+ let shaderFog=material.policy.y>1.5;
+ if(shaderFog){
+  let depth=input.viewZ*material.localFogSettings.y;
+  let height=1.0-(abs(input.worldY-material.localFogSettings.z)-material.localFogSettings.w)*material.stagePolicy.w;
+  fog=select(0.0,1.0-clamp(min(exp2(-depth*depth),height),0,1),fogApplies);
+ }
+ if(env.stages.x>0.5&&!shaderFog){
   // Height fog (experimental): exp2 with no fog before the authored start,
   // 1-1/255 at the end, the density e-folding above the eye so peaks clear
   // the haze. The global fog takes the horizon tint; local fog volumes keep
@@ -555,37 +635,31 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  if(material.skin.y>0.5){
   // Lightmap terrain receives the same cascade: the baked light sum is the
   // diffuse term here, so the shade multiplies it ahead of the fog blend.
-  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade;
+  // The occlusion factor multiplies it whole for the same reason: the
+  // baked sum carries no separable ambient term (#2094).
+  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
  if(animated&&waterPass.plane.w<0.5){
-  // Native: the planar reflection alone. Port-only refraction (stages2.w,
-  // device/water-refraction.ts): the water drew after a copy of the frame,
-  // so its fragment can bend what sits under the surface by its own bump
-  // offset and whiten where the depth behind it reaches its own depth -
-  // the shore. The reflection stays the specular base it always was.
-  if(env.stages2.w<0.5){
-   // Native: the planar reflection over the frame's own lit water where a
-   // mirror exists (plane.z), the water's lit texture untouched where one
-   // does not - exactly the retail condition, byte for byte.
-   if(waterPass.plane.z>0.5){lit=waterColor;}
-  }else{
-   let frame=vec2f(textureDimensions(sceneBehind));
-   let screenUv=vec2f(input.position.xy)/frame;
-   let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
-   let bumpOffset=select(vec2f(0),vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv)),material.reflection.w>0.5);
-   let behind=textureSampleLevel(sceneBehind,textureSampler,clamp(screenUv+bumpOffset*0.03,vec2f(0),vec2f(1)),0).rgb;
-   // The shore band in view-space metres: both depths linearised over the
-   // camera's near/far (env.camera, written per frame), not raw [0,1]
-   // buffer values whose spacing stretches with distance.
+  if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
+   // Port-only refraction (stages.z, device/water-refraction.ts): the
+   // blended water draws after a copy of the opaque frame, so it bends
+   // what lies under the surface by its own bump offset and whitens
+   // where the depth behind it comes within the shore band of its own
+   // (input.viewZ, view-space metres like the copy). The planar
+   // reflection, or the water's own lit texture without a mirror, stays
+   // the surface term it natively is.
+   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
+   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
+   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
    let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
-   let near=max(env.camera.x,0.1);
-   let far=max(env.camera.y,near+1.0);
-   let linBehind=near*far/(far-depthBehind*(far-near));
-   let linFrag=near*far/(far-input.position.z*(far-near));
-   let shore=clamp(1.0-abs(linBehind-linFrag)/2.0,0.0,1.0);
-   let reflected=select(input.color.rgb*material.color.rgb,waterColor,waterPass.plane.z>0.5);
-   lit=mix(behind*0.85,reflected,0.45)+vec3f(shore*0.4);
+   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
+   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
+   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
+  }else if(waterPass.plane.z>0.5){
+   // Native: the planar reflection where a mirror exists, the water's lit
+   // texture untouched where one does not.
+   lit=waterColor;
   }
  }
  // An unblended draw's surviving pixel is opaque: the retail back buffer

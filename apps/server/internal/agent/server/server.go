@@ -81,6 +81,24 @@ type sessionEpochAuthority interface {
 
 /*
 ================
+blockAuthority
+
+The staff account block (#2271), optional like sessionEpochAuthority:
+the login path verifies a blocked account's password through
+CredentialAny so the refusal can carry the stored reason and end
+(Block), and clears an expired temporary block before the ordinary
+login proceeds (ClearBlock). A store without it answers a blocked
+account the ordinary credential refusal.
+================
+*/
+type blockAuthority interface {
+	CredentialAny(typedID string) (string, []byte, bool)
+	Block(accountID string) (disabled bool, reason string, untilMs int64, found bool)
+	ClearBlock(ctx context.Context, accountID string) error
+}
+
+/*
+================
 Config
 ================
 */
@@ -98,9 +116,15 @@ type Config struct {
 	Now                     func() time.Time
 	Readiness               *readiness.Gate
 	// MaintenanceMessage names this Agent's not-operating shard refusals
-	// MAINTENANCE instead of SHARD_OFFLINE (SRO_MAINTENANCE_MESSAGE).
+	// MAINTENANCE instead of SHARD_OFFLINE (SRO_MAINTENANCE_MESSAGE),
+	// but only while a maintenance window is open (MaintenanceGatePath,
+	// #2861): a shard that is merely down or still loading answers
+	// SHARD_OFFLINE, so a plain restart never claims a maintenance.
 	// Port-only, not native: see agentapi.EnvMaintenanceMessage.
 	MaintenanceMessage bool
+	// MaintenanceGatePath is the maintenance release gate (agentapi
+	// .EnvMaintenanceGate); empty means no window can be open.
+	MaintenanceGatePath string
 	// BugReports is nil when the operator has not configured bug reports.
 	BugReports *bugreport.Service
 	// BcryptCost is the cost of the unknown-account refusal and of the hashes
@@ -148,9 +172,10 @@ type Server struct {
 	clientKey        []byte
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
-	// maintenanceMessage mirrors Config.MaintenanceMessage.
-	maintenanceMessage bool
-	bugReports         *bugreport.Service
+	// maintenanceMessage and maintenanceGatePath mirror Config.
+	maintenanceMessage  bool
+	maintenanceGatePath string
+	bugReports          *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
 	startedAt        time.Time
 	revokedMu        sync.Mutex
@@ -244,6 +269,7 @@ func New(config Config) (*Server, error) {
 		clientKey:               clientKey,
 		readiness:               config.Readiness,
 		maintenanceMessage:      config.MaintenanceMessage,
+		maintenanceGatePath:     config.MaintenanceGatePath,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
 		revokedNonces:           make(map[string]time.Time),

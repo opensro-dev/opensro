@@ -70,6 +70,11 @@ type MonsterVariant struct {
 	Capacity int `json:"capacity"`
 	Passes   int `json:"passes"`
 	Attempts int `json:"attempts"`
+	// GearRate is the Pharaoh Tomb equipment multiplier (port-only)
+	// the server applies to this variant's equipment rolls alone
+	// (action.PharaohGearRate); gold heaps and consumable draws stay
+	// at Passes. Absent at the native rate 1.
+	GearRate int `json:"gearRate,omitempty"`
 	// GoldMin and GoldMax bound one gold heap; a kill makes one per pass.
 	GoldMin uint64 `json:"goldMin"`
 	GoldMax uint64 `json:"goldMax"`
@@ -184,8 +189,10 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 	regions := map[uint32]map[uint16]bool{}
 	promotes := map[uint32]bool{}
 	for _, nest := range source.Template.Nests {
-		// A nest with no instance cap never spawns (Template.SpawnableRefs).
-		if nest.InstanceLimit() == 0 {
+		// A nest with no instance cap never spawns (Template.SpawnableRefs),
+		// unless the TombChain owns it: the chain spawns at the nest point,
+		// so the nest still names where the species stands (#2856).
+		if nest.InstanceLimit() == 0 && !chainOwnedNest(source.Template, nest) {
 			continue
 		}
 		if regions[nest.RefObjID] == nil {
@@ -226,6 +233,8 @@ producibleMonsters
 
 The world monsters the server itself creates, from its own spawn sources:
   - a nest with an instance cap (the population's nests);
+  - a nest the Qin-Shi TombChain owns: its cap is pinned to zero for the
+    chain (#2372, #2373), but the chain spawns the species at that nest;
   - a quest script's monster (quest.ScriptMonsterCodenames);
   - a summon child of a placed unique's default skills, transitively, as the
     unique encounter roster resolves it (enterworld.MonsterSummonClosure),
@@ -250,6 +259,8 @@ func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
 	for _, nest := range template.Nests {
 		if nest.InstanceLimit() > 0 {
 			admit(nest.RefObjID, SourceNest)
+		} else if chainOwnedNest(template, nest) {
+			admit(nest.RefObjID, SourceChain)
 		}
 	}
 	byCodename := map[string]uint32{}
@@ -282,9 +293,25 @@ func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
 // The spawn sources producibleMonsters reads, as its result names them.
 const (
 	SourceNest   = "nest"
+	SourceChain  = "chain"
 	SourceQuest  = "quest"
 	SourceSummon = "summon"
 )
+
+/*
+================
+chainOwnedNest
+
+Whether this nest's species is spawned by the Qin-Shi TombChain at this
+nest instead of by the nest lifecycle: the chain owns the nest exactly
+when monster says so for its region and codename (#2372, #2373). A
+codename the chain owns on one floor may nest normally on another.
+================
+*/
+func chainOwnedNest(template monster.Template, nest monster.NestRow) bool {
+	ref, ok := template.Refs[nest.RefObjID]
+	return ok && monster.QinShiTombChainOwned(nest.RegionID, ref.Codename)
+}
 
 /*
 ================
@@ -323,8 +350,17 @@ func monsterVariants(ref monster.MonsterRef, promotes bool) []MonsterVariant {
 	for _, grade := range grades {
 		capacity, passes, attempts := loot.MonsterDropBudget(grade, ref.Codename)
 		goldMin, goldMax, _ := action.MonsterGoldHeapRange(ref.Level, grade)
-		out = append(out, MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
-			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax})
+		variant := MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
+			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax}
+		// Port-only, not native: the Pharaoh Tomb gear rate the tomb
+		// stamped on the reference (monster.EnvPharaohGearRate) rides on
+		// its own field. The runtime (monsterloot.go) spends it on the
+		// equipment family alone: gold heaps stay at the native passes
+		// and consumables at theirs, so the passes above stay native.
+		if gearRate := action.PharaohGearRate(grade, int(ref.PharaohGearRate)); gearRate > 1 {
+			variant.GearRate = gearRate
+		}
+		out = append(out, variant)
 	}
 	return out
 }
@@ -364,10 +400,24 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 	if !action.RollsUniqueDrops(ref.MonsterType) {
 		return nil
 	}
-	c := action.UniqueDropCounts(ref.MonsterType, ref.Codename)
-	return &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
+	// The runtime reads the grade's low nibble (Instance.Rarity), so
+	// a party nibble on the authored byte changes none of its counts;
+	// the published counts read the same nibble.
+	grade := ref.MonsterType & 0x0f
+	c := action.UniqueDropCounts(grade, ref.Codename)
+	bonus := &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
 		EquipmentMin: c[0].Min + c[1].Min, EquipmentMax: c[0].Max + c[1].Max,
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}
+	// Port-only, not native: the same tomb gear rate multiplies the
+	// prepass equipment count of a tomb unique. The prepass admission
+	// above (action.RollsUniqueDrops, grades 3 and 8) is wider than the
+	// gear rate's own gate (action.PharaohGearRate, grades 6 and 8), so
+	// of the prepass grades only the grade-8 tomb uniques take it.
+	if rate := action.PharaohGearRate(grade, int(ref.PharaohGearRate)); rate > 1 {
+		bonus.EquipmentMin *= rate
+		bonus.EquipmentMax *= rate
+	}
+	return bonus
 }
 
 /*

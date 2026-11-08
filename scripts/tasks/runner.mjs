@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { getTask } from "./registry.mjs";
 import { resolveProcessCommand } from "./processCommand.mjs";
+import { runPython } from "../build/shared/pythonRun.mjs";
 import { runSuite } from "../test/runSuite.mjs";
 import { assertRealNodeModules } from "./workspaceGuard.mjs";
 
@@ -41,9 +42,18 @@ export async function runTask( name, forwardedArgs = [], stack = [] ) {
 
 	const nextStack = [ ...stack, task.name ];
 	switch ( task.run.type ) {
-		case "command":
-			await runCommand( task.run.command, [ ...task.run.args, ...normalizeForwardedArgs( forwardedArgs ) ] );
+		case "command": {
+			const plan = commandPlan( task.run.command, [
+				...task.run.args,
+				...normalizeForwardedArgs( forwardedArgs )
+			] );
+			if ( plan.type === "python" ) {
+				await runPythonCommand( task.name, plan.args );
+				return;
+			}
+			await runCommand( plan.executable, plan.args, task.run.command );
 			return;
+		}
 		case "suite":
 			await runSuite( task.run.suite, forwardedArgs );
 			return;
@@ -55,12 +65,17 @@ export async function runTask( name, forwardedArgs = [], stack = [] ) {
 				await runTask( dependency, [], nextStack );
 			}
 			return;
-		case "pipeline":
+		case "pipeline": {
 			if ( forwardedArgs.length > 0 ) {
 				throw new Error( `Task ${task.name} is a pipeline and does not accept forwarded arguments` );
 			}
-			await runCommand( "node", [ pipelineRunner, task.run.pipeline ] );
+			const plan = commandPlan( "node", [ pipelineRunner, task.run.pipeline ] );
+			if ( plan.type !== "spawn" ) {
+				throw new Error( "The check pipeline runner must spawn directly" );
+			}
+			await runCommand( plan.executable, plan.args, "node" );
 			return;
+		}
 		default:
 			throw new Error( `Task ${task.name} has an unsupported execution definition` );
 	}
@@ -77,13 +92,53 @@ function normalizeForwardedArgs( args ) {
 
 /*
 ================
+commandPlan
+
+What running one command means. A "python" command never spawns the first
+python on PATH: that interpreter may be an unprovisioned one (MSYS2's on
+this workstation) whose missing modules say nothing about the tree under
+test, so the task runs through pythonRun's candidates instead - SRO_PYTHON,
+then py -3 / python3, then python - with fallback only when an interpreter
+failed environmentally, never when the payload itself failed. Every other
+command resolves to one direct spawn.
+================
+*/
+export function commandPlan( command, args ) {
+	if ( command === "python" ) {
+		return { type: "python", args: [ ...args ] };
+	}
+	const resolved = resolveProcessCommand( command, args );
+	return { type: "spawn", executable: resolved.executable, args: resolved.args };
+}
+
+/*
+================
+runPythonCommand
+
+Run a python task through the house interpreter candidates (see
+commandPlan) and replay its output: the streams are captured so a failed
+attempt can be classified, then printed whole, so the operator still sees
+everything the run produced.
+================
+*/
+async function runPythonCommand( taskName, args ) {
+	const result = await runPython( args, { task: taskName, cwd: rebuildRoot } );
+	if ( result.stdout ) {
+		process.stdout.write( result.stdout );
+	}
+	if ( result.stderr ) {
+		process.stderr.write( result.stderr );
+	}
+}
+
+/*
+================
 runCommand
 ================
 */
-function runCommand( command, args ) {
-	const resolved = resolveProcessCommand( command, args );
+function runCommand( executable, args, label ) {
 	return new Promise( ( resolve, reject ) => {
-		const child = spawn( resolved.executable, resolved.args, {
+		const child = spawn( executable, args, {
 			windowsHide: true,
 			cwd: rebuildRoot,
 			env: process.env,
@@ -96,7 +151,7 @@ function runCommand( command, args ) {
 				resolve( undefined );
 				return;
 			}
-			reject( new Error( `${command} failed${signal ? ` with signal ${signal}` : ` with exit ${code}`}` ) );
+			reject( new Error( `${label} failed${signal ? ` with signal ${signal}` : ` with exit ${code}`}` ) );
 		} );
 	} );
 }

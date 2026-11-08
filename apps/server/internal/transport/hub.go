@@ -38,7 +38,21 @@ Hub
 type Hub struct {
 	// History is installed before admission opens; its queue never calls gameplay.
 	History HistoryObserver
-	cfg     Config
+	// Census, when installed, receives the same lifecycle events as
+	// History (history.go): the connection journal behind the
+	// SRO_CONNECTION_JOURNAL flag (#2716, port-only, not native). Nil
+	// is the native posture: nothing is recorded.
+	Census CensusObserver
+	cfg    Config
+
+	// now and newTicker are the hub's one clock. Production reads the
+	// wall clock (newHub's defaults); a test installs a manual clock so
+	// the keepalive watchdogs prove their bounds as ordering, never as
+	// scheduler speed (#2445). Only the stamps the keepalive loop
+	// compares (lastRecv, lastSent, lastStreamAck, sceneLoadingSince)
+	// read this clock.
+	now       func() time.Time
+	newTicker func(time.Duration) ticker
 
 	// activity is the one subscriber told about every dispatched game frame
 	// (OnSessionActivity); an atomic pointer, so the hot path takes no lock.
@@ -120,6 +134,9 @@ type Hub struct {
 	// storeLockMetrics reads the authority lock's waits, holds and commit
 	// phases (SetStoreLockMetrics); nil publishes no block.
 	storeLockMetrics atomic.Pointer[func() any]
+	// tickZoneMetrics reads the simulation's exact per-zone tick totals
+	// (SetTickZoneMetrics, #2824); nil publishes no block.
+	tickZoneMetrics atomic.Pointer[func() map[string]TickZone]
 }
 
 /*
@@ -130,6 +147,8 @@ newHub
 func newHub(cfg Config) *Hub {
 	return &Hub{
 		cfg:             cfg,
+		now:             time.Now,
+		newTicker:       newRealTicker,
 		sessions:        make(map[uint64]*Session),
 		byToken:         make(map[[ResumeTokenLen]byte]*Session),
 		ended:           make(map[[ResumeTokenLen]byte]endedToken),
@@ -591,6 +610,15 @@ func (h *Hub) AcceptConn(conn Conn) {
 	}
 	if resumePresented {
 		h.metrics.resumeFresh.Add(1)
+	}
+
+	if !h.clientSlotOpen(conn.RemoteAddr()) {
+		h.metrics.clientSessionRefusals.Add(1)
+		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "limit": h.cfg.MaxSessionsPerClient}).
+			Warn("transport: client session limit reached, refusing the new session")
+		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonServerBusy}})
+		_ = conn.Close("client session limit reached")
+		return
 	}
 
 	sess, err := h.createSession()

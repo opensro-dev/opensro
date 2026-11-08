@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-geardegree_test.go - degree bands, blue caps and improving roll floors
+geardegree_test.go - the degree table, blue caps and improving roll floors
 
 ===========================================================================
 */
@@ -17,27 +17,15 @@ import (
 
 /*
 ================
-TestGearDegreeBandsAndRolls
+TestGearDegreeCapsAndRolls
 ================
 */
-func TestGearDegreeBandsAndRolls(t *testing.T) {
+func TestGearDegreeCapsAndRolls(t *testing.T) {
 	levels := []uint8{1, 8, 16, 24, 32, 42, 52, 64, 76}
 	caps := []int{1, 2, 2, 3, 3, 4, 4, 5, 6}
 	for i, d := range D.Gear {
 		if d.MinPetLevel != levels[i] || d.MaxBlues != caps[i] || d.RollFloor != float64(i)/16 {
 			t.Fatalf("degree %d: %+v", i+1, d)
-		}
-		for level := levels[i]; level <= 100 && (i == 8 || level < levels[i+1]); level++ {
-			for _, unique := range []bool{false, true} {
-				got, ok := DegreeForLevel(level, unique)
-				want := min(i+1, 8)
-				if !unique {
-					want = i
-				}
-				if !ok || got.Degree != want+1 {
-					t.Fatalf("level %d unique %v: %+v", level, unique, got)
-				}
-			}
 		}
 		for slot := range d.Items {
 			for _, rarity := range []float64{0, d.RareChance + 0.001} {

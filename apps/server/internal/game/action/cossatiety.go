@@ -31,6 +31,43 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 	if state == nil {
 		return nil
 	}
+	// Judge on values read under the store read door: most ticks move
+	// no whole point of hunger and cross no rental deadline, so the
+	// update door opens only on a tick that can commit (#2139). The
+	// commit below re-derives from the live record exactly as the
+	// unjudged tick did, so the two cannot disagree. A skipped tick
+	// still carries the probed clock forward: its LastMs and fraction
+	// are the same state the door's own advance would have left, so
+	// the float32 spill cadence is preserved tick for tick.
+	commit := false
+	draining := false
+	resetSatiety := false
+	var probe companion.SatietyClock
+	guard := rt.deps.AcquireRead(key.division)
+	pet := state.character.CompanionByGID(key.gid)
+	if pet != nil && pet.BroodStage == 0 {
+		ref, valid := rt.cosReference(pet)
+		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
+			commit = true
+		} else if !valid || !pet.Summoned || pet.CurrentHP == 0 || ref.TidWord>>11 != 3 || ref.SatietyMinutes == 0 {
+			resetSatiety = true
+		} else {
+			draining = true
+			probe = state.satiety
+			after := probe.Advance(pet.GID, nowMs, ref.SatietyMinutes, pet.Satiety)
+			commit = pet.Satiety != after || probe.Exhausted
+		}
+	}
+	guard.Release()
+	if resetSatiety {
+		state.satiety = companion.SatietyClock{}
+	}
+	if !commit {
+		if draining {
+			state.satiety = probe
+		}
+		return nil
+	}
 	var frames []simulation.Frame
 	rt.deps.UpdateDeferred(state.character, "cos-satiety", func() bool {
 		c := state.character

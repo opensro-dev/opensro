@@ -55,7 +55,7 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// A pickup pet looting gold (cosground.go) is monster gold too.
 	"cos-ground-item":  {gain: "monster_gold"},
 	"gold-drop":        {loss: "gold_drop"},
-	"quest-reward":     {gain: "quest_reward"},
+	"quest-reward":     {gain: "quest_reward", loss: "quest_fee"},
 	"quest-start":      {loss: "quest_fee"},
 	"quest-collect":    {gain: "quest_reward"},
 	"quest-giveup":     {gain: "quest_refund"},

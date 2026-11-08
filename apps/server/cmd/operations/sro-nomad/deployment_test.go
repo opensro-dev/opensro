@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	nomad "github.com/hashicorp/nomad/api"
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/testsupport/opstree"
 	"opensro.online/server/internal/transport"
 )
 
@@ -264,7 +266,8 @@ TestNomadJobsShareOneMaintenanceMessage
 
 The Agent and the GameWorld must answer the same refusal code in one
 window (#2331), so the one shard setting fills both jobs, at its native
-default when the deployer names nothing.
+default when the deployer names nothing. Both jobs also carry the same
+maintenance gate file, the Agent's proof a window is open (#2861).
 ================
 */
 func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
@@ -281,6 +284,42 @@ func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
 		if got := deployment.gameVariables(shardDeployment{})["maintenance_message"]; got != want {
 			t.Fatalf("SRO_MAINTENANCE_MESSAGE=%q: GameWorld maintenance_message = %#v, want %q", value, got, want)
 		}
+		// The Agent may name the maintenance only while a window is
+		// open, so both jobs carry the same gate file (#2861).
+		agentGate := deployment.agentVariables()["maintenance_gate_path"]
+		gameGate := deployment.gameVariables(shardDeployment{})["maintenance_gate_path"]
+		if agentGate == nil || agentGate != gameGate {
+			t.Fatalf("maintenance_gate_path: Agent = %#v, GameWorld = %#v, want the same path", agentGate, gameGate)
+		}
+	}
+}
+
+/*
+================
+TestAgentVariablesAreAllDeclaredInTheJob
+
+sro-nomad hands agentVariables() to Nomad's job-parse API; a key the
+Agent job template does not declare is at best silently dropped (the
+Agent never sees the value - the maintenance gate path before its ops
+companion landed, #2861) and at worst a parse error that fails a
+deploy. Every key needs a variable block in the template. The
+GameWorld side has the same guard in shardsettings.
+================
+*/
+func TestAgentVariablesAreAllDeclaredInTheJob(t *testing.T) {
+	job, err := os.ReadFile(filepath.Join(opstree.Require(t), "nomad", "jobs", agentTemplateName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]bool{}
+	for _, match := range regexp.MustCompile(`variable "([^"]+)"`).FindAllSubmatch(job, -1) {
+		declared[string(match[1])] = true
+	}
+	deployment := &deployment{PortOnly: portOnlySettingsFromEnv()}
+	for name := range deployment.agentVariables() {
+		if !declared[name] {
+			t.Fatalf("agentVariables passes %q, but the Agent job declares no variable %q", name, name)
+		}
 	}
 }
 
@@ -293,24 +332,13 @@ func TestNomadGameWorldVariablesCarryGMAllowlist(t *testing.T) {
 }
 
 func TestRawExecBoundariesDenyInheritedControlPlaneCredentials(t *testing.T) {
-	moduleRoot := filepath.Clean("../../..")
+	// The job templates are in the private ops tree (opstree).
+	ops := opstree.Require(t)
 	paths := []string{
-		filepath.Join(moduleRoot, "ops", "nomad", "jobs", agentTemplateName),
-		filepath.Join(moduleRoot, "ops", "nomad", "jobs", gameTemplateName),
-		filepath.Join(
-			moduleRoot,
-			"ops",
-			"nomad",
-			"config",
-			"client-windows-agent-production.hcl.example",
-		),
-		filepath.Join(
-			moduleRoot,
-			"ops",
-			"nomad",
-			"config",
-			"client-windows-production.hcl.example",
-		),
+		filepath.Join(ops, "nomad", "jobs", agentTemplateName),
+		filepath.Join(ops, "nomad", "jobs", gameTemplateName),
+		filepath.Join(ops, "nomad", "config", "client-windows-agent-production.hcl.example"),
+		filepath.Join(ops, "nomad", "config", "client-windows-production.hcl.example"),
 	}
 	for _, path := range paths {
 		payload, err := os.ReadFile(path)

@@ -165,3 +165,69 @@ func TestSlotAdmittedAfterTickInstantDoesNotExpire(t *testing.T) {
 		t.Fatal("did not expire after its duration")
 	}
 }
+
+/*
+================
+TestPetrifyStoneCurse
+
+The stone curse (slot 12) lands outside the roll, holds the victim
+fast and pulses the snts percent of maximum HP after the snts delay,
+once per snts period, until its dura lifetime ends. Landed damage
+does not break it, and an equal curse does not refresh it.
+================
+*/
+func TestPetrifyStoneCurse(t *testing.T) {
+	params := &SkillParams{Stone: StoneCurse{Present: true, DelayMs: 5000, Percent: 12, PeriodMs: 5000, DurationMs: 20000}}
+	record, ok := params.StoneRecord(9, 4, "snake")
+	if !ok || record.Status != Petrify || record.DurationMs != 20000 || record.Chance != 5000 ||
+		record.PeriodMs != 5000 || record.Param38 != 12 || record.Grade != 1 || record.SourceGID != 9 {
+		t.Fatalf("stone record %+v ok %v", record, ok)
+	}
+	if _, ok := (&SkillParams{}).StoneRecord(9, 4, ""); ok {
+		t.Fatal("an absent curse minted a record")
+	}
+	if _, ok := (&SkillParams{Stone: StoneCurse{Present: true}}).StoneRecord(9, 4, ""); ok {
+		t.Fatal("a durationless curse minted a record")
+	}
+
+	var block Block
+	owner := &fakeOwner{alive: true, player: true, hp: 10000, maxHP: 10000, block: &block}
+	if !block.Apply(owner, record, 1000) || block.Mask != Petrify.Bit() {
+		t.Fatalf("petrify admission failed, mask %x", block.Mask)
+	}
+	if len(owner.cancels) != 1 || !owner.cancels[0] || len(owner.motions) != 1 || owner.motions[0][0] != 9 {
+		t.Fatalf("petrify start cancels %+v motions %+v", owner.cancels, owner.motions)
+	}
+	if block.Apply(owner, record, 2000) || block.Slots[Petrify].StartedAt != 1000 {
+		t.Fatal("an equal curse refreshed the timer")
+	}
+	if block.BreakOnHit(owner, HitContext{Attack: true, Magical: true}) || !block.Has(Petrify) {
+		t.Fatal("landed damage broke the stone")
+	}
+	for _, step := range []struct {
+		now  int64
+		hits int
+	}{
+		{5999, 0}, {6000, 1}, {10999, 1}, {11000, 2}, {16000, 3},
+	} {
+		owner.now = step.now
+		block.Update(owner, step.now)
+		if len(owner.hits) != step.hits {
+			t.Fatalf("at %d: %d pulse hits, want %d", step.now, len(owner.hits), step.hits)
+		}
+	}
+	for _, hit := range owner.hits {
+		if hit != 1200 {
+			t.Fatalf("pulse damage %d, want 1200 (12%% of 10000)", hit)
+		}
+	}
+	owner.now = 21001
+	block.Update(owner, 21001)
+	if block.Has(Petrify) || block.Mask != 0 || len(owner.hits) != 3 {
+		t.Fatalf("petrify survived its duration: mask %x hits %d", block.Mask, len(owner.hits))
+	}
+	last := owner.motions[len(owner.motions)-1]
+	if last[0] != 0 || last[1] != 0xff {
+		t.Fatalf("petrify end motion %+v", last)
+	}
+}

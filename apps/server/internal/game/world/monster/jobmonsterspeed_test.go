@@ -13,7 +13,7 @@ import "testing"
 ================
 TestJobMonsterSpeedScalesOnlyJobMonsters
 
-Thief and hunter references run 20% faster under the rule; an ordinary
+Thief and hunter references run 30% faster under the rule; an ordinary
 monster and the receiver's own references keep their speeds.
 ================
 */
@@ -26,7 +26,7 @@ func TestJobMonsterSpeedScalesOnlyJobMonsters(t *testing.T) {
 	if scaled != 2 {
 		t.Fatalf("scaled %d references, want the thief and the hunter", scaled)
 	}
-	for id, want := range map[uint32][2]float64{1: {60, 120}, 2: {60, 120}, 3: {50, 100}} {
+	for id, want := range map[uint32][2]float64{1: {65, 130}, 2: {65, 130}, 3: {50, 100}} {
 		if got := fast.Refs[id]; got.WalkSpeed != want[0] || got.RunSpeed != want[1] {
 			t.Fatalf("ref %d: walk %v run %v, want %v", id, got.WalkSpeed, got.RunSpeed, want)
 		}

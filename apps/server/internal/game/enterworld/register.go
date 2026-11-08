@@ -185,12 +185,18 @@ func encodeEnterWorld(deps *Deps, result *BootstrapResult, session string) Enter
 	deps.adoptEncodedInventory(result)
 	// Port-only, not native: the community site's player database shows the
 	// latest login (Character.LastLoginAtMs). Teleport re-entries do not count.
+	// The same stamp restarts the time-online clock (#2675): anchoring here,
+	// in the login door, means a crashed session's un-credited tail is never
+	// credited late and no span is ever counted twice.
 	if loggedIn != nil {
 		at := time.Now()
 		if deps.Now != nil {
 			at = deps.Now()
 		}
-		deps.Mutate(loggedIn, "last-login", func() { loggedIn.LastLoginAtMs = at.UnixMilli() })
+		deps.Mutate(loggedIn, "last-login", func() {
+			loggedIn.LastLoginAtMs = at.UnixMilli()
+			loggedIn.AnchorOnline(at.UnixMilli())
+		})
 	}
 	characterName := ""
 	if result.Character != nil {
@@ -209,6 +215,9 @@ func encodeEnterWorld(deps *Deps, result *BootstrapResult, session string) Enter
 		// Division-aware by necessity: the letter seed reads the memos
 		// table, which is keyed by division + character id.
 		seeds = deps.CommunitySeedFramesFor(result.DivisionID, result.Character)
+	}
+	if deps.EntryEventFrames != nil {
+		seeds = append(seeds, deps.EntryEventFrames(result.DivisionID, result.Character)...)
 	}
 	if len(seeds) > 0 {
 		combined := make([]Packet, 0, len(frames)+len(seeds))
@@ -400,15 +409,12 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			s.BindCharacter(result.DivisionID, result.Character.Name, ObjectIDForCharacter(result.Character))
 		}
 		// The gate ordered this snapshot against tick commits; Build is
-		// the last read of live state. Mark the snapshot built while the
-		// gate still serializes producers, then open it: the encode and
+		// the last read of live state. Open the gate now: the encode and
 		// publish below read only the detached result, so the marshal no
 		// longer queues every tick behind it (#2294). Wire order still
-		// holds — visibility stays fenced until the bootstrap lands,
-		// and work committed from now on parks behind it in the
-		// transport until the bootstrap batch queues.
-		s.MarkSceneSnapshotBuilt()
-		defer s.CloseSceneSnapshotBuilt()
+		// holds — the transport has parked this scene's work behind its
+		// bootstrap since admission began, and the batch below lands
+		// ahead of everything parked (#2872).
 		releaseGate()
 		var outcome EnterWorldOutcome
 		if !built {

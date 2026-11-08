@@ -176,9 +176,14 @@ owner instead.
 ================
 */
 type petCombatStep struct {
-	key        petOwnerKey
-	state      *petSession
-	snapshot   *enterworld.Character
+	key      petOwnerKey
+	state    *petSession
+	snapshot *enterworld.Character
+	// ownerWorld is the owner world a judged tick already read without
+	// seeding (WorldStore.SnapshotExisting, #2139); the formation lane
+	// uses it instead of seeding from snapshot. Nil on the copy path,
+	// which seeds exactly as before.
+	ownerWorld *simulation.WorldState
 	pet        *enterworld.CharacterCOS
 	ref        *enterworld.CharacterRef
 	run        float32
@@ -294,8 +299,8 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 			intent.nextAttackMs = step.nowMs + int64(intent.intervalMs)
 			frame := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: step.pet.GID, InstanceToken: intent.castToken, OwnerOrTargetGid: target.gid})
 			cast := []wire.Frame{frame}
-			if id, ok := rt.wolfRendQueued(step); ok {
-				// The rend clip plays from the windup; the release may still refuse it.
+			if id, ok := rt.petSkillWindupEmote(step); ok {
+				// The owned skill clip plays from the windup; the release may still refuse it.
 				cast = append(cast, wolfEmoteFrame(step.pet.GID, id))
 			}
 			step.state.public = append(step.state.public, cast...)

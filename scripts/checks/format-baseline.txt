@@ -90,7 +90,6 @@ apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
-apps/client-next/src/engine/foundation/rendering/dungeon-water.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
 apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
@@ -104,7 +103,6 @@ apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
-apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
@@ -154,11 +152,9 @@ apps/client-next/src/engine/runtime/frontend/dialog/dialog.ts
 apps/client-next/src/engine/runtime/frontend/flow/flow.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
-apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
-apps/client-next/src/engine/runtime/ui/hud/minimap.ts
 apps/client-next/src/engine/runtime/ui/hud/progression-bars.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
@@ -316,15 +312,6 @@ apps/client-next/tools/verify-bsr-transforms.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
-apps/server-observatory/public/item-model.js
-apps/server-observatory/public/items.js
-apps/server-observatory/public/model.js
-apps/server-observatory/server/source.mjs
-apps/server-observatory/tests/model.test.mjs
-apps/server-observatory/tests/operations.test.mjs
-apps/server-observatory/tests/security.test.mjs
-apps/server-observatory/tools/browser-probe.mjs
-apps/server-observatory/tools/items-browser-probe.mjs
 scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs

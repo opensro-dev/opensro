@@ -90,3 +90,54 @@ export function textureVariantPath( path: string, variant: TextureVariant ): str
 	}
 	return TEXTURE_VARIANT_ROOT + variant + path.slice( "/assets".length );
 }
+
+// Port-only, not native: the HD set (#2061). With the Experimental
+// "HD textures" row on, the asset build's x2 AI-upscaled re-encoding of a
+// world object texture is served instead of the retail texture. The set
+// lives outside /assets (its own subtree, index and packs), so the
+// default manifest and precache hold no HD bytes and the client learns
+// of it only from the index it fetches when the row is switched on.
+
+// Where the HD set is published: HD_TEXTURE_VARIANT_ROOT + format + the
+// original path below /assets.
+export const HD_TEXTURE_VARIANT_ROOT = "/hd/texture-variants/";
+
+// The HD formats the asset build publishes: BC7 for a device that samples
+// BC, ASTC 4x4 for one that does not. A device with neither keeps the
+// retail textures.
+export type HdTextureVariant = "bc7" | "astc";
+
+/*
+================
+hdTextureVariantPath
+
+The published path of path's HD variant, or null for a path that has
+none (only native .texture containers under /assets/ are upscaled).
+================
+*/
+export function hdTextureVariantPath( path: string, variant: HdTextureVariant ): string | null {
+	if ( !path.startsWith( "/assets/" ) || !path.endsWith( ".texture" ) || path.startsWith( TEXTURE_VARIANT_ROOT ) ) {
+		return null;
+	}
+	return HD_TEXTURE_VARIANT_ROOT + variant + path.slice( "/assets".length );
+}
+
+/*
+================
+chooseHdTextureVariant
+
+The HD format a device is served: none where the switch is off or it
+samples neither BC nor ASTC, else BC7 where it samples BC and ASTC where
+it does not. The retail texture stays the fallback for every path the
+HD set does not hold.
+================
+*/
+export function chooseHdTextureVariant(
+	features: ReadonlySet<string>,
+	enabled: boolean
+): HdTextureVariant | null {
+	if ( !enabled ) return null;
+	if ( features.has( "texture-compression-bc" ) ) return "bc7";
+	if ( features.has( "texture-compression-astc" ) ) return "astc";
+	return null;
+}

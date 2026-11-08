@@ -51,6 +51,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 	let anchors = new Set<GeometryDraw>(), nextAnchors = new Set<GeometryDraw>();
 	// The frame's drawable geometry, refilled every frame.
 	const live: GeometryDraw[] = [];
+	// The water refraction split, refilled every frame it is armed.
+	const opaqueWorld: GeometryDraw[] = [], waterTail: GeometryDraw[] = [];
 	let recordedImage: ImageDraw | undefined, imageBundle: GPURenderBundle | null = null;
 	/*
 	================
@@ -74,6 +76,94 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			) return false;
 		}
 		return true;
+	}
+	/*
+	================
+	splitWater
+
+	Partitions world for the water refraction stage: opaqueWorld takes
+	world[0..transparentStart) without its blended water; waterTail takes
+	that water, then the transparent tail world[transparentStart..), so
+	the tail keeps its native order behind the water. False when no
+	blended water is in view.
+	================
+	*/
+	function splitWater( world: readonly GeometryDraw[], transparentStart: number ): boolean {
+		opaqueWorld.length = 0;
+		waterTail.length = 0;
+		let found = false;
+		for ( let i = 0; i < world.length; i++ ) {
+			const draw = world[i]!, water = draw.water === true && draw.blended === true;
+			found ||= water;
+			if ( i >= transparentStart || water ) waterTail.push( draw );
+			else opaqueWorld.push( draw );
+		}
+		return found;
+	}
+	/*
+	================
+	recordGeometry
+
+	Appends to bundles the retained bundles that replay first and draws in
+	order. Retain bounded contiguous runs: individual bundles add submission
+	overhead; one whole-world bundle makes a terrain change re-record the
+	entire city. Run starts are this frame's anchors (nextAnchors), so a
+	frame may record several lists before the anchors swap.
+	================
+	*/
+	function recordGeometry(
+		bundles: GPURenderBundle[],
+		draws: readonly GeometryDraw[],
+		first?: GeometryDraw
+	) {
+		live.length = 0;
+		if ( first && first.indexCount > 0 && first.instanceCount > 0 ) live.push( first );
+		for ( const draw of draws ) if ( draw.indexCount > 0 && draw.instanceCount > 0 ) live.push( draw );
+		for ( let start = 0; start < live.length; ) {
+			let end = start + 1;
+			while ( end < live.length && end - start < 32 && (end - start < 16 || !anchors.has( live[end]! )) ) {
+				end++;
+			}
+			const head = live[start]!;
+			let cached = geometryBundles.get( head );
+			if ( !cached || !bundleCurrent( cached, start, end ) ) {
+				const run = live.slice( start, end ), counts: number[] = [];
+				const encoder = commands.createBundleEncoder( true, true );
+				let pipeline: GPURenderPipeline | undefined, binding: GPUBindGroup | undefined;
+				let vertices: GPUBuffer | undefined, indices: GPUBuffer | undefined;
+				for ( const draw of run ) {
+					counts.push( draw.indexCount, draw.instanceCount );
+					if ( pipeline !== draw.pipeline ) {
+						encoder.setPipeline( draw.pipeline );
+						pipeline = draw.pipeline;
+					}
+					if ( binding !== draw.binding ) {
+						encoder.setBindGroup( 0, draw.binding );
+						binding = draw.binding;
+					}
+					if ( vertices !== draw.vertices ) {
+						encoder.setVertexBuffer( 0, draw.vertices );
+						vertices = draw.vertices;
+					}
+					if ( indices !== draw.indices ) {
+						encoder.setIndexBuffer( draw.indices, "uint32" );
+						indices = draw.indices;
+					}
+					encoder.drawIndexed(
+						draw.indexCount,
+						draw.instanceCount,
+						draw.firstIndex ?? 0,
+						draw.baseVertex ?? 0,
+						0
+					);
+				}
+				cached = { draws: run, counts, bindings: run.map( draw => draw.binding ), bundle: encoder.finish() };
+				geometryBundles.set( head, cached );
+			}
+			bundles.push( cached.bundle );
+			nextAnchors.add( head );
+			start = end;
+		}
 	}
 	return {
 		/*
@@ -102,7 +192,6 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
-			const water = experimental?.water;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
@@ -151,58 +240,20 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				recordedImage = image;
 			}
-			// Retain bounded contiguous runs. Individual bundles add submission overhead;
-			// one whole-world bundle makes a terrain change re-record the entire city.
 			const bundles: GPURenderBundle[] = imageBundle ? [ imageBundle ] : [];
-			live.length = 0;
-			if ( geometry && geometry.indexCount > 0 && geometry.instanceCount > 0 ) live.push( geometry );
-			for ( const draw of world ) if ( draw.indexCount > 0 && draw.instanceCount > 0 ) live.push( draw );
 			nextAnchors.clear();
-			for ( let start = 0; start < live.length; ) {
-				let end = start + 1;
-				while ( end < live.length && end - start < 32 && (end - start < 16 || !anchors.has( live[end]! )) ) {
-					end++;
-				}
-				const first = live[start]!;
-				let cached = geometryBundles.get( first );
-				if ( !cached || !bundleCurrent( cached, start, end ) ) {
-					const draws = live.slice( start, end ), counts: number[] = [];
-					const encoder = commands.createBundleEncoder( true, true );
-					let pipeline: GPURenderPipeline | undefined, binding: GPUBindGroup | undefined;
-					let vertices: GPUBuffer | undefined, indices: GPUBuffer | undefined;
-					for ( const draw of draws ) {
-						counts.push( draw.indexCount, draw.instanceCount );
-						if ( pipeline !== draw.pipeline ) {
-							encoder.setPipeline( draw.pipeline );
-							pipeline = draw.pipeline;
-						}
-						if ( binding !== draw.binding ) {
-							encoder.setBindGroup( 0, draw.binding );
-							binding = draw.binding;
-						}
-						if ( vertices !== draw.vertices ) {
-							encoder.setVertexBuffer( 0, draw.vertices );
-							vertices = draw.vertices;
-						}
-						if ( indices !== draw.indices ) {
-							encoder.setIndexBuffer( draw.indices, "uint32" );
-							indices = draw.indices;
-						}
-						encoder.drawIndexed(
-							draw.indexCount,
-							draw.instanceCount,
-							draw.firstIndex ?? 0,
-							draw.baseVertex ?? 0,
-							0
-						);
-					}
-					cached = { draws, counts, bindings: draws.map( draw => draw.binding ), bundle: encoder.finish() };
-					geometryBundles.set( first, cached );
-				}
-				bundles.push( cached.bundle );
-				nextAnchors.add( first );
-				start = end;
-			}
+			// Port-only water refraction: with blended water in view, the main
+			// pass draws the opaque world without it; the water, then the
+			// transparent tail, draw in their own pass after the stage copies
+			// the opaque frame. With none in view the frame keeps one pass.
+			const water = experimental?.water && splitWater( world, experimental.water.transparentStart ) ?
+				experimental.water :
+				undefined;
+			const waterBundles: GPURenderBundle[] = [];
+			if ( water ) {
+				recordGeometry( bundles, opaqueWorld, geometry );
+				recordGeometry( waterBundles, waterTail );
+			} else recordGeometry( bundles, world, geometry );
 			const previousAnchors = anchors;
 			anchors = nextAnchors;
 			nextAnchors = previousAnchors;
@@ -261,6 +312,26 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					pass.end();
 				}
 			}
+			// A later pass reads the scene depth: the flares' occlusion, the
+			// deferred particles, the occlusion stage, or the labels after a
+			// post chain.
+			const depthRead = flares || deferred || !!experimental?.ao ||
+				((bloom || hdrScene || sceneScale) && !!worldUiBundle);
+			/*
+			================
+			sceneUi
+
+			The labels, background and interface draw inside the last scene
+			pass when no post chain or overlay claims them afterwards.
+			================
+			*/
+			const sceneUi = ( target: GPURenderPassEncoder ) => {
+				if ( bloom || deferred || hdrScene || sceneScale ) return;
+				if ( worldUiBundle ) target.executeBundles( [ worldUiBundle ] );
+				if ( flares || thunder ) return;
+				if ( backgroundBundle ) target.executeBundles( [ backgroundBundle ] );
+				if ( !preview.length && uiBundle ) target.executeBundles( [ uiBundle ] );
+			};
 			const pass = encoder.beginRenderPass( {
 				timestampWrites: timing?.pass( "main-pass" ),
 				label: "main-pass",
@@ -270,10 +341,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || water ||
-									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
-								"store" as const :
-								"discard" as const
+							// The water overlay loads the depth the main pass leaves.
+							depthStoreOp: depthRead || water ? "store" as const : "discard" as const
 						}
 					} :
 					{}),
@@ -286,26 +355,29 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && !water && worldUiBundle ) {
-				pass.executeBundles( [ worldUiBundle ] );
-			}
-			if (
-				!bloom && !deferred && !hdrScene && !sceneScale && !water && !flares && !thunder && backgroundBundle
-			) {
-				pass.executeBundles( [ backgroundBundle ] );
-			}
-			if (
-				!bloom && !deferred && !hdrScene && !sceneScale && !water && !flares && !thunder && !preview.length &&
-				uiBundle
-			) {
-				pass.executeBundles( [ uiBundle ] );
-			}
+			if ( !water ) sceneUi( pass );
 			pass.end();
-			// Port-only water refraction: the frame without the water is
-			// complete; the stage copies it and redraws the water refracted,
-			// before anything reads the frame.
-			if ( water && depth ) {
-				water.stage.encode( encoder, sceneView, depth, sceneView, depth, water.draws );
+			// Port-only water refraction: the opaque frame is complete. The
+			// stage copies its colour and depth, then the water and the
+			// transparent tail draw over it in their native order, so a
+			// blended surface in front of the water still covers it.
+			if ( water ) {
+				if ( !depth ) throw Error( "Water refraction needs the scene depth" );
+				water.stage.encode( encoder, sceneView, depth );
+				const overlay = encoder.beginRenderPass( {
+					timestampWrites: timing?.pass( "water-refraction" ),
+					label: "water-refraction",
+					depthStencilAttachment: {
+						view: depth,
+						depthLoadOp: "load",
+						depthStoreOp: depthRead ? "store" : "discard"
+					},
+					colorAttachments: [ { view: sceneView, loadOp: "load", storeOp: "store" } ]
+				} );
+				overlay.setBlendConstant( blendFactor );
+				if ( waterBundles.length ) overlay.executeBundles( waterBundles );
+				sceneUi( overlay );
+				overlay.end();
 			}
 			/*
 			================
@@ -373,7 +445,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+									depthStoreOp: flares || !!experimental?.ao ||
+											((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 										"store" as const :
 										"discard" as const
 								}
@@ -415,6 +488,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					overlay.draw( 6 );
 					overlay.end();
 				}
+				// Ambient occlusion (experimental, #2094): this frame's
+				// stored depth totals into the factor the NEXT frame's
+				// surfaces sample (binding 15) - the one-frame lag is the
+				// design (the alternative is a depth prepass). It reads
+				// the depth after the scene and particle passes and ahead
+				// of every post chain; while off the owner is absent and
+				// the depth above was discarded as natively.
+				if ( experimental?.ao && depth ) experimental.ao.encode( encoder, depth );
 				bloom?.encode( encoder, view );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,
@@ -441,7 +522,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				// Port-only, not native: labels keep full-resolution pixels and
 				// scene occlusion after HDR or reduced-resolution scene rendering.
-				if ( (hdrScene || sceneScale || water) && worldUiBundle ) {
+				if ( (hdrScene || sceneScale) && worldUiBundle ) {
 					sceneScale?.resolveDepth( encoder );
 					const labels = encoder.beginRenderPass( {
 						label: "hdr-world-ui",
@@ -459,7 +540,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					labels.executeBundles( [ worldUiBundle ] );
 					labels.end();
 				}
-				if ( flares || thunder || bloom || hdrScene || sceneScale || water ) {
+				if ( flares || thunder || bloom || hdrScene || sceneScale ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
 						label: "hud-after-flares",

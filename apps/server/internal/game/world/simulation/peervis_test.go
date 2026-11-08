@@ -124,12 +124,78 @@ func TestPeerSpawnCarriesItsItemReferencesFirst(t *testing.T) {
 	}
 	found := false
 	for _, ids := range asked {
-		if len(ids) == 10 && ids[0] == 11459 && ids[2] == 3700 {
+		// The demand names the sendable rows only: PeerB's worn 11459
+		// and the skin's 3700. The skin's empty slots (refObjId 0) were
+		// never references the catalogue could send.
+		if len(ids) == 2 && ids[0] == 11459 && ids[1] == 3700 {
 			found = true
 		}
 	}
 	if !found {
 		t.Fatalf("reference requests = %v, want PeerB's worn 11459 and skin 3700", asked)
+	}
+}
+
+/*
+================
+TestPeerReferencesCrossToAViewerOnce
+
+#2148: a viewer's client keeps every reference row for the whole
+session, so the tick must send each row to a viewer once - not again
+for the second peer wearing it, and not again when a peer is evicted
+and shown once more. Two peers share item 11459; the second also
+wears 22001. Across the first show of both, the departure of one, and
+its return, the reference requests to the catalogue name 11459 once
+and 22001 once, while every spawn row still rides.
+================
+*/
+func TestPeerReferencesCrossToAViewerOnce(t *testing.T) {
+	const startMs = int64(1_784_000_000_000)
+	const referenceOpcode = 14
+	viewer := peerSession("s1", "DIV_A", 1, "PeerA")
+	second := peerSession("s2", "DIV_A", 2, "PeerB")
+	second.Appearance.Equipment = []wire.PlayerEquipItem{{RefObjID: 11459}}
+	third := peerSession("s3", "DIV_A", 3, "PeerC")
+	third.Appearance.Equipment = []wire.PlayerEquipItem{{RefObjID: 11459}, {RefObjID: 22001}}
+	all := []SessionSnapshot{viewer, second, third}
+	source := &fakeSource{sessions: all}
+	push := &fakePusher{}
+	ticker := newTestTicker(source, push)
+	// The stub echoes the demanded ids as the frame payload, so the
+	// pushed frames themselves carry what crossed to each viewer.
+	ticker.ItemReferences = func(ids []uint32) []Frame {
+		payload, err := json.Marshal(ids)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return []Frame{{Opcode: referenceOpcode, Payload: payload}}
+	}
+
+	ticker.RunTick(startMs)
+	ticker.RunTick(startMs + 250)
+
+	// Peer s2 departs and returns: its spawn rides again, its items
+	// do not cross to s1 again.
+	source.sessions = []SessionSnapshot{viewer, third}
+	ticker.RunTick(startMs + 500)
+	source.sessions = all
+	ticker.RunTick(startMs + 750)
+
+	counts := make(map[uint32]int)
+	for _, payload := range peerFramesTo(push, "s1", referenceOpcode) {
+		var ids []uint32
+		if err := json.Unmarshal(payload, &ids); err != nil {
+			t.Fatalf("reference payload: %v", err)
+		}
+		for _, id := range ids {
+			counts[id]++
+		}
+	}
+	if counts[11459] != 1 || counts[22001] != 1 || len(counts) != 2 {
+		t.Fatalf("references sent to s1 = %v, want 11459 and 22001 exactly once each", counts)
+	}
+	if rows := peerFramesTo(push, "s1", wire.OpSingleObjectSpawn); len(rows) != 3 {
+		t.Fatalf("s1 spawn rows = %d, want 3 (two first shows and the return)", len(rows))
 	}
 }
 

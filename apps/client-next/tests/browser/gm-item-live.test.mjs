@@ -14,7 +14,7 @@ test('authenticated GM console creates and picks up a native speed scroll',{skip
  try{
   await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
    const response=await route.fetch(),source=await response.text();
-   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(...args){const owner=createObservedUi(...args);globalThis.__gmItemProbe={};return {...owner,step(view,now){globalThis.__gmItemProbe.view=view;return owner.step(view,now);}};}`;
+   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(ports){const owner=createObservedUi(ports);globalThis.__gmItemProbe={};return {...owner,step(view,now){globalThis.__gmItemProbe.view=view;return owner.step(view,now);}};}`;
    await route.fulfill({response,body,contentType:'application/javascript'});
   });
   await bootPlayableSession(page,character);

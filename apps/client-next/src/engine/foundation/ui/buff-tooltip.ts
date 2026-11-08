@@ -20,6 +20,7 @@ import { skillParameterFormatters } from "./skill-tooltip-params";
 import { statusCodes } from "../animation/status-presentation";
 
 const TOOLTIP_WHITE = 0xffffffff;
+const TOOLTIP_OPERATION_STOP_COLOR = 0xffff4a4a;
 const INFINITE_ABNORMAL_BIT = 24;
 const MILLISECONDS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
@@ -136,7 +137,9 @@ export function buffTooltip(
 	const row = catalog.get( source.skill );
 	if ( !effect || !row ) return [];
 	// 4FC730 returns one on equality. Soldier and pet exceptions use only a name.
+	// 6E2F61: the basic premium buff is name-only on an exact symbol match too.
 	const nameOnlySkills = [
+		"SN_SKILL_MALL_PRE_APRU_4W",
 		"SN_SKILL_ASSAULTING_SOILDER",
 		"SN_SKILL_ELITE_ASSAULTING_SOILDER",
 		"SN_SKILL_CENTURION",
@@ -151,11 +154,20 @@ export function buffTooltip(
 		"SN_SKILL_MALL_PET_GROWTH_POTION"
 	];
 
+	// 6E32A0 checks the local slot's suppression flag; 6E3318 paints
+	// "(%s)" in red before the blank line and skill description.
+	const stopped = !source.viewer && source.suppressed === true;
 	const rows: TooltipRow[] = [ {
 		value: text( row.nameSymbol ) + (nameOnlySkills.includes( row.nameSymbol ) ? "" : " Lv " + row.basicLevel) +
-			"\n ",
+			(stopped ? "" : "\n "),
 		color: TOOLTIP_WHITE
 	} ];
+	if ( stopped ) {
+		rows.push(
+			{ value: "(" + text( "UIIT_TOOLTIP_OPERATION_STOP" ) + ")", color: TOOLTIP_OPERATION_STOP_COLOR },
+			{ value: " ", color: TOOLTIP_WHITE }
+		);
+	}
 	// Skill text is PML like item text: markup never reaches the tooltip.
 	const description = tooltipDescription( text( row.tooltipDescriptionSymbol ) );
 	if ( description.length ) rows.push( ...description, { value: " ", color: TOOLTIP_WHITE } );

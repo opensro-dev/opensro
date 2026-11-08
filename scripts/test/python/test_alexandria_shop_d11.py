@@ -39,12 +39,13 @@ FILLER = ["-1", "xxx"] * 4
 
 SMITH_GOODS = ["PACKAGE_ITEM_CH_BLADE_09_A", "PACKAGE_ITEM_CH_BLADE_10_A", "PACKAGE_ITEM_CH_BOW_10_A", "PACKAGE_ITEM_ETC_AMMO_ARROW_01"]
 ACCESSORY_GOODS = ["PACKAGE_ITEM_CH_RING_10_A"]
+ARMOR_GOODS = ["PACKAGE_ITEM_CH_HELMET_09_A", "PACKAGE_ITEM_CH_CHEST_11_SET_A"]
 POTION_GOODS = ["PACKAGE_ITEM_ETC_HP_POTION_05"]
 ALL_GOODS = SMITH_GOODS + ACCESSORY_GOODS + POTION_GOODS + ["PACKAGE_ITEM_CH_BLADE_09_A"]
 
 
 def tables(smith_goods=SMITH_GOODS):
-	codes = list(dict.fromkeys(smith_goods + ACCESSORY_GOODS + POTION_GOODS))
+	codes = list(dict.fromkeys(smith_goods + ACCESSORY_GOODS + ARMOR_GOODS + POTION_GOODS))
 	packages = [["1", "11", str(10 + i), code, "0", "EXPAND_TERM_ALL", "SN", "SN_TT", "old.ddj", *FILLER] for i, code in enumerate(codes)]
 	scraps = [["1", "11", c, c.replace("PACKAGE_ITEM_", "ITEM_", 1), "0", "0", "120", *["0"] * 13, *FILLER, str(100 + i)] for i, c in enumerate(codes)]
 	prices = [["1", "11", c, "1", "1000", *FILLER] for c in codes]
@@ -52,7 +53,8 @@ def tables(smith_goods=SMITH_GOODS):
 		"refshop.txt": utf16([
 			["1", "11", "5", "STORE_SD_SMITH", *FILLER],
 			["1", "11", "6", "STORE_SD_ACCESSORY", *FILLER],
-			["1", "11", "7", "STORE_SD_POTION", *FILLER]
+			["1", "11", "7", "STORE_SD_POTION", *FILLER],
+			["1", "11", "12", "STORE_SD_ARMOR", *FILLER]
 		]),
 		"refmappingshopgroup.txt": utf16([
 			["1", "11", "GROUP_STORE_SD_M_SMITH", "STORE_SD_SMITH"]
@@ -60,21 +62,25 @@ def tables(smith_goods=SMITH_GOODS):
 		"refmappingshopwithtab.txt": utf16([
 			["1", "11", "STORE_SD_SMITH", "STORE_SD_SMITH_GROUP1"],
 			["1", "11", "STORE_SD_ACCESSORY", "STORE_SD_ACCESSORY_GROUP1"],
-			["1", "11", "STORE_SD_POTION", "STORE_SD_POTION_GROUP1"]
+			["1", "11", "STORE_SD_POTION", "STORE_SD_POTION_GROUP1"],
+			["1", "11", "STORE_SD_ARMOR", "STORE_SD_ARMOR_GROUP1"]
 		]),
 		"refshoptabgroup.txt": utf16([
 			["1", "11", "7", "STORE_SD_SMITH_GROUP1", "SN_GROUP"],
 			["1", "11", "8", "STORE_SD_ACCESSORY_GROUP1", "SN_GROUP"],
-			["1", "11", "9", "STORE_SD_POTION_GROUP1", "SN_GROUP"]
+			["1", "11", "9", "STORE_SD_POTION_GROUP1", "SN_GROUP"],
+			["1", "11", "13", "STORE_SD_ARMOR_GROUP1", "SN_GROUP"]
 		]),
 		"refshoptab.txt": utf16([
 			["1", "11", "9", "STORE_SD_SMITH_TAB1", "STORE_SD_SMITH_GROUP1", "SN_TAB_WEAPON", ""],
 			["1", "11", "10", "STORE_SD_ACCESSORY_TAB1", "STORE_SD_ACCESSORY_GROUP1", "SN_TAB_ACCESSORY", ""],
-			["1", "11", "11", "STORE_SD_POTION_TAB1", "STORE_SD_POTION_GROUP1", "SN_TAB_POTION", ""]
+			["1", "11", "11", "STORE_SD_POTION_TAB1", "STORE_SD_POTION_GROUP1", "SN_TAB_POTION", ""],
+			["1", "11", "14", "STORE_SD_ARMOR_TAB1", "STORE_SD_ARMOR_GROUP1", "SN_TAB_ARMOR", ""]
 		]),
 		"refshopgoods.txt": utf16(
 			[["1", "11", "STORE_SD_SMITH_TAB1", code, str(slot), *FILLER] for slot, code in enumerate(smith_goods)]
 			+ [["1", "11", "STORE_SD_ACCESSORY_TAB1", code, str(slot), *FILLER] for slot, code in enumerate(ACCESSORY_GOODS)]
+			+ [["1", "11", "STORE_SD_ARMOR_TAB1", code, str(slot), *FILLER] for slot, code in enumerate(ARMOR_GOODS)]
 			+ [["1", "11", "STORE_SD_POTION_TAB1", code, str(slot), *FILLER] for slot, code in enumerate(POTION_GOODS)]
 		),
 		"refpackageitem.txt": utf16(packages),
@@ -127,9 +133,49 @@ class StockTests(unittest.TestCase):
 		self.assertEqual(len([p for p in stock if "_11_" in p]), 20)
 
 
+class OfficialStockTests(unittest.TestCase):
+	"""The default build stocks what official Alexandria sold (#2846;
+	the source is iSRO-R, the official city that has a smith): degree-11
+	grade A goods only at the smith and the accessory, degree-11 set
+	armour only at the armourer - the set rows are the imported tables'
+	own, the clone's grade A rows are the port's invention. Non-gear
+	rows (the smith's arrows) are not degree stock and stay."""
+
+	def test_smith_and_accessory_stock_degree_11_grade_a_only(self):
+		merged, _ = d11.merge_d11_stock(tables(), ITEMS)
+		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_SMITH_TAB1")], [
+			"PACKAGE_ITEM_CH_BLADE_11_A", "PACKAGE_ITEM_CH_BOW_11_A", "PACKAGE_ITEM_ETC_AMMO_ARROW_01"
+		])
+		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_ACCESSORY_TAB1")], ["PACKAGE_ITEM_CH_RING_11_A"])
+
+	def test_the_armourer_keeps_only_its_set_rows(self):
+		merged, _ = d11.merge_d11_stock(tables(), ITEMS)
+		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_ARMOR_TAB1")], ["PACKAGE_ITEM_CH_CHEST_11_SET_A"])
+
+	def test_a_family_without_the_degree_11_item_leaves_the_tab(self):
+		items = {k: v for k, v in ITEMS.items() if k != "ITEM_CH_BOW_11_A"}
+		merged, _ = d11.merge_d11_stock(tables(), items)
+		smith = [r[3] for r in goods_of(merged, "STORE_SD_SMITH_TAB1")]
+		self.assertNotIn("PACKAGE_ITEM_CH_BOW_10_A", smith)
+		self.assertNotIn("PACKAGE_ITEM_CH_BOW_11_A", smith)
+
+	def test_set_and_rare_rows_are_not_degree_stock_and_stay(self):
+		goods = ["PACKAGE_ITEM_CH_SPEAR_10_SET_A", "PACKAGE_ITEM_CH_BLADE_10_A_RARE", "PACKAGE_ITEM_CH_BOW_10_A"]
+		merged, _ = d11.merge_d11_stock(tables(smith_goods=goods), ITEMS)
+		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_SMITH_TAB1")], [
+			"PACKAGE_ITEM_CH_SPEAR_10_SET_A", "PACKAGE_ITEM_CH_BLADE_10_A_RARE", "PACKAGE_ITEM_CH_BOW_11_A"
+		])
+
+	def test_reentry_stocks_the_same_official_goods(self):
+		merged, _ = d11.merge_d11_stock(tables(), ITEMS)
+		again, summary = d11.merge_d11_stock(merged, ITEMS)
+		for tab in ("STORE_SD_SMITH_TAB1", "STORE_SD_ACCESSORY_TAB1", "STORE_SD_ARMOR_TAB1"):
+			self.assertEqual([r[3] for r in goods_of(again, tab)], [r[3] for r in goods_of(merged, tab)])
+
+
 class MergeTests(unittest.TestCase):
 	def merge(self, items=ITEMS, **kwargs):
-		return d11.merge_d11_stock(tables(**kwargs), items)
+		return d11.merge_d11_stock(tables(**kwargs), items, port_stock=True)
 
 	def test_the_stores_gain_the_degree_11_goods_and_other_stores_stay_untouched(self):
 		merged, summary = self.merge()
@@ -173,7 +219,7 @@ class MergeTests(unittest.TestCase):
 
 	def test_reentry_stocks_nothing_twice(self):
 		merged, _ = self.merge()
-		again, summary = d11.merge_d11_stock(merged, ITEMS)
+		again, summary = d11.merge_d11_stock(merged, ITEMS, port_stock=True)
 		self.assertEqual(summary["goods"], 0)
 		self.assertEqual(summary["packages"], 0)
 		for tab in ("STORE_SD_SMITH_TAB1", "STORE_SD_ACCESSORY_TAB1"):

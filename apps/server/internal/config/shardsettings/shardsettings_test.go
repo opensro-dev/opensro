@@ -13,10 +13,15 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/opstree"
 )
 
-// gameWorldJob is the GameWorld job file, relative to this package.
-var gameWorldJob = filepath.Join("..", "..", "..", "ops", "nomad", "jobs", "gameworld.nomad.hcl")
+// gameWorldJob is the GameWorld job file in the private ops tree, which
+// the release build lays into the module (opstree); a public checkout skips.
+func gameWorldJob(t *testing.T) string {
+	return filepath.Join(opstree.Require(t), "nomad", "jobs", "gameworld.nomad.hcl")
+}
 
 /*
 ================
@@ -28,7 +33,7 @@ file, sro-nomad and the catalogue build cannot drift apart.
 ================
 */
 func TestTableMatchesTheJobFile(t *testing.T) {
-	data, err := os.ReadFile(gameWorldJob)
+	data, err := os.ReadFile(gameWorldJob(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +69,7 @@ the table.
 ================
 */
 func TestEveryJobSettingIsListed(t *testing.T) {
-	data, err := os.ReadFile(gameWorldJob)
+	data, err := os.ReadFile(gameWorldJob(t))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -98,39 +98,43 @@ tone-maps its unassociated color and composites over the presented UI.
 export interface HdrDraw extends BloomDraw {
 	encodePreview( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
+
+/*
+================
+AmbientOcclusionDraw
+
+The experimental occlusion stage (#2094): view is the blurred factor
+the surfaces sample (their binding 15), stable between resizes;
+encode totals this frame's stored depth into it for the next frame.
+The view is null while the live target has no measurement yet
+(creation, resize, re-enable): the surfaces then keep the white view,
+so the factor is 1 and a fresh target's zero is never sampled.
+================
+*/
+export interface AmbientOcclusionDraw {
+	readonly view: GPUTextureView | null;
+	encode( encoder: GPUCommandEncoder, depth: GPUTextureView ): void;
+}
+/*
+================
+WaterRefractionDraw
+
+The experimental refracted water stage (port-only; device
+/water-refraction.ts). The device prepares it per frame and installs its
+copies as the surfaces' bindings 16/17; the frame owner encodes the
+copies after the opaque scene pass, then draws the water and the
+transparent tail over the frame in their own pass.
+================
+*/
+export interface WaterRefractionDraw {
+	encode( encoder: GPUCommandEncoder, frameColour: GPUTextureView, frameDepth: GPUTextureView ): void;
+}
 /*
 ================
 SunShadowOwner
 
 The experimental sun cascade (device/sun-shadow.ts). The renderer prepares
 it per frame and the frame owner encodes its caster pass.
-================
-*/
-/*
-================
-WaterRefractionDraw
-
-The experimental refracted water stage (device/water-refraction.ts). The
-renderer prepares it per frame with the water draws; the frame owner
-encodes it right after the scene pass, before anything reads the frame.
-================
-*/
-export interface WaterRefractionDraw {
-	readonly colourView: GPUTextureView;
-	readonly depthView: GPUTextureView;
-	encode(
-		encoder: GPUCommandEncoder,
-		frameColour: GPUTextureView,
-		frameDepth: GPUTextureView,
-		target: GPUTextureView,
-		targetDepth: GPUTextureView,
-		draws: readonly GeometryDraw[]
-	): void;
-}
-
-/*
-================
-SunShadowOwner
 ================
 */
 export interface SunShadowOwner {
@@ -160,9 +164,14 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly ao?: AmbientOcclusionDraw;
+	// Port-only water refraction: the armed stage, and where the world
+	// list's transparent tail begins. The frame owner draws the opaque
+	// world without its blended water, copies the frame, then draws that
+	// water and the tail in order.
 	readonly water?: {
-		readonly draws: readonly GeometryDraw[];
 		readonly stage: WaterRefractionDraw;
+		readonly transparentStart: number;
 	};
 }
 /*
@@ -194,8 +203,19 @@ export interface DeviceOwner extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
-	waterRefraction( width: number, height: number, enabled: boolean ): WaterRefractionDraw | undefined;
+	waterRefraction(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): WaterRefractionDraw | undefined;
 	sunShadow(): SunShadowOwner;
+	ambientOcclusion(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): AmbientOcclusionDraw | undefined;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
@@ -209,9 +229,7 @@ export interface DeviceOwner extends Disposable {
 		transform: Float32Array,
 		environment: Float32Array,
 		shadowEnabled?: boolean,
-		directional?: boolean,
-		// The camera's near and far, for the shaders' depth linearisation.
-		camera?: readonly number[]
+		directional?: boolean
 	): void;
 	sky(): ImageDraw | null;
 	thunder( color: readonly number[] ): ImageDraw;
@@ -221,6 +239,10 @@ export interface DeviceOwner extends Disposable {
 	recoverable(): boolean;
 	phase(): RuntimePhase;
 	error(): string | null;
+	/** Record a failure the frame met on this device (device.ts fail): a
+	 * memory refusal becomes recoverable, so the renderer replaces the
+	 * device instead of ending on its own failure (#2866). */
+	fail( error: unknown ): void;
 	commands(): FrameCommands | null;
 	surfaceCommands(): SurfaceCommands | null;
 	format(): GPUTextureFormat;
@@ -399,9 +421,6 @@ GeometryCommands
 ================
 */
 export interface GeometryCommands {
-	/** Port-only water refraction: install or clear the copied frame views
-	 * (device/water-refraction.ts). */
-	refractionViews( colour: GPUTextureView | null, depth: GPUTextureView | null ): void;
 	// Port-only, not native: coverage-alpha siblings for the fullscreen HDR
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
 	// original draws because their UI consumer retains native alpha blending.

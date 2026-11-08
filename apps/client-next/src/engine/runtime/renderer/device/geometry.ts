@@ -13,7 +13,9 @@ writes a member's stream (or a patched range of it) straight to its slot.
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
 import { createWaterReflection } from "./water-reflection";
+import { WATER_SKIN_BLENDED } from "./water-refraction";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
+import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
@@ -35,6 +37,9 @@ type Binding = BufferSlice["binding"];
 // The packed vertex (14 floats) and a uint32 index, in bytes.
 const VERTEX_BYTES = 56;
 const INDEX_BYTES = 4;
+// policy.y, the local fog a material carries; the shader tests above 1.5.
+const LOCAL_FOG_LINEAR = 1;
+const LOCAL_FOG_SHADER = 2;
 /*
 ================
 geometryPipelineState
@@ -93,9 +98,6 @@ export function createGeometryResources(
 	// The HDR stage's scene intermediate flips the colour format every
 	// geometry pipeline renders into; sceneBindings swaps every draw over.
 	let floatScene = false, shadowEnabled = false;
-	// Port-only water refraction: the copied frame views (device
-	// /water-refraction.ts), or null while the row is off.
-	let refractionColour: GPUTextureView | null = null, refractionDepth: GPUTextureView | null = null;
 	const waterReflection = createWaterReflection( created, format, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
@@ -135,6 +137,21 @@ export function createGeometryResources(
 		usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 	} );
 	const shadowDummyView = shadowDummy.createView();
+	// Binding 15, the ambient occlusion factor (experimental, #2094):
+	// while the stage is off the draws bind the 1x1 white view (factor
+	// 1, no occlusion) and the gated shader read never samples it;
+	// while it is on, the blurred factor's view (device.ts installs it
+	// through refreshAmbientOcclusion when the view changes).
+	const aoDummyView = white.createView();
+	let aoBoundView = aoDummyView;
+	// Bindings 16/17, the port-only water refraction (device
+	// /water-refraction.ts): the frame's colour copy and its r32float depth
+	// copy. While the row is off both bind the 1x1 white view (a float
+	// texture, like the depth copy) and the stage-gated branch never
+	// samples them; device.ts installs the real views through
+	// refreshWaterRefraction when they change.
+	const refractionDummyView = white.createView();
+	let refractionColourView = refractionDummyView, refractionDepthView = refractionDummyView;
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
@@ -262,10 +279,9 @@ export function createGeometryResources(
 				{ binding: 12, resource: waterSampler },
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
-				{ binding: 15, resource: refractionColour ?? white.createView() },
-				// A float texture (the stage's r32float copy), so the dummy is the
-				// white view, not the depth dummy.
-				{ binding: 16, resource: refractionDepth ?? white.createView() },
+				{ binding: 15, resource: aoBoundView },
+				{ binding: 16, resource: refractionColourView },
+				{ binding: 17, resource: refractionDepthView },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -355,17 +371,15 @@ export function createGeometryResources(
 		);
 	/*
 	================
-	setRefractionViews
+	rebindEveryDraw
 
-	Port-only water refraction: the copied frame views (device
-	/water-refraction.ts), or null while the row is off. Bindings hold
-	their views, so every draw rebinds against its current pipeline.
+	A shared binding (the sun cascade, the occlusion factor, the water
+	refraction copies) now names another view. Bind groups hold their
+	views, so every draw rebinds against its current pipeline through
+	the one geometryBinding funnel.
 	================
 	*/
-	function setRefractionViews( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
-		if ( refractionColour === colour && refractionDepth === depth ) return;
-		refractionColour = colour;
-		refractionDepth = depth;
+	function rebindEveryDraw() {
 		for ( const [draw, meta] of metadata ) {
 			DeviceDraw.rebind(
 				meta.selection,
@@ -384,7 +398,6 @@ export function createGeometryResources(
 		}
 	}
 	const commands: GeometryCommands = Object.freeze( {
-		refractionViews: setRefractionViews,
 		/*
 		================
 		hdrPreview
@@ -1074,7 +1087,9 @@ export function createGeometryResources(
 								data.bones.length / 16 / Math.max( 1, count )) :
 							0,
 						mat?.lightmap ? 1 : 0,
-						mat?.water ? 1 : 0,
+						// skin.z: water, with blended surfaces marked apart for
+						// the port-only refraction branch (device/water-refraction.ts).
+						mat?.water ? (mat.blend ? WATER_SKIN_BLENDED : 1) : 0,
 						mat?.sky ?? 0,
 						1,
 						1,
@@ -1085,7 +1100,7 @@ export function createGeometryResources(
 						mat?.instanceFade ? 2 : mat?.objectFade ? 1 : 0,
 						mat?.fadeAlphaOnly ? 1 : 0,
 						mat?.fogDisabled ? 1 : 0,
-						mat?.fog ? 1 : 0,
+						mat?.fog ? (mat.fog.linear ? LOCAL_FOG_LINEAR : LOCAL_FOG_SHADER) : 0,
 						mat?.textureAlpha === false ? 1 : 0,
 						mat?.instanceMaterialTint ? 1 : 0,
 						...(mat?.fog ?
@@ -1096,8 +1111,7 @@ export function createGeometryResources(
 								mat.fog.nearPlane,
 								mat.fog.farPlane,
 								mat.fog.intensity,
-								0,
-								0
+								...dungeonHeightFog( mat.fog ).slice( 0, 2 )
 							] :
 							[ 0, 0, 0, 0, 0, 0, 0, 0 ]),
 						...(mat?.ambient ?? [ 1, 1, 1 ]),
@@ -1127,11 +1141,12 @@ export function createGeometryResources(
 						...packTextureStage( mat?.textureStage ),
 						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
 						// draw blends nothing, so its surviving pixels are opaque; z, stage 1
-						// is the object's lightmap (binding 8 at the second UV set).
+						// is the object's lightmap (binding 8 at the second UV set); w, the
+						// slope of the block's height fog.
 						mat?.shaderDiffuse ? 1 : 0,
 						geometryPipelineState( mat ).blend ? 0 : 1,
 						mat?.objectLightmap ? 1 : 0,
-						0,
+						mat?.fog ? dungeonHeightFog( mat.fog )[2] : 0,
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),
@@ -1398,37 +1413,52 @@ export function createGeometryResources(
 		every draw rebinds against its current pipeline.
 		================
 		*/
-		/*
-		================
-		refractionViews
-
-		Port-only, not native: the water refraction stage's copied frame
-		views, or null when the row is off (white and depth dummies then
-		 bind; the shader's stage gate never samples them). Bindings hold
-		their views, so every draw rebinds against its current pipeline.
-		================
-		*/
-		refractionViews: setRefractionViews,
 		refreshShadowBindings( enabled: boolean ) {
 			if ( shadowEnabled === enabled ) return;
 			// Bind the selected target before prepare() activates the first frame.
 			shadowEnabled = enabled;
-			for ( const [draw, meta] of metadata ) {
-				DeviceDraw.rebind(
-					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
-				);
+			rebindEveryDraw();
+		},
+		/*
+		================
+		refreshAmbientOcclusion
+
+		The ambient occlusion owner's per-frame answer (experimental,
+		#2094): null while the stage is off or the scene has no size.
+		The swap travels the same identity guard as the cascade's: the
+		owner's blurred view is stable per scene size, so bindings stay
+		valid across frames and only an enable, disable or resize
+		refreshes them; the frame's render bundles ride on that
+		stability. A changed view rebinds every draw through the one
+		geometryBinding funnel.
+		================
+		*/
+		refreshAmbientOcclusion( view: GPUTextureView | null ) {
+			const next = view ?? aoDummyView;
+			if ( next === aoBoundView ) {
+				return;
 			}
+			aoBoundView = next;
+			rebindEveryDraw();
+		},
+		/*
+		================
+		refreshWaterRefraction
+
+		Port-only, not native: the water refraction stage's copies
+		(device/water-refraction.ts), or null while the row is off, when
+		both bindings fall back to the white view the stage gate never
+		samples. The copies' views are stable per scene size and format,
+		so, as with the occlusion factor, only an enable, disable, resize
+		or format flip rebinds.
+		================
+		*/
+		refreshWaterRefraction( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
+			const nextColour = colour ?? refractionDummyView, nextDepth = depth ?? refractionDummyView;
+			if ( nextColour === refractionColourView && nextDepth === refractionDepthView ) return;
+			refractionColourView = nextColour;
+			refractionDepthView = nextDepth;
+			rebindEveryDraw();
 		},
 		/*
 		================

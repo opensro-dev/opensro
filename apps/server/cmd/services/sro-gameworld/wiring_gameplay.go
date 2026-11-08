@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
@@ -61,13 +62,16 @@ ports. Runtimes retain only the capabilities declared by their packages.
 ================
 */
 type gameplayPlane struct {
-	divisionID    string
-	hub           *transport.Hub
-	deps          *enterworld.Deps
-	items         *action.Runtime
-	movement      *movement.Runtime
-	water         *movement.WaterValidator
-	presence      *livepresence.Directory
+	divisionID string
+	hub        *transport.Hub
+	deps       *enterworld.Deps
+	items      *action.Runtime
+	movement   *movement.Runtime
+	water      *movement.WaterValidator
+	presence   *livepresence.Directory
+	// mutes is the chat mute book (moderation_wiring.go), set once the
+	// shard is known; the console's conduct actions reach it.
+	mutes         *moderation.Book
 	chat          *chat.Runtime
 	chatFeed      *chatfeed.Feed
 	parties       *party.Runtime
@@ -143,6 +147,7 @@ func newGameplayPlane(
 	// windows to the same sweep that retires them.
 	deps.Now = func() time.Time { return items.Now() }
 	deps.TrackTimedWindows = items.TrackTimedWindows
+	deps.TrackMostWanted = items.TrackMostWanted
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
 	deps.RetireCharacterSession = items.ForgetCharacterSession
@@ -218,6 +223,26 @@ func newGameplayPlane(
 		log.Infof("loot: unique rewards (port-only): gap exemption %t, pop ticket %t, max-level loot %t, seal drops %t (%s, %s, %s, %s)",
 			items.UniqueRules.GapExempt, items.UniqueRules.PopTicket, items.UniqueRules.MaxLevelLoot, items.UniqueRules.SealDrops,
 			progression.EnvUniqueGapExempt, progression.EnvUniquePopTicket, progression.EnvUniqueMaxLevelLoot, progression.EnvUniqueSealDrops)
+	}
+	// SRO_JANGAN_XL_POTIONS (port-only, not native; owner 2026-11-07):
+	// the X-Large potions join Jangan's potion tab at Hotan's price, as
+	// extra goods on the same catalogue. "off" is the native Jangan shop.
+	xlGoods, err := commerce.JanganXLPotionGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	extraGoods = append(extraGoods, xlGoods...)
+	// SRO_ALEXANDRIA_HIDE_D11_GOODS (port-only, not native, #2842):
+	// degree-11 goods leave Alexandria's own shops as ConfigureCommerce
+	// loads them, so it is set first. "off" (the default) is native:
+	// the original game sold them there.
+	hideD11, err := commerce.AlexandriaHideD11GoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	items.AlexandriaHideD11Goods = hideD11
+	if hideD11 {
+		log.Infof("shops: Alexandria's degree-11 goods are hidden (%s, port-only, not native)", commerce.EnvAlexandriaHideD11Goods)
 	}
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
@@ -364,7 +389,7 @@ func newGameplayPlane(
 	movementRuntime.MotionLocked = items.PlayerMotionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
-	movementRuntime.SpawnSkills = items.EntrySkills
+	movementRuntime.SpawnSkills = items.SpawnEntrySkills
 	movementRuntime.ActionSpeed = items.EntryActionSpeed
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt
@@ -556,14 +581,30 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
+	// a character to the 2.5-page inventory base, never lowers one.
+	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
+	if game.deps.InventoryPages {
+		log.Infof("inventory: 2.5-page base ON (%s); off is the native one page", enterworld.EnvInventoryPages)
+	}
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	// Port-only, not native (owner, 2026-11-07): item links in player chat;
+	// the client learns the per-line limit at world entry.
+	if chat.ItemLinksFromEnv() {
+		game.deps.ChatItemLinks = tunables.Current().Int(tunables.ChatItemLinksPerMessage)
+	}
 	// Port-only, not native: the Bandit Den scroll counts down half as long,
 	// and the client's delay bar learns it at world entry.
 	// Port-only, not native: the job-kill streak, its bonuses and bounty.
 	game.items.MostWanted = action.MostWantedFromEnv()
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
+	}
+	// Port-only, not native: a worn job suit's bonus tiered by job level.
+	game.items.JobSuitTiers = action.JobSuitTiersFromEnv()
+	if game.items.JobSuitTiers {
+		log.Infof("job: suit tiers by job level ON (%s)", action.EnvJobSuitTiers)
 	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
@@ -663,6 +704,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Port-only, not native: a GM's /FORGE item forge (issue #1980).
+	game.items.GMItemForge = action.GMItemForgeFromEnv()
+	if game.items.GMItemForge {
+		log.Infof("gm: /FORGE ON (%s); forged items are bound", action.EnvGMItemForge)
+	}
 	// Capture the Flag (native): the daily start and the house minimum.
 	flagWar, err := action.FlagWarSettingsFromEnv()
 	if err != nil {
@@ -725,6 +771,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
+	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
+	if err != nil {
+		return err
+	}
 	if stats.Growth.Enabled {
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate
@@ -790,6 +840,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.EntryEventFrames = game.items.HalloweenEntryFrames
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
@@ -797,6 +848,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// with the quest composition (wiring_quests.go).
 	game.wireQuestDoors(quests)
 	game.items.UpdateExperience = stats.ExperienceUpdater()
+	// The Academy cumulated buff earns and drains on each member's kill
+	// share (#2270); the runtime's ledger keeps it door-free in the grant.
+	game.items.TrainingCampKill = game.mentorInvites.CampKillGrant
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
@@ -911,6 +965,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.ModerationLog = moderationLog
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
+	if game.deps.ChatItemLinks > 0 {
+		links := &chat.ItemLinks{Source: game.items, Limit: int(game.deps.ChatItemLinks)}
+		game.chat.ItemLinks = links
+		game.items.ChatItemLinks = links
+		log.Infof("chat: item links ON, %d per line (%s)", links.Limit, chat.EnvChatItemLinks)
+	}
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

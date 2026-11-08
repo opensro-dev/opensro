@@ -22,7 +22,13 @@ import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-co
 import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
-import { textureVariantPath, type TextureVariant } from "@/engine/foundation/assets/texture-variants";
+import {
+	HD_TEXTURE_VARIANT_ROOT,
+	hdTextureVariantPath,
+	textureVariantPath,
+	type HdTextureVariant,
+	type TextureVariant
+} from "@/engine/foundation/assets/texture-variants";
 export type { PackRange } from "./internal/pack-contract";
 
 /*
@@ -51,7 +57,7 @@ rejects as soon as the request is cancelled, while the shared work goes on
 for its other callers. A cancelled request's execution slot frees only
 when the request settles (loader.ts), so a request parked on a slow
 shared download held its slot - and the demand queued behind it - for the
-whole download: "did not acknowledge cancelling /assets/effects/programs.json within 30 s".
+whole download: "did not acknowledge cancelling /assets/effects/programs.json" (#2871).
 ================
 */
 function untilCancelled<T>( work: Promise<T>, signal: AbortSignal ): Promise<T> {
@@ -90,7 +96,8 @@ pack member or a loose file.
 */
 export function createPacks(
 	download: PackDownload,
-	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {}
+	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {},
+	hdAvailability: ( available: boolean ) => void = () => {}
 ) {
 	const persistent = createPersistentAssets(), parser = createPackIndex(), lifetime = new AbortController();
 	const blocks = createPackBlocks( download, lifetime.signal );
@@ -102,6 +109,15 @@ export function createPacks(
 	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	// The texture variant this device is served, decided once (textureVariant).
 	let variant: Promise<TextureVariant | null> = Promise.resolve( null );
+	// The HD set (#2061), decided live (hdTextures): null is the native
+	// default, under which nothing below is ever fetched. hdIndex is the
+	// set's own pack index, learned only once a format is chosen; the
+	// install controller owns the download that follows the choice.
+	type Served = { registry: Index; entry: PackEntry; };
+	let hdDecision: HdTextureVariant | null = null,
+		hdIndex: Promise<Index | null> | null = null,
+		hdInstall: AbortController | null = null,
+		hdInstallKicked = false;
 	const headers = new Map<string, Promise<number>>();
 	/*
 	================
@@ -199,12 +215,18 @@ export function createPacks(
 	function manifest( base: string ): Promise<Index> {
 		if ( origin !== null && origin !== base ) throw new Error( "Asset origin changed during session" );
 		origin = base;
+		// A decision made before the origin was known starts its
+		// download here, the first moment it can.
+		kickHdInstall();
 		if ( !index ) {
 			const operation = download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal ).then(
 				bytes => {
 					const admitted = parser.manifest(
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) )
 					);
+					// The published build's HD certification (#2800), told
+					// once with the index that carries it.
+					hdAvailability( admitted.hd );
 					// The startup packs and their members are what eviction keeps.
 					persistent.setStartup(
 						base,
@@ -223,6 +245,97 @@ export function createPacks(
 			} );
 		}
 		return index;
+	}
+	/*
+	================
+	hdRegistry
+
+	The HD set's own index, fetched from /hd only while a format is
+	chosen (hdTextures). Any failure - a build without the set, a cut
+	connection - admits an empty set: the originals serve, and the
+	answer is kept for the rest of the decision so a missing set costs
+	one fetch, not one per texture. A new decision learns again.
+	================
+	*/
+	function hdRegistry( base: string ): Promise<Index | null> {
+		if ( !hdIndex ) {
+			hdIndex = download( base + "/hd/packs/manifest.json", 16 << 20, lifetime.signal )
+				.then( bytes =>
+					parser.manifest(
+						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ),
+						"/hd"
+					)
+				)
+				.catch( () => null );
+		}
+		return hdIndex;
+	}
+	/*
+	================
+	kickHdInstall
+
+	Starts the chosen set's download once its origin is known: the
+	decision may arrive before the first manifest read names it, and
+	manifest() calls here when it does. No decision, no fetch - with
+	the row off this owner never names an /hd path.
+	================
+	*/
+	function kickHdInstall() {
+		if ( disposed || !hdDecision || !origin || hdInstallKicked ) return;
+		hdInstallKicked = true;
+		const controller = new AbortController();
+		hdInstall = controller;
+		void installHdSet( origin, controller.signal ).catch( () => {
+			// The set stays demand-served; a foreground read of any of
+			// its textures still upgrades on its own.
+		} );
+	}
+	/*
+	================
+	installHdSet
+
+	Makes the whole chosen set local, with activity reported so the
+	download shows: each member is installed under its original path,
+	whose read resolves to the HD entry (servedEntry), so the bytes
+	land in the persistent store under the HD digest. Members are
+	manual load, never startup-pinned, so the store's ordinary
+	eviction owns them once the row is off again.
+	================
+	*/
+	async function installHdSet( base: string, signal: AbortSignal ) {
+		const registry = await hdRegistry( base );
+		if ( !registry ) return;
+		for ( const entry of registry.assets.values() ) {
+			if ( disposed || signal.aborted ) return;
+			// The original a member upgrades: the HD path minus its root
+			// and format, under /assets again.
+			const prefix = HD_TEXTURE_VARIANT_ROOT + hdDecision + "/";
+			if ( !entry.path.startsWith( prefix ) ) continue;
+			try {
+				await install( new URL( base + "/assets/" + entry.path.slice( prefix.length ) ), signal, true );
+			} catch {
+				// One absent or failed member stops nothing; its first
+				// read falls back to the original, as any miss does.
+			}
+		}
+	}
+	/*
+	================
+	hdSet
+
+	The live HD decision: a format starts the set (index first, then
+	the download), null stops the download and forgets the set, so the
+	originals serve and a later switch-on learns afresh.
+	================
+	*/
+	function hdSet( format: HdTextureVariant | null ) {
+		if ( disposed || format === hdDecision ) return;
+		hdInstall?.abort();
+		hdInstall = null;
+		hdInstallKicked = false;
+		hdDecision = format;
+		hdIndex = null;
+		kickHdInstall();
 	}
 	/*
 	================
@@ -314,7 +427,11 @@ export function createPacks(
 			const registry = await untilCancelled( manifest( url.origin ), signal );
 			// Manifest paths are filenames; URL pathname preserves percent escapes.
 			const pathname = decodeURIComponent( url.pathname ).toLowerCase();
-			let entry = await untilCancelled( servedEntry( registry, pathname ), signal ), gzip = false;
+			const served = await untilCancelled( servedEntry( url.origin, registry, pathname ), signal );
+			let entry = served?.entry, gzip = false;
+			// The registry that owns the entry: the HD set's own for an
+			// HD member, whose pack the default index does not hold.
+			const owner = served?.registry ?? registry;
 			if ( !entry && pathname.endsWith( ".json" ) ) {
 				entry = registry.assets.get( pathname + ".gz" );
 				gzip = Boolean( entry );
@@ -335,7 +452,7 @@ export function createPacks(
 			if ( saved ) bytes = saved;
 			else if ( cache.has( entry.packPath ) ) {
 				const loaded = await untilCancelled(
-					pack( url.origin, registry.packs.get( entry.packPath )! ),
+					pack( url.origin, owner.packs.get( entry.packPath )! ),
 					signal
 				);
 				bytes = await decoded(
@@ -345,7 +462,7 @@ export function createPacks(
 			} else if ( unpacked.has( entry.packPath ) ) bytes = await loose( url.origin, entry, signal );
 			else {
 				try {
-					const descriptor = registry.packs.get( entry.packPath )!;
+					const descriptor = owner.packs.get( entry.packPath )!;
 					if ( descriptor.bytes > SMALL_PACK_BYTES ) {
 						bytes = await member( url.origin, descriptor, entry, signal );
 					} else {
@@ -413,15 +530,28 @@ export function createPacks(
 	================
 	servedEntry
 
-	The manifest entry a path is served from: a native texture's published
-	variant when this device is served one and the build made it
-	(texture-variants.ts), else the path's own entry.
+	The manifest entry a path is served from, and the registry that owns
+	it: with the HD row on, an HD member of the set's own index, ahead of
+	a native texture's published variant when this device is served one
+	and the build made it (texture-variants.ts), else the path's own
+	entry. The retail texture is the fallback at every step: a path the
+	HD set does not hold serves its original, and no read waits for the
+	HD decision - it only upgrades what the decision already names.
 	================
 	*/
-	async function servedEntry( registry: Index, pathname: string ) {
+	async function servedEntry( base: string, registry: Index, pathname: string ): Promise<Served | undefined> {
+		if ( hdDecision && pathname.endsWith( ".texture" ) ) {
+			const hdPath = hdTextureVariantPath( pathname, hdDecision );
+			if ( hdPath ) {
+				const hdReg = await hdRegistry( base );
+				const hdEntry = hdReg?.assets.get( hdPath );
+				if ( hdReg && hdEntry ) return { registry: hdReg, entry: hdEntry };
+			}
+		}
 		const served = pathname.endsWith( ".texture" ) ? await variant : null;
 		const variantPath = served ? textureVariantPath( pathname, served ) : null;
-		return (variantPath && registry.assets.get( variantPath )) || registry.assets.get( pathname );
+		const entry = (variantPath && registry.assets.get( variantPath )) || registry.assets.get( pathname );
+		return entry ? { registry, entry } : undefined;
 	}
 	/*
 	================
@@ -433,17 +563,17 @@ export function createPacks(
 	were fetched.
 	================
 	*/
-	async function install( url: URL, signal: AbortSignal ): Promise<boolean> {
+	async function install( url: URL, signal: AbortSignal, report = false ): Promise<boolean> {
 		if ( disposed || signal.aborted ) return false;
 		const registry = await untilCancelled( manifest( url.origin ), signal );
-		const entry = await untilCancelled(
-			servedEntry( registry, decodeURIComponent( url.pathname ).toLowerCase() ),
+		const served = await untilCancelled(
+			servedEntry( url.origin, registry, decodeURIComponent( url.pathname ).toLowerCase() ),
 			signal
 		);
 		// An unanswerable store (suspended, saturated) skips the file: a fetch
 		// could not be stored, and its first play fetches it on demand anyway.
-		if ( !entry || await installed( url.origin, registry, entry, signal ) !== false ) return false;
-		await readVerified( url, entry.length, signal, false );
+		if ( !served || await installed( url.origin, served.registry, served.entry, signal ) !== false ) return false;
+		await readVerified( url, served.entry.length, signal, report );
 		await persistent.flush();
 		return true;
 	}
@@ -459,6 +589,18 @@ export function createPacks(
 		*/
 		textureVariant( decision: Promise<TextureVariant | null> ) {
 			variant = decision;
+		},
+		/*
+		================
+		hdTextures
+
+		The HD row's live decision (#2061): the format this device is
+		served, or null for the native textures. May change while the
+		worker runs; nothing is fetched while it stays null.
+		================
+		*/
+		hdTextures( format: HdTextureVariant | null ) {
+			hdSet( format );
 		},
 		stats: () => ({
 			...persistent.stats(),
@@ -499,6 +641,10 @@ export function createPacks(
 		dispose() {
 			if ( disposed ) return;
 			disposed = true;
+			hdInstall?.abort();
+			hdInstall = null;
+			hdDecision = null;
+			hdIndex = null;
 			lifetime.abort();
 			blocks.dispose();
 			index = null;

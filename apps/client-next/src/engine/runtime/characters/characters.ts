@@ -105,6 +105,19 @@ const ORB_DETAIL_FULL = 3;
 
 /*
 ================
+stackOf
+
+The bounded stack of a caught value, for the incident report (#2559):
+the session bounds what it files at the same 8192, so a stack cut here
+loses nothing. Not an Error, no stack.
+================
+*/
+function stackOf( cause: unknown ): string | undefined {
+	return cause instanceof Error && cause.stack ? cause.stack.slice( 0, 8192 ) : undefined;
+}
+
+/*
+================
 createCharacterPresentation
 
 Own character catalog admission and actor assembly across the dock, creation
@@ -135,6 +148,9 @@ export function createCharacterPresentation(
 ) {
 	let probe: CharacterFrameProbe | undefined;
 	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
+	// The frame-clock reading the presenter last published with; step never
+	// lets it run backwards (#2561).
+	let lastSeconds = Number.NEGATIVE_INFINITY;
 	// One id index per published catalogue, as GlobalDataManager keeps it.
 	let concealmentCatalog: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[] | undefined,
 		concealmentLookup: SkillLookup = skillLookup( undefined );
@@ -162,6 +178,7 @@ export function createCharacterPresentation(
 	const output: PresentationOutput = {
 		displayed: new Map<number, CharacterActor>(),
 		failure: null,
+		failureCause: null,
 		cameraTarget: null,
 		cameraFade: null,
 		previewReady: false,
@@ -173,6 +190,10 @@ export function createCharacterPresentation(
 	const animationEmission = createAnimationEmission( allocateActor );
 	const auxiliary = createAuxiliaryPresentation( allocateActor );
 	const modelEmission = createModelEmission( allocateActor );
+	// The Item Mall mannequin's glow steps in the same frame as the world
+	// pass, so its emitters get their own lane: one emission owner sees
+	// one lane's step per frame. Party portraits publish no glow.
+	const portraitEmission = createModelEmission( allocateActor );
 	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
@@ -205,7 +226,7 @@ export function createCharacterPresentation(
 			deathShown: gid => presentationState.idleStates.get( gid )?.deathModel === true
 		}
 	);
-	const dockPreview = createDockPreview( { renderer, resources, scenery, lizardGid } );
+	const dockPreview = createDockPreview( { renderer, resources, scenery, modelEmission, lizardGid } );
 	const displayedDependencies = new Map<number, readonly string[]>();
 	// Appearance topology is independent of pose time. Revalidate resource
 	// readiness each frame, but derive garment/cosmetic parts only on change.
@@ -277,6 +298,7 @@ export function createCharacterPresentation(
 		scenery.reset();
 		entityLod.reset();
 		modelEmission.reset();
+		portraitEmission.reset();
 		structureVisuals.reset();
 		animationEmission.reset();
 		auxiliary.resetStages();
@@ -291,6 +313,7 @@ export function createCharacterPresentation(
 		avatarOverrides.clear();
 		auxiliary.resetChildren();
 		posePresentation.reset();
+		lastSeconds = Number.NEGATIVE_INFINITY;
 		presentationState.reset();
 		retiring.clear();
 		disappearing.clear();
@@ -354,6 +377,7 @@ export function createCharacterPresentation(
 			gameplay?.localGid !== undefined ? appearances.get( gameplay.localGid )?.dependencies ?? [] : []
 		);
 		output.failure = null;
+		output.failureCause = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
 		posePresentation.samples( samples );
 		const result = resources.poll();
@@ -878,7 +902,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld },
 			output,
 			published,
-			{ renderer, resources, mallPreview }
+			{ renderer, resources, mallPreview, portraitEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
@@ -943,6 +967,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					presentationState.clearStances();
 					modelEmission.reset();
+					portraitEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
 					auxiliary.resetStages();
@@ -980,6 +1005,7 @@ export function createCharacterPresentation(
 			return weather.eventRain( published, () => {
 				presentationState.clearStances();
 				modelEmission.reset();
+				portraitEmission.reset();
 				structureVisuals.reset();
 				animationEmission.reset();
 				auxiliary.resetStages();
@@ -1012,6 +1038,17 @@ export function createCharacterPresentation(
 		/*
 		================
 		step
+
+		One presented frame. The host's frame clock is not monotonic:
+		visible frames carry the animation-frame callback timestamp while
+		maintenance frames carry performance.now(), and their interleave
+		steps the reading back by milliseconds. Every clock inside is
+		stamped from this reading and published as a difference, so a
+		rewound frame would publish negative times (#2561). The presenter
+		therefore presents the latest reading it has ever seen, kept in
+		lastSeconds across frames and reset by teardown. Times anchored
+		on simulationMs offset from the same reading, so they move with
+		it; nothing inside may read the raw argument instead.
 		================
 		*/
 		step(
@@ -1028,9 +1065,17 @@ export function createCharacterPresentation(
 			nativeServerName?: string,
 			normalFortressClothes = false
 		) {
-			const begun = beginFrame( entities, gameplay, seconds, dock, preview );
-			if ( dockPreview.step( { seconds, dock, preview, lizard, nativeServerName }, output, published ) ) return;
-			retireDespawned( seconds, entities );
+			const frameSeconds = Math.max( seconds, lastSeconds );
+			lastSeconds = frameSeconds;
+			const begun = beginFrame( entities, gameplay, frameSeconds, dock, preview );
+			if (
+				dockPreview.step(
+					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName },
+					output,
+					published
+				)
+			) return;
+			retireDespawned( frameSeconds, entities );
 			const presented = selectPresented( entities, gameplay );
 			// GameConfig +0x12E (745D10) forces the death model (8E655D) on an
 			// uncensored Korean shard. It also picks the authored blood over the
@@ -1038,17 +1083,23 @@ export function createCharacterPresentation(
 			// shard shows the authored blood.
 			const uncensored = uncensoredShard( published.dress.defaultWearLanguage ?? 4, nativeServerName );
 			const events = prepareEvents(
-				{ entities, gameplay, seconds, simulationMs, effectDetail, bloodEnabled: true },
+				{ entities, gameplay, seconds: frameSeconds, simulationMs, effectDetail, bloodEnabled: true },
 				begun,
 				presented
 			);
 			const actors = presentActors(
-				{ entities, seconds, simulationMs, nativeServerName, normalFortressClothes, uncensored },
+				{ entities, seconds: frameSeconds, simulationMs, nativeServerName, normalFortressClothes, uncensored },
 				begun,
 				presented,
 				events
 			);
-			finishFrame( { entities, seconds, cameraPitch, blindHeld }, begun, presented, events, actors );
+			finishFrame(
+				{ entities, seconds: frameSeconds, cameraPitch, blindHeld },
+				begun,
+				presented,
+				events,
+				actors
+			);
 		},
 		/*
 		================
@@ -1100,7 +1151,7 @@ export function createCharacterPresentation(
 				(effects.error() ?
 					{ path: null, message: effects.error() as string } :
 					output.failure ?
-					{ path: null, message: output.failure } :
+					{ path: null, message: output.failure, stack: stackOf( output.failureCause ) } :
 					null),
 		/*
 		================
@@ -1143,6 +1194,7 @@ export function createCharacterPresentation(
 		reset() {
 			teardown( "reset" );
 			output.failure = null;
+			output.failureCause = null;
 			renderer.setCharacterActors( [] );
 		},
 		/*

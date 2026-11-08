@@ -1503,6 +1503,19 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
 		step( 8320 );
 		assert.equal( labelOf( "rebirth-point" ), pointLabel );
+		// 52ff1b is dormant: the native camp-resurrection label tests a
+		// marker no reachable writer sets, so a running flag war never
+		// changes the death box; the team-death label stands (#2428).
+		f.state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				rebirthMode: 2,
+				flagWar: { timerEndsAt: 1, carrierGid: 0 }
+			}
+		};
+		step( 8330 );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "a flag war does not change the death box" );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );
@@ -2434,6 +2447,30 @@ test("GPU management controls send typed intent and preserve the selected guild 
 		assert.ok( output.controls.some( c => c.id === "social-confirm-yes" ) );
 		f.ui.event( { kind: "activate", id: "social-confirm-yes" } );
 		assert.deepEqual( sent.pop(), { kind: "guild-title", id: 22, name: "Officer" } );
+	} finally {
+		f.dispose();
+	}
+});
+test("Space with a digit uses the extended quickslot bar whatever the page", () => {
+	// Game_OnKeyDown 68111A adds 0x28 to the digit while GetKeyState(VK_SPACE)
+	// is down; 572990 takes a key above 10 as the slot itself (41..50).
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		f.state.gameplay.skills = [ 7, 8, 9 ];
+		f.state.gameplay.quickSlots = [
+			{ slot: 31, kind: 0x49, payload: 9 },
+			{ slot: 41, kind: 0x49, payload: 7 },
+			{ slot: 50, kind: 0x49, payload: 8 }
+		];
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "F4" } );
+		f.ui.step( f.state, 100 );
+		f.ui.event( { kind: "key", code: "Digit1", space: true } );
+		assert.equal( sent.pop().skillId, 7 );
+		f.ui.event( { kind: "key", code: "Digit0", space: true } );
+		assert.equal( sent.pop().skillId, 8 );
+		f.ui.event( { kind: "key", code: "Digit1" } );
+		assert.equal( sent.pop().skillId, 9 );
 	} finally {
 		f.dispose();
 	}
