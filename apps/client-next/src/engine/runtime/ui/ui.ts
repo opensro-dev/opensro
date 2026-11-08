@@ -13884,6 +13884,7 @@ export function createUi( ports: UiPorts ) {
 					hudData,
 					trackedQuest,
 					minimapResources,
+					caveMaps: minimapResources.caveMaps(),
 					mapTeleport,
 					reverseScrollHud,
 					text,
