@@ -87,3 +87,13 @@ runs at main. The full `pnpm --filter @sro/client-next check` adds gates
 lane) that need the retail asset build, so no CI run at main measures them;
 their cost lives on licensed asset workspaces. The slowest-30 table above
 is therefore the source lane's 27 files, whole.
+
+## Tightening (2026-11-08, #2929)
+
+Picked from this table: the per-file default dropped from 60 s to 20 s —
+the slowest ordinary file above took 14.6 s in the worse of the two
+profiled runs, so 20 s binds at a third of the old cap with headroom for
+runner jitter — and the run itself gained the 300 s whole-suite wall
+budget the five-minute client budget always implied
+(`SRO_TEST_SUITE_BUDGET_MS` overrides it). The ledger entry above is
+unchanged.

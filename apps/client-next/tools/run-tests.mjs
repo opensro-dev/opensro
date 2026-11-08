@@ -23,7 +23,9 @@ there discards it. SRO_CHECK_FORCE=1 runs everything.
 
 Every run times the files it actually executed and prints the thirty
 slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
-run (#2907), so suite time cannot creep back one file at a time.
+run, and a run over its whole-suite budget (TEST_SUITE_BUDGET_MS) fails
+too (#2907, #2929), so suite time cannot creep back one file at a time
+or in aggregate.
 
 ===========================================================================
 */
@@ -64,12 +66,20 @@ const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
 // watchdog's own test.
 const RSS_HEADROOM_MB = 2048;
 const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_HEADROOM_MB;
-// One test file's share of the five-minute client budget (#2907): a file
-// that runs longer than this fails the run and names itself, so suite
-// time cannot creep back file by file (the Go server's 30 s budget is
-// the same idea). Only files that actually ran are timed; a reused pass
-// spent nothing. SRO_TEST_FILE_BUDGET_MS overrides it.
-const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// A file that runs longer than this fails the run and names itself, so
+// suite time cannot creep back file by file (the Go server's 30 s budget
+// is the same idea). Only files that actually ran are timed; a reused
+// pass spent nothing. The 20 s default was picked from the measured
+// profile (docs/agents/client-test-profile.md): the slowest ordinary
+// file took 14.6 s on the CI runner in the worse of two profiled runs,
+// so 20 s binds at a third of the old 60 s cap with headroom for runner
+// jitter. SRO_TEST_FILE_BUDGET_MS overrides it.
+const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 20000;
+// The whole run's wall budget (#2929): the five-minute client budget
+// #2907 named, enforced on the run itself instead of only implied by
+// the per-file caps, so aggregate creep fails too. CI's source lane
+// measured 89-113 s against it. SRO_TEST_SUITE_BUDGET_MS overrides it.
+const TEST_SUITE_BUDGET_MS = Number( process.env.SRO_TEST_SUITE_BUDGET_MS ) || 300000;
 // How many of the slowest files each run names: enough that the suite
 // profile (docs/agents/client-test-profile.md, #2929) can be written
 // straight from a CI log line.
@@ -409,7 +419,14 @@ async function main() {
 				`${capOf( file ) / 1000}s per-file budget (#2907)\n`
 		);
 	}
-	if ( failed.size || overBudget.length ) process.exitCode = 1;
+	const suiteOver = Number( seconds ) * 1000 > TEST_SUITE_BUDGET_MS;
+	if ( suiteOver ) {
+		process.stdout.write(
+			`tests budget: the suite ran ${seconds}s, over its ` +
+				`${TEST_SUITE_BUDGET_MS / 1000}s whole-suite budget (#2929)\n`
+		);
+	}
+	if ( failed.size || overBudget.length || suiteOver ) process.exitCode = 1;
 }
 
 await main();
