@@ -98,6 +98,18 @@ class BlueBerserkTest(unittest.TestCase):
 		self.assertEqual(list(replaced), ["A"])
 
 	# ================
+	# test_a_filled_row_keeps_the_native_korean_source
+	# ================
+	def test_a_filled_row_keeps_the_native_korean_source(self):
+		native = native_line("A", "").split("\t")
+		native[2] = "native korean"
+		later = later_row("A", "later A")
+		later[2] = "later korean"
+		got, _, _ = blue.fill_text(text_table("\t".join(native)), {"A": later}, ("A",))
+		row = tables.table_rows(got)[0]
+		self.assertEqual((row[2], row[8]), ("native korean", "later A"))
+
+	# ================
 	# test_restoring_the_text_returns_the_original_bytes
 	# ================
 	def test_restoring_the_text_returns_the_original_bytes(self):

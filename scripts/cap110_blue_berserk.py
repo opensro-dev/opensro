@@ -59,6 +59,7 @@ FORMAT = "opensro-cap110-blue-berserk-v1"
 VARIANT_VERSION = "11"
 ENGLISH_COLUMN = 8
 KEY_COLUMN = 1
+KOREAN_COLUMN = 2
 SCROLL_COUNT = 4
 # The nine items and the kind each must be (type 3/3/x/y).
 ITEM_KINDS = {"ITEM_ETC_SECOND_HWAN": ("3", "3", "1", "8")}
@@ -114,7 +115,9 @@ def select_items(later, native):
 #
 # The text table with the later client's rows for the given symbols: a symbol
 # the table lacks is appended, a symbol whose English column is blank is
-# replaced in place, and a symbol with English keeps its line. Returns the new
+# replaced in place (the table's own Korean column stays: it is the source text
+# the English completion catalog is keyed on), and a symbol with English keeps
+# its line. Returns the new
 # bytes, the appended keys and {key: original line} of the replaced ones, so
 # the off path can restore the table exactly.
 # ================
@@ -129,15 +132,17 @@ def fill_text(raw, later_by_key, symbols):
 	for key in symbols:
 		if key not in later_by_key:
 			continue
-		line = "\t".join(map_tables.native_text_row(later_by_key[key]))
+		new = map_tables.native_text_row(later_by_key[key])
 		if key not in present:
 			appended.append(key)
-			additions.append(line)
+			additions.append("\t".join(new))
 			continue
 		fields = lines[present[key]].split("\t")
 		if len(fields) > ENGLISH_COLUMN and fields[ENGLISH_COLUMN].strip() == "":
 			replaced[key] = lines[present[key]]
-			lines[present[key]] = line
+			if len(fields) > KOREAN_COLUMN and fields[KOREAN_COLUMN].strip():
+				new[KOREAN_COLUMN] = fields[KOREAN_COLUMN]
+			lines[present[key]] = "\t".join(new)
 	if additions:
 		while lines and lines[-1] == "":
 			lines.pop()

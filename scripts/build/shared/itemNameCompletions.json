@@ -2870,5 +2870,29 @@
     "english": "Wind Snake Spirit's Skin",
     "basis": "translated-retail-korean",
     "source": "바람의 사령수의 껍질"
+  },
+  "SN_ITEM_ETC_INCREASE_HWAN_TIME_01": {
+    "english": "Essence of Vitality Tier 1 (internal reference)",
+    "basis": "translated-itemdata-korean",
+    "source": "생기의 정수 1차 (내부참조용)",
+    "absent": true
+  },
+  "SN_ITEM_ETC_INCREASE_HWAN_TIME_02": {
+    "english": "Essence of Vitality Tier 2 (internal reference)",
+    "basis": "translated-itemdata-korean",
+    "source": "생기의 정수 2차 (내부참조용)",
+    "absent": true
+  },
+  "SN_ITEM_ETC_INCREASE_HWAN_TIME_03": {
+    "english": "Essence of Vitality Tier 3 (internal reference)",
+    "basis": "translated-itemdata-korean",
+    "source": "생기의 정수 3차 (내부참조용)",
+    "absent": true
+  },
+  "SN_ITEM_ETC_INCREASE_HWAN_TIME_04": {
+    "english": "Essence of Vitality Tier 4 (internal reference)",
+    "basis": "translated-itemdata-korean",
+    "source": "생기의 정수 4차 (내부참조용)",
+    "absent": true
   }
 }
