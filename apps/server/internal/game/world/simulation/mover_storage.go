@@ -488,6 +488,24 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 
 /*
 ================
+livePoseAtSlot
+
+livePoseAt through a slot carried from the behaviour batch build,
+verified against the gid before use (#2133): a hit reads the row in
+its slot; a miss (the row moved, or the hint is the no-slot
+sentinel) delegates to livePoseAt, so the answer is the storage's
+either way.
+================
+*/
+func (s *moverStorage) livePoseAtSlot(slot uint32, gid uint32, nowMs int64, ground monster.GroundResolver) (monster.Pose, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return s.livePoseAt(gid, nowMs, ground)
+	}
+	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
+}
+
+/*
+================
 livePoses
 
 Every row's livePoseAt, in slot order: a population scan that reads

@@ -508,9 +508,23 @@ takeAIEvents
 ================
 */
 func (s *MonsterState) takeAIEvents(division string, gid uint32) []monsterAIEvent {
+	return s.takeAIEventsAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+takeAIEventsAt
+
+takeAIEvents with the population resolved through the monster slot
+the step carried (#2133): the events queue itself stays keyed by
+gid, only the population walk rides the verified hint, so the
+drained events are takeAIEvents' either way.
+================
+*/
+func (s *MonsterState) takeAIEventsAt(division string, gid uint32, monsterSlot uint32) []monsterAIEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	events := state.aiEvents[gid]
 	delete(state.aiEvents, gid)
 	return events
@@ -525,9 +539,21 @@ step (#2205) reads them now and consumes them at commit.
 ================
 */
 func (s *MonsterState) peekAIEvents(division string, gid uint32) []monsterAIEvent {
+	return s.peekAIEventsAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+peekAIEventsAt
+
+peekAIEvents with the population resolved through the monster
+slot the step carried, as takeAIEventsAt (#2133).
+================
+*/
+func (s *MonsterState) peekAIEventsAt(division string, gid uint32, monsterSlot uint32) []monsterAIEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	return append([]monsterAIEvent(nil), state.aiEvents[gid]...)
 }
 
