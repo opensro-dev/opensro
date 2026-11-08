@@ -81,10 +81,13 @@ const (
 // instead of captured fresh per owner tick (#2030), measured
 // 45,541 B / 822 allocs; with the tick driver's steps timed as
 // spans instead of per-step timing closures (#2030), measured
-// 39,284 B / 562 allocs.
+// 39,284 B / 562 allocs; with the pet counter judge taking the
+// read guard and composing its frame only on a change instead
+// of through a door closure per pet tick (#2030), measured
+// 27,259 B / 268 allocs.
 const (
-	tickBudgetBytesPerTick  = 32900
-	tickBudgetAllocsPerTick = 352
+	tickBudgetBytesPerTick  = 29900
+	tickBudgetAllocsPerTick = 294
 )
 
 /*
