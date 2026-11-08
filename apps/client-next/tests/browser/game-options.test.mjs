@@ -284,6 +284,7 @@ test(
 					perPixelLighting: false,
 					skyDetail: false,
 					msaa: false,
+					sceneFxaa: false,
 					renderScale: 100
 				}
 			);
@@ -327,6 +328,7 @@ test(
 					perPixelLighting: false,
 					skyDetail: false,
 					msaa: false,
+					sceneFxaa: false,
 					renderScale: 100
 				}
 			);
