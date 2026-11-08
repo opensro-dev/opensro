@@ -66,8 +66,13 @@ test("three tabs keep the 60x24 art and end inside the bag pane", () => {
 test("the selected tab paints last and takes the clicks in its overlap", () => {
 	for ( const selected of [ 0, 1, 2 ] ) {
 		const row = bagTabRow( PANE_X, PANE_Y, INVENTORY_BAG_TABS, 3, selected );
-		assert.equal( row.at( -1 ).page, selected );
-		const controls = row.map( tab => ({ id: "inventory-page:" + tab.page, rect: tab.rect }) );
+		assert.equal( row.at( -1 )?.page, selected );
+		const controls = /** @type {import("../../src/engine/contracts/ui").UiControl[]} */ (row.map( tab => ({
+			id: "inventory-page:" + tab.page,
+			label: String( tab.page + 1 ),
+			kind: "button",
+			rect: tab.rect
+		}) ));
 		const own = byPage( row )[selected];
 		// The selected tab's left and right edges both lie in an overlap.
 		for ( const x of [ own[0] + 1, own[0] + own[2] - 2 ] ) {
