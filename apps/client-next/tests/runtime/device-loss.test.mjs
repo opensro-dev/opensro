@@ -69,6 +69,11 @@ function installGpu( options = {} ) {
 					listeners.set( type, handler );
 				};
 			}
+			if ( key === "createRenderPipelineAsync" && options.rejectRenderPipeline ) {
+				return async () => {
+					throw options.rejectRenderPipeline();
+				};
+			}
 			if ( key === "createComputePipelineAsync" && options.rejectCompute ) {
 				return async descriptor => {
 					if ( options.rejectCompute( descriptor?.label ) ) {
@@ -236,6 +241,49 @@ test("running out of GPU memory can be cured by a new device", async () => {
 	} finally {
 		delete scope.GPUOutOfMemoryError;
 	}
+});
+
+test("an out-of-memory refusal while the device builds takes the recovery path", async () => {
+	// #2866: on memory-tight desktops Chrome refuses an allocation while
+	// the device builds and the pipeline promise rejects with this
+	// DOMException; it is not an uncaptured GPUOutOfMemoryError event.
+	installGpu( {
+		rejectRenderPipeline: () => new DOMException( "Not enough memory left.", "OperationError" )
+	} );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.error(), "OperationError: Not enough memory left." );
+	assert.equal( device.recoverable(), true, "a new device starts empty" );
+	device.dispose();
+});
+
+test("an out-of-memory refusal reported as a plain error takes the recovery path", async () => {
+	const gpu = installGpu();
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "running"; i++ ) await settle();
+	assert.equal( device.phase(), "running", device.error() ?? undefined );
+	// The same refusal in the uncaptured shape, but typed as the
+	// DOMException Chrome raises, not as a GPUOutOfMemoryError.
+	gpu.uncaptured(
+		"Not enough memory left.",
+		new DOMException( "Not enough memory left.", "OperationError" )
+	);
+	await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), true, "a new device starts empty" );
+	device.dispose();
+});
+
+test("a pipeline failure that is not a memory refusal stays permanent", async () => {
+	installGpu( {
+		rejectRenderPipeline: () => new Error( "GPUPipelineError: shader module compile failed" )
+	} );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), false, "a compile error would only repeat" );
+	device.dispose();
 });
 
 test("recovery waits longer each time and gives up in under two minutes", () => {

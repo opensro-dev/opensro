@@ -30,7 +30,7 @@ import { createCharacters } from "./characters/characters";
 import { createWorldRenderer } from "./world/world";
 import { copyGeometry } from "@/engine/foundation/rendering/geometry";
 import type { Geometry } from "@/engine/contracts/geometry";
-import { createDeviceRecovery } from "@/engine/foundation/rendering/device-recovery";
+import { createDeviceRecovery, isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
@@ -136,6 +136,16 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
+	// A memory refusal the frame met (a readback the GPU could not stage,
+	// a target it could not allocate) is the device's to cure: hand it
+	// down so the paced replacement runs instead of ending here (#2866).
+	const frameFailed = ( error: unknown ) => {
+		if ( isOutOfMemoryRefusal( error ) ) {
+			device.fail( error );
+			return;
+		}
+		failure = String( error );
+	};
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
 	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
@@ -897,7 +907,7 @@ export function createRenderer(
 								).then( results => {
 									if ( !disposed ) characters.deliverDeferred( results );
 								} ).catch( error => {
-									if ( !disposed ) failure = String( error );
+									if ( !disposed ) frameFailed( error );
 								} );
 							}
 							return finishDeferred();
@@ -1010,11 +1020,11 @@ export function createRenderer(
 					const frameDevice = open;
 					open = null;
 					return pending.catch( error => {
-						if ( !disposed ) failure = String( error );
+						if ( !disposed ) frameFailed( error );
 					} ).finally( () => frameDevice.endFrame() );
 				}
 			} catch ( error ) {
-				failure = String( error );
+				frameFailed( error );
 			} finally {
 				open?.endFrame();
 			}
