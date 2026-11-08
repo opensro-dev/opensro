@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -56,6 +57,63 @@ func BenchmarkBehaviorBatch(b *testing.B) {
 			b.Fatal("lost actors")
 		}
 		s.releaseBehaviorBatches(got)
+	}
+}
+
+/*
+================
+BenchmarkGateCommitInstanced
+
+#2029's gate commit priced where the leg is heaviest: six instanced
+world populations under one division, 400 due actors each, committed
+in world-interleaved order as the leg's division walk produces them.
+The commit is cadence-only, the gate's common due write, so one op
+prices the population resolve plus the slot write for all 2400 actors.
+================
+*/
+func BenchmarkGateCommitInstanced(b *testing.B) {
+	const worlds, actors = 6, 400
+	s := NewMonsterState(monster.Template{})
+	s.worldPopulations = make(map[populationKey]*divisionMonsterState)
+	type due struct {
+		gid               uint32
+		slot, monsterSlot uint32
+		before            monster.MoverState
+	}
+	dues := make([]due, 0, worlds*actors)
+	states := make([]*divisionMonsterState, worlds)
+	for w := 0; w < worlds; w++ {
+		lease := instance.Lease{ID: instance.ID(w + 2), Generation: 1}
+		d := &divisionMonsterState{lease: lease, instances: newMonsterStorage(nil), movers: newMoverStorage(nil)}
+		states[w] = d
+		s.worldPopulations[populationKey{benchDivision, lease}] = d
+	}
+	for i := 0; i < actors; i++ {
+		for w := 0; w < worlds; w++ {
+			gid := uint32(100000 + w*actors + i)
+			d := states[w]
+			d.instances.set(gid, monster.Instance{Gid: gid, CurrentHP: 100, Ref: monster.MonsterRef{MaxHP: 100}})
+			row := monster.MoverState{Activity: monster.ActivityCadence{Interval: 1000, LastCheck: 1}}
+			d.movers.set(gid, row)
+			d.behavior.set(gid, 0)
+			slot, _ := d.movers.slotOf(gid)
+			monsterSlot, _ := d.instances.hotSlotOf(gid)
+			dues = append(dues, due{gid, slot, monsterSlot, row})
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	now := int64(2000)
+	for n := 0; n < b.N; n++ {
+		for i := range dues {
+			now++
+			after := dues[i].before
+			after.Activity.LastCheck = uint32(now)
+			if !s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].before, after, now) {
+				b.Fatal("gate commit refused")
+			}
+			dues[i].before = after
+		}
 	}
 }
 
