@@ -351,7 +351,11 @@ fn skyNoise(p:vec2f)->f32{
 			selected = created.createRenderPipeline( {
 				layout: "auto",
 				vertex: { module, entryPoint: "vs" },
-				fragment: { module, entryPoint: "fs", targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ] },
+				fragment: {
+					module,
+					entryPoint: "fs",
+					targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ]
+				},
 				primitive: { topology: "triangle-list" },
 				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
 				multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }

@@ -97,8 +97,9 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let environmentBuffer: GPUBuffer | null = null,
 		sky: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
 		skyStages = new Map<string, import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw>(),
-		skyFactory: (( surface: SceneSurface ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw) | null =
-			null;
+		skyFactory:
+			| (( surface: SceneSurface ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw)
+			| null = null;
 	let geometry: ReturnType<typeof createGeometryResources> | null = null,
 		animation: ReturnType<typeof createGpuAnimationResources> | undefined,
 		particles: ReturnType<typeof createParticlePresentation> | null = null,
