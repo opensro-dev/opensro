@@ -622,6 +622,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# clear of, and before the shops that sell it.
 	import honor_items
 	honor_goods = honor_items.add_honor_items(native, out)
+	# The Blue Berserk chains' quest items follow the item switch and the level cap.
+	from cap110_quest_items import add_quest_items
+	quest_items = add_quest_items(vsro_root, native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
 	# The later client's seasonal town decoration (Halloween and the other
@@ -646,6 +649,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"monsterRewards": monster_rewards,
 		**later_layers,
 		"worldLayers": world_layers,
+		"questItems": quest_items,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],

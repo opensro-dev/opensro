@@ -3,7 +3,7 @@
 
 test_cap110_flag_off_mains.py - the cap-110 tools need no client when off
 
-With their flags off, the four standalone cap-110 tools only remove their
+With their flags off, the standalone cap-110 tools only remove their
 owned outputs and read no VSRO archive, so the archive pin (#1745) must
 not refuse them: each main runs against an empty VSRO root and returns.
 
@@ -23,11 +23,12 @@ from unittest import mock
 
 import cap110_item_import  # noqa: E402
 import cap110_monsters  # noqa: E402
+import cap110_quest_items  # noqa: E402
 import cap110_rewards  # noqa: E402
 import cap110_skill_import  # noqa: E402
 import import_vsro_alexandria  # noqa: E402
 
-FLAGS = ("SRO_CAP110_MONSTERS", "SRO_CAP110_ITEMS", "SRO_CAP110_SKILLS", "SRO_PHARAOH_TOMB")
+FLAGS = ("SRO_CAP110_MONSTERS", "SRO_CAP110_ITEMS", "SRO_CAP110_SKILLS", "SRO_PHARAOH_TOMB", "SRO_LEVEL_CAP")
 
 
 class FlagOffMainTests(unittest.TestCase):
@@ -56,6 +57,7 @@ class FlagOffMainTests(unittest.TestCase):
 		cases = [
 			(cap110_monsters, common + overlay),
 			(cap110_rewards, common + overlay),
+			(cap110_quest_items, common + ["--output", str(self.output)]),
 			(cap110_item_import, common + ["--output-extracted", str(self.output / "items")]),
 			(cap110_skill_import, common + ["--output-extracted", str(self.output / "skills")]),
 		]
