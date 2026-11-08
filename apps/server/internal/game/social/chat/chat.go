@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/party"
 )
 
@@ -59,6 +60,8 @@ type Views struct {
 	Parties  PartyView
 	Unions   UnionView
 	Stalls   StallView
+	// Links is the item-link switch (itemlinks.go); nil is native.
+	Links *ItemLinks
 }
 
 // Delivery is one presence-targeted 0x3667 send. The register glue resolves
@@ -90,6 +93,12 @@ type Outcome struct {
 	Refusal    string
 	Broadcast  []byte
 	Deliveries []Delivery
+	// PlainText is the line as text consumers store it (the moderation
+	// log, the website feed): item-link markers replaced by labels.
+	PlainText string
+	// Prelude is sent to every recipient of Broadcast and Deliveries just
+	// before the line: the linked items' reference frames (itemlinks.go).
+	Prelude []wire.Frame
 }
 
 /*
@@ -145,6 +154,8 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 	if sender == nil {
 		return refusedChat("characterNotFound")
 	}
+	// The store knows the live character only (item-link warehouse reads).
+	live := sender
 	sender = characterSnapshot(deps, divisionID, sender)
 	if sender == nil {
 		return refusedChat("characterNotFound")
@@ -152,11 +163,45 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 	if sender.DeletePending {
 		return refusedChat("deletePending")
 	}
-	request, err := DecodeChatRequest(payload)
+	decode := DecodeChatRequest
+	if views.Links != nil {
+		decode = DecodeChatRequestWithLinks
+	}
+	request, err := decode(payload)
 	if err != nil {
 		return refusedChat(err.Error())
 	}
+	var items []LinkedItem
+	if views.Links != nil {
+		// Port-only, not native: the stall window's box links nothing in
+		// v1, so its refs drop and its markers go with them.
+		refs := request.Links
+		if request.ChatType == ChatTypeStall {
+			refs = nil
+		}
+		storage := views.Links.Source.StorageLinks(divisionID, live, refs)
+		request.Message, items = ResolveLinks(views.Links, divisionID, sender, storage, request.Message, refs)
+	}
+	outcome := routeChat(deps, views, divisionID, sender, request)
+	if outcome.Broadcast != nil {
+		outcome.Broadcast = AppendLinkTail(outcome.Broadcast, items)
+	}
+	for i := range outcome.Deliveries {
+		outcome.Deliveries[i].Payload = AppendLinkTail(outcome.Deliveries[i].Payload, items)
+	}
+	outcome.PlainText = LabelText(request.Message, items)
+	outcome.Prelude = linkPrelude(items)
+	return outcome
+}
 
+/*
+================
+routeChat
+
+One decoded request to its channel's arm.
+================
+*/
+func routeChat(deps Dependencies, views Views, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	switch request.ChatType {
 	case ChatTypeAll, ChatTypeGM:
 		return handleAllChat(request, sender, ClosedBetaGlobalChat)

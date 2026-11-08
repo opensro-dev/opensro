@@ -81,6 +81,11 @@ export function tooltipItems(
 		// Port-only: the item a chat-log notice names (notice-links.ts).
 		const sequence = parseInt( id.slice( "notice-item:".length ), 10 );
 		item = game.chat?.lines.find( line => line.sequence === sequence )?.notice?.item;
+	} else if ( id.startsWith( "chat-item:" ) ) {
+		// Port-only: the item a player line links, chat-item:<sequence>:<index>
+		// with a wrapped part after (chat-item-links.ts).
+		const [, sequence, index] = id.split( ":" ).map( Number );
+		item = game.chat?.lines.find( line => line.sequence === sequence )?.links?.[index!];
 	} else if ( id.startsWith( "hotbar:" ) ) {
 		const binding = game.quickSlots?.find( row => row.slot === Number( id.slice( 7 ) ) );
 		if ( binding && (binding.kind === 0x46 || binding.kind === 0x47) ) {

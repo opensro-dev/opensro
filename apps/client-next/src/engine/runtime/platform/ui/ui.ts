@@ -366,9 +366,29 @@ export function createUiBridge(
 		if ( !(active instanceof HTMLElement) || !root.contains( active ) ) return;
 		const target = current( event.target );
 		if ( target?.element === active ) return;
+		if ( keepsFocus( event, active ) ) return;
 		active.blur();
 		if ( event.target === canvas || target?.value.kind === "region" ) canvas.focus( { preventScroll: true } );
 	}, { capture: true, signal: lifetime.signal } );
+	// Port-only (SRO_CHAT_ITEM_LINKS): the browser moves focus to the pressed
+	// control on mousedown; an editor that keeps its focus on Alt presses
+	// refuses that move, and the click still activates the control.
+	window.addEventListener( "mousedown", event => {
+		const active = document.activeElement;
+		if ( event.button !== 0 || !(active instanceof HTMLElement) || !root.contains( active ) ) return;
+		if ( current( event.target )?.element !== active && keepsFocus( event, active ) ) event.preventDefault();
+	}, { capture: true, signal: lifetime.signal } );
+	/*
+	================
+	keepsFocus
+
+	An Alt press while the focused control is an editor that keeps its
+	focus on Alt presses (keepFocusOnAltPress).
+	================
+	*/
+	function keepsFocus( event: MouseEvent, active: HTMLElement ) {
+		return event.altKey && current( active )?.value.keepFocusOnAltPress === true;
+	}
 	root.addEventListener( "pointerdown", event => {
 		if ( event.button !== 2 ) return;
 		const slot = current( event.target );

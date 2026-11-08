@@ -40,7 +40,7 @@
 | [Pet drop configuration](pet-expansion/PET-LOOT-DB-CONFIG.md) | Native equipment tables and the DB drop factor |
 | [Pet assets](pet-expansion/assets/README.md) | Icons, their build and provenance |
 | [Experimental graphics](features/EXPERIMENTAL_GRAPHICS.md) | Port-only render stages |
-| [Small features](features/SMALL_FEATURES.md) | Grab pets, pet nameplates, GM training dummy, beta mastery |
+| [Small features](features/SMALL_FEATURES.md) | Grab pets, pet nameplates, GM training dummy, beta mastery, item links in chat |
 
 ## Native research
 

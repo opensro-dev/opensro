@@ -702,3 +702,32 @@ func TestBootstrapJSONPublishesLevelCap(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestBootstrapJSONPublishesChatItemLinks
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): the per-line link limit
+reaches the client only while the switch is on; off (0) leaves the blob
+as the native one.
+================
+*/
+func TestBootstrapJSONPublishesChatItemLinks(t *testing.T) {
+	for _, limit := range []int64{0, 1} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			ChatItemLinks: limit,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if limit == 0 && strings.Contains(string(blob), "chatItemLinks") {
+			t.Fatal("the native blob names the port-only rule")
+		}
+		if limit == 1 && !strings.Contains(string(blob), `"chatItemLinks":1`) {
+			t.Fatal("the blob does not carry the link limit")
+		}
+	}
+}

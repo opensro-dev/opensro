@@ -277,11 +277,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Highlight event notices",
 			description: "Show the shard's event announcements in red."
 		}, {
-			key: "noticeLinks",
-			id: "experimental-notice-links",
-			label: "Links in notices",
-			description: "Hover an item for details; click a name to whisper."
-		}, {
 			key: "shortNotices",
 			id: "experimental-short-notices",
 			label: "Short notices",
@@ -437,6 +432,23 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-hd-textures",
 			label: "HD textures",
 			description: "Sharper world textures; downloads while on."
+		} ]
+	},
+	// Chat, appended last so the other tabs keep their indices: the
+	// chat-log links (notice links moved from Notices for room).
+	{
+		title: "Chat",
+		section: "Chat links",
+		rows: [ {
+			key: "noticeLinks",
+			id: "experimental-notice-links",
+			label: "Links in notices",
+			description: "Hover an item for details; click a name to whisper."
+		}, {
+			key: "chatItemLinks",
+			id: "experimental-chat-item-links",
+			label: "Item links in chat",
+			description: "Alt+click an item while typing to link it in chat."
 		} ]
 	}
 ];

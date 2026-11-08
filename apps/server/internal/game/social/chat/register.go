@@ -16,6 +16,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/transport"
@@ -66,7 +67,7 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
 		}
-		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls}, divisionID, character, payload)
+		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls, Links: rt.ItemLinks}, divisionID, character, payload)
 		// Port-only, not native: a shadow-muted author's lines reach only
 		// the author, who sees the same echo and acknowledgement as ever.
 		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID)
@@ -75,9 +76,10 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 			// The author's echo precedes the keyed receipt on the same reliable
 			// stream, so presentation uses the server's channel exactly once.
 			if muted {
+				sendPrelude(s, outcome.Prelude)
 				_ = s.Send(OpChatBroadcast, outcome.Broadcast)
 			} else {
-				rt.publish(divisionID, character.Name, outcome.Broadcast)
+				rt.publish(divisionID, character.Name, outcome.PlainText, publicLine{payload: outcome.Broadcast, prelude: outcome.Prelude})
 			}
 		}
 		if outcome.Ack != nil {
@@ -88,7 +90,12 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 			return
 		}
 		if outcome.Broadcast != nil && !ClosedBetaGlobalChat && !muted {
-			hub.BroadcastObserved(divisionID, s.ID, enterworld.ObjectIDForCharacter(character), []transport.Frame{{Opcode: OpChatBroadcast, Payload: outcome.Broadcast}})
+			frames := make([]transport.Frame, 0, len(outcome.Prelude)+1)
+			for _, frame := range outcome.Prelude {
+				frames = append(frames, transport.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
+			}
+			frames = append(frames, transport.Frame{Opcode: OpChatBroadcast, Payload: outcome.Broadcast})
+			hub.BroadcastObserved(divisionID, s.ID, enterworld.ObjectIDForCharacter(character), frames)
 		}
 		if presence == nil {
 			return
@@ -98,9 +105,23 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 				continue
 			}
 			if peer, online := presence.SessionByName(divisionID, delivery.TargetName); online {
+				sendPrelude(peer, outcome.Prelude)
 				_ = peer.Send(OpChatBroadcast, delivery.Payload)
 			}
 		}
+	}
+}
+
+/*
+================
+sendPrelude
+
+A linked line's reference frames, ahead of the line (itemlinks.go).
+================
+*/
+func sendPrelude(session *transport.Session, prelude []wire.Frame) {
+	for _, frame := range prelude {
+		_ = session.Send(frame.Opcode, frame.Payload)
 	}
 }
 
@@ -115,14 +136,17 @@ so refused lines (offline whisper target, wrong party, ...) are not
 logged, and a muted author's lines are logged, marked. Record only
 queues the line; the writer owns the disk (chatlog), so this never
 stalls the handler. The channel and text come from re-decoding the
-request, which HandleChat has already accepted at this point.
+request, which HandleChat has already accepted at this point; the text is
+Outcome.PlainText, the labels in place of item-link markers.
 ================
 */
 func (rt *Runtime) recordModerationLine(outcome Outcome, muted bool, character *enterworld.Character, payload []byte) {
 	if rt.ModerationLog == nil || outcome.Refusal != "" || (outcome.Broadcast == nil && len(outcome.Deliveries) == 0) {
 		return
 	}
-	request, err := DecodeChatRequest(payload)
+	// The lenient decoder reads a native frame and a linked one alike;
+	// HandleChat already chose which the switch allows.
+	request, err := DecodeChatRequestWithLinks(payload)
 	if err != nil {
 		return
 	}
@@ -133,7 +157,7 @@ func (rt *Runtime) recordModerationLine(outcome Outcome, muted bool, character *
 		Channel:   moderationChannel(request.ChatType),
 		Target:    request.TargetName,
 		Muted:     muted,
-		Text:      request.Message,
+		Text:      outcome.PlainText,
 	})
 }
 
