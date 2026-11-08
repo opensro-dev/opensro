@@ -8,6 +8,11 @@ asks the renderer to drop its CPU geometry once it is ready, and requests
 its bundle again if a device loss then drops the scene (renderer
 world/settle.ts).
 
+A transient load failure (a stalled download, the asset worker's stall
+watchdog) is retried on the shared bounded recovery clock, as the world
+and navigation streams are (asset-recovery.ts). Before #2862 one such
+failure on the title backdrop failed the frontend for good.
+
 ===========================================================================
 */
 import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -16,6 +21,7 @@ import type { AssetOwner, AssetResult } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { StageManifest } from "@/engine/contracts/frontend";
 import { createStagePreload } from "./preload";
+import { createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 /*
 ================
 createFrontendStage
@@ -33,6 +39,10 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		disposed = false,
 		sceneId: string | null = null;
 	const jobs = new Map<number, { kind: "manifest" | "world" | "texture"; path: string; }>();
+	// A transient failure waits here for its retry; no new request leaves
+	// until it is due (#2862).
+	const recovery = createAssetRecovery();
+	let retrying = false;
 	/*
 	================
 	request
@@ -103,6 +113,30 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		settleAsked = false;
 		error = null;
 		errorCause = null;
+		recovery.reset();
+		retrying = false;
+	}
+	/*
+	================
+	failed
+
+	A failed load: a transient one waits for the recovery clock and is
+	requested again (the world job by clearing worldRequested; the manifest
+	and textures are re-requested by step's own conditions). An exhausted
+	sequence, or a permanent failure, fails the stage as before.
+	================
+	*/
+	function failed(
+		job: { kind: "manifest" | "world" | "texture"; },
+		result: Extract<AssetResult, { kind: "error"; }>,
+		nowMs: number
+	) {
+		const failure = new Error( result.error );
+		if ( !result.transient ) throw failure;
+		recovery.failed( Object.assign( failure, { transient: true } ), nowMs );
+		if ( !recovery.reconnecting() ) throw failure;
+		if ( job.kind === "world" ) worldRequested = false;
+		retrying = true;
 	}
 	return {
 		/*
@@ -146,16 +180,24 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		/*
 		================
 		step
+
+		nowMs drives the transient-retry clock; the frame passes none and
+		reads the page clock.
 		================
 		*/
-		step() {
+		step( nowMs = performance.now() ) {
 			if ( disposed || !wanted || error ) return;
 			try {
 				for ( const [id, job] of jobs ) {
 					const result = assets.take( id );
 					if ( !result ) continue;
 					jobs.delete( id );
-					if ( result.kind === "error" ) throw new Error( result.error );
+					if ( result.kind === "error" ) {
+						failed( job, result, nowMs );
+						continue;
+					}
+					// A load that completes ends the failure sequence.
+					if ( !retrying ) recovery.reset();
 					if ( job.kind === "manifest" && result.kind === "bytes" ) {
 						manifest = JSON.parse( new TextDecoder().decode( result.buffer ) ) as StageManifest;
 					} else if ( job.kind === "world" && result.kind === "world" ) admit( result );
@@ -173,6 +215,8 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 					settleAsked = false;
 					sceneId = null;
 				}
+				if ( retrying && recovery.due( nowMs ) ) retrying = false;
+				if ( retrying ) return;
 				if ( !manifest && !jobs.size && assets.available() > 0 ) request( wanted, "manifest" );
 				if ( manifest && !worldRequested && assets.available() > 0 ) {
 					request( manifest.regionBundlePublicPath + new URL( wanted, base ).hash, "world" );
@@ -205,6 +249,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 			// so report no status rather than a manifest that never comes (#527).
 			if ( !wanted ) return undefined;
 			if ( error ) return error;
+			if ( retrying ) return "Connection interrupted - retrying";
 			if ( !manifest ) return "Loading scene description";
 			if ( !admitted ) return "Loading scene models";
 			// Request concurrency is not remaining work: texture dependencies are
