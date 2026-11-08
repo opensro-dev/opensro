@@ -20,7 +20,6 @@ package store
 
 import (
 	"cmp"
-	"database/sql"
 	"fmt"
 	"slices"
 
@@ -68,7 +67,7 @@ is written with every ground write, so a moved counter persists even
 when no item row changed.
 ================
 */
-func writeGroundChangesTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed map[string][]domain.GroundItemRecord, changes *domain.GroundChanges) error {
+func writeGroundChangesTx(tx sqlExecer, scratch *jsonscratch.Scratch, committed map[string][]domain.GroundItemRecord, changes *domain.GroundChanges) error {
 	if changes.Full {
 		if _, _, err := writeGroundDiffTx(tx, scratch, committed, changes.Snapshot.Divisions); err != nil {
 			return err

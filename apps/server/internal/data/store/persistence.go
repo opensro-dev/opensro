@@ -115,12 +115,11 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// then only the rows that changed (ground_changes.go).
 	ground := s.takeGroundChangesLocked()
 
+	// The build half (#2802): everything below up to the apply reads the
+	// planes and records statements into the batch; nothing touches the
+	// database until apply (commit_batch.go).
 	begun := s.mu.now()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := &commitBatch{}
 	// The trade and job planes marshal whole on every commit, changed
 	// or not; like the character rows below, a plane whose bytes still
 	// match its last committed digest is not rewritten (#1943 W2).
@@ -301,13 +300,12 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
-	phases[commitPhaseStatements] = s.mu.now().Sub(begun) - phases[commitPhaseEncode]
-	committing := s.mu.now()
-	if s.beforeSQLiteCommit != nil {
-		s.beforeSQLiteCommit()
-	}
-	err = tx.Commit()
-	phases[commitPhaseSQLite] = s.mu.now().Sub(committing)
+	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
+	statements, committed, err := tx.apply(batchApply{db: s.db, now: s.mu.now, beforeCommit: s.beforeSQLiteCommit})
+	// The statements phase keeps its meaning: everything but encoding
+	// before the SQLite commit, now the recording plus the apply's run.
+	phases[commitPhaseStatements] = built + statements
+	phases[commitPhaseSQLite] = committed
 	if err != nil {
 		return err
 	}
@@ -342,7 +340,7 @@ character rows' discipline (commitRowCommit), so a rolled-back commit
 leaves no digest describing bytes the disk does not hold.
 ================
 */
-func (s *Store) upsertMetaRowTx(tx *sql.Tx, staged map[string][32]byte, rows *commitRowCounts, key, value string) error {
+func (s *Store) upsertMetaRowTx(tx sqlExecer, staged map[string][32]byte, rows *commitRowCounts, key, value string) error {
 	digest := sha256.Sum256([]byte(value))
 	if committed, ok := s.committedMetaDigests[key]; ok && committed == digest {
 		rows.metaSkipped++
@@ -500,7 +498,7 @@ written through writeRow and released by close.
 ================
 */
 type characterRowCommit struct {
-	tx        *sql.Tx
+	tx        sqlExecer
 	upsert    *sql.Stmt
 	scratch   *jsonscratch.Scratch
 	committed map[committedCharacterKey][32]byte
@@ -527,17 +525,25 @@ tx.Exec's prepare again; on the real driver prepare-once took a
 ================
 */
 func (w *characterRowCommit) writeRow(division string, c *domain.Character, record []byte) error {
+	// string(record) is load-bearing: a []byte argument binds as a
+	// blob and the row reads back wrong (the same binding
+	// writeCharacterTx makes for the one-row doors). It also copies the
+	// borrowed encode buffer, so a recorded statement keeps its bytes.
+	args := []any{division, c.ID, strings.ToLower(c.Name), string(record)}
+	preparer, ok := w.tx.(sqlPreparer)
+	if !ok {
+		// Into a commitBatch: recorded, and the apply prepares it once.
+		_, err := w.tx.Exec(upsertCharacterSQL, args...)
+		return err
+	}
 	if w.upsert == nil {
-		stmt, err := w.tx.Prepare(upsertCharacterSQL)
+		stmt, err := preparer.Prepare(upsertCharacterSQL)
 		if err != nil {
 			return err
 		}
 		w.upsert = stmt
 	}
-	// string(record) is load-bearing: a []byte argument binds as a
-	// blob and the row reads back wrong (the same binding
-	// writeCharacterTx makes for the one-row doors).
-	_, err := w.upsert.Exec(division, c.ID, strings.ToLower(c.Name), string(record))
+	_, err := w.upsert.Exec(args...)
 	return err
 }
 
