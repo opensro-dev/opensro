@@ -63,19 +63,14 @@ import os
 import re
 import sys
 
+# revtool.py sits beside this file (scripts/re/revtool/).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-try:
-	import revtool
-except ImportError:  # repo layout not merged yet: allow an explicit home
-	_home = os.environ.get("REVTOOL_HOME")
-	if _home and os.path.isfile(os.path.join(_home, "revtool.py")):
-		sys.path.insert(0, _home)
-		import revtool
-	else:
-		raise SystemExit(
-			"error: revtool_rizin needs revtool.py beside it "
-			"(tools/re/revtool/) or REVTOOL_HOME pointing at it.")
+import revtool  # noqa: E402
 
+# The rizin these command shapes (aflj, afsj, pdfj, axtj) were written
+# against. The session asks the connected rizin for its own version
+# and records that measured value; another version warns, since its
+# JSON shapes may differ.
 RIZIN_VERSION = "0.8.2"
 ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
 
@@ -83,6 +78,17 @@ ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
 # =====================================================================
 # rizin session
 # =====================================================================
+
+# ================
+# measured_version
+#
+# The version token from rizin's "?V" answer ("0.8.2 @ windows-x86-64"),
+# or "" when the answer carries none.
+# ================
+def measured_version(answer):
+	words = answer.split()
+	return words[0] if words and words[0][:1].isdigit() else ""
+
 
 class RizinSession:
 	"""One rzpipe connection to one retail binary."""
@@ -101,6 +107,10 @@ class RizinSession:
 		# print usage, exit, and rzpipe spin forever on a dead pipe.
 		self._pipe = rzpipe.open(binary)
 		self._pipe.cmd("e scr.color=false")
+		self.version = measured_version(self._pipe.cmd("?V") or "")
+		if self.version != RIZIN_VERSION:
+			print(f"warning: rizin {self.version or 'of unknown version'} is connected; "
+			      f"these command shapes were written against {RIZIN_VERSION}.", file=sys.stderr)
 		if rzdb and os.path.exists(rzdb):
 			self._pipe.cmd(f'Po "{rzdb}"')
 		elif analyze and analyze != "none":
@@ -287,7 +297,7 @@ def cmd_index(args, con, rz):
 	revtool.record_artifact(
 		con, "rizin-analysis", rz.rzdb if rz.rzdb and os.path.exists(rz.rzdb) else binary,
 		record_count=len(rows), producer="rizin aflj analysis",
-		version=RIZIN_VERSION, settings={"analysis": getattr(args, "analyze", "aac")})
+		version=getattr(rz, "version", "") or "unknown", settings={"analysis": getattr(args, "analyze", "aac")})
 	rz.save()
 	con.commit()
 	print(f"indexed {len(rows)} functions from rizin "

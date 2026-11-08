@@ -19,21 +19,9 @@ import types
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-if os.environ.get("REVTOOL_HOME"):
-	sys.path.insert(0, os.environ["REVTOOL_HOME"])
-
-try:
-	import revtool  # noqa: E402
-	import revtool_rizin as rz  # noqa: E402
-	_MISSING = ""
-except ImportError as exc:
-	# revtool.py lands with its own port; until then (and on any
-	# machine without it) this suite skips instead of erroring, so a
-	# clean checkout stays green. Where revtool lives (REVTOOL_HOME
-	# pointing at it) the suite runs in full below.
-	revtool = rz = None
-	_MISSING = f"revtool is not importable here: {exc}"
+sys.path.insert(0, os.path.dirname(HERE))
+import revtool  # noqa: E402
+import revtool_rizin as rz  # noqa: E402
 
 
 OPS_402A70 = [
@@ -69,6 +57,7 @@ class FakeRizin:
 
 	def __init__(self):
 		self.saved = False
+		self.version = "0.9.0"
 
 	def functions(self):
 		return list(AFLJ)
@@ -141,7 +130,6 @@ def capture(fn, *a, **kw):
 	return rc, buf.getvalue()
 
 
-@unittest.skipIf(_MISSING, _MISSING)
 class TestSpelling(unittest.TestCase):
 	def test_bn_token(self):
 		self.assertEqual(rz.bn_token("fcn.00402a70", 0x402A70), "sub_402a70")
@@ -165,7 +153,6 @@ class TestSpelling(unittest.TestCase):
 		self.assertEqual(rz.normalize_line("cmp eax, 0x80", data), "cmp eax, 0x80")
 
 
-@unittest.skipIf(_MISSING, _MISSING)
 class TestCommands(unittest.TestCase):
 	def open_seeded(self):
 		tmp = tempfile.TemporaryDirectory()
@@ -191,6 +178,14 @@ class TestCommands(unittest.TestCase):
 		self.assertEqual(
 			con.execute("SELECT value FROM meta WHERE key='backend'").fetchone()[0],
 			"rizin")
+		# The measured version is recorded, not the supported pin.
+		self.assertEqual(con.execute(
+			"SELECT version FROM artifact_provenance WHERE name='rizin-analysis'").fetchone()[0], "0.9.0")
+
+	def test_measured_version(self):
+		self.assertEqual(rz.measured_version("0.8.2 @ windows-x86-64\n"), "0.8.2")
+		self.assertEqual(rz.measured_version(""), "")
+		self.assertEqual(rz.measured_version("Cannot find command"), "")
 
 	def test_view_applies_overlay(self):
 		con, binary, _tmp = self.open_seeded()
@@ -241,7 +236,6 @@ class TestCommands(unittest.TestCase):
 		self.assertIn("sub_402a70", out)
 
 
-@unittest.skipIf(_MISSING, _MISSING)
 @unittest.skipUnless(os.environ.get("SRO_RIZIN_IT"),
                      "set SRO_RIZIN_IT=1 (+SRO_RIZIN_BINARY) for the live run")
 class TestLiveRizin(unittest.TestCase):

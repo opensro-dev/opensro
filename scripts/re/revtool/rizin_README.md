@@ -2,18 +2,18 @@
 
 `revtool_rizin.py` lets revtool's six dump-reading commands run on a
 machine that has rizin and the retail binary but not Binary Ninja or
-its 110 MB HLIL dump export. revtool itself ships in the repo; before
+its 110 MB HLIL dump export. revtool.py sits beside it; before
 revtool.py grows its own `--backend` switch, this module is run
 directly with the same argument shapes:
 
 ```
-py .state/re-venv/Scripts/python.exe tools/re/revtool/revtool_rizin.py \
+py .state/re-venv/Scripts/python.exe scripts/re/revtool/revtool_rizin.py \
     --db revtool.db --binary SRO_Client.exe index
-py tools/re/revtool/revtool_rizin.py --db revtool.db view sub_402a70
-py tools/re/revtool/revtool_rizin.py --db revtool.db xref data_f0c90c
-py tools/re/revtool/revtool_rizin.py --db revtool.db coverage sub_402a70
-py tools/re/revtool/revtool_rizin.py --db revtool.db find CIFMain
-py tools/re/revtool/revtool_rizin.py --db revtool.db audit some_writeup.md
+py scripts/re/revtool/revtool_rizin.py --db revtool.db view sub_402a70
+py scripts/re/revtool/revtool_rizin.py --db revtool.db xref data_f0c90c
+py scripts/re/revtool/revtool_rizin.py --db revtool.db coverage sub_402a70
+py scripts/re/revtool/revtool_rizin.py --db revtool.db find CIFMain
+py scripts/re/revtool/revtool_rizin.py --db revtool.db audit some_writeup.md
 ```
 
 Setup follows docs/native/REVERSE_ENGINEERING.md (pinned venv at

@@ -694,7 +694,13 @@ def enforce_basis_tier(basis, tier):
 
 
 def migrate(con):
-    """Upgrade a local projection without treating it as shared authority."""
+    """Upgrade a local projection without treating it as shared authority.
+
+    One transaction: each ALTER otherwise commits (and syncs) on its own,
+    which cost about 9 s per fresh DB on a loaded disk."""
+    if con.in_transaction:
+        con.commit()
+    con.execute("BEGIN")
     for table in CLAIM_TABLES:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         for col, decl in PROVENANCE_COLS:
@@ -733,7 +739,8 @@ def open_db(path):
     except sqlite3.OperationalError:
         # WAL needs a real on-disk file; fall back silently for :memory:/tmpfs cases.
         pass
-    con.executescript(SCHEMA)
+    # One transaction for the whole schema, as in migrate().
+    con.executescript("BEGIN;\n" + SCHEMA + "\nCOMMIT;")
     migrate(con)
     return con
 
