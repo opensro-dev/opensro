@@ -364,7 +364,7 @@ func expectedChaseGoal(t *testing.T, ops *MonsterMoverOps, instance monster.Inst
 	if disposition != CombatApproachMove {
 		t.Fatalf("approach disposition %v, want an advancing goal", disposition)
 	}
-	before := ops.Monsters.prepareApproachNavigation(monsterTestDivision, instance, mover, target, 10000)
+	before := ops.Monsters.prepareApproachNavigation(monsterTestDivision, &instance, mover, target, 10000)
 	if before.approach != nil {
 		goal = squadApproachGoal(live, target, spacing, before.approach.slot)
 	}
@@ -408,7 +408,7 @@ func TestChaseLegStepsAlongHeading(t *testing.T) {
 		goals = append(goals, goal)
 		return monster.NewNavigationPath(from, goal, goal, 0, func(float64, monster.Pose) (float64, bool) { return 20, true })
 	}
-	frames := ops.startChaseLeg(monsterTestDivision, instance, aggressiveTactics(), mover, target, 10000)
+	frames := ops.startChaseLeg(monsterTestDivision, &instance, aggressiveTactics(), mover, target, 10000)
 	if len(frames) == 0 || len(goals) < 2 {
 		t.Fatalf("no chase leg authored: %v frames, %v goals", len(frames), goals)
 	}
@@ -476,7 +476,7 @@ func TestChaseLegGuardVetoKeepsSegment(t *testing.T) {
 	mover.To.Heading = headingWordAiming(live, goal, 4)
 	mover.NoteMoveIssued(monster.Pose{RegionID: monsterTestRegion, X: 990, Y: 20, Z: 1000}, false)
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-	frames := ops.startChaseLeg(monsterTestDivision, instance, aggressiveTactics(), mover, target, 10000)
+	frames := ops.startChaseLeg(monsterTestDivision, &instance, aggressiveTactics(), mover, target, 10000)
 	if len(frames) != 0 {
 		t.Fatalf("guard veto authored frames: %v", frames)
 	}

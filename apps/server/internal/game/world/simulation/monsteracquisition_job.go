@@ -76,7 +76,7 @@ the held one when it is preferred and the held one is not, or when both
 agree and it is strictly nearer than the held truncated distance.
 ================
 */
-func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []playerPose, sightRange float64, query jobQuery) (playerPose, bool) {
+func jobQueryAcquisition(actor *monster.Instance, from monster.Pose, players []playerPose, sightRange float64, query jobQuery) (playerPose, bool) {
 	sightFloat := float32(sightRange)
 	if math.IsNaN(float64(sightFloat)) || sightFloat < 0 || sightFloat > 1920 {
 		return playerPose{}, false

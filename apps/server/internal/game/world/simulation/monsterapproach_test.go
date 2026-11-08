@@ -39,7 +39,7 @@ func TestOrdinarySquadApproachAdmitsDetachedPolicySpawns(t *testing.T) {
 		"scripted spawn": questSpawn,
 		"GM spawn":       questSpawn,
 	} {
-		if !ordinarySquadApproach(actor) {
+		if !ordinarySquadApproach(&actor) {
 			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114)", name)
 		}
 	}
@@ -71,7 +71,7 @@ func TestOrdinarySquadApproachAdmitsAnAuthoredAreaNestAfterItsSlotIsReleased(t *
 	registry.StartDivision(monsterTestDivision)
 	registry.AdvancePopulation(time.Now().UnixMilli())
 	actor := monsterInstanceByRef(t, registry, 1933)
-	if ordinarySquadApproach(actor) {
+	if ordinarySquadApproach(&actor) {
 		t.Fatal("the authored area nest is admitted while it holds its slot")
 	}
 
@@ -90,7 +90,7 @@ func TestOrdinarySquadApproachAdmitsAnAuthoredAreaNestAfterItsSlotIsReleased(t *
 	if !detached.Nest.PolicyPinned {
 		t.Fatal("the released actor lost its pinned policy")
 	}
-	if !ordinarySquadApproach(detached) {
+	if !ordinarySquadApproach(&detached) {
 		t.Fatal("the released authored area nest stays out of ordinarySquadApproach")
 	}
 }
@@ -112,7 +112,7 @@ func TestOrdinarySquadApproachKeepsUnpinnedAndAttachedNestsOut(t *testing.T) {
 		"attached area nest":         {Nest: monster.NestRow{PolicyPinned: true}},
 		"plain instance":             {},
 	} {
-		if ordinarySquadApproach(actor) {
+		if ordinarySquadApproach(&actor) {
 			t.Fatalf("%s unexpectedly admitted to ordinarySquadApproach", name)
 		}
 	}
@@ -149,7 +149,7 @@ func TestQuestAndGMSpawnsJoinTheOrdinaryPursuit(t *testing.T) {
 	if actors[0].Nest.HasControls {
 		t.Fatal("the guardian's spawn table row grew a control block")
 	}
-	if !ordinarySquadApproach(actors[0]) {
+	if !ordinarySquadApproach(&actors[0]) {
 		t.Fatal("the quest guardian is excluded from the +0x114 pursuit")
 	}
 
@@ -162,7 +162,7 @@ func TestQuestAndGMSpawnsJoinTheOrdinaryPursuit(t *testing.T) {
 	if len(loaded) != 1 {
 		t.Fatalf("GM population %d, want 1", len(loaded))
 	}
-	if !ordinarySquadApproach(loaded[0]) {
+	if !ordinarySquadApproach(&loaded[0]) {
 		t.Fatal("the /LOADMONSTER spawn is excluded from the +0x114 pursuit")
 	}
 }

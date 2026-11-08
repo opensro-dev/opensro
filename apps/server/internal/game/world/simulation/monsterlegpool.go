@@ -463,7 +463,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		if !ok {
 			continue
 		}
-		actors = append(actors, actor)
+		actors = append(actors, *actor)
 	}
 	if len(actors) == 0 {
 		return stepped
@@ -553,7 +553,7 @@ func planLegActor(owned *MonsterMoverOps, plan *legPlan, work legBatchWork) {
 		return
 	}
 	plan.frames, plan.targeted = owned.advanceInstanceStep(
-		work.division, actor.instance, actor.mover, true, work.players, work.nowMs)
+		work.division, &actor.instance, actor.mover, true, work.players, work.nowMs)
 }
 
 /*
@@ -671,7 +671,7 @@ func (ops *MonsterMoverOps) executeLegPlanAttack(armed *MonsterMoverOps, work le
 		result = ops.BasicAttack(work.division, attack.instance, attack.target.Gid, attack.plan.SkillID, work.nowMs)
 	}
 	return armed.finishMonsterAttack(
-		work.division, attack.instance, attack.tactics, attack.mover,
+		work.division, &attack.instance, attack.tactics, attack.mover,
 		attack.target, attack.plan, work.nowMs, nil, result)
 }
 

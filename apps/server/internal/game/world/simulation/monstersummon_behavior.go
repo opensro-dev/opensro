@@ -22,7 +22,7 @@ retaliation is already owned by the ordinary chase/attack state and never
 enters this idle-only acquisition path.
 ==================
 */
-func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
+func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance *monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
 	if !ops.acquisitionReady(divisionID, instance, nowMs) {
 		return playerPose{}, false
 	}
@@ -45,7 +45,7 @@ summonedCandidate
 The one candidate the idle acquisition offers the target set.
 ==================
 */
-func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
+func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance *monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
 	if target, ok := nearestEligiblePlayer(instance, mover.LivePoseAt(nowMs, nil), players, instance.SummonSightRange); instance.SummonSightRange > 0 && ok {
 		return target, true
 	}
@@ -87,7 +87,7 @@ The boolean means this decision handled the tick, not packet acceptance.
 A rejected snapshot must not fall through into another stale-state plan.
 ==================
 */
-func (ops *MonsterMoverOps) followSummoner(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
+func (ops *MonsterMoverOps) followSummoner(divisionID string, instance *monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
 	if mover.ControllerGID() == 0 {
 		return nil, false
 	}
@@ -127,7 +127,7 @@ func (ops *MonsterMoverOps) planFollowSegment(plan monsterFollowPlan, live, targ
 	return frames, true
 }
 
-func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
+func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance *monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
 	plan, ok := ops.Monsters.prepareFollow(divisionID, instance, mover, nowMs)
 	if !ok {
 		return nil, true

@@ -33,7 +33,7 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 				return MonsterAttackResult{Accepted: true, TargetAlive: true}
 			}
 			m, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-			ops.tryMonsterAttack(monsterTestDivision, actor, aggressiveTactics(), m, []playerPose{target}, now)
+			ops.tryMonsterAttack(monsterTestDivision, &actor, aggressiveTactics(), m, []playerPose{target}, now)
 			m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 			if m.TargetGID() != target.Gid || !m.Retaliating() || m.NextAttackMs != 0 || calls != 1 || choices != 1 || draws != 2 {
 				t.Fatalf("refusal lost combat, retained timer, or retried synchronously: %+v choices=%d draws=%d calls=%d", m, choices, draws, calls)
@@ -49,7 +49,7 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 			// The next decision sees the moved target. Both cases must pursue it
 			// without another callback, and only command error reselects/jitters.
 			target.Pose.X = 1100
-			ops.tryMonsterAttack(monsterTestDivision, actor, aggressiveTactics(), m, []playerPose{target}, now+100)
+			ops.tryMonsterAttack(monsterTestDivision, &actor, aggressiveTactics(), m, []playerPose{target}, now+100)
 			m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 			wantChoices := 1
 			if refusal == MonsterAttackCommandRejected {
@@ -65,7 +65,7 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 			// an executable continuation, not merely a retained target field.
 			live := m.LivePoseAt(now+200, nil)
 			target.Pose = poseToSpawn(live)
-			ops.tryMonsterAttack(monsterTestDivision, actor, aggressiveTactics(), m, []playerPose{target}, now+200)
+			ops.tryMonsterAttack(monsterTestDivision, &actor, aggressiveTactics(), m, []playerPose{target}, now+200)
 			m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 			if calls != 2 || m.Mode() != monster.MoverAttacking || m.NextAttackMs <= now+200 || choices != wantChoices {
 				t.Fatalf("refused attack never resumed: %+v calls=%d", m, calls)
@@ -86,14 +86,14 @@ func TestMonsterRefusalCannotOverwriteRetaliationOrRetainLostTarget(t *testing.T
 			return MonsterAttackResult{TargetAlive: true, Refusal: MonsterAttackCommandRejected}
 		}
 		m, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-		ops.tryMonsterAttack(monsterTestDivision, actor, aggressiveTactics(), m, []playerPose{target}, 100000)
+		ops.tryMonsterAttack(monsterTestDivision, &actor, aggressiveTactics(), m, []playerPose{target}, 100000)
 		m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 		if newerTarget {
 			if m.TargetGID() != PlayerObjectID(2) || !m.RetaliationPending() || m.NextAttackMs == 0 {
 				t.Fatalf("stale refusal overwrote newer combat owner: %+v", m)
 			}
 		} else {
-			ops.tryMonsterAttack(monsterTestDivision, actor, aggressiveTactics(), m, nil, 100100)
+			ops.tryMonsterAttack(monsterTestDivision, &actor, aggressiveTactics(), m, nil, 100100)
 			m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 			if m.TargetGID() != 0 || m.Mode() == monster.MoverAttacking {
 				t.Fatalf("lost target survived refusal retry: %+v", m)

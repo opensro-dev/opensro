@@ -15,7 +15,7 @@ func TestWanderProbeAndMovementHaveSeparateDistances(t *testing.T) {
 			goals = append(goals, goal)
 			return monster.NewNavigationPath(from, goal, goal, result, func(float64, monster.Pose) (float64, bool) { return 20, true })
 		}
-		ops.startWanderLeg(monsterTestDivision, instance, passiveTactics(), mover, 1000)
+		ops.startWanderLeg(monsterTestDivision, &instance, passiveTactics(), mover, 1000)
 		if len(goals) != 2 {
 			t.Fatalf("need a probe then a movement plan, got %d", len(goals))
 		}
@@ -32,7 +32,7 @@ func TestWanderProbeAndMovementHaveSeparateDistances(t *testing.T) {
 func TestWanderExpiryPreservesMovementAndDefersAcquisition(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
-	ops.startWanderLeg(monsterTestDivision, instance, passiveTactics(), mover, 1000)
+	ops.startWanderLeg(monsterTestDivision, &instance, passiveTactics(), mover, 1000)
 	mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	deadline := mover.BehaviorDeadlineMs
 	if mover.ArriveMs <= deadline {
@@ -76,7 +76,7 @@ func TestIdleExpiryPrecedesSightAcquisition(t *testing.T) {
 func TestWanderTimeoutDoesNotRestartIdleTimerOnMovementArrival(t *testing.T) {
 	ops, instance := monsterLegFixture(t, passiveTactics())
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
-	ops.startWanderLeg(monsterTestDivision, instance, passiveTactics(), mover, 1000)
+	ops.startWanderLeg(monsterTestDivision, &instance, passiveTactics(), mover, 1000)
 	mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	ops.advanceInstance(monsterTestDivision, instance, nil, mover.BehaviorDeadlineMs+1)
 	idle, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)

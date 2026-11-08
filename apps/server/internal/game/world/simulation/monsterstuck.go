@@ -127,7 +127,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		next.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		detached := current
 		detached.NestDetached = true
-		if !needsHoming(detached, live) {
+		if !needsHoming(&detached, live) {
 			next.TakeIdleEntry()
 		}
 		if ops.Monsters.commitStuckMover(divisionID, gid, current, mover, next, true, nowMs) && hadSegment {

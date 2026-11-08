@@ -118,7 +118,7 @@ func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.Me
 // base still names the row; every other commit rewrites the row and
 // the caller must re-read before chaining generation-guarded commits
 // off it. The answer is load-bearing only on the unhandled return.
-func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool, bool) {
+func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool, bool) {
 	if ops.activity == nil {
 		return nil, m, false, false
 	}

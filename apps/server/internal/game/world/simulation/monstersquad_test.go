@@ -82,17 +82,17 @@ func TestSightAcquisitionRespectsTheSquadLimit(t *testing.T) {
 	last := actors[monster.SquadMemberLimit]
 	from := monster.Pose{RegionID: last.Spawn.RegionID, X: last.Spawn.X, Y: last.Spawn.Y, Z: last.Spawn.Z}
 	tactics := aggressiveTactics()
-	if _, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, tactics); ok {
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, &last, from, []playerPose{target}, tactics); ok {
 		t.Fatal("an unforced seventh joined a full squad")
 	}
 	uruchi := last
 	uruchi.Nest.HasControls, uruchi.Nest.Controls.ID = true, 0x3F
-	if got, ok := ops.acquireSightTarget(monsterTestDivision, uruchi, from, []playerPose{target}, tactics); !ok || got.Gid != target.Gid {
+	if got, ok := ops.acquireSightTarget(monsterTestDivision, &uruchi, from, []playerPose{target}, tactics); !ok || got.Gid != target.Gid {
 		t.Fatal("the fixed query did not force its target")
 	}
 	caravan := last
 	caravan.Nest.HasControls, caravan.Nest.Controls.Flags = true, 0x21E
-	if _, ok := ops.acquireSightTarget(monsterTestDivision, caravan, from, []playerPose{target}, tactics); !ok {
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, &caravan, from, []playerPose{target}, tactics); !ok {
 		t.Fatal("a flag-4 row did not force its target")
 	}
 	// A flag-4 row loses the fixed query even with a fixed-query ID.
@@ -103,7 +103,7 @@ func TestSightAcquisitionRespectsTheSquadLimit(t *testing.T) {
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, actors[0].Gid)
 	mustMoverTransition(&mover, monster.MoverEventTargetLost, 0)
 	ops.Monsters.CommitMover(monsterTestDivision, actors[0].Gid, mover)
-	if _, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, tactics); !ok {
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, &last, from, []playerPose{target}, tactics); !ok {
 		t.Fatal("a freed place did not admit the seventh")
 	}
 }
@@ -133,16 +133,16 @@ func TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach(t *testing.T) {
 	}
 	ordinary := actor
 	ordinary.Nest.Controls.ID = 1
-	if ops.switchToSecondaryOpponent(monsterTestDivision, ordinary, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
+	if ops.switchToSecondaryOpponent(monsterTestDivision, &ordinary, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
 		t.Fatal("an ordinary row ran the secondary-opponent switch")
 	}
-	if ops.switchToSecondaryOpponent(monsterTestDivision, actor, mover, at(far, reach-1), []playerPose{at(far, reach-1), at(near, 3)}, live, 1000) {
+	if ops.switchToSecondaryOpponent(monsterTestDivision, &actor, mover, at(far, reach-1), []playerPose{at(far, reach-1), at(near, 3)}, live, 1000) {
 		t.Fatal("a target in reach was switched")
 	}
-	if ops.switchToSecondaryOpponent(monsterTestDivision, actor, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, reach)}, live, 1000) {
+	if ops.switchToSecondaryOpponent(monsterTestDivision, &actor, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, reach)}, live, 1000) {
 		t.Fatal("a secondary at the reach edge was taken")
 	}
-	if !ops.switchToSecondaryOpponent(monsterTestDivision, actor, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
+	if !ops.switchToSecondaryOpponent(monsterTestDivision, &actor, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
 		t.Fatal("the secondary in reach was not taken")
 	}
 	after, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -175,17 +175,17 @@ func TestFlagRowsRedirectBetweenTraderAndVehicle(t *testing.T) {
 	trader.JobState = 1
 	transport := at(vehicle, 25.5)
 	transport.OwnerGid, transport.Band = owner, 2
-	if ops.redirectToVehicle(monsterTestDivision, actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
+	if ops.redirectToVehicle(monsterTestDivision, &actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
 		t.Fatal("a vehicle 14.5 closer was taken")
 	}
 	transport = at(vehicle, 25)
 	transport.OwnerGid, transport.Band = owner, 2
 	thief := trader
 	thief.JobState = 2
-	if ops.redirectToVehicle(monsterTestDivision, actor, mover, thief, []playerPose{thief, transport}, live, 1000) {
+	if ops.redirectToVehicle(monsterTestDivision, &actor, mover, thief, []playerPose{thief, transport}, live, 1000) {
 		t.Fatal("a flag-4 row redirected from a thief")
 	}
-	if !ops.redirectToVehicle(monsterTestDivision, actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
+	if !ops.redirectToVehicle(monsterTestDivision, &actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
 		t.Fatal("a vehicle 15 closer was not taken")
 	}
 	mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -195,13 +195,13 @@ func TestFlagRowsRedirectBetweenTraderAndVehicle(t *testing.T) {
 	near := at(owner, 5)
 	far := at(vehicle, 30)
 	far.OwnerGid, far.Band = owner, 2
-	if !ops.redirectToVehicle(monsterTestDivision, actor, mover, far, []playerPose{near, far}, live, 1000) {
+	if !ops.redirectToVehicle(monsterTestDivision, &actor, mover, far, []playerPose{near, far}, live, 1000) {
 		t.Fatal("a companion target did not give way to its nearer owner")
 	}
 	hunterRow := actor
 	hunterRow.Nest.Controls.Flags = 0x29A &^ 0x4
 	mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	if !ops.redirectToVehicle(monsterTestDivision, hunterRow, mover, thief, []playerPose{thief, transport}, live, 1000) {
+	if !ops.redirectToVehicle(monsterTestDivision, &hunterRow, mover, thief, []playerPose{thief, transport}, live, 1000) {
 		t.Fatal("a flag-0x80 row kept aiming at a thief beside its vehicle")
 	}
 }
@@ -223,7 +223,7 @@ func TestDeadSquadMemberFreesItsSlotAtDeath(t *testing.T) {
 	}
 	last := actors[monster.SquadMemberLimit]
 	from := monster.Pose{RegionID: last.Spawn.RegionID, X: last.Spawn.X, Y: last.Spawn.Y, Z: last.Spawn.Z}
-	if _, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, aggressiveTactics()); ok {
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, &last, from, []playerPose{target}, aggressiveTactics()); ok {
 		t.Fatal("an unforced seventh joined a full squad")
 	}
 	killed := actors[0]
@@ -233,7 +233,7 @@ func TestDeadSquadMemberFreesItsSlotAtDeath(t *testing.T) {
 	if mover, ok := ops.Monsters.Mover(monsterTestDivision, killed.Gid); !ok || mover.TargetGID() != target.Gid {
 		t.Fatal("fixture no longer keeps the corpse's target; this test no longer covers the retention window")
 	}
-	if got, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, aggressiveTactics()); !ok || got.Gid != target.Gid {
+	if got, ok := ops.acquireSightTarget(monsterTestDivision, &last, from, []playerPose{target}, aggressiveTactics()); !ok || got.Gid != target.Gid {
 		t.Fatal("a corpse kept its squad slot")
 	}
 }

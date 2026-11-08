@@ -62,7 +62,7 @@ func TestCommitSegmentCanonicalizesOverflowForEveryDestinationProducer(t *testin
 	}
 	frames := ops.commitSegment(
 		monsterTestDivision,
-		instance,
+		&instance,
 		mover,
 		dest,
 		instance.Ref.WalkSpeed,

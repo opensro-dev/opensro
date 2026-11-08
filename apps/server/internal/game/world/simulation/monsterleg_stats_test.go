@@ -34,14 +34,14 @@ func TestLegStatsRecordsPlansAndMemo(t *testing.T) {
 	ops.Navigation = &NavigationMetrics{}
 	ops.leg = &legStats{}
 
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 	st := ops.leg
 	if st.plans[navChase][navBlocked] != 1 || st.planProbes[navChase] != 200 || st.maxPlanProbes != 200 {
 		t.Fatalf("plan record = plans %v probes %d max %d, want one blocked 200-probe chase plan",
 			st.plans[navChase], st.planProbes[navChase], st.maxPlanProbes)
 	}
 	// The memoized retry records a memo hit, not another plan.
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 11000)
 	if calls != 1 || st.memo[navChase] != 1 || st.plans[navChase][navBlocked] != 1 {
 		t.Fatalf("memo retry: calls=%d memo=%d plans=%d, want 1/1/1", calls, st.memo[navChase], st.plans[navChase][navBlocked])
 	}

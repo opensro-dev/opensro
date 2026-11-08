@@ -24,14 +24,16 @@ import (
 advanceAndPublish
 ================
 */
-func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor behaviorActorSnapshot, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
+func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behaviorActorSnapshot, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
 	// Part C times the advance itself, so the direct dispatch below and
 	// the RunAction closure path accumulate into the same figure.
 	if ops.leg != nil {
 		started := time.Now()
 		defer func() { ops.leg.noteAdvance(time.Since(started)) }()
 	}
-	instance := actor.instance
+	// The actor is the leg view's own entry (#2982), read in place:
+	// the step never writes through it.
+	instance := &actor.instance
 	// The step's whole-value commits guard on the generation this
 	// actor was snapshot at (#2137 slice 1): a slower lane's set
 	// since the snapshot drops them instead of being overwritten.

@@ -239,7 +239,7 @@ func TestLegPlanFollowCommitsAtCommitTime(t *testing.T) {
 		plan := &legPlan{actor: behaviorActorSnapshot{instance: child, mover: mover, moverGen: gen, ok: true}}
 		planOps := *ops
 		planOps.plan = plan
-		planOps.followSummoner("summon", child, mover, now)
+		planOps.followSummoner("summon", &child, mover, now)
 		live, _ := ops.Monsters.Mover("summon", child.Gid)
 		if live.Mode() == monster.MoverFollowing {
 			t.Fatalf("stale=%v: the follow applied at plan time", stale)
