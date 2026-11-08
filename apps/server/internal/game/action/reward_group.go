@@ -378,6 +378,17 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	if !impact.Fatal || impact.Instance.Ref.TrainingDummy {
 		return out
 	}
+	arena := rt.sookPopulation(division, impact.Population)
+	if arena != nil {
+		arena.program.Kill(now)
+		if arena.program.Kills%5 == 0 {
+			arena.powerupsOwed++
+		}
+		if impact.Instance.Ref.MonsterType == 3 && !arena.bossPowerups[impact.Instance.Gid] {
+			arena.bossPowerups[impact.Instance.Gid] = true
+			arena.powerupsOwed++
+		}
+	}
 	// One snapshot of the live tunables for the whole kill (thiefparty.go).
 	settings := tunables.Current()
 	for _, award := range rt.grantBerserkForKill(actor, roster, impact) {
@@ -447,6 +458,10 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			exp, sexp = paramJobRewardBonus(a.character, exp, sexp, now)
 			// Port-only, not native (thiefparty.go): the member's party's thieves.
 			exp = thiefPartyExp(exp, rt.thiefPartyPercent(division, a.party, settings))
+			exp, sexp = sookReward(exp, arena), sookReward(sexp, arena)
+			if arena != nil {
+				sexp = min(sexp, math.MaxInt32)
+			}
 			var frames []wire.Frame
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)

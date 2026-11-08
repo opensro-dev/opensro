@@ -17,6 +17,52 @@ import (
 
 /*
 ================
+TestArenaPassiveSpawnDoesNotChangeNativeGMPolicy
+================
+*/
+func TestArenaPassiveSpawnDoesNotChangeNativeGMPolicy(t *testing.T) {
+	for _, arena := range []bool{false, true} {
+		for _, passive := range []bool{false, true} {
+			s, lease := gmMonsterState(t, 0)
+			ids := s.SpawnGMMonstersTracked(GMMonsterSpawn{Division: "gm", Population: lease, RefObjID: 1, Count: 1,
+				Position: Spawn{RegionID: 23644, X: 100, Y: 0, Z: 100}, NowMs: 1000, Arena: arena, ArenaPassive: passive})
+			if len(ids) != 1 {
+				t.Fatal("spawn failed")
+			}
+			actor, ok := s.Get("gm", ids[0])
+			if !ok || actor.Nest.Aggressive != (arena && !passive) {
+				t.Fatalf("arena=%v passive=%v: wrong acquisition policy", arena, passive)
+			}
+		}
+	}
+}
+
+/*
+================
+TestArenaEliteOverrideKeepsNativeGMResolution
+================
+*/
+func TestArenaEliteOverrideKeepsNativeGMResolution(t *testing.T) {
+	for _, arena := range []bool{false, true} {
+		s, lease := gmMonsterState(t, 0)
+		ids := s.SpawnGMMonstersTracked(GMMonsterSpawn{Division: "gm", Population: lease, RefObjID: 1, Count: 1,
+			Position: Spawn{RegionID: 23644, X: 100, Z: 100}, Arena: arena, Type: 6, NowMs: 1000})
+		if len(ids) != 1 {
+			t.Fatal("spawn failed")
+		}
+		actor, _ := s.Get("gm", ids[0])
+		want := uint8(0)
+		if arena {
+			want = 6
+		}
+		if actor.Rarity() != want {
+			t.Fatalf("arena=%v grade=%d want=%d", arena, actor.Rarity(), want)
+		}
+	}
+}
+
+/*
+================
 gmMonsterState
 ================
 */
@@ -142,5 +188,32 @@ func TestGMSpawnRarityMatchesNative(t *testing.T) {
 	}
 	if actor := state.MaterializedInstances("gm")[0]; actor.Rarity() != 4 || actor.CurrentHP != actor.EffectiveMaxHP() {
 		t.Fatalf("giant request produced rarity %d hp %d/%d", actor.Rarity(), actor.CurrentHP, actor.EffectiveMaxHP())
+	}
+}
+
+/*
+================
+TestArenaNonImmediateSpawnKeepsNativeProximityAggro
+================
+*/
+func TestArenaNonImmediateSpawnKeepsNativeProximityAggro(t *testing.T) {
+	s, lease := gmMonsterState(t, 0)
+	ref := monster.MonsterRef{RefObjID: 2, Codename: "MOB_CH_TIGER", MaxHP: 100, WalkSpeed: 8, RunSpeed: 20}
+	s = NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{2: ref}, nil))
+	s.SetRandomSource(func() float64 { return 0 })
+	s.StartDivision("gm")
+	lease, _ = s.PopulationLease("gm", instance.Pack(1, 1))
+	tactics, ok := monster.ResolveSummonTactics(ref, 0, func() float64 { return 0 })
+	if !ok || !tactics.HasControls || tactics.Controls.AggressType != 0 {
+		t.Fatal("fixture needs native aggressive tactics")
+	}
+	ids := s.SpawnGMMonstersTracked(GMMonsterSpawn{Division: "gm", Population: lease, RefObjID: 2, Count: 1, Position: Spawn{RegionID: 23644, X: 100, Z: 100}, NowMs: 1000, Arena: true, ArenaPassive: true})
+	if len(ids) != 1 {
+		t.Fatal("spawn")
+	}
+	actor, _ := s.Get("gm", ids[0])
+	policy := monster.ResolveTactics(actor)
+	if !policy.Aggressive || actor.Nest.Controls.SightRange != tactics.Controls.SightRange {
+		t.Fatal("native proximity aggression overwritten")
 	}
 }

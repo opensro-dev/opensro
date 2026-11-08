@@ -61,7 +61,7 @@ buildCifResources
 ================
 */
 export async function buildCifResources() {
-	const copiedImages = new Set( await buildPetItemIcons() );
+	const copiedImages = new Set( [ ...await buildPetItemIcons(), ...await buildSurvivalBuffIcons() ] );
 	const spriteCatalog = { resourcesByDdjPath: {} };
 	const layoutOutputDir = path.join( publicRoot, "assets", "cif", "layouts" );
 	const layoutsToBuild = await discoverCifLayouts( resinfoDir );
@@ -120,6 +120,24 @@ export async function buildCifResources() {
 		layoutsBuilt: layoutsToBuild.length,
 		copiedImages
 	};
+}
+
+/*
+================
+buildSurvivalBuffIcons - owned art for the port-only arena's virtual timed jobs.
+================
+*/
+export async function buildSurvivalBuffIcons() {
+	const files = [];
+	for ( const name of [ "damage-surge", "unstoppable", "unkillable", "arcane-spring", "fire-pit", "mirror-shell" ] ) {
+		const publicPath = `/assets/images/Media_extracted/icon/port/survival/${name}.png`;
+		await copyIntoPublicTree(
+			fileURLToPath( new URL( `../../../docs/features/assets/survival/${name}.png`, import.meta.url ) ),
+			path.join( publicRoot, publicPath.slice( 1 ) )
+		);
+		files.push( publicPath );
+	}
+	return files;
 }
 
 /*

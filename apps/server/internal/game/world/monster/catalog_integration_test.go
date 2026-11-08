@@ -105,6 +105,26 @@ func TestEffectiveMaxHPMatchesTheClientRarityTable(t *testing.T) {
 
 /*
 ================
+TestArenaUniqueHPDoesNotChangeNativeMonsters
+================
+*/
+func TestArenaUniqueHPDoesNotChangeNativeMonsters(t *testing.T) {
+	for _, arena := range []bool{false, true} {
+		for _, kind := range []uint8{0, 3} {
+			i := Instance{Ref: MonsterRef{MaxHP: 20000, MonsterType: kind}, Arena: arena}
+			want := uint32(20000)
+			if arena && kind == 3 {
+				want = 1000
+			}
+			if i.EffectiveMaxHP() != want {
+				t.Fatalf("arena=%v kind=%d hp=%d want=%d", arena, kind, i.EffectiveMaxHP(), want)
+			}
+		}
+	}
+}
+
+/*
+================
 TestRegistryGidBand
 ================
 */

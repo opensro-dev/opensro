@@ -81,6 +81,7 @@ type Setting struct {
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
+	{Env: "SRO_SOOK_SURVIVAL_ARENA", NomadVar: "sook_survival_arena", Default: "off", Catalogue: true},
 	// The catalogue publishes the expansion's derived pet-gear drops
 	// while it runs (items.json's petGear rows, droptables.json's
 	// petGear rule), so it is a catalogue setting (#2542).

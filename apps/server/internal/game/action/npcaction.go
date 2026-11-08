@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -145,8 +146,12 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			// answer (code 3) retires the request.
 			return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("NPC %s has no npcchat base-speech symbol", npc.Codename)
 		}
-		if rt.NpcQuests.Options != nil {
-			options := rt.NpcQuests.Options(divisionID, character, npc.Codename)
+		if rt.NpcQuests.Options != nil || rt.sookArena != nil {
+			var options []NpcQuestOption
+			if rt.NpcQuests.Options != nil {
+				options = rt.NpcQuests.Options(divisionID, character, npc.Codename)
+			}
+			options = append(options, rt.sookTalkOptions(npc.Codename)...)
 			if len(options) != 0 {
 				symbols := make([]string, 0, len(options))
 				for _, option := range options {
@@ -163,9 +168,17 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 					NpcGID: gid, NpcCode: npc.Codename, DefaultSymbol: npc.BaseSpeechSymbol,
 					Stage: npcDialogOptions, Options: options,
 				})
-				return []wire.Frame{{
+				frames := []wire.Frame{{
 					Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(prompt, symbols),
-				}}, ""
+				}}
+				if rt.sookArena != nil && npc.Codename == sookarena.NPC {
+					used := character.SookArenaEntries
+					if character.SookArenaDay != sookarena.Day(rt.Now()) {
+						used = 0
+					}
+					frames = append(frames, sookBanner(fmt.Sprintf("Solo arena: 20 min, x10 loot. Ultra mode at 15 min. Kill rewards up to 5M gold. Entries %d/3.", used)))
+				}
+				return frames, ""
 			}
 		}
 		rt.NpcDialogs.Clear(divisionID, character.Name)

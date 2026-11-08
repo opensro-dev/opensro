@@ -89,6 +89,9 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		session.pickup = nil
 		session.pickupCommand = false
 	}
+	if item, found := rt.characterGround(division, c, q.GroundGID); found && item.ArenaPowerup != 0 {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
 	at := session.follower.Position(now.UnixMilli())
 	var sharedOwner uint32
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	worldgeom "opensro.online/server/internal/game/world"
+	"os"
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
@@ -44,6 +45,7 @@ import (
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
@@ -110,6 +112,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	items.ConfigureSookArena(os.Getenv(sookarena.Env))
 	if err := loadPetGearPolicy(items, authorityStore); err != nil {
 		return nil, err
 	}

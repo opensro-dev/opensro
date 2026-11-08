@@ -210,13 +210,14 @@ and records every other consequence for publication after the door.
 ==================
 */
 type playerAbnormalOwner struct {
-	rt       *Runtime
-	division string
-	c        *enterworld.Character
-	block    *abnormal.Block
-	now      int64
-	sources  map[uint32]abnormalSourceState
-	bond     *petBondPlan
+	sookReflected []sookReflectedHit
+	rt            *Runtime
+	division      string
+	c             *enterworld.Character
+	block         *abnormal.Block
+	now           int64
+	sources       map[uint32]abnormalSourceState
+	bond          *petBondPlan
 
 	maskBefore   uint32
 	changed      bool
@@ -527,7 +528,12 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 		damage = sharePetBond(o.bond, damage)
 	}
 	debit := int64(vitals.HitDebit(uint32(remaining), damage))
+	if o.rt.sookPowerActive(o.division, o.c, sookInvincible, o.now) {
+		debit = min(debit, max(int64(0), remaining-1))
+		damage = uint32(debit)
+	}
 	remaining -= debit
+	o.noteSookReflection(source, uint32(debit))
 	o.c.CurrentHP = &remaining
 	o.hpChanged = true
 	// The native hit path publishes the authored hit independently of the saturated debit.
@@ -612,6 +618,9 @@ The caller prepared source facts before entering the transaction.
 ================
 */
 func (o *playerAbnormalOwner) applyHit(hit abnormal.HitContext, records []abnormal.Record) {
+	if o.rt.sookPowerActive(o.division, o.c, sookUnstoppable, o.now) {
+		records = nil
+	}
 	if o.block.Mask != 0 {
 		o.changed = o.block.BreakOnHit(o, hit) || o.changed
 	}
@@ -731,6 +740,10 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	if o == nil {
 		return out
 	}
+	for _, hit := range o.sookReflected {
+		rt.reflectSookDamage(division, c, hit.source, hit.damage, o.now)
+	}
+	o.sookReflected = nil
 	out.public = append(out.public, rt.commitPetBond(o.bond)...)
 	out.public = append(out.public, o.endedPublic...)
 	out.actor = append(out.actor, o.endedActor...)

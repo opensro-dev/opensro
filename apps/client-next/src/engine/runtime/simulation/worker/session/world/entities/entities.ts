@@ -977,7 +977,7 @@ export function createEntities(
 				const gid = v.getUint32( 0, true ), cue = p[4]!, book = p[5]!, regionId = v.getUint16( 6, true );
 				const x = v.getFloat32( 8, true ), y = v.getFloat32( 12, true ), z = v.getFloat32( 16, true );
 				if (
-					!gid || cue < 1 || cue > 8 || book < 1 || book > 3 || !regionId ||
+					!gid || cue < 1 || cue > 10 || book < 1 || book > 3 || !regionId ||
 					![ x, y, z ].every( Number.isFinite )
 				) {
 					throw Error( "Invalid crow effect position or kind" );

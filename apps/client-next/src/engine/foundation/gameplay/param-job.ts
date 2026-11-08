@@ -52,7 +52,49 @@ export interface ParamJobReference {
 	readonly durationSec: number;
 	readonly icon?: string;
 	readonly name?: string;
+	readonly description?: string;
 }
+
+// Port-only virtual rows emitted exclusively by the flagged survival arena.
+// They reuse the native timed board protocol without creating inventory items.
+const SURVIVAL_POWERS: Readonly<Record<number, ParamJobReference>> = {
+	0x7f530001: {
+		durationSec: 30,
+		icon: "port/survival/damage-surge.ddj",
+		name: "Damage Surge",
+		description: "Random 2x–10x outgoing damage, rolled on pickup."
+	},
+	0x7f530003: {
+		durationSec: 60,
+		icon: "port/survival/unstoppable.ddj",
+		name: "Unstoppable",
+		description: "Immune to abnormal states and knockback."
+	},
+	0x7f530005: {
+		durationSec: 60,
+		icon: "port/survival/unkillable.ddj",
+		name: "Unkillable",
+		description: "Combat damage cannot take your last HP."
+	},
+	0x7f530006: {
+		durationSec: 60,
+		icon: "port/survival/arcane-spring.ddj",
+		name: "Arcane Spring",
+		description: "Skills consume no MP. Cooldowns still apply."
+	},
+	0x7f530007: {
+		durationSec: 60,
+		icon: "port/survival/fire-pit.ddj",
+		name: "Fire Pit",
+		description: "30m burning ground: non-uniques lose 5% maximum HP each second."
+	},
+	0x7f530008: {
+		durationSec: 30,
+		icon: "port/survival/mirror-shell.ddj",
+		name: "Mirror Shell",
+		description: "Return 100% of HP damage taken to the attacker. You still take the hit."
+	}
+} as const;
 
 export type ParamJobUpdate =
 	| { readonly kind: "set"; readonly row: ParamJobRow; }
@@ -156,7 +198,10 @@ True when the frame was a param job row.
 				rows = kept;
 				return true;
 			}
-			if ( kept.length >= PARAM_JOB_CAPACITY ) throw Error( "Param job capacity" );
+			if (
+				!SURVIVAL_POWERS[id] &&
+				kept.filter( row => !SURVIVAL_POWERS[row.itemRefObjId] ).length >= PARAM_JOB_CAPACITY
+			) throw Error( "Param job capacity" );
 			rows = [ ...kept, update.row ];
 			return true;
 		},
@@ -188,7 +233,7 @@ Rows whose item reference is known, ready for the board.
 		*/
 		state() {
 			return rows.flatMap( row => {
-				const reference = references.get( row.itemRefObjId );
+				const reference = references.get( row.itemRefObjId ) ?? SURVIVAL_POWERS[row.itemRefObjId];
 				return reference ? [ { ...row, reference } ] : [];
 			} );
 		}

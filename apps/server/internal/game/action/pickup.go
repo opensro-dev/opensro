@@ -135,6 +135,9 @@ func (rt *Runtime) grantPickup(
 	groundItem grounditem.Item,
 	doors characterDoors,
 ) OpResult {
+	if groundItem.ArenaPowerup != 0 {
+		return rt.pickupSookPowerup(divisionID, worldKey, character, groundItem)
+	}
 	// Natively trade goods leave the party's item share for the picker's
 	// transport (tradepickup.go). Trade goods keep their own immediate
 	// door on both lanes (grantTradeGoodsPickup predates the batch).

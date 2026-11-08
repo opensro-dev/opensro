@@ -125,8 +125,14 @@ export function buffBoard(
 	for ( const job of game.paramJobs ?? [] ) {
 		const path = iconPath( job.reference.icon );
 		if ( path ) {
+			const left = Math.max(
+				0,
+				Math.ceil( (job.remainingSec * 1000 - Math.max( 0, timeMs - job.receivedAtMs )) / 1000 )
+			);
 			primary.push( {
-				helpText: job.reference.name,
+				helpText: job.reference.description ?
+					`${job.reference.name}\n${job.reference.description}\n${left}s remaining` :
+					job.reference.name,
 				id: "param-job:" + job.itemRefObjId,
 				path,
 				label: job.reference.name ?? "",

@@ -14,6 +14,7 @@ package action
 import (
 	"errors"
 	"fmt"
+	"opensro.online/server/internal/game/sookarena"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -395,6 +396,10 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 		}
 		conversation.Pending = conversation.Options[int(choice-5)]
 		if conversation.Pending.Immediate {
+			if conversation.Pending.Codename == sookarena.Service {
+				rt.NpcDialogs.Clear(divisionID, character.Name)
+				return rt.enterSookArena(divisionID, character), ""
+			}
 			if rt.NpcQuests.Finish == nil {
 				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "NPC service owner is unavailable")
 			}

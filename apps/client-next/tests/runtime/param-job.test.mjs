@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
 
 const { createParamJobs, paramJobFraction } = await import( "../../src/engine/foundation/gameplay/param-job.ts" );
+const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
 
 // TID 3/3/3/10 with the low class bits set the way itemdata words carry them.
 const PARAM_ITEM = 0x51ec | 1;
@@ -80,4 +81,45 @@ test("resume replaces, end removes, and other items are not param jobs", () => {
 	assert.deepEqual( jobs.state(), [] );
 	assert.throws( () => jobs.receive( { opcode: 0x36d4, payload: new Uint8Array( 4 ) }, 0 ), /end/ );
 	assert.equal( jobs.receive( frame( 0x3691, 1 ), 0 ), false );
+});
+
+test("arena powers use native timed HUD cells, tooltips, refresh and removal", () => {
+	const jobs = createParamJobs();
+	for ( const kind of [ 1, 3, 5, 6, 7, 8 ] ) {
+		jobs.receive( frame( 0x3602, 100006, kind === 1 || kind === 8 ? 30 : 60, 0x7f530000 | kind ), 1000 );
+	}
+	const cells = buffBoard( { localGid: 100006, vitals: [], paramJobs: jobs.state() }, 11000 );
+	assert.equal( cells.length, 6 );
+	assert.deepEqual( cells.map( c => c.label ), [
+		"Damage Surge",
+		"Unstoppable",
+		"Unkillable",
+		"Arcane Spring",
+		"Fire Pit",
+		"Mirror Shell"
+	] );
+	assert.ok(
+		cells.every( c => c.path.endsWith( ".png" ) && c.fraction !== null && c.fraction > 0 && c.fraction < 1 )
+	);
+	assert.ok( cells[0].helpText );
+	assert.ok( cells.every( c => c.path.includes( "/icon/port/survival/" ) ) );
+	assert.equal( new Set( cells.map( c => c.path ) ).size, 6 );
+	assert.match( cells[0].helpText, /20s remaining/ );
+	jobs.receive( frame( 0x3602, 100006, 60, 0x7f530003 ), 11000 );
+	assert.equal( jobs.state().length, 6, "refresh must replace, not duplicate" );
+	jobs.receive( frame( 0x36d4, 100006, 0x7f530003 ), 71000 );
+	assert.equal( jobs.state().length, 5 );
+	jobs.clear();
+	assert.equal( jobs.state().length, 0 );
+});
+
+test("arena HUD timers preserve all eight native parameter-job slots", () => {
+	const jobs = createParamJobs();
+	for ( let i = 1; i <= 8; i++ ) {
+		jobs.reference( { refObjId: i, typeFlags: PARAM_ITEM, nativeFields: { itemParam1_29c: 60 }, icon: "a.ddj" } );
+		jobs.receive( frame( 0x3602, 1, 60, i ), 0 );
+	}
+	for ( const k of [ 1, 3, 5, 6 ] ) jobs.receive( frame( 0x3602, 1, 60, 0x7f530000 | k ), 0 );
+	assert.equal( jobs.state().length, 12 );
+	assert.throws( () => jobs.receive( frame( 0x3602, 1, 60, 9 ), 0 ), /capacity/ );
 });

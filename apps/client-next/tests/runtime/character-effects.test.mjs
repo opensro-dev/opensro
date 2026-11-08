@@ -2063,6 +2063,84 @@ test("every crow cue and book draws bounded distinct feather cosmetics without g
 
 /*
 ================
+Arena blast and fire pit cosmetics
+================
+*/
+test("arena blast and fire pit have transparent flames, bounded radius and exact cosmetic expiry", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	for ( const path of [ "/assets/effects/survival-flame", "/assets/effects/survival-ember-ring" ] ) {
+		const resource = defined( createProceduralEffect( path ) );
+		const pixels = resource.images[0].levels[0];
+		assert.equal( pixels[3], 0, "quad corner must be transparent" );
+		assert.equal( resource.model.primitives[0].geometry.material.depthWrite, false );
+		assert.equal( resource.model.primitives[0].geometry.material.fadeAlphaOnly, false );
+		assert.deepEqual( resource.model.primitives[0].geometry.material.blendPair, { source: 5, destination: 6 } );
+		if ( path.endsWith( "ember-ring" ) ) {
+			const positions = resource.model.primitives[0].geometry.positions;
+			for ( let i = 0; i < positions.length; i += 3 ) {
+				const radius = Math.hypot( positions[i], positions[i + 2] );
+				assert.ok( radius > .99 && radius < 1.001, "boundary is an annulus, never a floor quad" );
+			}
+		}
+	}
+	for ( const cue of [ 9, 10 ] ) {
+		const effects = roarEffects();
+		effects.crowEffect( { regionId: 257, x: 11, y: 0, z: 22 }, cue, 1 );
+		effects.step( [], null, 0, () => true, () => 1, [] );
+		const actors = effects.step( [], null, .6, () => true, () => 1, [] );
+		assert.equal( actors.length, cue === 10 ? 20 : 2 );
+		assert.ok(
+			actors.every( a => !a.pickable && a.model.includes( cue === 10 ? "survival-" : "challenging-roar-" ) )
+		);
+		if ( cue === 10 ) {
+			assert.ok( actors.some( a => a.model.endsWith( "survival-cracks" ) ) );
+			assert.ok(
+				actors.filter( a => a.model.endsWith( "survival-flame" ) ).every( a => a.scale * 3 + a.pose.y < 10 ),
+				"flames stay below one metre"
+			);
+		}
+		assert.ok( actors.every( a => Math.hypot( a.pose.x - 11, a.pose.z - 22 ) <= (cue === 10 ? 300 : 150) ) );
+		if ( cue === 10 ) {
+			assert.equal( effects.step( [], null, 59.9, () => true, () => 1, [] ).length, 20 );
+			effects.crowEffect( { regionId: 257, x: 111, y: 0, z: 222 }, cue, 1 );
+			assert.equal(
+				effects.step( [], null, 59.95, () => true, () => 1, [] ).length,
+				20,
+				"refresh replaces old field"
+			);
+			assert.equal( effects.step( [], null, 119.95, () => true, () => 1, [] ).length, 0 );
+		} else {
+			assert.equal( effects.step( [], null, 1.2, () => true, () => 1, [] ).length, 0 );
+		}
+		effects.dispose();
+	}
+});
+
+test("fire pit cracks use thin finite ribbons and KABUM plays the bear roar once", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	const cracks = defined( createProceduralEffect( "/assets/effects/survival-cracks" ) );
+	const mesh = cracks.model.primitives[0].geometry;
+	assert.ok( mesh.positions.length / 3 < 2000 );
+	assert.ok( mesh.positions.every( Number.isFinite ) );
+	assert.ok( mesh.indices.every( index => index < mesh.positions.length / 3 ) );
+	for ( let i = 0; i < mesh.positions.length; i += 3 ) {
+		assert.ok( Math.hypot( mesh.positions[i], mesh.positions[i + 2] ) < 1 );
+		assert.equal( mesh.positions[i + 1], 0 );
+	}
+	const played = [], effects = roarEffects( event => played.push( event ) );
+	effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, 9, 1 );
+	for ( const now of [ 0, .1, .5, .8 ] ) effects.step( [], null, now, () => true, () => 1, [] );
+	assert.equal( played.length, 1 );
+	assert.match( played[0].id, /^arena-roar:/ );
+	effects.dispose();
+});
+
+/*
+================
 Crow recovery effects
 ================
 */

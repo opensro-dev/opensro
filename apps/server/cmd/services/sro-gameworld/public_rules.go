@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
@@ -35,6 +36,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/economy"
+	"os"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
@@ -240,6 +242,7 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three solo survival entries per UTC day: 30 minutes, escalating monsters, tenfold rewards and a 1,000,000 gold completion prize.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",

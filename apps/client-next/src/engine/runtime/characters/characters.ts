@@ -493,7 +493,17 @@ export function createCharacterPresentation(
 				renderer.dungeonBlockHides !== undefined,
 			dungeonBlockHides: renderer.dungeonBlockHides
 		} );
-		const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn, admit );
+		// Port-only survival arena: dense spells must not evict live enemies and their pick meshes.
+		const definition = (gameplay?.fortress?.worldId ?? 0) & 65535;
+		const survival = anchor?.regionId === 25580 && (definition === 30 || definition === 31);
+		const selected = selection.select(
+			entities,
+			anchor ?? undefined,
+			local?.gid,
+			local?.mountedOn,
+			admit,
+			survival
+		);
 		// Resident actor assemblies own their dependencies before transient
 		// effects compete for the frame's resource budget. A cold hit effect
 		// must never evict the fighter or strip its already admitted clothing.

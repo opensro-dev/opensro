@@ -413,7 +413,8 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 		if !statsHit {
 			return false, false
 		}
-		_, refusal := resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, p.verdictCost, p.verdictGroup)
+		cost := rt.sookManaConsumption(p.divisionID, c, p.verdictCost, rt.Now().UnixMilli())
+		_, refusal := resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, cost, p.verdictGroup)
 		return refusal == 0, true
 	}
 	skill, exists := source.SkillByID(p.cast.ActionId)
@@ -423,6 +424,7 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 	if !statsHit {
 		return false, false
 	}
+	skill.Consumption = rt.sookManaConsumption(p.divisionID, c, skill.Consumption, rt.Now().UnixMilli())
 	_, refusal := resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, statsErr, skill)
 	return refusal == 0, true
 }
