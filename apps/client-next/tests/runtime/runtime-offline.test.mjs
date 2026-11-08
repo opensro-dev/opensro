@@ -43,9 +43,12 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 	// second, and a frame runs when a delivery settles.
 	let now = 1000;
 	const deliveries = [];
-	globalThis.performance = { now: () => now };
-	globalThis.document = { visibilityState: "visible" };
-	globalThis.location = { search: "", origin: "http://localhost" };
+	Object.defineProperty( globalThis, "performance", { configurable: true, value: { now: () => now } } );
+	Object.defineProperty( globalThis, "document", { configurable: true, value: { visibilityState: "visible" } } );
+	Object.defineProperty( globalThis, "location", {
+		configurable: true,
+		value: { search: "", origin: "http://localhost" }
+	} );
 	owners.simulation.delivery = () => new Promise( resolve => deliveries.push( resolve ) );
 	globalThis.__runtimeOwners = owners;
 	globalThis.requestAnimationFrame = () => 1;
