@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 const { itemRarityIsSealed, sealTier, sealTextSymbol } = await import(
 	"../../src/engine/foundation/gameplay/item-seal.ts"
 );
+const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
 const { itemIsRare } = await import( "../../src/engine/foundation/ui/item-slot-effects.ts" );
 const { sealNoticeColorArgb, SEAL_NOTICE_COLOR_STAR } = await import(
 	"../../src/engine/foundation/gameplay/system-notices.ts"
@@ -48,4 +49,39 @@ test("the slot shine and the notice colour follow the same rule", () => {
 	assert.equal( itemIsRare( item( 3 ) ), false );
 	assert.equal( sealNoticeColorArgb( 6, 31 ), SEAL_NOTICE_COLOR_STAR );
 	assert.equal( sealNoticeColorArgb( 3, 31 ), undefined );
+});
+
+/*
+================
+sealedPiece
+
+An armor piece as the tooltip reads it; every stat column reads as 1 so the rows build.
+================
+*/
+/** @returns {any} */
+function sealedPiece( rarity, itemClass ) {
+	const fields = new Proxy( { rarity, itemClass, setId: 0 }, {
+		get: ( o, k ) => (k in o ? o[k] : 1),
+		has: () => true
+	} );
+	return {
+		name: "Piece",
+		slot: 1,
+		typeFlags: 0x2c | (3 << 7) | (1 << 11),
+		quantity: 1,
+		plus: 0,
+		variance: 0,
+		magic: [],
+		tooltip: { fields }
+	};
+}
+
+test("the tooltip names the seal of a sealed set piece and colours its name", () => {
+	const text = symbol => (symbol === "PARAM_RARE_FIRST2" ? "Seal of Nova" : symbol);
+	const rows = ( rarity, itemClass ) => itemTooltip( sealedPiece( rarity, itemClass ), { masteries: [] }, text );
+	assert.equal( rows( 6, 31 ).some( row => row.value === "Seal of Nova" ), true );
+	assert.equal( rows( 6, 31 )[0].color, 0xffffd953 );
+	assert.equal( rows( 2, 30 ).some( row => row.value === "PARAM_RARE_THIRD" ), true );
+	assert.equal( rows( 3, 31 ).some( row => row.value === "Seal of Nova" ), false );
+	assert.equal( rows( 3, 31 )[0].color, 0xffffffff );
 });
