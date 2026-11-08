@@ -242,7 +242,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@22350": {
+				"anonymous@22354": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -755,11 +755,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20533": {
+				"anonymous@20537": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20538": {
+				"anonymous@20542": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -863,7 +863,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20735": {
+				"anonymous@20739": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -913,7 +913,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20701": {
+				"anonymous@20705": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1063,15 +1063,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13067": {
+				"anonymous@13071": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22350": {
+				"anonymous@22354": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1246,7 +1246,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1261,7 +1261,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1350,7 +1350,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12526": {
+				"anonymous@12530": {
 					"reads": 3,
 					"writes": 0
 				}
@@ -1387,7 +1387,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12526": {
+				"anonymous@12530": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1511,7 +1511,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10432": {
+				"anonymous@10436": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2173,7 +2173,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2211,7 +2211,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13067": {
+				"anonymous@13071": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2230,7 +2230,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2249,7 +2249,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2268,7 +2268,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13067": {
+				"anonymous@13071": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2339,7 +2339,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2434,15 +2434,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13067": {
+				"anonymous@13071": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27810": {
+				"anonymous@27814": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2533,11 +2533,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13067": {
+				"anonymous@13071": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4015,11 +4015,11 @@
 					"reads": 0,
 					"writes": 2
 				},
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@9471": {
+				"anonymous@9475": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4166,7 +4166,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4277,7 +4277,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -4417,7 +4417,7 @@
 					"reads": 0,
 					"writes": 1
 				},
-				"anonymous@10608": {
+				"anonymous@10612": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4444,7 +4444,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10634": {
+				"anonymous@10638": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4705,11 +4705,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20929": {
+				"anonymous@20933": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21015": {
+				"anonymous@21019": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5199,7 +5199,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@9897": {
+				"anonymous@9901": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5868,7 +5868,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@23603": {
+				"anonymous@23607": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6127,7 +6127,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@13261": {
+				"anonymous@13265": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6211,7 +6211,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@9952": {
+				"anonymous@9956": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6452,7 +6452,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@16615": {
+				"anonymous@16619": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6471,7 +6471,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10024": {
+				"anonymous@10028": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6563,7 +6563,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6674,7 +6674,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12974": {
+				"anonymous@12978": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6999,7 +6999,7 @@
 					"writes": 0
 				},
 				"panel:Experimental": {
-					"reads": 5,
+					"reads": 6,
 					"writes": 0
 				},
 				"panel:Game Guide": {
@@ -7446,71 +7446,71 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10875": {
+				"anonymous@10879": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10963": {
+				"anonymous@10967": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11011": {
+				"anonymous@11015": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13432": {
+				"anonymous@13436": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13456": {
+				"anonymous@13460": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13630": {
+				"anonymous@13634": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@20483": {
+				"anonymous@20487": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21015": {
+				"anonymous@21019": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@23603": {
+				"anonymous@23607": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24895": {
+				"anonymous@24899": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24969": {
+				"anonymous@24973": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@25274": {
+				"anonymous@25278": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26700": {
+				"anonymous@26704": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26813": {
+				"anonymous@26817": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26832": {
+				"anonymous@26836": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@28096": {
+				"anonymous@28100": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7745,35 +7745,35 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10875": {
+				"anonymous@10879": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10963": {
+				"anonymous@10967": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11011": {
+				"anonymous@11015": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@12526": {
+				"anonymous@12530": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13261": {
+				"anonymous@13265": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13336": {
+				"anonymous@13340": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13630": {
+				"anonymous@13634": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7900,35 +7900,35 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10875": {
+				"anonymous@10879": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10963": {
+				"anonymous@10967": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11011": {
+				"anonymous@11015": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12229": {
+				"anonymous@12233": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12526": {
+				"anonymous@12530": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13261": {
+				"anonymous@13265": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13336": {
+				"anonymous@13340": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13456": {
+				"anonymous@13460": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -11649,1141 +11649,1141 @@
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6535,
+			"line": 6539,
 			"pattern": "item-mall-point-value"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6538,
+			"line": 6542,
 			"pattern": "item-mall-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6563,
+			"line": 6567,
 			"pattern": "item-mall"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6586,
+			"line": 6590,
 			"pattern": "notice-dialog-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6592,
+			"line": 6596,
 			"pattern": "notice-dialog-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6632,
+			"line": 6636,
 			"pattern": "specialty-allbuy-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6650,
+			"line": 6654,
 			"pattern": "cos-allsell-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6650,
+			"line": 6654,
 			"pattern": "cos-allsell-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6659,
+			"line": 6663,
 			"pattern": "cos-allsell-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6675,
+			"line": 6679,
 			"pattern": "shop-warning-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6683,
+			"line": 6687,
 			"pattern": "shop-warning-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6708,
+			"line": 6712,
 			"pattern": "recall-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6716,
+			"line": 6720,
 			"pattern": "recall-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6733,
+			"line": 6737,
 			"pattern": "fortress-production-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6746,
+			"line": 6750,
 			"pattern": "fortress-production-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6767,
+			"line": 6771,
 			"pattern": "fortress-map-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6775,
+			"line": 6779,
 			"pattern": "fortress-map-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6803,
+			"line": 6807,
 			"pattern": "fortress-tax-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6816,
+			"line": 6820,
 			"pattern": "fortress-tax-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6850,
+			"line": 6854,
 			"pattern": "fortress-staff-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6858,
+			"line": 6862,
 			"pattern": "fortress-staff-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6874,
+			"line": 6878,
 			"pattern": "fortress-war-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6882,
+			"line": 6886,
 			"pattern": "fortress-war-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6901,
+			"line": 6905,
 			"pattern": "guild-manager-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6911,
+			"line": 6915,
 			"pattern": "guild-manager-text"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6921,
+			"line": 6925,
 			"pattern": "guild-election-pick:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6930,
+			"line": 6934,
 			"pattern": "guild-election-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6946,
+			"line": 6950,
 			"pattern": "guild-transfer-member:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6956,
+			"line": 6960,
 			"pattern": "guild-transfer-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6972,
+			"line": 6976,
 			"pattern": "guild-manager-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7059,
+			"line": 7063,
 			"pattern": "job-confirm-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7067,
+			"line": 7071,
 			"pattern": "job-confirm-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7087,
+			"line": 7091,
 			"pattern": "academy-confirm-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7095,
+			"line": 7099,
 			"pattern": "academy-confirm-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7108,
+			"line": 7112,
 			"pattern": "academy-judge-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7108,
+			"line": 7112,
 			"pattern": "academy-judge-close"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7114,
+			"line": 7118,
 			"pattern": "academy-judge-select:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7121,
+			"line": 7125,
 			"pattern": "academy-judge-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7136,
+			"line": 7140,
 			"pattern": "specialty-deal-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7149,
+			"line": 7153,
 			"pattern": "specialty-deal-scale"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7154,
+			"line": 7158,
 			"pattern": "specialty-deal-row:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7161,
+			"line": 7165,
 			"pattern": "specialty-deal-ok"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7173,
+			"line": 7177,
 			"pattern": "wholechat-exit"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7173,
+			"line": 7177,
 			"pattern": "wholechat-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7187,
+			"line": 7191,
 			"pattern": "wholechat-use"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7199,
+			"line": 7203,
 			"pattern": "rename-exit"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7199,
+			"line": 7203,
 			"pattern": "rename-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7213,
+			"line": 7217,
 			"pattern": "rename-use"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7226,
+			"line": 7230,
 			"pattern": "job-alias-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7240,
+			"line": 7244,
 			"pattern": "job-alias-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7240,
+			"line": 7244,
 			"pattern": "job-alias-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7246,
+			"line": 7250,
 			"pattern": "job-alias-text"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7251,
+			"line": 7255,
 			"pattern": "job-alias-check"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7268,
+			"line": 7272,
 			"pattern": "job-alias-ok"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7281,
+			"line": 7285,
 			"pattern": "repair-all-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7289,
+			"line": 7293,
 			"pattern": "repair-all-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7323,
+			"line": 7327,
 			"pattern": "mall-use-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7331,
+			"line": 7335,
 			"pattern": "mall-use-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7350,
+			"line": 7354,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7371,
+			"line": 7375,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7383,
+			"line": 7387,
 			"pattern": "structure-remove-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7391,
+			"line": 7395,
 			"pattern": "structure-remove-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7407,
+			"line": 7411,
 			"pattern": "cos-clean-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7415,
+			"line": 7419,
 			"pattern": "cos-clean-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7430,
+			"line": 7434,
 			"pattern": "map-teleport-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7438,
+			"line": 7442,
 			"pattern": "map-teleport-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7468,
+			"line": 7472,
 			"pattern": "buff-dismiss-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7476,
+			"line": 7480,
 			"pattern": "buff-dismiss-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7499,
+			"line": 7503,
 			"pattern": "academy-buff-pass-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7507,
+			"line": 7511,
 			"pattern": "academy-buff-pass-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7533,
+			"line": 7537,
 			"pattern": "ground-drop-"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7558,
+			"line": 7562,
 			"pattern": "party-answer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7558,
+			"line": 7562,
 			"pattern": "party-form-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7563,
-			"pattern": "shop-quantity"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 7572,
+			"line": 7567,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
 			"line": 7576,
-			"pattern": "shop-dialog-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 7697,
-			"pattern": "stall-prompt-"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 7809,
-			"pattern": "letter-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 7823,
-			"pattern": "friend-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 7837,
-			"pattern": "blocking-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8028,
-			"pattern": "quest-detail-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8036,
-			"pattern": "quest-detail-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8102,
-			"pattern": "ext-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8124,
-			"pattern": "skill:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8124,
-			"pattern": "pet-skill:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8125,
-			"pattern": "hotbar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8126,
-			"pattern": "action:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8146,
-			"pattern": "ext-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8153,
-			"pattern": "map-town:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8164,
-			"pattern": "experimental-scroll-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8180,
-			"pattern": "hotbar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8195,
-			"pattern": "hotbar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8209,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8210,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8216,
-			"pattern": "pet-gear:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8252,
-			"pattern": "gacha-card"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8252,
-			"pattern": "gacha-bag:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8254,
-			"pattern": "gacha-card"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8264,
-			"pattern": "stall-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8275,
-			"pattern": "storage-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8311,
-			"pattern": "cos-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8346,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8542,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8562,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8567,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8573,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8573,
-			"pattern": "cos-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8587,
-			"pattern": "guild-notice-scroll-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8600,
-			"pattern": "war-combo-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8602,
-			"pattern": "war-members-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8630,
-			"pattern": "potion-combo-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8646,
-			"pattern": "experimental-scroll-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8660,
-			"pattern": "option-video-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8669,
-			"pattern": "option-input-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8675,
-			"pattern": "option-scroll:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8703,
-			"pattern": "gacha-card"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8724,
-			"pattern": "npc-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 8724,
-			"pattern": "window-drag:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8741,
-			"pattern": "resurrection-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8752,
-			"pattern": "instance-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8762,
-			"pattern": "invite-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8771,
-			"pattern": "disconnect-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8782,
-			"pattern": "rebirth-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8795,
-			"pattern": "main-popup-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8805,
-			"pattern": "system-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8815,
-			"pattern": "disconnect-confirm"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8818,
-			"pattern": "disconnect-confirm"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8821,
-			"pattern": "disconnect-confirm"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8824,
-			"pattern": "disconnect-confirm"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8854,
-			"pattern": "skill-scroll-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8855,
-			"pattern": "quest-scroll-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8896,
-			"pattern": "fortress-map-pan"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8908,
-			"pattern": "guide-index-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8916,
-			"pattern": "guide-thumb"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 8924,
-			"pattern": "guide-drag"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9029,
-			"pattern": "shop-offer:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9034,
-			"pattern": "shop-offer:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9077,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9093,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9093,
-			"pattern": "storage-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9120,
-			"pattern": "cos-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9121,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9137,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9145,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9173,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9173,
-			"pattern": "cos-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9175,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9203,
-			"pattern": "pet-gear:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9215,
-			"pattern": "cos-status:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9226,
-			"pattern": "cos-command:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9230,
-			"pattern": "action:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9234,
-			"pattern": "skill:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9238,
-			"pattern": "hotbar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9243,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9243,
-			"pattern": "storage-slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9259,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9275,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9299,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9306,
-			"pattern": "action:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9310,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9321,
-			"pattern": "server:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9337,
-			"pattern": "party-search-"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9343,
-			"pattern": "party-form-"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9349,
-			"pattern": "experimental-ui-scale"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9353,
-			"pattern": "option-audio:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9359,
-			"pattern": "companion-potion-percent:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9364,
-			"pattern": "potion-percent:"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9376,
-			"pattern": "blocking-name"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9378,
-			"pattern": "pet-name"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9380,
-			"pattern": "friend-name"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9382,
-			"pattern": "letter-receiver"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9386,
-			"pattern": "academy-name"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9387,
-			"pattern": "alchemy-quantity"
-		},
-		{
-			"fn": "event",
-			"kind": "exact",
-			"line": 9391,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9405,
+			"line": 7580,
+			"pattern": "shop-dialog-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 7701,
+			"pattern": "stall-prompt-"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 7813,
+			"pattern": "letter-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 7827,
+			"pattern": "friend-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 7841,
+			"pattern": "blocking-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8032,
+			"pattern": "quest-detail-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8040,
+			"pattern": "quest-detail-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8106,
+			"pattern": "ext-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8128,
+			"pattern": "skill:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8128,
+			"pattern": "pet-skill:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8129,
+			"pattern": "hotbar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8130,
+			"pattern": "action:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8150,
+			"pattern": "ext-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8157,
+			"pattern": "map-town:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8168,
+			"pattern": "experimental-scroll-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8184,
+			"pattern": "hotbar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8199,
+			"pattern": "hotbar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8213,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8214,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8220,
+			"pattern": "pet-gear:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8256,
+			"pattern": "gacha-card"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8256,
+			"pattern": "gacha-bag:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8258,
+			"pattern": "gacha-card"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8268,
+			"pattern": "stall-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8279,
+			"pattern": "storage-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8315,
+			"pattern": "cos-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8350,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8546,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8566,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8571,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8577,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8577,
+			"pattern": "cos-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8591,
+			"pattern": "guild-notice-scroll-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8604,
+			"pattern": "war-combo-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8606,
+			"pattern": "war-members-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8634,
+			"pattern": "potion-combo-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8650,
+			"pattern": "experimental-scroll-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8664,
+			"pattern": "option-video-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8673,
+			"pattern": "option-input-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8679,
+			"pattern": "option-scroll:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8707,
+			"pattern": "gacha-card"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8728,
+			"pattern": "npc-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 8728,
+			"pattern": "window-drag:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8745,
+			"pattern": "resurrection-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8756,
+			"pattern": "instance-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8766,
+			"pattern": "invite-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8775,
+			"pattern": "disconnect-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8786,
+			"pattern": "rebirth-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8799,
+			"pattern": "main-popup-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8809,
+			"pattern": "system-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8819,
+			"pattern": "disconnect-confirm"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8822,
+			"pattern": "disconnect-confirm"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8825,
+			"pattern": "disconnect-confirm"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8828,
+			"pattern": "disconnect-confirm"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8858,
+			"pattern": "skill-scroll-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8859,
+			"pattern": "quest-scroll-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8900,
+			"pattern": "fortress-map-pan"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8912,
+			"pattern": "guide-index-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8920,
+			"pattern": "guide-thumb"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 8928,
+			"pattern": "guide-drag"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9033,
+			"pattern": "shop-offer:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9038,
+			"pattern": "shop-offer:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9081,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9097,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9097,
+			"pattern": "storage-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9124,
+			"pattern": "cos-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9125,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9141,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9149,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9177,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9177,
+			"pattern": "cos-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9179,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9207,
+			"pattern": "pet-gear:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9219,
+			"pattern": "cos-status:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9230,
+			"pattern": "cos-command:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9234,
+			"pattern": "action:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9238,
+			"pattern": "skill:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9242,
+			"pattern": "hotbar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9247,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9247,
+			"pattern": "storage-slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9263,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9279,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9303,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9310,
+			"pattern": "action:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9314,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9325,
+			"pattern": "server:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9341,
+			"pattern": "party-search-"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9347,
+			"pattern": "party-form-"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9353,
+			"pattern": "experimental-ui-scale"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9357,
+			"pattern": "option-audio:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9363,
+			"pattern": "companion-potion-percent:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9368,
+			"pattern": "potion-percent:"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9380,
+			"pattern": "blocking-name"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9382,
+			"pattern": "pet-name"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9384,
+			"pattern": "friend-name"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9386,
+			"pattern": "letter-receiver"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9390,
+			"pattern": "academy-name"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9391,
+			"pattern": "alchemy-quantity"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9395,
+			"pattern": "shop-quantity"
+		},
+		{
+			"fn": "event",
+			"kind": "exact",
+			"line": 9409,
 			"pattern": "split-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9408,
+			"line": 9412,
 			"pattern": "exchange-count"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9411,
+			"line": 9415,
 			"pattern": "gold-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9427,
+			"line": 9431,
 			"pattern": "social-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9428,
+			"line": 9432,
 			"pattern": "social-subject"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9429,
+			"line": 9433,
 			"pattern": "social-contents"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9430,
+			"line": 9434,
 			"pattern": "social-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9433,
+			"line": 9437,
 			"pattern": "war-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9433,
+			"line": 9437,
 			"pattern": "war-money"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9437,
+			"line": 9441,
 			"pattern": "exchange-gold"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9439,
+			"line": 9443,
 			"pattern": "gm-input"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9440,
+			"line": 9444,
 			"pattern": "chat-text"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9442,
+			"line": 9446,
 			"pattern": "chat-target"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9443,
+			"line": 9447,
 			"pattern": "account"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9444,
+			"line": 9448,
 			"pattern": "password"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9445,
+			"line": 9449,
 			"pattern": "endpoint"
 		}
 	],
