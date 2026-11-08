@@ -96,7 +96,12 @@ fixed-query row's 0x100 bit does not select the 0x11/5 query.
 func (ops *MonsterMoverOps) acquireSightTarget(division string, instance *monster.Instance, from monster.Pose, players []playerPose, tactics monster.Tactics) (playerPose, bool) {
 	query := instance
 	if instance.Nest.HasControls && instance.Nest.Controls.FixedQuery() {
-		query.Nest.NativeTacticsFlags &^= 0x100
+		// The clear is the query's own: the caller reads the actor
+		// by pointer into the leg view (#2982) under a read-only
+		// contract, so it lands in a copy that dies with the call.
+		cleared := *instance
+		cleared.Nest.NativeTacticsFlags &^= 0x100
+		query = &cleared
 	}
 	target, found := nearestEligiblePlayer(query, from, players, tactics.SightRange)
 	if !found {
