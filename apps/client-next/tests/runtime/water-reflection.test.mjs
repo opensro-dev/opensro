@@ -120,3 +120,44 @@ test("reflection allocates once, retires after submission, recreates and dispose
 	water.dispose();
 	assert.equal( gpu.live(), 0 );
 });
+
+test("a 4x mirror resolves and stores only the resolve; a 1x mirror stores itself", () => {
+	const device = {
+		createBuffer: () => ({ destroy() {} }),
+		queue: { writeBuffer() {} },
+		createTexture: descriptor => ({ createView: () => ({ samples: descriptor.sampleCount ?? 1 }), destroy() {} })
+	};
+	const water = createWaterReflection( /** @type {any} */ (device), "rgba8unorm", () => {} );
+	/*
+	================
+	attachment
+
+	The mirror pass's colour attachment for one encode.
+	================
+	*/
+	function attachment() {
+		let colour;
+		const encoder = {
+			beginRenderPass( descriptor ) {
+				colour = descriptor.colorAttachments[0];
+				return { setBlendConstant() {}, end() {} };
+			}
+		};
+		water.encode( /** @type {any} */ (encoder), [] );
+		return colour;
+	}
+	try {
+		water.update( identity(), 0, true, 0 );
+		const single = attachment();
+		assert.equal( single.storeOp, "store" );
+		assert.equal( single.resolveTarget, undefined );
+		water.reformat( "rgba8unorm", 4 );
+		water.update( identity(), 0, true, 1 );
+		const multi = attachment();
+		assert.equal( multi.view.samples, 4 );
+		assert.equal( multi.resolveTarget, water.view() );
+		assert.equal( multi.storeOp, "discard" );
+	} finally {
+		water.dispose();
+	}
+});

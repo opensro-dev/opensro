@@ -180,7 +180,9 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 					...(resolveView ? { resolveTarget: resolveView } : {}),
 					clearValue: [ 0, 0, 0, 1 ],
 					loadOp: "clear",
-					storeOp: "store"
+					// Under MSAA only the resolve is sampled (view()): the 4x
+					// samples need no store, which saves their write bandwidth.
+					storeOp: resolveView ? "discard" : "store"
 				} ],
 				depthStencilAttachment: {
 					view: depthView!,
