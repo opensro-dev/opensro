@@ -877,8 +877,9 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		} );
 		// A fetch burst across sources in one poll is a dropped
 		// connection, not three broken assets (#2559): the first two
-		// file as asset failures, the third completes the burst and
-		// files the one asset_offline.
+		// file as asset failures, and the third completes the burst -
+		// but a burst that recovers inside the retry owners' backoff
+		// files no asset_offline (#2869): the burst only arms it.
 		owners.characters.failure = () => null;
 		characterError = "TypeError: Failed to fetch";
 		owners.audio.error = () => "TypeError: Failed to fetch";
@@ -895,16 +896,42 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		await frame();
 		assert.deepEqual( assetReports().slice( burstStart ).map( report => report.code ), [
 			"asset_failed",
-			"asset_failed",
-			"asset_offline"
+			"asset_failed"
 		] );
 		// The outage's later fetch failures are the same outage: they
-		// file nothing more, never an asset_failed, and the outage
-		// stays one asset_offline.
+		// file nothing more, never an asset_failed, while the armed
+		// report waits out its gap.
 		const tailStart = assetReports().length;
 		characterError = "TypeError: Failed to fetch (burst tail)";
 		await frame();
 		assert.deepEqual( assetReports().slice( tailStart ), [] );
+		// Silence past the gap buries the armed report: had the
+		// connection recovered here, nothing would ever file. This
+		// outage instead keeps failing, so the failures still
+		// arriving after the gap file the one asset_offline.
+		for ( let i = 0; i < 4; i++ ) await frame();
+		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 0 );
+		characterError = "TypeError: Failed to fetch (sustained)";
+		owners.audio.error = () => "TypeError: Failed to fetch (sustained)";
+		owners.audio.failure = () => ({
+			path: "/assets/audio/burst2.ogg",
+			message: "TypeError: Failed to fetch (sustained)"
+		});
+		owners.ui.resourceError = () =>
+			"UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch";
+		owners.ui.resourceFailure = () => ({
+			path: "/assets/ui/burst2.ddj",
+			attempts: 4,
+			transient: true,
+			message: "UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch"
+		});
+		const sustainedStart = assetReports().length;
+		await frame();
+		assert.deepEqual( assetReports().slice( sustainedStart ).map( report => report.code ), [
+			"asset_failed",
+			"asset_failed",
+			"asset_offline"
+		] );
 		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
 		// The asset worker's death still stops the session: fatal
 		// (#2559). It dies mid-frame here: healthy at the frame's

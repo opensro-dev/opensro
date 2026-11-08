@@ -137,6 +137,13 @@ export function startRuntime(
 		// One asset_offline per outage window; the window's other fetch
 		// failures are the same outage, never asset failures (#2559).
 		const OFFLINE_REPORT_GAP_MS = 5000;
+		// When the current fetch-failure streak armed its offline
+		// report and when its latest failure arrived (#2869): a burst
+		// only arms the report, and fetch failures still arriving a
+		// full gap later file it. A connection that drops inside the
+		// retry owners' backoff and recovers files nothing.
+		let offlineArmedAt: number | undefined;
+		let lastFetchFailureAt = -Infinity;
 		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
 			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
@@ -298,12 +305,15 @@ export function startRuntime(
 
 		Files one runtime error under a code that names its cause
 		(#2559), where fatal_asset_failed once filed everything with
-		constant fields: a network burst or an offline browser files
-		asset_offline (once per burst), a thrown error files
-		runtime_exception with its stack, the asset worker's death
-		stays fatal_asset_failed (it actually stops the session), and
-		everything else files asset_failed with the retry owner's real
-		facts - fields it does not know are dropped, not filled in.
+		constant fields: a network burst or an offline browser arms
+		an asset_offline that only fetch failures still arriving a
+		full OFFLINE_REPORT_GAP_MS later file (#2869) - a drop the
+		retry owners recover inside their backoff files nothing - a
+		thrown error files runtime_exception with its stack, the
+		asset worker's death stays fatal_asset_failed (it actually
+		stops the session), and everything else files asset_failed
+		with the retry owner's real facts - fields it does not know
+		are dropped, not filled in.
 		================
 		*/
 		function reportRuntimeIncident( source: string, error: string, message: string ) {
@@ -315,8 +325,17 @@ export function startRuntime(
 				const burst = fetchFailures.length >= 3 &&
 					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
 				if ( globalThis.navigator?.onLine === false || burst ) {
-					if ( now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS ) {
+					// Arm on a streak's first outage failure; a streak
+					// silent for a full gap starts over as a new one.
+					if ( offlineArmedAt === undefined || now - lastFetchFailureAt > OFFLINE_REPORT_GAP_MS ) {
+						offlineArmedAt = now;
+					}
+					if (
+						now - offlineArmedAt >= OFFLINE_REPORT_GAP_MS &&
+						now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS
+					) {
 						offlineReportedAt = now;
+						offlineArmedAt = undefined;
 						sessionCommand( {
 							kind: "client-report",
 							incidentKind: "asset",
@@ -324,8 +343,10 @@ export function startRuntime(
 							message
 						} );
 					}
+					lastFetchFailureAt = now;
 					return;
 				}
+				lastFetchFailureAt = now;
 			} else if ( facts?.stack ) {
 				sessionCommand( {
 					kind: "client-report",
