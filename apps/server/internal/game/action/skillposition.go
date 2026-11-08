@@ -46,6 +46,33 @@ func positionSkillGoal(from, requested simulation.Spawn, limit uint32) (simulati
 	return simulation.Spawn{RegionID: p.RegionID, X: p.X, Y: from.Y + dy*fraction, Z: p.Z, Angle: from.Angle}, true
 }
 
+// positionSkillArrivalSlack bounds how far the reached endpoint may sit
+// from the requested one and still count as arrival: planSkillTravel
+// truncates X/Z to the published integers, so a reached endpoint differs
+// by under one unit per axis and the squared slack of 2 is exactly that
+// truncation square's diagonal.
+const positionSkillArrivalSlack = 2
+
+/*
+================
+positionSkillArrived
+
+Whether the planned destination is the destination asked for. The
+reference server runs its movement query over the whole chord and
+commits no result when the query cannot reach it, so a plan the
+constraint only clipped toward the goal is a refusal here too, never
+a shortened teleport at the caster's feet (#2807). Heights are
+surface-owned on both sides of the comparison, so arrival is judged
+on the ground plane.
+================
+*/
+func positionSkillArrived(goal, reached simulation.Spawn) bool {
+	a := worldgeom.RegionXZ{RegionID: goal.RegionID, X: goal.X, Z: goal.Z}
+	b := worldgeom.RegionXZ{RegionID: reached.RegionID, X: reached.X, Z: reached.Z}
+	dx, dz := worldgeom.Delta(a, b)
+	return dx*dx+dz*dz <= positionSkillArrivalSlack
+}
+
 /*
 ================
 acceptPositionSkill
@@ -99,6 +126,11 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 		}
 		plan, ok := rt.planSkillTravel(character.Name, from, fromOwner, to)
 		if !ok {
+			return false
+		}
+		// An unreached destination refuses the cast before any cost:
+		// the reference server commits no result for one (#2807).
+		if !positionSkillArrived(to, plan.to) {
 			return false
 		}
 		point = plan.point
