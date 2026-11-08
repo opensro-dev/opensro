@@ -157,7 +157,7 @@ func (s *Store) beginTxLocked() (*sql.Tx, error) {
 	if err := s.flushDeferredLocked(); err != nil {
 		return nil, err
 	}
-	return s.db.Begin()
+	return s.syncDBLocked().Begin()
 }
 
 //============================================================================

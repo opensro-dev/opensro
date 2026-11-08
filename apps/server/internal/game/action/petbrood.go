@@ -22,7 +22,7 @@ import (
 const broodGIDBase uint32 = 0x08000000
 const broodHatchMs int64 = 30000
 const broodLifeMs int64 = 600000
-const broodWindOpcode uint16 = 0x3FBA
+const broodWindOpcode uint16 = 0x3FBE
 const broodDeathMultiplier = 5
 
 // The 0x33A6 vitals body is [u32 gid][u16 source][u8 updateMask]...; mask

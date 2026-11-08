@@ -43,7 +43,7 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("CREATE TRIGGER reject_war BEFORE UPDATE ON guild_wars BEGIN SELECT RAISE(ABORT, 'war failure'); END"); err != nil {
+	if _, err := s.syncDBLocked().Exec("CREATE TRIGGER reject_war BEFORE UPDATE ON guild_wars BEGIN SELECT RAISE(ABORT, 'war failure'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if _, code, err := a.Begin(start); code != 2 || err == nil {
@@ -52,7 +52,7 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if *masters[0].Gold != 1000 || *masters[1].Gold != 1000 || len(a.Wars(testDivision, guilds[0])) != 0 {
 		t.Fatal("failed begin leaked payment")
 	}
-	if _, err := s.db.Exec("DROP TRIGGER reject_war"); err != nil {
+	if _, err := s.syncDBLocked().Exec("DROP TRIGGER reject_war"); err != nil {
 		t.Fatal(err)
 	}
 	war, code, err := a.Begin(start)
@@ -92,7 +92,7 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if err != nil || len(accounts) != 1 || accounts[0].Score != 100 || accounts[0].Kills != 1 {
 		t.Fatalf("member account %+v %v", accounts, err)
 	}
-	if _, err := s.db.Exec("CREATE TRIGGER reject_end BEFORE DELETE ON guild_wars BEGIN SELECT RAISE(ABORT, 'end failure'); END"); err != nil {
+	if _, err := s.syncDBLocked().Exec("CREATE TRIGGER reject_end BEFORE DELETE ON guild_wars BEGIN SELECT RAISE(ABORT, 'end failure'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if code, err := a.End(war.ID, guilds[0]); code != 2 || err == nil {
@@ -102,7 +102,7 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if g.WarCompensation != 0 || len(a.Wars(testDivision, guilds[0])) != 1 {
 		t.Fatal("failed end leaked compensation")
 	}
-	if _, err := s.db.Exec("DROP TRIGGER reject_end"); err != nil {
+	if _, err := s.syncDBLocked().Exec("DROP TRIGGER reject_end"); err != nil {
 		t.Fatal(err)
 	}
 	if code, err := a.End(war.ID, guilds[0]); code != 0 || err != nil {
@@ -119,7 +119,7 @@ func TestGuildWarAtomicLifecycle(t *testing.T) {
 	if refusal.Refused() || paid != 1000 {
 		t.Fatalf("claim %d %d", paid, refusal)
 	}
-	if err := validateGuildWars(s.db); err != nil {
+	if err := validateGuildWars(s.syncDBLocked()); err != nil {
 		t.Fatal(err)
 	}
 }

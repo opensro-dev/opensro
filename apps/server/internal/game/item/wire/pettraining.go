@@ -87,18 +87,19 @@ type PetGearState struct {
 }
 
 type PetTrainingState struct {
-	PetGID                            uint32
-	FreePoints                        uint8
-	AttackPercent, DefensePercent     uint16
-	Rows                              [2]PetRowState
-	Slotted                           [3]uint8
-	Skills                            []PetSkillRow
-	Gear                              []PetGearState
-	MaxHP                             uint32
-	MagicPercent, MagicDefensePercent uint16
-	MagicPrimary                      bool
-	GearStats                         [6]uint32
-	CooldownPercent                   uint16
+	PetGID                               uint32
+	FreePoints                           uint8
+	AttackPercent, DefensePercent        uint16
+	Rows                                 [2]PetRowState
+	Slotted                              [3]uint8
+	Skills                               []PetSkillRow
+	Gear                                 []PetGearState
+	MaxHP                                uint32
+	MagicPercent, MagicDefensePercent    uint16
+	MagicPrimary                         bool
+	GearStats                            [6]uint32
+	CooldownPercent                      uint16
+	PassiveCooldownMs, PassiveDurationMs [3]uint32
 }
 
 /*
@@ -137,7 +138,7 @@ func EncodePetTrainingState(s PetTrainingState) []byte {
 		}
 	}
 	if s.MaxHP != 0 {
-		out = append(out, 2) // combat profile plus flat equipment stats and cooldown reduction
+		out = append(out, 3) // combat profile, equipment and passive cooldowns
 		out = binary.LittleEndian.AppendUint32(out, s.MaxHP)
 		out = binary.LittleEndian.AppendUint16(out, s.MagicPercent)
 		out = binary.LittleEndian.AppendUint16(out, s.MagicDefensePercent)
@@ -150,6 +151,10 @@ func EncodePetTrainingState(s PetTrainingState) []byte {
 			out = binary.LittleEndian.AppendUint32(out, value)
 		}
 		out = binary.LittleEndian.AppendUint16(out, s.CooldownPercent)
+		for i, remaining := range s.PassiveCooldownMs {
+			out = binary.LittleEndian.AppendUint32(out, remaining)
+			out = binary.LittleEndian.AppendUint32(out, s.PassiveDurationMs[i])
+		}
 	}
 	return out
 }

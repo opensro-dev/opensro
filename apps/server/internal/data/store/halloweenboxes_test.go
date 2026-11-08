@@ -115,16 +115,16 @@ func TestHalloweenBoxesRefuseCorruptRows(t *testing.T) {
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	defer s.Close()
-	if _, err := s.db.Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyHalloweenBoxes, `{"account-a":{"day":1,"count":-1}}`); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyHalloweenBoxes, `{"account-a":{"day":1,"count":-1}}`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := loadHalloweenBoxes(s.db); err == nil {
+	if _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
 		t.Fatal("a negative count loaded")
 	}
-	if _, err := s.db.Exec("UPDATE meta SET value = ? WHERE key = ?", `{" ":{"day":1,"count":1}}`, metaKeyHalloweenBoxes); err != nil {
+	if _, err := s.syncDBLocked().Exec("UPDATE meta SET value = ? WHERE key = ?", `{" ":{"day":1,"count":1}}`, metaKeyHalloweenBoxes); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := loadHalloweenBoxes(s.db); err == nil {
+	if _, _, err := loadHalloweenBoxes(s.syncDBLocked()); err == nil {
 		t.Fatal("a blank account key loaded")
 	}
 }
@@ -147,7 +147,7 @@ func TestHalloweenAccountUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -157,7 +157,7 @@ func TestHalloweenAccountUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

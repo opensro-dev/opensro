@@ -18,7 +18,7 @@ import (
 )
 
 const tailwindPeriod int64 = 5000
-const tailwindOpcode uint16 = 0x3fb7 // Private: recipient u32, book u8, stacks u8, speed percent x10 u16.
+const tailwindOpcode uint16 = 0x3fb7 // Public: recipient u32, book u8, stacks u8, speed percent x10 u16.
 
 type tailwindCharge struct {
 	name        string
@@ -171,7 +171,7 @@ func (rt *Runtime) tailwindSpeedFactor(division string, c *enterworld.Character,
 ================
 publishTailwind / clearTailwindSource
 
-Movement uses native observer publication. Stack details go only to the recipient.
+Movement and stack details use native observer publication.
 ================
 */
 func (rt *Runtime) publishTailwind(division string, gid uint32, now int64) {
@@ -185,8 +185,8 @@ func (rt *Runtime) publishTailwind(division string, gid uint32, now int64) {
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 		rt.queueCrowVisual(division, crowVisual{gid: gid, kind: crowTailwindVisual, book: row.book - 54, at: at})
 	}
-	f := wire.Frame{Opcode: tailwindOpcode, Payload: wire.NewWriter(8).U32(gid).U8(row.book).U8(row.stacks).U16(uint16(row.percent * float64(row.stacks) * 10)).Payload()}
-	rt.queueMonsterLegRecipients(division, []RecipientFrames{{CharacterID: c.ID, Frames: []wire.Frame{f}}})
+	f := tailwindFrame(gid, row)
+	rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: gid, Frames: simFrames([]wire.Frame{f})}})
 	if frames := rt.refreshMovementEffects(division, snapshot, now); len(frames) != 0 {
 		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: gid, Frames: simFrames(frames)}})
 	}
@@ -255,7 +255,7 @@ func (rt *Runtime) tailwindDamage(division string, c *enterworld.Character, targ
 		}
 		row := enterworld.SkillRow{}
 		setPetStatus(&row, tagStun, [6]uint32{2000, 100, 0})
-		frames := rt.applyPetCounterStun(step, row, target)
+		frames := rt.applyPetStatus(step, row, target)
 		if len(frames) > 0 {
 			if victim, ok := rt.resolvePetCombatTarget(step, target); ok {
 				rt.queueCrowVisual(division, crowVisual{gid: target, kind: crowStunVisual, book: uint8(skill.Option), at: victim.at})

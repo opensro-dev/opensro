@@ -241,9 +241,10 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 });
 
 test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide; no HD set.
+	// No world session: no hunting guide, so its emptied World map (M)
+	// section goes and the next section leads the tab; no HD set.
 	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "expandedWorldMap" ] );
+	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "questTrackerMarkers" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 

@@ -54,7 +54,8 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 14
+	// Protocol 15 adds expanded pet frames to protocol 14's chat-link contract.
+	Current = 15
 	// The chat contract: 1 carries the port-only item links
 	// (SRO_CHAT_ITEM_LINKS): a link block after the text of a 0x7367 request
 	// and of a 0x75BD Global Chatting use, and the linked item bodies after
@@ -108,11 +109,12 @@ const (
 	// the packet but cannot sustain the stream, which is a protocol change
 	// all the same.
 	EffectsContract = 1
-	// The companion contract: 2 lifts the COS bag capacity bound to its
+	// The companion contract: 3 adds pet passive cooldowns, paid Bond
+	// feedback, public buffs and a separate crow wind opcode; 2 lifts the COS bag capacity bound to its
 	// one wire byte (#801), so an item-mall transport's 141 to 177 slots
 	// decode; 1 added populated summoners and concurrent COS lifetimes and
 	// refused a bag over 140.
-	CompanionsContract = 2
+	CompanionsContract = 3
 	BootstrapContract  = 2 // the EnterWorld DTO
 	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
 	// The reference file: 3 adds every creatable monster's row
@@ -136,6 +138,7 @@ var history = map[int]Contracts{
 	11: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1},
 	12: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 1},
 	13: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2},
+	14: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2, Chat: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract,
 		Chat: ChatContract},

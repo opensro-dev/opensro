@@ -6,6 +6,7 @@ petbond_test.go - Guardian recovery, tier gates, shared budget and admission
 package action
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -104,8 +105,12 @@ func TestGuardianSharingTiersBudgetAndParty(t *testing.T) {
 			if damage != 100-uint32(tier)*10 {
 				t.Fatal("transfer percent", damage)
 			}
-			if len(rt.commitPetBond(plan)) != 2 || c.ActiveCOS.CurrentHP != oldHP-(100-damage) {
+			frames := rt.commitPetBond(plan)
+			if len(frames) != 2 || c.ActiveCOS.CurrentHP != oldHP-(100-damage) {
 				t.Fatal("bear did not pay transfer")
+			}
+			if len(frames[1].Payload) != 13 || binary.LittleEndian.Uint32(frames[1].Payload[9:]) != 100-damage {
+				t.Fatal("wrong paid damage feedback")
 			}
 			if len(rt.commitPetBond(plan)) != 0 {
 				t.Fatal("duplicate debit")

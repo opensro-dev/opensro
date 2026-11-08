@@ -368,7 +368,7 @@ func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, n
 		return cancel(RenameRefusedReserved)
 	}
 	if c.GuildID != nil && s.db != nil {
-		if wars, err := readGuildWars(s.db, division); err == nil {
+		if wars, err := readGuildWars(s.syncDBLocked(), division); err == nil {
 			for _, war := range wars {
 				active := war.EndMs == 0 || war.EndMs > nowMs
 				if active && (war.Guilds[0] == *c.GuildID || war.Guilds[1] == *c.GuildID) {

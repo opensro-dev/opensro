@@ -22,6 +22,10 @@ test("every wolf signal plays published, compiling, wolf-only effect programs", 
 	const catalog = JSON.parse( new TextDecoder().decode( bytes ) );
 	const compiler = createEffectPrograms();
 	const signals = [
+		0xd7,
+		0xd8,
+		0xd9,
+		0xda,
 		...wolf.WOLF_HOWL,
 		...wolf.WOLF_REND,
 		wolf.WOLF_EXECUTED,
