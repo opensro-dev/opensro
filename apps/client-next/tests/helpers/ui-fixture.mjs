@@ -60,7 +60,12 @@ export function uiFixture(
 	let nextId = 0;
 	const ui = createUi( uiPorts(
 		{
-			available: () => 8,
+			// The fixture serves every request synchronously from disk, so
+			// the production slot count only multiplies admission waves:
+			// each wave costs a full HUD step in the settle pump, which
+			// made every fixture build pay ~100 frame steps before its
+			// first assertion (#2925). The settled state is unchanged.
+			available: () => 1024,
 			// The fixture's published build carries the HD set (#2800), so
 			// the Experimental HD row is listed in fixture scenes.
 			hdAvailable: () => true,
