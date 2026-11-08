@@ -43,7 +43,7 @@ func (s *Store) AccountStorage(character *domain.Character) (domain.AccountStora
 	if _, known := s.charDivision[character]; !known {
 		return domain.AccountStorage{}, fmt.Errorf("storage: unknown character")
 	}
-	return readAccountStorage(s.db, character.AccountID)
+	return readAccountStorage(s.syncDBLocked(), character.AccountID)
 }
 
 /*
@@ -61,7 +61,7 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 	if !known {
 		return domain.AccountStorage{}, fmt.Errorf("storage: unknown character")
 	}
-	current, err := readAccountStorage(s.db, character.AccountID)
+	current, err := readAccountStorage(s.syncDBLocked(), character.AccountID)
 	if err != nil {
 		return current, err
 	}

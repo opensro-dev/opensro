@@ -49,6 +49,30 @@ func TestTheCurrentProtocolPasses(t *testing.T) {
 
 /*
 ================
+TestExpandedPetFramesDoNotReuseReleasedProtocols
+================
+*/
+func TestExpandedPetFramesDoNotReuseReleasedProtocols(t *testing.T) {
+	previous, ok := ContractsOf(13)
+	if !ok || previous.Wanted != 2 || previous.Companions != 2 {
+		t.Fatalf("released protocol 13 changed: %+v", previous)
+	}
+	releasedChat, ok := ContractsOf(14)
+	if !ok || releasedChat.Chat != 1 || releasedChat.Companions != 2 {
+		t.Fatalf("released protocol 14 changed: %+v", releasedChat)
+	}
+	if Current <= 14 || WantedContract != 2 || ChatContract != 1 || CompanionsContract != 3 {
+		t.Fatal("expanded pet frames need a new protocol while retaining main's wanted contract")
+	}
+	for _, declared := range []string{"13", "14"} {
+		if reached, recorder := serve(t, http.MethodPost, declared); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("a protocol-%s browser would receive incompatible pet frames", declared)
+		}
+	}
+}
+
+/*
+================
 TestAnyOtherDeclarationIsRefusedAsOutdated
 
 Browsers older than the handshake declare nothing; a stale or garbled
@@ -312,7 +336,7 @@ func TestAClientWithoutChatLinksIsRefused(t *testing.T) {
 	if _, ok := history[13]; !ok || refused == 0 {
 		t.Fatal("the protocol-13 client is not in the history this test refuses")
 	}
-	if ChatContract < readsChatLinks || Current != 14 {
-		t.Fatalf("ChatContract = %d, Current = %d; this build sends link tails at 14", ChatContract, Current)
+	if ChatContract < readsChatLinks || Current < 14 {
+		t.Fatalf("ChatContract = %d, Current = %d; this build sends link tails since protocol 14", ChatContract, Current)
 	}
 }

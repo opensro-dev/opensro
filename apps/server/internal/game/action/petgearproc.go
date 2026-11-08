@@ -22,6 +22,7 @@ petGearField
 type petGearField struct {
 	center    simulation.Spawn
 	damage    uint32
+	kind      int
 	next, end int64
 	left      uint8
 }
@@ -53,6 +54,14 @@ func (rt *Runtime) petGearProcs(division string, owner *enterworld.Character, gi
 		if p.Damage == 0 || !rt.petChance(p.Chance) {
 			continue
 		}
+		damage := p.Damage
+		if p.MaxDamage > damage {
+			draw, err := rt.CombatRoll()
+			if err != nil {
+				continue
+			}
+			damage += draw % (p.MaxDamage - damage + 1)
+		}
 		if kind == companion.ProcMend {
 			var heal wire.Frame
 			healed := false
@@ -63,20 +72,24 @@ func (rt *Runtime) petGearProcs(division string, owner *enterworld.Character, gi
 				continue
 			}
 			rt.queueMonsterLegFrames(rt.sealTickPrivate([]simulation.DivisionFrames{{DivisionID: division, SourceGID: enterworld.ObjectIDForCharacter(owner), Frames: simFrames([]wire.Frame{heal})}}))
+			rt.wolfEmote(division, enterworld.ObjectIDForCharacter(owner), 0xda)
 		} else if kind == companion.ProcBlizzard || kind == companion.ProcPoison {
 			if len(step.state.trained.gearFields) >= 4 {
 				continue
 			}
-			field := petGearField{center: at, damage: p.Damage, next: now + 1000, end: now + 4000, left: 3}
-			rt.petGearArea(step, at, p.Damage/4, 50)
+			field := petGearField{center: at, damage: damage, kind: kind, next: now + 1000, end: now + 4000, left: 3}
+			rt.petGearArea(step, at, damage/4, 50, kind, false)
 			step.state.trained.gearFields = append(step.state.trained.gearFields, field)
 			if kind == companion.ProcBlizzard {
 				rt.wolfEmote(division, target, 0xd3)
+			} else {
+				rt.wolfEmote(division, target, 0xd9)
 			}
 		} else if kind == companion.ProcChain {
-			rt.petGearChain(step, target, at, p.Damage)
+			rt.petGearChain(step, target, at, damage)
 		} else {
-			rt.petGearArea(step, at, p.Damage, 30)
+			rt.petGearArea(step, at, damage, 30, kind, false)
+			rt.wolfEmote(division, target, 0xd8)
 		}
 		step.state.trained.procReadyAt = now + companion.D.Rules.ProcInternalCooldownMs
 		return
@@ -91,12 +104,25 @@ Only the source's ordinary-world population, with explicit range, sight and
 normal target eligibility. Eight victims bounds each pulse's work.
 ================
 */
-func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage uint32, radius float64) {
+func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage uint32, radius float64, kind int, final bool) {
 	lease, ok := rt.casterPopulation(step.key.division, step.snapshot)
 	if !ok {
 		return
 	}
 	count := 0
+	status := enterworld.SkillRow{}
+	switch kind {
+	case companion.ProcFire:
+		// Port-only design inputs, not a native audit: a level-eight burn of up to
+		// six seconds through the native abnormal engine; damage follows the pet level.
+		setPetStatus(&status, tagBurn, [6]uint32{8, 25, uint32(step.pet.Level)})
+	case companion.ProcBlizzard:
+		// Port-only design inputs: frostbite of up to three seconds; freeze is tried only on the final pulse.
+		setPetStatus(&status, tagFrostbite, [6]uint32{12, 100})
+		if final {
+			setPetStatus(&status, tagFreeze, [6]uint32{20, 10})
+		}
+	}
 	for _, mob := range rt.Monsters.CombatCandidatesInPopulation(step.key.division, lease, at, radius, step.nowMs, false) {
 		target, valid := rt.resolvePetCombatTarget(step, mob.Gid)
 		if !valid || target.monster == nil || !samePlaneAdjacent(at, target.at) || areaDistance(at, target.at) > radius {
@@ -107,6 +133,14 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 			continue
 		}
 		rt.wolfBonusHit(step, *target.monster, damage, "pet-gear-proc")
+		if kind == companion.ProcFire || kind == companion.ProcBlizzard {
+			if after, ok := rt.Monsters.Get(step.key.division, target.gid); ok && after.CurrentHP > 0 && after.CurrentHP < target.monster.CurrentHP {
+				frames := rt.applyPetStatus(step, status, target.gid)
+				if len(frames) > 0 {
+					rt.queueMonsterLegFrames(rt.sealTickPrivate([]simulation.DivisionFrames{{DivisionID: step.key.division, SourceGID: target.gid, Frames: simFrames(frames)}}))
+				}
+			}
+		}
 		count++
 		if count == 8 {
 			break
@@ -147,6 +181,7 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 			}
 			seen[gid] = true
 			rt.wolfBonusHit(step, *victim.monster, damage, "pet-gear-proc")
+			rt.wolfEmote(step.key.division, gid, 0xd7)
 			at = victim.at
 			damage = damage * 80 / 100
 			found = true
@@ -191,7 +226,7 @@ func (rt *Runtime) advancePetGearFields(key petOwnerKey, now int64) {
 			if field.left == 1 {
 				damage += field.damage % 4
 			}
-			rt.petGearArea(step, field.center, damage, 50)
+			rt.petGearArea(step, field.center, damage, 50, field.kind, field.left == 1)
 			field.left--
 			field.next = now + 1000
 		}

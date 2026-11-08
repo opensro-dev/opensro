@@ -79,6 +79,9 @@ func TestDoorCommitsWhileASnapshotReads(t *testing.T) {
 
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "SnapReader", 10)
+	// The reader's snapshot starts after the setup rows are on disk (a
+	// no-op on the synchronous door, a drain on the asynchronous one).
+	s.syncDBLocked()
 	reader, err := connectDB(s.dbPath)
 	if err != nil {
 		t.Fatal(err)

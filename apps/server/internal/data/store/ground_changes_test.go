@@ -41,8 +41,21 @@ type groundChangeFixture struct {
 
 func newGroundChangeFixture(t *testing.T) *groundChangeFixture {
 	t.Helper()
+	return newGroundChangeFixtureOpen(t, openTest)
+}
+
+/*
+================
+newGroundChangeFixtureOpen
+
+newGroundChangeFixture on the store open supplies (openTestSync for a
+property only the synchronous door has).
+================
+*/
+func newGroundChangeFixtureOpen(t *testing.T, open func(testing.TB, string, *testClock) *Store) *groundChangeFixture {
+	t.Helper()
 	f := &groundChangeFixture{dir: t.TempDir(), clock: newTestClock()}
-	f.s = openTest(t, f.dir, f.clock)
+	f.s = open(t, f.dir, f.clock)
 	f.r = grounditem.NewRegistry()
 	f.s.AttachGround(f.r)
 	for i := 0; i < 40; i++ {
@@ -234,7 +247,9 @@ move, so the next flush writes the same rows again.
 func TestARolledBackFlushAcknowledgesNothing(t *testing.T) {
 	t.Parallel()
 
-	f := newGroundChangeFixture(t)
+	// A rollback is the synchronous door's: the asynchronous writer
+	// retries a failed batch instead (commit_writer.go).
+	f := newGroundChangeFixtureOpen(t, openTestSync)
 	c := seededCharacter()
 	if err := f.s.CreateCharacter(testDivision, "ground-account", c); err != nil {
 		t.Fatal(err)
@@ -279,7 +294,7 @@ func TestACrashBeforeTheAcknowledgementRewritesIdempotently(t *testing.T) {
 	f.r.Remove(testDivision, f.gids[11])
 	changes := f.r.Changes()
 	f.s.mu.Lock()
-	tx, err := f.s.db.Begin()
+	tx, err := f.s.syncDBLocked().Begin()
 	if err != nil {
 		f.s.mu.Unlock()
 		t.Fatal(err)

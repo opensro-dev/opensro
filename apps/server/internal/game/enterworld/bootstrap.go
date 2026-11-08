@@ -320,6 +320,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
+		Alexandria:           deps.Alexandria,
 		RaisedGoldCaps:       deps.RaisedGoldCaps,
 		UiTuning:             UiTuningFrom(tunables.Current()),
 	}

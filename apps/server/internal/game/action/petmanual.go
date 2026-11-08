@@ -139,7 +139,12 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 		}
 		if !rt.deps.Update(owner, "pet-manual-target", func() bool {
 			live := owner.CompanionByGID(gid)
-			return live != nil && companion.Queue(live, id, now) == ""
+			if live == nil {
+				return false
+			}
+			// A repeated manual order renews the attack; it never toggles it off.
+			live.Training.Queued = 0
+			return companion.Queue(live, id, now) == ""
 		}) {
 			return petTrainingReceipt("The ability could not be applied.")
 		}

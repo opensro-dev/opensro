@@ -46,17 +46,44 @@ func batchFixture(t *testing.T) (*Store, *enterworld.Character, *enterworld.Char
 ================
 diskOpen
 
-The witness connection; closed with the test.
+The witness connection; closed with the test. Every read through it
+first drains the store's asynchronous writer (#2802), so it reads what
+the disk holds once the queued batches are written - a no-op on the
+synchronous door.
 ================
 */
-func diskOpen(t *testing.T, s *Store) *sql.DB {
+func diskOpen(t *testing.T, s *Store) *diskWitness {
 	t.Helper()
 	db, err := sql.Open("sqlite", s.dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return db
+	return &diskWitness{db: db, store: s}
+}
+
+/*
+================
+diskWitness
+================
+*/
+type diskWitness struct {
+	db    *sql.DB
+	store *Store
+}
+
+/*
+================
+diskWitness::row
+
+QueryRow after the drain.
+================
+*/
+func (w *diskWitness) row(query string, args ...any) *sql.Row {
+	if w.store.writer != nil {
+		w.store.writer.drain()
+	}
+	return w.db.QueryRow(query, args...)
 }
 
 /*
@@ -66,10 +93,10 @@ diskGold
 The gold a reboot would load for one character.
 ================
 */
-func diskGold(t *testing.T, db *sql.DB, name string) int64 {
+func diskGold(t *testing.T, disk *diskWitness, name string) int64 {
 	t.Helper()
 	var record string
-	if err := db.QueryRow("SELECT record FROM characters WHERE division = ? AND name_lower = ?", testDivision, strings.ToLower(name)).Scan(&record); err != nil {
+	if err := disk.row("SELECT record FROM characters WHERE division = ? AND name_lower = ?", testDivision, strings.ToLower(name)).Scan(&record); err != nil {
 		t.Fatal(err)
 	}
 	var c enterworld.Character
@@ -89,10 +116,10 @@ diskGround
 The ground rows a reboot would load.
 ================
 */
-func diskGround(t *testing.T, db *sql.DB) int {
+func diskGround(t *testing.T, disk *diskWitness) int {
 	t.Helper()
 	var n int
-	if err := db.QueryRow("SELECT COUNT(*) FROM ground_items").Scan(&n); err != nil {
+	if err := disk.row("SELECT COUNT(*) FROM ground_items").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	return n
@@ -338,10 +365,10 @@ diskRecord
 The stored record bytes a reboot would load for one character.
 ================
 */
-func diskRecord(t *testing.T, db *sql.DB, name string) string {
+func diskRecord(t *testing.T, disk *diskWitness, name string) string {
 	t.Helper()
 	var record string
-	if err := db.QueryRow("SELECT record FROM characters WHERE division = ? AND name_lower = ?", testDivision, strings.ToLower(name)).Scan(&record); err != nil {
+	if err := disk.row("SELECT record FROM characters WHERE division = ? AND name_lower = ?", testDivision, strings.ToLower(name)).Scan(&record); err != nil {
 		t.Fatal(err)
 	}
 	return record

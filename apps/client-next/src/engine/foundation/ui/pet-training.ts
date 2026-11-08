@@ -338,7 +338,7 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 		return `Shields the bear and its owner for ${formatValue( Math.min( 100, value ) )}% of maximum HP for 5 s.` +
 			(design.option >= 2 ? " Also shields party members within 20 m." : "") +
 			(design.option === 3 ?
-				" After 5 s, each recipient's remaining shield (including the bear) explodes within 8 m for 50% of its remaining value as damage to monsters." :
+				" After 5 s, each recipient's remaining shield (including the bear) explodes within 8 m for 40% of its remaining value as damage to monsters." :
 				"") +
 			" Cannot cast in town.";
 	}
@@ -377,8 +377,8 @@ export function petCooldownQuads(
 		[ {
 			skill: row + 1,
 			group: 0,
-			startedAtMs: state.receivedAtMs,
-			durationMs: cooldown.timerMs
+			startedAtMs: state.receivedAtMs - ((cooldown.durationMs ?? cooldown.timerMs) - cooldown.timerMs),
+			durationMs: cooldown.durationMs ?? cooldown.timerMs
 		} ],
 		row + 1,
 		0,
@@ -604,7 +604,7 @@ function petSkillEffectLines( d: PetSkillDesign, value: number, rank: number ): 
 				"Duration 5 s",
 				d.option > 1 ? "Bear, owner and party within 20 m" : "Bear and owner",
 				...(d.option === 3 ?
-					[ "Expiry: remaining shield bursts", "Damage 50% remaining shield", "Burst range 8 m" ] :
+					[ "Expiry: remaining shield bursts", "Damage 40% remaining shield", "Burst range 8 m" ] :
 					[])
 			];
 		case "Unbroken Spirit":

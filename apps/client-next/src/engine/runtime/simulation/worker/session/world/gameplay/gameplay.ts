@@ -528,6 +528,9 @@ export function createGameplay(
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
 	let moonlitThiefSuit = false;
+	// The shard runs the port-only Alexandria area (SRO_ALEXANDRIA): the M
+	// window may use the published wider overview and town pages.
+	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
@@ -1798,6 +1801,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
+			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
@@ -4094,7 +4098,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( petTraining.receive( frame, now ) ) {
+				if ( petTraining.receive( frame, now, localGid ) ) {
 					dirty = true;
 					return true;
 				}
@@ -6004,6 +6008,9 @@ The published plane when something changed since the last take, else null.
 			}
 			dirty = false;
 			const m = movement.state(), i = inventory.state(), c = combat.state();
+			for ( const row of petTraining.recipients() ) {
+				if ( row.gid !== localGid && !readEntity( row.gid ) ) petTraining.removeRecipient( row.gid );
+			}
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
@@ -6046,6 +6053,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
@@ -6110,6 +6118,8 @@ The published plane when something changed since the last take, else null.
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
+				petHowl: petTraining.howl(),
+				petRecipientBuffs: petTraining.recipients(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null

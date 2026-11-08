@@ -182,7 +182,7 @@ func TestQueuedRenameCancelsDuringGuildWar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("INSERT INTO guild_wars (division, id, guild_a, guild_b, record) VALUES (?, 1, ?, 78, ?)",
+	if _, err := s.syncDBLocked().Exec("INSERT INTO guild_wars (division, id, guild_a, guild_b, record) VALUES (?, 1, ?, 78, ?)",
 		testDivision, guildID, string(raw)); err != nil {
 		t.Fatal(err)
 	}

@@ -54,7 +54,7 @@ func TestFortressStaffHireDurableAndOrdered(t *testing.T) {
 	if refused.Refused() {
 		t.Fatal(refused)
 	}
-	if _, err := s.db.Exec("CREATE TRIGGER reject_staff BEFORE INSERT ON fortresses BEGIN SELECT RAISE(ABORT, 'staff failure'); END"); err != nil {
+	if _, err := s.syncDBLocked().Exec("CREATE TRIGGER reject_staff BEFORE INSERT ON fortresses BEGIN SELECT RAISE(ABORT, 'staff failure'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if code, err := a.HireStaff(testDivision, 1, leader.ID, 1); code != 2 || err == nil {
@@ -65,7 +65,7 @@ func TestFortressStaffHireDurableAndOrdered(t *testing.T) {
 	if unchanged.StaffFlags != 0 || *leader.Gold != 90000 || unchangedGuild.GP != 9000 {
 		t.Fatal("failed hire published partial payment or flags")
 	}
-	if _, err := s.db.Exec("DROP TRIGGER reject_staff"); err != nil {
+	if _, err := s.syncDBLocked().Exec("DROP TRIGGER reject_staff"); err != nil {
 		t.Fatal(err)
 	}
 	a.SetPeriod(testDivision, fortress.PeriodWar, true)

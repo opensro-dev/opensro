@@ -49,6 +49,30 @@ func cosCancelResult(code uint8) OpResult {
 
 /*
 ================
+attackPetSummonBlocked
+
+Port-only: scrolls and toolbar dismissal share the owner/pet attack delay.
+================
+*/
+func (rt *Runtime) attackPetSummonBlocked(division string, c *enterworld.Character, now int64) bool {
+	if inBattleState(c, now) || rt.PlayerAttackLocked(division, c.Name) || rt.objectActionCommitted(division, c.Name) {
+		return true
+	}
+	if _, attacking := rt.combatIntentFor(division, c.Name); attacking {
+		return true
+	}
+	for _, pet := range c.Companions() {
+		if pet.Summoned {
+			if state := rt.petSessionFor(division, c.Name, pet.GID); state != nil && state.combat != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+/*
+================
 HandleCosCancel
 
 Never resolve a supplied GID globally: it must name this session's companion.
@@ -70,6 +94,9 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 		return cosCancelResult(0x0D)
 	}
 	now := rt.Now().UnixMilli()
+	if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand && rt.attackPetSummonBlocked(division, snapshot, now) {
+		return cosCancelResult(cosSummonInBattle)
+	}
 	owner := rt.liveSpawn(simulation.WorldKey(division, c.Name), snapshot, now)
 	pet := rt.companionLiveSpawn(division, snapshot, snapshot.CompanionByGID(gid), now)
 	if !worldgeom.SamePlane(owner.RegionID, pet.RegionID) ||

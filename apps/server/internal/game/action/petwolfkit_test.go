@@ -21,6 +21,26 @@ import (
 
 /*
 ================
+TestManualRendRepeatDoesNotCancel
+================
+*/
+func TestManualRendRepeatDoesNotCancel(t *testing.T) {
+	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	skill := learnPetBook(t, c, 4)
+	for range 2 {
+		rt.manualPetSkill(testDivision, c, c, c.ActiveCOS.GID, skill.ID, mob.Gid, clock.NowMs())
+		if c.ActiveCOS.Training.Queued != skill.ID {
+			t.Fatal("repeated manual cast cancelled Rend")
+		}
+		state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
+		if state.combat == nil || state.combat.target != mob.Gid {
+			t.Fatal("manual cast lost its attack target")
+		}
+	}
+}
+
+/*
+================
 TestWolfHuntingHowlTargetsCooldownAndExpiry
 ================
 */
@@ -43,6 +63,18 @@ func TestWolfHuntingHowlTargetsCooldownAndExpiry(t *testing.T) {
 			}
 			if (rt.EntryActionSpeed(testDivision, c.Name) < 100) != (tier >= 2) || (rt.EntryActionSpeed(testDivision, near.Name) < 100) != (tier == 3) || rt.EntryActionSpeed(testDivision, far.Name) != 100 {
 				t.Fatal("owner/party tier or range")
+			}
+			indicators := 0
+			for _, frame := range out.Broadcast {
+				if frame.Opcode == 0x3fbd {
+					indicators++
+					if len(frame.Payload) != 11 || frame.Payload[4] != tier || binary.LittleEndian.Uint32(frame.Payload[7:]) != 8000 {
+						t.Fatal("invalid owner howl indicator", frame.Payload)
+					}
+				}
+			}
+			if indicators != int(tier)-1 {
+				t.Fatal("howl indicator recipient count", indicators)
 			}
 			emotes := 0
 			for _, f := range out.Broadcast {
@@ -72,6 +104,11 @@ func TestWolfHuntingHowlTargetsCooldownAndExpiry(t *testing.T) {
 			rt.advanceWolfKit(step.key, clock.NowMs())
 			if rt.EntryActionSpeed(testDivision, c.Name) != 100 || rt.EntryActionSpeed(testDivision, near.Name) != 100 || len(rt.wolfHowls.rows) != 0 {
 				t.Fatal("expired howl remains")
+			}
+			for _, frame := range rt.wolfHowlFrames(testDivision, wolfHowl{members: map[uint32]string{enterworld.ObjectIDForCharacter(c): c.Name}}) {
+				if frame.Opcode == 0x3fbd && (frame.Payload[4] != 0 || binary.LittleEndian.Uint32(frame.Payload[7:]) != 0) {
+					t.Fatal("expired howl indicator remains", frame.Payload)
+				}
 			}
 		})
 	}

@@ -88,6 +88,24 @@ if ( !wolf || !affix ) throw new Error( "Missing implemented pet fixtures" );
 const blue = (7n << 32n) | BigInt( PET_AFFIX_PARAM_BASE + affix.code );
 const collar = PET_DESIGN.gear[0].items[0].id;
 
+test("Guardian revival cooldown decodes, counts down and expires on its passive row", () => {
+	const owner = createPetTraining( () => null ), base = statePayload( [], [] );
+	const tail = new Uint8Array( 60 ), v = new DataView( tail.buffer );
+	tail[0] = 3;
+	v.setUint32( 1, 13226, true );
+	v.setUint32( 44, 300000, true );
+	v.setUint32( 48, 600000, true );
+	const frame = { opcode: OP_PET_TRAINING_STATE, payload: Uint8Array.from( [ ...base, ...tail ] ) };
+	owner.receive( frame, 100 );
+	const state = defined( owner.state() );
+	assert.equal( petRowCooldown( state, 3, 1100 ), "299s" );
+	assert.ok( petCooldownQuads( state, 3, 1100, [ 0, 0, 32, 32 ], [ 0, 0, 100, 100 ] ).length > 0 );
+	assert.equal( petRowCooldown( state, 3, 300100 ), "" );
+	v.setUint32( 44, 600001, true );
+	assert.throws( () => owner.receive( { ...frame, payload: Uint8Array.from( [ ...base, ...tail ] ) }, 200 ) );
+	assert.equal( owner.state(), state );
+});
+
 test("the state decodes rows, skills and worn gear with its blues", () => {
 	const asked = [];
 	const blues = Array.from( { length: 6 }, ( _, i ) => blue + (BigInt( i ) << 32n) );
@@ -464,14 +482,17 @@ test("Roar I/III gain one metre per effective level and explain cast restriction
 
 test("Iron Hide tooltips and shieldGauge scale health + shield like League of Legends", async () => {
 	const { shieldGauge } = await import( "../../src/engine/foundation/ui/shield-gauge.ts" );
-	const t1 = petEffect( defined( petSkillDesign( 19 ) ), 30, 1 );
-	const t2 = petEffect( defined( petSkillDesign( 20 ) ), 55, 1 );
-	const t3 = petEffect( defined( petSkillDesign( 21 ) ), 80, 1 );
-	assert.match( t1, /Shields the bear and its owner for 30% of maximum HP for 5 s\./ );
+	const t1 = petEffect( defined( petSkillDesign( 19 ) ), 20, 1 );
+	const t2 = petEffect( defined( petSkillDesign( 20 ) ), 35, 1 );
+	const t3 = petEffect( defined( petSkillDesign( 21 ) ), 50, 1 );
+	assert.match( t1, /Shields the bear and its owner for 20% of maximum HP for 5 s\./ );
 	assert.doesNotMatch( t1, /party members/ );
 	assert.match( t2, /Also shields party members within 20 m\./ );
 	assert.doesNotMatch( t2, /explodes/ );
-	assert.match( t3, /explodes within 8 m for 50% of its remaining value/ );
+	assert.match( t3, /explodes within 8 m for 40% of its remaining value/ );
+	assert.equal( defined( petSkillDesign( 19 ) ).value, 20 );
+	assert.equal( defined( petSkillDesign( 20 ) ).value, 35 );
+	assert.equal( defined( petSkillDesign( 21 ) ).value, 50 );
 	for ( const id of [ 19, 20, 21 ] ) {
 		const design = petSkillDesign( id );
 		assert.ok( design );
