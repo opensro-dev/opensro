@@ -191,6 +191,10 @@ type Store struct {
 	// SRO_STORE_ASYNC_COMMIT, port-only): started by adoptDB when the
 	// flag is on, stopped by Close, nil whenever commits apply in place.
 	writer *commitWriter
+	// queuedSeq is the sequence number of the last batch queued on
+	// writer (persistence.go); a durable door waits for it after the
+	// unlock (durableTicket).
+	queuedSeq uint64
 	// asyncCommit is Options.AsyncCommit: whether adoptDB starts writer.
 	asyncCommit bool
 	// encodeScratch is the commit path's reusable JSON encode buffer
