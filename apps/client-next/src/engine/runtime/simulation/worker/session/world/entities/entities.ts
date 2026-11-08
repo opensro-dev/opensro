@@ -6,6 +6,7 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 ===========================================================================
 */
 import { petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
+import { decodePetBondPulse } from "@/engine/foundation/gameplay/damage-feedback";
 import { animationRate, decodeAnimationSpeed } from "@/engine/foundation/animation/animation-rate";
 import {
 	refreshNameColor,
@@ -1054,13 +1055,7 @@ export function createEntities(
 			}
 			// Port-only Guardian's Bond cue; independent of emotes and native casts.
 			if ( frame.opcode === 0x3fb4 ) {
-				const p = frame.payload;
-				if ( p.length !== 9 && p.length !== 13 ) throw Error( "Invalid pet bond pulse length" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-				const gid = v.getUint32( 0, true ), bear = v.getUint32( 4, true ), kind = v.getUint8( 8 );
-				if ( !gid || !bear || (kind !== 1 && kind !== 2) || (p.length === 13 && kind !== 1) ) {
-					throw Error( "Invalid pet bond pulse" );
-				}
+				const { gid, bear, kind } = decodePetBondPulse( frame.payload );
 				const entity = entities.get( gid );
 				if ( entity ) {
 					samplePose( {

@@ -113,10 +113,11 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 	status := enterworld.SkillRow{}
 	switch kind {
 	case companion.ProcFire:
-		// Native level-eight burn lasts up to six seconds; its damage follows the pet level.
+		// Port-only design inputs, not a native audit: a level-eight burn of up to
+		// six seconds through the native abnormal engine; damage follows the pet level.
 		setPetStatus(&status, tagBurn, [6]uint32{8, 25, uint32(step.pet.Level)})
 	case companion.ProcBlizzard:
-		// Native frostbite lasts up to three seconds; freeze is attempted only on the final pulse.
+		// Port-only design inputs: frostbite of up to three seconds; freeze is tried only on the final pulse.
 		setPetStatus(&status, tagFrostbite, [6]uint32{12, 100})
 		if final {
 			setPetStatus(&status, tagFreeze, [6]uint32{20, 10})

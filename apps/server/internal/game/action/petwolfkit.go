@@ -242,9 +242,7 @@ func (rt *Runtime) wolfHowlFrames(division string, howl wolfHowl) []wire.Frame {
 	for gid, name := range howl.members {
 		frames = append(frames, wire.ActionSpeedFrame(gid, rt.EntryActionSpeed(division, name)))
 		active := rt.wolfHowlFor(division, rt.characterSnapshotCast(division, rt.findCharacter(division, name)))
-		// Port-only: recipient, book, speed percent x10, remaining milliseconds.
-		frames = append(frames, wire.Frame{Opcode: 0x3fbd, Payload: wire.NewWriter(11).U32(gid).U8(active.book).
-			U16(uint16(active.percent * 10)).U32(uint32(max(int64(0), active.until-rt.Now().UnixMilli()))).Payload()})
+		frames = append(frames, wolfHowlFrame(gid, active, rt.Now().UnixMilli()))
 	}
 	return frames
 }

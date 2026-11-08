@@ -30,8 +30,36 @@ func (rt *Runtime) petRecipientBuffFrames(division string, gid uint32, now int64
 	guidance := rt.crowPrecisionView(division, gid, now)
 	howl := rt.wolfHowlFor(division, c)
 	return []wire.Frame{
-		{Opcode: tailwindOpcode, Payload: wire.NewWriter(8).U32(gid).U8(tail.book).U8(tail.stacks).U16(uint16(tail.percent * float64(tail.stacks) * 10)).Payload()},
+		tailwindFrame(gid, tail),
 		{Opcode: 0x3fb9, Payload: guidance[:]},
-		{Opcode: 0x3fbd, Payload: wire.NewWriter(11).U32(gid).U8(howl.book).U16(uint16(howl.percent * 10)).U32(uint32(max(int64(0), howl.until-now))).Payload()},
+		wolfHowlFrame(gid, howl, now),
 	}
+}
+
+/*
+================
+tailwindFrame
+
+The one builder of the public Tailwind frame (tailwindOpcode): recipient
+u32, book u8, stacks u8, speed percent x10 u16. The live publish
+(publishTailwind) and the selection refresh above both send it.
+================
+*/
+func tailwindFrame(gid uint32, row tailwindCharge) wire.Frame {
+	return wire.Frame{Opcode: tailwindOpcode, Payload: wire.NewWriter(8).U32(gid).U8(row.book).U8(row.stacks).
+		U16(uint16(row.percent * float64(row.stacks) * 10)).Payload()}
+}
+
+/*
+================
+wolfHowlFrame
+
+The one builder of the public Howl frame (0x3FBD): recipient u32, book u8,
+speed percent x10 u16, remaining milliseconds u32. The live publish
+(wolfHowlFrames) and the selection refresh above both send it.
+================
+*/
+func wolfHowlFrame(gid uint32, howl wolfHowl, now int64) wire.Frame {
+	return wire.Frame{Opcode: 0x3fbd, Payload: wire.NewWriter(11).U32(gid).U8(howl.book).
+		U16(uint16(howl.percent * 10)).U32(uint32(max(int64(0), howl.until-now))).Payload()}
 }

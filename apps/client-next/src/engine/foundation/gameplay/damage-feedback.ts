@@ -25,11 +25,27 @@ export function damageFeedback(
 		return { gid: v.getUint32( 0, true ), damage: v.getUint32( 4, true ) };
 	}
 	if ( op !== 0x3fb4 ) throw Error( "Invalid damage feedback opcode" );
+	const pulse = decodePetBondPulse( p );
+	return pulse.damage === undefined ? undefined : { gid: pulse.bear, damage: pulse.damage, linked: true };
+}
+
+/*
+================
+decodePetBondPulse
+
+The one reader of the port-only Guardian's Bond pulse (0x3FB4): {u32 pet gid,
+u32 bearer gid, u8 kind} with kind 1 (transfer) or 2, and the 13-byte paid
+form appending the transferred u32 amount, which only a transfer carries.
+The bearer's damage text (damageFeedback) and the pet's pose cue (entities.ts)
+both read it here, so a change to the pulse lands in one place.
+================
+*/
+export function decodePetBondPulse( p: Uint8Array ): { gid: number; bear: number; kind: number; damage?: number; } {
 	if ( p.length !== 9 && p.length !== 13 ) throw Error( "Invalid pet bond pulse length" );
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-	if (
-		!v.getUint32( 0, true ) || !v.getUint32( 4, true ) || (p[8] !== 1 && p[8] !== 2) ||
-		(p.length === 13 && p[8] !== 1)
-	) throw Error( "Invalid pet bond pulse" );
-	return p.length === 13 ? { gid: v.getUint32( 4, true ), damage: v.getUint32( 9, true ), linked: true } : undefined;
+	const gid = v.getUint32( 0, true ), bear = v.getUint32( 4, true ), kind = p[8]!;
+	if ( !gid || !bear || (kind !== 1 && kind !== 2) || (p.length === 13 && kind !== 1) ) {
+		throw Error( "Invalid pet bond pulse" );
+	}
+	return p.length === 13 ? { gid, bear, kind, damage: v.getUint32( 9, true ) } : { gid, bear, kind };
 }

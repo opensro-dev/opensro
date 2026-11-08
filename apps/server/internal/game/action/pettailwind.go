@@ -185,7 +185,7 @@ func (rt *Runtime) publishTailwind(division string, gid uint32, now int64) {
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 		rt.queueCrowVisual(division, crowVisual{gid: gid, kind: crowTailwindVisual, book: row.book - 54, at: at})
 	}
-	f := wire.Frame{Opcode: tailwindOpcode, Payload: wire.NewWriter(8).U32(gid).U8(row.book).U8(row.stacks).U16(uint16(row.percent * float64(row.stacks) * 10)).Payload()}
+	f := tailwindFrame(gid, row)
 	rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: gid, Frames: simFrames([]wire.Frame{f})}})
 	if frames := rt.refreshMovementEffects(division, snapshot, now); len(frames) != 0 {
 		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: gid, Frames: simFrames(frames)}})
