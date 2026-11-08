@@ -253,8 +253,13 @@ func (deployment *deployment) planVariables(
 				err,
 			)
 		}
-		// The items each variable may change while its job runs: the
-		// webhooks its templates render with change_mode noop or restart.
+		// The items each variable may change while its job runs without
+		// demanding a stop: the Agent's bug-report webhook (its template
+		// restarts the Agent with it), and the GameWorld's two webhooks
+		// (their templates are change_mode noop - the new value reaches
+		// the running task's files and applies as their banners say:
+		// the staff file at the next post, the bug-report env at the
+		// next boot). A difference confined to these never needs a stop.
 		var restartable []string
 		if variable.path == agentVariablePath {
 			variable.items = keepBugReportWebhook(variable.items, existing, deployment.BugReports.Off)

@@ -143,10 +143,10 @@ const (
 TestAGameWorldBugReportWebhookChangeAloneNeedsNoStop
 
 The mirrored bug-report item (opensro#2959) reaches the GameWorld
-through its env template (change_mode restart), like the Agent's own:
-setting, changing or removing it - alone, or together with the staff
-webhook - never needs the GameWorld stopped, and a deploy that names
-none keeps the stored mirror, as the Agent's keep does.
+through its env template (change_mode noop, like every GameWorld
+secret): setting, changing or removing it - alone, or together with
+the staff webhook - never needs the GameWorld stopped, and a deploy
+that names none keeps the stored mirror, as the Agent's keep does.
 ================
 */
 func TestAGameWorldBugReportWebhookChangeAloneNeedsNoStop(t *testing.T) {
