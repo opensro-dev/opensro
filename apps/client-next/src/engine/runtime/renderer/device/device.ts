@@ -16,7 +16,7 @@ import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
 import { createAmbientOcclusion } from "./ambient-occlusion";
-import { createMsaa } from "./msaa";
+import { createMsaa, MSAA_SAMPLE_COUNT } from "./msaa";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -279,7 +279,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 							// the MSAA stage's sample count when that row is on.
 							colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
 							...(depth ? { depthStencilFormat: "depth24plus" as const } : {}),
-							...(scene && msaaOn ? { sampleCount: 4 } : {})
+							...(scene && msaaOn ? { sampleCount: MSAA_SAMPLE_COUNT } : {})
 						} )
 					),
 				/*

@@ -19,6 +19,7 @@ import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
 import { destroyNow, type Retire } from "./retirement";
+import { MSAA_SAMPLE_COUNT } from "./msaa";
 import { createBufferSlabs, type BufferSlice } from "./buffer-slabs";
 import { DeviceDraw } from "./device-draw";
 import { createGeometryUploads } from "./geometry-uploads";
@@ -534,7 +535,7 @@ export function createGeometryResources(
 				// The receiver draws land in the scene target: the getters
 				// follow the HDR stage's format and the MSAA stage's samples.
 				() => (floatScene ? "rgba16float" : format),
-				() => (msaaScene ? 4 : 1),
+				() => (msaaScene ? MSAA_SAMPLE_COUNT : 1),
 				retire
 			);
 			return shadows.prepare( requests, blob );
@@ -1369,7 +1370,7 @@ export function createGeometryResources(
 			if ( floatScene === sceneFloat && msaaScene === sceneMsaa ) return;
 			floatScene = sceneFloat;
 			msaaScene = sceneMsaa;
-			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? 4 : 1 );
+			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
 				const pipeline = pipelines( meta.state, sceneFloat, undefined, sceneMsaa );
 				DeviceDraw.repipeline(

@@ -9,6 +9,7 @@ mip generation, and the samplers they bind.
 ===========================================================================
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
+import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
@@ -781,7 +782,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 					},
 					primitive: { topology: "triangle-list" },
 					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
-					multisample: { count: msaa ? 4 : 1 }
+					multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
 				} );
 				skyStagePipelines.set( key, selected );
 			}
@@ -803,7 +804,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 					},
 					primitive: { topology: "triangle-list" },
 					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
-					multisample: { count: msaa ? 4 : 1 }
+					multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
 				} );
 				imageStagePipelines.set( key, selected );
 			}
@@ -834,7 +835,7 @@ the same rule.
 					sceneFloat ? SCENE_FLOAT_FORMAT : format,
 					previewCoverage
 				);
-				if ( msaa ) descriptor.multisample = { count: 4 };
+				if ( msaa ) descriptor.multisample = { count: MSAA_SAMPLE_COUNT };
 				selected = created.createRenderPipeline( descriptor );
 				geometryPipelines.set( key, selected );
 			}

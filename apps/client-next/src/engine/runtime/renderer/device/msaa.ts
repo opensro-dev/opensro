@@ -27,6 +27,11 @@ per pixel, so foliage keeps its hard edge.
 */
 import { destroyNow, type Retire } from "./retirement";
 
+// The scene's sample count while the row is on. Every 4x sibling (the
+// scene pipelines, the retained bundles, the water mirror, the shadow
+// ground) and the depth resolve's sample loop read this one value.
+export const MSAA_SAMPLE_COUNT = 4;
+
 /*
 ================
 createMsaa
@@ -66,9 +71,10 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 	================
 	ensurePipeline
 
-	The depth downsample: one fullscreen triangle, the minimum of the four
+	The depth downsample: one fullscreen triangle, the minimum of the
 	samples per texel written as fragment depth (finish.ts's depth upscale
-	owns the matching single-sampled shape).
+	owns the matching single-sampled shape). The target has the source's
+	size, so the fragment's own pixel is the texel to load.
 	================
 	*/
 	function ensurePipeline() {
@@ -77,16 +83,15 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 			label: "msaa-depth",
 			code: `
 @group(0) @binding(0) var source:texture_depth_multisampled_2d;
-struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
-@vertex fn vs(@builtin(vertex_index) i:u32)->V{
+@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f{
  let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];
- return V(vec4f(p,0,1),vec2f(p.x*.5+.5,.5-p.y*.5));
+ return vec4f(p,0,1);
 }
-@fragment fn fs(v:V)->@builtin(frag_depth) f32{
- let size=textureDimensions(source);
- let at=clamp(vec2i(v.uv*vec2f(size)),vec2i(0),vec2i(size)-1);
- return min(min(textureLoad(source,at,0),textureLoad(source,at,1)),
-            min(textureLoad(source,at,2),textureLoad(source,at,3)));
+@fragment fn fs(@builtin(position) position:vec4f)->@builtin(frag_depth) f32{
+ let at=vec2i(position.xy);
+ var nearest=1.0;
+ for(var s=0;s<${MSAA_SAMPLE_COUNT};s++){nearest=min(nearest,textureLoad(source,at,s));}
+ return nearest;
 }`
 		} );
 		pipeline = device.createRenderPipeline( {
@@ -125,14 +130,14 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 				colour = device.createTexture( {
 					label: "msaa-scene-colour",
 					size: [ w, h ],
-					sampleCount: 4,
+					sampleCount: MSAA_SAMPLE_COUNT,
 					format,
 					usage: GPUTextureUsage.RENDER_ATTACHMENT
 				} );
 				depth = device.createTexture( {
 					label: "msaa-scene-depth",
 					size: [ w, h ],
-					sampleCount: 4,
+					sampleCount: MSAA_SAMPLE_COUNT,
 					format: "depth24plus",
 					usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 				} );
