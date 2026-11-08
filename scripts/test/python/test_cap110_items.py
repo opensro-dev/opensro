@@ -453,7 +453,9 @@ class ImportTests(unittest.TestCase):
 			(base / "itemdata.txt").write_bytes(original_manifest)
 			(base / "itemdata_5000.txt").write_bytes(utf16([weapon()]))
 			(base / "textdataname.txt").write_bytes(utf16([]))
-			for name in ("itemdata.txt", "textdataname.txt"):
+			native_ui = utf16([["1", "PARAM_REINFORCE", "ko", "", "tw", "cn", "de", "ja", "enhancement", "vi"]])
+			(base / "textuisystem.txt").write_bytes(native_ui)
+			for name in ("itemdata.txt", "textdataname.txt", "textuisystem.txt"):
 				os.link(base / name, target / name)
 			glow_native, glow_target = native / importer.GLOW_ROOT, output / importer.GLOW_ROOT
 			glow_native.mkdir(parents=True)
@@ -475,6 +477,10 @@ class ImportTests(unittest.TestCase):
 				"refsetitemgroup.txt": utf16([set_group(13)]),
 				"refmagicoptgroup.txt": utf16([magic_group(2), magic_group(3), magic_group(4)]),
 				"magicoption.txt": utf16([magic_option(389)]),
+				"textuisystem.txt": utf16([
+					["1", "PARAM_REINFORCE_ITEM_SET", "ko", "", "tw", "cn", "de", "ja", "Set enforcement", "vi"],
+					["1", "PARAM_REINFORCE", "ko", "", "tw", "cn", "de", "ja", "different", "vi"],
+					["1", "PARAM_UNRELATED", "ko", "", "tw", "cn", "de", "ja", "other", "vi"]]),
 			}
 			# The later file lists the new piece and one the import does not carry; a group the tier table lacks is refused.
 			files["resinfo/itemoption.txt"] = b"ITEM_EU_SWORD_11_A\t1\r\nITEM_EU_AXE_11_A\t1\r\nITEM_EU_SWORD_11_B\t9\r\n"
@@ -488,6 +494,10 @@ class ImportTests(unittest.TestCase):
 			self.assertEqual(
 				(glow_target / importer.GLOW_TABLE).read_bytes(), native_glow + b"ITEM_EU_SWORD_11_A\t1\r\n")
 			self.assertEqual((glow_native / importer.GLOW_TABLE).read_bytes(), native_glow)
+			# Only the set symbols the table lacks are added; a symbol it has keeps its row.
+			self.assertEqual(first["setUiTexts"], ["PARAM_REINFORCE_ITEM_SET"])
+			ui_rows = {r[1]: r[8] for r in importer.tables.table_rows((target / "textuisystem.txt").read_bytes())}
+			self.assertEqual(ui_rows, {"PARAM_REINFORCE": "enhancement", "PARAM_REINFORCE_ITEM_SET": "Set enforcement"})
 			self.assertEqual(first["idMap"], second["idMap"])
 			self.assertEqual(first["setCatalogue"], {"groups": 1, "magicGroups": 3, "optionIds": [389], "setItems": 0})
 			self.assertEqual(importer.tables.table_rows((target / items.SET_GROUP_TABLE).read_bytes()), [set_group(13)])
@@ -500,6 +510,7 @@ class ImportTests(unittest.TestCase):
 			self.assertFalse((target / items.MAGIC_GROUP_TABLE).exists())
 			self.assertEqual((target / "itemdata.txt").read_bytes(), original_manifest)
 			self.assertEqual((glow_target / importer.GLOW_TABLE).read_bytes(), native_glow)
+			self.assertEqual((target / "textuisystem.txt").read_bytes(), native_ui)
 
 	# ================
 	# test_glow_rows_follow_the_imported_codenames

@@ -180,6 +180,9 @@ def add_items(vsro_root, native, output):
 				if catalogue.exists():
 					catalogue.unlink()
 			write_atomically(manifest, (native / TEXT_ROOT / "itemdata.txt").read_bytes())
+			ui = safe_target(output / TEXT_ROOT, "textuisystem.txt")
+			if ui.exists():
+				write_atomically(ui, (native / TEXT_ROOT / "textuisystem.txt").read_bytes())
 			glow = safe_target(output / GLOW_ROOT, GLOW_TABLE)
 			if glow.exists():
 				write_atomically(glow, (native / GLOW_ROOT / GLOW_TABLE).read_bytes())
@@ -229,7 +232,12 @@ def add_items(vsro_root, native, output):
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
 			for row in tables.table_rows(read_later(name))
 		]
-		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, equipment)
+		set_names = {row[items.SET_GROUP_NAME] for row in set_groups if len(row) > items.SET_GROUP_NAME}
+		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, equipment, set_names)
+		# The set tooltip's option labels (setgroups' options 389 and 390) live in the interface table.
+		ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
+		ui_base = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
+		ui_text, ui_added = items.merge_ui_texts(ui_base, tables.table_rows(read_later("textuisystem.txt")), items.SET_UI_SYMBOLS)
 		shops = items.shop_dependencies({
 			name: tables.table_rows(read_later(name))
 			for name in ("refscrapofpackageitem.txt", "refshopgoods.txt", "refpricepolicyofitem.txt", "shopitemdata.txt")
@@ -251,6 +259,7 @@ def add_items(vsro_root, native, output):
 			b"\xff\xfe" + text_tables.table_text(set_magic).encode("utf-16-le"),
 		)
 		write_atomically(text_path, merged_text)
+		write_atomically(ui_path, ui_text)
 		# The glow group of each imported piece the v1.150 file does not list (set weapons and shields).
 		native_glow = (native / GLOW_ROOT / GLOW_TABLE).read_bytes().decode("latin1")
 		later_entry = index.get("resinfo/" + GLOW_TABLE)
@@ -269,7 +278,7 @@ def add_items(vsro_root, native, output):
 			"laterArchiveHashes": identities, "shardSha256": sro_pk2.digest(raw_shard),
 			"nativeItemHashes": native_hashes,
 			"absentAuthoredDescriptions": missing_descriptions,
-			"glowRowsAdded": glow_added,
+			"glowRowsAdded": glow_added, "setUiTexts": ui_added,
 			"assets": assets, "shopsImported": False,
 			"shopDependencies": shops,
 			"setCatalogue": catalogue,

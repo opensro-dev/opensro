@@ -55,6 +55,9 @@ MAGIC_GROUP_TABLE = "refmagicoptgroup.txt"
 MAGIC_OPTION_TABLE = "magicoption.txt"
 SET_GROUP_ID = 1
 SET_GROUP_CODE = 2
+SET_GROUP_NAME = 4
+# The interface symbols naming the two set options (389 reinforce, 390 resist all).
+SET_UI_SYMBOLS = ("PARAM_REINFORCE_ITEM_SET", "PARAM_RESIST_ALL_SET")
 SET_LINK_FIRST = 6
 SET_LINK_LAST = 17
 MAGIC_GROUP_ID = 1
@@ -316,9 +319,13 @@ def glow_rows(native_text, later_text, codenames, native_groups):
 # Later equip/skill translations use the same language order as the city's
 # object table. Native symbols win; every imported item must have a name.
 # ================
-def merge_texts(native_raw, later_rows, equipment):
+def merge_texts(native_raw, later_rows, equipment, extra=()):
 	known = {row[1] for row in tables.table_rows(native_raw) if len(row) > 1}
 	needed = {row[column] for row in equipment for column in (NAME_KEY, DESCRIPTION_KEY) if row[column] != UNUSED}
+	# Symbols the item rows do not name but the client draws (the set names). A symbol the later
+	# client has no text for is left out, never an error.
+	needed |= {symbol for symbol in extra if symbol and symbol != UNUSED}
+	extra_only = set(extra) - {row[column] for row in equipment for column in (NAME_KEY, DESCRIPTION_KEY)}
 	translations = {}
 	for row in later_rows:
 		if len(row) > 1 and row[1] in needed:
@@ -328,13 +335,32 @@ def merge_texts(native_raw, later_rows, equipment):
 			if row[1] in translations and translations[row[1]] != converted:
 				raise ValueError(f"conflicting translation: {row[1]}")
 			translations[row[1]] = converted
-	missing = needed - known - translations.keys()
+	missing = needed - known - translations.keys() - extra_only
 	missing_names = missing & {row[NAME_KEY] for row in equipment}
 	if missing_names:
 		raise ValueError(f"missing equipment names: {sorted(missing_names)}")
 	# Ordinary equipment description symbols are often absent in both clients.
 	# Retain that authored absence; never synthesize tooltip prose.
-	return text_tables.append_rows(native_raw, [translations[key] for key in sorted(needed - known - missing)]), sorted(missing)
+	return text_tables.append_rows(native_raw, [translations[key] for key in sorted(translations.keys() - known)]), sorted(missing)
+
+
+# ================
+# merge_ui_texts
+#
+# The interface strings the set tooltip draws ("Set enforcement", "Increase all resistance"):
+# the later client's rows for the given symbols join the v1.150 table unchanged in meaning,
+# in its row layout. A symbol the table already has keeps its row; one the later client lacks
+# is skipped. Returns the table and the symbols added.
+# ================
+def merge_ui_texts(native_raw, later_rows, symbols):
+	known = {row[1] for row in tables.table_rows(native_raw) if len(row) > 1}
+	found = {}
+	for row in later_rows:
+		if len(row) > 9 and row[1] in symbols and row[1] not in known:
+			found[row[1]] = native_text_row(row)
+	if not found:
+		return native_raw, []
+	return text_tables.append_rows(native_raw, [found[key] for key in sorted(found)]), sorted(found)
 
 
 # ================
