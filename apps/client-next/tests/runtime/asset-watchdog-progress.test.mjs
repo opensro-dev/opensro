@@ -165,6 +165,25 @@ test("byte progress during decode slides the decode window, never the ceiling", 
 	assert.deepEqual( assets.take( id ), { kind: "error", id, error: TIMEOUT_ERROR, transient: true } );
 });
 
+test("decoder work notes keep a long pure-CPU decode alive, and silence still ends it", t => {
+	const { assets, worker, clock } = fixture( t );
+	const id = assets.request( REGION );
+	clock.now += 10000;
+	worker.onmessage( { data: { kind: "job-decoding", id } } );
+	// A city decode is minutes of pure CPU work: no bytes move, so only
+	// the decoder's own work notes can prove the job is alive.
+	for ( let step = 1; step <= 5; step++ ) {
+		clock.now += 50000;
+		worker.onmessage( { data: { kind: "job-decoding-progress", id, units: step * 1024 } } );
+		assert.equal( assets.take( id ), null, "a decode reporting work must stay alive" );
+		assert.equal( assets.health().phase, "running" );
+	}
+	// The notes stop: the decode window still runs out.
+	clock.now += 61000;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual( assets.take( id ), { kind: "error", id, error: TIMEOUT_ERROR, transient: true } );
+});
+
 test("an expired job's late completion and release are inert", t => {
 	const { assets, worker, clock } = fixture( t );
 	const id = assets.request( REGION );
@@ -206,7 +225,7 @@ test("a wedged expired job is abandoned and reported, like a wedged cancellation
 	// The worker never acknowledges (an uninterruptible decode outlives the
 	// acknowledgement window): the slot stays reserved and the fault is
 	// reported once, but the runtime lives.
-	clock.now += 31000;
+	clock.now += 61000;
 	assert.equal( assets.health().phase, "running" );
 	assert.equal( assets.available(), 3 );
 	assert.deepEqual( assets.takeDegradations().map( d => d.code ), [ "asset-cancel-unacknowledged" ] );

@@ -208,6 +208,10 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// Owner, 2026-11-08: the connection census - staff census reads and
+	// the public people counts (#2716/#2717, opensro-web#78; port-only,
+	// not native; "off" opens no journal and installs no census route).
+	{Env: "SRO_CONNECTION_JOURNAL", NomadVar: "connection_journal", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
