@@ -173,16 +173,48 @@ test("stalled presentation retains one sampled pose per mover without dropping l
 	owner.step( 9616 );
 	owner.ack( inflight.sequence );
 	const next = owner.take();
-	assert.equal( next.events.length, 141, "84,000 sampled poses collapse to 140 plus reliable death" );
+	assert.equal( next.events.length, 140, "84,000 sampled poses and the death collapse to one row per mover" );
 	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === 1 );
-	assert.equal( states.length, 2 );
-	assert.notEqual( states[0].entity.appearanceState?.[0], 2 );
-	assert.equal( states[1].entity.appearanceState[0], 2 );
+	// The death is the mover's newest row (#2868): it replaces the queued
+	// pose and is never lost behind it.
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[0], 2 );
 	assert.equal( next.events.find( e => e.entity?.gid === 2 ).entity.x, owner.read( 2 ).x );
 	owner.ack( next.sequence );
 	owner.step( 9632 );
 	const after = flush( owner );
 	assert.equal( after.events.length, 139 );
+	owner.dispose();
+});
+
+test("a stalled consumer coalesces one entity's states into one row and never compacts (#2868)", () => {
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	for ( const row of rows ) owner.receive( row );
+	const spawn = flush( owner ).events.find( e => e.kind === "spawn" ).entity;
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( spawn.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	// The live failure: about 1000 states queued behind a batch the main
+	// thread did not acknowledge for 4.5 s filled the 32 MiB bound and
+	// compacted ("state":1017 of 1105 dropped). Before the fix every
+	// state queued on its own and this flood compacted.
+	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
+	const inflight = owner.take();
+	for ( let i = 0; i < 200000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	owner.receive( packet( 4 ) );
+	assert.equal( owner.resyncs(), 0, "no compaction: the queue holds one row per entity" );
+	assert.deepEqual( owner.takeDegradations().filter( d => d.code === "world-journal-resync" ), [] );
+	owner.ack( inflight.sequence );
+	const next = owner.take();
+	const states = next.events.filter( e => e.kind === "state" && e.entity.gid === spawn.gid );
+	assert.equal( states.length, 1 );
+	assert.equal( states[0].entity.appearanceState[2], 4, "the newest row wins" );
 	owner.dispose();
 });
 
@@ -198,8 +230,9 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 	assert.equal( owner.synchronized(), true );
 	assert.ok( p.read( spawn.gid ) );
 	// The consumer stalls: one batch is taken and not acknowledged while
-	// the wire keeps producing state behind it - a hidden or frozen tab,
-	// the 2026-10-24 backlog deaths. The queue used to throw at 32 MiB.
+	// the wire keeps producing lifecycle changes behind it - a hidden or
+	// frozen tab, the 2026-10-24 backlog deaths. The queue used to throw
+	// at 32 MiB.
 	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
 	const inflight = owner.take();
 	const packet = value => {
@@ -209,15 +242,23 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// On its return the consumer applies the stalled batch as offered,
 	// acks it, and the next take is the rebuilt world on a new epoch.
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized" ]
 	);
 	assert.equal( resync.events[2].entity.gid, spawn.gid );
@@ -251,7 +292,7 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 	const notice = marker => ({ kind: "native", opcode: 0x300c, payload: Uint8Array.of( marker ) });
 	// The consumer stalls on an unacknowledged batch (which carries one
 	// native of its own) while two more one-shots queue behind it; a
-	// state flood then compacts the queue (#1482). The rebuilt snapshot
+	// lifecycle flood then compacts the queue (#1482). The rebuilt snapshot
 	// supersedes the flood, never the one-shots.
 	owner.publish( notice( 0 ) );
 	const inflight = owner.take();
@@ -264,15 +305,23 @@ test("one-shot natives queued before a compaction ride the resync in order", () 
 		payload[5] = value;
 		return { opcode: 0x3122, payload };
 	};
-	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	// States of one entity coalesce into its one queued row (#2868), so
+	// the flood that passes the bound carries events a row cannot replace:
+	// a cue before each state, which the rebuilt snapshot supersedes.
+	for ( let i = 0; owner.resyncs() === 0 && i < 200000; i++ ) {
+		owner.publish( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: i } );
+		owner.receive( packet( i % 2 ? 4 : 0 ) );
+	}
 	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
 	// A native queued behind the drop is newer than the kept ones.
 	owner.publish( notice( 3 ) );
 	p.apply( inflight );
 	owner.ack( inflight.sequence );
 	const resync = owner.take();
+	// The cue whose append tripped the bound queues behind the drop.
+	assert.ok( resync.events.filter( e => e.kind === "ui-sound" ).length <= 1 );
 	assert.deepEqual(
-		resync.events.map( e => e.kind ),
+		resync.events.map( e => e.kind ).filter( kind => kind !== "ui-sound" ),
 		[ "reset", "bootstrap", "spawn", "synchronized", "native", "native", "native" ]
 	);
 	assert.equal( p.apply( resync ), true );
