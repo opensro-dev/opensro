@@ -959,6 +959,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	moderationLog := chatlog.Open(store.DirForShardFromEnv(game.divisionID), chatlog.RetainDaysFromEnv())
 	game.chat.ModerationLog = moderationLog
 	game.items.ModerationLog = moderationLog
+	wireChatReports(game)
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {

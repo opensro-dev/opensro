@@ -24,6 +24,7 @@ import (
 
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
+	"opensro.online/server/internal/game/social/chatreport"
 	"opensro.online/server/internal/transport"
 )
 
@@ -87,6 +88,10 @@ type Runtime struct {
 	// port-only, not native), muted lines included and marked; nil
 	// keeps no log.
 	ModerationLog *chatlog.Log
+	// Reports is the /report chat-abuse intake (chatreport, port-only,
+	// not native, #2959); nil leaves "/report ..." as ordinary chat
+	// text, the native posture for a command the original lacks.
+	Reports *chatreport.Service
 }
 
 /*

@@ -8,7 +8,13 @@ goTestBudget.test.mjs - the Go test budget's arithmetic
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { budgetOffenders, overBudgetPackages, packageTestTimes, soloVerdicts } from "../../checks/goTestBudget.mjs";
+import {
+	budgetOffenders,
+	isLintRunnerRefusal,
+	overBudgetPackages,
+	packageTestTimes,
+	soloVerdicts
+} from "../../checks/goTestBudget.mjs";
 
 // One busy full run: two packages far over, one just over, one exactly at
 // the budget, one cached, one failed (its line never counts as a time).
@@ -92,4 +98,20 @@ test("soloVerdicts judges the solo times, and no solo time never fits", () => {
 		{ pkg: "opensro.online/server/internal/config", seconds: 31, solo: 31.5, fits: false },
 		{ pkg: "opensro.online/server/internal/game/action", seconds: 135.4, solo: undefined, fits: false }
 	] );
+});
+
+/*
+================
+isLintRunnerRefusal
+================
+*/
+test("isLintRunnerRefusal names only the parallel-runner refusal", () => {
+	// The refusal text golangci-lint exits 3 with while a peer holds its
+	// cache lock (#2971): contention the gate waits out, never a finding.
+	assert.equal( isLintRunnerRefusal( "parallel golangci-lint is running" ), true );
+	assert.equal( isLintRunnerRefusal( 'level=error msg="parallel golangci-lint is running"' ), true );
+	// A lint finding, a build failure and a clean run are not refusals.
+	assert.equal( isLintRunnerRefusal( "internal/data/store/store.go:12:1: unused variable" ), false );
+	assert.equal( isLintRunnerRefusal( "0 issues." ), false );
+	assert.equal( isLintRunnerRefusal( "" ), false );
 });
