@@ -134,6 +134,9 @@ type Hub struct {
 	// storeLockMetrics reads the authority lock's waits, holds and commit
 	// phases (SetStoreLockMetrics); nil publishes no block.
 	storeLockMetrics atomic.Pointer[func() any]
+	// tickZoneMetrics reads the simulation's exact per-zone tick totals
+	// (SetTickZoneMetrics, #2824); nil publishes no block.
+	tickZoneMetrics atomic.Pointer[func() map[string]TickZone]
 }
 
 /*

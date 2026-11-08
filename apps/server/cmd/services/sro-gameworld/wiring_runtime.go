@@ -61,6 +61,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}
 		return ticker.TraceZone(name)
 	}
+	// Every step's exact time also lands in the ticker's zone ledger
+	// (tick_zones, #2824), slow or not, so the budget read sees the
+	// whole action hook and not only what crossed 100 ms.
+	game.items.Steps.Total = func(name string, elapsed time.Duration) {
+		if ticker != nil {
+			ticker.Zones.AddStep(name, elapsed)
+		}
+	}
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold

@@ -291,60 +291,55 @@ func (t *Ticker) traceBegin() {
 ================
 Ticker.zone
 
-One zone on the running tick, or the shared no-op when no tracer
-is armed - the one nil check the disarmed hot path pays per zone
-point.
+One zone on the running tick: timed into the always-on ledger
+(zone_ledger.go, #2824) and, while a tracer is armed, recorded on the
+slow-tick timeline. The armed timeline keeps the names it always had
+- phases as "phase:<name>", a division's sub-steps bare, divisions as
+"division:<id>", hooks as "hook:<name>" - and builds them only when
+armed, so the disarmed path stays allocation-free.
 ================
 */
-func (t *Ticker) zone(name string) func() {
-	if t.Trace == nil {
-		return tickTraceZoneNoop
+func (t *Ticker) zone(kind, name string) zoneSpan {
+	span := zoneSpan{ledger: t.Zones, key: zoneKey{kind: kind, name: name}}
+	if t.Trace != nil {
+		span.trace = t.Trace.zone(tickTraceZoneName(kind, name))
 	}
-	return t.Trace.zone(name)
+	if span.ledger != nil {
+		span.start = time.Now()
+	}
+	return span
 }
 
 /*
 ================
-Ticker.zoneDivision
+tickTraceZoneName
 
-One division's zone. The name is built only when armed, so the
-disarmed path stays allocation-free - no string work per division
-per tick.
+A zone's name on the Perfetto timeline (#2301), unchanged by the
+ledger: sub-steps were always bare.
 ================
 */
-func (t *Ticker) zoneDivision(divisionID string) func() {
-	if t.Trace == nil {
-		return tickTraceZoneNoop
+func tickTraceZoneName(kind, name string) string {
+	if kind == ZoneKindSub {
+		return name
 	}
-	return t.Trace.zone("division:" + divisionID)
-}
-
-/*
-================
-Ticker.zoneHook
-
-One hook's zone, named like its slow-hook reports. As
-zoneDivision, the name is built only when armed.
-================
-*/
-func (t *Ticker) zoneHook(name string) func() {
-	if t.Trace == nil {
-		return tickTraceZoneNoop
-	}
-	return t.Trace.zone("hook:" + name)
+	return kind + ":" + name
 }
 
 /*
 ================
 Ticker.TraceZone
 
-The zone seam other lanes time against the running tick - the
-action runtime's StepTimer steps (wiring_runtime.go). Same cost
-as Ticker.zone; named for the cross-package caller.
+The timeline seam other lanes time against the running tick - the
+action runtime's StepTimer steps (wiring_runtime.go). Timeline only:
+the steps reach the ledger through StepTimer.Total, which already
+holds their elapsed time.
 ================
 */
 func (t *Ticker) TraceZone(name string) func() {
-	return t.zone(name)
+	if t.Trace == nil {
+		return tickTraceZoneNoop
+	}
+	return t.Trace.zone(name)
 }
 
 /*

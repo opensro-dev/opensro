@@ -577,6 +577,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	// Port-only, not native (owner, 2026-11-07): item links in player chat;
+	// the client learns the per-line limit at world entry.
+	if chat.ItemLinksFromEnv() {
+		game.deps.ChatItemLinks = tunables.Current().Int(tunables.ChatItemLinksPerMessage)
+	}
 	// Port-only, not native: the Bandit Den scroll counts down half as long,
 	// and the client's delay bar learns it at world entry.
 	// Port-only, not native: the job-kill streak, its bonuses and bounty.
@@ -948,6 +953,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.ModerationLog = moderationLog
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
+	if game.deps.ChatItemLinks > 0 {
+		links := &chat.ItemLinks{Source: game.items, Limit: int(game.deps.ChatItemLinks)}
+		game.chat.ItemLinks = links
+		game.items.ChatItemLinks = links
+		log.Infof("chat: item links ON, %d per line (%s)", links.Limit, chat.EnvChatItemLinks)
+	}
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

@@ -24,6 +24,7 @@
     "src/engine/runtime/ui/hud/repair-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/skin-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/global-chat-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/chat-link-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/name-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/specialty-deal-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -246,7 +247,9 @@
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ambient-occlusion.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
-    "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts"
+    "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/characters/resources/effect-model.ts": "src/engine/runtime/characters/resources/resources.ts",
+    "src/engine/runtime/characters/resources/blizzard-resources.ts": "src/engine/runtime/characters/resources/resources.ts"
   },
   "workers": {
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",

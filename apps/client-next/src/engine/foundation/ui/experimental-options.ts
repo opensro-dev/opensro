@@ -187,6 +187,12 @@ export interface ExperimentalOptions {
 	// (foundation/gameplay/notice-links.ts). On unless turned off (the
 	// owner's choice, 2026-10-15); off is plain text.
 	readonly noticeLinks: boolean;
+	// Port-only, not native: Alt+click on an item while typing a chat line
+	// links it, and a linked item's name in the chat log shows its tooltip
+	// (foundation/gameplay/chat-item-links.ts; the server's
+	// SRO_CHAT_ITEM_LINKS must be on too). On unless turned off (the
+	// owner's choice, 2026-11-07); off is plain text and no gesture.
+	readonly chatItemLinks: boolean;
 	// Port-only, not native: the notice banner shows for 5000 ms with a
 	// 1000 ms fade instead of the native 7000 ms and 2000 ms (6B3180, 6B30F0;
 	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
@@ -434,7 +440,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -489,6 +495,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
+		chatItemLinks: record.chatItemLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,

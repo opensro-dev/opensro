@@ -153,6 +153,8 @@ type Request struct {
 	Second     uint8
 	TargetName string
 	Message    string
+	// Links rides only when the item-link switch is on (itemlinks.go).
+	Links []LinkRef
 }
 
 // DecodeChatRequest strict-decodes the client
@@ -171,6 +173,28 @@ type Request struct {
 // opposite arm (or a forward-queue index check with no v1.150
 // equivalent). Rejected.
 func DecodeChatRequest(payload []byte) (Request, error) {
+	return decodeChatRequest(payload, false)
+}
+
+/*
+================
+DecodeChatRequestWithLinks
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS): the native body, then an
+optional item-link block (itemlinks.go). Bytes after the block are an
+error, as trailing bytes are natively.
+================
+*/
+func DecodeChatRequestWithLinks(payload []byte) (Request, error) {
+	return decodeChatRequest(payload, true)
+}
+
+/*
+================
+decodeChatRequest
+================
+*/
+func decodeChatRequest(payload []byte, links bool) (Request, error) {
 	reader := wire.NewReader(payload)
 	chatType, err := reader.U8()
 	if err != nil {
@@ -205,6 +229,11 @@ func DecodeChatRequest(payload []byte) (Request, error) {
 	textBytes, err := reader.Bytes(int(wideCount) * 2)
 	if err != nil {
 		return Request{}, err
+	}
+	if links && reader.Done() != nil {
+		if request.Links, err = DecodeLinkRefs(reader); err != nil {
+			return Request{}, err
+		}
 	}
 	if err := reader.Done(); err != nil {
 		return Request{}, err
@@ -302,6 +331,27 @@ The inverse of EncodeChatBroadcastNamed, for the server's own payloads
 ================
 */
 func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, message string, ok bool) {
+	return decodeNamed(payload, true)
+}
+
+/*
+================
+decodeNamedHead
+
+DecodeChatBroadcastNamed without the trailing-byte check: a line that
+carries an item-link tail (itemlinks.go) still yields its head.
+================
+*/
+func decodeNamedHead(payload []byte) (chatType uint8, senderName, message string, ok bool) {
+	return decodeNamed(payload, false)
+}
+
+/*
+================
+decodeNamed
+================
+*/
+func decodeNamed(payload []byte, strict bool) (chatType uint8, senderName, message string, ok bool) {
 	reader := wire.NewReader(payload)
 	chatType, err := reader.U8()
 	if err != nil {
@@ -320,7 +370,7 @@ func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, messa
 		return 0, "", "", false
 	}
 	text, err := reader.Bytes(int(wideCount) * 2)
-	if err != nil || reader.Done() != nil {
+	if err != nil || (strict && reader.Done() != nil) {
 		return 0, "", "", false
 	}
 	units := make([]uint16, wideCount)
