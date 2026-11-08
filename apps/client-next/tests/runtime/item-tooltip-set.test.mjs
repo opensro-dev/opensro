@@ -191,6 +191,41 @@ test("an armor tooltip carries only the set's name; the pieces and tiers are the
 	assert.equal( side[0].ornament, "item", "the side box's heading carries the icon" );
 });
 
+test("a weapon or shield set piece carries the set's name through itemTooltip itself", () => {
+	const weapons = publishedEquipmentSets( [ { id: 39, name: "SN_ITEM_11_SET_A_WEAPON", tiers: [] } ] );
+	const fields = new Proxy( { setId: 39, rarity: 0, itemClass: 1 }, {
+		get: ( o, k ) => (k in o ? o[k] : 1),
+		has: () => true
+	} );
+	// TypeID3 is bits 7..10 of the type flags: 4 is a shield, 6 a weapon.
+	for ( const typeId3 of [ 4, 6 ] ) {
+		/** @type {any} */ const item = {
+			name: "Piece",
+			slot: 1,
+			typeFlags: 0x2c | (typeId3 << 7) | (1 << 11),
+			quantity: 1,
+			plus: 0,
+			variance: 0,
+			magic: [],
+			tooltip: { fields }
+		};
+		const viewer = { sets: tooltipSetViewer( true, weapons, [ item ] ) };
+		const rows = itemTooltip( item, { masteries: [] }, text, viewer ).map( row => row.value );
+		assert.ok( rows.includes( "Power" ), `type ${typeId3} names its set` );
+	}
+});
+
+test("the heading's total is never below the pieces the set publishes", () => {
+	const many = publishedEquipmentSets( [ {
+		id: 50,
+		name: "SN_ITEM_11_SET_A_DEFENSE",
+		pieces: Array.from( { length: 8 }, ( _, i ) => ({ slot: i + 1, name: "x" }) ),
+		tiers: [ { pieces: 6, options: [] } ]
+	} ] );
+	const worn = Array.from( { length: 8 }, ( _, i ) => piece( i + 1, 50, i + 1 ) );
+	assert.equal( itemTooltipSet( worn[0], many, worn, noText )[0].value, "Destruction (8/8)" );
+});
+
 test("the side box stands right of the item's box with the borders meeting, else left of it", () => {
 	const measure = s => s.length * 7, rows = [ { value: "Destruction (2/6)", color: 0xffffffff } ];
 	/** @type {[number, number, number, number]} */ const main = [ 300, 100, 200, 400 ];

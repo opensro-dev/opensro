@@ -16,7 +16,8 @@ import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 // The border's outset around the text, and the gap the bubble keeps from
 // the viewport's sides when it must be pushed back inside.
 const BUBBLE_BORDER = 8;
-// The side box starts this far below the main box's top, as in the later client.
+// The side box starts this far below the main box's top, as in the later client;
+// with the border drawn inside tooltipBubble (BUBBLE_BORDER) its text sits 12 pixels down.
 const SIDE_BUBBLE_DROP = 4;
 const BUBBLE_ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
 

@@ -326,7 +326,8 @@ def glow_rows(native_text, later_text, codenames, native_groups):
 # client's row (its scale and bone are tuned per family). The later file gives
 # set A the same sun effect as set B, but set A is the moon tier, so a set A
 # row takes its family's _B_RARE effect (the moon effect) in place of the
-# later one; with no family row the later row stands, and with no later row the
+# later one (the premise, that set A is the moon tier, is the owner's observation
+# of the official client; the later data alone shows both sets as the sun); with no family row the later row stands, and with no later row the
 # family row is used under the piece's own code. A code the v1.150 file lists
 # keeps its row. Returns the file text and the codenames added.
 # ================

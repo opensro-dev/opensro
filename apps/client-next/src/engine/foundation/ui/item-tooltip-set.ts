@@ -193,7 +193,8 @@ export function itemTooltipSet(
 	if ( !set || !set.tiers.length ) return [];
 	const count = wornSetPieces( equipment ).get( set.id ) ?? 0,
 		worn = wornSetSlots( equipment ).get( set.id ),
-		total = set.tiers[set.tiers.length - 1]!.pieces,
+		// The top tier's count, or the published piece count when that is larger (never "11/10").
+		total = Math.max( set.tiers[set.tiers.length - 1]!.pieces, set.pieces.length ),
 		active = set.tiers.filter( tier => count >= tier.pieces ).at( -1 ),
 		name = setName( set, text );
 	const rows: TooltipRow[] = [
