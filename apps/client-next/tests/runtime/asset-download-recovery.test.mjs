@@ -529,6 +529,21 @@ test("the caller's cancellation during a stalled request stays a cancellation", 
 	assert.deepEqual( ended, [ "aborted" ], "one attempt, ended by the caller, never retried" );
 });
 
+test("a cancellation that arrives after its job settled is still acknowledged", async t => {
+	// #2871: the execution finishes while the caller's cancel is still
+	// queued (the worker was inside a decode it could not interrupt).
+	// The job leaves the worker's table as it settles, but the caller's
+	// slot is freed by the acknowledgement: dropping the cancel here
+	// strands the slot and reports a healthy worker as unanswering.
+	const { loader, messages } = fixture( t, async () => new Response( Uint8Array.of( 1, 2, 3 ) ) );
+	await settle();
+	assert.equal( messages.length, 1 );
+	assert.equal( messages[0].kind, "bytes" );
+	loader.receive( { kind: "cancel", id: 1 } );
+	await settle();
+	assert.deepEqual( messages[1], { kind: "released", id: 1 } );
+});
+
 test("a stalled body whose cancel never settles still frees the attempt for its retry", async t => {
 	let attempts = 0;
 	const { messages } = fixture( t, async () => {

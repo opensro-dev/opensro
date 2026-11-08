@@ -39,8 +39,12 @@ const REQUEST_STALL_MS = 120000;
 const REQUEST_DECODE_STALL_MS = 60000;
 const REQUEST_ABSOLUTE_MS = 600000;
 // A cancellation's own acknowledgement window, from the cancel: a request
-// cancelled late in its deadline still gets this long to be released.
-const CANCEL_ACK_MS = 30000;
+// cancelled late in its deadline still gets this long to be released. The
+// worker acknowledges on receipt, but receipt waits behind the decode a
+// sibling job is inside - and this same watchdog sanctions a decode for
+// REQUEST_DECODE_STALL_MS of silence. A shorter window reports that
+// healthy worker as unanswering (#2871), so the two windows are one.
+const CANCEL_ACK_MS = REQUEST_DECODE_STALL_MS;
 // The degraded code an unacknowledged cancellation reports (client AGENTS.md).
 const CANCEL_UNACKNOWLEDGED = "asset-cancel-unacknowledged";
 /*
