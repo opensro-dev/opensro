@@ -62,6 +62,29 @@ function sha256( bytes ) {
 	return createHash( "sha256" ).update( bytes ).digest( "hex" );
 }
 
+// The same model bytes are decoded by several tests below (loose in one,
+// packed in another). Decode each distinct byte string once per file and
+// assert on the shared result: a changed model hashes differently and
+// decodes again, so the assertions still break on the same changes.
+const decodedCharacters = new Map();
+
+/*
+================
+decodeCharacterOnce
+================
+*/
+function decodeCharacterOnce( decoder, bytes, label ) {
+	const key = sha256( bytes );
+	if ( !decodedCharacters.has( key ) ) {
+		let character;
+		assert.doesNotThrow( () => {
+			character = decoder.character( decoder.decode( bytes ) );
+		}, label );
+		decodedCharacters.set( key, character );
+	}
+	return decodedCharacters.get( key );
+}
+
 test("every published NPC model passes the production character decoder", () => {
 	const manifest = joinedNpcManifest( readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ) );
 	const paths = new Set( Object.values( manifest.models ).map( model => model.glb ) );
@@ -69,10 +92,7 @@ test("every published NPC model passes the production character decoder", () => 
 	const decoder = createModelDecoder();
 	for ( const resource of paths ) {
 		assert.equal( typeof resource, "string" );
-		assert.doesNotThrow(
-			() => decoder.character( decoder.decode( readPublishedAssetBytesSync( resource, publicRoot ) ) ),
-			resource
-		);
+		decodeCharacterOnce( decoder, readPublishedAssetBytesSync( resource, publicRoot ), resource );
 	}
 });
 
@@ -102,7 +122,7 @@ test("packed NPC models match their published authority and pass the production 
 				readPublishedAssetBytesSync( member.path, publicRoot ),
 				`Stale packed NPC ${member.path}`
 			);
-			assert.doesNotThrow( () => decoder.character( decoder.decode( model ) ), member.path );
+			decodeCharacterOnce( decoder, model, member.path );
 		}
 	}
 });
@@ -136,7 +156,7 @@ test("every authored item drop passes the production model decoder", () => {
 	assert.equal( Object.keys( manifest.models ).filter( key => key !== PORT_PET_DROP_MODEL ).length, 38 );
 	assert.ok( manifest.models[PORT_PET_DROP_MODEL], "owned pet prop published beside native drops" );
 	for ( const row of entries ) {
-		const model = decoder.character( decoder.decode( readPublishedAssetBytesSync( row.glb, publicRoot ) ) );
+		const model = decodeCharacterOnce( decoder, readPublishedAssetBytesSync( row.glb, publicRoot ), row.glb );
 		assert.ok( model.primitives.length, row.glb );
 		for ( const clip of row.clips ) assert.ok( model.clips.some( c => c.name === clip ), row.glb + ": " + clip );
 	}
@@ -159,7 +179,7 @@ test("every catalog attachment is packed once and accepted by the production dec
 		const members = owners.get( glb ) ?? [];
 		assert.equal( members.length, 1, glb );
 		assert.equal( sha256( bytes ), members[0].sha256, glb );
-		assert.ok( decoder.character( decoder.decode( bytes ) ).primitives.length, glb );
+		assert.ok( decodeCharacterOnce( decoder, bytes, glb ).primitives.length, glb );
 	}
 });
 
@@ -179,7 +199,9 @@ for ( const enabled of [ false, true ] ) {
 				}
 			} ] :
 			[];
-		const createVariantDecoder = await loadModelDecoder( plugins );
+		// The plain bundle is already loaded at module scope; only the
+		// plugin variant pays a second esbuild run.
+		const createVariantDecoder = enabled ? await loadModelDecoder( plugins ) : createModelDecoder;
 		const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot );
 		const garment = Object.entries( roster.dress.defaultWear ).find( ( [key] ) => key.startsWith( "CH_M_" ) );
 		assert.ok( garment, "the catalog must publish Chinese male default wear" );
