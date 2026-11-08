@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	nomad "github.com/hashicorp/nomad/api"
+	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
 )
 
@@ -129,6 +130,61 @@ func TestADeployWithoutAStaffWebhookKeepsTheStoredOne(t *testing.T) {
 	plan, err = deployment.planVariables(context.Background(), client, false)
 	if _, kept := gameWorldPlanned(plan)[staffWebhookItem]; err != nil || kept {
 		t.Fatalf("off = %v, kept %t; want the webhook removed without a stop", err, kept)
+	}
+}
+
+const (
+	storedBugWebhook = "https://discord.com/api/webhooks/123456789012345678/storedbugtoken01234567890"
+	namedBugWebhook  = "https://discord.com/api/webhooks/223456789012345678/namedbugtoken012345678901"
+)
+
+/*
+================
+TestAGameWorldBugReportWebhookChangeAloneNeedsNoStop
+
+The mirrored bug-report item (opensro#2959) reaches the GameWorld
+through its env template (change_mode restart), like the Agent's own:
+setting, changing or removing it - alone, or together with the staff
+webhook - never needs the GameWorld stopped, and a deploy that names
+none keeps the stored mirror, as the Agent's keep does.
+================
+*/
+func TestAGameWorldBugReportWebhookChangeAloneNeedsNoStop(t *testing.T) {
+	// The first release after the mirror: the stored variable has none.
+	deployment, client := staffPlanFixture(t, nomad.VariableItems{"agent_session_public_keys": staffTestRing})
+	deployment.BugReports = bugreport.Config{WebhookURL: namedBugWebhook}
+	plan, err := deployment.planVariables(context.Background(), client, false)
+	if err != nil {
+		t.Fatalf("adding the bug-report mirror to a running GameWorld refused the plan: %v", err)
+	}
+	if len(plan.requiresStop) != 0 || gameWorldPlanned(plan)[bugReportWebhookItem] != namedBugWebhook {
+		t.Fatalf("stops %v, items %v; want no stop and the named webhook", plan.requiresStop, gameWorldPlanned(plan))
+	}
+	// Both webhooks change together: still no stop.
+	deployment, client = staffPlanFixture(t, nomad.VariableItems{
+		"agent_session_public_keys": staffTestRing, staffWebhookItem: storedStaffWebhook, bugReportWebhookItem: storedBugWebhook})
+	deployment.StaffWebhook = namedStaffWebhook
+	deployment.BugReports = bugreport.Config{WebhookURL: namedBugWebhook}
+	plan, err = deployment.planVariables(context.Background(), client, false)
+	if err != nil || len(plan.requiresStop) != 0 ||
+		gameWorldPlanned(plan)[staffWebhookItem] != namedStaffWebhook ||
+		gameWorldPlanned(plan)[bugReportWebhookItem] != namedBugWebhook {
+		t.Fatalf("plan = %v, stops %v, items %v; want both webhooks replaced without a stop",
+			err, plan.requiresStop, gameWorldPlanned(plan))
+	}
+	// A release that names none keeps the stored mirror; off removes it.
+	deployment, client = staffPlanFixture(t, nomad.VariableItems{
+		"agent_session_public_keys": staffTestRing, bugReportWebhookItem: storedBugWebhook})
+	plan, err = deployment.planVariables(context.Background(), client, false)
+	if err != nil || gameWorldPlanned(plan)[bugReportWebhookItem] != storedBugWebhook {
+		t.Fatalf("plan = %v, items %v; want the stored mirror kept without a stop", err, gameWorldPlanned(plan))
+	}
+	deployment, client = staffPlanFixture(t, nomad.VariableItems{
+		"agent_session_public_keys": staffTestRing, bugReportWebhookItem: storedBugWebhook})
+	deployment.BugReports = bugreport.Config{Off: true}
+	plan, err = deployment.planVariables(context.Background(), client, false)
+	if _, kept := gameWorldPlanned(plan)[bugReportWebhookItem]; err != nil || kept {
+		t.Fatalf("off = %v, kept %t; want the mirror removed without a stop", err, kept)
 	}
 }
 

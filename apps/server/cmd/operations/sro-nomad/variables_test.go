@@ -127,7 +127,10 @@ func TestDesiredVariablesExposeOnlyPublicKeysToGameWorlds(t *testing.T) {
 TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet
 
 The webhook is a credential: it reaches the Agent's variable when the
-deployer configured it, is absent otherwise, and never reaches a GameWorld.
+deployer configured it, is absent otherwise, and reaches each GameWorld
+only as the mirror its /report intake reads (opensro#2959): the same
+item, from the same configuration, so the GameWorld carries
+SRO_BUG_REPORT_DISCORD_WEBHOOK exactly when the Agent does.
 ================
 */
 func TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet(t *testing.T) {
@@ -147,8 +150,9 @@ func TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet(t *testing.T) {
 		if found != configured || (configured && value != webhook) {
 			t.Fatalf("configured=%t: Agent item found=%t value=%q", configured, found, value)
 		}
-		if _, leaked := variables[1].items[bugReportWebhookItem]; leaked {
-			t.Fatal("GameWorld variable exposes the bug report webhook")
+		mirror, mirrored := variables[1].items[bugReportWebhookItem]
+		if mirrored != configured || (configured && mirror != webhook) {
+			t.Fatalf("configured=%t: GameWorld mirror found=%t value=%q", configured, mirrored, mirror)
 		}
 	}
 }
