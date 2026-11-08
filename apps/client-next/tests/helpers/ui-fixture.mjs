@@ -17,6 +17,27 @@ const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/
 export const fontAtlas = JSON.parse(
 	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf-8" )
 );
+// One read of each published file per test process, shared by every fixture
+// instance: a window test otherwise re-reads and re-decodes the same
+// catalogues from the generated tree (~1.4 s of cold admission per fixture).
+// The bytes are the generated tree's, which no test mutates; the port below
+// still hands each consumer its own slice for the byte kind.
+const publishedBytes = new Map();
+/*
+================
+readPublished
+
+The generated tree's bytes for one path, read once per process.
+================
+*/
+function readPublished( path ) {
+	let bytes = publishedBytes.get( path );
+	if ( !bytes ) {
+		bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
+		publishedBytes.set( path, bytes );
+	}
+	return bytes;
+}
 /*
 ================
 uiPorts
@@ -90,7 +111,7 @@ export function uiFixture(
 					return id;
 				}
 				try {
-					const bytes = published[path] ?? readFileSync( CLIENT_PUBLIC_ROOT + path );
+					const bytes = published[path] ?? readPublished( path );
 					// A native .texture is container bytes the UI decodes itself (#414).
 					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) || path.endsWith( ".texture" ) ) {
 						pending.set( id, bytes );
