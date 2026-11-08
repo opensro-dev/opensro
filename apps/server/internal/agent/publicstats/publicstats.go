@@ -161,6 +161,12 @@ type Sources struct {
 	// unserved (404): SRO_SEAL_BOARD off, the native default.
 	SealCounts        func(weekStart time.Time) ([]sealboard.Count, error)
 	SealCountingSince func(weekStart time.Time) (time.Time, error)
+	// CensusPeople returns the player census's two public counts
+	// (people online now, unique people over 7 days); ok is false
+	// while the census cannot answer. Nil while the connection
+	// journal is off (SRO_CONNECTION_JOURNAL). Nil and not-ok both
+	// leave the status fields omitted (opensro-web#78).
+	CensusPeople func() (peopleNow int, uniquePeople7d int, ok bool)
 }
 
 /*

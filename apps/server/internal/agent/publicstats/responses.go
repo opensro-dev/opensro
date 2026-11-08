@@ -269,6 +269,14 @@ type StatusResponse struct {
 	// beta setting replaces the native rule (CH 300, EU min(2 x level,
 	// 240)); omitted when native. It is the value the client receives.
 	MasteryTotalOverride int `json:"masteryTotalOverride,omitempty"`
+	// People and UniquePlayers7d are the player census's counts:
+	// people online now and unique people over the last 7 days, the
+	// same clustering the operator census reads (console#9 part 4,
+	// opensro-web#78). Present only while the connection journal
+	// runs (SRO_CONNECTION_JOURNAL); absent, callers keep showing
+	// sessions - the two never mix in one figure.
+	People          int `json:"people,omitempty"`
+	UniquePlayers7d int `json:"uniquePlayers7d,omitempty"`
 }
 
 // ScheduleEvent is one event the server runs. Kind is "fortress" (the

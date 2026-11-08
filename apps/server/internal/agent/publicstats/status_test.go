@@ -213,3 +213,60 @@ func TestEventsServeAnnouncementsApartFromChat(t *testing.T) {
 		t.Fatalf("chat answered %d %+v", code, chat)
 	}
 }
+
+/*
+================
+TestStatusPublishesCensusPeople
+
+The census's two public counts (people online now, unique people
+over 7 days, opensro-web#78) ride the status answer once sampled:
+present at their sampled values while the census answers, and an
+unavailable census leaves them out entirely - a failed read clears
+the sampled pair, so the next uncached answer omits them instead
+of serving a stale people number beside live session counts.
+================
+*/
+func TestStatusPublishesCensusPeople(t *testing.T) {
+	s, _, _, now := statusService(t)
+	available := true
+	s.src.CensusPeople = func() (int, int, bool) {
+		if !available {
+			return 0, 0, false
+		}
+		return 3, 42, true
+	}
+	s.recordStatus(*now)
+
+	var raw map[string]any
+	if code := get(t, s, "/public/v1/status", &raw); code != http.StatusOK {
+		t.Fatalf("GET status: %d", code)
+	}
+	if raw["people"] != float64(3) || raw["uniquePlayers7d"] != float64(42) {
+		t.Fatalf("census on: got people=%v uniquePlayers7d=%v, want 3/42", raw["people"], raw["uniquePlayers7d"])
+	}
+
+	// A failed read clears the sampled pair; the route's cache may
+	// still hold the last answer, but nothing new carries people.
+	available = false
+	s.recordStatus(*now)
+	s.status.mu.Lock()
+	carried := s.status.censusOK
+	s.status.mu.Unlock()
+	if carried {
+		t.Fatal("census unavailable: sampled state still carries people")
+	}
+
+	off, _, _, offNow := statusService(t)
+	off.src.CensusPeople = func() (int, int, bool) { return 0, 0, false }
+	off.recordStatus(*offNow)
+	var offRaw map[string]any
+	if code := get(t, off, "/public/v1/status", &offRaw); code != http.StatusOK {
+		t.Fatalf("GET status unavailable: %d", code)
+	}
+	if _, ok := offRaw["people"]; ok {
+		t.Fatalf("census unavailable: people present: %v", offRaw)
+	}
+	if _, ok := offRaw["uniquePlayers7d"]; ok {
+		t.Fatalf("census unavailable: uniquePlayers7d present: %v", offRaw)
+	}
+}

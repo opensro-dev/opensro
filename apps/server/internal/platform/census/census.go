@@ -334,6 +334,30 @@ func (s *Service) Uniques() (Uniques, error) {
 	return answer, nil
 }
 
+/*
+================
+Service.PublicCounts
+
+The two census numbers that may be public (console#9 part 4,
+opensro-web#78): people online now, and unique people over the last
+7 days, by this package's clustering - the same definitions the staff
+readings use. Counts only: nothing about any person - no names, no
+hashes - leaves through here, so the public status answer can carry
+them beside the staff readings they match.
+================
+*/
+func (s *Service) PublicCounts() (peopleNow int, uniquePeople7d int, err error) {
+	online, err := s.OnlineNow(windowDayMs, windowDayMs)
+	if err != nil {
+		return 0, 0, err
+	}
+	uniques, err := s.Uniques()
+	if err != nil {
+		return 0, 0, err
+	}
+	return online.People, uniques.Windows["7d"].People, nil
+}
+
 // distinctAccounts is the span set's account set.
 func distinctAccounts(spans []Span) map[string]bool {
 	accounts := make(map[string]bool, len(spans))
