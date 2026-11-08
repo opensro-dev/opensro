@@ -18,8 +18,8 @@ shore.
 The colour copy is a fullscreen load (the retained frame carries
 TEXTURE_BINDING; the canvas texture does not); the depth copy is a
 fullscreen load into r32float (a depth attachment cannot be sampled
-while it is attached, and the renderer is single-sampled, so a plain
-load reads every texel). Off, the stage owns nothing, the water draws
+while it is attached; under MSAA the frame resolves the 4x depth to
+the single-sample target first, so a plain load reads every texel). Off, the stage owns nothing, the water draws
 stay in the main pass and the frame is byte-identical to the native
 order.
 
