@@ -248,6 +248,10 @@ type Character struct {
 	// door. Writers use TransitionBodyStatus; presentation never owns it.
 	BerserkPoints  uint8 `json:"berserkPoints"`
 	BerserkUntilMs int64 `json:"-"`
+	// HwanLevel is the Blue Berserk level, 0 to HwanLevelMax (the shard's
+	// _Char.HwanLevel). Port-only while SRO_LEVEL_CAP is 110: a native shard
+	// never raises it. Written through SetHwanLevel.
+	HwanLevel uint8 `json:"hwanLevel,omitempty"`
 	// BattleUntilMs ends the battle state (the player object's state+0xD,
 	// channel 8). Striking or being struck restarts its countdown; zero is
 	// peace.

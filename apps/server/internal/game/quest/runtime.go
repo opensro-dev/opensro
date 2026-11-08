@@ -87,6 +87,14 @@ type Runtime struct {
 	ivy3 ivy3Programme
 	// goria7 is the GORIA 7 programme's state (goria7.go).
 	goria7 goria7Programme
+	// HwanLevelFrames builds the frames that announce a raised Blue Berserk
+	// level (port-only, not native); the composition root wires it to the
+	// action lane, which knows the character's world identity. Nil in
+	// detached tests: the level still changes, nothing is announced.
+	HwanLevelFrames func(c *enterworld.Character) []wire.Frame
+	// Hwan holds the operator knobs of the Blue Berserk quests (hwanknobs.go).
+	// The zero value is the original behaviour.
+	Hwan HwanKnobs
 }
 
 /*
@@ -751,6 +759,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 	var refusal error
 	var goldFrame *wire.Frame
 	var capacityFrame *wire.Frame
+	var hwanFrames []wire.Frame
 	var experienceFrames []wire.Frame
 	var inventoryFrames []wire.Frame
 	var objectiveFrames []wire.Frame
@@ -894,6 +903,11 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			// Finishing a superseded chain completes the quest that replaced it.
 			creditPredecessorCompletions(character, rt.Defs)
 			forgetQuests(character, def.completeForgetsIDs)
+			// The Blue Berserk level is paid with the completion (the reward row's
+			// Hwan column); the character store door is held here.
+			if def.RewardHwanLevel > 0 && character.SetHwanLevel(def.RewardHwanLevel) && rt.HwanLevelFrames != nil {
+				hwanFrames = rt.HwanLevelFrames(character)
+			}
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
 		if def.RewardGold > 0 || turnInGold > 0 {
@@ -945,6 +959,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 	frames = append(inventoryFrames, frames...)
 	frames = append(frames, objectiveFrames...)
 	frames = append(frames, experienceFrames...)
+	frames = append(frames, hwanFrames...)
 	// The server's POTION_3 end talk sends its notice before it completes
 	// and pays the quest.
 	if advanced == nil && def.CompleteNoticeSymbol != "" {

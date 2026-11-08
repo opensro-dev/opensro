@@ -40,6 +40,10 @@ func TestBetaSettingValidationKinds(t *testing.T) {
 		"SRO_BETA_SHOP_ONLY_DEGREE9": ValueSwitch,
 		"SRO_BETA_SEAL_RATES":        ValueSwitch,
 		"SRO_BETA_UNIQUE_RESPAWN":    ValueSwitch,
+		// Not beta rules: the Blue Berserk quest knobs share the grammar check.
+		"SRO_HWAN_NIYA_CAPTURE_RATES": ValueHwanKnob,
+		"SRO_HWAN_SUN_RELIC":          ValueHwanKnob,
+		"SRO_HWAN_3_FAST_DROP":        ValueHwanKnob,
 	}
 	for _, setting := range Settings {
 		expected, beta := want[setting.Env]

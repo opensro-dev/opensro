@@ -40,7 +40,7 @@ var characterSectionFields = [][]string{
 	// world: where the character stands; the tick's doors touch it most.
 	{"World", "LastSeenUnixMs"},
 	// vitals: hit/magic points and the clocks combat rewrites.
-	{"CurrentHP", "CurrentMP", "BerserkPoints", "PK", "PremiumClock"},
+	{"CurrentHP", "CurrentMP", "BerserkPoints", "HwanLevel", "PK", "PremiumClock"},
 	// progress: level, experience, points and gold.
 	{"Level", "MaxLevel", "Experience", "ExperiencePercent", "SkillPoints", "StatPoints", "Strength", "Intellect", "Gold", "LevelReachedAt"},
 	// cooldowns: the ticking timers.

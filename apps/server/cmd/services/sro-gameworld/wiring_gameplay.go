@@ -813,6 +813,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return game.items.RecoverLevelVitals(game.divisionID, character)
 	}
 	quests, err := quest.NewRuntime(game.deps, definitions, stats.ExperienceUpdater())
+	if err == nil {
+		err = applyHwanKnobs(quests)
+	}
 	if err != nil {
 		return fmt.Errorf("quest runtime: %w", err)
 	}

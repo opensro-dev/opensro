@@ -226,6 +226,11 @@ type QuestSpec struct {
 	RewardExp      int64
 	RewardGold     int64
 	RewardSkillExp int64
+	// RewardHwanLevel is the Blue Berserk level the completion raises the
+	// character to (_RefQuestReward.Hwan; the Lua LuaSetHwanLevel call). Zero
+	// grants none; a level the character already holds is kept. Port-only,
+	// not native: only the cap-110 Blue Berserk quests set it.
+	RewardHwanLevel uint8
 	// RewardItems are committed atomically through the inventory owner.
 	RewardItems []RewardItemLead
 	// RewardChoices are granted on top of RewardItems: exactly one, picked
@@ -557,6 +562,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		}
 		if spec.RewardExp < 0 || spec.RewardGold < 0 || spec.RewardSkillExp < 0 {
 			return nil, fmt.Errorf("quest %s negative reward", spec.Codename)
+		}
+		if spec.RewardHwanLevel > domain.HwanLevelMax {
+			return nil, fmt.Errorf("quest %s Blue Berserk level %d exceeds the level table", spec.Codename, spec.RewardHwanLevel)
 		}
 		if spec.DeliveryNpcCodename != "" && (spec.Objective != ObjectiveCollect || spec.DeliveryPromptSymbol == "" || spec.InventoryFullSymbol == "") {
 			return nil, fmt.Errorf("quest %s incomplete delivery contract", spec.Codename)
