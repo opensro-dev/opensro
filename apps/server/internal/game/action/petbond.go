@@ -74,23 +74,21 @@ func (rt *Runtime) bondSourceRefused(key petOwnerKey, state *petSession) (refuse
 	if rt.companionCopy != nil {
 		return false, false
 	}
-	rt.deps.Read(key.division, func() {
-		owner := state.character
-		pet := owner.CompanionByGID(key.gid)
-		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || companion.PetKind(pet.Codename) != "Bear" || !pet.Summoned {
-			refused = true
-			return
-		}
-		if rt.inFreeBattle(owner) || wearsJobSuit(owner, rt.deps.ItemReferences()) ||
-			domain.CharacterWorldInstance(owner) != domain.DefaultWorldInstance {
-			refused = true
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	owner := state.character
+	pet := owner.CompanionByGID(key.gid)
+	if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || companion.PetKind(pet.Codename) != "Bear" || !pet.Summoned {
+		refused = true
+	} else if rt.inFreeBattle(owner) || wearsJobSuit(owner, rt.deps.ItemReferences()) ||
+		domain.CharacterWorldInstance(owner) != domain.DefaultWorldInstance {
+		refused = true
+	} else {
 		row := *pet
 		row.Container, row.Rentals = nil, nil
 		_, _, slotted := companion.Passive(&row, "Guardian's Bond", companion.ModifiersFor(&row))
 		refused = !slotted
-	})
+	}
+	guard.Release()
 	return refused, true
 }
 

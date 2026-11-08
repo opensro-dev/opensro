@@ -248,6 +248,13 @@ type Deps struct {
 	// is wired.
 	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
 	ReadCharacter         func(divisionID string, read func())
+	// ReadLock and ReadUnlock are the two halves of the read door the
+	// callback above runs between, exposed so a per-tick reader can
+	// hold the door as a value (AcquireRead) instead of boxing a
+	// closure per call (#2030). Both nil reads unguarded, as the
+	// callback does when ReadCharacter is unset.
+	ReadLock   func(divisionID string)
+	ReadUnlock func(divisionID string)
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
@@ -659,6 +666,51 @@ func (d *Deps) Read(divisionID string, read func()) {
 		return
 	}
 	read()
+}
+
+/*
+================
+ReadGuard
+
+The read door held as a value instead of a callback: a caller that
+reads a handful of scalars every tick (the pet judges, #2030) takes
+the door on the stack and releases it in line, instead of boxing a
+closure and its captures on every call. The guard holds the same
+store read lock the callback door runs between; a Deps without the
+lock pair reads unguarded, exactly as the callback does when
+ReadCharacter is unset.
+================
+*/
+type ReadGuard struct {
+	deps     *Deps
+	division string
+}
+
+/*
+================
+AcquireRead
+================
+*/
+func (d *Deps) AcquireRead(divisionID string) ReadGuard {
+	if d.ReadLock != nil {
+		d.ReadLock(divisionID)
+	}
+	return ReadGuard{deps: d, division: divisionID}
+}
+
+/*
+================
+Release
+
+Releasing twice is a no-op, so a guard released early and again on
+the way out cannot unlock a door it no longer holds.
+================
+*/
+func (g *ReadGuard) Release() {
+	if g.deps != nil && g.deps.ReadUnlock != nil {
+		g.deps.ReadUnlock(g.division)
+	}
+	g.deps = nil
 }
 
 // ReentryPackets rebuilds the native reset/character/object-list
