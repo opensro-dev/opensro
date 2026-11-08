@@ -29,7 +29,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -103,11 +102,12 @@ func remoteScript(pprofAddr, metricsAddr string) string {
 ================
 extractTarGz
 
-Unpack the returned stream into the output directory. Every member
-must land inside it: the member's joined, cleaned path has to keep
-the output directory as a prefix, and anything else (a ".." climb,
-an absolute name) refuses the whole capture - the remote script
-writes plain "./name" members and nothing else is legitimate.
+Unpack the returned stream into the output directory. Members are
+created through an os.Root opened on that directory, so a member
+name cannot escape it by construction: a ".." climb or an absolute
+name fails the create and refuses the whole capture. The remote
+script writes plain "./name" members, and "./name" is exactly the
+local form the root accepts.
 ================
 */
 func extractTarGz(r io.Reader, outDir string) error {
@@ -115,10 +115,11 @@ func extractTarGz(r io.Reader, outDir string) error {
 	if err != nil {
 		return err
 	}
-	absOut, err := filepath.Abs(outDir)
+	root, err := os.OpenRoot(outDir)
 	if err != nil {
 		return err
 	}
+	defer root.Close()
 	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
@@ -131,11 +132,7 @@ func extractTarGz(r io.Reader, outDir string) error {
 		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		dest := filepath.Join(absOut, header.Name)
-		if dest != absOut && !strings.HasPrefix(dest, absOut+string(os.PathSeparator)) {
-			return fmt.Errorf("capture member %q would land outside %s - refusing the capture", header.Name, absOut)
-		}
-		out, err := os.Create(dest)
+		out, err := root.Create(header.Name)
 		if err != nil {
 			return err
 		}

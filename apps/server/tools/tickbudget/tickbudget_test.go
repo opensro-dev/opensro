@@ -16,7 +16,9 @@ and must print BLIND SPOT lines naming both sources.
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -360,6 +362,52 @@ func TestCaptureRefusesNonLoopback(t *testing.T) {
 	err := runCapture(captureOptions{sshTarget: "user@host", pprofAddr: "203.0.113.7:8792", metricsAddr: "127.0.0.1:8788", outDir: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "refused") {
 		t.Fatalf("runCapture with routable pprof = %v, want refusal", err)
+	}
+}
+
+/*
+================
+TestExtractTarGzRefusesEscape
+
+Capture members are created through an os.Root on the output
+directory: a member named to climb out of it refuses the capture,
+and a plain "./name" member lands inside.
+================
+*/
+func TestExtractTarGzRefusesEscape(t *testing.T) {
+	writeTar := func(t *testing.T, names ...string) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		for _, name := range names {
+			if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: 2, Typeflag: tar.TypeReg}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tw.Write([]byte("{}")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := gz.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	out := t.TempDir()
+	if err := extractTarGz(bytes.NewReader(writeTar(t, "../evil.json")), out); err == nil {
+		t.Fatal("member ../evil.json extracted without refusal")
+	}
+	if _, err := os.Stat(filepath.Join(out, "evil.json")); !os.IsNotExist(err) {
+		t.Fatalf("evil.json exists in the output directory: %v", err)
+	}
+	if err := extractTarGz(bytes.NewReader(writeTar(t, "./metrics-1.json")), out); err != nil {
+		t.Fatalf("plain member refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "metrics-1.json")); err != nil {
+		t.Fatalf("metrics-1.json not extracted: %v", err)
 	}
 }
 
