@@ -21,6 +21,10 @@ unchanged tree is a stat sweep. The cache lives in .state/client-test-cache
 and is keyed by the Node version, platform and test environment; any change
 there discards it. SRO_CHECK_FORCE=1 runs everything.
 
+Every run times the files it actually executed and prints the ten
+slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
+run (#2907), so suite time cannot creep back one file at a time.
+
 ===========================================================================
 */
 import { run } from "node:test";
@@ -60,6 +64,12 @@ const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
 // watchdog's own test.
 const RSS_HEADROOM_MB = 2048;
 const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_HEADROOM_MB;
+// One test file's share of the five-minute client budget (#2907): a file
+// that runs longer than this fails the run and names itself, so suite
+// time cannot creep back file by file (the Go server's 30 s budget is
+// the same idea). Only files that actually ran are timed; a reused pass
+// spent nothing. SRO_TEST_FILE_BUDGET_MS overrides it.
+const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
 
 /*
 ================
@@ -280,6 +290,10 @@ async function main() {
 	} );
 	const reused = files.length - pending.length;
 	const failed = new Set(), passed = new Set();
+	// Per-file wall time of the files that run (#2907), from each file
+	// node's own reported duration. Reused files never appear here -
+	// they spent nothing this run.
+	const fileSeconds = new Map();
 	if ( pending.length ) {
 		const logDir = fs.mkdtempSync( path.join( os.tmpdir(), "sro-test-inputs-" ) );
 		process.env.SRO_TEST_INPUT_LOG = logDir;
@@ -300,6 +314,13 @@ async function main() {
 			} );
 			stream.on( "test:pass", data => {
 				if ( data?.file ) passed.add( path.resolve( data.file ) );
+			} );
+			stream.on( "test:complete", data => {
+				// The file's own node (its name is its path) reports the
+				// file's whole duration, process start included.
+				if ( data?.file && data.name === data.file && data.details?.duration_ms !== undefined ) {
+					fileSeconds.set( path.resolve( data.file ), data.details.duration_ms / 1000 );
+				}
 			} );
 			stream.compose( spec ).pipe( process.stdout );
 			await new Promise( ( resolve, reject ) => {
@@ -329,7 +350,26 @@ async function main() {
 	process.stdout.write(
 		`tests: ${files.length} files, ${reused} reused unchanged, ${pending.length} run, ${failed.size} failed in ${seconds}s\n`
 	);
-	if ( failed.size ) process.exitCode = 1;
+	// The slowest files name themselves every run, budgeted or not, so
+	// the next profile is a log line away (#2907, docs/agents/client-gates.md).
+	const slowest = [ ...fileSeconds ].sort( ( a, b ) => b[1] - a[1] );
+	if ( slowest.length ) {
+		process.stdout.write(
+			`tests slowest: ${
+				slowest.slice( 0, 10 ).map(
+					( [file, s] ) => `${path.relative( clientRoot, file )} ${s.toFixed( 1 )}s`
+				).join( ", " )
+			}\n`
+		);
+	}
+	const overBudget = slowest.filter( ( [, s] ) => s * 1000 > TEST_FILE_BUDGET_MS );
+	for ( const [file, s] of overBudget ) {
+		process.stdout.write(
+			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over the ` +
+				`${TEST_FILE_BUDGET_MS / 1000}s per-file budget (#2907)\n`
+		);
+	}
+	if ( failed.size || overBudget.length ) process.exitCode = 1;
 }
 
 await main();
