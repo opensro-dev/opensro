@@ -464,6 +464,9 @@ class ImportTests(unittest.TestCase):
 			native_glow = b"ITEM_CH_SWORD_10_A\t1\r\n"
 			(glow_native / importer.GLOW_TABLE).write_bytes(native_glow)
 			os.link(glow_native / importer.GLOW_TABLE, glow_target / importer.GLOW_TABLE)
+			native_rare = b"ITEM_EU_SWORD_11_B_RARE\tsystem\\system_raretype_a_step2.efp\t175\tai_end\tnone\r\n"
+			(glow_native / importer.RARE_TABLE).write_bytes(native_rare)
+			os.link(glow_native / importer.RARE_TABLE, glow_target / importer.RARE_TABLE)
 			with patch.dict(os.environ, {importer.FLAG: "off"}):
 				self.assertFalse(importer.add_items(later, native, output)["enabled"])
 			new = weapon("ITEM_EU_SWORD_11_A", 11, "1", 31)
@@ -480,7 +483,8 @@ class ImportTests(unittest.TestCase):
 				"textuisystem.txt": utf16([
 					["1", "PARAM_REINFORCE_ITEM_SET", "ko", "", "tw", "cn", "de", "ja", "Set enforcement", "vi"],
 					["1", "PARAM_REINFORCE", "ko", "", "tw", "cn", "de", "ja", "different", "vi"],
-					["1", "PARAM_UNRELATED", "ko", "", "tw", "cn", "de", "ja", "other", "vi"]]),
+					["1", "PARAM_UNRELATED", "ko", "", "tw", "cn", "de", "ja", "other", "vi"],
+					["1", "PARAM_RARE_FIRST2", "ko", "", "tw", "cn", "de", "ja", "Seal of Nova", "vi"]]),
 			}
 			# The later file lists the new piece and one the import does not carry; a group the tier table lacks is refused.
 			files["resinfo/itemoption.txt"] = b"ITEM_EU_SWORD_11_A\t1\r\nITEM_EU_AXE_11_A\t1\r\nITEM_EU_SWORD_11_B\t9\r\n"
@@ -495,9 +499,11 @@ class ImportTests(unittest.TestCase):
 				(glow_target / importer.GLOW_TABLE).read_bytes(), native_glow + b"ITEM_EU_SWORD_11_A\t1\r\n")
 			self.assertEqual((glow_native / importer.GLOW_TABLE).read_bytes(), native_glow)
 			# Only the set symbols the table lacks are added; a symbol it has keeps its row.
-			self.assertEqual(first["setUiTexts"], ["PARAM_REINFORCE_ITEM_SET"])
+			self.assertEqual(first["setUiTexts"], ["PARAM_RARE_FIRST2", "PARAM_REINFORCE_ITEM_SET"])
 			ui_rows = {r[1]: r[8] for r in importer.tables.table_rows((target / "textuisystem.txt").read_bytes())}
-			self.assertEqual(ui_rows, {"PARAM_REINFORCE": "enhancement", "PARAM_REINFORCE_ITEM_SET": "Set enforcement"})
+			self.assertEqual(ui_rows, {
+				"PARAM_REINFORCE": "enhancement", "PARAM_REINFORCE_ITEM_SET": "Set enforcement",
+				"PARAM_RARE_FIRST2": "Seal of Nova"})
 			self.assertEqual(first["idMap"], second["idMap"])
 			self.assertEqual(first["setCatalogue"], {"groups": 1, "magicGroups": 3, "optionIds": [389], "setItems": 0})
 			self.assertEqual(importer.tables.table_rows((target / items.SET_GROUP_TABLE).read_bytes()), [set_group(13)])
@@ -510,7 +516,29 @@ class ImportTests(unittest.TestCase):
 			self.assertFalse((target / items.MAGIC_GROUP_TABLE).exists())
 			self.assertEqual((target / "itemdata.txt").read_bytes(), original_manifest)
 			self.assertEqual((glow_target / importer.GLOW_TABLE).read_bytes(), native_glow)
+			self.assertEqual((glow_target / importer.RARE_TABLE).read_bytes(), native_rare)
 			self.assertEqual((target / "textuisystem.txt").read_bytes(), native_ui)
+
+	# ================
+	# test_rare_rows_give_set_pieces_their_seal_particle
+	# ================
+	def test_rare_rows_give_set_pieces_their_seal_particle(self):
+		effect = "system\\system_raretype_a_step%d.efp\t175\tai_end\tnone"
+		native = f"ITEM_CH_SWORD_11_A_RARE\t{effect % 1}\r\nITEM_CH_SWORD_11_B_RARE\t{effect % 2}\r\n"
+		later = (
+			f"ITEM_CH_SWORD_11_SET_A_RARE\t{effect % 3}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{effect % 3}\r\n"
+			f"ITEM_CH_AXE_11_SET_B_RARE\t{effect % 3}\r\n"
+		)
+		codes = {
+			"ITEM_CH_SWORD_11_A_RARE", "ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE",
+			"ITEM_CH_SWORD_11_SET_A", "ITEM_CH_SHIELD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B",
+		}
+		text, added = items.rare_rows(native, later, codes)
+		# Set A takes the family's moon row under its own code; set B keeps the later sun row; the rest are untouched.
+		self.assertEqual(added, ["ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE"])
+		self.assertEqual(
+			text, native + f"ITEM_CH_SWORD_11_SET_A_RARE\t{effect % 2}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{effect % 3}\r\n")
+		self.assertEqual(items.rare_rows(native, later, {"ITEM_CH_SWORD_11_A_RARE"}), (native, []))
 
 	# ================
 	# test_glow_rows_follow_the_imported_codenames

@@ -57,7 +57,11 @@ SET_GROUP_ID = 1
 SET_GROUP_CODE = 2
 SET_GROUP_NAME = 4
 # The interface symbols naming the two set options (389 reinforce, 390 resist all).
-SET_UI_SYMBOLS = ("PARAM_REINFORCE_ITEM_SET", "PARAM_RESIST_ALL_SET")
+# The set tooltip's option labels, and the degree 11 first seal tier ("Seal of Nova").
+SET_UI_SYMBOLS = ("PARAM_REINFORCE_ITEM_SET", "PARAM_RESIST_ALL_SET", "PARAM_RARE_FIRST2")
+# Sealed set weapons and shields: the family's seal particle follows the set (A moon, B sun).
+RARE_SET_A, RARE_SET_B = "_SET_A_RARE", "_SET_B_RARE"
+RARE_FAMILY_MOON = "_B_RARE"
 SET_LINK_FIRST = 6
 SET_LINK_LAST = 17
 MAGIC_GROUP_ID = 1
@@ -311,6 +315,45 @@ def glow_rows(native_text, later_text, codenames, native_groups):
 		return native_text, []
 	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
 	return native_text + tail + "".join(f"{code}\t{later[code]}\r\n" for code in added), added
+
+
+# ================
+# rare_rows
+#
+# Port-only inference. resinfo\\itemrare.txt names the seal particle of each
+# sealed weapon and shield (star, moon, sun by its step1 to step3 effect). The
+# v1.150 file knows no sealed set piece. A sealed set B piece takes the later
+# client's row, which is the sun effect. A sealed set A piece takes its
+# family's _B_RARE row (the moon effect) under its own code, because the later
+# file gives it the sun effect too. A code the v1.150 file lists keeps its
+# row. Returns the file text and the codenames added.
+# ================
+def rare_rows(native_text, later_text, codenames):
+	def parse(text):
+		rows = {}
+		for line in text.splitlines():
+			cells = line.split()
+			if len(cells) == 5 and not cells[0].startswith("//"):
+				rows[cells[0]] = cells
+		return rows
+	native, later = parse(native_text), parse(later_text)
+	added = []
+	for code in sorted(codenames):
+		if code in native:
+			continue
+		if code.endswith(RARE_SET_B):
+			source = later.get(code)
+		elif code.endswith(RARE_SET_A):
+			family = code[:-len(RARE_SET_A)] + RARE_FAMILY_MOON
+			source = native.get(family) or later.get(family)
+		else:
+			continue
+		if source:
+			added.append([code] + source[1:])
+	if not added:
+		return native_text, []
+	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
+	return native_text + tail + "".join("\t".join(row) + "\r\n" for row in added), [row[0] for row in added]
 
 
 # ================

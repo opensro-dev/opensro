@@ -36,6 +36,7 @@ TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 GLOW_ROOT = Path("Media_extracted") / "resinfo"
 GLOW_TABLE = "itemoption.txt"
 GLOW_TIERS = "itemtypenumber.txt"
+RARE_TABLE = "itemrare.txt"
 PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp")
 
 
@@ -183,9 +184,10 @@ def add_items(vsro_root, native, output):
 			ui = safe_target(output / TEXT_ROOT, "textuisystem.txt")
 			if ui.exists():
 				write_atomically(ui, (native / TEXT_ROOT / "textuisystem.txt").read_bytes())
-			glow = safe_target(output / GLOW_ROOT, GLOW_TABLE)
-			if glow.exists():
-				write_atomically(glow, (native / GLOW_ROOT / GLOW_TABLE).read_bytes())
+			for table in (GLOW_TABLE, RARE_TABLE):
+				restored = safe_target(output / GLOW_ROOT, table)
+				if restored.exists():
+					write_atomically(restored, (native / GLOW_ROOT / table).read_bytes())
 			marker.unlink()
 		return {"enabled": False, "added": 0}
 	with ExitStack() as stack:
@@ -272,13 +274,21 @@ def add_items(vsro_root, native, output):
 			{row[items.CODENAME] for row in equipment}, glow_groups,
 		)
 		write_atomically(safe_target(output / GLOW_ROOT, GLOW_TABLE), glow_text.encode("latin1"))
+		# The seal particle of each imported sealed set weapon and shield.
+		rare_entry = index.get("resinfo/" + RARE_TABLE)
+		rare_text, rare_added = items.rare_rows(
+			(native / GLOW_ROOT / RARE_TABLE).read_bytes().decode("latin1"),
+			sro_pk2.payload(media, rare_entry).decode("latin1") if rare_entry else "",
+			{row[items.CODENAME] for row in equipment},
+		)
+		write_atomically(safe_target(output / GLOW_ROOT, RARE_TABLE), rare_text.encode("latin1"))
 		write_atomically(manifest, b"\xff\xfe" + (base_manifest + "\r\n" + items.OUTPUT_SHARD + "\r\n").encode("utf-16-le"))
 		summary.update({
 			"enabled": True, "format": "opensro-cap110-equipment-v2", "portOnly": True,
 			"laterArchiveHashes": identities, "shardSha256": sro_pk2.digest(raw_shard),
 			"nativeItemHashes": native_hashes,
 			"absentAuthoredDescriptions": missing_descriptions,
-			"glowRowsAdded": glow_added, "setUiTexts": ui_added,
+			"glowRowsAdded": glow_added, "rareRowsAdded": rare_added, "setUiTexts": ui_added,
 			"assets": assets, "shopsImported": False,
 			"shopDependencies": shops,
 			"setCatalogue": catalogue,

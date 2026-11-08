@@ -34,6 +34,8 @@ const RARE_SUFFIX = "_RARE";
 const SPARK_ROOT = "system/system_enchant";
 // The fallback sparks' lowest reinforcement (equipment-appearance.ts ENCHANT_SPARK_PLUS).
 const ENCHANT_SPARK_PLUS = 8;
+// The item data's rarity column: 2 is sealed, 6 is a sealed set piece (`_SET_A_RARE` / `_SET_B_RARE`).
+const SEALED_STATES = new Set( [ 2, 6 ] );
 // ModDataParticle set kind of the always-on ambient set (model-particles.ts).
 export const AMBIENT_MODIFIER_KIND = 2;
 
@@ -41,7 +43,7 @@ export const AMBIENT_MODIFIER_KIND = 2;
 ================
 itemRareRows
 
-itemrare.txt's rows for the special-state-two items, by item code: the
+itemrare.txt's rows for the sealed items (special state 2 or 6), by item code: the
 authored effect, its bone and its scale.
 ================
 */
@@ -52,7 +54,7 @@ function itemRareRows( byCode ) {
 	) {
 		if ( !line.trim() || line.trim().startsWith( "//" ) ) continue;
 		const c = line.trim().split( /\s+/ ), item = byCode.get( c[0] );
-		if ( !item || item.specialState !== 2 ) continue;
+		if ( !item || !SEALED_STATES.has( item.specialState ) ) continue;
 		if (
 			c.length !== 5 || !Number.isFinite( Number( c[2] ) ) || Number( c[2] ) <= 0 || c[4] !== "none"
 		) throw Error( "Unsupported itemrare row " + line );
@@ -72,7 +74,7 @@ function itemRareRows( byCode ) {
 ================
 equipmentParticleCatalog
 
-Only special-state two activates itemrare's authored particle descriptors.
+Only the sealed special states (2 and 6) activate itemrare's authored particle descriptors.
 ================
 */
 export function equipmentParticleCatalog( records = loadEquipmentRecords( retailTextdataRoot ) ) {

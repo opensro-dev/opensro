@@ -9,6 +9,7 @@ Draft selection remains with the HUD, and never sends a message by itself.
 */
 import { chatLineText, chatLineColor } from "./chat-presentation";
 import { chatLineTime } from "./chat-time";
+import { sealTier } from "../gameplay/item-seal";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
@@ -52,7 +53,7 @@ export function isSunDropChatLine( line: Pick<ChatLine, "channel" | "text" | "no
 	const fields = line.notice?.item?.tooltip?.fields;
 	if ( fields ) {
 		const itemClass = fields.itemClass ?? 0;
-		return fields.rarity === 2 && itemClass > 0 && (itemClass - 1) % 3 === 2;
+		return sealTier( fields.rarity, itemClass ) === 2;
 	}
 	return isSunDropNoticeText( line.text );
 }

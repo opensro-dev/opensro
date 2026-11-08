@@ -23,10 +23,10 @@ the avatar attachment slot under a one-piece dress (5965E0).
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
+import { itemRarityIsSealed } from "../gameplay/item-seal";
 
 const SHEET = "/assets/images/Media_extracted/";
 // CSOItemData_IsRare (789340): item +0xA0 (itemdata column 15) == 2.
-const RARITY_RARE = 2;
 // Summoner rent state (0x3645 flag 0x40, CIFSlot_ApplySummonerRentState
 // 54FC80): 2 summoned, 3 dormant, 4 dead.
 const RENT_SUMMONED = 2;
@@ -141,7 +141,7 @@ item (567290), so the shop reads the same test.
 ================
 */
 export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; }; } ) {
-	return item.tooltip?.fields.rarity === RARITY_RARE;
+	return itemRarityIsSealed( item.tooltip?.fields.rarity );
 }
 
 /*

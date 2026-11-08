@@ -11,6 +11,7 @@ appends the seal after the requirement rows; the under-heading place
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
+import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
 import { isPetGearRef } from "../gameplay/inventory-item";
 import { petGear as petGearDefinition } from "./pet-gear";
 import { itemTooltipMagic } from "./item-tooltip-magic";
@@ -46,7 +47,8 @@ export function itemTooltip(
 		t = (item.typeFlags >>> 7) & 15,
 		k = (item.typeFlags >>> 11) & 31,
 		equipment = (item.typeFlags & 0x7e) === 0x2c;
-	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ), rare = f?.rarity === 2;
+	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ),
+		rare = itemRarityIsSealed( f?.rarity );
 	const nameColor = rare ? (repaired ? 0xff6ce675 : 0xffffd953) : item.magic.length ? 0xff72bfff : 0xffffffff;
 	const petGear = item.refObjId !== undefined && isPetGearRef( item.refObjId );
 	const petDefinition = petGear ? petGearDefinition( item.refObjId ) : undefined;
@@ -85,7 +87,7 @@ export function itemTooltip(
 	// under-heading place is the Experimental sealUnderHeading row (#2496).
 	const seal = rare && f.itemClass ?
 		{
-			value: text( [ "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][(f.itemClass - 1) % 3]! ),
+			value: text( sealTextSymbol( f.rarity, f.itemClass )! ),
 			color: nameColor,
 			strong: true
 		} :
