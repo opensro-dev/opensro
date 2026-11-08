@@ -308,7 +308,10 @@ export function startRuntime(
 		constant fields: a network burst or an offline browser arms
 		an asset_offline that only fetch failures still arriving a
 		full OFFLINE_REPORT_GAP_MS later file (#2869) - a drop the
-		retry owners recover inside their backoff files nothing - a
+		retry owners recover inside their backoff files nothing,
+		and a failure arriving more than a full gap after the
+		previous one buries the arm, so a later blink starts a
+		fresh streak instead of filing the old streak's report - a
 		thrown error files runtime_exception with its stack, the
 		asset worker's death stays fatal_asset_failed (it actually
 		stops the session), and everything else files asset_failed
@@ -320,14 +323,21 @@ export function startRuntime(
 			const facts = runtimeIncidentFacts( source, error );
 			if ( /failed to fetch|networkerror|load failed/i.test( error ) ) {
 				const now = performance.now();
+				// A failure arriving more than a full gap after the
+				// previous one buries any arm an earlier streak left:
+				// nothing runs during the silence to bury it, so the
+				// next failure does - this streak starts fresh, and
+				// only its own burst can arm its own report.
+				if ( now - lastFetchFailureAt > OFFLINE_REPORT_GAP_MS ) {
+					offlineArmedAt = undefined;
+				}
 				fetchFailures.push( { at: now, source } );
 				while ( fetchFailures.length && now - fetchFailures[0]!.at > 1000 ) fetchFailures.shift();
 				const burst = fetchFailures.length >= 3 &&
 					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
 				if ( globalThis.navigator?.onLine === false || burst ) {
-					// Arm on a streak's first outage failure; a streak
-					// silent for a full gap starts over as a new one.
-					if ( offlineArmedAt === undefined || now - lastFetchFailureAt > OFFLINE_REPORT_GAP_MS ) {
+					// Arm on the burst that opens a streak.
+					if ( offlineArmedAt === undefined ) {
 						offlineArmedAt = now;
 					}
 					if (

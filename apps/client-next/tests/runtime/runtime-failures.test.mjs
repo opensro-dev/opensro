@@ -907,9 +907,11 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		assert.deepEqual( assetReports().slice( tailStart ), [] );
 		// Silence past the gap buries the armed report: had the
 		// connection recovered here, nothing would ever file. This
-		// outage instead keeps failing, so the failures still
-		// arriving after the gap file the one asset_offline.
-		for ( let i = 0; i < 4; i++ ) await frame();
+		// outage instead resumes after five silent frames, so its
+		// first failure arrives more than a full gap after the tail
+		// and buries the first burst's arm: the resumed burst arms
+		// fresh and files no asset_offline of its own.
+		for ( let i = 0; i < 5; i++ ) await frame();
 		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 0 );
 		characterError = "TypeError: Failed to fetch (sustained)";
 		owners.audio.error = () => "TypeError: Failed to fetch (sustained)";
@@ -918,19 +920,59 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			message: "TypeError: Failed to fetch (sustained)"
 		});
 		owners.ui.resourceError = () =>
-			"UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch";
+			"UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained)";
 		owners.ui.resourceFailure = () => ({
 			path: "/assets/ui/burst2.ddj",
 			attempts: 4,
 			transient: true,
-			message: "UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch"
+			message: "UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained)"
 		});
 		const sustainedStart = assetReports().length;
 		await frame();
 		assert.deepEqual( assetReports().slice( sustainedStart ).map( report => report.code ), [
 			"asset_failed",
-			"asset_failed",
+			"asset_failed"
+		] );
+		// The resumed outage keeps failing: each frame's fresh burst
+		// (new texts, so the poll reports them) lands inside the gap
+		// of the one before, nothing files, until a failure arrives a
+		// full gap after the fresh arm - that one files it.
+		for ( let i = 2; i <= 5; i++ ) {
+			characterError = `TypeError: Failed to fetch (sustained ${i})`;
+			owners.audio.error = () => `TypeError: Failed to fetch (sustained ${i})`;
+			owners.ui.resourceError = () =>
+				`UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained ${i})`;
+			const keepAliveStart = assetReports().length;
+			await frame();
+			assert.deepEqual( assetReports().slice( keepAliveStart ), [], `sustained ${i} files nothing` );
+		}
+		characterError = "TypeError: Failed to fetch (sustained 6)";
+		owners.audio.error = () => "TypeError: Failed to fetch (sustained 6)";
+		owners.ui.resourceError = () =>
+			"UI image unavailable; retrying: /assets/ui/burst2.ddj: TypeError: Failed to fetch (sustained 6)";
+		const filingStart = assetReports().length;
+		await frame();
+		assert.deepEqual( assetReports().slice( filingStart ).map( report => report.code ), [
 			"asset_offline"
+		] );
+		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
+		// A later blink is a new streak, not this outage's tail: its
+		// first failure arrives more than a full gap after the last
+		// one above, so its burst arms fresh and files nothing - the
+		// arm an earlier streak left must not survive the silence.
+		characterError = null;
+		owners.audio.error = () => null;
+		owners.ui.resourceError = () => null;
+		for ( let i = 0; i < 6; i++ ) await frame();
+		characterError = "TypeError: Failed to fetch (blink)";
+		owners.audio.error = () => "TypeError: Failed to fetch (blink)";
+		owners.ui.resourceError = () =>
+			"UI image unavailable; retrying: /assets/ui/burst3.ddj: TypeError: Failed to fetch (blink)";
+		const blinkStart = assetReports().length;
+		await frame();
+		assert.deepEqual( assetReports().slice( blinkStart ).map( report => report.code ), [
+			"asset_failed",
+			"asset_failed"
 		] );
 		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
 		// The asset worker's death still stops the session: fatal
