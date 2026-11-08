@@ -40,12 +40,16 @@ The bearer's damage text (damageFeedback) and the pet's pose cue (entities.ts)
 both read it here, so a change to the pulse lands in one place.
 ================
 */
-export function decodePetBondPulse( p: Uint8Array ): { gid: number; bear: number; kind: number; damage?: number; } {
+export function decodePetBondPulse(
+	p: Uint8Array
+): { gid: number; bear: number; kind: 1 | 2; damage?: number; } {
 	if ( p.length !== 9 && p.length !== 13 ) throw Error( "Invalid pet bond pulse length" );
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	const gid = v.getUint32( 0, true ), bear = v.getUint32( 4, true ), kind = p[8]!;
 	if ( !gid || !bear || (kind !== 1 && kind !== 2) || (p.length === 13 && kind !== 1) ) {
 		throw Error( "Invalid pet bond pulse" );
 	}
-	return p.length === 13 ? { gid, bear, kind, damage: v.getUint32( 9, true ) } : { gid, bear, kind };
+	// The throw above proves the kind; TypeScript does not carry it out of the test.
+	const known = kind as 1 | 2;
+	return p.length === 13 ? { gid, bear, kind: known, damage: v.getUint32( 9, true ) } : { gid, bear, kind: known };
 }
