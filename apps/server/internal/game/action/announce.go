@@ -244,10 +244,12 @@ linked item's reference (0 when the notice links no item): its reference
 rows ride ahead of the notice in the same division frames, because a
 viewer who was never sent that reference cannot render the link
 (BUG-084 - the bootstrap preloads only Degree-1 references, so a Degree
-2-9 seal or advanced item is unknown on most viewers).
+2-9 seal or advanced item is unknown on most viewers). Returns true when
+the line went out and false when the kind's bucket dropped it, so a
+caller folding another line into this one only folds on a real post.
 ================
 */
-func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, refObjID uint32, nowMs int64) {
+func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, refObjID uint32, nowMs int64) bool {
 	limit := announceCap(tunables.Current(), kind)
 	a := &rt.announcer
 	a.mu.Lock()
@@ -264,7 +266,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	}
 	if int64(len(recent)) >= limit {
 		a.windows[key] = recent
-		return
+		return false
 	}
 	a.windows[key] = append(recent, nowMs)
 	text = clampNotice(text)
@@ -287,6 +289,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	frames = append(frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division, Frames: frames})
 	a.feed = append(a.feed, announcedLine{division, text})
+	return true
 }
 
 /*
@@ -496,9 +499,10 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 ================
 Runtime.breakNoticeQuiet
 
-Whether this character's last break notice is at least
-breakNoticePerCharacterMs old, recording it when so (#1738: the
-per-character cap under the break kind's per-minute shard cap).
+Whether this character's last break-channel notice is at least
+breakNoticePerCharacterMs old (#1738: the per-character cap under the
+break kind's per-minute shard cap). A caller that goes on to post
+records the line with breakNoticeRecord.
 ================
 */
 func (rt *Runtime) breakNoticeQuiet(division, name string, nowMs int64) bool {
@@ -519,8 +523,27 @@ func (rt *Runtime) breakNoticeQuiet(division, name string, nowMs int64) bool {
 			}
 		}
 	}
-	a.breaks[key] = nowMs
 	return true
+}
+
+/*
+================
+Runtime.breakNoticeRecord
+
+Starts the character's breakNoticePerCharacterMs window, called by a
+line that is posting (the break line records at its gate, the failure
+line only once its post is confirmed, so a bucket-dropped failure
+never consumes the window its folded break line would need).
+================
+*/
+func (rt *Runtime) breakNoticeRecord(division, name string, nowMs int64) {
+	a := &rt.announcer
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.breaks == nil {
+		a.breaks = map[string]int64{}
+	}
+	a.breaks[division+"\x00"+name] = nowMs
 }
 
 /*
@@ -551,6 +574,7 @@ func (rt *Runtime) announceBreak(division string, character *enterworld.Characte
 	if !rt.breakNoticeQuiet(division, character.Name, nowMs) {
 		return
 	}
+	rt.breakNoticeRecord(division, character.Name, nowMs)
 	name, seal := rt.announceItemName(codename)
 	who := announceAlias(character)
 	text := fmt.Sprintf("%s broke %s%s", who, name, seal)
@@ -610,9 +634,12 @@ opted in on the account page - the break notice's opt-in
 "a player", never the character name, and the line links nothing (the
 break channel), so the alias cannot lead to a character. The wording
 names the outcome: destroyed, saved by its Immortal option, or dropped
-to its new plus. Returns true when it posted, so the caller folds a
-destroyed item's break line into this one instead of posting both. A
-notice only: the reinforcement's outcome stands either way.
+to its new plus. Returns true only when the line actually posted (the
+kind's shard bucket can still drop it), so the caller folds a destroyed
+item's break line into this one instead of posting both, and only then.
+The line also keeps the break channel's per-character window, shared
+with the break line, and spends it only on a post. A notice only: the
+reinforcement's outcome stands either way.
 ================
 */
 func (rt *Runtime) announcePlusFail(division string, character *enterworld.Character, codename string, outcome alchemy.Outcome, nowMs int64) bool {
@@ -621,6 +648,9 @@ func (rt *Runtime) announcePlusFail(division string, character *enterworld.Chara
 	}
 	attempted := int(outcome.From) + 1
 	if attempted < rt.Announce.PlusFailMin {
+		return false
+	}
+	if !rt.breakNoticeQuiet(division, character.Name, nowMs) {
 		return false
 	}
 	name, seal := rt.announceItemName(codename)
@@ -644,8 +674,11 @@ func (rt *Runtime) announcePlusFail(division string, character *enterworld.Chara
 	if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 		text = strings.Replace(text, seal, "", 1)
 	}
-	rt.announce(division, announcePlusFail, text, wire.NoticeLink{}, 0, nowMs)
-	return true
+	posted := rt.announce(division, announcePlusFail, text, wire.NoticeLink{}, 0, nowMs)
+	if posted {
+		rt.breakNoticeRecord(division, character.Name, nowMs)
+	}
+	return posted
 }
 
 /*
