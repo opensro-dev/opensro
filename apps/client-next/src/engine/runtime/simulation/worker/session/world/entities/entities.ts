@@ -1431,7 +1431,16 @@ export function createEntities(
 					removalTail = data.slice( count * 4 );
 					return;
 				}
-				if ( !staged || remaining <= 0 ) {
+				if ( !staged ) {
+					// #2882: a chunk can outlive its bracket (the bracket was
+					// split away by a reset, or this is a replayed tail after
+					// the finalize). Native 0x77BDC0 appends into the
+					// persistent key-0 buffer that the next start (0x77BD30)
+					// rewinds, so stray bytes are never consumed; drop the
+					// chunk instead of killing the session.
+					return;
+				}
+				if ( remaining <= 0 ) {
 					throw new Error( "Unexpected object-list chunk" );
 				}
 				// Reserve raw payload capacity before spawn can copy an unknown family.
