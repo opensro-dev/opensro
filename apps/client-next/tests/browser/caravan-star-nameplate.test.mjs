@@ -32,10 +32,11 @@ test( "a rostered 5-star transport carries its mark in the browser", { timeout: 
 			document.querySelector( "output" )?.textContent?.includes( "runtime: running" )
 		);
 		const proof = await page.evaluate( async () => {
-			const { runtime } = await import(
-				Array.from( document.scripts ).find( s => s.src && new URL( s.src ).pathname === "/src/bootstrap.ts" )
-					.src
+			const boot = Array.from( document.scripts ).find(
+				s => s.src && new URL( s.src ).pathname === "/src/bootstrap.ts"
 			);
+			if ( !boot ) throw Error( "bootstrap script missing" );
+			const { runtime } = await import( boot.src );
 			runtime.dispose();
 			const { createUi } = await import( "/src/engine/runtime/ui/ui.ts" );
 			const { createPlatform } = await import( "/src/engine/runtime/platform/platform.ts" );

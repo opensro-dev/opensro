@@ -25,6 +25,19 @@ const { defaultGameOptions } = await import( "../../src/engine/foundation/gamepl
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 
 const options = defaultGameOptions();
+
+/*
+================
+layoutFor
+
+The layout reads the whole GameplayState type; the fixtures below carry
+only the fields the overhead rows consult.
+================
+*/
+function layoutFor( entity, game ) {
+	return overheadLayout( entity, local, /** @type {any} */ (game), options );
+}
+
 const local = { gid: 1, refObjId: 1907, kind: "local-player", name: "Me", heading: 0, regionId: 257, x: 0, y: 0, z: 0 };
 const transport = {
 	...local,
@@ -39,7 +52,7 @@ const transport = {
 
 test("a rostered transport carries the five-star mark above its stack", () => {
 	const game = { localGid: 1, social: emptySocial( "Me" ), vitals: [], caravanStars: [ transport.gid ] };
-	const layout = overheadLayout( transport, local, game, options );
+	const layout = layoutFor( transport, game );
 	assert.ok( layout.caravanMark, "the mark is set" );
 	assert.match( layout.caravanMark.path, /com_star\.png$/ );
 	assert.deepEqual( layout.caravanMark.tint, tradeStarTint( 5 ) );
@@ -52,18 +65,18 @@ test("a rostered transport carries the five-star mark above its stack", () => {
 test("no roster, no mark: the native stack is untouched", () => {
 	const bare = { localGid: 1, social: emptySocial( "Me" ), vitals: [] };
 	for ( const game of [ bare, { ...bare, caravanStars: [] }, { ...bare, caravanStars: [ 77 ] } ] ) {
-		const layout = overheadLayout( transport, local, game, options );
+		const layout = layoutFor( transport, game );
 		assert.equal( layout.caravanMark, null );
 		assert.equal( layout.speechY, -20 );
 	}
 	// Only a COS carries the mark, whatever the roster names.
 	const monster = { ...transport, kind: "monster" };
 	assert.equal(
-		overheadLayout( monster, local, { ...bare, caravanStars: [ transport.gid ] }, options ).caravanMark,
+		layoutFor( monster, { ...bare, caravanStars: [ transport.gid ] } ).caravanMark,
 		null
 	);
 	// The /id-off pass hides it with the rest of the kind-4 rows.
-	const layout = overheadLayout( transport, local, { ...bare, caravanStars: [ transport.gid ] }, options );
+	const layout = layoutFor( transport, { ...bare, caravanStars: [ transport.gid ] } );
 	assert.equal( withoutBoardPass( layout ).caravanMark, null );
 });
 

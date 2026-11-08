@@ -219,6 +219,12 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200", Catalogue: true},
 	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300",
 		Catalogue: true},
+	// #2958 (game/tunables): the 5-star caravan stakes - a bigger thief
+	// cut, a bigger hunter escort share, and the bounty on a thief who
+	// attacked a 5-star caravan. They bite only under SRO_TRADE_TIERS.
+	{Env: "SRO_TRADE_FIVE_STAR_THIEF_PERCENT", NomadVar: "trade_five_star_thief_percent", Default: "50", Catalogue: true},
+	{Env: "SRO_TRADE_FIVE_STAR_HUNTER_PERCENT", NomadVar: "trade_five_star_hunter_percent", Default: "50", Catalogue: true},
+	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", NomadVar: "trade_five_star_bounty_percent", Default: "50", Catalogue: true},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
