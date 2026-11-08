@@ -47,6 +47,9 @@ test("the native gate and the later layouts decode side by side", () => {
 		{ layout: layout( { open: false } ) },
 		{ layouts: { pcroom: layout(), winter: layout( { textPosition: [ 32, 40 ] } ) } }
 	);
+	assert.ok( data.gate );
+	assert.ok( data.pcroom );
+	assert.ok( data.winter );
 	assert.equal( data.gate.open, false );
 	assert.equal( eventInterfaceShown( data.gate ), false );
 	assert.equal( eventInterfaceShown( data.pcroom ), true );
