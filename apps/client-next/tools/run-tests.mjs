@@ -70,6 +70,38 @@ const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_
 // the same idea). Only files that actually ran are timed; a reused pass
 // spent nothing. SRO_TEST_FILE_BUDGET_MS overrides it.
 const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// Named per-file caps replace the default for the files listed there
+// (fileBudgets below); the ledger only ever shrinks.
+const BUDGET_LEDGER = path.join( clientRoot, "tests", "architecture", "test-file-budgets.txt" );
+
+/*
+================
+fileBudgets
+
+The named per-file caps, as client-relative forward-slash paths to
+milliseconds. The ledger names the files that already ran longer than the
+default when the budget arrived - execution.test.mjs measured 109 s on
+the two-core CI runner against 4.5 s on a 16-core workstation (#2907) -
+so the budget can bind every other file today instead of waiting for
+that one to be split. An entry naming a file that no longer exists
+fails the run, the test-type-debt rule: debt is deleted, not carried.
+================
+*/
+function fileBudgets() {
+	const budgets = new Map();
+	if ( !fs.existsSync( BUDGET_LEDGER ) ) return budgets;
+	for ( const raw of fs.readFileSync( BUDGET_LEDGER, "utf8" ).split( /\r?\n/ ) ) {
+		const line = raw.trim();
+		if ( !line || line.startsWith( "#" ) ) continue;
+		const match = /^(\S+)\s+(\d+)$/.exec( line );
+		if ( !match ) throw new Error( `test-file-budgets: unreadable line: ${raw}` );
+		if ( !fs.existsSync( path.join( clientRoot, match[1] ) ) ) {
+			throw new Error( `test-file-budgets: ${match[1]} no longer exists; remove its line` );
+		}
+		budgets.set( match[1].replaceAll( "\\", "/" ), Number( match[2] ) * 1000 );
+	}
+	return budgets;
+}
 
 /*
 ================
@@ -362,11 +394,15 @@ async function main() {
 			}\n`
 		);
 	}
-	const overBudget = slowest.filter( ( [, s] ) => s * 1000 > TEST_FILE_BUDGET_MS );
+	const budgets = fileBudgets();
+	const capOf = file =>
+		budgets.get( path.relative( clientRoot, file ).replaceAll( "\\", "/" ) ) ??
+			TEST_FILE_BUDGET_MS;
+	const overBudget = slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) );
 	for ( const [file, s] of overBudget ) {
 		process.stdout.write(
-			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over the ` +
-				`${TEST_FILE_BUDGET_MS / 1000}s per-file budget (#2907)\n`
+			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over its ` +
+				`${capOf( file ) / 1000}s per-file budget (#2907)\n`
 		);
 	}
 	if ( failed.size || overBudget.length ) process.exitCode = 1;

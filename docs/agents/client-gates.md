@@ -33,5 +33,7 @@ Per test file, the runner (`tools/run-tests.mjs`) pays a fixed cost per file - a
 TypeScript graph it loads - before the first test runs: observed ~0.5-2 s per file even for trivial tests, so a
 suite's floor is its file count times that cost, divided by the worker concurrency. Targeted suites land at
 13-15 s. The runner prints the ten slowest files per run and fails any file over the 60 s per-file budget
-(`SRO_TEST_FILE_BUDGET_MS` overrides it); a file near the budget is split, not tolerated. The full suite is
-CI's measurement, never a local one.
+(`SRO_TEST_FILE_BUDGET_MS` overrides it); a file near the budget is split, not tolerated. Named exceptions
+with their own caps live in `apps/client-next/tests/architecture/test-file-budgets.txt` and only shrink
+(one entry today: `execution.test.mjs`, 109 s on the two-core CI runner). The full suite is CI's
+measurement, never a local one.
