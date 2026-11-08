@@ -1,6 +1,7 @@
 # Per-file budget allowances for the client test runner (#2907).
 #
-# The default per-file budget is 60 s (SRO_TEST_FILE_BUDGET_MS). A file
+# The default per-file budget is 60 s (SRO_TEST_FILE_BUDGET_MS; the CI
+# source lane sets 20 s). A file
 # listed here gets the cap on its line instead. An entry names debt, it
 # does not excuse it: lower the cap as the file gets faster, delete the
 # line when the file fits the default, and never raise a cap without

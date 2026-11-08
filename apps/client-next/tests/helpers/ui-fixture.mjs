@@ -27,7 +27,7 @@ const servedBytes = new Map();
 readServedBytes
 ================
 */
-function readServedBytes( path ) {
+export function readServedBytes( path ) {
 	let bytes = servedBytes.get( path );
 	if ( !bytes ) {
 		bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
