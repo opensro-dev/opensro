@@ -77,6 +77,9 @@ func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster
 	value.Party = roster.party
 	tier, _ := rt.caravanTier(c)
 	value.OneStar = tier == 1
+	// Port-only, not native (#2958): only the SRO_TRADE_TIERS gold tier
+	// counts; the native units tier reaching 5 changes nothing.
+	value.FiveStar = rt.TradeTiers && tier == 5
 	for _, member := range roster.members {
 		if member.ID == c.ID {
 			member = c
@@ -103,6 +106,10 @@ func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster
 	if rt.TradeJobBonus {
 		// Port-only, not native (tradejobbonus.go).
 		applyTradeJobBonus(&distribution, value, s)
+	}
+	if value.FiveStar {
+		// Port-only, not native (tradetiers.go, #2958).
+		applyFiveStarTradeBonus(&distribution, value, s)
 	}
 	out := []tradePayout{{c, distribution.Actor}}
 	if !roster.party || value.Profit <= 0 {

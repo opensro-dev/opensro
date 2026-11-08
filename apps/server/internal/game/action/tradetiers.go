@@ -29,6 +29,16 @@ home town is the one specialty shop that stocks it (STORE_<town>_SPECIAL),
 so no buy town is stored; the outpost traders (SPECIAL2) and every other
 pair stay native.
 
+Stakes (#2958). The fifth star is danger, not only money. A thief party
+selling a 5-star caravan's worth of goods splits a larger gold share, and
+each hunter escorting a trader's 5-star sale earns a larger gold share
+(applyFiveStarTradeBonus, in the sale's reward distribution). A hunter
+who kills a thief marked for attacking a 5-star caravan - its transport
+or its owner, within caravanRobWindowMs - earns raised job EXP (the
+bounty, in pkreward.go). The three percents are live tunables (game/
+tunables, the Trade group). The caravan's star itself shows on the
+transport's nameplate, client side.
+
 Off, the default here, every tier and price is native; the GameWorld's
 Nomad job turns it on.
 
@@ -41,10 +51,12 @@ import (
 	"os"
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -285,4 +297,150 @@ func (rt *Runtime) caravanTier(c *enterworld.Character) (uint8, uint32) {
 	}
 	value := rt.caravanCargoValue(c)
 	return caravan.DifficultyTier(value), caravan.StarRating(value, cargoHolds(c, cargoSpecialGoods))
+}
+
+// caravanRobWindowMs is how long an attack on a 5-star caravan keeps its
+// thief marked for the hunter bounty: a robbery - chase, kill the
+// transport, fight over the goods - resolves inside two minutes; past
+// it, a hunter's kill is an ordinary road kill again.
+const caravanRobWindowMs = 120_000
+
+// caravanThiefMark is one thief's last attack on a 5-star caravan
+// (runtime.go's caravanThiefMarks; session only, like the aggression
+// indexes - a relog clears it and the thief simply robs again).
+type caravanThiefMark struct {
+	at int64
+}
+
+/*
+================
+noteCaravanAttack
+
+Port-only, not native (#2958): a dressed thief's landed hit on a 5-star
+caravan - its transport or its owner - marks the thief for the hunter
+bounty. Called from the two strike doors once the hit is in, so refused
+or whiffed casts never mark. The tier is the owner's own caravan tier at
+the hit; with SRO_TRADE_TIERS off nothing is ever marked.
+================
+*/
+func (rt *Runtime) noteCaravanAttack(attacker, owner *enterworld.Character, now int64) {
+	if !rt.TradeTiers || attacker == nil || owner == nil || attacker.ID == owner.ID {
+		return
+	}
+	if enterworld.DressedJob(attacker) != domain.JobThief {
+		return
+	}
+	if tier, _ := rt.caravanTier(owner); tier != 5 {
+		return
+	}
+	rt.caravanThiefMarks.Store(attacker.ID, caravanThiefMark{at: now})
+}
+
+/*
+================
+caravanThiefMarked
+
+Whether the thief still carries a live 5-star mark; an expired mark is
+dropped on read so the map holds only live quarrels.
+================
+*/
+func (rt *Runtime) caravanThiefMarked(thief *enterworld.Character, now int64) bool {
+	if thief == nil {
+		return false
+	}
+	stamp, ok := rt.caravanThiefMarks.Load(thief.ID)
+	if !ok {
+		return false
+	}
+	mark := stamp.(caravanThiefMark)
+	if now < mark.at || now-mark.at > caravanRobWindowMs {
+		rt.caravanThiefMarks.Delete(thief.ID)
+		return false
+	}
+	return true
+}
+
+/*
+================
+fiveStarBountyPercent
+
+Port-only, not native (#2958): the bounty percent on a hunter's job-kill
+EXP for killing a marked thief (pkreward.go), or 0. A paid bounty is
+consumed: the thief must attack a 5-star caravan again to be worth it
+twice.
+================
+*/
+func (rt *Runtime) fiveStarBountyPercent(killer, victim *enterworld.Character, now int64) int64 {
+	if !rt.TradeTiers || enterworld.DressedJob(killer) != domain.JobHunter ||
+		enterworld.DressedJob(victim) != domain.JobThief || !rt.caravanThiefMarked(victim, now) {
+		return 0
+	}
+	rt.caravanThiefMarks.Delete(victim.ID)
+	return tunables.Current().Int(tunables.TradeFiveStarBountyPercent)
+}
+
+/*
+================
+applyFiveStarTradeBonus
+
+Port-only, not native (#2958): the 5-star stakes in a sale's reward
+distribution. A thief's party splits its gold share raised by the thief
+percent (the solo thief's own credit is the same share), and each hunter
+on a trader's sale earns its gold share raised by the hunter percent.
+Only gold moves; job EXP on a sale stays as DistributeTradeReward and
+SRO_TRADE_JOB_BONUS left it, the same posture as tradejobbonus.go. The
+input's FiveStar is set only under SRO_TRADE_TIERS, so off is native.
+================
+*/
+func applyFiveStarTradeBonus(out *commerce.TradeRewardDistribution, in commerce.TradeRewardInput, s *tunables.Settings) {
+	if !in.FiveStar || in.Profit <= 0 {
+		return
+	}
+	switch in.Job {
+	case domain.JobThief:
+		percent := s.Int(tunables.TradeFiveStarThiefPercent)
+		out.Thief.Gold += out.Thief.Gold * percent / 100
+		out.Actor.Gold += out.Actor.Gold * percent / 100
+	case domain.JobTrader:
+		percent := s.Int(tunables.TradeFiveStarHunterPercent)
+		out.Hunter.Gold += out.Hunter.Gold * percent / 100
+	}
+}
+
+// caravanStarPushIntervalMs paces the 5-star roster push: a nameplate
+// mark is a slow view, the beta world map roster's own pace.
+const caravanStarPushIntervalMs = 2000
+
+/*
+================
+CaravanStarFrames
+
+Port-only, not native (#2958): the division's 5-star caravan transport
+gids (wire.OpCaravanStars), recomputed at the push pace from the same
+tier the sales use, so a caravan that loads or sells its way across the
+50M mark gains and loses its nameplate star on its own. The wiring hook
+pushes the frame to the whole division; it goes out even when empty so
+a lost fifth star clears. Nil off the pace, and nil with the flag off,
+when no client ever hears of the mark.
+================
+*/
+func (rt *Runtime) CaravanStarFrames(division string, views []simulation.SessionView, nowMs int64) []simulation.Frame {
+	if !rt.TradeTiers || nowMs < rt.caravanStarDueMs {
+		return nil
+	}
+	rt.caravanStarDueMs = nowMs + caravanStarPushIntervalMs
+	gids := []uint32{}
+	for _, view := range views {
+		if view.DivisionID != division {
+			continue
+		}
+		c := rt.findCharacterByID(division, view.CharacterID)
+		if c == nil || c.ActiveCOS == nil {
+			continue
+		}
+		if tier, _ := rt.caravanTier(c); tier == 5 {
+			gids = append(gids, c.ActiveCOS.GID)
+		}
+	}
+	return []simulation.Frame{{Opcode: wire.OpCaravanStars, Payload: wire.EncodeCaravanStars(gids)}}
 }
