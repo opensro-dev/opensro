@@ -33,6 +33,8 @@ func publicationDeps(t *testing.T) *Deps {
 	})
 	writeSetTable(t, dir, "refsetitemgroup.txt", [][]string{
 		setGroupRow("1", "13", "ITEM_11_SET_A_CH_M_HEAVY", "0", "21", "2", "0", "3"),
+		// A weapon set: no tiers, so only its name is published.
+		setGroupRow("1", "39", "ITEM_11_SET_A_WEAPON"),
 	})
 	// Two pieces of group 13 (the shoulder listed before the head, and a rare twin of the head sharing
 	// its name symbol), a piece of another group and a disabled row.
@@ -42,6 +44,7 @@ func publicationDeps(t *testing.T) *Deps {
 		pieceRow("1", "SN_PIECE_HEAD", "1", "13"),
 		pieceRow("1", "SN_OTHER_SET", "1", "14"),
 		pieceRow("0", "SN_DISABLED", "3", "13"),
+		pieceRow("1", "SN_STAFF", "6", "39"),
 	})
 	return &Deps{SetGroups: NewTextdataSetGroups(dir)}
 }
@@ -88,6 +91,8 @@ func TestPublishedSetsListTheTiers(t *testing.T) {
 				{Option: SetOptionResistAll, Value: 10},
 			}},
 		},
+	}, {
+		ID: 39, Name: "SN_ITEM_11_SET_A_WEAPON", Pieces: []SetPiece{}, Tiers: []SetTierPublication{},
 	}}
 	if got := deps.PublishedSets(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("published = %+v, want %+v", got, want)

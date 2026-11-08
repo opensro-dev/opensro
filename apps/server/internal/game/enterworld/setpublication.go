@@ -92,14 +92,21 @@ Every loaded set group with its tiers, ascending by id.
 */
 func (t *TextdataSetGroups) PublishedSets() []SetPublication {
 	t.once.Do(t.load)
-	ids := make([]int64, 0, len(t.tiers))
+	seen := map[int64]bool{}
+	ids := make([]int64, 0, len(t.tiers)+len(t.present))
 	for id := range t.tiers {
+		seen[id] = true
 		ids = append(ids, id)
+	}
+	for id := range t.present {
+		if !seen[id] {
+			ids = append(ids, id)
+		}
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	out := make([]SetPublication, 0, len(ids))
 	for _, id := range ids {
-		set := SetPublication{ID: id, Name: t.names[id], Pieces: append([]SetPiece{}, t.pieces[id]...)}
+		set := SetPublication{ID: id, Name: t.names[id], Pieces: append([]SetPiece{}, t.pieces[id]...), Tiers: []SetTierPublication{}}
 		for _, tier := range t.tiers[id] {
 			published := SetTierPublication{Pieces: tier.RequiredCount, Options: []SetOptionPublication{}}
 			for _, option := range t.options[tier.MagicGroupID] {

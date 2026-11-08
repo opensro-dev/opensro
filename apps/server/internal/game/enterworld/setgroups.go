@@ -160,6 +160,7 @@ type TextdataSetGroups struct {
 	options map[int][]SetOption
 	names   map[int64]string
 	pieces  map[int64][]SetPiece
+	present map[int64]bool
 }
 
 /*
@@ -228,6 +229,7 @@ func (t *TextdataSetGroups) load() {
 	t.tiers = map[int64][]SetTier{}
 	t.names = map[int64]string{}
 	t.pieces = map[int64][]SetPiece{}
+	t.present = map[int64]bool{}
 	t.options = map[int][]SetOption{}
 	codenames := map[int]string{}
 
@@ -317,6 +319,11 @@ func (t *TextdataSetGroups) load() {
 				tiers = append(tiers, tier)
 			}
 		}
+		// The name is kept for a group without tiers too (the weapon and shield sets): the
+		// tooltip still names the set an item belongs to.
+		if len(fields) > setNameSymbolCell {
+			t.names[group] = strings.TrimSpace(fields[setNameSymbolCell])
+		}
 		if len(tiers) == 0 {
 			continue
 		}
@@ -324,9 +331,6 @@ func (t *TextdataSetGroups) load() {
 			return tiers[i].RequiredCount < tiers[j].RequiredCount
 		})
 		t.tiers[group] = tiers
-		if len(fields) > setNameSymbolCell {
-			t.names[group] = strings.TrimSpace(fields[setNameSymbolCell])
-		}
 	}
 	t.loadPieces()
 	log.Infof("bootstrap: equipment set catalogue loaded from %s (%d group(s), %d magic group(s))", t.dir, len(t.tiers), len(t.options))
@@ -358,7 +362,8 @@ func setTierRequirement(codename string) (int, bool) {
 loadPieces
 
 loadPieces lists each set group's pieces for the tooltip: every enabled
-itemdata row whose column 62 names a group that has tiers, once per name
+itemdata row whose column 62 names a group that has tiers (a group without
+tiers is marked present, so its name is published, but lists no pieces), once per name
 symbol (a piece and its rare twin share one), ordered by the item's slot
 (TypeID4: head, shoulder, chest, legs, hands, feet for armor; earring,
 necklace, ring for accessories). Absent itemdata shards leave the lists
@@ -375,7 +380,12 @@ func (t *TextdataSetGroups) loadPieces() {
 				continue
 			}
 			group := setGroupIDOf(fields)
-			if group <= 0 || len(t.tiers[group]) == 0 {
+			if group <= 0 || t.names[group] == "" {
+				continue
+			}
+			// A group an enabled item names is published, with its pieces only when it has tiers.
+			t.present[group] = true
+			if len(t.tiers[group]) == 0 {
 				continue
 			}
 			slot, ok := textdataInt(fields[setPieceSlotCell])

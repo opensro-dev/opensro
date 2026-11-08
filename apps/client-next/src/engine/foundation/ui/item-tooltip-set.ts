@@ -145,13 +145,13 @@ function optionText( option: number, value: number, text: ( symbol: string ) => 
 ================
 itemSetOf
 
-The published set an item belongs to, with at least one tier; undefined otherwise.
+The published set an item belongs to; undefined otherwise. A set without tiers
+(the weapon and shield sets) is published for its name only.
 ================
 */
 function itemSetOf( item: InventoryItem, sets: readonly EquipmentSet[] ): EquipmentSet | undefined {
 	const id = item.tooltip?.fields.setId ?? 0;
-	const set = id > 0 ? sets.find( row => row.id === id ) : undefined;
-	return set && set.tiers.length ? set : undefined;
+	return id > 0 ? sets.find( row => row.id === id ) : undefined;
 }
 
 /*
@@ -176,8 +176,11 @@ export function itemTooltipSetName(
 itemTooltipSet
 
 The set block of one item's tooltip; empty when the item names no set the
-shard published. The tier in force is the highest the worn count reaches
-(tiers replace each other, they never add).
+shard published, or a set without tiers (a weapon or shield set shows only its
+name under the title). The tier in force is the highest the worn count reaches
+(tiers replace each other, they never add). Like the later client's panel it
+lists the tiers reached and the next one to reach, not the ones beyond (an
+unworn set shows only its first tier).
 ================
 */
 export function itemTooltipSet(
@@ -187,7 +190,7 @@ export function itemTooltipSet(
 	text: ( symbol: string ) => string
 ): readonly TooltipRow[] {
 	const set = itemSetOf( item, sets );
-	if ( !set ) return [];
+	if ( !set || !set.tiers.length ) return [];
 	const count = wornSetPieces( equipment ).get( set.id ) ?? 0,
 		worn = wornSetSlots( equipment ).get( set.id ),
 		total = set.tiers[set.tiers.length - 1]!.pieces,
@@ -204,7 +207,8 @@ export function itemTooltipSet(
 			);
 		}
 	}
-	for ( const tier of set.tiers ) {
+	const next = set.tiers.findIndex( tier => tier.pieces > count );
+	for ( const tier of next < 0 ? set.tiers : set.tiers.slice( 0, next + 1 ) ) {
 		const on = tier === active;
 		rows.push( { value: " ", color: 0 } );
 		rows.push( { value: `${name}(${tier.pieces})`, color: on ? COLOR_NAME : COLOR_DIM, strong: on } );

@@ -77,10 +77,7 @@ test("the block follows the later client's layout: name and count, pieces, tiers
 		" ",
 		"Destruction(4)",
 		"Set enforcement : 2 enhancement",
-		"Increase all resistance : 10 Increase",
-		" ",
-		"Destruction(6)",
-		"Set enforcement : 4 enhancement"
+		"Increase all resistance : 10 Increase"
 	] );
 	// Worn pieces are bright, the others dim; the tier in force is in colour, higher tiers dim.
 	const byValue = value => defined( rows.find( r => r.value === value ) );
@@ -90,6 +87,28 @@ test("the block follows the later client's layout: name and count, pieces, tiers
 	assert.equal( byValue( "Destruction(2)" ).color, byValue( "Destruction (2/6)" ).color );
 	assert.equal( byValue( "Destruction(4)" ).color, byValue( "Shell" ).color );
 	assert.equal( byValue( "Set enforcement : 1 enhancement" ).color, 0xff2ee6f0 );
+});
+
+test("the tiers shown are those reached and the next one, as the later client's panel", () => {
+	const tiersOf = count =>
+		itemTooltipSet(
+			piece( 1, 13 ),
+			SETS,
+			Array.from( { length: count }, ( _, n ) => piece( n + 1, 13, n + 1 ) ),
+			text
+		)
+			.map( r => r.value ).filter( value => /^Destruction\(\d\)$/.test( value ) );
+	assert.deepEqual( tiersOf( 0 ), [ "Destruction(2)" ] );
+	assert.deepEqual( tiersOf( 1 ), [ "Destruction(2)" ] );
+	assert.deepEqual( tiersOf( 2 ), [ "Destruction(2)", "Destruction(4)" ] );
+	assert.deepEqual( tiersOf( 4 ), [ "Destruction(2)", "Destruction(4)", "Destruction(6)" ] );
+	assert.deepEqual( tiersOf( 6 ), [ "Destruction(2)", "Destruction(4)", "Destruction(6)" ] );
+});
+
+test("a set without tiers (weapons, shields) shows its name under the title and no block", () => {
+	const weapons = publishedEquipmentSets( [ { id: 39, name: "SN_ITEM_11_SET_A_WEAPON", tiers: [] } ] );
+	assert.equal( itemTooltipSetName( piece( 1, 39 ), weapons, noText )?.value, "Power" );
+	assert.deepEqual( itemTooltipSet( piece( 1, 39 ), weapons, [ piece( 1, 39 ) ], noText ), [] );
 });
 
 test("a build without the later text still names the set and the effects in English", () => {
