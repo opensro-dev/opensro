@@ -499,6 +499,10 @@ func (state *divisionMonsterState) queueAIEvents(gid uint32, events []monsterAIE
 		state.aiEvents = make(map[uint32][]monsterAIEvent)
 	}
 	state.aiEvents[gid] = append(state.aiEvents[gid], events...)
+	// A queued event is a wake like the other event doors (impact,
+	// help, hostility set the due to 0): an idle actor now sleeps
+	// until a real due (#2136) and would otherwise sit on the event.
+	state.behavior.set(gid, 0)
 }
 
 // takeAIEvents consumes the tactics events queued by fear and confusion.
