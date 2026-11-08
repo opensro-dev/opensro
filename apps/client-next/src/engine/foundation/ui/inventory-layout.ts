@@ -44,10 +44,10 @@ export interface BagTabOrigin {
 }
 
 // 59DF10: the inventory's tabs start at (4, -0x17) from the bag pane.
-export const INVENTORY_BAG_TABS = { x: 4, y: -23 } as const satisfies BagTabOrigin;
+export const INVENTORY_BAG_TABS = { x: 4, y: -23 } as const;
 // 644170: the gacha's tabs start at (0x1db, 0x37) against its bag frame at
 // (475, 77) in ifghacha.txt: flush with the frame, 22 px above it.
-export const GACHA_BAG_TABS = { x: 0, y: -22 } as const satisfies BagTabOrigin;
+export const GACHA_BAG_TABS = { x: 0, y: -22 } as const;
 // 644C20 creates the gacha's bag cells at (0x1ee, 0x5b) against the same
 // frame: one pixel right of and below the inventory's (18, 13).
 export const GACHA_BAG_CELL_SHIFT = 1;
