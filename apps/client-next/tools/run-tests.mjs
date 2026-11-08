@@ -21,6 +21,12 @@ unchanged tree is a stat sweep. The cache lives in .state/client-test-cache
 and is keyed by the Node version, platform and test environment; any change
 there discards it. SRO_CHECK_FORCE=1 runs everything.
 
+Every run times the files it actually executed and prints the thirty
+slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
+run, and a run over its whole-suite budget (TEST_SUITE_BUDGET_MS, when
+one is set) fails too (#2907, #2929), so suite time cannot creep back
+one file at a time or in aggregate.
+
 ===========================================================================
 */
 import { run } from "node:test";
@@ -60,6 +66,58 @@ const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
 // watchdog's own test.
 const RSS_HEADROOM_MB = 2048;
 const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_HEADROOM_MB;
+// A file that runs longer than this fails the run and names itself, so
+// suite time cannot creep back file by file (the Go server's 30 s budget
+// is the same idea). Only files that actually ran are timed; a reused
+// pass spent nothing. The default stays 60 s: the full check's runtime
+// lane is unmeasured and still slow before the shards land (#2924-#2928),
+// so the tight budget is set where the profile was measured - the CI
+// source lane sets 20 s via SRO_TEST_FILE_BUDGET_MS (the slowest ordinary
+// file took 14.6 s there; docs/agents/client-test-profile.md).
+// SRO_TEST_FILE_BUDGET_MS overrides it everywhere.
+const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// The whole run's wall budget (#2929): the five-minute client budget
+// #2907 named, enforced on the run itself instead of only implied by
+// the per-file caps, so aggregate creep fails too. No cap by default,
+// for the same unmeasured-full-lane reason; the CI source lane sets
+// 300 s via SRO_TEST_SUITE_BUDGET_MS (it measured 79-113 s there).
+const TEST_SUITE_BUDGET_MS = Number( process.env.SRO_TEST_SUITE_BUDGET_MS ) || 0;
+// How many of the slowest files each run names: enough that the suite
+// profile (docs/agents/client-test-profile.md, #2929) can be written
+// straight from a CI log line.
+const SLOWEST_PRINTED = 30;
+// Named per-file caps replace the default for the files listed there
+// (fileBudgets below); the ledger only ever shrinks.
+const BUDGET_LEDGER = path.join( clientRoot, "tests", "architecture", "test-file-budgets.txt" );
+
+/*
+================
+fileBudgets
+
+The named per-file caps, as client-relative forward-slash paths to
+milliseconds. The ledger names the files that already ran longer than the
+default when the budget arrived - execution.test.mjs measured 109 s on
+the two-core CI runner against 4.5 s on a 16-core workstation (#2907) -
+so the budget can bind every other file today instead of waiting for
+that one to be split. An entry naming a file that no longer exists
+fails the run, the test-type-debt rule: debt is deleted, not carried.
+================
+*/
+function fileBudgets() {
+	const budgets = new Map();
+	if ( !fs.existsSync( BUDGET_LEDGER ) ) return budgets;
+	for ( const raw of fs.readFileSync( BUDGET_LEDGER, "utf8" ).split( /\r?\n/ ) ) {
+		const line = raw.trim();
+		if ( !line || line.startsWith( "#" ) ) continue;
+		const match = /^(\S+)\s+(\d+)$/.exec( line );
+		if ( !match ) throw new Error( `test-file-budgets: unreadable line: ${raw}` );
+		if ( !fs.existsSync( path.join( clientRoot, match[1] ) ) ) {
+			throw new Error( `test-file-budgets: ${match[1]} no longer exists; remove its line` );
+		}
+		budgets.set( match[1].replaceAll( "\\", "/" ), Number( match[2] ) * 1000 );
+	}
+	return budgets;
+}
 
 /*
 ================
@@ -280,6 +338,10 @@ async function main() {
 	} );
 	const reused = files.length - pending.length;
 	const failed = new Set(), passed = new Set();
+	// Per-file wall time of the files that run (#2907), from each file
+	// node's own reported duration. Reused files never appear here -
+	// they spent nothing this run.
+	const fileSeconds = new Map();
 	if ( pending.length ) {
 		const logDir = fs.mkdtempSync( path.join( os.tmpdir(), "sro-test-inputs-" ) );
 		process.env.SRO_TEST_INPUT_LOG = logDir;
@@ -300,6 +362,13 @@ async function main() {
 			} );
 			stream.on( "test:pass", data => {
 				if ( data?.file ) passed.add( path.resolve( data.file ) );
+			} );
+			stream.on( "test:complete", data => {
+				// The file's own node (its name is its path) reports the
+				// file's whole duration, process start included.
+				if ( data?.file && data.name === data.file && data.details?.duration_ms !== undefined ) {
+					fileSeconds.set( path.resolve( data.file ), data.details.duration_ms / 1000 );
+				}
 			} );
 			stream.compose( spec ).pipe( process.stdout );
 			await new Promise( ( resolve, reject ) => {
@@ -329,7 +398,37 @@ async function main() {
 	process.stdout.write(
 		`tests: ${files.length} files, ${reused} reused unchanged, ${pending.length} run, ${failed.size} failed in ${seconds}s\n`
 	);
-	if ( failed.size ) process.exitCode = 1;
+	// The slowest files name themselves every run, budgeted or not, so
+	// the next profile is a log line away (#2907, docs/agents/client-gates.md).
+	const slowest = [ ...fileSeconds ].sort( ( a, b ) => b[1] - a[1] );
+	if ( slowest.length ) {
+		process.stdout.write(
+			`tests slowest: ${
+				slowest.slice( 0, SLOWEST_PRINTED ).map(
+					( [file, s] ) => `${path.relative( clientRoot, file )} ${s.toFixed( 1 )}s`
+				).join( ", " )
+			}\n`
+		);
+	}
+	const budgets = fileBudgets();
+	const capOf = file =>
+		budgets.get( path.relative( clientRoot, file ).replaceAll( "\\", "/" ) ) ??
+			TEST_FILE_BUDGET_MS;
+	const overBudget = slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) );
+	for ( const [file, s] of overBudget ) {
+		process.stdout.write(
+			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over its ` +
+				`${capOf( file ) / 1000}s per-file budget (#2907)\n`
+		);
+	}
+	const suiteOver = TEST_SUITE_BUDGET_MS > 0 && Number( seconds ) * 1000 > TEST_SUITE_BUDGET_MS;
+	if ( suiteOver ) {
+		process.stdout.write(
+			`tests budget: the suite ran ${seconds}s, over its ` +
+				`${TEST_SUITE_BUDGET_MS / 1000}s whole-suite budget (#2929)\n`
+		);
+	}
+	if ( failed.size || overBudget.length || suiteOver ) process.exitCode = 1;
 }
 
 await main();

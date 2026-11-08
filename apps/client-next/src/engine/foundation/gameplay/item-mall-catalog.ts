@@ -43,6 +43,24 @@ mallProjection
 */
 export function mallProjection( payload: Uint8Array ) {
 	const value = commerceJson( payload );
+	// The server's entering refusal (ops #1455) is an answer too: the
+	// balances and a reason, no catalogue. Surface it instead of
+	// rejecting the frame for the catalogue it does not carry.
+	if ( typeof value.error === "string" && value.error !== "" ) {
+		return {
+			state: {
+				tabs: [],
+				offers: [],
+				silk: commerceInteger( value.silk ),
+				giftSilk: commerceInteger( value.giftSilk ),
+				points: commerceInteger( value.points ),
+				pending: false,
+				revision: 0
+			},
+			items: undefined,
+			error: caption( value.error )
+		};
+	}
 	if (
 		!Array.isArray( value.tabs ) || value.tabs.length > MAX_MALL_TABS || !Array.isArray( value.offers ) ||
 		value.offers.length > MAX_MALL_OFFERS
@@ -112,5 +130,5 @@ export function mallProjection( payload: Uint8Array ) {
 		pending: false,
 		revision: 0
 	};
-	return { state, items: value.items };
+	return { state, items: value.items, error: undefined };
 }

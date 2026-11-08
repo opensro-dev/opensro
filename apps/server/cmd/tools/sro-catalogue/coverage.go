@@ -102,6 +102,7 @@ var catalogueExempt = map[string]string{
 	"SRO_PREMIUM_UPGRADE":                     "a mall ticket replacement rule; the catalogue publishes no mall listing",
 	"SRO_NAME_CHANGE_SCROLL":                  "adds a scroll to the Item Mall; the catalogue publishes no mall listing, and items.json publishes the scroll either way",
 	"SRO_KILL_STATS":                          "staff telemetry; no catalogue file carries it",
+	"SRO_CONNECTION_JOURNAL":                  "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                "how a worn suit is drawn; the catalogue publishes no rendering",
 	"SRO_JOB_SUIT_TIERS":                      "stats a worn suit grants at runtime; items.json publishes the suits either way",
 	"SRO_MOONLIT_THIEF_SUIT":                  "a worn suit's look; the catalogue publishes no rendering",

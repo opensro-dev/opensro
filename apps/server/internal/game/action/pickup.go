@@ -329,8 +329,19 @@ func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result Op
 		MagicOptions:      grantedItem.MagicOptions,
 		TransformRefObjID: grantedItem.TransformRefObjID, Summon: domain.CloneCOS(grantedItem.Summon),
 	}
+	// #2885: the grant leads with the granted item's reference rows, as
+	// the shared-recipient and COS receipts already do (#1612). The
+	// browser has no item table, so a grant naming a reference this
+	// client never received - its spawn delta went to another audience,
+	// or the drop predates its scope - throws "Unknown inventory
+	// reference" on receipt and ends the session. The rows are small
+	// and the client re-admits a reference it already holds.
+	frames := append(
+		rt.itemReferenceFrames([]inventory.Item{grantedItem}),
+		wire.PickupItemGrantFrames(anim, grant.DestSlot, body, groundItem.Gid, grant.GroundRemainder, questFrames)...,
+	)
 	return OpResult{
-		Frames:    wire.PickupItemGrantFrames(anim, grant.DestSlot, body, groundItem.Gid, grant.GroundRemainder, questFrames),
+		Frames:    frames,
 		Broadcast: wire.PickupBroadcastFrames(anim, groundItem.Gid, grant.GroundRemainder),
 	}
 }

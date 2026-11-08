@@ -211,6 +211,10 @@ export interface DeviceOwner extends Disposable {
 	recoverable(): boolean;
 	phase(): RuntimePhase;
 	error(): string | null;
+	/** Record a failure the frame met on this device (device.ts fail): a
+	 * memory refusal becomes recoverable, so the renderer replaces the
+	 * device instead of ending on its own failure (#2866). */
+	fail( error: unknown ): void;
 	commands(): FrameCommands | null;
 	surfaceCommands(): SurfaceCommands | null;
 	format(): GPUTextureFormat;

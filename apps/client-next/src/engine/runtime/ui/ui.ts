@@ -229,7 +229,19 @@ import {
 	UNDERBAR_WIDTH
 } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
-import { createExperimentalHud, experimentalTabs } from "./hud/experimental-hud";
+import { createExperimentalHud, experimentalRows, experimentalTabs } from "./hud/experimental-hud";
+import {
+	EXPERIMENTAL_DESCRIPTION_WIDTH,
+	EXPERIMENTAL_HEAD_HEIGHT,
+	EXPERIMENTAL_INDENT,
+	EXPERIMENTAL_LIST_HEIGHT,
+	EXPERIMENTAL_ROW_HEIGHT,
+	EXPERIMENTAL_COLUMN_GAP,
+	EXPERIMENTAL_COLUMN_WIDTH,
+	experimentalListItems,
+	experimentalListRange,
+	experimentalListView
+} from "@/engine/foundation/ui/experimental-list";
 import {
 	browserDisplayClass,
 	renderScales,
@@ -887,6 +899,41 @@ const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // (CIFButton_SetEnabledWithFaceAlpha 541640) and grey label 0xFF999999.
 const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
 const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
+// Port-only, not native: the Experimental window keeps the native option
+// window's width and one height on every tab; its list frame starts under
+// the tabs.
+const EXPERIMENTAL_WINDOW_WIDTH = 710;
+// The list frame holds two columns of rows, their gap and the scrollbar.
+const EXPERIMENTAL_LIST_FRAME_WIDTH = 660;
+// A column's left edge in the window: the first column, then one column
+// and gap further right.
+const EXPERIMENTAL_COLUMN_LEFT = 27;
+const EXPERIMENTAL_WINDOW_HEIGHT = 488;
+const EXPERIMENTAL_LIST_FRAME_TOP = 70;
+// A row whose parent row is off (the pickup filter's kinds) draws at this
+// alpha; the row under the pointer gets a faint warm fill.
+const EXPERIMENTAL_DIM_ALPHA = 0.5;
+const EXPERIMENTAL_ROW_HOVER = [ 1, 0.85, 0.55, 0.12 ] as const;
+// A section header: the Set Game header bar stretched across a row, tinted
+// darker so the rows stand out, centred in its slot.
+const EXPERIMENTAL_HEAD_TINT = [ 0.7, 0.7, 0.7, 1 ] as const;
+const EXPERIMENTAL_HEAD_BAR = 28;
+// The header art (opt_video_quality_tab, 196 x 28) has chamfered top
+// corners: its 12-pixel ends are drawn unscaled and only the middle
+// stretches, so the corners keep their shape at any width.
+const EXPERIMENTAL_HEAD_ART_WIDTH = 196;
+const EXPERIMENTAL_HEAD_CAP = 12;
+// Default / OK / Cancel: the option window's 103-pixel pitch, centred on
+// the window and in the band between the inner frame (it ends 46 above the
+// window's bottom) and the visible edge of the bottom border (its last 5
+// rows of mframe_wnd_mid_down).
+const EXPERIMENTAL_BUTTON_PITCH = 103;
+const EXPERIMENTAL_FOOTER_TOP = 46;
+const EXPERIMENTAL_FOOTER_EDGE = 5;
+const EXPERIMENTAL_HEAD_TEXT_INSET = 12;
+// The ON / OFF word: gold when on, grey when off.
+const EXPERIMENTAL_ON_COLOR = [ 1, 0.85, 0.54, 1 ] as const;
+const EXPERIMENTAL_OFF_COLOR = [ 0.55, 0.55, 0.5, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
@@ -2036,6 +2083,18 @@ export function createUi( ports: UiPorts ) {
 	// invisible ("I put items yet I can't see them").
 	let contentImages = new Set<string>();
 	const white = [ 1, 1, 1, 1 ] as const, gold = [ .94, .85, .63, 1 ] as const;
+	/*
+	================
+	experimentalRange
+
+	Port-only, not native. How far the open Experimental tab's list can
+	scroll, over the rows this session lists.
+	================
+	*/
+	function experimentalRange( session: UiView["session"] | undefined ): number {
+		const page = experimentalTabs( session, assets.hdAvailable?.() ?? false )[experimental.state().tab];
+		return page ? experimentalListRange( experimentalListItems( page.sections ) ) : 0;
+	}
 	// CGWndListHost::LayoutScrollbar 6F3620: content insets also govern the scrollbar.
 	/*
 	================
@@ -3763,8 +3822,10 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
 			const row = experimentalTabs( view?.session, assets.hdAvailable?.() ?? false )
-				.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
-			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
+				.flatMap( experimentalRows ).find( candidate => candidate.id === id );
+			if ( id === "experimental-scroll-up" || id === "experimental-scroll-down" ) {
+				experimental.scroll( id.endsWith( "-up" ) ? -1 : 1, experimentalRange( view?.session ) );
+			} else if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
 			else if ( id.startsWith( "experimental-render-scale:" ) ) {
 				experimental.selectRenderScale( Number( id.slice( "experimental-render-scale:".length ) ) );
 			} else if ( row && row.key !== "renderScale" && row.key !== "uiScale" ) experimental.toggle( row.key );
@@ -6465,6 +6526,10 @@ export function createUi( ports: UiPorts ) {
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
 				if ( carriedShortcut?.id === event.id ) carriedShortcut = null;
+				// Port-only, not native: a cancelled Experimental drag (pointercancel,
+				// blur) never reaches drag-end, so its travel would otherwise carry
+				// into the next press and swallow that row's click.
+				if ( panel === "Experimental" ) experimental.endDrag();
 				dirty = true;
 				return;
 			}
@@ -7605,6 +7670,11 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Experimental" ) {
+				experimental.scroll( Math.sign( event.delta ), experimentalRange( view?.session ) );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
 				dirty = true;
@@ -8091,6 +8161,18 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			// Port-only, not native: the end of an Experimental list drag. A press
+			// on a row that barely moved was a click the bridge swallowed.
+			if (
+				event.kind === "drag-end" && panel === "Experimental" &&
+				(event.id === "experimental-scroll-thumb" ||
+					experimentalTabs( view?.session, assets.hdAvailable?.() ?? false )
+						.flatMap( experimentalRows ).some( row => row.id === event.id ))
+			) {
+				if ( experimental.endDrag() && event.id !== "experimental-scroll-thumb" ) activate( event.id );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag-end" && view?.gameplay ) {
 				const target = topmostControlAt( controls, event.x, event.y );
 				if ( target?.id.startsWith( "hotbar:" ) ) {
@@ -8555,6 +8637,29 @@ export function createUi( ports: UiPorts ) {
 				potionComboOffset = Math.max( 0, Math.min( 6, potionComboOffset + event.dy / 4 ) );
 				dirty = true;
 				return;
+			}
+			// Port-only, not native: the Experimental list follows its thumb, and
+			// a drag that starts on a row (a finger on a phone) moves the list a
+			// row per row height instead of toggling it. A press that barely
+			// moved is still the row's click: the platform swallowed it.
+			if ( event.kind === "drag" && panel === "Experimental" ) {
+				const range = experimentalRange( view?.session );
+				const page =
+					experimentalTabs( view?.session, assets.hdAvailable?.() ?? false )[experimental.state().tab];
+				const onRow = !!page && experimentalRows( page ).some( row => row.id === event.id );
+				if ( event.id === "experimental-scroll-thumb" ) {
+					const up = controls.find( c => c.id === "experimental-scroll-up" ),
+						down = controls.find( c => c.id === "experimental-scroll-down" );
+					const travel = up && down ? Math.max( 1, down.rect[1] - up.rect[1] - 32 ) : 1;
+					if ( range > 0 ) experimental.drag( event.dy, travel / range, range );
+					dirty = true;
+					return;
+				}
+				if ( onRow ) {
+					experimental.drag( -event.dy, EXPERIMENTAL_ROW_HEIGHT, range );
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "drag" && event.id === "option-video-thumb" && panel === "Option" && optionTab === 0 ) {
 				videoScroll = Math.max(
@@ -14550,14 +14655,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				if ( panel === "Experimental" && hudData ) {
 					const admission = beginWindow();
-					// Options-style tabs over one framed list: a header naming the tab,
-					// then a checkbox or numeric selection with its help line below it.
-					// The window grows with the selected tab, as CIFOption::OnTab does.
-					const { tab, draft } = experimental.state(),
+					// Port-only, not native. Options-style tabs over one framed list
+					// that scrolls by whole items (foundation/ui/experimental-list.ts):
+					// section headers, then rows of a box, a label, an ON / OFF word
+					// and a help line. The window keeps one size on every tab.
+					const { tab, draft, scroll } = experimental.state(),
 						tabs = experimentalTabs( next.session, assets.hdAvailable?.() ?? false ),
 						page = tabs[tab]!;
-					const rowPitch = 46, listTop = 98, width = 386;
-					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
+					const width = EXPERIMENTAL_WINDOW_WIDTH, height = EXPERIMENTAL_WINDOW_HEIGHT;
 					const [px, py] = windowOrigin( "Experimental", [
 						(w - width) / 2,
 						(h - height) / 2,
@@ -14579,123 +14684,215 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
 						);
 					}
-					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 78, 332, height - 140 ] }, px, py );
 					authoredChrome(
-						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 62, 364, height - 108 ] },
+						{ ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 78, width - 54, height - 140 ] },
 						px,
 						py
 					);
-					// Browser-only section reuses the native Set Game header and inset frame.
-					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
-					authoredImage( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py );
-					authoredText( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py, page.section );
 					authoredChrome(
 						{
-							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
-							rect: [ 25, listTop, 336, listHeight ]
+							...layout.GDR_OPTION_WND_GAME!,
+							type: "CIFFrame",
+							rect: [ 11, 62, width - 22, height - 108 ]
 						},
 						px,
 						py
 					);
-					for ( let i = 0; i < page.rows.length; i++ ) {
-						const row = page.rows[i]!, top = listTop + 8 + i * rowPitch;
+					const listFrame: UiRect = [
+						25,
+						EXPERIMENTAL_LIST_FRAME_TOP,
+						EXPERIMENTAL_LIST_FRAME_WIDTH,
+						EXPERIMENTAL_LIST_HEIGHT + 4
+					];
+					// The list sits directly on the window's inner frame: a second
+					// frame around it read as a section nested in a section.
+					// Browser-only headers reuse the native Set Game header.
+					const header = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
+					const head = ( title: string, y: number ) => {
+						// Across both columns and their gap.
+						const bar: UiRect = [
+							EXPERIMENTAL_COLUMN_LEFT,
+							y + (EXPERIMENTAL_HEAD_HEIGHT - EXPERIMENTAL_HEAD_BAR) / 2,
+							EXPERIMENTAL_COLUMN_WIDTH * 2 + EXPERIMENTAL_COLUMN_GAP,
+							EXPERIMENTAL_HEAD_BAR
+						];
+						if ( header.texture ) {
+							const cap = EXPERIMENTAL_HEAD_CAP, u = cap / EXPERIMENTAL_HEAD_ART_WIDTH;
+							const x = px + bar[0], top = py + bar[1], middle = bar[2] - cap * 2;
+							image( [ x, top, cap, bar[3] ], header.texture, EXPERIMENTAL_HEAD_TINT, [ 0, 0, u, 1 ] );
+							image( [ x + cap, top, middle, bar[3] ], header.texture, EXPERIMENTAL_HEAD_TINT, [
+								u,
+								0,
+								1 - u * 2,
+								1
+							] );
+							image( [ x + cap + middle, top, cap, bar[3] ], header.texture, EXPERIMENTAL_HEAD_TINT, [
+								1 - u,
+								0,
+								u,
+								1
+							] );
+						}
 						authoredText(
-							{
-								...slot.GDR_GAME_OPTION_SLOT_STA1!,
-								rect: [
-									39,
-									top + 4,
-									row.key === "renderScale" || row.key === "uiScale" ? 130 : 270,
-									16
-								],
-								client: [ 0, 2, 0, 0 ]
-							},
+							{ ...header, rect: bar, client: [ EXPERIMENTAL_HEAD_TEXT_INSET, 0, 0, 0 ], vAlign: 1 },
 							px,
 							py,
-							row.label
+							title
 						);
-						if ( row.key === "renderScale" ) {
-							const choiceWidth = 54, choicePitch = 56, choiceLeft = 177;
-							for ( const [index, scale] of renderScales().entries() ) {
-								button(
-									row.id + ":" + scale,
-									scale + "%",
-									px + choiceLeft + index * choicePitch,
-									py + top,
-									choiceWidth,
-									false,
-									draft.renderScale === scale
+					};
+					const items = experimentalListItems( page.sections ), range = experimentalListRange( items );
+					const view = experimentalListView( items, scroll );
+					const listTop = EXPERIMENTAL_LIST_FRAME_TOP + 2;
+					if ( view.pinned !== null ) head( view.pinned, listTop );
+					for ( const { item, top: itemTop } of view.slots ) {
+						const top = listTop + itemTop;
+						if ( item.kind === "head" ) {
+							head( item.title, top );
+							continue;
+						}
+						// A line holds up to two rows, left to right; each row keeps
+						// its parts' offsets from its column's left edge.
+						for ( const [column, row] of item.rows.entries() ) {
+							const cx = EXPERIMENTAL_COLUMN_LEFT +
+								column * (EXPERIMENTAL_COLUMN_WIDTH + EXPERIMENTAL_COLUMN_GAP);
+							const indent = row.parent ? EXPERIMENTAL_INDENT : 0;
+							const numeric = row.key === "renderScale" || row.key === "uiScale";
+							// A row whose parent is off cannot act yet: drawn dimmed, still
+							// clickable so its value can be set first.
+							const alpha = row.parent && !draft[row.parent] ? EXPERIMENTAL_DIM_ALPHA : 1;
+							if ( hover === row.id ) {
+								rect(
+									[ px + cx, py + top, EXPERIMENTAL_COLUMN_WIDTH, EXPERIMENTAL_ROW_HEIGHT ],
+									EXPERIMENTAL_ROW_HOVER
 								);
 							}
-						} else if ( row.key === "uiScale" ) {
-							// Port-only, not native: the option slider's thumb over a
-							// drawn groove, as the Audio tab draws its thumb; the
-							// range control under it owns the drag and the keys.
-							const sliderLeft = 168, sliderWidth = 140;
-							rect( [ px + sliderLeft, py + top + 7, sliderWidth, 2 ], [ 0.45, 0.45, 0.45, 1 ] );
-							image(
-								[
-									px + sliderLeft + Math.trunc(
-										(draft.uiScale - UI_SCALE_MIN) * (sliderWidth - 16) /
-											(UI_SCALE_MAX - UI_SCALE_MIN)
-									),
-									py + top,
-									16,
-									16
-								],
-								ROOT + "interface/ifcommon/com_scroll_button.png"
-							);
+							const label = slot.GDR_GAME_OPTION_SLOT_STA1!;
 							authoredText(
 								{
-									...slot.GDR_GAME_OPTION_SLOT_STA1!,
-									rect: [ 316, top + 4, 45, 16 ],
-									client: [ 0, 2, 0, 0 ]
+									...label,
+									rect: [ cx + (numeric ? 12 : 30) + indent, top + 4, numeric ? 130 : 230, 16 ],
+									client: [ 0, 2, 0, 0 ],
+									color: [ label.color[0], label.color[1], label.color[2], label.color[3] * alpha ]
 								},
 								px,
 								py,
-								draft.uiScale + "%"
+								row.label
 							);
-							controls.push( {
-								id: row.id,
-								label: row.label,
-								kind: "range",
-								rect: [ px + sliderLeft, py + top, sliderWidth, 16 ],
-								min: UI_SCALE_MIN,
-								max: UI_SCALE_MAX,
-								value: String( draft.uiScale ),
-								valueText: draft.uiScale + "%",
-								helpText: draft.uiScale + "%"
-							} );
-						} else {
-							const enabled = draft[row.key];
-							image(
-								[ px + 331, py + top + 4, 16, 16 ],
-								ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
+							if ( row.key === "renderScale" ) {
+								const choiceWidth = 54, choicePitch = 56, choiceLeft = cx + 150;
+								for ( const [index, scale] of renderScales().entries() ) {
+									button(
+										row.id + ":" + scale,
+										scale + "%",
+										px + choiceLeft + index * choicePitch,
+										py + top,
+										choiceWidth,
+										false,
+										draft.renderScale === scale
+									);
+								}
+							} else if ( row.key === "uiScale" ) {
+								// Port-only, not native: the option slider's thumb over a
+								// drawn groove, as the Audio tab draws its thumb; the
+								// range control under it owns the drag and the keys.
+								const sliderLeft = cx + 141, sliderWidth = 140;
+								rect( [ px + sliderLeft, py + top + 7, sliderWidth, 2 ], [ 0.45, 0.45, 0.45, 1 ] );
+								image(
+									[
+										px + sliderLeft + Math.trunc(
+											(draft.uiScale - UI_SCALE_MIN) * (sliderWidth - 16) /
+												(UI_SCALE_MAX - UI_SCALE_MIN)
+										),
+										py + top,
+										16,
+										16
+									],
+									ROOT + "interface/ifcommon/com_scroll_button.png"
+								);
+								authoredText(
+									{
+										...label,
+										rect: [ cx + 273, top + 4, 34, 16 ],
+										client: [ 0, 2, 0, 0 ]
+									},
+									px,
+									py,
+									draft.uiScale + "%"
+								);
+								controls.push( {
+									id: row.id,
+									label: row.label,
+									kind: "range",
+									rect: [ px + sliderLeft, py + top, sliderWidth, 16 ],
+									min: UI_SCALE_MIN,
+									max: UI_SCALE_MAX,
+									value: String( draft.uiScale ),
+									valueText: draft.uiScale + "%",
+									helpText: draft.uiScale + "%"
+								} );
+							} else {
+								const enabled = draft[row.key];
+								image(
+									[ px + cx + 8 + indent, py + top + 4, 16, 16 ],
+									ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png",
+									[ 1, 1, 1, alpha ]
+								);
+								const word = enabled ? EXPERIMENTAL_ON_COLOR : EXPERIMENTAL_OFF_COLOR;
+								quads.push(
+									...text.quads(
+										enabled ? "ON" : "OFF",
+										[ px + cx + 259, py + top + 4, 48, 16 ],
+										full,
+										[ word[0], word[1], word[2], word[3] * alpha ],
+										{ hAlign: 2, vAlign: 1 }
+									)
+								);
+								controls.push( {
+									id: row.id,
+									label: row.label,
+									kind: "button",
+									rect: [ px + cx, py + top, EXPERIMENTAL_COLUMN_WIDTH, EXPERIMENTAL_ROW_HEIGHT ],
+									selected: enabled,
+									draggable: true
+								} );
+							}
+							authoredText(
+								{
+									...label,
+									rect: [
+										cx + 8 + indent,
+										top + (numeric ? 26 : 22),
+										EXPERIMENTAL_DESCRIPTION_WIDTH - indent,
+										16
+									],
+									client: [ 0, 0, 0, 0 ],
+									color: [ 180 / 255, 180 / 255, 180 / 255, alpha ]
+								},
+								px,
+								py,
+								row.description
 							);
-							controls.push( {
-								id: row.id,
-								label: row.label,
-								kind: "button",
-								rect: [ px + 35, py + top, 316, 40 ],
-								selected: enabled
-							} );
 						}
-						authoredText(
-							{
-								...slot.GDR_GAME_OPTION_SLOT_STA1!,
-								rect: [
-									39,
-									top + (row.key === "renderScale" || row.key === "uiScale" ? 26 : 22),
-									304,
-									16
-								],
-								client: [ 0, 0, 0, 0 ],
-								color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
-							},
-							px,
-							py,
-							row.description
+					}
+					if ( range > 0 ) {
+						const bar = chatScrollbar(
+							"experimental-scroll",
+							optionListTrack(
+								[ px + listFrame[0], py + listFrame[1], listFrame[2], listFrame[3] ],
+								5,
+								6
+							),
+							range + 1,
+							1,
+							range - Math.trunc( scroll ),
+							resources.size,
+							full,
+							hover,
+							pressed
 						);
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
+						controls.push( ...bar.controls );
 					}
 					for (
 						const [index, key, id] of [ [ 0, "DEF", "default" ], [ 1, "OK", "confirm" ], [
@@ -14705,8 +14902,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] ] as const
 					) {
 						const node = layout["GDR_OPTION_BTN_" + key]!;
+						const left = (width - (EXPERIMENTAL_BUTTON_PITCH * 2 + node.size[0])) / 2;
+						const band = EXPERIMENTAL_FOOTER_TOP - EXPERIMENTAL_FOOTER_EDGE;
+						const top = height - EXPERIMENTAL_FOOTER_TOP + Math.round( (band - node.size[1]) / 2 );
 						authoredLabeledButton(
-							{ ...node, rect: [ 52 + index * 103, height - 34, ...node.size ] },
+							{
+								...node,
+								rect: [ Math.round( left ) + index * EXPERIMENTAL_BUTTON_PITCH, top, ...node.size ]
+							},
 							px,
 							py,
 							"experimental-" + id,

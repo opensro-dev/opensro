@@ -78,6 +78,23 @@ function fixture( t ) {
 	return { assets, worker, clock };
 }
 
+test("a release inside the decode window the watchdog itself allows is not reported", t => {
+	// #2871: the worker acknowledges on receipt, but receipt waits
+	// behind a decode the watchdog sanctions for 60 s of silence. An
+	// acknowledgement 45 s after the cancel is a healthy worker, not
+	// an unanswering one.
+	const { assets, worker, clock } = fixture( t );
+	const id = assets.request( PROGRAMS );
+	assets.cancel( id );
+	assert.deepEqual( defined( worker ).messages.at( -1 ), { kind: "cancel", id } );
+	clock.now += 45000;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual( assets.takeDegradations(), [] );
+	defined( worker ).onmessage( { data: { kind: "released", id } } );
+	assert.equal( assets.available(), 4 );
+	assert.deepEqual( assets.takeDegradations(), [] );
+});
+
 test("a release that arrives after the request deadline does not fail the asset runtime", t => {
 	const { assets, worker, clock } = fixture( t );
 	const id = assets.request( PROGRAMS );

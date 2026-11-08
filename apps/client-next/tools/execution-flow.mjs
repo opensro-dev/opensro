@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { root, ts } from "./project.mjs";
+import { seedExecutionGraph } from "./warm-cache.mjs";
 
 /*
 ================
@@ -21,6 +22,10 @@ export function executionFlow( base = root ) {
 	const key = executionFlowKey( base );
 	const cacheFile = path.join( base, "temp", "cache", "execution-flow", `${key}.json` );
 	if ( fs.existsSync( cacheFile ) ) return JSON.parse( fs.readFileSync( cacheFile, "utf8" ) );
+	// Another checkout may already have computed this exact graph; the key
+	// hashes every input, so a shared hit is this tree's graph (warm-cache.mjs).
+	const shared = seedExecutionGraph( base, key );
+	if ( shared ) return shared;
 	const graph = computeExecutionFlow( base );
 	const directory = path.dirname( cacheFile );
 	fs.mkdirSync( directory, { recursive: true } );

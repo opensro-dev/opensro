@@ -228,7 +228,7 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 		if _, live := s.SceneRevision(); !live {
 			// Info, not debug: a client that sends while loading is a bug to see.
 			if refusal := sceneLoadingRefusal(opcode); len(refusal) > 0 {
-				sendFrames(s, refusal)
+				sendSessionAnswer(s, refusal)
 			}
 			log.Infof("action: 0x%04X from %s refused: the scene is loading", opcode, character.Name)
 			return
@@ -403,3 +403,19 @@ sendFrames
 ================
 */
 func sendFrames(s *transport.Session, frames []wire.Frame) { SendFrames(s, frames) }
+
+/*
+================
+sendSessionAnswer
+
+The acting session's own synchronous answer (a result, or the
+refusal for a request the loading gate turned away), on the lane
+that never waits behind the scene's bootstrap
+(transport.SendSceneAnswerBatch).
+================
+*/
+func sendSessionAnswer(s *transport.Session, frames []wire.Frame) {
+	if err := s.SendSceneAnswerBatch(transportFrames(frames)); err != nil {
+		log.Debugf("action: send answer to session %d failed: %v", s.ID, err)
+	}
+}

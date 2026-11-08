@@ -150,8 +150,26 @@ export function createMall() {
   ================
   */
 		projection( payload: Uint8Array ): unknown {
-			if ( !request || staged || expired ) throw Error( "Unexpected mall projection" );
+			// A projection answers the one outstanding request. One that
+			// arrives when no request is outstanding - a scene reset at
+			// the next bootstrap retired it, or a resume re-delivered an
+			// answer already applied - belongs to a scene the client has
+			// left: set it aside, never end the session over it (#2864).
+			// The same holds behind a staged purchase delivery, whose
+			// receipt is still owed.
+			if ( !request || staged ) return undefined;
+			if ( expired ) throw Error( "Unexpected mall projection" );
 			const decoded = mallProjection( payload );
+			if ( decoded.error !== undefined ) {
+				// The entering refusal retires a catalogue request with
+				// its reason shown. A purchase waits on its own receipt
+				// lane and is never retired by it.
+				if ( request === "catalog" ) {
+					state = { ...decoded.state, error: decoded.error, revision: ++revision };
+					request = null;
+				}
+				return undefined;
+			}
 			if ( request === "catalog" ) {
 				if ( decoded.items !== undefined ) throw Error( "Unsolicited mall delivery" );
 				state = { ...decoded.state, revision: ++revision };
