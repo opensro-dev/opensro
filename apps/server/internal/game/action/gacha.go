@@ -268,8 +268,8 @@ ticket row, entry lookup); every refusal answers one B053 [2][u8 code],
 the native answer the client's waiting phase ends on. On commit the ticket
 row becomes a native win/loss result card; 0x3645 reaches the client before
 B053 so CIFGhaCha_ApplyResult observes the new ref and reward map. A roll
-announces nothing: the reference server's roll (SR_GameServer 4C7E20)
-sends no broadcast, the win is announced when its voucher is exchanged
+announces nothing: the reference server's roll sends no broadcast; the
+win is announced when its voucher is exchanged
 (HandleGachaExchange, #2852).
 ================
 */
@@ -492,12 +492,12 @@ while the paid voucher stayed to be redeemed again. A stacked row or a pair
 that is not an enabled prize row is refused, so the exchange can only hand out
 what a roll could have written.
 
-A committed exchange answers 0xB1BE [1][win] - the reference server's
-CGObjPC_SendGachaExchangeResultAndAnnounceWin (4EDF80) writes the success
-byte and the voucher reference's win flag; client 766A90 reads both and
-acts only on a refusal. A WIN voucher then publishes the shard-wide
-0x30C0 [prizeRef:u32][qty:u16] banner (4EE029-4EE075 broadcasts it to
-every world; the u16 quantity is the asm's width 2 at 4EE056). The winner
+A committed exchange answers 0xB1BE [1][win]: the reference server's
+exchange reply writes the success byte and the voucher reference's win
+flag, and client 766A90 reads both and acts only on a refusal. A WIN
+voucher then publishes the shard-wide 0x30C0 [prizeRef:u32][qty:u16]
+banner; the reference server broadcasts it to every world and writes
+the quantity two bytes wide (the decompiler's u32 is wrong). The winner
 reads it at the tail of their own burst, every other session through the
 shard push. Port-only, not native (#2852, SRO_ANNOUNCE_GACHA_WIN): the
 same win also posts a channel-7 notice naming the winner, so it reaches

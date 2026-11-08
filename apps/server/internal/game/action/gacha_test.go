@@ -143,8 +143,8 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 TestGachaWinAnnouncesOnTheExchange
 
 The reference server announces a Magic Pang win when the WIN voucher is
-exchanged, never at the roll (SR_GameServer 4C7E20 sends nothing;
-4EDF80 broadcasts after the exchange reply, #2852). The roll's burst
+exchanged, never at the roll: its roll sends nothing, and its exchange
+broadcasts after the exchange reply (#2852). The roll's burst
 carries no banner and pushes nothing. The exchange answers B1BE [1][win]
 and, for a win, 0x30C0 [prizeRef:u32][qty:u16] at the tail of the
 winner's burst and through the shard push, carrying the same frame. A

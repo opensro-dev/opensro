@@ -25,8 +25,7 @@ const (
 	// OpWinAnnounce is the shard-wide win banner the client renders
 	// as UIIT_MSG_GACHA_ANNOUNCE (client 768530, notice window only).
 	// The reference server broadcasts it to every world when a WIN
-	// voucher is exchanged (4EDF80; 0x3120 in v1.188), never at the
-	// roll (#2852).
+	// voucher is exchanged, never at the roll (#2852).
 	OpWinAnnounce uint16 = 0x30C0
 
 	InteractionFlagGacha uint32 = 0x10000
@@ -104,7 +103,7 @@ func EncodeWinAnnounce(prizeRefObjID uint32, quantity uint16) []byte {
 
 // EncodeExchangeResult is the committed exchange's B1BE [1][win]: the
 // reference server writes the success byte and the voucher reference's
-// win flag (4EDF80); client 766A90 reads both and acts only on flag 2.
+// win flag; client 766A90 reads both and acts only on flag 2.
 func EncodeExchangeResult(won bool) []byte {
 	flag := uint8(0)
 	if won {
