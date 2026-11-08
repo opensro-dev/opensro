@@ -110,6 +110,30 @@ func TestSightAcquisitionRespectsTheSquadLimit(t *testing.T) {
 
 /*
 ================
+TestAcquireSightTargetLeavesTheActorUntouched
+
+The leg reads its actor by pointer into the view (#2982) under a
+read-only contract: the fixed-query flag clear is the query's own
+business and must not land in the caller's instance, where the rest
+of the step would read a tactics word the snapshot never held.
+================
+*/
+func TestAcquireSightTargetLeavesTheActorUntouched(t *testing.T) {
+	ops, actors, target := squadFixture(t)
+	last := actors[monster.SquadMemberLimit]
+	last.Nest.HasControls, last.Nest.Controls.ID = true, 0x3F
+	last.Nest.NativeTacticsFlags |= 0x100
+	from := monster.Pose{RegionID: last.Spawn.RegionID, X: last.Spawn.X, Y: last.Spawn.Y, Z: last.Spawn.Z}
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, &last, from, []playerPose{target}, aggressiveTactics()); !ok {
+		t.Fatal("the fixed query did not force its target")
+	}
+	if last.Nest.NativeTacticsFlags&0x100 == 0 {
+		t.Fatal("the query cleared the 0x100 bit in the caller's instance")
+	}
+}
+
+/*
+================
 TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach
 
 The native secondary-opponent switch: with the target beyond body radius
