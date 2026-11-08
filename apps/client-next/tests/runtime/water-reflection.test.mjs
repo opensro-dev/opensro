@@ -136,6 +136,7 @@ test("a 4x mirror resolves and stores only the resolve; a 1x mirror stores itsel
 	================
 	*/
 	function attachment() {
+		/** @type {any} */
 		let colour;
 		const encoder = {
 			beginRenderPass( descriptor ) {
@@ -144,6 +145,7 @@ test("a 4x mirror resolves and stores only the resolve; a 1x mirror stores itsel
 			}
 		};
 		water.encode( /** @type {any} */ (encoder), [] );
+		if ( !colour ) throw Error( "the mirror encoded no pass" );
 		return colour;
 	}
 	try {
