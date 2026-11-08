@@ -119,6 +119,7 @@ func newGameplayPlane(
 		return captureObjectFrames(ts.Hub, division, gid)
 	}
 	items.PetPolicies = companion.PoliciesFromEnv()
+	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -766,7 +767,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
-	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
 	if err != nil {
 		return err

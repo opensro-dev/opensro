@@ -97,7 +97,7 @@ type petTrainedStrike struct {
 	executed    bool    // this strike's Execute raised the last hit to a kill
 	critBonus   float64
 	critWound   float64 // Scent of Blood: crit against bleeding or wounded
-	shatter     float64 // bonus damage share against frozen or frostbitten
+	shatter     float64 // bonus damage share against chilled or immobilized
 	ownerHeal   float64 // owner heal (percent of max HP) at commit
 	petHeal     float64 // pet heal (percent of max HP) at commit
 	passive     int     // passive row whose timer the commit restarts (-1)
@@ -505,6 +505,15 @@ func petTargetChilled(target monster.Instance) bool {
 
 /*
 ================
+petTargetImmobilized
+================
+*/
+func petTargetImmobilized(target monster.Instance) bool {
+	return target.Abnormal != nil && (target.Abnormal.Has(abnormal.Freeze) || target.Abnormal.Has(abnormal.Stun) || target.Abnormal.Has(abnormal.Root))
+}
+
+/*
+================
 petTrainedDamage
 
 Adjusts the resolved hits of one target: Retribution's fixed damage,
@@ -532,7 +541,7 @@ func (rt *Runtime) petTrainedDamage(ts *petTrainedStrike, target monster.Instanc
 		if ts.fixed > 0 {
 			f.Damage = max(f.Damage, ts.fixed)
 		}
-		if ts.shatter > 0 && petTargetChilled(target) {
+		if ts.shatter > 0 && (petTargetChilled(target) || petTargetImmobilized(target)) {
 			f.Damage += uint32(float64(f.Damage) * ts.shatter / 100)
 		}
 		if rt.petChance(ts.mods.DeadlyPct) {
