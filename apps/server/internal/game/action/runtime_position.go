@@ -351,19 +351,37 @@ func (rt *Runtime) readPetTickFacts(
 	character *enterworld.Character,
 	gid uint32,
 ) *petTickFacts {
-	// The facts travel by pointer: the container is scalars only, so
-	// the one heap hand-off to advancePetJudged stays a few dozen
-	// bytes and never grows a record copy (#2030).
-	facts := &petTickFacts{}
+	return rt.readPetTickFactsInto(&petTickFacts{}, divisionID, character, gid)
+}
+
+/*
+================
+readPetTickFactsInto
+
+readPetTickFacts into caller-owned storage: advancePet passes its
+session scratch, so the settled tick's fact read allocates nothing -
+no fresh container and no door closure (#2030). The facts are
+scalars only (the codename header aside, a copy of the record's own
+header), so the scratch is zeroed per call and reused tick after
+tick; the facts travel by pointer, so the one heap hand-off to
+advancePetJudged stays a few dozen bytes and never grows a record
+copy.
+================
+*/
+func (rt *Runtime) readPetTickFactsInto(
+	facts *petTickFacts,
+	divisionID string,
+	character *enterworld.Character,
+	gid uint32,
+) *petTickFacts {
+	*facts = petTickFacts{}
 	if character == nil {
 		return facts
 	}
 
-	rt.deps.Read(divisionID, func() {
-		pet := character.CompanionByGID(gid)
-		if pet == nil {
-			return
-		}
+	guard := rt.deps.AcquireRead(divisionID)
+	pet := character.CompanionByGID(gid)
+	if pet != nil {
 		facts.companionSeen = true
 		facts.ownerDead = enterworld.CurrentHP(character) == 0
 		facts.admitted = !character.DeletePending && !facts.ownerDead &&
@@ -378,7 +396,8 @@ func (rt *Runtime) readPetTickFacts(
 			facts.petFollowRunFactor = pet.FollowRunFactor
 			facts.petFollowRunSet = pet.FollowRunSet
 		}
-	})
+	}
+	guard.Release()
 
 	return facts
 }

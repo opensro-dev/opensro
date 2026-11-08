@@ -120,6 +120,7 @@ func publicRules() publicstats.RulesResponse {
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
+	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
@@ -165,6 +166,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The world is the v1.150 map; Alexandria is not part of it.",
 				Now:    "The Alexandria city is open, with its gates, ferry and townspeople.",
 				Why:    "Optional Alexandria expansion, imported from a later client."},
+			{Flag: commerce.EnvAlexandriaHideD11Goods, On: hideAlexandriaD11,
+				Native: "Alexandria's smith, armourer and accessory shops sell degree-11 gear and alchemy, as the original game's shops did.",
+				Now:    "Degree-11 goods are hidden from Alexandria's shops; degree-11 gear comes from monster drops only.",
+				Why:    "An operator choice for shards that want degree-11 gear earned by grinding, not bought."},
 			{Flag: companion.EnvAttackPetExpansion, On: companion.AttackPetExpansionEnabled(),
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
