@@ -24,11 +24,12 @@ from unittest import mock
 import cap110_item_import  # noqa: E402
 import cap110_monsters  # noqa: E402
 import cap110_quest_items  # noqa: E402
+import cap110_quest_monsters  # noqa: E402
 import cap110_rewards  # noqa: E402
 import cap110_skill_import  # noqa: E402
 import import_vsro_alexandria  # noqa: E402
 
-FLAGS = ("SRO_CAP110_MONSTERS", "SRO_CAP110_ITEMS", "SRO_CAP110_SKILLS", "SRO_PHARAOH_TOMB", "SRO_LEVEL_CAP")
+FLAGS = ("SRO_CAP110_MONSTERS", "SRO_CAP110_ITEMS", "SRO_CAP110_SKILLS", "SRO_PHARAOH_TOMB", "SRO_LEVEL_CAP", "SRO_CAP110_QUESTS")
 
 
 class FlagOffMainTests(unittest.TestCase):
@@ -58,6 +59,7 @@ class FlagOffMainTests(unittest.TestCase):
 			(cap110_monsters, common + overlay),
 			(cap110_rewards, common + overlay),
 			(cap110_quest_items, common + ["--output", str(self.output)]),
+			(cap110_quest_monsters, common + ["--output", str(self.output)]),
 			(cap110_item_import, common + ["--output-extracted", str(self.output / "items")]),
 			(cap110_skill_import, common + ["--output-extracted", str(self.output / "skills")]),
 		]
