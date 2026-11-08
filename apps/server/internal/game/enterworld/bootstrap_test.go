@@ -677,6 +677,35 @@ func TestBootstrapJSONPublishesRaisedGoldCaps(t *testing.T) {
 
 /*
 ================
+TestBootstrapPublishesAlexandria
+
+SRO_ALEXANDRIA reaches the client through the world-entry blob, so the M
+window can show the wider map only on a shard that runs Alexandria; off
+leaves the blob as the native one.
+================
+*/
+func TestBootstrapPublishesAlexandria(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			Alexandria: on,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if got := strings.Contains(string(blob), `"alexandria":true`); got != on {
+			t.Fatalf("Alexandria=%v: blob carries the switch %v", on, got)
+		}
+		if !on && strings.Contains(string(blob), `"alexandria"`) {
+			t.Fatal("the native blob names the port-only switch")
+		}
+	}
+}
+
+/*
+================
 TestBootstrapJSONPublishesLevelCap
 
 The configured cap reaches the client only when it differs from the

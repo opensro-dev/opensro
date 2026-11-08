@@ -9,6 +9,7 @@ mip generation, and the samplers they bind.
 ===========================================================================
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
+import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
@@ -28,6 +29,35 @@ import {
 	type BlendPair,
 	validBlend
 } from "@/engine/foundation/rendering/blend-state";
+
+/*
+================
+SceneSurface
+
+The scene target a scene-drawing pipeline renders into: the HDR stage's
+float intermediate (sceneFloat) and the MSAA stage's sample count
+(msaa). Both absent is the native canvas-format, single-sampled target.
+fullscreenPreview selects the geometry family's coverage-alpha sibling
+for the HDR preview pass.
+================
+*/
+export interface SceneSurface {
+	readonly sceneFloat?: boolean;
+	readonly msaa?: boolean;
+	readonly fullscreenPreview?: boolean;
+}
+
+/*
+================
+sceneStageKey
+
+The one cache key for a surface's stage pair: the sky and image pipeline
+families here and the device's sky draws (device.ts) key by it.
+================
+*/
+export function sceneStageKey( { sceneFloat = false, msaa = false }: SceneSurface ) {
+	return (sceneFloat ? "hdr" : "ldr") + (msaa ? "|msaa" : "");
+}
 
 // The pair a material that blends without naming one draws with.
 export const DEFAULT_BLEND: BlendPair = Object.freeze( {
@@ -295,9 +325,45 @@ fn skyNoise(p:vec2f)->f32{
 		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
 	} );
 	let skyPipeline: GPURenderPipeline | null = null;
-	// Lazy HDR siblings: like the float bloom chain, they compile only on
-	// first enabled use, so a native-only device never pays for them.
-	let skyFloatPipeline: GPURenderPipeline | null = null, imageFloatPipeline: GPURenderPipeline | null = null;
+	// Lazy HDR/MSAA siblings: like the float bloom chain, they compile only
+	// on first enabled use, so a native-only device never pays for them.
+	// The stage formats and sample counts pair up, so each family keeps one
+	// lazily-filled map keyed by the pair.
+	const skyStagePipelines = new Map<string, GPURenderPipeline>(),
+		imageStagePipelines = new Map<string, GPURenderPipeline>();
+	/*
+	================
+	stageSibling
+
+	The sky or fullscreen image pipeline for a non-native scene surface,
+	compiled on first use into its family's map. Both families share one
+	shape: a fullscreen draw that never tests or writes depth.
+	================
+	*/
+	function stageSibling(
+		family: Map<string, GPURenderPipeline>,
+		module: GPUShaderModule,
+		{ sceneFloat = false, msaa = false }: SceneSurface
+	) {
+		const key = sceneStageKey( { sceneFloat, msaa } );
+		let selected = family.get( key );
+		if ( !selected ) {
+			selected = created.createRenderPipeline( {
+				layout: "auto",
+				vertex: { module, entryPoint: "vs" },
+				fragment: {
+					module,
+					entryPoint: "fs",
+					targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ]
+				},
+				primitive: { topology: "triangle-list" },
+				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+				multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
+			} );
+			family.set( key, selected );
+		}
+		return selected;
+	}
 	const geometryShader = created.createShaderModule( {
 		code: environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
@@ -763,46 +829,40 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		lightmapSampling( anisotropic: boolean ) {
 			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
 		},
-		sky( sceneFloat = false ) {
-			if ( !sceneFloat ) return skyPipeline!;
-			skyFloatPipeline ??= created.createRenderPipeline( {
-				layout: "auto",
-				vertex: { module: skyShader, entryPoint: "vs" },
-				fragment: { module: skyShader, entryPoint: "fs", targets: [ { format: SCENE_FLOAT_FORMAT } ] },
-				primitive: { topology: "triangle-list" },
-				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
-			} );
-			return skyFloatPipeline;
+		sky( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return skyPipeline!;
+			return stageSibling( skyStagePipelines, skyShader, surface );
 		},
 		mips: () => mipPipeline!,
-		image( sceneFloat = false ) {
-			if ( !sceneFloat ) return pipeline!;
-			imageFloatPipeline ??= created.createRenderPipeline( {
-				layout: "auto",
-				vertex: { module: shader, entryPoint: "vs" },
-				fragment: { module: shader, entryPoint: "fs", targets: [ { format: SCENE_FLOAT_FORMAT } ] },
-				primitive: { topology: "triangle-list" },
-				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
-			} );
-			return imageFloatPipeline;
+		image( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return pipeline!;
+			return stageSibling( imageStagePipelines, shader, surface );
 		},
 		/*
 ================
 geometry
 
 The geometry pipeline for state, compiled on first use. The HDR stage's
-rgba16float sibling compiles lazily under the same rule.
+rgba16float sibling and the MSAA stage's 4x sibling compile lazily under
+the same rule.
 ================
 		*/
-		geometry( state: GeometryPipelineState, sceneFloat = false, fullscreenPreview = false ) {
+		geometry(
+			state: GeometryPipelineState,
+			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {}
+		) {
 			const previewCoverage = sceneFloat && fullscreenPreview;
 			const key = geometryPipelineKey( state ) + (sceneFloat ? "|hdr" : "") +
-				(previewCoverage ? "|preview" : "");
+				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "");
 			let selected = geometryPipelines.get( key );
 			if ( !selected ) {
-				selected = created.createRenderPipeline(
-					geometryDescriptor( state, sceneFloat ? SCENE_FLOAT_FORMAT : format, previewCoverage )
+				const descriptor = geometryDescriptor(
+					state,
+					sceneFloat ? SCENE_FLOAT_FORMAT : format,
+					previewCoverage
 				);
+				if ( msaa ) descriptor.multisample = { count: MSAA_SAMPLE_COUNT };
+				selected = created.createRenderPipeline( descriptor );
 				geometryPipelines.set( key, selected );
 			}
 			return selected;

@@ -66,6 +66,12 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			if rt.petShields.rows[self].amount == 0 || rt.petShields.rows[petShieldKey{testDivision, c.ActiveCOS.GID}].amount == 0 {
 				t.Fatal("missing owner/bear shield")
 			}
+			percent := []uint32{20, 35, 50}[tier-1]
+			for _, shield := range rt.petShields.rows {
+				if shield.amount != uint32(uint64(shield.maxHP)*uint64(percent)/100) {
+					t.Fatalf("tier %d shield is not %d percent of recipient HP", tier, percent)
+				}
+			}
 			_, gotNear := rt.petShields.rows[petShieldKey{testDivision, enterworld.ObjectIDForCharacter(near)}]
 			if gotNear != (tier >= 2) {
 				t.Fatal("party tier gate")
@@ -77,7 +83,7 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 				t.Fatal("burst tier gate")
 			}
 			before := rt.petShields.rows[self]
-			// Leave 20 absorption on the owner and 40 on the bear: both bursts must deal 30 total.
+			// Leave 20 absorption on the owner and 40 on the bear: 40% bursts deal 24 total.
 			if tier == 3 {
 				rt.absorbPetShield(testDivision, self.gid, before.amount-20, clock.NowMs())
 				nearKey := petShieldKey{testDivision, enterworld.ObjectIDForCharacter(near)}
@@ -113,7 +119,7 @@ func TestPetShieldTiersAndExpiry(t *testing.T) {
 			left, _ := rt.Monsters.Get(testDivision, mob.Gid)
 			want := mob.CurrentHP
 			if tier == 3 {
-				want -= 30
+				want -= 24
 			}
 			if left.CurrentHP != want {
 				t.Fatalf("burst HP %d, want %d", left.CurrentHP, want)

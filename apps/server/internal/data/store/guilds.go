@@ -435,7 +435,7 @@ func (door storeGuildDoor) DissolveGuildAs(
 	}
 	// The server's disband check refuses disbanding while the guild has any war enemy.
 	var warCount int
-	if err := s.db.QueryRow("SELECT count(*) FROM guild_wars WHERE division = ? AND (guild_a = ? OR guild_b = ?)", divisionID, guildID, guildID).Scan(&warCount); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT count(*) FROM guild_wars WHERE division = ? AND (guild_a = ? OR guild_b = ?)", divisionID, guildID, guildID).Scan(&warCount); err != nil {
 		s.recordWriteFailureLocked("guild-dissolve-war-check", err)
 		return refused, domain.GuildRefusalUpdateRejected
 	}

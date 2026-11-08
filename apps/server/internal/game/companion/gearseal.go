@@ -40,6 +40,11 @@ func sealedDegree(d GearDegree, slot, tier int) GearDegree {
 	item.Codename += []string{"", "_STAR", "_MOON", "_SUN"}[tier]
 	scale := 1 + float64(tier)*0.5
 	d.ProcDamage = uint32(float64(d.ProcDamage) * scale)
+	for kind := range d.ProcRanges {
+		for end := range d.ProcRanges[kind] {
+			d.ProcRanges[kind][end] = uint32(float64(d.ProcRanges[kind][end]) * scale)
+		}
+	}
 	g := &item.BaseStats
 	g.MaxHPPercent *= scale
 	g.PhysicalAttack *= scale

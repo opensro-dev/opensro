@@ -34,7 +34,7 @@ error. Remove this trigger to recover without replacing the action owner.
 */
 func blockBetaSilkStarter(t *testing.T, s *Store) {
 	t.Helper()
-	if _, err := s.db.Exec(`CREATE TRIGGER reject_beta_starter BEFORE INSERT ON mall_accounts
+	if _, err := s.syncDBLocked().Exec(`CREATE TRIGGER reject_beta_starter BEFORE INSERT ON mall_accounts
 BEGIN SELECT RAISE(ABORT, 'starter temporarily unavailable'); END`); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ unblockBetaSilkStarter
 */
 func unblockBetaSilkStarter(t *testing.T, s *Store) {
 	t.Helper()
-	if _, err := s.db.Exec("DROP TRIGGER reject_beta_starter"); err != nil {
+	if _, err := s.syncDBLocked().Exec("DROP TRIGGER reject_beta_starter"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -63,13 +63,13 @@ zero through the mall API, but only the latter suppresses another starter.
 func assertBetaSilkWallet(t *testing.T, s *Store, want uint32, exists bool) {
 	t.Helper()
 	var count int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM mall_accounts WHERE account_id = ?", betaSilkRecoveryAccount).Scan(&count); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT COUNT(*) FROM mall_accounts WHERE account_id = ?", betaSilkRecoveryAccount).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if (count == 1) != exists {
 		t.Fatalf("wallet rows=%d, want exists=%v", count, exists)
 	}
-	balance, err := readMallBalance(s.db, betaSilkRecoveryAccount)
+	balance, err := readMallBalance(s.syncDBLocked(), betaSilkRecoveryAccount)
 	if err != nil || balance != (domain.MallBalance{Silk: want}) {
 		t.Fatalf("persisted balance=%+v err=%v, want silk=%d with no gift silk or points", balance, err, want)
 	}

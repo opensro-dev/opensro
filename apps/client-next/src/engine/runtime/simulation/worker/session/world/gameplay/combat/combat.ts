@@ -7,6 +7,7 @@ Owns casts and vitals; validated presentation events and animation never own HP.
 
 ===========================================================================
 */
+import { damageFeedback } from "@/engine/foundation/gameplay/damage-feedback";
 import { SYSTEM_KNOCKBACK } from "@/engine/contracts/orb";
 import {
 	appendCastResults,
@@ -526,19 +527,14 @@ export function createCombat(
 					gid: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true )
 				} );
 			}
-			// 74D9FD -> 74FE80: periodic damage is display-only. HP and
-			// death remain owned by 33A6; this packet never debits HP again.
-			if ( op === 0x3128 ) {
-				if ( p.length !== 8 ) throw Error( "Invalid periodic damage notification" );
-				const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
-					gid = v.getUint32( 0, true ),
-					damage = v.getUint32( 4, true );
-				if ( readEntity( gid ) && damage ) {
+			// Cosmetic feedback never debits HP; 33A6 owns the committed vitals.
+			if ( op === 0x3fb4 || op === 0x3128 ) {
+				const hit = damageFeedback( op, p );
+				if ( hit && readEntity( hit.gid ) && hit.damage ) {
 					if ( environmentalDamage.length >= 2048 ) throw Error( "Environmental feedback capacity exceeded" );
 					environmentalDamage = [ ...environmentalDamage, {
+						...hit,
 						sequence: ++feedbackSequence,
-						gid,
-						damage,
 						atMs: now
 					} ];
 				}
