@@ -322,11 +322,13 @@ def glow_rows(native_text, later_text, codenames, native_groups):
 #
 # Port-only inference. resinfo\\itemrare.txt names the seal particle of each
 # sealed weapon and shield (star, moon, sun by its step1 to step3 effect). The
-# v1.150 file knows no sealed set piece. A sealed set B piece takes the later
-# client's row, which is the sun effect. A sealed set A piece takes its
-# family's _B_RARE row (the moon effect) under its own code, because the later
-# file gives it the sun effect too. A code the v1.150 file lists keeps its
-# row. Returns the file text and the codenames added.
+# v1.150 file knows no sealed set piece. Every sealed set piece takes the later
+# client's row (its scale and bone are tuned per family). The later file gives
+# set A the same sun effect as set B, but set A is the moon tier, so a set A
+# row takes its family's _B_RARE effect (the moon effect) in place of the
+# later one; with no family row the later row stands, and with no later row the
+# family row is used under the piece's own code. A code the v1.150 file lists
+# keeps its row. Returns the file text and the codenames added.
 # ================
 def rare_rows(native_text, later_text, codenames):
 	def parse(text):
@@ -344,8 +346,13 @@ def rare_rows(native_text, later_text, codenames):
 		if code.endswith(RARE_SET_B):
 			source = later.get(code)
 		elif code.endswith(RARE_SET_A):
-			family = code[:-len(RARE_SET_A)] + RARE_FAMILY_MOON
-			source = native.get(family) or later.get(family)
+			moon = code[:-len(RARE_SET_A)] + RARE_FAMILY_MOON
+			family = native.get(moon) or later.get(moon)
+			source = later.get(code)
+			if source and family:
+				source = [source[0], family[1]] + source[2:]
+			else:
+				source = source or family
 		else:
 			continue
 		if source:

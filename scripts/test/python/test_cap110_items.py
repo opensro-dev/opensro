@@ -523,21 +523,26 @@ class ImportTests(unittest.TestCase):
 	# test_rare_rows_give_set_pieces_their_seal_particle
 	# ================
 	def test_rare_rows_give_set_pieces_their_seal_particle(self):
-		effect = "system\\system_raretype_a_step%d.efp\t175\tai_end\tnone"
-		native = f"ITEM_CH_SWORD_11_A_RARE\t{effect % 1}\r\nITEM_CH_SWORD_11_B_RARE\t{effect % 2}\r\n"
+		effect = "system\\system_raretype_a_step%d.efp"
+		row = lambda step, scale: f"{effect % step}\t{scale}\tai_end\tnone"
+		native = f"ITEM_CH_SWORD_11_A_RARE\t{row(1, 175)}\r\nITEM_CH_SWORD_11_B_RARE\t{row(2, 175)}\r\n"
 		later = (
-			f"ITEM_CH_SWORD_11_SET_A_RARE\t{effect % 3}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{effect % 3}\r\n"
-			f"ITEM_CH_AXE_11_SET_B_RARE\t{effect % 3}\r\n"
+			f"ITEM_CH_SWORD_11_SET_A_RARE\t{row(3, 185)}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{row(3, 215)}\r\n"
+			f"ITEM_CH_AXE_11_SET_A_RARE\t{row(3, 160)}\r\n"
+			f"ITEM_CH_AXE_11_SET_B_RARE\t{row(3, 170)}\r\n"
 		)
 		codes = {
 			"ITEM_CH_SWORD_11_A_RARE", "ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE",
-			"ITEM_CH_SWORD_11_SET_A", "ITEM_CH_SHIELD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B",
+			"ITEM_CH_SWORD_11_SET_A", "ITEM_CH_SHIELD_11_SET_A_RARE", "ITEM_CH_AXE_11_SET_A_RARE",
 		}
 		text, added = items.rare_rows(native, later, codes)
-		# Set A takes the family's moon row under its own code; set B keeps the later sun row; the rest are untouched.
-		self.assertEqual(added, ["ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE"])
-		self.assertEqual(
-			text, native + f"ITEM_CH_SWORD_11_SET_A_RARE\t{effect % 2}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{effect % 3}\r\n")
+		# Set A keeps the later row's scale and bone with the family's moon effect; set B keeps the later row whole;
+		# a set A piece with no family row keeps the later (sun) effect; the rest are untouched.
+		self.assertEqual(added, ["ITEM_CH_AXE_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE"])
+		self.assertEqual(text, native
+			+ f"ITEM_CH_AXE_11_SET_A_RARE\t{row(3, 160)}\r\n"
+			+ f"ITEM_CH_SWORD_11_SET_A_RARE\t{row(2, 185)}\r\n"
+			+ f"ITEM_CH_SWORD_11_SET_B_RARE\t{row(3, 215)}\r\n")
 		self.assertEqual(items.rare_rows(native, later, {"ITEM_CH_SWORD_11_A_RARE"}), (native, []))
 
 	# ================
