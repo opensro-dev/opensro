@@ -87,10 +87,13 @@ const (
 // 27,259 B / 268 allocs; with the mercenary cooldown pass
 // collecting its owner keys into runtime scratch instead of a
 // slice grown from empty every tick (#2030), measured 25,952 B /
-// 263 allocs.
+// 263 allocs; with the bond lane's revival walk judging its
+// refusal on door-read facts before bondSource's answer comes
+// home, instead of paying for the escaped SkillDef on every pet
+// owner's tick (#2030), measured 25,150 B / 258 allocs.
 const (
-	tickBudgetBytesPerTick  = 28500
-	tickBudgetAllocsPerTick = 289
+	tickBudgetBytesPerTick  = 27700
+	tickBudgetAllocsPerTick = 284
 )
 
 /*
