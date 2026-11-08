@@ -44,6 +44,7 @@ export default {
 		"scripts/test/assets/boothModelAssets.test.mjs",
 		"scripts/test/assets/cifSpriteCatalog.test.mjs",
 		"scripts/test/assets/slotEffectPublication.test.mjs",
+		"scripts/test/assets/itemIconSubstitution.test.mjs",
 		"scripts/test/assets/skillPaneImageReferences.test.mjs",
 		"scripts/test/world/worldMapImageReferences.test.mjs",
 		"scripts/test/mission/effectProgramClosure.test.mjs",
