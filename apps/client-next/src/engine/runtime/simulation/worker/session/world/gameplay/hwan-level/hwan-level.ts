@@ -14,8 +14,8 @@ Body, little-endian: u32 object id, u8 level.
 
 The later client draws a blue gauge and a title for the level; this client
 shows the title through the server's notice and keeps the level here for the
-gauge skin (the pmi_jahwan_02 art is not published yet, so the gauge stays
-the plain one).
+gauge skin (hwan-skin.ts swaps the Berserk gauge to the pmi_jahwan_02 art; the
+server also sends a notice with the title).
 
 ===========================================================================
 */

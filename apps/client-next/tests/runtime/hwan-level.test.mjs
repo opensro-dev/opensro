@@ -48,3 +48,28 @@ test("a malformed level frame is a protocol error", () => {
 	assert.throws( () => owner.receive( { opcode: OP_HWAN_LEVEL, payload: new Uint8Array( 4 ) } ), /length/ );
 	assert.throws( () => owner.receive( levelFrame( 1, HWAN_LEVEL_MAX + 1 ) ), /level/ );
 });
+
+const { hwanSkin } = await import( "../../src/engine/foundation/gameplay/hwan-skin.ts" );
+
+test("a Blue Berserk names the blue twin of every gauge picture, and nothing else", () => {
+	const root = "/assets/images/Media_extracted/interface/playerminiinfo/";
+	for (
+		const name of [
+			"pmi_jahwan",
+			"pmi_jahwan_burn",
+			"pmi_jahwan_face",
+			"pmi_jahwan_glow",
+			"pmi_jahwan_button_focus"
+		]
+	) {
+		const blue = hwanSkin( root + name + ".png", 2 );
+		assert.equal( blue, root + name.replace( "pmi_jahwan", "pmi_jahwan_02" ) + ".png" );
+		assert.equal( hwanSkin( blue, 2 ), blue, "already blue" );
+		assert.equal( hwanSkin( root + name + ".png", 0 ), root + name + ".png" );
+		assert.equal( hwanSkin( root + name + ".png", undefined ), root + name + ".png" );
+	}
+	assert.equal(
+		hwanSkin( "/assets/images/Media_extracted/interface/playerminiinfo/pmi_hp.png", 3 ),
+		"/assets/images/Media_extracted/interface/playerminiinfo/pmi_hp.png"
+	);
+});

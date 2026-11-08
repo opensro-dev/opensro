@@ -338,6 +338,16 @@ export const runtimeCifImageReferences = [
 	"interface/playerminiinfo/pmi_hp.ddj",
 	"interface/playerminiinfo/pmi_mp.ddj",
 	"interface/playerminiinfo/pmi_jahwan_burn.ddj",
+	// The Blue Berserk's gauge art: the v1.150 data ships a blue twin of every pmi_jahwan
+	// picture, at the same size. The later client draws them for a Blue Berserk level above 0
+	// (hwan-skin.ts); no v1.150 layout names them, so they are listed here.
+	"interface/playerminiinfo/pmi_jahwan_02.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_burn.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button_focus.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_button_press.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_face.ddj",
+	"interface/playerminiinfo/pmi_jahwan_02_glow.ddj",
 	// CIFPetMiniInfo_OnCreate (6B3760) loads the pet portrait frame from code.
 	"interface/playerminiinfo/pmi_pet_face.ddj",
 	"interface/ifcommon/com_kindred_china.ddj",

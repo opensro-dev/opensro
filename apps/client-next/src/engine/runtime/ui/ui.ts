@@ -120,6 +120,7 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
+import { hwanSkin } from "@/engine/foundation/gameplay/hwan-skin";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -12069,18 +12070,27 @@ export function createUi( ports: UiPorts ) {
 								(hudCopy( "UIIT_STT_LV_LEVEL" ) || "Lv %d").replace( "%d", String( level ) )
 							);
 						}
+						// Port-only: a Blue Berserk draws the gauge in its blue art (hwan-skin.ts).
+						// The blue file is requested like any gauge picture; until it is loaded (or if a
+						// build does not publish it) the plain one draws.
+						const blue = ( path: string ) => {
+							const art = hwanSkin( path, game?.hwanLevel );
+							if ( art === path ) return path;
+							paths.push( art );
+							return resources.has( art ) ? art : path;
+						};
 						if ( berserkActor ) {
 							const animation = berserkHud( now - berserkStarted ),
-								burn = ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png",
+								burn = blue( ROOT + "interface/playerminiinfo/pmi_jahwan_burn.png" ),
 								size = resources.size( burn );
 							paths.push( burn );
 							for ( let i = 0; i < 5; i++ ) {
-								const circle = p["GDR_PMI_CIRCLE" + i]!;
-								if ( resources.has( circle.texture ) && animation.circles[i]! > 0 ) {
+								const circle = p["GDR_PMI_CIRCLE" + i]!, circleArt = blue( circle.texture );
+								if ( resources.has( circleArt ) && animation.circles[i]! > 0 ) {
 									rect(
 										authoredRect( circle, px, py ),
 										[ 1, 1, 1, animation.circles[i]! ],
-										circle.texture,
+										circleArt,
 										circle.uv
 									);
 								}
@@ -12100,18 +12110,28 @@ export function createUi( ports: UiPorts ) {
 								}
 							}
 							for ( const name of [ "GDR_PMI_HWAN_EFF_FACE", "GDR_PMI_HWAN_EFF_GLOW" ] ) {
-								const n = p[name]!;
-								if ( resources.has( n.texture ) && animation.glow > 0 ) {
-									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], n.texture, n.uv );
+								const n = p[name]!, art = blue( n.texture );
+								if ( resources.has( art ) && animation.glow > 0 ) {
+									rect( authoredRect( n, px, py ), [ 1, 1, 1, animation.glow ], art, n.uv );
 								}
 							}
 						} else {for ( let i = 0; i < Math.min( 5, gauge?.displayed ?? 0 ); i++ ) {
-								authoredImage( p["GDR_PMI_CIRCLE" + (4 - i)]!, px, py );
+								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!;
+								authoredImage( circle, px, py, blue( circle.texture ) );
 							}}
 						if (
 							gauge?.displayed === 5 &&
 							next.entities.find( e => e.gid === game?.localGid )?.appearanceState?.[2] !== 1
-						) authoredButton( p.GDR_PMI_BTN_JAHWAN!, px, py, "berserk", "Berserk" );
+						) {
+							const plain = p.GDR_PMI_BTN_JAHWAN!;
+							authoredButton(
+								{ ...plain, texture: blue( plain.texture ) },
+								px,
+								py,
+								"berserk",
+								"Berserk"
+							);
+						}
 						if ( (game?.progression?.statPoints ?? 0) > 0 ) {
 							authoredButton(
 								p.GDR_PMI_BTN_STATUP!,

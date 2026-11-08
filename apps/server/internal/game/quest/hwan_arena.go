@@ -25,6 +25,11 @@ trades it for a Soul Fragment, anything else ends the ritual with "failed to
 obtain", keeping the talisman for another try. Either way the player goes home
 ten seconds after the kill.
 
+Not implemented: the level 100 trial's Annihilation Trap (it holds the commander or the
+healer in AI state 0x1f for 10 s). CaptureQuestTrap sees only a codename and a closure that
+defeats the monster, and the monster owner has no quest-callable "not acting" hold; see
+docs/features/CAP110.md.
+
 The return point is where the quest was entered (the instance transfer's
 anchor). The later client's cutscene scripts for the rituals are not ported
 (docs/features/CAP110.md).
