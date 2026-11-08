@@ -13,7 +13,8 @@ naming the blue file in place of the plain one.
 ===========================================================================
 */
 
-const PLAIN = /(interface\/playerminiinfo\/pmi_jahwan)(?!_02)(?=[._])/;
+const GAUGE_ART = "interface/playerminiinfo/pmi_jahwan";
+const BLUE_MARK = "_02";
 
 /*
 ================
@@ -24,5 +25,12 @@ Blue Berserk level above 0, and every other path (or level 0) unchanged.
 ================
 */
 export function hwanSkin( path: string, level: number | undefined ): string {
-	return level && level > 0 ? path.replace( PLAIN, "$1_02" ) : path;
+	if ( !level || level <= 0 ) return path;
+	const at = path.indexOf( GAUGE_ART );
+	if ( at < 0 ) return path;
+	const end = at + GAUGE_ART.length;
+	// Already blue, or a longer name that only starts with pmi_jahwan (none ships).
+	if ( path.startsWith( BLUE_MARK, end ) ) return path;
+	const next = path[end];
+	return next === "_" || next === "." ? path.slice( 0, end ) + BLUE_MARK + path.slice( end ) : path;
 }
