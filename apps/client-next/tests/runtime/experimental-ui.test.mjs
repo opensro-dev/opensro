@@ -482,6 +482,25 @@ test("the window is wide enough for native tabs", () => {
 	}
 });
 
+test("a cancelled drag on a row does not swallow the next row click", () => {
+	const f = fixture();
+	try {
+		f.activate( "open-window:Experimental" );
+		const before = f.wheel( 1 );
+		const id = "experimental-anisotropic-filtering";
+		const row = defined( before.controls.find( control => control.id === id ) );
+		// A touch drag that the browser cancels (pointercancel) ends in
+		// drag-cancel, never drag-end; its travel must not carry over.
+		f.ui.event( { kind: "drag", id, dx: 0, dy: 6 } );
+		f.ui.event( { kind: "drag-cancel", id } );
+		const after = f.drag( id, 3 );
+		const moved = defined( after.controls.find( control => control.id === id ) );
+		assert.equal( moved.selected, !row.selected );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a click with a pixel of motion on a row still toggles it and keeps the list", () => {
 	const f = fixture();
 	try {

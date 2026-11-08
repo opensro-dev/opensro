@@ -6526,6 +6526,10 @@ export function createUi( ports: UiPorts ) {
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
 				if ( carriedShortcut?.id === event.id ) carriedShortcut = null;
+				// Port-only, not native: a cancelled Experimental drag (pointercancel,
+				// blur) never reaches drag-end, so its travel would otherwise carry
+				// into the next press and swallow that row's click.
+				if ( panel === "Experimental" ) experimental.endDrag();
 				dirty = true;
 				return;
 			}
