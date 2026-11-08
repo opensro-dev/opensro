@@ -317,7 +317,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		// The sqlite phase is the wait for a queue slot, the only disk
 		// time the lock still sees.
 		waited := s.mu.now()
-		s.writer.enqueue(tx, s.beforeSQLiteCommit)
+		s.queuedSeq = s.writer.enqueue(tx, s.beforeSQLiteCommit)
 		phases[commitPhaseStatements] = built
 		phases[commitPhaseSQLite] = s.mu.now().Sub(waited)
 	} else {
