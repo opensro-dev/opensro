@@ -157,8 +157,13 @@ def npc_map_labels(mapinfo, positions, characters, original):
 
 # ================
 # add_services
+#
+# port_stock (#2846; build_alexandria_variant's
+# SRO_ALEXANDRIA_PORT_STOCK) asks the three shop passes for the port's
+# own degree stock; without it they stock each store with the goods
+# one official source had active.
 # ================
-def add_services(vsro_root, native, output):
+def add_services(vsro_root, native, output, port_stock=False):
 	from build_alexandria_variant import TEXTDATA, read_vsro_file, replace_file
 	root = output / "Media_extracted" / TEXTDATA
 	native_root = native / "Media_extracted" / TEXTDATA
@@ -172,21 +177,22 @@ def add_services(vsro_root, native, output):
 		replace_file(root / name, raw)
 	# Ordinary degree 10 goods, on stores of the city's own (a no-op without the degree 10 items).
 	item_rows = {r[2]: r for p in root.glob("itemdata_*.txt") for r in tables.table_rows(p.read_bytes()) if len(r) > d10.PRICE_COLUMN and r[0] == "1"}
-	stock, stock_summary = d10.merge_d10_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows)
+	stock, stock_summary = d10.merge_d10_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows, port_stock=port_stock)
 	for name, raw in stock.items():
 		replace_file(root / name, raw)
 	summary["degree10"] = stock_summary
 	# Band consumables and degree 10/11 alchemy (#1748), on the post-degree-10 tables.
-	supplied, supplies_summary = supplies.merge_supplies({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows)
+	supplied, supplies_summary = supplies.merge_supplies({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows, port_stock=port_stock)
 	for name, raw in supplied.items():
 		replace_file(root / name, raw)
 	summary["supplies"] = supplies_summary
 	# Degree 11 grade A gear (#1748 PR 2, owner-approved), on the same stores.
-	geared, gear_summary = d11.merge_d11_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows)
+	geared, gear_summary = d11.merge_d11_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows, port_stock=port_stock)
 	for name, raw in geared.items():
 		replace_file(root / name, raw)
 	summary["degree11"] = gear_summary
 	labels, count = npc_map_labels((root / "worldmap_mapinfo.txt").read_bytes(), (root / "npcpos.txt").read_bytes(), characters, (root / "worldmap_localinfo.txt").read_bytes())
 	replace_file(root / "worldmap_localinfo.txt", labels)
 	summary["mapLabels"] = count
+	summary["portStock"] = port_stock
 	return summary

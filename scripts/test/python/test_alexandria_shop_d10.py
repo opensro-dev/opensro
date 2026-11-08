@@ -86,13 +86,31 @@ class StockTests(unittest.TestCase):
 		self.assertTrue(all("_05_" not in p for p in stock) or len(goods) + 10 <= d10.MAX_TAB_SLOTS)
 
 
+class OfficialStockTests(unittest.TestCase):
+	"""The default build stocks what official Alexandria sold (#2846):
+	iSRO-R's smith sells degree-11 goods only (its degree-10 rows are
+	inactive), so the degree 10 pass adds nothing anywhere. The city's
+	stores are plain copies until the degree 11 pass stocks them."""
+
+	def test_the_degree_10_pass_adds_nothing_by_default(self):
+		merged, summary = d10.merge_d10_stock(tables(GOODS), ITEMS)
+		goods = [r for r in table_rows(merged["refshopgoods.txt"]) if r[2] == "STORE_SD_SMITH_TAB1"]
+		self.assertEqual([r[3] for r in goods], GOODS)
+		self.assertEqual((summary["goods"], summary["packages"]), (0, 0))
+
+	def test_reentry_still_adds_nothing(self):
+		merged, _ = d10.merge_d10_stock(tables(GOODS), ITEMS)
+		again, summary = d10.merge_d10_stock(merged, ITEMS)
+		self.assertEqual((summary["goods"], summary["packages"]), (0, 0))
+
+
 class MergeTests(unittest.TestCase):
 	def merge(self, items=ITEMS):
-		return d10.merge_d10_stock(tables(GOODS), items)
+		return d10.merge_d10_stock(tables(GOODS), items, port_stock=True)
 
 	def test_the_city_gets_a_store_of_its_own_and_khotans_stays_unchanged(self):
 		raw = tables(GOODS)
-		merged, summary = d10.merge_d10_stock(raw, ITEMS)
+		merged, summary = d10.merge_d10_stock(raw, ITEMS, port_stock=True)
 		self.assertEqual(summary["stores"], ["STORE_SD_SMITH"])
 		mapping = {tuple(r[2:]) for r in table_rows(merged["refmappingshopgroup.txt"])}
 		self.assertIn(("GROUP_STORE_SD_M_SMITH", "STORE_SD_SMITH"), mapping)
@@ -132,10 +150,10 @@ class MergeTests(unittest.TestCase):
 		raw["refscrapofpackageitem.txt"].append(["1", "11", "PACKAGE_ITEM_CH_RING_09_A", "ITEM_CH_RING_09_A", "0", "0", "120", *["0"] * 13, *FILLER, "200"])
 		raw["refpricepolicyofitem.txt"].append(["1", "11", "PACKAGE_ITEM_CH_RING_09_A", "1", "1000", *FILLER])
 		items = {**ITEMS, "ITEM_CH_RING_10_A": item("ITEM_CH_RING_10_A", 100)}
-		merged, _ = d10.merge_d10_stock({name: utf16(r) for name, r in raw.items()}, items)
+		merged, _ = d10.merge_d10_stock({name: utf16(r) for name, r in raw.items()}, items, port_stock=True)
 		accessory = ["PACKAGE_ITEM_CH_RING_09_A", "PACKAGE_ITEM_CH_RING_10_A"]
 		self.assertEqual([r[3] for r in table_rows(merged["refshopgoods.txt"]) if r[2] == "STORE_SD_ACCESSORY_TAB1"], accessory)
-		again, summary = d10.merge_d10_stock(merged, items)
+		again, summary = d10.merge_d10_stock(merged, items, port_stock=True)
 		self.assertEqual(summary["goods"], 0)
 		self.assertEqual(summary["packages"], 0)
 		self.assertEqual([r[3] for r in table_rows(again["refshopgoods.txt"]) if r[2] == "STORE_SD_ACCESSORY_TAB1"], accessory)

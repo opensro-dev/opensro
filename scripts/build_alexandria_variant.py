@@ -105,6 +105,12 @@ NATIVE_LEVEL_CAP = 90
 # gate conditions are clamped to the cap the shard runs, read with the same
 # values the server accepts so build and server can never disagree.
 LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
+# The shops' stock choice (#2846): unset, the Alexandria variant stocks
+# each store with the goods one official source had active; on, the
+# shop passes stock the port's own degree goods instead.
+PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
+PORT_STOCK_OFF_VALUES = ("", "0", "off", "false")
+PORT_STOCK_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
 LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
@@ -627,7 +633,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out)
+	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
 	environment = read_vsro_file(vsro_root, "Map", "environment.ifo")
 	replace_file(out / "Map_extracted" / "environment.ifo", environment)
@@ -674,6 +680,25 @@ def gate_level_cap(environ=None):
 	if value in LEVEL_CAP_EXPANSION_VALUES:
 		return EXPANSION_LEVEL_CAP
 	raise ValueError(f"{LEVEL_CAP_FLAG} must be off, 90 or 110, not {value!r}")
+
+
+# ================
+# port_stock_enabled
+# ================
+def port_stock_enabled(environ=None):
+	"""
+	The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK:
+	False - the default, and the value every official build has - asks
+	the shop passes for each store's official stock; on asks for the
+	port's own degree goods. Anything else is refused, as the server
+	refuses a value it does not know.
+	"""
+	value = (os.environ if environ is None else environ).get(PORT_STOCK_FLAG, "").strip().lower()
+	if value in PORT_STOCK_OFF_VALUES:
+		return False
+	if value in PORT_STOCK_ON_VALUES:
+		return True
+	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
 
 
 # ================
