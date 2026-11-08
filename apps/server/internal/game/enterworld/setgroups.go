@@ -48,6 +48,12 @@ const setMagicGroupPrefix = "MAGIC_11_SET_"
 // empty slot. The figure is
 // a family code (21 armour, 5 accessory), never a piece count: the tier
 // requirement is the trailing _2/_4/_6 of the magic group's codename.
+// The itemdata cells a piece is read from: its name symbol and TypeID4 (the slot).
+const (
+	setPieceNameCell = 5
+	setPieceSlotCell = 12
+)
+
 // setNameSymbolCell is the refsetitemgroup column naming the set's text symbol.
 const setNameSymbolCell = 4
 
@@ -153,6 +159,7 @@ type TextdataSetGroups struct {
 	tiers   map[int64][]SetTier
 	options map[int][]SetOption
 	names   map[int64]string
+	pieces  map[int64][]SetPiece
 }
 
 /*
@@ -220,6 +227,7 @@ applies, never a wrong bonus.
 func (t *TextdataSetGroups) load() {
 	t.tiers = map[int64][]SetTier{}
 	t.names = map[int64]string{}
+	t.pieces = map[int64][]SetPiece{}
 	t.options = map[int][]SetOption{}
 	codenames := map[int]string{}
 
@@ -320,6 +328,7 @@ func (t *TextdataSetGroups) load() {
 			t.names[group] = strings.TrimSpace(fields[setNameSymbolCell])
 		}
 	}
+	t.loadPieces()
 	log.Infof("bootstrap: equipment set catalogue loaded from %s (%d group(s), %d magic group(s))", t.dir, len(t.tiers), len(t.options))
 }
 
@@ -342,4 +351,46 @@ func setTierRequirement(codename string) (int, bool) {
 		return 0, false
 	}
 	return int(required), true
+}
+
+/*
+================
+loadPieces
+
+loadPieces lists each set group's pieces for the tooltip: every enabled
+itemdata row whose column 62 names a group that has tiers, once per name
+symbol (a piece and its rare twin share one), ordered by the item's slot
+(TypeID4: head, shoulder, chest, legs, hands, feet for armor; earring,
+necklace, ring for accessories). Absent itemdata shards leave the lists
+empty, so the tooltip draws the tiers without them.
+================
+*/
+func (t *TextdataSetGroups) loadPieces() {
+	files, _ := filepath.Glob(filepath.Join(t.dir, "itemdata_*.txt"))
+	sort.Strings(files)
+	seen := map[int64]map[string]bool{}
+	for _, file := range files {
+		for _, fields := range readTextdataFile(file) {
+			if len(fields) <= setPieceSlotCell || fields[0] != "1" {
+				continue
+			}
+			group := setGroupIDOf(fields)
+			if group <= 0 || len(t.tiers[group]) == 0 {
+				continue
+			}
+			slot, ok := textdataInt(fields[setPieceSlotCell])
+			name := strings.TrimSpace(fields[setPieceNameCell])
+			if !ok || name == "" || seen[group][name] {
+				continue
+			}
+			if seen[group] == nil {
+				seen[group] = map[string]bool{}
+			}
+			seen[group][name] = true
+			t.pieces[group] = append(t.pieces[group], SetPiece{Slot: int(slot), Name: name})
+		}
+	}
+	for _, pieces := range t.pieces {
+		sort.SliceStable(pieces, func(i, j int) bool { return pieces[i].Slot < pieces[j].Slot })
+	}
 }

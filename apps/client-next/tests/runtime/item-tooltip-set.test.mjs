@@ -12,8 +12,9 @@ names none, shows nothing.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 
-const { itemTooltipSet, tooltipSetViewer, wornSetPieces } = await import(
+const { itemTooltipSet, itemTooltipSetName, tooltipSetViewer, wornSetPieces, wornSetSlots } = await import(
 	"../../src/engine/foundation/ui/item-tooltip-set.ts"
 );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
@@ -22,24 +23,34 @@ const { publishedEquipmentSets } = await import( "../../src/engine/foundation/ga
 const SETS = publishedEquipmentSets( [ {
 	id: 13,
 	name: "SN_ITEM_11_SET_A_DEFENSE",
+	pieces: [ { slot: 1, name: "SN_HEAD" }, { slot: 2, name: "SN_SHOULDER" }, { slot: 3, name: "SN_CHEST" } ],
 	tiers: [
 		{ pieces: 2, options: [ { option: 389, value: 1 } ] },
 		{ pieces: 4, options: [ { option: 389, value: 2 }, { option: 390, value: 10 } ] },
 		{ pieces: 6, options: [ { option: 389, value: 4 } ] }
 	]
 } ] );
-const text = symbol => symbol;
+// A build without the later text: every symbol answers empty, so the English fallbacks show.
+const noText = () => "";
+const TEXTS = {
+	SN_HEAD: "Headgear",
+	SN_SHOULDER: "Shell",
+	SN_CHEST: "Lamellar",
+	SN_ITEM_11_SET_A_DEFENSE: "Destruction"
+};
+const text = symbol => TEXTS[symbol] ?? "";
 
 /*
 ================
 piece
 
-A worn or carried item as the tooltip reads it: its slot and its set id.
+A worn or carried item as the tooltip reads it: its slot (the equipment slot, below 13 when worn),
+its set id and its worn position (TypeID4 in the type flags).
 ================
 */
 /** @returns {any} */
-function piece( slot, setId ) {
-	return { slot, tooltip: { fields: { setId } } };
+function piece( slot, setId, position = 1 ) {
+	return { slot, typeFlags: 0x2c | (3 << 7) | (position << 11), tooltip: { fields: { setId } } };
 }
 
 test("worn pieces count by set and ignore the bag", () => {
@@ -47,28 +58,58 @@ test("worn pieces count by set and ignore the bag", () => {
 	assert.equal( counts.get( 13 ), 2 );
 	assert.equal( counts.get( 14 ), 1 );
 	assert.equal( counts.has( 0 ), false );
+	assert.deepEqual( [
+		...(wornSetSlots( [ piece( 1, 13, 1 ), piece( 2, 13, 3 ), piece( 14, 13, 2 ) ] ).get( 13 ) ?? [])
+	], [ 1, 3 ] );
 });
 
-test("the tier the worn count reaches is in force, higher tiers wait", () => {
-	const rows = itemTooltipSet( piece( 1, 13 ), SETS, new Map( [ [ 13, 4 ] ] ), text );
-	assert.equal( rows[0].value, "Ruin Set (4/6)" );
-	const active = rows.filter( row => row.color === 0xff6ce675 ).map( row => row.value.trim() );
-	assert.deepEqual( active, [ "Reinforce +2 on each worn piece", "Abnormal state resistance +10" ] );
-	const waiting = rows.filter( row => row.color === 0xff8a8a8a ).map( row => row.value.trim() );
-	assert.ok( waiting.includes( "Reinforce +4 on each worn piece" ) );
-	assert.ok( waiting.includes( "Reinforce +1 on each worn piece" ) );
+test("the block follows the later client's layout: name and count, pieces, tiers with their effects", () => {
+	const worn = [ piece( 1, 13, 1 ), piece( 2, 13, 3 ) ];
+	const rows = itemTooltipSet( worn[0], SETS, worn, text );
+	assert.deepEqual( rows.map( r => r.value ), [
+		"Destruction (2/6)",
+		"Headgear",
+		"Shell",
+		"Lamellar",
+		" ",
+		"Destruction(2)",
+		"Set enforcement : 1 enhancement",
+		" ",
+		"Destruction(4)",
+		"Set enforcement : 2 enhancement",
+		"Increase all resistance : 10 Increase",
+		" ",
+		"Destruction(6)",
+		"Set enforcement : 4 enhancement"
+	] );
+	// Worn pieces are bright, the others dim; the tier in force is in colour, higher tiers dim.
+	const byValue = value => defined( rows.find( r => r.value === value ) );
+	assert.equal( byValue( "Headgear" ).color, 0xffffffff );
+	assert.equal( byValue( "Lamellar" ).color, 0xffffffff );
+	assert.notEqual( byValue( "Shell" ).color, 0xffffffff );
+	assert.equal( byValue( "Destruction(2)" ).color, byValue( "Destruction (2/6)" ).color );
+	assert.equal( byValue( "Destruction(4)" ).color, byValue( "Shell" ).color );
+	assert.equal( byValue( "Set enforcement : 1 enhancement" ).color, 0xff2ee6f0 );
+});
+
+test("a build without the later text still names the set and the effects in English", () => {
+	const rows = itemTooltipSet( piece( 1, 13 ), SETS, [ piece( 1, 13 ) ], noText );
+	assert.equal( rows[0].value, "Destruction (1/6)" );
+	assert.ok( rows.some( r => r.value === "Set enforcement : 1 enhancement" ) );
+	assert.equal( rows.some( r => r.value === "Headgear" ), false, "a piece without text is not listed" );
 });
 
 test("below the first tier nothing is in force", () => {
-	const rows = itemTooltipSet( piece( 1, 13 ), SETS, new Map( [ [ 13, 1 ] ] ), text );
-	assert.equal( rows[0].value, "Ruin Set (1/6)" );
-	assert.equal( rows.some( row => row.color === 0xff6ce675 ), false );
+	const rows = itemTooltipSet( piece( 1, 13 ), SETS, [ piece( 1, 13 ) ], text );
+	assert.equal( rows.some( r => r.color === 0xff2ee6f0 ), false );
 });
 
 test("an item without a published set shows nothing", () => {
-	assert.deepEqual( itemTooltipSet( piece( 1, 0 ), SETS, new Map(), text ), [] );
-	assert.deepEqual( itemTooltipSet( piece( 1, 99 ), SETS, new Map(), text ), [] );
-	assert.deepEqual( itemTooltipSet( piece( 1, 13 ), [], new Map(), text ), [] );
+	assert.deepEqual( itemTooltipSet( piece( 1, 0 ), SETS, [], text ), [] );
+	assert.deepEqual( itemTooltipSet( piece( 1, 99 ), SETS, [], text ), [] );
+	assert.deepEqual( itemTooltipSet( piece( 1, 13 ), [], [], text ), [] );
+	assert.equal( itemTooltipSetName( piece( 1, 0 ), SETS, text ), undefined );
+	assert.equal( itemTooltipSetName( piece( 1, 13 ), SETS, text )?.value, "Destruction" );
 });
 
 test("a malformed set list is refused whole and an absent one is empty", () => {
@@ -77,7 +118,9 @@ test("a malformed set list is refused whole and an absent one is empty", () => {
 	assert.throws( () =>
 		publishedEquipmentSets( [ { id: 1, tiers: [ { pieces: 2, options: [ { option: 389 } ] } ] } ] )
 	);
+	assert.throws( () => publishedEquipmentSets( [ { id: 1, pieces: [ { slot: 99, name: "x" } ], tiers: [] } ] ) );
 	assert.throws( () => publishedEquipmentSets( {} ) );
+	assert.deepEqual( publishedEquipmentSets( [ { id: 1, tiers: [] } ] )[0].pieces, [] );
 });
 
 test("the Experimental row and a published set list decide whether the tooltip has a set block", () => {
@@ -91,7 +134,7 @@ test("the Experimental row and a published set list decide whether the tooltip h
 	assert.deepEqual( tooltipSetViewer( true, SETS, undefined )?.equipment, [] );
 });
 
-test("an armor tooltip carries the set block only when the viewer gives sets", () => {
+test("an armor tooltip carries the set rows only when the viewer gives sets", () => {
 	// Every stat column reads as 1, so the armor rows build; only the set rows are under test.
 	const fields = new Proxy( { setId: 13, rarity: 0, itemClass: 1 }, {
 		get: ( o, k ) => (k in o ? o[k] : 1),
@@ -107,11 +150,12 @@ test("an armor tooltip carries the set block only when the viewer gives sets", (
 		magic: [],
 		tooltip: { fields }
 	};
-	const rowsOf = viewer => itemTooltip( item, { masteries: [] }, symbol => symbol, viewer ).map( row => row.value );
+	const rowsOf = viewer => itemTooltip( item, { masteries: [] }, text, viewer ).map( row => row.value );
 	const plain = rowsOf( undefined );
-	assert.equal( plain.some( value => value.includes( "Ruin Set" ) ), false, "no viewer, no block" );
+	assert.equal( plain.some( value => value.includes( "Destruction" ) ), false, "no viewer, no set rows" );
 	const shown = rowsOf( { sets: tooltipSetViewer( true, SETS, [ item ] ) } );
-	assert.ok( shown.some( value => value.includes( "Ruin Set (1/6)" ) ), "the block heads the set rows" );
+	assert.equal( shown[2], "Destruction", "the set's name sits under the title row and its spacer" );
+	assert.ok( shown.some( value => value === "Destruction (1/6)" ), "the block lists the pieces and tiers" );
 	assert.deepEqual(
 		rowsOf( { sets: tooltipSetViewer( false, SETS, [ item ] ) } ),
 		plain,

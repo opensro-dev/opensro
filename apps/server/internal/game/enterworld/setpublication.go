@@ -45,6 +45,20 @@ type SetTierPublication struct {
 
 /*
 ================
+SetPiece
+
+One piece of a set: its slot (the item's TypeID4, the worn position the client
+matches a worn item by) and its name symbol, which the client resolves in its
+own text table.
+================
+*/
+type SetPiece struct {
+	Slot int    `json:"slot"`
+	Name string `json:"name"`
+}
+
+/*
+================
 SetPublication
 
 One set group: its id (an item's setId), the name symbol the overlay
@@ -52,9 +66,10 @@ authored, and its tiers ascending by piece count.
 ================
 */
 type SetPublication struct {
-	ID    int64                `json:"id"`
-	Name  string               `json:"name,omitempty"`
-	Tiers []SetTierPublication `json:"tiers"`
+	ID     int64                `json:"id"`
+	Name   string               `json:"name,omitempty"`
+	Pieces []SetPiece           `json:"pieces"`
+	Tiers  []SetTierPublication `json:"tiers"`
 }
 
 /*
@@ -84,7 +99,7 @@ func (t *TextdataSetGroups) PublishedSets() []SetPublication {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	out := make([]SetPublication, 0, len(ids))
 	for _, id := range ids {
-		set := SetPublication{ID: id, Name: t.names[id]}
+		set := SetPublication{ID: id, Name: t.names[id], Pieces: append([]SetPiece{}, t.pieces[id]...)}
 		for _, tier := range t.tiers[id] {
 			published := SetTierPublication{Pieces: tier.RequiredCount, Options: []SetOptionPublication{}}
 			for _, option := range t.options[tier.MagicGroupID] {

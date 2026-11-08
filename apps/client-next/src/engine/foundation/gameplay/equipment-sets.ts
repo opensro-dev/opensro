@@ -19,6 +19,7 @@ export const SET_OPTION_RESIST_ALL = 390;
 
 const MAX_SETS = 256;
 const MAX_TIERS = 16;
+const MAX_PIECES = 32;
 const MAX_OPTIONS = 16;
 const MAX_VALUE = 100000;
 
@@ -32,9 +33,16 @@ export interface EquipmentSetTier {
 	readonly options: readonly EquipmentSetOption[];
 }
 
+// One piece of a set: the worn position its item sits in (TypeID4) and its name symbol.
+export interface EquipmentSetPiece {
+	readonly slot: number;
+	readonly name: string;
+}
+
 export interface EquipmentSet {
 	readonly id: number;
 	readonly name: string;
+	readonly pieces: readonly EquipmentSetPiece[];
 	readonly tiers: readonly EquipmentSetTier[];
 }
 
@@ -59,14 +67,24 @@ export function publishedEquipmentSets( value: unknown ): readonly EquipmentSet[
 	if ( value === undefined ) return [];
 	if ( !Array.isArray( value ) || value.length > MAX_SETS ) throw Error( "Invalid equipment sets" );
 	return value.map( ( row: unknown ) => {
-		const set = row as { id?: unknown; name?: unknown; tiers?: unknown; } | null;
+		const set = row as { id?: unknown; name?: unknown; pieces?: unknown; tiers?: unknown; } | null;
 		if (
 			!set || !isCount( set.id, 0xffffffff ) || (set.name !== undefined && typeof set.name !== "string") ||
-			!Array.isArray( set.tiers ) || set.tiers.length > MAX_TIERS
+			!Array.isArray( set.tiers ) || set.tiers.length > MAX_TIERS ||
+			(set.pieces !== undefined && (!Array.isArray( set.pieces ) || set.pieces.length > MAX_PIECES))
 		) throw Error( "Invalid equipment set" );
 		return {
 			id: set.id,
 			name: (set.name as string | undefined) ?? "",
+			pieces: ((set.pieces as unknown[] | undefined) ?? []).map( ( pieceRow: unknown ) => {
+				const piece = pieceRow as { slot?: unknown; name?: unknown; } | null;
+				if (
+					!piece || !isCount( piece.slot, 31 ) || typeof piece.name !== "string" || piece.name.length > 256
+				) {
+					throw Error( "Invalid equipment set piece" );
+				}
+				return { slot: piece.slot, name: piece.name };
+			} ),
 			tiers: set.tiers.map( ( tierRow: unknown ) => {
 				const tier = tierRow as { pieces?: unknown; options?: unknown; } | null;
 				if (

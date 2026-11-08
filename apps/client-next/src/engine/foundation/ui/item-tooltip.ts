@@ -18,7 +18,7 @@ import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
 import { itemTooltipRecovery } from "./item-tooltip-recovery";
 import { itemTooltipStone } from "./item-tooltip-stone";
-import { itemTooltipSet, wornSetPieces } from "./item-tooltip-set";
+import { itemTooltipSet, itemTooltipSetName } from "./item-tooltip-set";
 import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
@@ -91,6 +91,9 @@ export function itemTooltip(
 		} :
 		undefined;
 	if ( seal && viewer?.sealUnderHeading ) rows.push( seal );
+	// Port-only (Experimental set tooltip): the set's name sits under the title, as in the later client.
+	const setNameRow = viewer?.sets && equipment ? itemTooltipSetName( item, viewer.sets.groups, text ) : undefined;
+	if ( setNameRow ) rows.push( setNameRow );
 
 	if ( petItem && petDegree ) {
 		add( `${text( "UIIT_STT_ARMOR_POSITION" ) || "Mounting part"}: ${petItem.slot}` );
@@ -264,7 +267,7 @@ export function itemTooltip(
 		rows.push( ...magic );
 	}
 	if ( viewer?.sets && equipment ) {
-		const setRows = itemTooltipSet( item, viewer.sets.groups, wornSetPieces( viewer.sets.equipment ), text );
+		const setRows = itemTooltipSet( item, viewer.sets.groups, viewer.sets.equipment, text );
 		if ( setRows.length ) {
 			space();
 			rows.push( ...setRows );

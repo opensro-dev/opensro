@@ -1,13 +1,18 @@
 /*
 ===========================================================================
 
-item-tooltip-set.ts - the set bonus rows of an equipment tooltip
+item-tooltip-set.ts - the set rows of an equipment tooltip
 
 Port-only, not native (the Experimental "Set bonus on item tooltips" row):
-the v1.150 client has no set rows and the original text for these lines is
-not in its data, so the wording is the port's own. The block names the item's
-set, how many of its pieces are worn, and every tier with its effect, the
-tier in force drawn bright and the rest dim.
+the v1.150 client has no set rows. The layout follows what the later client
+shows beside a set piece: the set name with the worn pieces out of the total,
+every piece of the set (worn ones bright, the rest dim), then each tier as
+"<name>(<pieces>)" with its effects as "<label> : <value> <unit>", the tier in
+force in colour and the others dim. The names and labels are the later
+client's own text (SN_ITEM_11_SET_*, PARAM_REINFORCE_ITEM_SET, ...), merged
+into the build's text tables; the English fallbacks below cover a build that
+lacks them. The original draws this as a second panel to the right of the item;
+the port draws it as a block at the end of the one panel.
 
 ===========================================================================
 */
@@ -17,19 +22,46 @@ import type { TooltipRow } from "./tooltip-rows";
 
 // The equipment slots below this index are the worn ones (the bag follows).
 const FIRST_BAG_SLOT = 13;
-const COLOR_HEADING = 0xffffd953;
-const COLOR_ACTIVE = 0xff6ce675;
-const COLOR_INACTIVE = 0xff8a8a8a;
-const COLOR_PIECES = 0xffefdaa4;
+const COLOR_NAME = 0xff9ce86b;
+const COLOR_WORN = 0xffffffff;
+const COLOR_DIM = 0xff6b7684;
+const COLOR_EFFECT = 0xff2ee6f0;
 
-// Port-written names for the overlay's text symbols; the symbol itself is
-// preferred when the client has text for it.
+// English names of the later client's set symbols, for a build without its text.
 const SET_NAMES = {
-	SN_ITEM_11_SET_A_DEFENSE: "Ruin Set",
-	SN_ITEM_11_SET_B_DEFENSE: "Immortal Set",
-	SN_ITEM_11_SET_A_ACCESSORY: "Myth Set",
-	SN_ITEM_11_SET_B_ACCESSORY: "Legend Set"
+	SN_ITEM_11_SET_A_DEFENSE: "Destruction",
+	SN_ITEM_11_SET_B_DEFENSE: "Immortality",
+	SN_ITEM_11_SET_A_ACCESSORY: "Myth",
+	SN_ITEM_11_SET_B_ACCESSORY: "Legend",
+	SN_ITEM_11_SET_A_WEAPON: "Power",
+	SN_ITEM_11_SET_B_WEAPON: "Fight",
+	SN_ITEM_11_SET_A_SHIELD: "Protection",
+	SN_ITEM_11_SET_B_SHIELD: "Guard"
 } as const;
+
+/*
+================
+known
+
+The client's text for a symbol, or the fallback when it has none (an unknown
+symbol comes back empty or as itself).
+================
+*/
+function known( text: ( symbol: string ) => string, symbol: string, fallback: string ): string {
+	const value = symbol ? text( symbol ) : "";
+	return value && value !== symbol ? value : fallback;
+}
+
+/*
+================
+setName
+
+The set's display name.
+================
+*/
+function setName( set: EquipmentSet, text: ( symbol: string ) => string ): string {
+	return known( text, set.name, (SET_NAMES as Readonly<Record<string, string>>)[set.name] ?? "" );
+}
 
 /*
 ================
@@ -47,6 +79,26 @@ export function wornSetPieces( items: readonly InventoryItem[] ): ReadonlyMap<nu
 		if ( id > 0 ) counts.set( id, (counts.get( id ) ?? 0) + 1 );
 	}
 	return counts;
+}
+
+/*
+================
+wornSetSlots
+
+The worn positions (TypeID4) of each set group's worn pieces.
+================
+*/
+export function wornSetSlots( items: readonly InventoryItem[] ): ReadonlyMap<number, ReadonlySet<number>> {
+	const slots = new Map<number, Set<number>>();
+	for ( const item of items ) {
+		if ( item.slot >= FIRST_BAG_SLOT ) continue;
+		const id = item.tooltip?.fields.setId ?? 0;
+		if ( id <= 0 ) continue;
+		let row = slots.get( id );
+		if ( !row ) slots.set( id, row = new Set() );
+		row.add( (item.typeFlags >>> 11) & 31 );
+	}
+	return slots;
 }
 
 /*
@@ -72,13 +124,51 @@ export function tooltipSetViewer(
 ================
 optionText
 
-One tier option as a line; an option the port does not know prints nothing.
+One tier option as "<label> : <value> <unit>"; an option the port does not know prints nothing.
 ================
 */
-function optionText( option: number, value: number ): string {
-	if ( option === SET_OPTION_REINFORCE_ITEM ) return `Reinforce +${value} on each worn piece`;
-	if ( option === SET_OPTION_RESIST_ALL ) return `Abnormal state resistance +${value}`;
+function optionText( option: number, value: number, text: ( symbol: string ) => string ): string {
+	if ( option === SET_OPTION_REINFORCE_ITEM ) {
+		return `${known( text, "PARAM_REINFORCE_ITEM_SET", "Set enforcement" )} : ${value} ${
+			known( text, "PARAM_REINFORCE", "enhancement" )
+		}`;
+	}
+	if ( option === SET_OPTION_RESIST_ALL ) {
+		return `${known( text, "PARAM_RESIST_ALL_SET", "Increase all resistance" )} : ${value} ${
+			known( text, "PARAM_INCREASE", "Increase" )
+		}`;
+	}
 	return "";
+}
+
+/*
+================
+itemSetOf
+
+The published set an item belongs to, with at least one tier; undefined otherwise.
+================
+*/
+function itemSetOf( item: InventoryItem, sets: readonly EquipmentSet[] ): EquipmentSet | undefined {
+	const id = item.tooltip?.fields.setId ?? 0;
+	const set = id > 0 ? sets.find( row => row.id === id ) : undefined;
+	return set && set.tiers.length ? set : undefined;
+}
+
+/*
+================
+itemTooltipSetName
+
+The line under an item's name that names its set (the later client's green row),
+or nothing when the item is no published set's.
+================
+*/
+export function itemTooltipSetName(
+	item: InventoryItem,
+	sets: readonly EquipmentSet[],
+	text: ( symbol: string ) => string
+): TooltipRow | undefined {
+	const set = itemSetOf( item, sets ), name = set ? setName( set, text ) : "";
+	return name ? { value: name, color: COLOR_NAME } : undefined;
 }
 
 /*
@@ -93,27 +183,34 @@ shard published. The tier in force is the highest the worn count reaches
 export function itemTooltipSet(
 	item: InventoryItem,
 	sets: readonly EquipmentSet[],
-	worn: ReadonlyMap<number, number>,
+	equipment: readonly InventoryItem[],
 	text: ( symbol: string ) => string
 ): readonly TooltipRow[] {
-	const id = item.tooltip?.fields.setId ?? 0;
-	const set = id > 0 ? sets.find( row => row.id === id ) : undefined;
-	if ( !set || !set.tiers.length ) return [];
-	const count = worn.get( id ) ?? 0,
+	const set = itemSetOf( item, sets );
+	if ( !set ) return [];
+	const count = wornSetPieces( equipment ).get( set.id ) ?? 0,
+		worn = wornSetSlots( equipment ).get( set.id ),
 		total = set.tiers[set.tiers.length - 1]!.pieces,
 		active = set.tiers.filter( tier => count >= tier.pieces ).at( -1 ),
-		named = set.name ? text( set.name ) : "",
-		name = (named && named !== set.name ? named : (SET_NAMES as Readonly<Record<string, string>>)[set.name]) ||
-			"Set";
-	const rows: TooltipRow[] = [
-		{ value: `${name} (${count}/${total})`, color: COLOR_HEADING, strong: true }
-	];
+		name = setName( set, text );
+	const rows: TooltipRow[] = [ { value: `${name} (${count}/${total})`, color: COLOR_NAME, strong: true } ];
+	for ( const piece of set.pieces ) {
+		const label = known( text, piece.name, "" );
+		if ( label ) {
+			rows.push(
+				worn?.has( piece.slot ) ?
+					{ value: label, color: COLOR_WORN, strong: true } :
+					{ value: label, color: COLOR_DIM }
+			);
+		}
+	}
 	for ( const tier of set.tiers ) {
-		const color = tier === active ? COLOR_ACTIVE : COLOR_INACTIVE;
-		rows.push( { value: `${tier.pieces} pieces:`, color: tier === active ? COLOR_PIECES : COLOR_INACTIVE } );
+		const on = tier === active;
+		rows.push( { value: " ", color: 0 } );
+		rows.push( { value: `${name}(${tier.pieces})`, color: on ? COLOR_NAME : COLOR_DIM, strong: on } );
 		for ( const option of tier.options ) {
-			const line = optionText( option.option, option.value );
-			if ( line ) rows.push( { value: "  " + line, color } );
+			const line = optionText( option.option, option.value, text );
+			if ( line ) rows.push( { value: line, color: on ? COLOR_EFFECT : COLOR_DIM, strong: on } );
 		}
 	}
 	return rows;
