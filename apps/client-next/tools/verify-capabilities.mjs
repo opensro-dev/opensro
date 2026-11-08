@@ -70,6 +70,7 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+const ambientOcclusion = runtime + "renderer/device/ambient-occlusion.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/guides/VIEWER.md).
@@ -100,7 +101,8 @@ const deviceInternals = [
 	particles,
 	shadows,
 	sunShadow,
-	hdr
+	hdr,
+	ambientOcclusion
 ];
 export const rules = {
 	createQuerySet: [ timing ],
@@ -368,6 +370,19 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( hdr );
+// The experimental occlusion owner (#2094): it totals the frame's
+// stored depth into the half-resolution factor the surfaces sample.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createTexture",
+		"createBindGroup",
+		"createBuffer",
+		"writeBuffer",
+		"beginRenderPass"
+	]
+) rules[name].push( ambientOcclusion );
 for (
 	const name of [
 		"createShaderModule",

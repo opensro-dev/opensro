@@ -62,9 +62,10 @@ const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
 // native flat fog return stands.
 
 // Port-only, not native: the second experimental stages vec4 (byte 368 of
-// the environment block; env.stages2 in WGSL) switches the three lighting
+// the environment block; env.stages2 in WGSL) switches the lighting
 // stages of the 2026-10-08 wave: x the HDR intermediate with its tone map,
-// y the sun shadow cascade, z per-pixel character and object lighting.
+// y the sun shadow cascade, z per-pixel character and object lighting,
+// w the ambient occlusion of the previous frame's depth (#2094).
 //
 // HDR - the scene renders into an rgba16float intermediate and the
 // presentation applies a filmic tone map. The 2005 frame is authored
@@ -348,6 +349,17 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
+// The ambient occlusion factor (experimental, #2094): the blurred
+// half-resolution total of the previous frame's depth, written by
+// ambient-occlusion.ts after the scene. While the stage is off every
+// draw binds a 1x1 white view and the gated read below never samples
+// it, so the native frame is untouched.
+@group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
+fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
+ let size=vec2i(textureDimensions(ambientOcclusionMap));
+ let px=clamp(vec2i(fragCoord*0.5),vec2i(0),size-vec2i(1));
+ return textureLoad(ambientOcclusionMap,px,0).r;
+}
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -509,6 +521,18 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
   surfaceLight=ambientTerm+(surfaceLight-ambientTerm)*sunShade;
  }
+// Ambient occlusion (experimental, #2094): the previous frame's depth
+// scales the ambient term only, under the cascade's admissions
+// (reflection.z world-space receivers, never water or sky) and never
+// in the mirror capture, whose positions are the reflection's, not
+// the scene's. The vertex-lit path's illumination was saturated at
+// the vertex; the same decomposition the cascade applies stands.
+var occlusion=1.0;
+if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.skin.w==0.0&&waterPass.plane.w<0.5){
+  occlusion=ambientOcclusionFactor(input.position.xy);
+  let ambientTerm=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
+  surfaceLight=surfaceLight-ambientTerm+ambientTerm*occlusion;
+ }
  // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
  // the resource. Its DIFFUSE is the vertex colour as lit, or unlit the
  // material colour (NOLIGHT object lighting writes oD0 = 1, no tint).
@@ -590,7 +614,9 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  if(material.skin.y>0.5){
   // Lightmap terrain receives the same cascade: the baked light sum is the
   // diffuse term here, so the shade multiplies it ahead of the fog blend.
-  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade;
+  // The occlusion factor multiplies it whole for the same reason: the
+  // baked sum carries no separable ambient term (#2094).
+  let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
  if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}

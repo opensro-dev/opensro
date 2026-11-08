@@ -53,6 +53,8 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
+	// Off by default: ambient occlusion is a port-only stage (#2094).
+	ambientOcclusion: false,
 	// Off by default: sky detail is a port-only deviation.
 	skyDetail: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
@@ -281,6 +283,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		ambientOcclusion: false,
 		skyDetail: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
@@ -300,7 +303,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"ambientOcclusion"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -330,7 +334,8 @@ test("new environment preferences persist only on Confirm and Default remains a 
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"ambientOcclusion"
 		])
 	) {
 		const hud = createExperimentalHud();
@@ -380,9 +385,10 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 			"silkHistory"
 		]
 	);
-	// Effects holds the port-only image effects; HD, appended last, holds
+	// Effects holds the port-only image effects - the sky detail and the
+	// ambient occlusion (#2094), here for room; HD, appended last, holds
 	// the HD texture set's row (#2061).
-	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail" ] );
+	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail", "ambientOcclusion" ] );
 	assert.deepEqual( EXPERIMENTAL_TABS[9].rows.map( row => row.key ), [ "hdTextures" ] );
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

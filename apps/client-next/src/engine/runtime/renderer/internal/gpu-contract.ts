@@ -98,6 +98,20 @@ tone-maps its unassociated color and composites over the presented UI.
 export interface HdrDraw extends BloomDraw {
 	encodePreview( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
+
+/*
+================
+AmbientOcclusionDraw
+
+The experimental occlusion stage (#2094): view is the blurred factor
+the surfaces sample (their binding 15), stable between resizes;
+encode totals this frame's stored depth into it for the next frame.
+================
+*/
+export interface AmbientOcclusionDraw {
+	readonly view: GPUTextureView;
+	encode( encoder: GPUCommandEncoder, depth: GPUTextureView ): void;
+}
 /*
 ================
 SunShadowOwner
@@ -133,6 +147,7 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly ao?: AmbientOcclusionDraw;
 }
 /*
 ================
@@ -164,6 +179,12 @@ export interface DeviceOwner extends Disposable {
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
 	sunShadow(): SunShadowOwner;
+	ambientOcclusion(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): AmbientOcclusionDraw | undefined;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
