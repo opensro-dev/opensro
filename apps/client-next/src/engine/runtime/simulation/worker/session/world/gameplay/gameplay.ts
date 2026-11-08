@@ -577,7 +577,7 @@ export function createGameplay(
 	const movement = createMovement( send, publishFeedback ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
 		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
-		targeting = createTargeting( send ),
+		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
