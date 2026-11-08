@@ -58,9 +58,48 @@ test("durability audio follows native signed comparisons, slot gates and exact t
 	assert.equal( sounds.length, 1 );
 	const before = owner.state().inventory;
 	assert.throws( () => owner.receive( 0x31e8, Buffer.alloc( 4 ) ) );
-	assert.throws( () => owner.receive( 0x31e8, durability( 12, 0 ) ) );
+	// #2877: a durability answer for a slot this client does not hold is
+	// dropped and reported, never the end of the session.
+	assert.equal( owner.receive( 0x31e8, durability( 12, 0 ) ), true );
 	assert.deepEqual( owner.state().inventory, before );
 	assert.equal( sounds.length, 1 );
+	const degraded = owner.takeDegradations();
+	assert.equal( degraded.length, 1 );
+	assert.equal( degraded[0]?.code, "durability-unknown-slot" );
+	assert.deepEqual( owner.takeDegradations(), [], "the queue drains" );
+});
+test("a durability answer for an unheld bag slot degrades instead of ending the session (#2877)", () => {
+	// Production incident: 0x31E8 25 36000000 (slot 37, durability 54)
+	// reached a client holding nothing there, after a repair, and ended
+	// the session ("Durability result references absent item"); the same
+	// frame replayed on re-entry and stranded the login.
+	const sounds = [], owner = createInventory( () => {}, handle => sounds.push( handle ) );
+	owner.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c } ],
+		equipItems: [ { slot: 13, refObjId: 1, body: equipment( 7 ) } ]
+	} );
+	const before = owner.state().inventory;
+	assert.equal( owner.receive( 0x31e8, Uint8Array.of( 0x25, 0x36, 0, 0, 0 ) ), true );
+	assert.deepEqual( owner.state().inventory, before, "nothing is applied for an unheld slot" );
+	assert.deepEqual( sounds, [], "no repair cue for an item that is not held" );
+	const [degraded] = owner.takeDegradations();
+	assert.equal( degraded?.code, "durability-unknown-slot" );
+	assert.match( degraded?.message ?? "", /37/ );
+	assert.equal( degraded?.frame?.opcode, 0x31e8 );
+	assert.deepEqual( [ ...(degraded?.frame?.payload ?? []) ], [ 0x25, 0x36, 0, 0, 0 ] );
+	// A held slot still applies in the same session.
+	owner.receive( 0x31e8, durability( 13, 30 ) );
+	assert.equal( owner.state().inventory.find( row => row.slot === 13 )?.durability, 30 );
+});
+test("gameplay surfaces the inventory owner's degradations to the world", () => {
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c } ],
+		equipItems: [ { slot: 13, refObjId: 1, body: equipment( 7 ) } ]
+	} );
+	game.receive( { opcode: 0x31e8, payload: Uint8Array.of( 0x25, 0x36, 0, 0, 0 ) }, 0 );
+	assert.deepEqual( game.takeDegradations().map( row => row.code ), [ "durability-unknown-slot" ] );
+	assert.deepEqual( game.takeDegradations(), [], "the queue drains" );
 });
 test("a durability increase flashes the repaired slot; wear does not (77C300 -> 54FA20)", () => {
 	const owner = createInventory( () => {}, () => {} );

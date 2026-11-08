@@ -578,7 +578,10 @@ test("core republishes the gameplay snapshot in full behind a journal resync", (
 		return { opcode: 0x3122, payload };
 	};
 	let compacted = [];
-	for ( let i = 0; i < 2000000 && !compacted.length; i++ ) {
+	// One entity's states coalesce (#2868): the flood interleaves a native
+	// the worker forwards raw, a barrier no row can replace.
+	for ( let i = 0; i < 200000 && !compacted.length; i++ ) {
+		core.receive( { opcode: 0x300c, payload: Uint8Array.of( 1 ) }, 10 );
 		core.receive( packet( i % 2 ? 4 : 0 ), 10 );
 		compacted = core.takeDegradations().filter( d => d.code === "world-journal-resync" );
 	}

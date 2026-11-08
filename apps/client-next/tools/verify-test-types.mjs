@@ -19,6 +19,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { root } from "./project.mjs";
+import { publishWarmCaches, seedWarmCaches } from "./warm-cache.mjs";
 
 const TSC = path.join( root, "node_modules", "typescript", "bin", "tsc" );
 const LEDGER = path.join( root, "tests", "architecture", "test-type-debt.txt" );
@@ -75,7 +76,11 @@ main
 */
 function main() {
 	const update = process.argv.includes( "--update" );
+	// A fresh worktree starts warm when another checkout already paid for
+	// this exact tree (warm-cache.mjs); publish after tsc has run either way.
+	seedWarmCaches();
 	const counts = filesWithErrors();
+	publishWarmCaches();
 	const ledger = readLedger();
 	const listed = new Set( ledger );
 

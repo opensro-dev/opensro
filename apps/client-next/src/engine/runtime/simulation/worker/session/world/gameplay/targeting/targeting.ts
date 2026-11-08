@@ -87,7 +87,10 @@ function decodeGateRows( p: Uint8Array, at: number ): GateRow[] | null {
 createTargeting
 ================
 */
-export function createTargeting( send: ( frame: WireFrame ) => void ) {
+export function createTargeting(
+	send: ( frame: WireFrame ) => void,
+	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined
+) {
 	let capabilities = 0, taxRate = 0, flagWarMode = 0;
 	let gateRows: GateRow[] = [];
 	let localSelection = false;
@@ -262,11 +265,19 @@ receive
 			// Native 764C60 picks the shape from the entity's class when the
 			// reply arrives, never from the click. The port's click-time family
 			// can disagree during the entry burst, and 9 bytes is only ever a
-			// teleport gate, so the length settles it (#2149).
-			const gate = pending?.family === "teleport" || p.length === TELEPORT_GRANT_BYTES;
+			// teleport gate, so the length settles that case (#2149); an
+			// 11-byte answer is a fortress gate's tax tail or an NPC grant,
+			// which only the replied entity's class settles (#2870).
+			const gid = p.length >= 5 ?
+				new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ) :
+				0;
+			const replied = gid ? readEntity( gid ) : undefined;
+			const gate = replied?.kind === "teleport" || pending?.family === "teleport" ||
+				p.length === TELEPORT_GRANT_BYTES;
+			const fortress = replied ? !!replied.teleport?.fortressId : pending?.fortress;
 			// A teleport gate's word may carry 0x8000000, a quest exit gate's
 			// rows after the base (CIFNPCTalk_AppendTeleportRows 5D32C0).
-			const base = gate ? (pending?.fortress ? 11 : TELEPORT_GRANT_BYTES) : 0;
+			const base = gate ? (fortress ? 11 : TELEPORT_GRANT_BYTES) : 0;
 			const rows = gate && p.length > base && p.length >= 9 &&
 					(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 5, true ) & GATE_ROWS_FLAG) !== 0 ?
 				decodeGateRows( p, base ) :
@@ -276,11 +287,10 @@ receive
 				!((gate && (p.length === base || rows)) || (p.length === 11 && p[5] === 0) ||
 					(p.length === 14 && p[5] === 1))
 			) throw new Error( "Unsupported target grant" );
-			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
 			if ( pending?.kind !== "select" || gid !== pending.gid ) return true;
 			target = gid;
 			localSelection = false;
-			taxRate = gate && pending!.fortress ?
+			taxRate = gate && fortress ?
 				new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt16( 9, true ) :
 				0;
 			capabilities = gate ?

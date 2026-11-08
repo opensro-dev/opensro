@@ -57,7 +57,7 @@ rejects as soon as the request is cancelled, while the shared work goes on
 for its other callers. A cancelled request's execution slot frees only
 when the request settles (loader.ts), so a request parked on a slow
 shared download held its slot - and the demand queued behind it - for the
-whole download: "did not acknowledge cancelling /assets/effects/programs.json within 30 s".
+whole download: "did not acknowledge cancelling /assets/effects/programs.json" (#2871).
 ================
 */
 function untilCancelled<T>( work: Promise<T>, signal: AbortSignal ): Promise<T> {

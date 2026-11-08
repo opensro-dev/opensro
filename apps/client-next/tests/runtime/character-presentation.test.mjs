@@ -75,6 +75,38 @@ const entity = ( gid, extra = {} ) => ({
 	movementMode: 2,
 	...extra
 });
+let publishedRosterValue, publishedItemsValue;
+/*
+================
+publishedRoster
+
+The published character roster, read and parsed once per process: a
+dozen tests admit the same 5 MB catalog, and re-reading and re-parsing
+it per test was seconds of this file's wall time (#2924). Tests only
+read the result and the presentation only ever receives re-encoded
+bytes, so sharing the parsed object cannot leak state between tests.
+================
+*/
+function publishedRoster() {
+	publishedRosterValue ??= JSON.parse(
+		readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" )
+	);
+	return publishedRosterValue;
+}
+/*
+================
+publishedItems
+
+The published item presentation rows, parsed once per process on the
+same terms as publishedRoster.
+================
+*/
+function publishedItems() {
+	publishedItemsValue ??= JSON.parse(
+		readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" )
+	).itemsByRefObjId;
+	return publishedItemsValue;
+}
 
 test("BSR particles cross real manifest admission for drops and NPCs and follow holder lifetime", () => {
 	const modifiers = [ {
@@ -356,6 +388,29 @@ test("a rider whose vehicle is still loading stands until the vehicle draws (BUG
 	assert.equal( f.presentation.error(), null );
 	f.dispose();
 });
+const appearanceBuffers = new WeakMap();
+/*
+================
+appearanceBuffer
+
+Encode one admitted catalog payload once per source object: a test that
+builds a fixture per family or race would otherwise stringify and
+encode the same multi-megabyte roster and item payloads for every
+fixture (#2924). The presentation decodes the bytes read-only, so one
+buffer can serve every fixture that admits the same source object.
+================
+*/
+function appearanceBuffer( source, wrap = value => value ) {
+	if ( !source || typeof source !== "object" ) {
+		return new TextEncoder().encode( JSON.stringify( wrap( source ) ) ).buffer;
+	}
+	let buffer = appearanceBuffers.get( source );
+	if ( !buffer ) {
+		buffer = new TextEncoder().encode( JSON.stringify( wrap( source ) ) ).buffer;
+		appearanceBuffers.set( source, buffer );
+	}
+	return buffer;
+}
 /*
 ================
 fixture
@@ -424,13 +479,17 @@ function fixture(
 			if ( metadataAdmission.pending && job.url.endsWith( "/data/characterActionData.json" ) ) return null;
 			pending.delete( id );
 			if ( metadataAdmission.appearance ) {
-				const value = job.url.endsWith( "/char/roster.json" ) ?
-					metadataAdmission.appearance.roster :
-					job.url.endsWith( "/data/missionPresentation.json" ) ?
-					{ itemsByRefObjId: metadataAdmission.appearance.items } :
-					undefined;
-				if ( value ) {
-					return { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( value ) ).buffer };
+				if ( job.url.endsWith( "/char/roster.json" ) ) {
+					return { kind: "bytes", buffer: appearanceBuffer( metadataAdmission.appearance.roster ) };
+				}
+				if ( job.url.endsWith( "/data/missionPresentation.json" ) ) {
+					return {
+						kind: "bytes",
+						buffer: appearanceBuffer(
+							metadataAdmission.appearance.items,
+							items => ({ itemsByRefObjId: items })
+						)
+					};
 				}
 			}
 			if ( failures.has( job.url ) ) return { kind: "error", error: "Unavailable " + job.url };
@@ -912,9 +971,8 @@ test("a rewound frame clock republishes the previous instant on every published 
 	// a rewound frame presents the latest reading it has ever seen, so
 	// no published clip or effect clock runs backwards or negative.
 	const role = "native:default:80", bsr = "res/item/china/item/cj_store.bsr";
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	const wingId = Number(
 		Object.keys( roster.dress.avatarAuxiliary ).find( id => roster.dress.equipment[id].bodies.CH_M )
 	);
@@ -3432,26 +3490,27 @@ test("quest marker waits for character metadata admission without reporting a mi
 });
 
 test("all CH/EU armor families and degrees assemble by native reference for local and remote players", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	const byCode = new Map( Object.entries( items ).map( ( [id, row] ) => [ row.codename, Number( id ) ] ) );
 	for ( const race of [ "CH", "EU" ] ) {
 		for ( const sex of [ "M", "W" ] ) {
+			// One appearance per race and sex: the fixtures below admit the
+			// same payload, and appearanceBuffer encodes it once (#2924).
+			const appearance = {
+				items,
+				roster: {
+					models: [ {
+						refObjId: 1,
+						codename: `CHAR_${race}_${sex === "M" ? "MAN" : "WOMAN"}_TEST`,
+						glb: "/assets/1.glb",
+						clips: [ "stand" ]
+					} ],
+					dress: roster.dress
+				}
+			};
 			for ( const family of [ "HEAVY", "LIGHT", "CLOTHES" ] ) {
 				for ( const local of [ false, true ] ) {
-					const appearance = {
-						items,
-						roster: {
-							models: [ {
-								refObjId: 1,
-								codename: `CHAR_${race}_${sex === "M" ? "MAN" : "WOMAN"}_TEST`,
-								glb: "/assets/1.glb",
-								clips: [ "stand" ]
-							} ],
-							dress: roster.dress
-						}
-					};
 					const f = fixture(
 						{},
 						2,
@@ -3504,9 +3563,8 @@ test("all CH/EU armor families and degrees assemble by native reference for loca
 });
 
 test("event avatars and mall avatars use the same native reference catalog", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	let checked = 0;
 	for ( const prefix of [ "CH_M", "CH_W", "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ),
@@ -3559,9 +3617,8 @@ test("event avatars and mall avatars use the same native reference catalog", () 
 });
 
 test("default clothing assembles and retires through repeated raw equipment and avatar changes", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	for ( const prefix of [ "CH_M", "CH_W", "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ),
 			appearance = {
@@ -3659,9 +3716,8 @@ keeps running its track, and its ambient glow rides that child's bones.
 ================
 */
 test("a worn EU shoulder garment is its own animated handle carrying its crystal glow", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	for ( const prefix of [ "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ),
 			appearance = {
@@ -3734,9 +3790,8 @@ test("a worn EU shoulder garment is its own animated handle carrying its crystal
 });
 
 test("auxiliary avatar wings keep independent tracks and retire across cold replacement, masking, unequip, despawn and reset", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	for ( const prefix of [ "CH_M", "CH_W", "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ),
 			appearance = {
@@ -3859,9 +3914,8 @@ test("auxiliary avatar wings keep independent tracks and retire across cold repl
 });
 
 test("body avatar override restores normal run and restarts same-name replacements only once", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) ),
-		items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-			.itemsByRefObjId;
+	const roster = publishedRoster(),
+		items = publishedItems();
 	for ( const prefix of [ "CH_M", "CH_W", "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ), role = "native:avatar_wing:7";
 		const appearance = {
@@ -3975,9 +4029,8 @@ test("the equipped weapon's animation set drives stand and run, falling back per
 	// CCObjCharacter_ResolveWeaponAnimationPrefix (8E83F0): a spear (band 4)
 	// plays the spear set's two-handed stand/run; a state the set lacks keeps
 	// the default clip. Reported: a spear ran holding the weapon in one hand.
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const items = publishedItems();
+	const roster = publishedRoster();
 	const run = "native:spear:7", stand = "native:spear:0";
 	const appearance = {
 		items,
@@ -4039,9 +4092,8 @@ test("partial avatar override (avatar_wing) falls through per state to the weapo
 	// for state 7 (run) and falls through 8E7210 -> 8E89D0 -> 8E7150 to the
 	// spear set for state 0 (stand, spear planted in the ground) and state 1
 	// (walk), matching the inventory preview's preview-state0-spear pose.
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const items = publishedItems();
+	const roster = publishedRoster();
 	const wingRun = "native:avatar_wing:7",
 		spearRun = "native:spear:7",
 		spearWalk = "native:spear:1",
@@ -4146,9 +4198,8 @@ test("partial avatar override (avatar_wing) falls through per state to the weapo
 });
 
 test("native Korean wear freeze preserves committed default handles while equipment still changes", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
-	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
-		.itemsByRefObjId;
+	const roster = publishedRoster();
+	const items = publishedItems();
 	for ( const prefix of [ "CH_M", "CH_W", "EU_M", "EU_W" ] ) {
 		const [race, sex] = prefix.split( "_" ), dress = { ...roster.dress, defaultWearLanguage: 0 };
 		const appearance = {
@@ -4575,7 +4626,7 @@ admission and lifetime; the renderer owns the compound attachment transform.
 ================
 */
 test("berserk hair publishes compound attachments only after the resource is ready", () => {
-	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const roster = publishedRoster();
 	for ( const prefix of [ "CH_M", "CH_W" ] ) {
 		const hair = roster.dress.hwan[prefix];
 		const blockedPaths = new Set( [ "http://localhost" + hair.glb ] );

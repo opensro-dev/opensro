@@ -290,7 +290,10 @@ for ( const panel of [ ...uiPanels(), ...Object.keys( SERVICE_WINDOWS ) ] ) {
 			/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null} */ presentation: null
 		};
 		const step = () => {
-			for ( let i = 0; i < 16; i++ ) seen.presentation = f.ui.step( f.state, now += 100 ) ?? seen.presentation;
+			// One step to the same endpoint: the fixture settles assets and
+			// the skill catalogue inside a step, so the old sixteen ticks
+			// only repainted the settled frame (#2932's party-matching cut).
+			seen.presentation = f.ui.step( f.state, now += 1600 ) ?? seen.presentation;
 		};
 		step();
 		const before = new Set( seen.presentation?.controls.map( control => control.id ) ?? [] );
@@ -324,7 +327,7 @@ test("the transport bag beside a shop closes the trade through its own control",
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null} */ presentation: null
 	};
 	const step = () => {
-		for ( let i = 0; i < 16; i++ ) seen.presentation = f.ui.step( f.state, now += 100 ) ?? seen.presentation;
+		seen.presentation = f.ui.step( f.state, now += 1600 ) ?? seen.presentation;
 	};
 	step();
 	tradeWithTransport( f );
@@ -350,7 +353,7 @@ for ( const panel of [ "Storage", "Shop" ] ) {
 		t.after( () => f.dispose() );
 		let now = 0;
 		const step = () => {
-			for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+			f.ui.step( f.state, now += 1600 );
 		};
 		step();
 		if ( panel === "Shop" ) tradeWithTransport( f );
@@ -466,7 +469,7 @@ function scenario( open ) {
 			/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null} */ presentation: null
 		};
 		const step = () => {
-			for ( let i = 0; i < 16; i++ ) seen.presentation = f.ui.step( f.state, now += 100 ) ?? seen.presentation;
+			seen.presentation = f.ui.step( f.state, now += 1600 ) ?? seen.presentation;
 		};
 		const check = () => {
 			step();

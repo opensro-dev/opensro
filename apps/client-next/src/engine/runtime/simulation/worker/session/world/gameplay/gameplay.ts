@@ -579,7 +579,7 @@ export function createGameplay(
 	const movement = createMovement( send, publishFeedback ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
 		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
-		targeting = createTargeting( send ),
+		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
@@ -1762,12 +1762,13 @@ packets own subsequent mutations; bootstrap owns only initial state.
 
 continued marks an entry that continues the same character's session: the
 one after a 0x3369 world transfer, or a resumed transport's repeated
-EnterWorld. Party and guild state survive it. Native keeps them in
+EnterWorld. Party, guild and academy state survive it. Native keeps them in
 g_CharacterDependentData and its teleport reset retains the roster (the
 clear, 828960, runs from the party handlers, mission creation 829EE0 and
 teardown), and the server keeps the membership across both entries and
 resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
-"Unknown party delta member" after every teleport or reconnect.
+"Unknown party delta member" after every teleport or reconnect, and the
+next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 ================
 		*/
 		bootstrap( value: unknown, continued = false, receivedAtMs = 0 ) {
@@ -1869,7 +1870,18 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 					guideSummons.set( row.refObjId, row.summonedCharacterTypeFlags );
 				}
 			}
-			academy = academyBootstrap( value );
+			const nextAcademy = academyBootstrap( value );
+			// A continued entry keeps the camp roster, as social keeps its
+			// roster below: the entry snapshot carries only the membership
+			// flag and the server seeds the roster once (OnWorldBound), so
+			// it resends nothing on a transfer or a resumed transport.
+			// Wiping it here made the next 0x3AC5 status-5 member update
+			// throw "Unknown academy member status" (#2876). The snapshot's
+			// flag stays authoritative, and the old scene's in-flight
+			// request and result die with it.
+			academy = continued && academy && nextAcademy?.member ?
+				{ ...academy, member: true, request: null, result: null } :
+				nextAcademy;
 			pkStatus = pkStatusBootstrap( value );
 			const nextGroups = new Map<number, { group: number; level: number; }>();
 			for ( const row of b.refSkillSnapshot ?? [] ) {
@@ -5917,6 +5929,9 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
+		// The inventory owner's skipped cosmetic steps, for the world's
+		// degraded reports (core takeDegradations drains both owners).
+		takeDegradations: () => inventory.takeDegradations(),
 		/*
 ================
 cancelCast

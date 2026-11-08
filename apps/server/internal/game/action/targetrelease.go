@@ -61,10 +61,10 @@ func (rt *Runtime) registerTargetRelease(hub *transport.Hub) {
 				character.Name,
 				outcome.Refusal,
 			)
-			sendFrames(session, outcome.Frames)
+			sendSessionAnswer(session, outcome.Frames)
 			return
 		}
-		sendFrames(session, outcome.Frames)
+		sendSessionAnswer(session, outcome.Frames)
 		log.Debugf(
 			"action: 0x74B3 %s released gid %d",
 			character.Name,

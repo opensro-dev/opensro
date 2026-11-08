@@ -637,7 +637,7 @@ func TestPickupOverCapLeavesRemainderOnGround(t *testing.T) {
 
 	// No despawn: the heap still lives with the remainder.
 	assertOpcodes(t, result.Frames,
-		wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpActionState)
+		opCommerceItemReferences, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpActionState)
 	assertOpcodes(t, result.Broadcast, wire.OpPickupAnim)
 
 	remaining, ok := rt.Ground.Get(testDivision, added.Gid)

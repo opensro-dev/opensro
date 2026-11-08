@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
+import { readServedBytes } from "../helpers/ui-fixture.mjs";
 
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
@@ -162,7 +163,10 @@ function createFixture( held = [] ) {
 	/** @param {number} id @param {string} path */
 	function load( id, path ) {
 		try {
-			const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
+			// One read per path per process (readServedBytes): every fixture
+			// in this file serves the same generated catalog, and re-reading
+			// it per fixture was most of each test's wall time (#2924).
+			const bytes = readServedBytes( path );
 			if ( path.endsWith( ".png" ) ) {
 				pending.set( id, {
 					kind: "image",
