@@ -55,11 +55,16 @@ createLayoutKeys
 
 One event source's held keys: down resolves and remembers, up releases
 what went down (or resolves afresh for a key that went down elsewhere).
+held reads a physical key's state, as native GetKeyState does for the
+Space modifier of the extended quickslot keys (68111A).
 ================
 */
 export function createLayoutKeys() {
 	const held = new Map<string, string>();
 	return {
+		held( code: string ): boolean {
+			return held.has( code );
+		},
 		down( code = "", key = "" ): string {
 			const resolved = layoutCode( code, key );
 			held.set( code, resolved );

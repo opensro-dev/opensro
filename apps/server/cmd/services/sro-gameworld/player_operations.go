@@ -188,5 +188,13 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			}
 			return read(request.Character)
 		},
+		RemoveCrest: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "crest removal", func() error {
+				return game.items.OperatorRemoveCrest(shard, request.Operator, request.Character, request.Crest)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
 	})
 }

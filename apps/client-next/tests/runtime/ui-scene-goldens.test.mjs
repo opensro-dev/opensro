@@ -36,7 +36,10 @@ const ASSETS_HERE = existsSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-fo
 settle
 
 Step a script's world the way the panel sweep does: sixteen fixed ticks
-of 100 ms, keeping the last semantics the HUD published.
+of 100 ms, keeping the last semantics the HUD published. The tick
+cadence is load-bearing, not repaint waste: the rebirth prompt's
+3000 ms timer arms off it (dialog-rebirth and dialog-resurrection
+goldens change if the ticks collapse into one step, tried 2026-11-08).
 ================
 */
 function settle( ctx, ticks = 16 ) {

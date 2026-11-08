@@ -193,8 +193,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	let mapSmall = false, mapFollow = true, mapPage = 0, mapX = 100, mapY = 100;
 	let mapPan: [number, number] = [ 0, 0 ], mapCenter: Pose | null = null;
 	// The last pose the world map could place. 5758D0 finds no page for a
-	// dungeon point and 57FE60 then keeps the loaded page and its scroll,
-	// so while the player is off the map this pose holds the view.
+	// dungeon point, so 57FE60 keeps the loaded page; a dungeon without a map
+	// point (worldMapDungeonPose) holds the view here instead.
 	let mapPose: Pose | null = null;
 	// The window drew a cave floor last frame, so a manual view holds cave
 	// coordinates rather than the dungeon's point on the world map.

@@ -160,3 +160,62 @@ func ItemWhiteStats(ref *enterworld.ItemRef, varianceBits uint64, plus uint8) (S
 	stats, _, err := deriveItemStats(ref, varianceBits, plus)
 	return stats, err
 }
+
+/*
+================
+WhiteStatField
+
+One named 5-bit variance field of an equipment family: the field index
+deriveItemStats reads (field 0 is durability, except on accessories,
+whose fields 0 and 1 are the two parry rates) and the short name tools
+address it by. The GM item forge (action/forge.go) derives both its
+accepted white.<stat> keys and its /forge help lines from this table,
+so the two can never drift apart.
+================
+*/
+type WhiteStatField struct {
+	Name  string
+	Field uint
+}
+
+/*
+================
+WhiteStatFields
+
+The white fields of the equipment family these type flags name, in
+field order; nil when the flags are no equipment family combat derives
+stats for.
+================
+*/
+func WhiteStatFields(typeFlags uint16) []WhiteStatField {
+	switch {
+	case isWeaponFamily(typeFlags):
+		return []WhiteStatField{
+			{Name: "dur", Field: 0},
+			{Name: "hit", Field: 3},
+			{Name: "phyatk", Field: 4},
+			{Name: "magatk", Field: 5},
+			{Name: "critical", Field: 6},
+		}
+	case isBodyProtectorFamily(typeFlags):
+		return []WhiteStatField{
+			{Name: "dur", Field: 0},
+			{Name: "block", Field: 3},
+			{Name: "phydef", Field: 4},
+			{Name: "magdef", Field: 5},
+		}
+	case isAccessoryFamily(typeFlags):
+		return []WhiteStatField{
+			{Name: "parry", Field: 0},
+			{Name: "magparry", Field: 1},
+		}
+	case isWearArmorFamily(typeFlags):
+		return []WhiteStatField{
+			{Name: "dur", Field: 0},
+			{Name: "phydef", Field: 3},
+			{Name: "magdef", Field: 4},
+			{Name: "evasion", Field: 5},
+		}
+	}
+	return nil
+}

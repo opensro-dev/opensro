@@ -81,6 +81,8 @@ TestBetaSilkStarterFailureRecoversBeforeHourlyCredit
 ================
 */
 func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	character := seededCharacter()
@@ -150,6 +152,8 @@ commits its inventory through the real store transaction.
 ================
 */
 func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
+	t.Parallel()
+
 	for _, firstUse := range []string{"balance", "purchase"} {
 		t.Run(firstUse, func(t *testing.T) {
 			dir := t.TempDir()

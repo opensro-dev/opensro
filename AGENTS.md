@@ -241,7 +241,12 @@ Treat what players, chat users and outside contributors send as untrusted.
 
 ## Verification
 
-Run the checks for what you touched, and report what actually ran:
+Run the checks for what you touched, and report what actually ran.
+A fix's local gate is the tests that cover the change (the targeted
+suites, `verify:quick`, the changed Go packages with `-run`), in five
+minutes at most. The full-tree rows below are CI's: every PR runs them,
+so a local copy proves nothing CI does not and holds the shared machine.
+The agent bus refuses them for Cursor agents.
 
 | Scope | Command |
 | --- | --- |
@@ -249,7 +254,7 @@ Run the checks for what you touched, and report what actually ran:
 | Formatting only | `pnpm task check:format` |
 | Encoding only | `pnpm task check:source-encoding` |
 | Go server | see `apps/server/AGENTS.md` |
-| Client | `pnpm --filter @sro/client-next check` |
+| Client (CI's full gate) | `pnpm --filter @sro/client-next check` |
 | Everything, including assets | `pnpm check` (the full asset build takes about 6 minutes on 16 cores; `SRO_BUILD_JOBS` sets the parallelism) |
 
 Speed: the gates run concurrently, and the two heavy ones (the Go server

@@ -36,6 +36,18 @@ import {
 	type WireFrame
 } from "@/engine/contracts/network";
 const ADMISSION_TIMEOUT_MS = 10000;
+// The wait for the EnterWorld answer once the entry is presented. The
+// answer is one multi-megabyte record: on the WebTransport path its
+// chunks prove the link as they land, but on the socket a WebSocket
+// message is atomic - no byte of the record is visible until it lands
+// whole, and the server's loading pings queue behind it on the same
+// ordered stream. A slow socket therefore shows total silence for the
+// whole download, and the ten-second admission window tore healthy
+// answers down mid-flight (#2867). The wait runs to the server's own
+// patience instead: the transport detaches a silent session at its
+// 60 s idle timeout (apps/server/internal/transport/config.go), so a
+// longer client wait buys nothing the server would have kept.
+const ENTER_WORLD_ANSWER_TIMEOUT_MS = 60000;
 const REFERENCE_TIMEOUT_MS = 30000;
 // Progress may slide a deadline this many windows past its arm, no further:
 // eighteen admission windows is three minutes (nine for references), long
@@ -782,10 +794,15 @@ step
 						try {
 							if ( result.kind === "transport" ) {
 								network.connect( endpoint, result.token!, resume );
+								armDeadline( ADMISSION_TIMEOUT_MS );
 							} else {
 								network.enterWorld( division, character, result.token! );
+								// The answer's flight is invisible on the
+								// socket (ENTER_WORLD_ANSWER_TIMEOUT_MS):
+								// it gets the server's idle bound, not
+								// the admission window.
+								armDeadline( ENTER_WORLD_ANSWER_TIMEOUT_MS );
 							}
-							armDeadline( ADMISSION_TIMEOUT_MS );
 						} catch ( error ) {
 							failure = String( error );
 						}

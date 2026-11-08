@@ -17,6 +17,13 @@ import type { WireFrame } from "@/engine/contracts/network";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { DROP_PLUS_NOTICE_CHANNEL, isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
 import { decodeNoticeLinks, type NoticeLinks } from "@/engine/foundation/gameplay/notice-links";
+import {
+	type ChatLinkRef,
+	decodeChatLinkTail,
+	encodeChatLinkRefs,
+	resolveChatLinks,
+	stripChatMarkers
+} from "@/engine/foundation/gameplay/chat-item-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 import { partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
@@ -31,6 +38,10 @@ const CHAT_GLOBAL_CHANNEL = 6;
 // (history.go OpChatHistory). Version 2 carries each line's send time.
 const CHAT_HISTORY_VERSION = 2;
 const CHAT_HISTORY_LIMIT = 10;
+// The player channels whose lines may carry item links (port-only,
+// SRO_CHAT_ITEM_LINKS): All, whisper, GM, party, guild, global and union.
+// Stall lines never do in v1.
+const CHAT_LINK_CHANNELS: readonly number[] = [ 1, 2, 3, 4, 5, CHAT_GLOBAL_CHANNEL, 11 ];
 
 /*
 ================
@@ -46,6 +57,8 @@ interface PendingChat {
 	target: string;
 	deadline: number;
 	echoed: boolean;
+	// Port-only: the items the line links, as this client holds them.
+	items: readonly InventoryItem[];
 }
 
 // v1.150 social/chat/wire.go: 7367 requests, B367 keyed receipt, 3667 broadcast.
@@ -57,12 +70,20 @@ One 0x3667 line (CPSMission_HandleChatBroadcast0x3667): channels 1 and 3 carry t
 2, 4, 5, 6, 11 and the stall's a sized sender name, 7 neither. The
 port-only job-kill, drop/plus and item-break channels (isServerNoticeChannel) are laid
 out and shown as channel 7; a drop/plus line may carry its links after the
-text (notice-links.ts). Null for a channel this owner does not present.
+text (notice-links.ts), a player line its item links (chat-item-links.ts).
+Null for a channel this owner does not present.
 ================
 */
 function decodeChatBroadcast(
 	p: Uint8Array
-): { channel: number; sender: string; gid: number | undefined; text: string; links?: NoticeLinks; } | null {
+): {
+	channel: number;
+	sender: string;
+	gid: number | undefined;
+	text: string;
+	links?: NoticeLinks;
+	bodies?: Uint8Array[];
+} | null {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = 0;
 	/*
@@ -95,6 +116,12 @@ function decodeChatBroadcast(
 		const links = decodeNoticeLinks( p, o );
 		return { channel, sender, gid, text, ...(links ? { links } : {}) };
 	}
+	if ( CHAT_LINK_CHANNELS.includes( wireChannel ) && o < p.length ) {
+		// Port-only item links (chat-item-links.ts), decoded leniently: a
+		// malformed tail is no links and a plain line.
+		const bodies = decodeChatLinkTail( p, o );
+		return { channel, sender, gid, text, ...(bodies?.length ? { bodies } : {}) };
+	}
 	if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
 	return { channel, sender, gid, text };
 }
@@ -112,7 +139,7 @@ Only named public lines are admitted; anything else is a malformed frame.
 */
 export function decodeChatHistory(
 	p: Uint8Array
-): { channel: number; sender: string; text: string; sentAt: number; }[] {
+): { channel: number; sender: string; text: string; sentAt: number; bodies?: Uint8Array[]; }[] {
 	if ( p.length < 2 || p[0] !== CHAT_HISTORY_VERSION || p[1]! > CHAT_HISTORY_LIMIT ) {
 		throw new Error( "Invalid chat history" );
 	}
@@ -126,7 +153,13 @@ export function decodeChatHistory(
 		const line = decodeChatBroadcast( p.subarray( o, o + n ) );
 		o += n;
 		if ( !line || !line.sender ) throw new Error( "Chat history line has no sender" );
-		lines.push( { channel: line.channel, sender: line.sender, text: line.text, sentAt } );
+		lines.push( {
+			channel: line.channel,
+			sender: line.sender,
+			text: line.text,
+			sentAt,
+			...(line.bodies ? { bodies: line.bodies } : {})
+		} );
 	}
 	if ( o !== p.length ) throw new Error( "Chat history trailing bytes" );
 	return lines;
@@ -207,7 +240,8 @@ createChat
 */
 export function createChat(
 	send: ( frame: WireFrame ) => void,
-	noticeItem: ( body: Uint8Array ) => InventoryItem | undefined = () => undefined
+	noticeItem: ( body: Uint8Array ) => InventoryItem | undefined = () => undefined,
+	linkedItem: ( ref: ChatLinkRef ) => InventoryItem | undefined = () => undefined
 ) {
 	// The port's own deadline for a chat or block acknowledgement (ui-tuning.ts).
 	let ackTimeoutMs = CHAT_ACK_TIMEOUT_MS;
@@ -224,6 +258,18 @@ export function createChat(
 	let whispers = true;
 	let sequence = 0;
 	let feedback: readonly ChatFeedback[] = [];
+	// Port-only (SRO_CHAT_ITEM_LINKS): the server's per-line link limit; 0 is off.
+	let linkLimit = 0;
+	/*
+================
+linkedLine
+
+A received line's item links, decoded through the bag's own presentation.
+================
+	*/
+	function linkedLine( bodies: readonly Uint8Array[] | undefined ) {
+		return bodies?.length ? { links: bodies.map( body => noticeItem( body ) ) } : {};
+	}
 	/*
 ================
 append
@@ -263,6 +309,8 @@ bootstrap
 		bootstrap( value: unknown ) {
 			// Port-only: the shard may tune the acknowledgement deadline (ui-tuning.ts).
 			ackTimeoutMs = uiTuningFrom( value ).chatAckTimeoutMs;
+			const limit = (value as { chatItemLinks?: unknown; } | null)?.chatItemLinks;
+			linkLimit = typeof limit === "number" && Number.isInteger( limit ) && limit > 0 ? limit : 0;
 			blocked = blockedWhisperers( value );
 			blockPending = false;
 			blockError = null;
@@ -310,8 +358,19 @@ block
 request
 ================
 		*/
-		request( channel: number, text: string, target: string, now: number ) {
+		request( channel: number, text: string, target: string, now: number, links: readonly ChatLinkRef[] = [] ) {
 			if ( pending ) throw new Error( "Chat acknowledgement pending" );
+			// Port-only (SRO_CHAT_ITEM_LINKS): only links this client can read
+			// go out, as the server would keep them; the stall box links nothing.
+			const resolved = resolveChatLinks(
+				text,
+				channel === STALL_CHAT_CHANNEL ? [] : links,
+				linkLimit,
+				linkedItem
+			);
+			// A line that was only an unreadable link has nothing left to say.
+			if ( linkLimit > 0 && !resolved.text.trim() && text.trim() ) return;
+			text = resolved.text;
 			if (
 				![ 1, 2, 3, 4, 5, 11, STALL_CHAT_CHANNEL ].includes( channel ) || !text.trim() ||
 				text.length > CHAT_TEXT_LIMIT ||
@@ -338,8 +397,14 @@ request
 			v.setUint16( o, text.length, true );
 			o += 2;
 			for ( let i = 0; i < text.length; i++ ) v.setUint16( o + i * 2, text.charCodeAt( i ), true );
-			send( { opcode: 0x7367, payload: p } );
-			pending = { channel, text, target, deadline: now + ackTimeoutMs, echoed: false };
+			const block = encodeChatLinkRefs( resolved.refs ),
+				payload = block.length ? new Uint8Array( p.length + block.length ) : p;
+			if ( block.length ) {
+				payload.set( p );
+				payload.set( block, p.length );
+			}
+			send( { opcode: 0x7367, payload } );
+			pending = { channel, text, target, deadline: now + ackTimeoutMs, echoed: false, items: resolved.items };
 			error = null;
 		},
 		/*
@@ -363,7 +428,8 @@ receive
 							name: pending.channel === 2 ? pending.target : name,
 							gid: pending.channel === 2 ? undefined : localGid,
 							text: pending.text,
-							outgoing: true
+							outgoing: true,
+							...(pending.items.length ? { links: pending.items } : {})
 						} );
 					}
 					error = null;
@@ -410,7 +476,8 @@ receive
 							text: line.text,
 							outgoing: false,
 							history: true,
-							sentAt: line.sentAt
+							sentAt: line.sentAt,
+							...linkedLine( line.bodies )
 						} );
 					}
 				}
@@ -419,18 +486,28 @@ receive
 			if ( frame.opcode !== 0x3667 ) return false;
 			const line = decodeChatBroadcast( p );
 			if ( !line ) return false;
-			const { channel, sender, gid, text, links } = line;
+			const { channel, sender, gid, text, links, bodies } = line;
 			if ( channel === CHAT_GLOBAL_CHANNEL && sender === displayName ) {
 				// Native receipts retain the request's channel. The beta server
 				// sends this authoritative echo first (under the display name -
 				// the alias while suited, which 753760 compares at +0x108), so
 				// the receipt must not invent a second, differently colored line.
-				const outgoing = pending !== null && [ 1, 3 ].includes( pending.channel ) && pending.text === text;
+				// A link the server could not read leaves the echo without its
+				// marker, so the two compare without markers (chat-item-links.ts).
+				const outgoing = pending !== null && [ 1, 3 ].includes( pending.channel ) &&
+					stripChatMarkers( pending.text ) === stripChatMarkers( text );
 				if ( outgoing ) {
 					if ( pending!.echoed ) return true;
 					pending!.echoed = true;
 				}
-				append( { channel, name: sender, text, outgoing, gid: outgoing ? localGid : undefined } );
+				append( {
+					channel,
+					name: sender,
+					text,
+					outgoing,
+					gid: outgoing ? localGid : undefined,
+					...linkedLine( bodies )
+				} );
 				return true;
 			}
 			// 752800 filters named incoming channels 1..5 and 11 before any presentation.
@@ -443,7 +520,15 @@ receive
 					notice = links && (links.name || item) ?
 						{ notice: { ...(links.name ? { name: links.name } : {}), ...(item ? { item } : {}) } } :
 						{};
-				append( { channel, name: sender || senderName, gid, text, outgoing: false, ...notice } );
+				append( {
+					channel,
+					name: sender || senderName,
+					gid,
+					text,
+					outgoing: false,
+					...notice,
+					...linkedLine( bodies )
+				} );
 			}
 			return true;
 		},

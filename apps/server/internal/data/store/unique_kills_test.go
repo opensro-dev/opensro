@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -24,6 +25,8 @@ table and its records untouched; a second upgrade has nothing to do.
 ================
 */
 func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
+	tier.Long(t, "a schema-21 layout-8 authority upgrades to 22 with an empty unique-kill table")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -77,6 +80,8 @@ them back oldest first, and a reader holding a sequence gets only newer ones.
 ================
 */
 func TestUniqueKillsAppendInOrderAndSurviveReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	for i, kill := range []domain.UniqueKill{
@@ -113,6 +118,8 @@ record never claims a lower milestone, and a recorded time is kept.
 ================
 */
 func TestLevelReachedRecordsOnlyCrossedMilestones(t *testing.T) {
+	t.Parallel()
+
 	c := &domain.Character{}
 	if !c.RecordLevelReached(18, 31, 500) || c.LevelReachedAt[20] != 500 || c.LevelReachedAt[30] != 500 || len(c.LevelReachedAt) != 2 {
 		t.Fatalf("18 -> 31 recorded %v", c.LevelReachedAt)

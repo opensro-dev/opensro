@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
 	nativeStackIdentity,
@@ -21,7 +22,7 @@ import {
 	sameStackIdentity,
 	stackable
 } from "@/engine/foundation/gameplay/container-transfer";
-import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
+import { INVENTORY_TRANSACTION_TIMEOUT, type Degradation } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -220,6 +221,10 @@ presentShop
 		readonly atMs: number;
 	}[] = [];
 	const FLASH_RETENTION_MS = 2000;
+	// Skipped cosmetic steps for the world's degraded reports, bounded the
+	// way entities bounds its queue (the world reports each code once).
+	const MAX_PENDING_DEGRADATIONS = 64;
+	let degradations: Degradation[] = [];
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
@@ -339,6 +344,17 @@ slot
 			throw new Error( "Invalid inventory slot" );
 		}
 		return n;
+	}
+	/*
+================
+degrade
+
+Records a skipped cosmetic step for the world's degraded reports; the
+queue is bounded so an undrained owner cannot grow it.
+================
+	*/
+	function degrade( degradation: Degradation ) {
+		if ( degradations.length < MAX_PENDING_DEGRADATIONS ) degradations.push( degradation );
 	}
 	/*
 ================
@@ -660,6 +676,19 @@ The exchange line the last 0x3645 or 0x3272 raised, once.
 			const notice = exchangeNotice;
 			exchangeNotice = null;
 			return notice;
+		},
+		/*
+================
+takeDegradations
+
+The skipped cosmetic steps since the last take, for the world's
+degraded reports.
+================
+		*/
+		takeDegradations(): Degradation[] {
+			const taken = degradations;
+			degradations = [];
+			return taken;
 		},
 		/*
 ================
@@ -1633,7 +1662,7 @@ full window after the stream falls silent, or at the hard limit.
 use
 ================
 		*/
-		use( n: number, now = 0, context?: CosItemUseContext, message?: string ) {
+		use( n: number, now = 0, context?: CosItemUseContext, message?: string, links: readonly ChatLinkRef[] = [] ) {
 			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
@@ -1646,7 +1675,7 @@ use
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
 				isGlobalChatItem( item.typeFlags ) ?
-				globalChatTail( message ?? "" ) :
+				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
 			p.set( tail, 3 );
@@ -1895,7 +1924,23 @@ receive
 				const n = p[0]!;
 				if ( n >= 0x3d ) return true;
 				const item = slots.get( n );
-				if ( !item ) throw Error( "Durability result references absent item" );
+				if ( !item ) {
+					// The frame is a fixed five bytes and fully read; what it
+					// names is only a held item's durability, its repair sound
+					// and flash. INFERENCE (no native trace of the empty-slot
+					// arm): 77C300 writes the value on the slot's item object,
+					// so an empty slot has nothing to write and the update is
+					// dropped. The port degrades instead of ending the session
+					// (production "Durability result references absent item",
+					// #2877: repair answers naming bag slots this client no
+					// longer held, replayed on re-entry).
+					degrade( {
+						code: "durability-unknown-slot",
+						message: "Durability result for unheld slot " + n,
+						frame: { opcode: op, payload: p }
+					} );
+					return true;
+				}
 				const value = new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 1, true ),
 					old = item.durability | 0;
 				const cue = value > old ?

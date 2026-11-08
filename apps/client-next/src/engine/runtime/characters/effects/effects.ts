@@ -18,7 +18,8 @@ lifecycles that belong in separate owners (see the size ledger).
 import {
 	createPenguinBolts,
 	penguinEffectActors,
-	PENGUIN_EFFECT_SOUND
+	PENGUIN_EFFECT_SOUND,
+	PENGUIN_BLIZZARD_SECONDS
 } from "@/engine/foundation/animation/penguin-effects";
 import {
 	PET_BOND_TRANSFER_SOUND,
@@ -3617,10 +3618,8 @@ export function createCharacterEffects(
 					}
 				}
 				// Attack pet Challenging Roar I / II / III (action 16 / 17 / 18 on COS):
-				// 0.0s -> 1.0s: progressively brightening golden-crimson aura glow and
-				// Dynamic point light follows the dedicated pet-roar buildup.
-				// After 1s the ring expands to the tier's radius at its effective skill level.
-				// Only the server decides taunt victims.
+				// Port-only storyboard: rise .25s, roar .5s, full reach 1s, recover 1.4s.
+				// Server taunt timing and victim selection remain authoritative.
 				roarAppearances.clear();
 				for ( const entity of entities ) {
 					if (
@@ -3659,223 +3658,89 @@ export function createCharacterEffects(
 					}
 				}
 				const auraModel = "/assets/effects/challenging-roar-aura",
-					shockwaveModel = "/assets/effects/challenging-roar-shockwave";
-				for ( const [gid, roar] of [ ...roars ] ) {
-					const host = presentation.get( gid );
+					shockwaveModel = "/assets/effects/bear-roar-ring",
+					debrisModel = "/assets/effects/bear-roar-debris";
+				for ( const [gid, roar] of roars ) {
 					const entity = byGid.get( gid );
 					if ( !entity || entity.emote?.revision !== roar.revision ) {
 						roars.delete( gid );
 						continue;
 					}
-					const bearPose = host?.pose ?? (entity ?
-						{
-							regionId: entity.regionId,
-							x: entity.x,
-							y: entity.y,
-							z: entity.z,
-							yaw: nativeHeadingYaw( entity.heading )
-						} :
-						roar.originPose);
 					const elapsed = Math.max( 0, now - roar.startedAt );
-					if ( elapsed >= 2.25 ) {
-						// Keep the consumed revision until the entity leaves or a new emote arrives.
+					if ( elapsed >= 1.4 ) continue;
+					const bearPose = presentation.get( gid )?.pose ?? roar.originPose;
+					if ( elapsed < .5 ) {
+						roar.originPose = { ...bearPose };
 						continue;
 					}
-					const targetRadiusMeters = roar.radiusMeters;
-					const targetRadiusUnits = targetRadiusMeters * 10;
-					if ( elapsed < 1.0 ) {
-						// Phase 1 (0.0s -> 1.0s): glow gets progressively brighter over 1 second.
-						const p = Math.min( 1, elapsed / 1.0 );
-						const glow = p * (0.25 + 0.75 * p);
-						roar.originPose = { ...bearPose };
-						roarAppearances.set( gid, {
-							pointLight: {
-								pose: {
-									regionId: bearPose.regionId,
-									x: bearPose.x,
-									y: bearPose.y + 18,
-									z: bearPose.z
-								},
-								ambient: [ 1.95 * glow, 1.22 * glow, 0.38 * glow ],
-								diffuse: [ 2.85 * glow, 1.78 * glow, 0.56 * glow ],
-								range: 45 + 205 * glow,
-								attenuation: 0.35
-							},
-							materialTint: [
-								1.0,
-								1.0 - 0.08 * glow,
-								1.0 - 0.32 * glow
-							],
-							scale: 1.0 + 0.08 * Math.sin( p * Math.PI * 0.65 )
+					const age = elapsed - .5;
+					if ( !roar.released ) {
+						roar.released = true;
+						if ( age < .25 ) {
+							play( {
+								id: `pet-roar:${gid}:${roar.revision}`,
+								path: PET_ROAR_SOUND,
+								gain: .8,
+								...audioPosition( bearPose ),
+								expires: now + .25
+							} );
+						}
+					}
+					if ( age < .40 && ready( auraModel ) ) {
+						result.push( {
+							gid: roar.auraHeadGid,
+							model: auraModel,
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: 1 + age * 1.5,
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: .8 * (1 - age / .4),
+							materialTint: [ 1, .78, .35 ],
+							pose: bearPose,
+							attachment: { gid, bone: "Bip01 Head", offset: [ 0, 0, 0 ], rootIfMissing: true }
 						} );
-						if ( ready( auraModel ) ) {
-							result.push( {
-								gid: roar.auraBodyGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: true,
-								scale: 0.55 + 0.90 * glow,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.03 + 0.22 * glow,
-								materialTint: [
-									0.85 + 0.15 * glow,
-									0.42 + 0.53 * glow,
-									0.12 + 0.66 * glow
-								],
-								effectRotation: { axis: "y", angle: radians( elapsed * 3.4 ) },
-								pose: bearPose,
-								attachment: { gid, bone: "", root: true, offset: [ 0, 0, 0 ], ground: true }
-							} );
-							result.push( {
-								gid: roar.auraHeadGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: true,
-								scale: 0.30 + 0.65 * glow,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.02 + 0.12 * p * p,
-								materialTint: [ 1.0, 0.88 + 0.12 * p, 0.55 + 0.40 * p ],
-								effectRotation: { axis: "y", angle: radians( -elapsed * 5.2 ) },
-								pose: bearPose,
-								attachment: { gid, bone: "Bip01 Head", offset: [ 0, 0, 0 ], rootIfMissing: true }
-							} );
-						}
-					} else {
-						// Phase 2 (1.0s -> 2.25s): release the 25m (250-unit) shockwave!
-						if ( !roar.released ) {
-							roar.released = true;
-							roar.originPose = { ...bearPose };
-							if ( elapsed - 1 < .25 ) {
-								play( {
-									id: `pet-roar:${gid}:${roar.revision}`,
-									path: PET_ROAR_SOUND,
-									gain: .8,
-									...audioPosition( bearPose ),
-									expires: now + .25
-								} );
-							}
-							cameraEvents.push( {
-								atMs: Math.trunc( now * 1000 ),
-								amplitude: roar.action === 18 ? 200 : 50,
-								durationMs: 500,
-								periodMs: roar.action === 18 ? 25 : 20
-							} );
-						}
-						const shockElapsed = elapsed - 1.0;
-						if ( shockElapsed < 0.65 ) {
-							const decay = Math.pow( 1 - shockElapsed / 0.65, 1.8 );
-							roarAppearances.set( gid, {
-								pointLight: {
-									pose: {
-										regionId: roar.originPose.regionId,
-										x: roar.originPose.x,
-										y: roar.originPose.y + 16,
-										z: roar.originPose.z
-									},
-									ambient: [ 2.60 * decay, 1.75 * decay, 0.68 * decay ],
-									diffuse: [ 3.40 * decay, 2.25 * decay, 0.90 * decay ],
-									range: 250 + 60 * (1 - decay),
-									attenuation: 0.30
-								},
-								materialTint: [
-									1.0,
-									1.0 - 0.06 * decay,
-									1.0 - 0.24 * decay
-								],
-								scale: 1.0 + 0.05 * decay
-							} );
-						}
-						if ( shockElapsed < 0.40 && ready( auraModel ) ) {
-							const burstU = shockElapsed / 0.40;
-							result.push( {
-								gid: roar.auraBodyGid,
-								model: auraModel,
-								clip: "effect",
-								time: elapsed,
-								loop: false,
-								scale: 1.45 + 0.85 * burstU,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: 0.12 * Math.pow( 1 - burstU, 1.6 ),
-								materialTint: [ 1.0, 0.92, 0.72 ],
-								effectRotation: { axis: "y", angle: radians( elapsed * 4.2 ) },
-								pose: roar.originPose
-							} );
-						}
-						if ( shockElapsed < 0.90 && ready( shockwaveModel ) ) {
-							const u1 = Math.min( 1, shockElapsed / 0.90 );
-							const ease1 = 1 - Math.pow( 1 - u1, 2.3 );
-							const primaryRadiusUnits = 6 + (targetRadiusUnits - 6) * ease1;
-							result.push( {
-								gid: roar.shockPrimaryGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed,
-								loop: false,
-								scale: primaryRadiusUnits,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: Math.max( 0, (1 - Math.pow( u1, 1.65 )) * 0.45 ),
-								materialTint: [
-									1.0,
-									0.96 - 0.22 * u1,
-									0.82 - 0.48 * u1
-								],
-								effectRotation: { axis: "y", angle: radians( shockElapsed * 2.2 ) },
-								pose: roar.originPose
-							} );
-						}
-						if ( shockElapsed >= 0.08 && shockElapsed < 1.03 && ready( shockwaveModel ) ) {
-							const u2 = Math.min( 1, (shockElapsed - 0.08) / 0.95 );
-							const ease2 = 1 - Math.pow( 1 - u2, 2.1 );
-							const secondaryRadiusUnits = 4 + (targetRadiusUnits - 4) * ease2;
-							result.push( {
-								gid: roar.shockSecondaryGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed - 0.08,
-								loop: false,
-								scale: secondaryRadiusUnits,
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: Math.max( 0, (1 - Math.pow( u2, 1.45 )) * 0.30 ),
-								materialTint: [ 1.0, 0.62 - 0.18 * u2, 0.24 ],
-								effectRotation: { axis: "y", angle: radians( -shockElapsed * 1.8 ) },
-								pose: {
-									...roar.originPose,
-									y: roar.originPose.y + 0.6
-								}
-							} );
-						}
-						if ( shockElapsed < 0.45 && ready( shockwaveModel ) ) {
-							const uCore = shockElapsed / 0.45;
-							result.push( {
-								gid: roar.shockCoreGid,
-								model: shockwaveModel,
-								clip: "effect",
-								time: shockElapsed,
-								loop: false,
-								scale: 8 + 97 * (1 - Math.pow( 1 - uCore, 2.0 )),
-								absoluteEffectScale: true,
-								effectEntity: true,
-								pickable: false,
-								opacity: (1 - uCore) * 0.25,
-								materialTint: [ 1.0, 0.95, 0.80 ],
-								pose: {
-									...roar.originPose,
-									y: roar.originPose.y + 1.1
-								}
-							} );
-						}
+					}
+					if ( ready( debrisModel ) ) {
+						result.push( {
+							gid: roar.auraBodyGid,
+							model: debrisModel,
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: roar.radiusMeters / 30,
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: Math.min( 1, age / .08 ) * Math.min( 1, (.9 - age) / .4 ),
+							pose: roar.originPose,
+							attachment: { gid, bone: "", root: true, ground: true, offset: [ 0, 1, 0 ] }
+						} );
+					}
+					for (
+						const [index, ringGid] of [ roar.shockPrimaryGid, roar.shockSecondaryGid, roar.shockCoreGid ]
+							.entries()
+					) {
+						const ringAge = age - index * .09;
+						if ( ringAge < 0 || !ready( shockwaveModel ) ) continue;
+						const progress = Math.min( 1, ringAge / .5 );
+						result.push( {
+							gid: ringGid,
+							model: shockwaveModel,
+							clip: "effect",
+							time: ringAge,
+							loop: false,
+							scale: 8 + (roar.radiusMeters * 10 - 8) * (1 - Math.pow( 1 - progress, 1.5 )),
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: .8 * Math.min( 1, (.9 - age) / .4 ) * (1 - index * .2),
+							materialTint: [ 1, .78, .32 ],
+							pose: { ...roar.originPose, y: roar.originPose.y + 1 },
+							attachment: { gid, bone: "", root: true, ground: true, offset: [ 0, 1, 0 ] }
+						} );
 					}
 				}
 				// Port-only wolf skill signals (server petwolfkit.go / petwolfvisual.go),
@@ -3891,7 +3756,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xd6)
+						!(action >= 0xd0 && action <= 0xd6) && !(entity.kind === "cos" && action >= 34 && action <= 36)
 					) {
 						continue;
 					}
@@ -3916,21 +3781,27 @@ export function createCharacterEffects(
 				for ( const [gid, skill] of [ ...wolfSkills ] ) {
 					const entity = byGid.get( gid );
 					const elapsed = Math.max( 0, now - skill.startedAt );
-					const frost = skill.action >= 0xd0 && skill.action <= 0xd6;
+					const penguinCasting = skill.action >= 34 && skill.action <= 36;
+					const frost = skill.action >= 0xd0 && skill.action <= 0xd6 || penguinCasting;
+					const lifetime = skill.action >= 0xd3 && skill.action <= 0xd5 ?
+						PENGUIN_BLIZZARD_SECONDS :
+						penguinCasting ?
+						1.25 :
+						WOLF_EFFECT_SECONDS;
 					// Ground frost outlives its victim; retain the latched pose for its bounded lifetime.
 					if (
 						!frost && (!entity || entity.emote?.revision !== skill.revision) ||
-						!entity && elapsed >= WOLF_EFFECT_SECONDS
+						!entity && elapsed >= lifetime
 					) {
 						wolfSkills.delete( gid );
 						continue;
 					}
 					const parts = frost ? [] : wolfEffectParts( skill.action );
-					const kind = skill.action >= 0xd0 && skill.action <= 0xd6 ?
+					const kind = penguinCasting ? "follow" : skill.action >= 0xd0 && skill.action <= 0xd6 ?
 						"victim" :
 						wolfEffectKind( skill.action );
 					// Keep the consumed revision until the entity leaves or a new emote arrives.
-					if ( elapsed >= WOLF_EFFECT_SECONDS ) continue;
+					if ( elapsed >= lifetime ) continue;
 					const live = presentation.get( gid )?.pose ?? skill.pose;
 					// Victims keep where they were struck; a dead monster may already be gone.
 					const pose = kind === "victim" ? skill.pose : live;

@@ -15,6 +15,7 @@ import { createBloom } from "./bloom";
 import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
+import { createAmbientOcclusion } from "./ambient-occlusion";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -26,6 +27,7 @@ import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import { isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -101,6 +103,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
@@ -127,7 +130,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		texturesKnown = resolve;
 	} );
 	const fail = ( error: unknown, canRecover = false ) => {
-		if ( !canRecover ) texturesKnown( [] );
+		// A memory refusal takes the recovery path however it arrived:
+		// the builders' promise catches below see it as a rejected
+		// DOMException long after `retryable` cleared (#2866).
+		const recover = canRecover || isOutOfMemoryRefusal( error );
+		if ( !recover ) texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}
@@ -135,7 +142,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		// rejecting a format or usage) and then every consequence ("createView:
 		// texture is not valid"); the report must name the cause (BUG-022).
 		if ( phase === "failed" ) return;
-		recoverable = canRecover;
+		recoverable = recover;
 		failure = String( error );
 		phase = "failed";
 	};
@@ -207,7 +214,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				// cure: it starts empty. Validation errors would only repeat.
 				fail(
 					message,
-					typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError
+					isOutOfMemoryRefusal( event.error ) ||
+						(typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError)
 				);
 			} );
 
@@ -472,6 +480,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			occlusion = createAmbientOcclusion( created, retirement.retire );
+
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -566,6 +576,28 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		},
 		/*
 		================
+		ambientOcclusion
+
+		The experimental occlusion owner (port-only, not native; #2094):
+		prepared per frame against the scene size and camera, and its
+		blurred view installed as geometry binding 15 whenever the
+		answer changes (enable, disable, resize) through the geometry
+		owner's refresh seam. While off it owns nothing.
+		================
+		*/
+		ambientOcclusion(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
+			if ( phase !== "running" || !occlusion ) throw Error( "Ambient occlusion device is not ready" );
+			const draw = occlusion.prepare( width, height, enabled, camera );
+			geometry?.refreshAmbientOcclusion( draw?.view ?? null );
+			return draw;
+		},
+		/*
+		================
 		sunShadow
 
 		The experimental cascade owner, created by the geometry resources on
@@ -637,7 +669,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,
-				0
+				value.ambientOcclusion ? 1 : 0
 			] );
 			// The HDR stage flips every scene target's format: geometry
 			// re-pipelines, the mirror reformats, the portraits retire.
@@ -799,6 +831,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		error: () => failure,
 		/*
 		================
+		fail
+
+		Record a failure the renderer met while driving this device.
+		================
+		*/
+		fail: ( error: unknown ) => fail( error ),
+		/*
+		================
 		gpuTiming
 
 		Read completed GPU measurements without taking ownership of pending queries.
@@ -877,6 +917,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			occlusion?.dispose();
+			occlusion = null;
 			finish?.dispose();
 			finish = null;
 			particleQuery?.dispose();

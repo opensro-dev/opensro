@@ -269,7 +269,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+							depthStoreOp: flares || deferred || !!experimental?.ao ||
+									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
@@ -362,7 +363,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+									depthStoreOp: flares || !!experimental?.ao ||
+											((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 										"store" as const :
 										"discard" as const
 								}
@@ -404,6 +406,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					overlay.draw( 6 );
 					overlay.end();
 				}
+				// Ambient occlusion (experimental, #2094): this frame's
+				// stored depth totals into the factor the NEXT frame's
+				// surfaces sample (binding 15) - the one-frame lag is the
+				// design (the alternative is a depth prepass). It reads
+				// the depth after the scene and particle passes and ahead
+				// of every post chain; while off the owner is absent and
+				// the depth above was discarded as natively.
+				if ( experimental?.ao && depth ) experimental.ao.encode( encoder, depth );
 				bloom?.encode( encoder, view );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,

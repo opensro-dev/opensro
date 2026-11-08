@@ -27,11 +27,15 @@ export function normalizePublicPath( value ) {
 	return `/${String( value ).replaceAll( "\\", "/" ).replace( /^\/+/, "" )}`.replace( /\/{2,}/g, "/" );
 }
 
-/** Asset-pack boundary: public paths outside /assets are never admissible. */
-export function normalizePublicAssetPath( value ) {
+/**
+ * Asset-pack boundary: public paths outside the pack index's own subtree
+ * are never admissible. The default index's subtree is /assets; the HD
+ * set's own index (#2061) names its /hd root explicitly.
+ */
+export function normalizePublicAssetPath( value, root = "/assets" ) {
 	const normalized = normalizePublicPath( value );
-	if ( !normalized.startsWith( "/assets/" ) ) {
-		throw new Error( `Asset packs only accept public /assets paths, got ${value}` );
+	if ( !normalized.startsWith( root + "/" ) ) {
+		throw new Error( `Asset packs only accept public ${root} paths, got ${value}` );
 	}
 	return normalized;
 }
@@ -53,11 +57,12 @@ export function assertInsideRoot( root, target, label ) {
 	}
 }
 
-/** Resolve a public /assets path to its file below publicRoot, refusing escapes. */
-export function containedPublicFile( publicRoot, publicPath ) {
-	// /assets itself is a valid root to list; anything else must sit below it.
+/** Resolve a public path to its file below publicRoot, refusing escapes. */
+export function containedPublicFile( publicRoot, publicPath, root = "/assets" ) {
+	// The subtree root itself is a valid root to list; anything else must
+	// sit below it.
 	const normalized = normalizePublicPath( publicPath );
-	if ( normalized !== "/assets" ) normalizePublicAssetPath( normalized );
+	if ( normalized !== root ) normalizePublicAssetPath( normalized, root );
 	const file = path.resolve( publicRoot, normalized.slice( 1 ) );
 	assertInsideRoot( publicRoot, file, `public path ${publicPath}` );
 	return file;

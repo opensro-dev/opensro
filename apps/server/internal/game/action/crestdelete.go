@@ -27,8 +27,10 @@ has no per-member observer set, so it sends division-wide (a few
 bytes; crest changes are rare), falling back to the user's observers
 plus a named push to each member where that seam is unwired.
 
-The register twins (param2 1) stay unsupported: their flow uploads a
-bitmap the port has no source for yet (#2272).
+The register twins (param2 1) stand their crests through the upload
+lane (crestregister.go): their bitmap's source is the browser file
+picker under the owner's 2026-11-07 contract, and this lane's clear
+clears what that lane stood.
 
 ===========================================================================
 */

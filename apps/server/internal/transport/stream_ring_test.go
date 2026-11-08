@@ -186,7 +186,12 @@ behind-floor with floor == reported+1 for the rest of the session.
 ================
 */
 func TestRingOversizedFrameIsHeldUntilAcked(t *testing.T) {
-	_, sess, _ := attachedSession(t, false)
+	// Gated: the writer parks inside its first write, so nothing writes
+	// or notes between this test's lock windows. On an un-gated session
+	// the writer drains the re-sent frame and notes it again before
+	// the last window below, and ackLocked(2) leaves that second copy
+	// in the ring - the #2822 flake, a test race, not a ring bug.
+	_, sess, _ := attachedSession(t, true)
 	big := Frame{Opcode: ringTestOp, Payload: make([]byte, streamRingMaxBytes)}
 	sess.mu.Lock()
 	sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)

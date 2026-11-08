@@ -137,6 +137,13 @@ export function startRuntime(
 		// One asset_offline per outage window; the window's other fetch
 		// failures are the same outage, never asset failures (#2559).
 		const OFFLINE_REPORT_GAP_MS = 5000;
+		// When the current fetch-failure streak armed its offline
+		// report and when its latest failure arrived (#2869): a burst
+		// only arms the report, and fetch failures still arriving a
+		// full gap later file it. A connection that drops inside the
+		// retry owners' backoff and recovers files nothing.
+		let offlineArmedAt: number | undefined;
+		let lastFetchFailureAt = -Infinity;
 		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
 			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
@@ -298,25 +305,47 @@ export function startRuntime(
 
 		Files one runtime error under a code that names its cause
 		(#2559), where fatal_asset_failed once filed everything with
-		constant fields: a network burst or an offline browser files
-		asset_offline (once per burst), a thrown error files
-		runtime_exception with its stack, the asset worker's death
-		stays fatal_asset_failed (it actually stops the session), and
-		everything else files asset_failed with the retry owner's real
-		facts - fields it does not know are dropped, not filled in.
+		constant fields: a network burst or an offline browser arms
+		an asset_offline that only fetch failures still arriving a
+		full OFFLINE_REPORT_GAP_MS later file (#2869) - a drop the
+		retry owners recover inside their backoff files nothing,
+		and a failure arriving more than a full gap after the
+		previous one buries the arm, so a later blink starts a
+		fresh streak instead of filing the old streak's report - a
+		thrown error files runtime_exception with its stack, the
+		asset worker's death stays fatal_asset_failed (it actually
+		stops the session), and everything else files asset_failed
+		with the retry owner's real facts - fields it does not know
+		are dropped, not filled in.
 		================
 		*/
 		function reportRuntimeIncident( source: string, error: string, message: string ) {
 			const facts = runtimeIncidentFacts( source, error );
 			if ( /failed to fetch|networkerror|load failed/i.test( error ) ) {
 				const now = performance.now();
+				// A failure arriving more than a full gap after the
+				// previous one buries any arm an earlier streak left:
+				// nothing runs during the silence to bury it, so the
+				// next failure does - this streak starts fresh, and
+				// only its own burst can arm its own report.
+				if ( now - lastFetchFailureAt > OFFLINE_REPORT_GAP_MS ) {
+					offlineArmedAt = undefined;
+				}
 				fetchFailures.push( { at: now, source } );
 				while ( fetchFailures.length && now - fetchFailures[0]!.at > 1000 ) fetchFailures.shift();
 				const burst = fetchFailures.length >= 3 &&
 					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
 				if ( globalThis.navigator?.onLine === false || burst ) {
-					if ( now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS ) {
+					// Arm on the burst that opens a streak.
+					if ( offlineArmedAt === undefined ) {
+						offlineArmedAt = now;
+					}
+					if (
+						now - offlineArmedAt >= OFFLINE_REPORT_GAP_MS &&
+						now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS
+					) {
 						offlineReportedAt = now;
+						offlineArmedAt = undefined;
 						sessionCommand( {
 							kind: "client-report",
 							incidentKind: "asset",
@@ -324,8 +353,10 @@ export function startRuntime(
 							message
 						} );
 					}
+					lastFetchFailureAt = now;
 					return;
 				}
+				lastFetchFailureAt = now;
 			} else if ( facts?.stack ) {
 				sessionCommand( {
 					kind: "client-report",
@@ -376,6 +407,7 @@ export function startRuntime(
 				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
 				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
@@ -539,6 +571,7 @@ export function startRuntime(
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
+					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
@@ -1042,7 +1075,6 @@ export function startRuntime(
 			frameWork.begin( now, visible );
 			renderer.setFrameWork?.( frameWork );
 			characters.frameWork( frameWork );
-			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -1431,7 +1463,6 @@ export function startRuntime(
 				if ( rendered ) {
 					await rendered;
 				}
-				waitMs = visible || admitting ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
@@ -1495,11 +1526,10 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				const cpuMs = performance.now() - cpuStart - waitMs;
+				const cpuMs = performance.now() - cpuStart;
 				sample( cpuHistory, cpuMs );
 				frameWork.recordCpu( cpuMs );
 				frameProbe()?.characterCount( "cpu-ms", cpuMs );
-				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
 				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
@@ -1647,6 +1677,10 @@ export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanv
 	const random = createPresentationRandom( 1 );
 	const assets = createAssets();
 	const renderer = createRenderer( canvas, random );
+	// Port-only: as startRuntime, the asset owner learns the device's
+	// texture features once, so a native texture read never waits on an
+	// answer this page would never give (texture-variants.ts, #2772).
+	void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 	const characters = createCharacterPresentation(
 		assets,
 		renderer,

@@ -106,6 +106,7 @@ function fieldOfViewWorldFixture( t ) {
 		progress: unexpectedCameraWork,
 		health: unexpectedCameraWork,
 		textureFeatures: unexpectedCameraWork,
+		hdTextures: unexpectedCameraWork,
 		install: unexpectedCameraWork,
 		dispose: unexpectedCameraWork,
 		request: unexpectedCameraWork,

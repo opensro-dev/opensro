@@ -367,6 +367,7 @@ that reached the worker.
 		owners.input.blindHeld = () => false;
 		owners.input.altHeld = () => false;
 		owners.assets.progress = () => 0;
+		owners.assets.hdTextures = () => {};
 		owners["bug-report"].movement = () => {};
 		globalThis.__runtimeOwners = owners;
 		globalThis.__runtimeCalls = [];
@@ -547,6 +548,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.input.blindHeld = () => false;
 	owners.input.altHeld = () => false;
 	owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 	owners["bug-report"].movement = () => {};
 	globalThis.__runtimeOwners = owners;
 	globalThis.__runtimeCalls = [];
@@ -873,37 +875,8 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			message: "asset=/assets/ui/panel.ddj transient=true attempts=3 " +
 				"error=Interface: UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
 		} );
-		// A fetch burst across sources in one poll is a dropped
-		// connection, not three broken assets (#2559): the first two
-		// file as asset failures, the third completes the burst and
-		// files the one asset_offline.
-		owners.characters.failure = () => null;
-		characterError = "TypeError: Failed to fetch";
-		owners.audio.error = () => "TypeError: Failed to fetch";
-		owners.audio.failure = () => ({ path: "/assets/audio/burst.ogg", message: "TypeError: Failed to fetch" });
-		owners.ui.resourceError = () =>
-			"UI image unavailable; retrying: /assets/ui/burst.ddj: TypeError: Failed to fetch";
-		owners.ui.resourceFailure = () => ({
-			path: "/assets/ui/burst.ddj",
-			attempts: 1,
-			transient: true,
-			message: "UI image unavailable; retrying: /assets/ui/burst.ddj: TypeError: Failed to fetch"
-		});
-		const burstStart = assetReports().length;
-		await frame();
-		assert.deepEqual( assetReports().slice( burstStart ).map( report => report.code ), [
-			"asset_failed",
-			"asset_failed",
-			"asset_offline"
-		] );
-		// The outage's later fetch failures are the same outage: they
-		// file nothing more, never an asset_failed, and the outage
-		// stays one asset_offline.
-		const tailStart = assetReports().length;
-		characterError = "TypeError: Failed to fetch (burst tail)";
-		await frame();
-		assert.deepEqual( assetReports().slice( tailStart ), [] );
-		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
+		// The fetch-burst and asset_offline discipline (#2869) lives
+		// in runtime-offline.test.mjs, its own runtime and clock.
 		// The asset worker's death still stops the session: fatal
 		// (#2559). It dies mid-frame here: healthy at the frame's
 		// opening check, failed by the report poll in the same frame -

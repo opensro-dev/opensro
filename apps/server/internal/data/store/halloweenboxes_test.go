@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -21,6 +23,8 @@ hand the account a second daily allowance (#2547).
 ================
 */
 func TestHalloweenAccountSurvivesSaveLoad(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -62,6 +66,8 @@ character that never minted seed nothing.
 ================
 */
 func TestHalloweenBoxesSeedFromLegacyCounts(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -104,6 +110,8 @@ zero progress: the load refuses it, like the trade pools.
 ================
 */
 func TestHalloweenBoxesRefuseCorruptRows(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	defer s.Close()
@@ -131,6 +139,7 @@ a second upgrade has nothing to do.
 ================
 */
 func TestHalloweenAccountUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-35 layout-11 authority upgrades to 36 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

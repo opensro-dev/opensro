@@ -587,6 +587,15 @@ The party walk after the heal: every other party member not in the set,
 alive, on the same plane, within the radius and admitted by buff
 replacement gets a child instance under its own authority; its new stats
 are owed to the end of the pass. There is no target cap.
+
+A member still loading its scene is skipped: its position already reads
+at the destination, but its session is not in the tick's delivery set
+(transport Bridge.sessionSnapshot skips scene-loading sessions), so the
+installation would reach nobody while the set recorded it as joined -
+the member then never saw the aura until a recast (#2789). The walk
+runs every scan, so the member joins on the first tick after its scene
+goes live, the same presence gate the party pickup and concealment
+lanes already use.
 ==================
 */
 func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) {
@@ -599,6 +608,9 @@ func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.C
 			continue
 		}
 		if !enterworld.CharacterAlive(member) {
+			continue
+		}
+		if rt.RewardActorPresent != nil && !rt.RewardActorPresent(aura.division, member.Name) {
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(aura.division, member.Name), member, now)

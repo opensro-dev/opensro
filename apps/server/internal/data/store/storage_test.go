@@ -20,6 +20,8 @@ TestStorageTransferIsAtomicAndShared
 ================
 */
 func TestStorageTransferIsAtomicAndShared(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)

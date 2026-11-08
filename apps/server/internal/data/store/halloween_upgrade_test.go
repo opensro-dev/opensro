@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -24,6 +25,7 @@ to do.
 ================
 */
 func TestHalloweenUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-33 layout-11 authority upgrades to 34 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -62,6 +64,8 @@ edge: a server restart must not reset the day's count).
 ================
 */
 func TestHalloweenBoxCountSurvivesSaveLoad(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)

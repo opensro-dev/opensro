@@ -230,6 +230,51 @@ def overview_tiles(box, regions=None):
 
 
 # ================
+# seam_tiles
+#
+# Port-only, not native. The v1.150 overview draws decorative sea and blank
+# land around its world; the later client draws Egypt there. A tile that
+# shows no v1.150 region carries no v1.150 information, so where it touches
+# later art it takes the later art too, or the page shows a patchwork of
+# the two styles around Alexandria. The walk spreads only through such
+# tiles, so the v1.150 world and the decoration away from the import stay.
+# ================
+def seam_tiles(box, native_box, regions, native_land, differs):
+	"""
+	Overview tiles inside native_box that join the imported art to the page:
+	reachable (edge to edge) from a later-art tile through tiles with no
+	native_land(x, y) region whose later art differs(path) from the native.
+	"""
+	left, top, right, bottom = box
+	native_tiles = set(overview_tiles(native_box))
+	later = set(overview_tiles(box, regions)) | (set(overview_tiles(box)) - native_tiles)
+
+	def tile(x, y):
+		return f"interface/worldmap/map/map_world_{x}x{y}.ddj"
+
+	def open_tile(x, y):
+		return (tile(x, y) in native_tiles and tile(x, y) not in later
+			and not any(native_land(rx, ry) for rx in range(x, x + OVERVIEW_TILE_REGIONS)
+				for ry in range(y - OVERVIEW_TILE_REGIONS + 1, y + 1))
+			and differs(tile(x, y)))
+
+	step = OVERVIEW_TILE_REGIONS
+	cells = [(x, y) for y in range(top, bottom - 1, -step) for x in range(left, right + 1, step)]
+	frontier = [(x, y) for x, y in cells if tile(x, y) in later]
+	seams, seen = [], set(frontier)
+	while frontier:
+		x, y = frontier.pop()
+		for nx, ny in ((x - step, y), (x + step, y), (x, y - step), (x, y + step)):
+			if (nx, ny) in seen or not (left <= nx <= right and bottom <= ny <= top):
+				continue
+			seen.add((nx, ny))
+			if open_tile(nx, ny):
+				seams.append(tile(nx, ny))
+				frontier.append((nx, ny))
+	return sorted(seams)
+
+
+# ================
 # map_media_paths
 # ================
 def map_media_paths(regions, box=None, native_box=None):

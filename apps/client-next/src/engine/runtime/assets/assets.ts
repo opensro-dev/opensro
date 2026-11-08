@@ -24,7 +24,7 @@ import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
-import { chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
+import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 const REQUEST_CAPACITY = 4;
 // A load's watchdog is a stall window, not a total budget: the worker notes
 // the bytes it reads per job (job-progress), and a job that keeps moving
@@ -39,8 +39,12 @@ const REQUEST_STALL_MS = 120000;
 const REQUEST_DECODE_STALL_MS = 60000;
 const REQUEST_ABSOLUTE_MS = 600000;
 // A cancellation's own acknowledgement window, from the cancel: a request
-// cancelled late in its deadline still gets this long to be released.
-const CANCEL_ACK_MS = 30000;
+// cancelled late in its deadline still gets this long to be released. The
+// worker acknowledges on receipt, but receipt waits behind the decode a
+// sibling job is inside - and this same watchdog sanctions a decode for
+// REQUEST_DECODE_STALL_MS of silence. A shorter window reports that
+// healthy worker as unanswering (#2871), so the two windows are one.
+const CANCEL_ACK_MS = REQUEST_DECODE_STALL_MS;
 // The degraded code an unacknowledged cancellation reports (client AGENTS.md).
 const CANCEL_UNACKNOWLEDGED = "asset-cancel-unacknowledged";
 /*
@@ -66,6 +70,11 @@ export function createAssets(): AssetOwner {
 		// marked its primary bytes in (the decode stall window then applies).
 		bytes: number;
 		decoding: boolean;
+		// Cumulative decoder work units noted for this job: the high-water
+		// mark a job-decoding-progress note must pass to slide the decode
+		// window. Never reset within a job: the worker counts one job's
+		// decode calls into one monotonic total.
+		decodeUnits: number;
 		cancelled?: boolean;
 		// The watchdog expired it: its error result is deliverable, and the
 		// worker's late result or release is expected, not a protocol fault.
@@ -156,7 +165,7 @@ export function createAssets(): AssetOwner {
 	after its no-progress window and retries (about 91 s for headers that
 	arrive late and a body that then stalls), then answers with a transient
 	error. What remains for this watchdog is a worker that stopped answering,
-	and a decode that hung without moving another byte.
+	and a decode that hung without reporting work.
 	================
 	*/
 	function checkDeadline() {
@@ -231,6 +240,26 @@ export function createAssets(): AssetOwner {
 
 	/*
 	================
+	noteJobDecodingProgress
+
+	The decoder reported more of its own work: slide the decode window.
+	Pure CPU work moves no bytes, so without these notes a city decode
+	that outlasts the decode window reads as a hung worker and dies
+	mid-decode (#2862). Only an increase inside the decoding phase
+	counts; the worker counts one job's decode calls into one monotonic
+	total, so a note at or under the high-water mark is a stale echo.
+	The absolute ceiling in checkDeadline never slides.
+	================
+	*/
+	function noteJobDecodingProgress( id: number, units: number ) {
+		const job = jobs.get( id );
+		if ( !job || job.result || job.cancelled || !job.decoding || units <= job.decodeUnits ) return;
+		job.decodeUnits = units;
+		job.deadline = performance.now() + REQUEST_DECODE_STALL_MS;
+	}
+
+	/*
+	================
 	noteJobFetching
 
 	A decode-phase read started downloading again (the worker flips the job
@@ -257,8 +286,20 @@ export function createAssets(): AssetOwner {
 			if ( !disposed && !failure ) noteJobDecoding( event.data.id );
 			return;
 		}
+		if ( event.data.kind === "job-decoding-progress" ) {
+			if ( !disposed && !failure ) noteJobDecodingProgress( event.data.id, event.data.units );
+			return;
+		}
 		if ( event.data.kind === "job-fetching" ) {
 			if ( !disposed && !failure ) noteJobFetching( event.data.id );
+			return;
+		}
+		if ( event.data.kind === "hd-availability" ) {
+			if ( !disposed && !failure && event.data.available !== hdSetAvailable ) {
+				hdSetAvailable = event.data.available;
+				// A saved "on" wakes only now that a set exists to serve.
+				if ( lastFeatures ) sendHdTextures( lastFeatures );
+			}
 			return;
 		}
 		if ( event.data.kind === "released" ) {
@@ -329,12 +370,38 @@ export function createAssets(): AssetOwner {
 	// so with the switch off it is given at once, else when the device knows
 	// its features (textureFeatures).
 	let compressedTextures = false, variantSent = false;
+	// Port-only (#2061): the HD set's row, read from the same stored
+	// record. Nothing is sent while it is off, so the worker fetches
+	// none of the set; when it is on, the format follows the device's
+	// features (textureFeatures), and a live toggle re-sends it.
+	// Port-only (#2800): whether the published build carries the set at
+	// all, told by the worker with the main pack index. Until it does,
+	// the saved row is inert: no format is ever sent.
+	let hdTexturesEnabled = false, hdSetAvailable = false, lastFeatures: readonly string[] | null = null;
 	try {
-		compressedTextures = storedExperimentalOptions( globalThis.localStorage ).options.compressedTextures;
+		const options = storedExperimentalOptions( globalThis.localStorage ).options;
+		compressedTextures = options.compressedTextures;
+		hdTexturesEnabled = options.hdTextures;
 	} catch {}
 	if ( !compressedTextures ) {
 		send( { kind: "texture-variant", variant: null } );
 		variantSent = true;
+	}
+	/*
+	================
+	sendHdTextures
+
+	The HD decision as it stands: the chosen format once the device's
+	features are known, nothing before (the worker's set is off until
+	then, and no texture waits on it - the originals serve).
+	================
+	*/
+	function sendHdTextures( features: readonly string[] ) {
+		if ( disposed ) return;
+		send( {
+			kind: "hd-textures",
+			format: hdTexturesEnabled && hdSetAvailable ? chooseHdTextureVariant( new Set( features ), true ) : null
+		} );
 	}
 	return {
 		/*
@@ -347,7 +414,35 @@ export function createAssets(): AssetOwner {
 		textureFeatures( features: readonly string[] ) {
 			if ( disposed || variantSent ) return;
 			variantSent = true;
+			lastFeatures = features;
 			send( { kind: "texture-variant", variant: chooseTextureVariant( new Set( features ), true ) } );
+			sendHdTextures( features );
+		},
+		/*
+		================
+		hdTextures
+
+		The HD row's live state. The device's features are the owner's to
+		remember, so a toggle after they arrive re-sends the decision at
+		once; before they arrive it only records the row.
+		================
+		*/
+		hdTextures( enabled: boolean ) {
+			if ( disposed ) return;
+			hdTexturesEnabled = enabled;
+			if ( lastFeatures ) sendHdTextures( lastFeatures );
+		},
+		/*
+		================
+		hdAvailable
+
+		Whether the published build carries the HD set (#2800), as the
+		worker reported with the main pack index; false until it does, so
+		the Experimental row stays hidden and the saved row inert.
+		================
+		*/
+		hdAvailable() {
+			return hdSetAvailable;
 		},
 		/*
 		================
@@ -422,7 +517,8 @@ export function createAssets(): AssetOwner {
 				decode,
 				result: null,
 				bytes: 0,
-				decoding: false
+				decoding: false,
+				decodeUnits: 0
 			} );
 
 			try {

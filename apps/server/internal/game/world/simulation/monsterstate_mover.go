@@ -22,6 +22,31 @@ func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState,
 
 /*
 ================
+moverStuckAt
+
+MoverAt(...).Stuck() without building the MoverState. resolveStuck asks
+it for every actor at the end of every step and the answer is almost
+always no; the gid door it used was 12% of the seeded leg's samples
+(#2133). Same population, same existence probe and the same carried
+slots as MoverAt; an actor with no row yet answers no, because the
+spawn mover MoverAt would synthesize starts unstuck. The full row is
+validated by resolveStuck's own Mover read, which runs only on a yes.
+================
+*/
+func (s *MonsterState) moverStuckAt(divisionID string, gid uint32, slot, monsterSlot uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if !state.instances.containsAt(monsterSlot, gid) {
+		return false
+	}
+	stuck, _ := state.movers.stuckAt(slot, gid)
+	return stuck
+}
+
+/*
+================
 MoverAt
 
 Mover through the slots the behaviour batch carried for the actor

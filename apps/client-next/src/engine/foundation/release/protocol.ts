@@ -18,6 +18,11 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 14 carries the port-only item links in player chat
+// (SRO_CHAT_ITEM_LINKS, chat-item-links.ts): a link block after the text of
+// 0x7367 and of the Global Chatting 0x75BD, and the linked item bodies after
+// the text of a player 0x3667 line, which 13 read as trailing bytes and
+// failed its session on. Protocol 13 grew the 0x3FBA most-wanted body.
 // Protocol 12 shows the port-only 0x3FBA most-wanted state on the buff
 // board (most-wanted.ts); the frame is never offered to an 11 browser,
 // whose release the server refuses with 426 at connect, so no client
@@ -35,7 +40,7 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 12;
+export const RELEASE_PROTOCOL = 14;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

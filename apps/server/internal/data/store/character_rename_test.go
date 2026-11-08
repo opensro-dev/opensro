@@ -9,6 +9,8 @@ import (
 )
 
 func TestOperatorRenamePreservesIdentityAndReopensGMName(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := &domain.Character{Name: "Test2", MissionInventory: []domain.InventoryRow{{Slot: 13, RefObjID: 24198, StackCount: 2}}}

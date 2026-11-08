@@ -16,7 +16,8 @@ import type { AuthoredLayout } from "./authored-layout";
 import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
-import { type NoticeRowLink, noticeWrappedLinks } from "@/engine/foundation/gameplay/notice-links";
+import { type NoticeRowLink, noticeWrappedLinks, projectSpans } from "@/engine/foundation/gameplay/notice-links";
+import { CHAT_LINK_MARKER, chatLinkSpans, replaceChatMarkers } from "@/engine/foundation/gameplay/chat-item-links";
 import {
 	isSunDropNoticeText,
 	SEAL_NOTICE_COLOR_MOON,
@@ -116,6 +117,14 @@ export interface ChatLayoutInput {
 	// Port-only: link a drop/plus notice's player and item (Experimental
 	// "Links in notices"); omitted or false keeps every line plain.
 	noticeLinks?: boolean;
+	// Port-only (SRO_CHAT_ITEM_LINKS, Experimental "Item links in chat"),
+	// true only while the server switch and the row are both on: a player
+	// line's item labels are hover regions showing the item's tooltip and
+	// the input keeps its focus on Alt presses; omitted or false is native.
+	chatItemLinks?: boolean;
+	// Port-only (SRO_CHAT_ITEM_LINKS): the labels of the links in the input,
+	// drawn where their markers sit (chat-link-hud.ts).
+	inputLabels?: readonly string[];
 	// Port-only, not native (#1976, Experimental "Event chat tab"): a fifth
 	// tab holding the channel-7 event notices, which All then skips.
 	// Omitted or false keeps the native four tabs, notices in All included.
@@ -138,6 +147,18 @@ export interface ChatLayoutInput {
 		caretVisible?: boolean;
 	};
 }
+// The kind prefix of an item-link span (chat-item-links.ts chatLinkSpans).
+const CHAT_ITEM_KIND = "chat-item:";
+
+/*
+================
+ChatRowItemLink
+
+One piece of an item link's label on a displayed row.
+================
+*/
+type ChatRowItemLink = ReturnType<typeof projectSpans<`chat-item:${number}`>>[number][number];
+
 /*
 ================
 chatLayout
@@ -147,6 +168,9 @@ author across filtering, wrapping and scrolling instead of parsing captions.
 ================
 */
 export function chatLayout( state: ChatLayoutInput ) {
+	// The rows of a line without item links share one empty list (port-only
+	// item links; one list per pass, not per row).
+	const noItemLinks: readonly ChatRowItemLink[] = [];
 	const {
 		layout,
 		width,
@@ -284,6 +308,7 @@ button
 					sentAt: undefined as number | undefined,
 					notice: undefined as ChatLine["notice"],
 					links: [] as readonly NoticeRowLink[],
+					itemLinks: noItemLinks,
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
@@ -301,9 +326,16 @@ button
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
 						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
-						full = chatLineText( l, copy ),
+						// Port-only item links: each marker shows its item's label. A line
+						// without a marker takes none of this path (the per-frame budget).
+						raw = chatLineText( l, copy ),
+						labelled = raw.includes( CHAT_LINK_MARKER ) ?
+							chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
+							null,
+						full = labelled?.text ?? raw,
 						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),
-						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined );
+						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined ),
+						itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
 					return wrapped.map( ( value, index ) => ({
 						value,
 						color,
@@ -312,6 +344,7 @@ button
 						sentAt: l.sentAt,
 						notice: state.noticeLinks ? l.notice : undefined,
 						links: links[index] ?? ([] as readonly NoticeRowLink[]),
+						itemLinks: itemLinks?.[index] ?? noItemLinks,
 						sequence: l.sequence
 					}) );
 				}
@@ -388,6 +421,34 @@ button
 					}
 				}
 			}
+			// Port-only item links (chat-item-links.ts): a label shows the
+			// linked item's tooltip and underlines while hovered.
+			if ( line.sequence !== undefined ) {
+				for ( const link of line.itemLinks ) {
+					const baseId = "chat-item:" + line.sequence + ":" + link.kind.slice( CHAT_ITEM_KIND.length ),
+						rect: UiRect = [
+							r[0] + measure( line.value.slice( 0, link.at ), line.style ),
+							r[1],
+							measure( link.value, line.style ),
+							14
+						];
+					controls.push( {
+						id: link.part ? baseId + ":" + link.part : baseId,
+						label: link.value,
+						kind: "region",
+						rect
+					} );
+					if ( hover === baseId || (hover !== null && hover.startsWith( baseId + ":" )) ) {
+						quads.push( {
+							texture: "",
+							rect: [ rect[0], rect[1] + 13, rect[2], 1 ],
+							clip,
+							uv: [ 0, 0, 1, 1 ],
+							color: line.color
+						} );
+					}
+				}
+			}
 		}
 		blocks.push( [ 18, y + 21, backgroundWidth, rows * 56 + 20 ] );
 	}
@@ -397,8 +458,11 @@ button
 	const edit: UiRect = [ 22, inputY + 3, Math.max( 0, chatWidth - 26 ), 14 ],
 		start = Math.max( 0, Math.min( input.length, editState?.start ?? 0 ) ),
 		end = Math.max( start, Math.min( input.length, editState?.end ?? start ) );
-	const before = measure( input.slice( 0, start ) ),
-		through = measure( input.slice( 0, end ) ),
+	// Port-only item links: a marker draws as its label (chat-link-hud.ts).
+	const shown = ( value: string ) =>
+		state.inputLabels?.length ? replaceChatMarkers( value, state.inputLabels ) : value;
+	const before = measure( shown( input.slice( 0, start ) ) ),
+		through = measure( shown( input.slice( 0, end ) ) ),
 		scroll = editState?.focused ? Math.max( 0, through - edit[2] + 3 ) : 0;
 	const ink = ( r: UiRect, color: UiQuad["color"] ) =>
 		quads.push( { rect: r, clip: edit, texture: "", uv: [ 0, 0, 1, 1 ], color } );
@@ -406,7 +470,12 @@ button
 		ink( [ edit[0] + before - scroll, edit[1], through - before, edit[3] ], [ .2, .4, .7, .6 ] );
 	}
 	quads.push(
-		...text( input, [ edit[0] - scroll, edit[1], Math.max( edit[2], measure( input ) ), edit[3] ], edit, white )
+		...text(
+			shown( input ),
+			[ edit[0] - scroll, edit[1], Math.max( edit[2], measure( shown( input ) ) ), edit[3] ],
+			edit,
+			white
+		)
 	);
 	if ( editState?.focused ) {
 		if ( editState.caretVisible !== false ) {
@@ -416,7 +485,15 @@ button
 			ink( [ edit[0] + before - scroll, edit[1] + edit[3] - 1, Math.max( 1, through - before ), 1 ], white );
 		}
 	}
-	controls.push( { id: "chat-text", label: "Chat", kind: "text", rect: edit, value: input, maxLength: 100 } );
+	controls.push( {
+		id: "chat-text",
+		label: "Chat",
+		kind: "text",
+		rect: edit,
+		value: input,
+		maxLength: 100,
+		...(state.chatItemLinks ? { keepFocusOnAltPress: true } : {})
+	} );
 	blocks.push( [ 18, inputY, backgroundWidth, 20 ] );
 	return { quads, controls, paths, blocks, scrolling };
 }

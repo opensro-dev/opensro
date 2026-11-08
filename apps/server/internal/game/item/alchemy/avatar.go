@@ -110,6 +110,19 @@ func avatarPart(flags uint16) (uint8, bool) {
 
 /*
 ================
+AvatarPart
+
+avatarPart, exported for the GM item forge, which offers an avatar's
+blue keys from the same part table the smith's bless reads
+(action/forge.go).
+================
+*/
+func AvatarPart(flags uint16) (uint8, bool) {
+	return avatarPart(flags)
+}
+
+/*
+================
 avatarAssigned
 
 The server's assigned-option check: the codename is on the part's

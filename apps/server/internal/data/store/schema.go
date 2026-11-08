@@ -127,7 +127,18 @@ func isVersionMismatch(err error) bool {
 // Version 39 changes no record: layout 12 adds the silk_history table
 // (port-only, silkhistory.go), the movement record the Item Mall's silk
 // history window lists (#2269). The upgrade rewrites no record.
-const CurrentVersion = 39
+// Version 40 replaces the wanted level's seven-day lapse with a per-day
+// decay (mostWanted.nextDecayAtMs, port-only, #2721): every counted kill
+// restamps it, and each day without one drops the level by one. The
+// schema 35 expiresAtMs stays in the record as an unread seed, like the
+// schema 36 Halloween counts. Streaks saved earlier carry no decay stamp
+// and are stamped fresh at their first judging door, so no saved streak
+// decays early. It also adds the optional forge-bound mark on item rows
+// (forgeBound, port-only, #1980): an item a GM forged with /FORGE can
+// never be traded, sold or handed to another character; rows saved
+// earlier carry no mark and are unbound. The offline upgrade rewrites
+// no record.
+const CurrentVersion = 40
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

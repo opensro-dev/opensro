@@ -16,7 +16,10 @@ package main
 import (
 	"testing"
 
+	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/tier"
@@ -63,5 +66,69 @@ func TestCataloguePopulationCarriesTheShippedTomb(t *testing.T) {
 			t.Fatalf("setting %q: tomb species %d in the catalogue population = %v, want %v",
 				c.setting, qinShiTombSpecies, got, c.want)
 		}
+	}
+}
+
+// The eight tomb uniques the TombChain spawns at chain-owned nests
+// (Floor 5's guardians and Flame Master, Floor 6's anchors): the
+// catalogue lost them when the chain pinned their nests to zero
+// (#2856). 14838 is Flame Master Sinmu, the /uniques board's face.
+var qinShiTombChainUniques = []uint32{14824, 14833, 14834, 14835, 14836, 14837, 14838, 14839}
+
+/*
+================
+TestCatalogueMonstersKeepTheChainUniques
+
+The published monster rows are built from the shard population at its
+deployment defaults (the tomb on): a monster the server's spawn data
+still puts into the world - a chain-owned nest included - keeps its
+catalogue row. The count pins the published set the 2026-11-01
+release shipped (#2856 done-when 1).
+================
+*/
+func TestCatalogueMonstersKeepTheChainUniques(t *testing.T) {
+	tier.Long(t, "the catalogue build keeps the TombChain uniques")
+	dir := gamedatatest.TextdataDir(t)
+	for _, s := range shardsettings.Settings {
+		if s.Catalogue {
+			t.Setenv(s.Env, "")
+		}
+	}
+	if err := resolveShardSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if err := loot.InitCap110(dir, monster.Cap110Enabled()); err != nil {
+		t.Fatal(err)
+	}
+	template, err := shardPopulation(dir, monster.Cap110Enabled())
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemSource, err := shardItems(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemID := func(codename string) uint32 {
+		if ref, ok := itemSource.ItemRefByCodename(codename); ok {
+			return ref.RefObjID
+		}
+		return 0
+	}
+	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: template, ItemID: itemID,
+		Skills: enterworld.NewTextdataSkills(dir)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make(map[uint32]bool, len(monsters))
+	for _, m := range monsters {
+		ids[m.ID] = true
+	}
+	for _, id := range qinShiTombChainUniques {
+		if !ids[id] {
+			t.Fatalf("chain unique %d lost its catalogue row; the shard still spawns it", id)
+		}
+	}
+	if len(monsters) != 230 {
+		t.Fatalf("catalogue monsters = %d, want 230 (the 2026-11-01 published set)", len(monsters))
 	}
 }

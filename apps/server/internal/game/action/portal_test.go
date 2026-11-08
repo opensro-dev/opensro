@@ -6,6 +6,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -14,6 +15,9 @@ import (
 )
 
 func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
+	// The census is the native catalog: a tomb-variant shell must
+	// not add the tomb links to it (#2850).
+	t.Setenv(monster.EnvQinShiTomb, "off")
 	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {

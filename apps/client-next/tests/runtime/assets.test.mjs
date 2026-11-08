@@ -58,7 +58,9 @@ test("asset worker transfers exact bytes without retaining the output buffer", a
 	const loader = createLoader( ( result, transfer ) => {
 		// Progress is time-based telemetry (sent after 150 ms), so a loaded
 		// machine can emit one mid-test; only deliveries are under test.
-		if ( [ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) return;
+		if (
+			[ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( result.kind )
+		) return;
 		transferred = result.buffer;
 		results.push( structuredClone( result, { transfer } ) );
 	} );
@@ -77,7 +79,11 @@ test("asset cancellation rejects late completion even if fetch ignores abort", a
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -93,11 +99,20 @@ test("asset loader bounds concurrency and aborts every pending request on dispos
 	const signals = [];
 	t.mock.method( globalThis, "fetch", ( _url, options ) => {
 		signals.push( options.signal );
-		return new Promise( () => {} );
+		// Settle on abort as real fetch does: a promise that never settles
+		// leaves the loader's 15 s stall watchdog holding this process open
+		// long after the tests finish.
+		return new Promise( ( _resolve, reject ) =>
+			options.signal.addEventListener( "abort", () => reject( options.signal.reason ), { once: true } )
+		);
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -143,7 +158,11 @@ close
 	};
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -189,7 +208,11 @@ test("cancelled downloads retain capacity even when fetch ignores abort, then re
 	t.mock.method( globalThis, "fetch", () => new Promise( resolve => downloads.push( resolve ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -220,6 +243,10 @@ test("cancelled downloads retain capacity even when fetch ignores abort, then re
 	await settle();
 	assert.equal( results.filter( r => r.kind !== "released" ).length, 1 );
 	assert.equal( results.filter( r => r.kind === "released" ).length, 4 );
+	// Settle the sixth download too: left in flight, its 15 s stall
+	// watchdog holds this process open long after the test ends (#2924).
+	downloads[5]( new Response( Uint8Array.of( 3 ) ) );
+	await settle();
 });
 
 test("a cancellation is acknowledged on receipt while its decode still drains", async t => {
@@ -240,7 +267,11 @@ test("a cancellation is acknowledged on receipt while its decode still drains", 
 		new Promise( resolve => decodes.push( () => resolve( { width: 4096, height: 4096, close() {} } ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );

@@ -32,8 +32,10 @@ import (
 	"opensro.online/server/internal/game/namefilter"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
+	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -75,6 +77,11 @@ type Runtime struct {
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
+	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
+	// off is native: a retired client command the server does not honor).
+	GMItemForge bool
+	// forgeStamps holds each GM's /FORGE rate-limit window (forge.go).
+	forgeStamps sync.Map
 	// FlagWar is the Capture the Flag schedule (native; flagwar.go):
 	// SRO_FLAGWAR_START_UTC and SRO_FLAGWAR_MIN_PLAYERS, wired from env.
 	FlagWar FlagWarSettings
@@ -173,6 +180,13 @@ type Runtime struct {
 	// the checked producer boundary.
 	effects         *statuseffect.Registry
 	periodicEffects linkedpulse.Registry
+
+	// entrySpawnCache is the tick's shared spawn projection per owner
+	// (activeeffect.go SpawnEntrySkills): entrySpawnMu owns the map and
+	// the cached rows' remaining-time refresh. The entry bootstrap does
+	// not use it; EntrySkills still builds a fresh projection per call.
+	entrySpawnMu    sync.Mutex
+	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
 
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
@@ -308,6 +322,11 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// mercenaryKeys is the cooldown pass's owner-key scratch
+	// (mercenary_clock.go): refilled under petMu on every pass and
+	// consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is serial and nothing retains it.
+	mercenaryKeys []petOwnerKey
 	// cosOwners is the pet gid to owner index (cosownerindex.go):
 	// whose pet a gid is, without walking the division's characters.
 	cosOwners  cosOwnerIndex
@@ -346,6 +365,16 @@ type Runtime struct {
 	// differential test sets it, to the full copy. Nil is the narrow
 	// copy.
 	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// elementalFacts holds each pet owner's armed elemental-walk facts
+	// (petwolf.go, #2030), keyed by division and lower-cased owner name.
+	// advancePetInDivision arms one entry per owner tick and clears it
+	// after the wolf lane; elementalFactsMu owns the map and the
+	// recycle list - an entry itself is read and written under its
+	// division's lane. elementalFactsFree holds cleared captures for
+	// the next arm to reset and reuse (takeElementalFacts).
+	elementalFactsMu   sync.Mutex
+	elementalFacts     map[petOwnerKey]*elementalWalkFacts
+	elementalFactsFree []*elementalWalkFacts
 	// castCopy, when set, replaces the press/release cast copy
 	// (characterSnapshotCast); only the cast-copy differential tests
 	// set it, to the full or the combat copy. Nil is the cast copy.
@@ -510,6 +539,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// AlexandriaHideD11Goods keeps degree-11 goods out of Alexandria's
+	// own shops (commerce/alexandriashops.go; port-only, not native).
+	// False is native: the original game sold them there (#2842).
+	AlexandriaHideD11Goods bool
 	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
 	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
 	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
@@ -560,6 +593,10 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
+	// PetInventoryPages gives every pet bag five pages (companion
+	// PetInventorySlots; port-only, not native; owner 2026-11-07).
+	// False is native.
+	PetInventoryPages bool
 	// Port-only: DB-configured chance of extra pet gear per admitted normal equipment drop.
 	PetGearDropFactor float64
 	PetGearAffixes    []companion.AffixDef
@@ -736,6 +773,14 @@ type Runtime struct {
 	// RecordSilkGrant journals each committed grant.
 	SilkWallet      SilkWallet
 	RecordSilkGrant func(SilkGrant)
+	// Crests is the uploaded-crest store (crestregister.go,
+	// internal/game/social/crest): the register lane's image sink and
+	// the /marks/ resolver's index. Nil refuses every crest upload
+	// and every staff crest removal - register items have no source.
+	Crests *crest.Store
+	// RecordCrestChange journals each committed crest change or
+	// staff removal (crestregister.go), beside RecordSilkGrant.
+	RecordCrestChange func(CrestChange)
 	// RecordUniqueKill queues each announced unique kill for the community
 	// site's record (port-only). It runs inside the character door, so it
 	// must only enqueue: the store write happens on its own goroutine.
@@ -776,6 +821,9 @@ type Runtime struct {
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
 	ChatShadowMuted func(accountID string) bool
+	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
+	// Global Chatting line (globalchat.go); nil keeps the native tail.
+	ChatItemLinks *chat.ItemLinks
 	// ModerationLog keeps the Global Chatting line for the staff
 	// (chatlog, port-only, not native), muted lines included and
 	// marked. Record only queues the line; nil keeps no log.

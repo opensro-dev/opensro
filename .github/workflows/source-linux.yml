@@ -61,6 +61,12 @@ jobs:
       - name: Require dependency inputs to remain unchanged
         run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
       - name: Verify client without generated retail assets
+        # The tight test budgets bind where the profile was measured
+        # (docs/agents/client-test-profile.md); the runner's defaults
+        # stay loose for the unmeasured full lane (#2929).
+        env:
+          SRO_TEST_FILE_BUDGET_MS: "20000"
+          SRO_TEST_SUITE_BUDGET_MS: "300000"
         run: node apps/client-next/tools/check.mjs --source
 
   # The repository source policies that cover server files too. source-check

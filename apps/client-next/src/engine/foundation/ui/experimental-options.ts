@@ -61,6 +61,13 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Port-only, not native (#2094): screen-space ambient occlusion. A
+	// half-resolution depth pass totals how much of each surface's
+	// surroundings the previous frame's depth hides, and the next
+	// frame's surfaces scale their ambient term by it; the diffuse
+	// keeps its direction and the unlit path is untouched. Off by
+	// default; off owns nothing and the frame is the native one.
+	readonly ambientOcclusion: boolean;
 	// Port-only, not native: drifting procedural clouds, the sun's
 	// atmospheric glow and a rim light against the sky (pipelines.ts's
 	// stages.w). Off by default; off is the native gradient and disc.
@@ -86,6 +93,14 @@ export interface ExperimentalOptions {
 	// without BC are affected, where RGBA ends the tab; off is the native
 	// texture content.
 	readonly compressedTextures: boolean;
+	// Port-only, not native (#2061): the HD texture set, the asset build's
+	// x2 AI-upscaled world object textures served from their own /hd
+	// subtree behind a separate pack index. Off unless turned on (the
+	// owner's choice, 2026-11-07): off, the asset worker fetches none of
+	// the set, not even its index; on, the index is fetched and the set
+	// downloads with progress, and the retail texture stays the fallback
+	// for every path the set does not hold.
+	readonly hdTextures: boolean;
 	// Port-only, not native: characters and effects share one nearest-first
 	// order under the renderer's CHARACTER_ACTORS (the original keeps every
 	// decoration, 85C020), so a far character gives way to a near effect.
@@ -172,6 +187,12 @@ export interface ExperimentalOptions {
 	// (foundation/gameplay/notice-links.ts). On unless turned off (the
 	// owner's choice, 2026-10-15); off is plain text.
 	readonly noticeLinks: boolean;
+	// Port-only, not native: Alt+click on an item while typing a chat line
+	// links it, and a linked item's name in the chat log shows its tooltip
+	// (foundation/gameplay/chat-item-links.ts; the server's
+	// SRO_CHAT_ITEM_LINKS must be on too). On unless turned off (the
+	// owner's choice, 2026-11-07); off is plain text and no gesture.
+	readonly chatItemLinks: boolean;
 	// Port-only, not native: the notice banner shows for 5000 ms with a
 	// 1000 ms fade instead of the native 7000 ms and 2000 ms (6B3180, 6B30F0;
 	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
@@ -188,10 +209,11 @@ export interface ExperimentalOptions {
 	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
-	// Port-only, not native (owner 2026-10-24): the summoned trade transport
-	// drinks a transport HP potion at the auto-potion HP percentage
-	// (transport-auto-potion.ts). The original watches only the player
-	// (70C550). Off unless turned on.
+	// Port-only, not native (owner 2026-10-24, extended #2741): companion
+	// and vigor auto-potions (transport-auto-potion.ts, companion-potions.ts).
+	// The original watches only the player (70C550). On unless turned off
+	// (the owner's choice, 2026-11-07, #2741: an explicit exception to the
+	// off-by-default rule); off is the native player-only recovery.
 	readonly transportAutoPotion: boolean;
 	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
 	// first and fall back to the WebSocket when the path fails. On unless
@@ -331,6 +353,26 @@ export function phoneDisplay( display: DisplayClass ): boolean {
 
 /*
 ================
+browserDisplayClass
+
+What this window reports about its display, read once per call: the primary
+pointer's coarseness and the screen's short side in CSS pixels. This is the
+one reader of the pointer class - the renderer and the UI runtime both call
+it. A host without matchMedia reads as a fine pointer, so layout keeps the
+desktop rule; a test that wants the touch layout stubs a coarse matchMedia
+before the UI is created, instead of relying on a production default.
+================
+*/
+export function browserDisplayClass(): DisplayClass {
+	const query = globalThis.matchMedia?.( "(pointer: coarse)" ),
+		screen = globalThis.screen,
+		width = screen?.width ?? 0,
+		height = screen?.height ?? 0;
+	return { coarsePointer: query ? query.matches : false, shortSide: Math.min( width, height ) };
+}
+
+/*
+================
 sceneRenderScale
 
 The render scale the scene is drawn at this frame. Only the phone cap
@@ -398,8 +440,8 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
+plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -431,11 +473,13 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
+		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
+		hdTextures: enabled( "hdTextures" ),
 		sharedActorRoom: record.sharedActorRoom !== false,
 		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
@@ -451,11 +495,12 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
+		chatItemLinks: record.chatItemLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
-		transportAutoPotion: enabled( "transportAutoPotion" ),
+		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
@@ -538,6 +583,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
@@ -563,6 +609,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
+		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,

@@ -94,7 +94,7 @@ test("disabled shards hide both controls even with a saved opt-in and make no gu
 		assert.equal( f.saved.length, 0, "a stale control cannot change the saved preference" );
 		f.activate( panelCloseId( "Map" ) );
 		f.activate( "open-window:Experimental" );
-		assert.equal( control( f.activate( "experimental-tab:1" ), "experimental-monster-guide" ), undefined );
+		assert.equal( control( f.activate( "experimental-tab:3" ), "experimental-monster-guide" ), undefined );
 		f.activate( "experimental-monster-guide" );
 		f.activate( "experimental-confirm" );
 		assert.equal( f.saved.at( -1 ).monsterGuide, true, "hiding the row preserves the saved preference" );
@@ -120,7 +120,7 @@ test("enabled shards expose both map sizes and Experimental but fetch only after
 		f.activate( panelCloseId( "Map" ) );
 		f.activate( "open-window:Experimental" );
 		assert.equal(
-			defined( control( f.activate( "experimental-tab:1" ), "experimental-monster-guide" ) ).selected,
+			defined( control( f.activate( "experimental-tab:3" ), "experimental-monster-guide" ) ).selected,
 			true
 		);
 	} finally {

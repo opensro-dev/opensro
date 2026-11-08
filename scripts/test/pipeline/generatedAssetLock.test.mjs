@@ -82,6 +82,30 @@ export const rm = realFs.rm;
 export const stat = realFs.stat;
 export const writeFile = realFs.writeFile;
 `;
+// The publish-race wrapper: the first publish inside the claimed mutex
+// directory removes the whole lock dir underneath itself - the
+// empty-state release landing between the claim and its owner record,
+// which the retrying publisher must survive.
+const MUTEX_PUBLISH_FS_WRAPPER_SOURCE = `import { promises as realFs } from "node:fs";
+import path from "node:path";
+let injected = false;
+export const mkdir = realFs.mkdir;
+export const readFile = realFs.readFile;
+export const readdir = realFs.readdir;
+export const realpath = realFs.realpath;
+export const rename = realFs.rename;
+export const rm = realFs.rm;
+export const stat = realFs.stat;
+export async function writeFile( target, data, options ) {
+	const text = String( target );
+	if ( !injected && text.includes( path.sep + "mutex" + path.sep ) ) {
+		injected = true;
+		console.error( "INJECTED lock dir removal during the mutex publish" );
+		await realFs.rm( path.dirname( path.dirname( text ) ), { recursive: true, force: true } );
+	}
+	return realFs.writeFile( target, data, options );
+}
+`;
 const MUTEX_RACE_DRIVER = `
 import { register } from "node:module";
 import path from "node:path";
@@ -103,6 +127,18 @@ with generated_assets_lock('test reader or publisher', mode=os.environ.get('MODE
         sys.stdin.readline()
     if os.environ.get('FAIL') == '1':
         raise RuntimeError('intentional callback failure')
+`;
+
+// The #2787 regression opener: holds the writer's owner record open the
+// way a polling Python contender's read does - a plain open(), which on
+// Windows grants no delete sharing - for a few seconds, then lets go.
+const PYTHON_OPENER = `
+import os, time
+handle = open(os.environ['OPEN_RECORD'], 'r')
+print('HOLDING', flush=True)
+time.sleep(3)
+handle.close()
+print('RELEASED', flush=True)
 `;
 
 /*
@@ -441,6 +477,47 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 	}
 }
 
+test("a node release waits out a python contender holding its owner record open", async ( t ) => {
+	const f = await fixture( t );
+	const writer = start( f, { cwd: f.owner, language: "node", env: { HOLD: "1", MODE: "write" } } );
+	await entered( writer );
+	// While the opener holds the record, the release's removal of it
+	// cannot land (#2787): the release must wait the three seconds out
+	// and still finish clean, where it used to die with EBUSY.
+	const attempt = pythonAttempts( [ "-B", "-c", PYTHON_OPENER ] )[0];
+	const opener = spawn( attempt.command, attempt.args, {
+		cwd: f.owner,
+		env: { ...process.env, OPEN_RECORD: path.join( f.lockDir, "owner.json" ) },
+		windowsHide: true,
+		stdio: [ "pipe", "pipe", "pipe" ]
+	} );
+	opener.output = "";
+	opener.stdout.on( "data", ( chunk ) => opener.output += chunk );
+	opener.stderr.on( "data", ( chunk ) => opener.output += chunk );
+	opener.finished = new Promise( ( resolve, reject ) => {
+		opener.once( "error", reject );
+		opener.once( "close", resolve );
+	} );
+	f.children.push( opener );
+	const deadline = Date.now() + CHILD_PROGRESS_TIMEOUT_MS;
+	while ( !opener.output.includes( "HOLDING" ) ) {
+		assert.equal( opener.exitCode, null, opener.output );
+		assert.ok( Date.now() < deadline, opener.output );
+		await new Promise( ( resolve ) => setTimeout( resolve, PARENT_POLL_MS ) );
+	}
+	const releasedAt = Date.now();
+	writer.stdin.end( "\n" );
+	assert.equal( await writer.finished, 0, writer.output );
+	assert.doesNotMatch( writer.output, /EBUSY|EPERM/ );
+	// The release could only finish once the opener let go. The wait
+	// itself exists only on Windows (a portable host deletes an open
+	// file at once), so the elapsed floor is asserted there only.
+	if ( process.platform === "win32" ) {
+		assert.ok( Date.now() - releasedAt >= 2500, writer.output );
+	}
+	assert.equal( await opener.finished, 0, opener.output );
+});
+
 for ( const [holderLanguage, contenderLanguage] of [ [ "node", "python" ], [ "python", "node" ] ] ) {
 	test(`a killed ${holderLanguage} reader's claim is reaped for a ${contenderLanguage} writer`, async ( t ) => {
 		const f = await fixture( t );
@@ -481,6 +558,16 @@ test("a contender whose lock dir is removed before its mutex claim still enters"
 	const child = start( f, { cwd: f.owner, language: "node", driver: MUTEX_RACE_DRIVER } );
 	assert.equal( await child.finished, 0, child.output );
 	assert.match( child.output, /INJECTED lock dir removal/ );
+	assert.match( child.output, /ENTERED/ );
+});
+
+test("a contender whose lock dir is removed during its mutex record publish still enters", async ( t ) => {
+	const f = await fixture( t );
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceHook.mjs" ), MUTEX_RACE_HOOK_SOURCE );
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceFsWrapper.mjs" ), MUTEX_PUBLISH_FS_WRAPPER_SOURCE );
+	const child = start( f, { cwd: f.owner, language: "node", driver: MUTEX_RACE_DRIVER } );
+	assert.equal( await child.finished, 0, child.output );
+	assert.match( child.output, /INJECTED lock dir removal during the mutex publish/ );
 	assert.match( child.output, /ENTERED/ );
 });
 

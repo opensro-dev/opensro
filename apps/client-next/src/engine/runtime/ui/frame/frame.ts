@@ -14,7 +14,7 @@ import type { BuffViewerIcon } from "@/engine/foundation/ui/buff-viewer";
 import type { CloseControlId, UiFrame } from "./frame-contract";
 import { closedPanel } from "@/engine/foundation/ui/panels";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { fitUiGroup } from "@/engine/foundation/ui/layout";
+import { DESKTOP_HEIGHT, DESKTOP_WIDTH, fitUiGroup } from "@/engine/foundation/ui/layout";
 import { frameRing } from "@/engine/foundation/ui/frame-ring";
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
@@ -245,6 +245,21 @@ export function endWindow(
 			for ( let i = mark[1]; i < controls.length; i++ ) {
 				controls[i] = compactCloseControl( controls[i]!, windowBounds );
 			}
+		} else if ( w < DESKTOP_WIDTH || h < DESKTOP_HEIGHT ) {
+			// Port-only, not native: a fine pointer below the original's
+			// smallest screen mode keeps the desktop windows; one that
+			// cannot hold the viewport is scaled into it, and a window
+			// that already fits keeps the place the player dragged it to.
+			// A scaled window drops its window drags like the compact
+			// fit does: a drag would write fitted coordinates back as
+			// the remembered native position.
+			fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
+				blocks,
+				firstBlock: mark[2],
+				disableDrag: compactWindowDrag,
+				leaveWhenFits: true,
+				...(source ? { sourceBounds: source } : {})
+			} );
 		}
 		const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
 		quads.length = mark[0];

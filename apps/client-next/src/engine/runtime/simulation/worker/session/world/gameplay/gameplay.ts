@@ -103,6 +103,13 @@ import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/uni
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
+import {
+	crestRegisterKeys,
+	crestRegisterKind,
+	crestRegisterResult,
+	crestRegisterUploadPayload
+} from "@/engine/foundation/gameplay/crest-register";
+import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -317,6 +324,7 @@ import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
+import { CHAT_LINK_SOURCE, type ChatLinkRef, resolveChatLinks } from "@/engine/foundation/gameplay/chat-item-links";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
@@ -506,6 +514,8 @@ export function createGameplay(
 	let gmCatalog: GmCatalog | null = null, gmCatalogPending = false;
 	// The server's port-only storage auto-stack rule (storageAutoStack).
 	let storageAutoStack = false;
+	// The server's port-only item-link limit (SRO_CHAT_ITEM_LINKS); 0 is off.
+	let chatItemLinks = 0;
 	// The shard's client tuning from the world-entry bootstrap (ui-tuning.ts).
 	let uiTuning: UiTuning = defaultUiTuning();
 	// The server's port-only Bandit Den countdown rule (fastDenReturn).
@@ -567,7 +577,7 @@ export function createGameplay(
 	const movement = createMovement( send, publishFeedback ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
 		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
-		targeting = createTargeting( send ),
+		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
@@ -1065,6 +1075,32 @@ re-resolved at release from wherever the player then stands.
 	}
 	/*
 ================
+linkedChatItem
+
+Port-only (SRO_CHAT_ITEM_LINKS): the item a chat link names, read where the
+server reads it (action chatitemlinks.go) - the bag and worn gear, the
+costume slots, the open warehouse, the pet bag. Undefined when it is not
+there, so the line goes out without that link.
+================
+	*/
+	function linkedChatItem( ref: ChatLinkRef ) {
+		const state = inventory.state();
+		switch ( ref.source ) {
+			case CHAT_LINK_SOURCE.inventory:
+				return state.inventory.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.avatar:
+				return state.avatarInventory?.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.storage:
+				return presentedStorage()?.items.find( item => item.slot === ref.slot );
+			case CHAT_LINK_SOURCE.pet:
+				return [ ...cosRecords.values() ].find( record => record.inventory )?.inventory?.find( item =>
+					item.slot === ref.slot
+				);
+		}
+		return undefined;
+	}
+	/*
+================
 presentedStorage
 
 The open storage room with its rows named and drawn like the bag's.
@@ -1145,6 +1181,11 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// A crest register upload (#2282) stays in flight until the upload
+	// lane answers; a second confirmed register is held while one is
+	// outstanding. The success box is the 0xB5BD answer's business, not
+	// this flight's, exactly as a delete's box is.
+	let crestUploadInFlight = false;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -1277,7 +1318,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
-	const chat = createChat( send, body => inventory.noticeItem( body ) ),
+	const chat = createChat( send, body => inventory.noticeItem( body ), ref => linkedChatItem( ref ) ),
 		quests = createQuests( send ),
 		friends = createFriends( send ),
 		letters = createLetters( send );
@@ -1556,6 +1597,7 @@ selected entities, cooldowns or world-entry state.
 		gmReplies = [];
 		tradeStars = 0;
 		notices = [];
+		crestUploadInFlight = false;
 		guide = undefined;
 		guideSummons.clear();
 		academy = undefined;
@@ -1717,12 +1759,13 @@ packets own subsequent mutations; bootstrap owns only initial state.
 
 continued marks an entry that continues the same character's session: the
 one after a 0x3369 world transfer, or a resumed transport's repeated
-EnterWorld. Party and guild state survive it. Native keeps them in
+EnterWorld. Party, guild and academy state survive it. Native keeps them in
 g_CharacterDependentData and its teleport reset retains the roster (the
 clear, 828960, runs from the party handlers, mission creation 829EE0 and
 teardown), and the server keeps the membership across both entries and
 resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
-"Unknown party delta member" after every teleport or reconnect.
+"Unknown party delta member" after every teleport or reconnect, and the
+next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 ================
 		*/
 		bootstrap( value: unknown, continued = false, receivedAtMs = 0 ) {
@@ -1742,6 +1785,10 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			const linkLimit = (value as { chatItemLinks?: unknown; } | null)?.chatItemLinks;
+			chatItemLinks = typeof linkLimit === "number" && Number.isInteger( linkLimit ) && linkLimit > 0 ?
+				linkLimit :
+				0;
 			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
@@ -1819,7 +1866,18 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 					guideSummons.set( row.refObjId, row.summonedCharacterTypeFlags );
 				}
 			}
-			academy = academyBootstrap( value );
+			const nextAcademy = academyBootstrap( value );
+			// A continued entry keeps the camp roster, as social keeps its
+			// roster below: the entry snapshot carries only the membership
+			// flag and the server seeds the roster once (OnWorldBound), so
+			// it resends nothing on a transfer or a resumed transport.
+			// Wiping it here made the next 0x3AC5 status-5 member update
+			// throw "Unknown academy member status" (#2876). The snapshot's
+			// flag stays authoritative, and the old scene's in-flight
+			// request and result die with it.
+			academy = continued && academy && nextAcademy?.member ?
+				{ ...academy, member: true, request: null, result: null } :
+				nextAcademy;
 			pkStatus = pkStatusBootstrap( value );
 			const nextGroups = new Map<number, { group: number; level: number; }>();
 			for ( const row of b.refSkillSnapshot ?? [] ) {
@@ -3357,7 +3415,8 @@ state here before a command can claim a native wire conversation.
 					command.channel === 1 && eligibility.gm ? 3 : command.channel,
 					command.text,
 					command.target ?? "",
-					now
+					now,
+					command.links
 				);
 				return null;
 			}
@@ -3664,11 +3723,31 @@ state here before a command can claim a native wire conversation.
 					api.notice( refusal );
 					return null;
 				}
-				const sent = inventory.use( command.slot, now, context, command.message );
+				// Port-only (SRO_CHAT_ITEM_LINKS): the Global Chatting line links
+				// only what this client can read, as the chat line does.
+				const line = command.message === undefined ?
+					undefined :
+					resolveChatLinks( command.message, command.links ?? [], chatItemLinks, linkedChatItem );
+				const sent = inventory.use( command.slot, now, context, line?.text, line?.refs );
 				// Port-only (#1689): the scroll's use went out; its answer
 				// is the one 0xB5BD the refusal chain reads as its lines.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
 				return sent;
+			}
+			if ( command.kind === "crest-register" ) {
+				// #2282 (register half): the confirm box already asked and
+				// the picker already chose; the upload rides the crest
+				// lane to the server, which re-judges the row server-side
+				// anyway. One upload outstanding at a time.
+				if ( crestUploadInFlight ) return null;
+				const uploadSlot = command.slot;
+				const row = inventory.state().inventory.find( r => r.slot === uploadSlot );
+				if ( !row || crestRegisterKind( row.refObjId ) !== command.crestKind ) return null;
+				crestUploadInFlight = true;
+				return sendFrame( {
+					opcode: CREST_UPLOAD_CONTROL,
+					payload: crestRegisterUploadPayload( command.crestKind, command.slot, command.image )
+				} );
 			}
 			if ( command.kind === "premium-command" || command.kind === "count-job-use" ) {
 				// The chat command (6AD990) finds its row by item type; the
@@ -4015,7 +4094,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( mostWanted.receive( frame ) ) {
+				if ( mostWanted.receive( frame, now ) ) {
 					dirty = true;
 					return true;
 				}
@@ -5074,6 +5153,32 @@ Packet handling must not depend on which HUD panel is currently open.
 						return true;
 					}
 				}
+				if ( frame.opcode === CREST_UPLOAD_CONTROL ) {
+					// #2282 (register half): the upload lane's one answer. A
+					// success raises nothing here - the 0xB5BD behind it opens
+					// the completion box, as a delete's does. A refusal prints
+					// its native line: the gate's notice byte when one rides
+					// along, else the reason's own line.
+					const result = crestRegisterResult( frame.payload );
+					crestUploadInFlight = false;
+					if ( !result.ok ) {
+						const notice = result.code !== undefined ?
+							constantNativeNotice( 1, result.code ) :
+							{
+								key: result.reason === "overlap" ?
+									crestRegisterKeys( "guild" ).refused :
+									result.reason === "invalid" ?
+									crestRegisterKeys( "guild" ).error :
+									crestRegisterKeys( "guild" ).fail,
+								value: 0
+							};
+						if ( notice ) {
+							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						}
+					}
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 19 ) {
 					inventory.cosPurchase( frame.payload );
 					dirty = true;
@@ -5128,8 +5233,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
 				// 755E40's codename chain: a crest delete's success raises
 				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
-				// title, the DELETE_COMPLETE body), where the register
-				// items would open their 0x1A/0x1B boxes (#2272's half).
+				// title, the DELETE_COMPLETE body); a crest register's
+				// success raises its 0x1A/0x1B box (the REGISTER_COMPLETE
+				// body and the four information lines).
 				const crestKind = used ? crestDeleteKind( used.refObjId ) : undefined;
 				if ( used && crestKind ) {
 					notices = [ ...notices.slice( -99 ), {
@@ -5139,6 +5245,21 @@ Packet handling must not depend on which HUD panel is currently open.
 						dialog: {
 							title: "UIIT_STT_CONFIRM_BOX",
 							lines: [ crestDeleteKeys( crestKind ).complete ]
+						},
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
+				const registerKind = used ? crestRegisterKind( used.refObjId ) : undefined;
+				if ( used && registerKind ) {
+					const keys = crestRegisterKeys( registerKind );
+					notices = [ ...notices.slice( -99 ), {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: {
+							title: "UIIT_STT_CONFIRM_BOX",
+							lines: [ keys.complete, ...keys.information ]
 						},
 						sequence: ++noticeSequence
 					} ];
@@ -5804,6 +5925,9 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
+		// The inventory owner's skipped cosmetic steps, for the world's
+		// degraded reports (core takeDegradations drains both owners).
+		takeDegradations: () => inventory.takeDegradations(),
 		/*
 ================
 cancelCast
@@ -5912,6 +6036,7 @@ The published plane when something changed since the last take, else null.
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
+				...(chatItemLinks ? { chatItemLinks } : {}),
 				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),

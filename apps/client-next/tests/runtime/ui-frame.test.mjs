@@ -207,7 +207,7 @@ test("compact admission fits the window and enlarges its exit before caching", (
 		w: width,
 		h: height,
 		full: [ 0, 0, width, height ],
-		compact: compactHudLayout( width, height )
+		compact: compactHudLayout( width, height, true )
 	} );
 	const mark = beginWindow( frame );
 	const source = /** @type {const} */ ([ 600, 300, 200, 150 ]);

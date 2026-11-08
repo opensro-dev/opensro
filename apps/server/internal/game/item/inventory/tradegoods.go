@@ -11,6 +11,10 @@ Magic and attribute stones carry their assimilation value in Plus. Natively
 they stack 1, so the original never compares it; SRO_STACK_SIZES can let
 them stack (port-only, #583), and a merge must then keep that value.
 
+ForgeBound rides the same identity: a merge keeps the destination row
+and rewrites only its count, so bound quantity must never pour into an
+unbound row - it would come out tradeable (port-only, issue #1980).
+
 ===========================================================================
 */
 package inventory
@@ -54,12 +58,17 @@ func nativeStackIdentityMatches(a, b Item) bool {
 stackIdentityMatches
 
 Port-only, not native: quantity transfers between value-carrying stones
-must preserve assimilation. Whole-container native singles use the native
-identity instead; other placement paths cannot pour into a full singleton.
+must preserve assimilation, and a bound stack merges only with a bound
+stack, an unbound stack only with an unbound one. Whole-container native
+singles use the native identity instead; other placement paths cannot
+pour into a full singleton.
 ================
 */
 func stackIdentityMatches(a, b Item) bool {
 	if !nativeStackIdentityMatches(a, b) {
+		return false
+	}
+	if a.ForgeBound != b.ForgeBound {
 		return false
 	}
 	if wire.EtcCarriesPlusByte(a.TypeFlags) || wire.EtcCarriesPlusByte(b.TypeFlags) {
@@ -75,13 +84,15 @@ wholeStackIdentityMatches
 The client's CPSMission_MergeOrSwapItems exchanges counts even at cap
 one (its arms at client 756A99..756AD5 and 756BF4..756C14); the client's
 CItem_MatchesItem does not compare Plus. Retained stacks after rollback
-still need
-the port-only value guard, or a count exchange changes assimilation stock.
+still need the port-only value guard, or a count exchange changes
+assimilation stock. The bound guard covers the singleton shortcut too:
+native had no bound row to compare, and a mixed pair must fall through
+to the plain row swap so each row keeps its own mark.
 ================
 */
 func wholeStackIdentityMatches(a, b Item, stackCap uint16) bool {
 	if stackCap == 1 && a.Quantity == 1 && b.Quantity == 1 {
-		return nativeStackIdentityMatches(a, b)
+		return a.ForgeBound == b.ForgeBound && nativeStackIdentityMatches(a, b)
 	}
 	return stackIdentityMatches(a, b)
 }

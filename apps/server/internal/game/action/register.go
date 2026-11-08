@@ -52,6 +52,7 @@ Register
 func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
+	rt.registerCrest(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(opFortressInteraction, rt.hubHandler(hub, rt.HandleFortressInteraction))
@@ -227,7 +228,7 @@ func (rt *Runtime) hubHandlerPrepared(hub *transport.Hub, op opFunc, prepare opP
 		if _, live := s.SceneRevision(); !live {
 			// Info, not debug: a client that sends while loading is a bug to see.
 			if refusal := sceneLoadingRefusal(opcode); len(refusal) > 0 {
-				sendFrames(s, refusal)
+				sendSessionAnswer(s, refusal)
 			}
 			log.Infof("action: 0x%04X from %s refused: the scene is loading", opcode, character.Name)
 			return
@@ -295,6 +296,13 @@ func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 		// the way a failed native purchase retires its own pending lane.
 		if payload, err := json.Marshal(mallProjection{Version: 1, Error: "mall is unavailable while entering"}); err == nil {
 			return []wire.Frame{{Opcode: opMallCatalog, Payload: payload}}
+		}
+	case opCrestRegister:
+		// The crest upload waits on its own answer lane (extension
+		// opcode 19); a refused answer retires its pending the way a
+		// failed catalogue read retires its request (crestregister.go).
+		if payload, err := json.Marshal(crestRegisterAnswer{Reason: crestRefusedGeneric}); err == nil {
+			return []wire.Frame{{Opcode: opCrestRegister, Payload: payload}}
 		}
 	}
 	return nil
@@ -395,3 +403,19 @@ sendFrames
 ================
 */
 func sendFrames(s *transport.Session, frames []wire.Frame) { SendFrames(s, frames) }
+
+/*
+================
+sendSessionAnswer
+
+The acting session's own synchronous answer (a result, or the
+refusal for a request the loading gate turned away), on the lane
+that never waits behind the scene's bootstrap
+(transport.SendSceneAnswerBatch).
+================
+*/
+func sendSessionAnswer(s *transport.Session, frames []wire.Frame) {
+	if err := s.SendSceneAnswerBatch(transportFrames(frames)); err != nil {
+		log.Debugf("action: send answer to session %d failed: %v", s.ID, err)
+	}
+}

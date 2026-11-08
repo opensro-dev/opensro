@@ -48,7 +48,17 @@ export type AssetWorkerMessage =
 	// slot or a result; the watchdog in assets.ts owns their meaning.
 	| { kind: "job-progress"; id: number; bytes: number; }
 	| { kind: "job-decoding"; id: number; }
+	// The decoder's own work notes: cumulative work units (placements and
+	// terrain blocks processed) reported from inside the synchronous
+	// decode. A city decode is minutes of pure CPU that moves no bytes, so
+	// these notes are its only liveness; the watchdog slides the decode
+	// window on their increase - never the fetching window, never the
+	// absolute ceiling.
+	| { kind: "job-decoding-progress"; id: number; units: number; }
 	| { kind: "job-fetching"; id: number; }
+	// Port-only (#2800): the published build carries the HD set's index
+	// (the main pack index says so), learned once that index is read.
+	| { kind: "hd-availability"; available: boolean; }
 	| Exclude<AssetResult, { kind: "world"; }>
 	| {
 		kind: "world";
@@ -96,6 +106,13 @@ export type AssetRequest = {
 	// for the originals (foundation/assets/texture-variants.ts). Sent once.
 	kind: "texture-variant";
 	variant: import("@/engine/foundation/assets/texture-variants").TextureVariant | null;
+} | {
+	// Port-only: the HD set this device is served (#2061), or null while
+	// the Experimental row is off (foundation/assets/texture-variants.ts).
+	// Unlike the variant it may change while the worker runs: switching
+	// the row on starts the set's download, off stops it.
+	kind: "hd-textures";
+	format: import("@/engine/foundation/assets/texture-variants").HdTextureVariant | null;
 };
 /*
 ================
@@ -201,6 +218,12 @@ export interface AssetOwner {
 	// Port-only: the device's texture features, given once when known
 	// (foundation/assets/texture-variants.ts).
 	textureFeatures( features: readonly string[] ): void;
+	// Port-only: the Experimental "HD textures" row's live state (#2061).
+	hdTextures( enabled: boolean ): void;
+	// Port-only (#2800): whether the published build carries the HD set,
+	// once the worker has read the main pack index; false until then, so
+	// the row stays hidden and a saved "on" does nothing without a set.
+	hdAvailable?(): boolean;
 	cancel( id: number ): void;
 	// Starts the worker's background install once; uses no request slot.
 	install( listUrl: string ): void;
