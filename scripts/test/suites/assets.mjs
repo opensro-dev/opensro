@@ -38,6 +38,7 @@ export default {
 		"scripts/test/assets/jsonAssetCompression.test.mjs",
 		"scripts/test/assets/vatPipeline.test.mjs",
 		"scripts/test/assets/resourceBuildGraph.test.mjs",
+		"scripts/test/assets/laterDungeonMapStep.test.mjs",
 		"scripts/test/assets/publishedAssetBoundary.test.mjs",
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",
