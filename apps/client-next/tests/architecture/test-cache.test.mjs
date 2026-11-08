@@ -1,14 +1,15 @@
 /*
 ===========================================================================
 
-test-cache.test.mjs - the test runner reuses a pass only while its inputs hold
+test-cache.test.mjs - the test runner's reuse and per-file budget
 
 Drives tools/run-tests.mjs on a two-file fixture suite under temp/ (the
 recorder ignores the OS temporary directory, so the fixture must live in the
 checkout): a pass is reused, an edit to a module one test imports reruns
 exactly that test, a failure is never reused, and a test process cannot
 grow past the runner's heap ceiling or its resident memory ceiling, nor
-outlive its runner.
+outlive its runner. A file over its per-file budget fails the run although
+its tests pass (#2929).
 
 ===========================================================================
 */
@@ -24,12 +25,13 @@ const runner = path.join( root, "tools/run-tests.mjs" );
 
 /*
 ================
-runSuite
+runRunner
 
-Runs the fixture suite; returns its exit code and summary line.
+Runs the fixture suite; returns the exit code and the runner's whole
+stdout and stderr, for the cases that assert on what the runner printed.
 ================
 */
-function runSuite( suite, environment = {} ) {
+function runRunner( suite, environment = {} ) {
 	// A top-level run: without node --test's child context, which would turn
 	// the runner's own reporting into the parent's protocol.
 	const { NODE_TEST_CONTEXT, ...env } = process.env;
@@ -38,6 +40,18 @@ function runSuite( suite, environment = {} ) {
 		encoding: "utf8",
 		env: { ...env, ...environment, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }
 	} );
+	return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "", error: result.error };
+}
+
+/*
+================
+runSuite
+
+Runs the fixture suite; returns its exit code and summary counts.
+================
+*/
+function runSuite( suite, environment = {} ) {
+	const result = runRunner( suite, environment );
 	const summary = result.stdout.split( "\n" ).find( line => line.startsWith( "tests:" ) ) ?? "";
 	const counts = /(\d+) reused unchanged, (\d+) run, (\d+) failed/.exec( summary );
 	assert.ok(
@@ -92,6 +106,27 @@ test("a pass is reused until an input it read changes; a failure is never reused
 		fs.writeFileSync( dependency, "export const value = 2;\n" );
 		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 } );
 		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 }, "a failure reruns" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a file over its per-file budget fails the run although its tests pass", () => {
+	const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync(
+			path.join( suite, "quick.test.mjs" ),
+			'import { test } from "node:test";\ntest( "quick", () => {} );\n'
+		);
+		// A 1 ms budget: the file's tests pass, but starting its process
+		// alone costs more than that, so the run must fail on the budget
+		// line alone - the failure CI enforces (#2929).
+		const run = runRunner( suite, { SRO_TEST_FILE_BUDGET_MS: "1" } );
+		assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+		assert.match( run.stdout, /tests slowest: .*quick\.test\.mjs/ );
+		assert.match( run.stdout, /tests budget: .*quick\.test\.mjs ran .* over its .* per-file budget/ );
+		assert.equal( run.status, 1, "an over-budget file fails the run" );
 	} finally {
 		fs.rmSync( suite, { recursive: true, force: true } );
 	}

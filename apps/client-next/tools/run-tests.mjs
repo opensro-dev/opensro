@@ -21,7 +21,7 @@ unchanged tree is a stat sweep. The cache lives in .state/client-test-cache
 and is keyed by the Node version, platform and test environment; any change
 there discards it. SRO_CHECK_FORCE=1 runs everything.
 
-Every run times the files it actually executed and prints the ten
+Every run times the files it actually executed and prints the thirty
 slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
 run (#2907), so suite time cannot creep back one file at a time.
 
@@ -70,6 +70,10 @@ const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_
 // the same idea). Only files that actually ran are timed; a reused pass
 // spent nothing. SRO_TEST_FILE_BUDGET_MS overrides it.
 const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// How many of the slowest files each run names: enough that the suite
+// profile (docs/agents/client-test-profile.md, #2929) can be written
+// straight from a CI log line.
+const SLOWEST_PRINTED = 30;
 // Named per-file caps replace the default for the files listed there
 // (fileBudgets below); the ledger only ever shrinks.
 const BUDGET_LEDGER = path.join( clientRoot, "tests", "architecture", "test-file-budgets.txt" );
@@ -388,7 +392,7 @@ async function main() {
 	if ( slowest.length ) {
 		process.stdout.write(
 			`tests slowest: ${
-				slowest.slice( 0, 10 ).map(
+				slowest.slice( 0, SLOWEST_PRINTED ).map(
 					( [file, s] ) => `${path.relative( clientRoot, file )} ${s.toFixed( 1 )}s`
 				).join( ", " )
 			}\n`

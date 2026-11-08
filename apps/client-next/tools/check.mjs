@@ -6,8 +6,10 @@ check.mjs - client verification with explicit source and asset boundaries
 `pnpm check` used to run its gates one after another. They are
 independent - each reads the sources, the contracts or the generated assets
 and writes nothing another gate reads - so they run together here, with the
-test run (the longest) started first. Each gate's output is captured and
-printed as one block when it finishes, so the report stays readable. The
+test run (the longest) started first. Each gate's output is captured; a
+failed gate's output is printed whole, and the test runner's timing lines
+are printed either way, so a green CI log still carries the per-file
+profile (#2929). The
 check fails if any gate fails, after all of them have finished. Hosted app-only
 builds use --source: types, layout and source tests without retail extraction.
 The default remains the complete check, including asset audits. The UI gallery
@@ -28,6 +30,9 @@ import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
 const SOURCE_FLAG = "--source";
+// The test runner's timing lines: its run summary, its slowest files and
+// its per-file budget failures (printTimingLines, #2929).
+const TIMING_PREFIXES = [ "tests:", "tests slowest:", "tests budget:" ];
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
 const SOURCE_GATE_NAMES = new Set( [
 	"verify:test-types",
@@ -141,6 +146,31 @@ function runGate( name, args ) {
 
 /*
 ================
+printTimingLines
+
+The test gate's output is captured, so without this its per-file timings
+would only ever surface inside a failed gate's output dump. Print the
+runner's timing lines (the run summary, the slowest files, the budget
+failures) from every gate that produced them: the client-source CI job's
+log then carries the suite profile on green runs too, which is where
+docs/agents/client-test-profile.md is measured from (#2929). A failed
+gate also gets its whole output below; the repeated lines read as the
+summary they are.
+================
+*/
+/**
+ * @param {{ name: string, output: string }} result
+ */
+function printTimingLines( result ) {
+	for ( const line of result.output.split( "\n" ) ) {
+		if ( TIMING_PREFIXES.some( prefix => line.startsWith( prefix ) ) ) {
+			process.stdout.write( `${result.name}: ${line}\n` );
+		}
+	}
+}
+
+/*
+================
 main
 ================
 */
@@ -161,6 +191,9 @@ async function main() {
 		process.stdout.write( "Retail audio parity and asset delivery remain required by the full check.\n" );
 	}
 	const results = await Promise.all( gates.map( ( [name, args] ) => runGate( name, args ) ) );
+	for ( const result of results ) {
+		printTimingLines( result );
+	}
 	const failed = results.filter( ( result ) => !result.ok );
 	for ( const result of failed ) {
 		process.stderr.write( `\n--- ${result.name} ---\n${result.output}\n` );
