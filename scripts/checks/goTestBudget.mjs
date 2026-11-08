@@ -97,3 +97,24 @@ export function soloVerdicts( offenders, soloTimes, budgetSeconds ) {
 		return { pkg, seconds, solo, fits: solo !== undefined && solo <= budgetSeconds };
 	} );
 }
+
+/*
+================
+isLintRunnerRefusal
+
+Whether a golangci-lint run's output is its parallel-runner refusal
+("parallel golangci-lint is running", exit 3): the tool found another
+instance holding its cache lock and refused to start. That refusal is
+shared-box contention, not a lint finding, so check_go_server.mjs waits
+and retries it instead of failing the gate (#2971). The wording is
+matched loosely (parallel + golangci-lint + running) so a version's
+punctuation does not silently turn contention back into a failure.
+================
+*/
+/**
+ * @param {string} output
+ * @returns {boolean}
+ */
+export function isLintRunnerRefusal( output ) {
+	return /parallel golangci-lint is running/i.test( output );
+}
