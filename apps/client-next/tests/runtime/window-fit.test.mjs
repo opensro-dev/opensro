@@ -20,13 +20,14 @@ import { defined } from "../helpers/defined.mjs";
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const { captionWords } = await import( "../../src/engine/foundation/ui/text-lines.ts" );
 const { tooltipBubble } = await import( "../../src/engine/foundation/ui/helper-bubble.ts" );
-const { EXPERIMENTAL_TABS } = await import( "../../src/engine/runtime/ui/hud/experimental-hud.ts" );
+const { EXPERIMENTAL_TABS, experimentalRows } = await import( "../../src/engine/runtime/ui/hud/experimental-hud.ts" );
+const { EXPERIMENTAL_DESCRIPTION_WIDTH, EXPERIMENTAL_INDENT } = await import(
+	"../../src/engine/foundation/ui/experimental-list.ts"
+);
 
 const FRAME = "interface/messagebox/msgbox2_window_";
 // ifletter.txt ids 51 and 55: Rect 0,0,439,271.
 const POPUP = [ 439, 271 ];
-// The Experimental description static: 39..343 on the window.
-const DESCRIPTION_WIDTH = 304;
 
 /*
 ================
@@ -184,10 +185,12 @@ test("captionWords keeps the leading words that fit", () => {
 
 test("every Experimental description fits its line", () => {
 	for ( const tab of EXPERIMENTAL_TABS ) {
-		for ( const row of tab.rows ) {
+		for ( const row of experimentalRows( tab ) ) {
+			// A row with a parent is indented, and its line shorter by as much.
+			const width = EXPERIMENTAL_DESCRIPTION_WIDTH - (row.parent ? EXPERIMENTAL_INDENT : 0);
 			assert.ok(
-				advance( row.description ) <= DESCRIPTION_WIDTH,
-				`${row.label}: ${advance( row.description )} > ${DESCRIPTION_WIDTH}`
+				advance( row.description ) <= width,
+				`${row.label}: ${advance( row.description )} > ${width}`
 			);
 		}
 	}
