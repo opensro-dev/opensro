@@ -777,6 +777,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/assets/worker/world/world.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"noteDecodeWork"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/world/resources/resources.ts",
 			"functions": [
@@ -2798,6 +2805,13 @@
 			"function": "wakeIdleWaiters",
 			"kind": "callback",
 			"reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/loader.ts",
+			"expression": "restart",
+			"function": "syncWork",
+			"kind": "callback",
+			"reason": "Stall-window restarts of the downloads in flight (loader.ts downloadAttempt): a synchronous span restarts each attempt's own restart closure when the loop frees."
 		},
 		{
 			"file": "src/engine/runtime/platform/keep-awake.ts",

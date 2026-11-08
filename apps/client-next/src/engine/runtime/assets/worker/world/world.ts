@@ -35,6 +35,10 @@ const WATER_ALPHA = 0xb4 / 255;
 // and ruins under the ice show through. Its texture (water201) is opaque, so
 // the vertex alpha alone carries it.
 const SPECIAL_WATER_ALPHA = 0xc8 / 255;
+// Decode work units between onProgress reports: small enough that a
+// decode reports several times a second even on a slow device, large
+// enough that the report itself never shows in a profile.
+const WORK_REPORT_INTERVAL = 512;
 for ( let i = 1; i < FLAT_BLOCK_NORMALS.length; i += 3 ) FLAT_BLOCK_NORMALS[i] = 1;
 import { dungeonWaterGroup } from "@/engine/foundation/rendering/dungeon-water";
 import { DEFAULT_DUNGEON_AMBIENT_COLOR } from "@/engine/foundation/rendering/world-environment";
@@ -81,6 +85,12 @@ export type WorldDecodePart = "all" | "objects" | "terrain";
 export interface WorldDecodeOptions {
 	readonly origin?: number;
 	readonly part?: WorldDecodePart;
+	// The decoder's work notes: called with the cumulative count of work
+	// units (placements and terrain blocks processed) as the synchronous
+	// decode advances. A city decode is minutes of pure CPU on a slow
+	// device and moves no bytes; the caller forwards these to the asset
+	// watchdog as the decode's only proof of life (#2862).
+	readonly onProgress?: ( units: number ) => void;
 }
 
 /*
@@ -125,6 +135,21 @@ reserve
 				!b.source || !Number.isInteger( b.source.sectorX ) || !Number.isInteger( b.source.sectorY ) ||
 				!b.terrain || !b.objects?.resources
 			) throw new Error( "Unsupported world bundle" );
+			let workUnits = 0;
+			/*
+================
+noteWork
+
+Count one unit of decode work and, every WORK_REPORT_INTERVAL units,
+report the cumulative count: the synchronous decode's pulse. The check
+is one increment and one modulo per unit, so a hot loop pays nothing
+measurable for staying provably alive.
+================
+			*/
+			const noteWork = () => {
+				workUnits++;
+				if ( workUnits % WORK_REPORT_INTERVAL === 0 ) options.onProgress?.( workUnits );
+			};
 			const region = b.source.sectorX | (b.source.sectorY << 8),
 				origin = options.origin ?? region,
 				part = options.part ?? "all",
@@ -314,6 +339,7 @@ noteMaterial
 			const models: Record<string, import("@/engine/contracts/character").CharacterModel> = {},
 				scenery: import("@/engine/contracts/scenery").SceneryEmitter[] = [];
 			for ( const p of placements ) {
+				noteWork();
 				const home = Number( p.regionId ),
 					key = `${home}:${p.objectId}:${p.uid}:${p.position.x}:${p.position.y}:${p.position.z}`;
 				if ( seen.has( key ) ) continue;
@@ -616,6 +642,7 @@ noteMaterial
 			);
 			for ( const sector of terrainPart ? sectors : [] ) {
 				for ( const block of sector.blocks ) {
+					noteWork();
 					if (
 						block.heights.length !== 289 || block.textureData.length !== 289 ||
 						!finiteNumbers( block.heights ) || !block.textureData.every( v =>
