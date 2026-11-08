@@ -190,21 +190,39 @@ populationForObject
 ================
 */
 func (s *MonsterState) populationForObject(division string, gid uint32) *divisionMonsterState {
+	return s.populationForObjectAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+populationForObjectAt
+
+populationForObject through the monster slot the caller's step
+carried (#2133): every candidate's membership test goes through
+containsAt, which answers from the slot when it still names the
+gid and delegates to the gid probe otherwise, so the candidate
+order - and therefore the answer, popHint side effects included -
+is populationForObject's either way. The step's membership tests
+(moverStuckAt, the AI timer check) run per actor per leg; their
+gid probes were the store map walk this removes.
+================
+*/
+func (s *MonsterState) populationForObjectAt(division string, gid uint32, monsterSlot uint32) *divisionMonsterState {
 	if state := s.divs[division]; state != nil {
-		if state.instances.contains(gid) {
+		if state.instances.containsAt(monsterSlot, gid) {
 			return state
 		}
 	}
 	if s.popHintState != nil {
 		if s.popHintKey.division == division && s.worldPopulations[s.popHintKey] == s.popHintState &&
-			s.popHintState.instances.contains(gid) {
+			s.popHintState.instances.containsAt(monsterSlot, gid) {
 			return s.popHintState
 		}
 		s.popHintState = nil
 	}
 	for key, state := range s.worldPopulations {
 		if key.division == division {
-			if state.instances.contains(gid) {
+			if state.instances.containsAt(monsterSlot, gid) {
 				s.popHintKey, s.popHintState = key, state
 				return state
 			}
