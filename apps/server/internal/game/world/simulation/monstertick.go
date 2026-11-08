@@ -515,11 +515,11 @@ func monsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 resolveTactics
 ================
 */
-func (ops *MonsterMoverOps) resolveTactics(instance monster.Instance) monster.Tactics {
+func (ops *MonsterMoverOps) resolveTactics(instance *monster.Instance) monster.Tactics {
 	if ops.TacticsFor != nil {
-		return ops.TacticsFor(instance)
+		return ops.TacticsFor(*instance)
 	}
-	return monster.ResolveTactics(instance)
+	return monster.ResolveTactics(*instance)
 }
 
 // startWanderLeg probes the facing-relative direction, then requests the
@@ -529,7 +529,7 @@ func (ops *MonsterMoverOps) resolveTactics(instance monster.Instance) monster.Ta
 startWanderLeg
 ================
 */
-func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
+func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	if !monster.CanEnterWander(instance.Ref.TidWord, instance.Ref.RunSpeed) || instance.Ref.WalkSpeed <= 0 || tactics.WanderProbeDistance <= 0 {
 		// Zero-speed types never wander.
@@ -578,7 +578,7 @@ the retail autonomous-entity turn gate, not the player ack's first-move
 lifecycle.
 ==================
 */
-func (ops *MonsterMoverOps) commitSegment(divisionID string, instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
+func (ops *MonsterMoverOps) commitSegment(divisionID string, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	return ops.commitPreparedSegment(divisionID, before, instance, mover, dest, speed, channel, nowMs)
 }
@@ -623,7 +623,7 @@ func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before na
 commitPreparedSegment
 ================
 */
-func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
+func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
 	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 }
@@ -635,7 +635,7 @@ func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navi
 planDirectSegment
 ================
 */
-func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) (monster.MoverState, []Frame) {
+func (ops *MonsterMoverOps) planDirectSegment(instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) (monster.MoverState, []Frame) {
 	// Quantise the destination to the grid the WIRE can express, before
 	// anything derives from it. The 0xB738 goal is the only destination the
 	// client ever learns and it carries x/y/z as ROUNDED i16 words
@@ -891,7 +891,7 @@ func (ops *MonsterMoverOps) rand() float64 {
 anchorPose
 ================
 */
-func anchorPose(instance monster.Instance) monster.Pose {
+func anchorPose(instance *monster.Instance) monster.Pose {
 	if instance.Nest.HasControls {
 		// The native home tests use the nest anchor, not the randomized
 		// spawn candidate.

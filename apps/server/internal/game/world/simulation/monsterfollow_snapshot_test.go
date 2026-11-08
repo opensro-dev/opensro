@@ -18,7 +18,7 @@ func TestFollowRejectsEveryChangedGeometryAndHomeInput(t *testing.T) {
 		t.Run(change.name, func(t *testing.T) {
 			ops, _, child, now := followFixture(t)
 			mover, _ := ops.Monsters.Mover("summon", child.Gid)
-			plan, ok := ops.Monsters.prepareFollow("summon", child, mover, now)
+			plan, ok := ops.Monsters.prepareFollow("summon", &child, mover, now)
 			if !ok {
 				t.Fatal("fixture not admitted")
 			}
@@ -31,7 +31,7 @@ func TestFollowRejectsEveryChangedGeometryAndHomeInput(t *testing.T) {
 			if _, accepted := ops.Monsters.commitFollow(plan, mover, nil); accepted {
 				t.Fatal("stale callback committed")
 			}
-			if _, accepted := ops.Monsters.prepareFollow("summon", child, mover, now); accepted {
+			if _, accepted := ops.Monsters.prepareFollow("summon", &child, mover, now); accepted {
 				t.Fatal("stale input admitted")
 			}
 		})

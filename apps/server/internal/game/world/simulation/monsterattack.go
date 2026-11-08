@@ -146,7 +146,7 @@ func (ops *MonsterMoverOps) selectStepConditionalSkill(divisionID string, gid ui
 selectMonsterAttack
 ================
 */
-func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance monster.Instance, requestedSkillID uint32, from monster.Pose, target playerPose) (MonsterAttackPlan, bool) {
+func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance *monster.Instance, requestedSkillID uint32, from monster.Pose, target playerPose) (MonsterAttackPlan, bool) {
 	if ops.AttackPlan == nil {
 		return MonsterAttackPlan{}, false
 	}
@@ -154,14 +154,14 @@ func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance mons
 	// selector. Resolving a retained authored ID must not consume a choice
 	// draw; its interval draw was already consumed on adoption.
 	if requestedSkillID != 0 {
-		return ops.AttackPlan(instance, requestedSkillID, AttackPick{})
+		return ops.AttackPlan(*instance, requestedSkillID, AttackPick{})
 	}
 	if ops.Monsters != nil {
 		if skill, selected := ops.selectStepConditionalSkill(divisionID, instance.Gid); selected {
-			return ops.AttackPlan(instance, skill, AttackPick{})
+			return ops.AttackPlan(*instance, skill, AttackPick{})
 		}
 	}
-	return ops.AttackPlan(instance, requestedSkillID, attackPickFor(ops.rand(), from, target))
+	return ops.AttackPlan(*instance, requestedSkillID, attackPickFor(ops.rand(), from, target))
 }
 
 /*
@@ -176,7 +176,7 @@ movement planner and the action planner own the same monster simultaneously.
 */
 func (ops *MonsterMoverOps) tryMonsterAttack(
 	divisionID string,
-	instance monster.Instance,
+	instance *monster.Instance,
 	tactics monster.Tactics,
 	mover monster.MoverState,
 	players []playerPose,
@@ -217,7 +217,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	// Choose a damage-triggered wave at the next action boundary, from the
 	// current HP band, not from a stale plan cached during another cast.
-	if monster.SummonDue(instance) && nowMs < mover.NextAttackMs {
+	if monster.SummonDue(*instance) && nowMs < mover.NextAttackMs {
 		return nil, nil, true
 	}
 	plan, planned := ops.selectMonsterAttack(divisionID, instance, mover.AttackSkillID, live, target)
@@ -286,11 +286,11 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 		// the ordered commit executes it through the same door and
 		// runs finishMonsterAttack on the real result.
 		ops.plan.attack = &legPlanAttack{
-			instance: instance, tactics: tactics, mover: mover, target: target, plan: plan,
+			instance: *instance, tactics: tactics, mover: mover, target: target, plan: plan,
 		}
 		return frames, nil, true
 	}
-	result := ops.BasicAttack(divisionID, instance, target.Gid, plan.SkillID, nowMs)
+	result := ops.BasicAttack(divisionID, *instance, target.Gid, plan.SkillID, nowMs)
 	frames, targeted := ops.finishMonsterAttack(divisionID, instance, tactics, mover, target, plan, nowMs, frames, result)
 	return frames, targeted, true
 }
@@ -309,7 +309,7 @@ spot; a pooled plan's commit runs it on the intent's real result
 */
 func (ops *MonsterMoverOps) finishMonsterAttack(
 	divisionID string,
-	instance monster.Instance,
+	instance *monster.Instance,
 	tactics monster.Tactics,
 	mover monster.MoverState,
 	target playerPose,

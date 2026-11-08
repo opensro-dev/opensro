@@ -841,14 +841,31 @@ actor and a dispatch-read actor are the same values by construction.
 ================
 */
 func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref behaviorActorRef) behaviorActorSnapshot {
+	var actor behaviorActorSnapshot
+	s.behaviorActorMoverInto(&actor, state, ref)
+	return actor
+}
+
+/*
+================
+MonsterState.behaviorActorMoverInto
+
+behaviorActorMoverLocked written in place (#2982): the leg snapshot
+builds each actor straight into its view slot, so the 2.7 KB value
+is expanded once instead of copied out through two return values.
+dst reads as the zero snapshot (ok false) when the actor is gone.
+================
+*/
+func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state *divisionMonsterState, ref behaviorActorRef) {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
-	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
-	if !ok {
-		actor, ok = state.instances.lookup(ref.gid)
-	}
-	if !ok {
-		return behaviorActorSnapshot{}
+	if !state.instances.lookupAtInto(&dst.instance, ref.monsterSlot, ref.gid) {
+		actor, ok := state.instances.lookup(ref.gid)
+		if !ok {
+			*dst = behaviorActorSnapshot{}
+			return
+		}
+		dst.instance = actor
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
@@ -856,18 +873,15 @@ func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref
 	if !ok {
 		mover, ok = state.movers.lookup(ref.gid)
 	}
-	gen := state.movers.generationAt(ref.slot, ref.gid)
-	if ok {
-		if err := mover.Validate(); err != nil {
-			panic(err)
-		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
+	if !ok {
+		mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
 	}
-	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
+	dst.mover = mover
+	dst.moverGen = state.movers.generationAt(ref.slot, ref.gid)
+	dst.slot, dst.monsterSlot, dst.ok = ref.slot, ref.monsterSlot, true
 }
 
 /*

@@ -315,7 +315,7 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 		"hunter bandit (Flags 0x29A)": hunterBandit,
 		"summoned monster":            summoned,
 	} {
-		if !ordinarySquadApproach(actor) {
+		if !ordinarySquadApproach(&actor) {
 			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114)", name)
 		}
 	}
@@ -323,7 +323,7 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 		"fleeing tactics":      fleeing,
 		"battle-style tactics": rangedStyle,
 	} {
-		if ordinarySquadApproach(actor) {
+		if ordinarySquadApproach(&actor) {
 			t.Fatalf("%s unexpectedly admitted to ordinarySquadApproach", name)
 		}
 	}

@@ -246,25 +246,25 @@ func TestSummonChildAcquisitionAndLeaderLoss(t *testing.T) {
 	mover, _ := s.Mover("summon", child.Gid)
 	local := playerPose{Gid: PlayerObjectID(2), Pose: poseToSpawn(mover.Pose)}
 	distant := playerPose{Gid: leaderTarget, Pose: Spawn{RegionID: parent.Spawn.RegionID, X: 1000, Z: 100}}
-	target, found := ops.summonedTarget("summon", child, mover, []playerPose{distant, local}, *now)
+	target, found := ops.summonedTarget("summon", &child, mover, []playerPose{distant, local}, *now)
 	if !found || target.Gid != local.Gid {
 		t.Fatal("local target must precede inherited enemy")
 	}
-	target, found = ops.summonedTarget("summon", child, mover, []playerPose{distant}, *now)
+	target, found = ops.summonedTarget("summon", &child, mover, []playerPose{distant}, *now)
 	if !found || target.Gid != leaderTarget {
 		t.Fatal("summon did not inherit leader enemy")
 	}
 	leader, _ := s.Mover("summon", parent.Gid)
 	leader.Pose.X = 900
 	s.CommitMover("summon", parent.Gid, leader)
-	if frames, following := ops.followSummoner("summon", child, mover, *now); !following || len(frames) != 0 {
+	if frames, following := ops.followSummoner("summon", &child, mover, *now); !following || len(frames) != 0 {
 		t.Fatal("distant leader did not enter FOLLOW without premature movement")
 	}
 	s.ApplyDamage("summon", parent.Gid, parent.CurrentHP)
-	if _, found := ops.summonedTarget("summon", child, mover, []playerPose{distant}, *now); found {
+	if _, found := ops.summonedTarget("summon", &child, mover, []playerPose{distant}, *now); found {
 		t.Fatal("dead leader supplied a target")
 	}
-	if frames, _ := ops.followSummoner("summon", child, mover, *now); len(frames) != 0 {
+	if frames, _ := ops.followSummoner("summon", &child, mover, *now); len(frames) != 0 {
 		t.Fatal("stale idle snapshot published follow movement after leader death")
 	}
 	if _, exists := s.Get("summon", child.Gid); !exists {
@@ -337,11 +337,11 @@ func TestSummonUnresolvedLocalSightStillInheritsLeader(t *testing.T) {
 	ops := &MonsterMoverOps{Monsters: s}
 	mover, _ := s.Mover("summon", child.Gid)
 	target := playerPose{Gid: PlayerObjectID(1), Pose: poseToSpawn(mover.Pose)}
-	if _, ok := ops.summonedTarget("summon", child, mover, []playerPose{target}, *now); ok {
+	if _, ok := ops.summonedTarget("summon", &child, mover, []playerPose{target}, *now); ok {
 		t.Fatal("unknown tactics invented local hostility")
 	}
 	s.ArmRetaliation("summon", parent.Gid, target.Gid)
-	if got, ok := ops.summonedTarget("summon", child, mover, []playerPose{target}, *now); !ok || got.Gid != target.Gid {
+	if got, ok := ops.summonedTarget("summon", &child, mover, []playerPose{target}, *now); !ok || got.Gid != target.Gid {
 		t.Fatal("missing local metadata disabled leader assistance")
 	}
 }
@@ -369,7 +369,7 @@ func TestSummonInheritsTwoRememberedOpponents(t *testing.T) {
 	ops := &MonsterMoverOps{Monsters: s}
 	check := func(players []playerPose, want uint32) {
 		t.Helper()
-		got, found := ops.summonedTarget("summon", child, mover, players, *now)
+		got, found := ops.summonedTarget("summon", &child, mover, players, *now)
 		if found != (want != 0) || (found && got.Gid != want) {
 			t.Fatalf("target=%d/%v want=%d", got.Gid, found, want)
 		}

@@ -46,7 +46,7 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 	rest, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	rest.BehaviorDeadlineMs = now + 60000
 	rest.Activity = monster.ActivityCadence{Interval: 60000, LastCheck: uint32(now)}
-	if !idleRestQuiescent(ops, instance, rest, passiveTactics(), now) {
+	if !idleRestQuiescent(ops, &instance, rest, passiveTactics(), now) {
 		t.Fatal("resting idle monster was not quiescent")
 	}
 
@@ -91,7 +91,7 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 	for _, flip := range flips {
 		mover, actor, tactics := rest, instance, passiveTactics()
 		flip.mutate(&mover, &actor, &tactics)
-		if idleRestQuiescent(ops, actor, mover, tactics, now) {
+		if idleRestQuiescent(ops, &actor, mover, tactics, now) {
 			t.Fatalf("%s: monster still quiescent", flip.name)
 		}
 	}
@@ -101,7 +101,7 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 	ops.activity = nil
 	due := rest
 	due.Activity.LastCheck = wrappedLastCheck(now)
-	if !idleRestQuiescent(ops, instance, due, passiveTactics(), now) {
+	if !idleRestQuiescent(ops, &instance, due, passiveTactics(), now) {
 		t.Fatal("nil activity snapshot must leave the resting monster quiescent")
 	}
 }

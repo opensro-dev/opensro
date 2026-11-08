@@ -10,7 +10,7 @@ func activityFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, int64) {
 	ops, actor := monsterLegFixture(t, passiveTactics())
 	const now int64 = 10000
 	m, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	ops.startWanderLeg(monsterTestDivision, actor, passiveTactics(), m, now)
+	ops.startWanderLeg(monsterTestDivision, &actor, passiveTactics(), m, now)
 	m, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 	m.Activity = monster.ActivityCadence{Interval: 1000, LastCheck: uint32(now)}
 	m.BehaviorDeadlineMs = now + 500 // activity gate must take precedence when both expire
@@ -142,7 +142,7 @@ func TestActivityGateReportsGenerationAdvance(t *testing.T) {
 	_, genBefore, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
 	ops.activity = ops.captureActivity(nil, now+1001)
 	current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	_, gated, handled, generationAdvanced := ops.runActivityGate(monsterTestDivision, actor, current, now+1001)
+	_, gated, handled, generationAdvanced := ops.runActivityGate(monsterTestDivision, &actor, current, now+1001)
 	if !handled || gated.Mode() != monster.MoverPending {
 		t.Fatalf("unobserved actor was not suspended: %v", gated.Mode())
 	}
@@ -320,7 +320,7 @@ func TestSummonFactoryBindsControllerAndExemptsActivity(t *testing.T) {
 	m.BehaviorDeadlineMs = now + 10000
 	ops.Monsters.CommitMover("summon", child.Gid, m)
 	ops.activity = ops.captureActivity(nil, now+1001)
-	frames, _, handled, _ := ops.runActivityGate("summon", child, m, now+1001)
+	frames, _, handled, _ := ops.runActivityGate("summon", &child, m, now+1001)
 	after, _ := ops.Monsters.Mover("summon", child.Gid)
 	if handled || len(frames) != 0 || after != m {
 		t.Fatal("controlled actor ran unobserved suspension/cadence")

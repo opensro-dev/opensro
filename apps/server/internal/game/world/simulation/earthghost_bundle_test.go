@@ -45,7 +45,7 @@ func TestEarthGhostSuppliedBundlePopulation(t *testing.T) {
 		}
 		for grade, variant := range variants {
 			t.Run(fmt.Sprintf("nest_%02d_variant_%d", nests, grade), func(t *testing.T) {
-				if !variant.HasControls || variant.Controls.TraceBoundary != 1 || variant.Controls.TraceData != 500 || variant.Controls.HomingType != 1 || !ordinarySquadApproach(monster.Instance{Nest: variant}) {
+				if !variant.HasControls || variant.Controls.TraceBoundary != 1 || variant.Controls.TraceData != 500 || variant.Controls.HomingType != 1 || !ordinarySquadApproach(&monster.Instance{Nest: variant}) {
 					t.Fatalf("unverified ordinary policy %+v", variant.Controls)
 				}
 				ops, a, target := earthGhostFixture(t)

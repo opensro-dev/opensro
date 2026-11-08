@@ -101,7 +101,7 @@ func (s *MonsterState) aiTimerBankLocked(state *divisionMonsterState, gid uint32
 	return timers
 }
 
-func (ops *MonsterMoverOps) acquisitionReady(divisionID string, instance monster.Instance, nowMs int64) bool {
+func (ops *MonsterMoverOps) acquisitionReady(divisionID string, instance *monster.Instance, nowMs int64) bool {
 	// Inside the actor's step the batch's monster slot is armed on
 	// the ops (#2133): read the instance through it. The hint is
 	// verified against the gid before use, so an actor other than

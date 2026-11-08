@@ -311,7 +311,7 @@ func TestAggroLifecycleEndToEnd(t *testing.T) {
 	// --- PHASE 4: Leash break return ---
 	// Arrive at home, player resurrects, aggro re-acquired, then player flees past leash
 	mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
-	mover.Pose = anchorPose(instance)
+	mover.Pose = anchorPose(&instance)
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
 	mover.DepartMs, mover.ArriveMs = 0, 0
 	player.CombatEligible = true

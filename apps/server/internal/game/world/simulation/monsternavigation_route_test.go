@@ -39,7 +39,7 @@ func TestSharedNavigationCachesCornersAndKeepsSurface(t *testing.T) {
 				calls++
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
 			}
-			next, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+			next, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 			if len(frames) == 0 || next.To.X != corner.X || next.To.Z != corner.Z || next.Mode() != mode {
 				t.Fatal("first corner lost behavior")
 			}
@@ -53,15 +53,15 @@ func TestSharedNavigationCachesCornersAndKeepsSurface(t *testing.T) {
 			}
 			movingGoal := goal
 			movingGoal.X += 8
-			retained, repeat := ops.planSegment(instance, next, movingGoal, 20, wire.MoveStateRun, 10050)
+			retained, repeat := ops.planSegment(&instance, next, movingGoal, 20, wire.MoveStateRun, 10050)
 			if len(repeat) != 0 || calls != 1 || retained.From != next.From || retained.To != next.To {
 				t.Fatal("small target update resent/researched detour leg")
 			}
-			next, frames = ops.planSegment(instance, next, goal, 20, wire.MoveStateRun, next.ArriveMs)
+			next, frames = ops.planSegment(&instance, next, goal, 20, wire.MoveStateRun, next.ArriveMs)
 			if calls != 1 || next.To.X != goal.X || next.To.Z != goal.Z || next.Mode() != mode || len(frames) == 0 {
 				t.Fatal("corner arrival lost cached route or behavior")
 			}
-			next, frames = ops.planSegment(instance, next, goal, 20, wire.MoveStateRun, next.ArriveMs)
+			next, frames = ops.planSegment(&instance, next, goal, 20, wire.MoveStateRun, next.ArriveMs)
 			if next.InFlight(100000) || len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
 				t.Fatal("final arrival did not settle once")
 			}
@@ -80,18 +80,18 @@ func TestSharedNavigationBlockedRetryAndCancellation(t *testing.T) {
 			goal.X += 120
 			calls := 0
 			ops.PlanRoute = func(monster.Pose, NavOwner, monster.Pose) *monster.NavigationRoute { calls++; return nil }
-			mover, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+			mover, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 			if calls != 1 || len(frames) != 0 || mover.Mode() != mode || !mover.NavigationWaiting(10001) {
 				t.Fatal("blocked path discarded behavior or emitted move")
 			}
 			for tick := int64(10100); tick < 11000; tick += 100 {
 				goal.X++ // movement of the same target cannot force 10 searches/sec
-				mover, frames = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, tick)
+				mover, frames = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, tick)
 				if calls != 1 || len(frames) != 0 {
 					t.Fatal("failed route flooded geometry or packets")
 				}
 			}
-			mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11000)
+			mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 11000)
 			if calls != 2 {
 				t.Fatal("retry deadline never reopened")
 			}
@@ -99,7 +99,7 @@ func TestSharedNavigationBlockedRetryAndCancellation(t *testing.T) {
 			if _, active := mover.NavigationGoal(); active {
 				t.Fatal("retaliation retained old route")
 			}
-			mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11001)
+			mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 11001)
 			if calls != 3 {
 				t.Fatal("new owner inherited old retry deadline")
 			}
@@ -121,7 +121,7 @@ func TestNavigationRejectsChangedActorDuringRouteSearch(t *testing.T) {
 		state.instances.set(instance.Gid, row)
 		return monster.NewNavigationRoute(to, []monster.Pose{to})
 	}
-	frames := ops.commitSegment(monsterTestDivision, instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	frames := ops.commitSegment(monsterTestDivision, &instance, mover, goal, 20, wire.MoveStateRun, 10000)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if len(frames) != 0 || after != mover {
 		t.Fatal("stale route published")
@@ -142,18 +142,18 @@ func TestFollowRouteSurvivesClosedTimerAndControllerDeath(t *testing.T) {
 		return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
 	}
 	mover := startFixtureFollow(t, ops, child, now)
-	ops.stopOrAdvanceFollow("summon", child, mover, now+1)
+	ops.stopOrAdvanceFollow("summon", &child, mover, now+1)
 	mover, _ = ops.Monsters.Mover("summon", child.Gid)
 	if calls != 1 || !mover.InFlight(now+1) {
 		t.Fatal("first callback did not plan route")
 	}
 	ops.Monsters.ApplyDamage("summon", parent.Gid, parent.CurrentHP)
-	frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, now+2)
+	frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, now+2)
 	after, _ := ops.Monsters.Mover("summon", child.Gid)
 	if len(frames) != 0 || calls != 1 || after != mover {
 		t.Fatal("controller death canceled owned route")
 	}
-	frames, _ = ops.stopOrAdvanceFollow("summon", child, after, after.ArriveMs)
+	frames, _ = ops.stopOrAdvanceFollow("summon", &child, after, after.ArriveMs)
 	continued, _ := ops.Monsters.Mover("summon", child.Gid)
 	if len(frames) == 0 || calls != 1 || !continued.InFlight(after.ArriveMs) || continued.Mode() != monster.MoverFollowing {
 		t.Fatal("dead controller stranded movement at a route corner")
@@ -177,7 +177,7 @@ func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
 				corner.Z += 32
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
 			}
-			ops.startReturnLeg(monsterTestDivision, instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+			ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
 			mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 			if blocked {
 				if !mover.NavigationWaiting(10001) || mover.Mode() != monster.MoverReturning {
@@ -239,7 +239,7 @@ func TestRouteReplanCarriesTheLiveOwner(t *testing.T) {
 		planned = fromOwner
 		return monster.NewNavigationRoute(to, []monster.Pose{to})
 	}
-	ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 5000)
+	ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 5000)
 	if calls == 0 {
 		t.Fatal("the route planner was never asked")
 	}

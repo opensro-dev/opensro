@@ -104,7 +104,7 @@ func TestSummonFollowOwnsDistinctStateAcrossLeaderDeath(t *testing.T) {
 	leader.Pose.X += 900
 	s.CommitMover("summon", parent.Gid, leader)
 	mover, _ := s.Mover("summon", child.Gid)
-	if _, ok := ops.followSummoner("summon", child, mover, *now); !ok {
+	if _, ok := ops.followSummoner("summon", &child, mover, *now); !ok {
 		t.Fatal("follow not started")
 	}
 	mover, _ = s.Mover("summon", child.Gid)

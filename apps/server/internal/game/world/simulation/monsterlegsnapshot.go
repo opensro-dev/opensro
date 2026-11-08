@@ -119,7 +119,7 @@ func (s *MonsterState) legSnapshot(key populationKey, refs []behaviorActorRef) *
 		return view
 	}
 	for i, ref := range refs {
-		view.actors[i] = s.behaviorActorMoverLocked(state, ref)
+		s.behaviorActorMoverInto(&view.actors[i], state, ref)
 	}
 	return view
 }
@@ -131,13 +131,19 @@ legSnapshot.actorAt
 The view's actor for the batch's refs[i], in the shape the dispatch
 consumes. ok is false when the actor was already gone at build time
 - the same answer the dispatch read gives for it.
+
+The actor is returned by pointer into the view, never into storage
+(#2982): the view is leg-local, written only by legSnapshot and
+cleared only by releaseLegSnapshot after its batch is dispatched, so
+the pointer outlives no lock and no slot move. Readers treat it as
+read-only; the step copies the mover before it changes it.
 ================
 */
-func (view *legSnapshot) actorAt(i int) (behaviorActorSnapshot, bool) {
+func (view *legSnapshot) actorAt(i int) (*behaviorActorSnapshot, bool) {
 	if view == nil || i < 0 || i >= len(view.actors) {
-		return behaviorActorSnapshot{}, false
+		return nil, false
 	}
-	actor := view.actors[i]
+	actor := &view.actors[i]
 	return actor, actor.ok
 }
 

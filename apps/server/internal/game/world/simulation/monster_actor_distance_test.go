@@ -40,13 +40,13 @@ func TestSummonRememberedDungeonTargetsUseLocalCoordinates(t *testing.T) {
 	}
 	ops := &MonsterMoverOps{Monsters: s}
 	for _, players := range [][]playerPose{{first, second}, {second, first}} {
-		got, found := ops.summonedTarget("summon", child, mover, players, *now)
+		got, found := ops.summonedTarget("summon", &child, mover, players, *now)
 		if !found || got.Gid != first.Gid {
 			t.Fatalf("native dungeon tie lost: %d/%v", got.Gid, found)
 		}
 	}
 	first.Pose.Y += 10
-	got, found := ops.summonedTarget("summon", child, mover, []playerPose{first, second}, *now)
+	got, found := ops.summonedTarget("summon", &child, mover, []playerPose{first, second}, *now)
 	if !found || got.Gid != second.Gid {
 		t.Fatal("dungeon target height ignored")
 	}
@@ -71,7 +71,7 @@ func TestFollowAdmissionNativeCoordinatePrecisionAndDungeonWords(t *testing.T) {
 			ops.Monsters.CommitMover("summon", child.Gid, mover)
 			ops.Monsters.CommitMover("summon", parent.Gid, leader)
 			child.SummonerFollowRange = tc.threshold
-			frames, _ := ops.followSummoner("summon", child, mover, now)
+			frames, _ := ops.followSummoner("summon", &child, mover, now)
 			current, _ := ops.Monsters.Mover("summon", child.Gid)
 			if (current.Mode() == monster.MoverFollowing) != tc.admitted || len(frames) != 0 {
 				t.Fatalf("FOLLOW admission=%v; packets=%d", current.Mode(), len(frames))
