@@ -391,23 +391,47 @@ test("a rider whose vehicle is still loading stands until the vehicle draws (BUG
 const appearanceBuffers = new WeakMap();
 /*
 ================
-appearanceBuffer
+barePayload
 
-Encode one admitted catalog payload once per source object: a test that
-builds a fixture per family or race would otherwise stringify and
-encode the same multi-megabyte roster and item payloads for every
-fixture (#2924). The presentation decodes the bytes read-only, so one
-buffer can serve every fixture that admits the same source object.
+A catalog payload served as itself: the roster answer.
 ================
 */
-function appearanceBuffer( source, wrap = value => value ) {
+const barePayload = value => value;
+/*
+================
+itemsPayload
+
+The item rows served under their itemsByRefObjId envelope.
+================
+*/
+const itemsPayload = items => ({ itemsByRefObjId: items });
+/*
+================
+appearanceBuffer
+
+Encode one admitted catalog payload once per (source, wrap) pair: a test
+that builds a fixture per family or race would otherwise stringify and
+encode the same multi-megabyte roster and item payloads for every
+fixture (#2924). The key carries the wrap because one source under two
+envelopes is two payloads; the wraps are the module constants above, so
+their identity is stable across calls. The presentation decodes the
+bytes read-only, so one buffer can serve every fixture that admits the
+same payload.
+================
+*/
+function appearanceBuffer( source, wrap = barePayload ) {
 	if ( !source || typeof source !== "object" ) {
 		return new TextEncoder().encode( JSON.stringify( wrap( source ) ) ).buffer;
 	}
-	let buffer = appearanceBuffers.get( source );
+	let byWrap = appearanceBuffers.get( source );
+	if ( !byWrap ) {
+		byWrap = new Map();
+		appearanceBuffers.set( source, byWrap );
+	}
+	let buffer = byWrap.get( wrap );
 	if ( !buffer ) {
 		buffer = new TextEncoder().encode( JSON.stringify( wrap( source ) ) ).buffer;
-		appearanceBuffers.set( source, buffer );
+		byWrap.set( wrap, buffer );
 	}
 	return buffer;
 }
@@ -485,10 +509,7 @@ function fixture(
 				if ( job.url.endsWith( "/data/missionPresentation.json" ) ) {
 					return {
 						kind: "bytes",
-						buffer: appearanceBuffer(
-							metadataAdmission.appearance.items,
-							items => ({ itemsByRefObjId: items })
-						)
+						buffer: appearanceBuffer( metadataAdmission.appearance.items, itemsPayload )
 					};
 				}
 			}
