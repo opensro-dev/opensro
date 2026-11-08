@@ -68,11 +68,13 @@ tightening chmod in protect zeroes the mask of any ACL carrying named
 entries and disables an operator's grant while the entries still read
 as present - the stall-dump watch lost its authority traverse this way
 (issue #2860). When the access ACL holds named user or group entries,
-the mask is re-asserted as the union of the owning group's and the
-named entries' permissions, the mask setfacl itself computes: the
-grant survives with exactly the reach its entries name, and everyone
-else keeps the tightened mode. A path with no ACL, or a filesystem
-without ACL support, keeps the plain chmod result.
+the mask is re-asserted as the union of the named entries' permissions
+and the owning group's entry is zeroed: the grant survives with
+exactly the reach its entries name, and the tightened boundary gives
+nobody else anything - not even the owning group, whose pre-chmod
+permissions would otherwise ride back in on the mask. A path with no
+ACL, or a filesystem without ACL support, keeps the plain chmod
+result.
 ================
 */
 func restoreACLMask(path string) error {
@@ -98,13 +100,14 @@ func restoreACLMask(path string) error {
 ================
 repairACLMask
 
-Recomputes the mask entry of a binary POSIX access ACL as the union of
-the owning group's and every named entry's permissions, and returns
-the ACL with that mask written. The input comes back untouched when it
-holds no named entry, has no mask entry, or is not a version-2 ACL this
-function can prove out. The union grants nothing the named entries do
-not already name; the owning group stays at its post-chmod reach
-because its entry is part of the union.
+Recomputes a binary POSIX access ACL whose named entries the chmod
+just masked out: the mask becomes the union of the named entries'
+permissions and the owning group's entry is zeroed, so only the named
+grants survive the tightening. (setfacl's own mask rule unions the
+owning group in; that is the mask an operator's grant sits under, not
+the boundary protect just asserted.) The input comes back untouched
+when it holds no named entry, has no mask entry, already matches that
+shape, or is not a version-2 ACL this function can prove out.
 ================
 */
 func repairACLMask(raw []byte) ([]byte, bool) {
@@ -115,7 +118,7 @@ func repairACLMask(raw []byte) ([]byte, bool) {
 	if len(body)%aclEntrySize != 0 {
 		return raw, false
 	}
-	maskAt := -1
+	maskAt, groupObjAt := -1, -1
 	mask := uint16(0)
 	named := false
 	for at := 0; at < len(body); at += aclEntrySize {
@@ -123,7 +126,7 @@ func repairACLMask(raw []byte) ([]byte, bool) {
 		perm := binary.LittleEndian.Uint16(body[at+2:])
 		switch tag {
 		case aclTagGroupObj:
-			mask |= perm
+			groupObjAt = at
 		case aclTagUser, aclTagGroup:
 			mask |= perm
 			named = true
@@ -134,11 +137,15 @@ func repairACLMask(raw []byte) ([]byte, bool) {
 	if !named || maskAt < 0 {
 		return raw, false
 	}
-	if binary.LittleEndian.Uint16(body[maskAt+2:]) == mask {
+	if binary.LittleEndian.Uint16(body[maskAt+2:]) == mask &&
+		(groupObjAt < 0 || binary.LittleEndian.Uint16(body[groupObjAt+2:]) == 0) {
 		return raw, false
 	}
 	repaired := make([]byte, len(raw))
 	copy(repaired, raw)
+	if groupObjAt >= 0 {
+		binary.LittleEndian.PutUint16(repaired[4+groupObjAt+2:], 0)
+	}
 	binary.LittleEndian.PutUint16(repaired[4+maskAt+2:], mask)
 	return repaired, true
 }

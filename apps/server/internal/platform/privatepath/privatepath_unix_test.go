@@ -110,13 +110,15 @@ func TestRepairACLMaskRestoresTheNamedGrant(t *testing.T) {
 
 /*
 ================
-TestRepairACLMaskUnionsTheGroupAndNamedEntries
+TestRepairACLMaskMasksTheNamedEntriesAlone
 
-setfacl's own mask rule: the owning group's permissions union every
-named entry, user and group alike.
+A path the owning group could read before the tightening (group::r-x,
+a live mask): after the repair the mask is the union of the named
+entries alone and the owning group's own entry is zeroed, so the
+group cannot ride its old reach back in on the mask.
 ================
 */
-func TestRepairACLMaskUnionsTheGroupAndNamedEntries(t *testing.T) {
+func TestRepairACLMaskMasksTheNamedEntriesAlone(t *testing.T) {
 	raw := aclBytes(
 		aclEntryBytes(aclTagUserObj, 0o7, aclUndefinedQualifier),
 		aclEntryBytes(aclTagUser, 0o4, 1001),
@@ -127,10 +129,18 @@ func TestRepairACLMaskUnionsTheGroupAndNamedEntries(t *testing.T) {
 	)
 	repaired, changed := repairACLMask(raw)
 	if !changed {
-		t.Fatal("repairACLMask reported no change for a mask below the union")
+		t.Fatal("repairACLMask reported no change for a mask carrying the owning group")
 	}
-	if got := aclMaskPerm(repaired); got != 0o7 {
-		t.Fatalf("mask after repair = %o, want 7 (r-x | r-- | -w-)", got)
+	want := aclBytes(
+		aclEntryBytes(aclTagUserObj, 0o7, aclUndefinedQualifier),
+		aclEntryBytes(aclTagUser, 0o4, 1001),
+		aclEntryBytes(aclTagGroupObj, 0, aclUndefinedQualifier),
+		aclEntryBytes(aclTagGroup, 0o2, 2002),
+		aclEntryBytes(aclTagMask, 0o6, aclUndefinedQualifier),
+		aclEntryBytes(aclTagOther, 0, aclUndefinedQualifier),
+	)
+	if !bytes.Equal(repaired, want) {
+		t.Fatal("repair left the owning group a reach, or masked beyond the named entries (r-- | -w- = 6)")
 	}
 }
 
