@@ -66,6 +66,11 @@ export function createAssets(): AssetOwner {
 		// marked its primary bytes in (the decode stall window then applies).
 		bytes: number;
 		decoding: boolean;
+		// Cumulative decoder work units noted for this job: the high-water
+		// mark a job-decoding-progress note must pass to slide the decode
+		// window. Never reset within a job: the worker counts one job's
+		// decode calls into one monotonic total.
+		decodeUnits: number;
 		cancelled?: boolean;
 		// The watchdog expired it: its error result is deliverable, and the
 		// worker's late result or release is expected, not a protocol fault.
@@ -156,7 +161,7 @@ export function createAssets(): AssetOwner {
 	after its no-progress window and retries (about 91 s for headers that
 	arrive late and a body that then stalls), then answers with a transient
 	error. What remains for this watchdog is a worker that stopped answering,
-	and a decode that hung without moving another byte.
+	and a decode that hung without reporting work.
 	================
 	*/
 	function checkDeadline() {
@@ -231,6 +236,26 @@ export function createAssets(): AssetOwner {
 
 	/*
 	================
+	noteJobDecodingProgress
+
+	The decoder reported more of its own work: slide the decode window.
+	Pure CPU work moves no bytes, so without these notes a city decode
+	that outlasts the decode window reads as a hung worker and dies
+	mid-decode (#2862). Only an increase inside the decoding phase
+	counts; the worker counts one job's decode calls into one monotonic
+	total, so a note at or under the high-water mark is a stale echo.
+	The absolute ceiling in checkDeadline never slides.
+	================
+	*/
+	function noteJobDecodingProgress( id: number, units: number ) {
+		const job = jobs.get( id );
+		if ( !job || job.result || job.cancelled || !job.decoding || units <= job.decodeUnits ) return;
+		job.decodeUnits = units;
+		job.deadline = performance.now() + REQUEST_DECODE_STALL_MS;
+	}
+
+	/*
+	================
 	noteJobFetching
 
 	A decode-phase read started downloading again (the worker flips the job
@@ -255,6 +280,10 @@ export function createAssets(): AssetOwner {
 		}
 		if ( event.data.kind === "job-decoding" ) {
 			if ( !disposed && !failure ) noteJobDecoding( event.data.id );
+			return;
+		}
+		if ( event.data.kind === "job-decoding-progress" ) {
+			if ( !disposed && !failure ) noteJobDecodingProgress( event.data.id, event.data.units );
 			return;
 		}
 		if ( event.data.kind === "job-fetching" ) {
@@ -484,7 +513,8 @@ export function createAssets(): AssetOwner {
 				decode,
 				result: null,
 				bytes: 0,
-				decoding: false
+				decoding: false,
+				decodeUnits: 0
 			} );
 
 			try {

@@ -98,6 +98,92 @@ test("interrupted response body restarts the read without publishing partial byt
 	assert.deepEqual( [ ...new Uint8Array( messages[0].buffer ) ], [ 4, 5, 6 ] );
 });
 
+test("a download stalled only by a synchronous world decode is not killed, and the decode reports its work", async t => {
+	// One manual clock drives performance.now; mock timers drive the
+	// loader's setTimeout deadlines. The decode's work notes are the only
+	// hands that move the clock while the decode parks the loop: each
+	// note stands for 6 s of synchronous decode, so the notes park the
+	// worker for 30 s of wall time inside one blocked span.
+	const clock = { now: 1000 };
+	t.mock.method( performance, "now", () => clock.now );
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const bundle = {
+		source: { sectorX: 1, sectorY: 1 },
+		terrain: { blocks: [] },
+		terrainTextures: { tileCatalog: { referencedTiles: [] } },
+		objects: {
+			placements: Array.from( { length: 3000 }, ( _, i ) => ({
+				objectId: 1,
+				uid: i,
+				regionId: "257",
+				position: { x: i % 97, y: 0, z: Math.floor( i / 97 ) },
+				yaw: 0
+			}) ),
+			resources: { meshes: [], bsr: [], materialSets: [] }
+		}
+	};
+	let assetFetches = 0;
+	t.mock.method( globalThis, "fetch", async url => {
+		const text = String( url );
+		if ( text.endsWith( "/assets/packs/manifest.json" ) ) {
+			return new Response( JSON.stringify( { version: 2, groups: [], assets: [] } ) );
+		}
+		if ( text.endsWith( "/asset.bin" ) ) {
+			assetFetches++;
+			// One chunk, then silence: this download can only die of the
+			// no-progress timer, never of completion.
+			return new Response(
+				new ReadableStream( {
+					/*
+					================
+					start
+					================
+					*/
+					start( controller ) {
+						controller.enqueue( Uint8Array.of( 1, 2, 3 ) );
+					}
+				} )
+			);
+		}
+		return new Response( JSON.stringify( bundle ) );
+	} );
+	const messages = [];
+	const loader = createLoader( message => {
+		messages.push( message );
+		if ( message.kind === "job-decoding-progress" ) clock.now += 6000;
+	} );
+	t.after( () => loader.dispose() );
+	loader.receive( { kind: "load", id: 1, url: "https://example.test/asset.bin", limit: 1024 } );
+	await settle();
+	assert.equal( assetFetches, 1 );
+	loader.receive( { kind: "load", id: 2, url: "https://example.test/world.json", limit: 16 << 20, decode: "world" } );
+	for ( let turn = 0; turn < 500 && !messages.some( m => m.kind === "world" && m.id === 2 ); turn++ ) await settle();
+	const notes = messages.filter( m => m.kind === "job-decoding-progress" && m.id === 2 );
+	assert.ok( notes.length >= 2, "the decode must report its work while it runs" );
+	assert.ok(
+		notes.every( ( note, i ) => i === 0 || note.units > notes[i - 1].units ),
+		"decode work notes must increase monotonically"
+	);
+	assert.ok( messages.some( m => m.kind === "world" && m.id === 2 ), "the world load must still complete" );
+	// The download's whole silence was the decode's park: its stall
+	// deadline passes with 30 s of blocked time covering it, so the
+	// no-progress timer must not fire (the extra small tick covers the
+	// retry backoff a fired timer would have started).
+	t.mock.timers.tick( 15000 );
+	t.mock.timers.tick( 1000 );
+	await settle();
+	assert.equal( assetFetches, 1, "a download stalled only by the decode must not be retried" );
+	assert.ok( !messages.some( m => m.kind === "error" && m.id === 1 ) );
+	// Real silence outlasts the window even after blocked time is
+	// subtracted: the timer still kills the download and retries it.
+	clock.now += 16000;
+	for ( let turn = 0; turn < 40 && assetFetches < 2; turn++ ) {
+		t.mock.timers.tick( 60000 );
+		await settle();
+	}
+	assert.equal( assetFetches, 2, "a truly silent download must still be abandoned and retried" );
+} );
+
 test("persistent transport failure exhausts exactly three attempts", async t => {
 	let attempts = 0;
 	const { messages } = fixture( t, async () => {

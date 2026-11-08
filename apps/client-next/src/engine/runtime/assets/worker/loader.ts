@@ -147,8 +147,31 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Foreground downloads in flight. The decoding mark waits for the pipe
 	// to drain: while a download can still deliver, a load is fetching.
 	let activeDownloads = 0;
+	// Worker time spent inside synchronous work (a world decode, a scene
+	// pack). While the loop is parked there, no download can be read and
+	// no stall timer can run, so the time counts against nobody: download
+	// stall accounting subtracts it (downloadAttempt), because bytes that
+	// were only queued behind the park did arrive (#2862).
+	let blockedMs = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
+	/*
+	================
+	syncWork
+
+	Run one synchronous stretch (a world decode, a scene pack) and charge
+	its duration to blockedMs: while it ran, the worker could not read a
+	single download, so that time is nobody's stall.
+	================
+	*/
+	function syncWork<T>( run: () => T ): T {
+		const started = performance.now();
+		try {
+			return run();
+		} finally {
+			blockedMs += performance.now() - started;
+		}
+	}
 	/*
 	================
 	progress
@@ -334,14 +357,39 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
-		// received chunk restarts the timer.
+		// received chunk restarts the timer. The timer measures silence the
+		// worker could have acted on: time parked in a synchronous decode
+		// (blockedMs) is subtracted, so a download whose bytes were only
+		// queued behind the decode is not killed the moment the loop frees.
 		const attempt = new AbortController(), stalled = new NoProgressError( url, DOWNLOAD_NO_PROGRESS_MS );
 		const forward = () => attempt.abort( signal.reason );
 		signal.addEventListener( "abort", forward, { once: true } );
-		let timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
+		let lastProgressAt = performance.now(), blockedAtProgress = blockedMs;
+		let timer: ReturnType<typeof setTimeout>;
+		/*
+		================
+		onStall
+
+		The stall deadline arrived: abort only if the silence since the
+		last chunk, minus the time the loop was parked in synchronous
+		work, really spans the no-progress window; otherwise re-arm for
+		what is left of it.
+		================
+		*/
+		const onStall = () => {
+			const silence = (performance.now() - lastProgressAt) - (blockedMs - blockedAtProgress);
+			if ( silence >= DOWNLOAD_NO_PROGRESS_MS ) {
+				attempt.abort( stalled );
+				return;
+			}
+			timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS - silence );
+		};
+		timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS );
 		const progressed = () => {
+			lastProgressAt = performance.now();
+			blockedAtProgress = blockedMs;
 			clearTimeout( timer );
-			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
+			timer = setTimeout( onStall, DOWNLOAD_NO_PROGRESS_MS );
 		};
 		try {
 			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
@@ -569,6 +617,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( total > (128 << 20) ) throw new Error( "World resource transaction exceeds budget" );
 						return resource;
 					}
+					// The decoder's work notes, forwarded as this job's liveness:
+					// each decode call counts from zero, so a per-job base keeps
+					// the forwarded total monotonic across the call sequence.
+					let decodeBase = 0, decodeUnits = 0;
+					/*
+					================
+					noteDecodeWork
+					================
+					*/
+					const noteDecodeWork = ( units: number ) => {
+						const total = decodeBase + units;
+						if ( total <= decodeUnits ) return;
+						decodeUnits = total;
+						if ( !disposed ) send( { kind: "job-decoding-progress", id: request.id, units: total }, [] );
+					};
 					// An outdoor scene names its coordinate anchor and which part it
 					// wants (world.ts WorldDecodeOptions); a terrain part is one region.
 					const hash = new URLSearchParams( url.hash.slice( 1 ) ),
@@ -581,12 +644,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = prepareWorldScene(
-							worlds.decode( terrain, false, {
-								origin,
-								part
-							} )
+						const prepared = syncWork( () =>
+							prepareWorldScene(
+								worlds.decode( terrain, false, {
+									origin,
+									part,
+									onProgress: noteDecodeWork
+								} )
+							)
 						);
+						decodeBase = decodeUnits;
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
 						return;
@@ -640,10 +707,14 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
-					let scene = worlds.decode( resolved, request.decode === "frontend-world", {
-						origin,
-						part
-					} );
+					let scene = syncWork( () =>
+						worlds.decode( resolved, request.decode === "frontend-world", {
+							origin,
+							part,
+							onProgress: noteDecodeWork
+						} )
+					);
+					decodeBase = decodeUnits;
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {
 						const manifest = JSON.parse(
@@ -663,15 +734,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							if ( prop.name === "idol_lizard" ) continue;
 							if ( prop.scale !== 1 ) throw Error( "Unsupported interface model scale" );
 							const region = resolved.source.sectorX | (resolved.source.sectorY << 8);
-							const product = worlds.decode( {
-								source: resolved.source,
-								terrain: { blocks: [] },
-								terrainTextures: { tileCatalog: { referencedTiles: [] } },
-								objects: {
-									resources: manifest.resources,
-									placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
-								}
-							}, true );
+							const product = syncWork( () =>
+								worlds.decode( {
+									source: resolved.source,
+									terrain: { blocks: [] },
+									terrainTextures: { tileCatalog: { referencedTiles: [] } },
+									objects: {
+										resources: manifest.resources,
+										placements: [ { ...prop, uid: prop.objectId, regionId: String( region ) } ]
+									}
+								}, true, { onProgress: noteDecodeWork } )
+							);
+							decodeBase = decodeUnits;
 							added.push(
 								...product.groups.map( group => ({
 									...group,
@@ -696,7 +770,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					}
 					resolved = null;
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-					const prepared = prepareWorldScene( scene ), transfer = worldSceneTransfers( prepared.scene );
+					const prepared = syncWork( () => prepareWorldScene( scene ) ),
+						transfer = worldSceneTransfers( prepared.scene );
 					send( { kind: "world", id: request.id, prepared }, transfer );
 					pending.delete( request.id );
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
