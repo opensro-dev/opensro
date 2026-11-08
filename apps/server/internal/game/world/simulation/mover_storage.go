@@ -75,11 +75,24 @@ value
 ================
 */
 func (p *residentPendingMover) value() monster.MoverState {
+	var m monster.MoverState
+	p.fill(&m)
+	return m
+}
+
+/*
+================
+residentPendingMover.fill
+
+value written in place (#2985): the interned shared row is read out of
+its handle once and expanded straight into dst.
+================
+*/
+func (p *residentPendingMover) fill(dst *monster.MoverState) {
 	shared := p.shared.Value()
-	row := shared.row
-	row.Pose, row.Activity = p.pose, p.activity
-	row.NavigationSpeed = math.Float64frombits(shared.speedBits)
-	return row.Expand()
+	shared.row.Pose, shared.row.Activity = p.pose, p.activity
+	shared.row.NavigationSpeed = math.Float64frombits(shared.speedBits)
+	shared.row.ExpandInto(dst)
 }
 
 /*
@@ -310,13 +323,27 @@ value
 ================
 */
 func (r moverRecord) value() monster.MoverState {
-	if r.live != nil {
-		return *r.live
+	var m monster.MoverState
+	r.fill(&m)
+	return m
+}
+
+/*
+================
+moverRecord.fill
+
+value written in place (#2985).
+================
+*/
+func (r moverRecord) fill(dst *monster.MoverState) {
+	switch {
+	case r.live != nil:
+		*dst = *r.live
+	case r.pending != nil:
+		r.pending.fill(dst)
+	default:
+		*dst = monster.MoverState{}
 	}
-	if r.pending != nil {
-		return r.pending.value()
-	}
-	return monster.MoverState{}
 }
 
 /*
@@ -412,10 +439,24 @@ here: the miss is the signal.
 ================
 */
 func (s *moverStorage) lookupAt(slot uint32, gid uint32) (monster.MoverState, bool) {
+	var m monster.MoverState
+	ok := s.lookupAtInto(&m, slot, gid)
+	return m, ok
+}
+
+/*
+================
+moverStorage.lookupAtInto
+
+lookupAt written in place (#2985); dst is untouched on a miss.
+================
+*/
+func (s *moverStorage) lookupAtInto(dst *monster.MoverState, slot uint32, gid uint32) bool {
 	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
-		return monster.MoverState{}, false
+		return false
 	}
-	return s.slots[slot].rec.value(), true
+	s.slots[slot].rec.fill(dst)
+	return true
 }
 
 /*
