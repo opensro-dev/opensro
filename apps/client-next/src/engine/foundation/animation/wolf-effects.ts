@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-wolf-effects.ts - port-only attack-pet wolf skill visuals
+wolf-effects.ts - port-only wolf skill and shared pet-gear impact visuals
 
 Which retail effect programs each wolf signal plays, when and where. The
 server sends the signal as a COS emote (0x324B) on the object the effect
@@ -102,6 +102,14 @@ export function wolfEffectParts( action: number ): readonly WolfEffectPart[] {
 		];
 	}
 	switch ( action ) {
+		case 0xd7:
+			return [ { path: "hiteffect/hit_4_lightning_hit_a.efp", at: 0, anchor: "self", lift: 8 } ];
+		case 0xd8:
+			return [ { path: "hiteffect/hit_4_fire_hit_a.efp", at: 0, anchor: "self", lift: 8 } ];
+		case 0xd9:
+			return [ { path: "monster/skill_scorpion_poison_hit.efp", at: 0, anchor: "self", lift: 5 } ];
+		case 0xda:
+			return [ { path: "skill/china/water_hpheal_effect_a.efp", at: 0, anchor: "self" } ];
 		case WOLF_EXECUTED:
 			return [
 				{ path: BLOOD_DEATH, at: 0, anchor: "self" },
@@ -138,7 +146,10 @@ strike: a flash at the moment of the hit.
 */
 export function wolfEffectKind( action: number ): "howl" | "victim" | "strike" {
 	if ( action >= 1 && action <= 3 ) return "howl";
-	return action === WOLF_EXECUTED || action === WOLF_HUNT || action === WOLF_HUNT_BURST ? "victim" : "strike";
+	return action >= 0xd7 && action <= 0xda || action === WOLF_EXECUTED || action === WOLF_HUNT ||
+			action === WOLF_HUNT_BURST ?
+		"victim" :
+		"strike";
 }
 
 /*

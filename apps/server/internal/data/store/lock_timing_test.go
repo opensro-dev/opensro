@@ -50,8 +50,10 @@ func TestSlowCommitShowsInAConcurrentReadersWait(t *testing.T) {
 	// Serial alone still leaves this test's own setup commits in the
 	// record on a loaded box, so the commit record is cleared below,
 	// once setup is done and before the timed writer starts: the timed
-	// window then holds only the commit this test injects.
-	s := openTest(t, t.TempDir(), newTestClock())
+	// window then holds only the commit this test injects. The blocking
+	// it pins is the synchronous door's; the asynchronous twin is in
+	// commit_writer_test.go.
+	s := openTestSync(t, t.TempDir(), newTestClock())
 	c := &enterworld.Character{Name: "timed"}
 	if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {
 		t.Fatal(err)

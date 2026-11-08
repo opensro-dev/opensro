@@ -46,6 +46,16 @@ func (s *Store) commitCheckedLocked(label string) error {
 		return err
 	}
 	s.changes = newChangeSet()
+	// The asynchronous writer retries a failing batch in place; its
+	// failure reaches Health here, at the next commit, because the writer
+	// never takes the store lock (commit_writer.go). The door itself
+	// succeeded: its batch is queued and will be written.
+	if s.writer != nil {
+		if failure := s.writer.lastFailure(); failure.attempts > 0 {
+			s.recordWriteFailureLocked(label, failure.err)
+			return nil
+		}
+	}
 	s.recordWriteSuccessLocked()
 	return nil
 }
@@ -301,13 +311,24 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		return err
 	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
-	statements, committed, err := tx.apply(batchApply{db: s.db, now: s.mu.now, beforeCommit: s.beforeSQLiteCommit})
-	// The statements phase keeps its meaning: everything but encoding
-	// before the SQLite commit, now the recording plus the apply's run.
-	phases[commitPhaseStatements] = built + statements
-	phases[commitPhaseSQLite] = committed
-	if err != nil {
-		return err
+	if s.writer != nil {
+		// Asynchronous (commit_writer.go): the batch is the disk's next
+		// write once queued, so everything below retains it as committed.
+		// The sqlite phase is the wait for a queue slot, the only disk
+		// time the lock still sees.
+		waited := s.mu.now()
+		s.queuedSeq = s.writer.enqueue(tx, s.beforeSQLiteCommit)
+		phases[commitPhaseStatements] = built
+		phases[commitPhaseSQLite] = s.mu.now().Sub(waited)
+	} else {
+		statements, committed, err := tx.apply(batchApply{db: s.db, now: s.mu.now, beforeCommit: s.beforeSQLiteCommit})
+		// The statements phase keeps its meaning: everything but encoding
+		// before the SQLite commit, now the recording plus the apply's run.
+		phases[commitPhaseStatements] = built + statements
+		phases[commitPhaseSQLite] = committed
+		if err != nil {
+			return err
+		}
 	}
 	// The whole dirty set is written: rows a deferred door left are on disk.
 	s.batch.pending = false
@@ -411,7 +432,7 @@ func (s *Store) BackupTo(path string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	_, err := s.db.Exec("VACUUM INTO ?", path)
+	_, err := s.syncDBLocked().Exec("VACUUM INTO ?", path)
 	return err
 }
 
@@ -455,6 +476,11 @@ func (s *Store) Close() {
 		// A graceful stop never drops a tick: rows a deferred door left
 		// (tickbatch.go) are written before the final checkpoint.
 		_ = s.flushDeferredLocked()
+		// Every queued batch is written before the final checkpoint.
+		if s.writer != nil {
+			s.writer.stop()
+			s.writer = nil
+		}
 		if _, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			log.Warnf("store: wal_checkpoint at close failed: %v", err)
 		}

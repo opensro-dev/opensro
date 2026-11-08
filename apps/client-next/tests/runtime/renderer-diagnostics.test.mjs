@@ -43,7 +43,8 @@ const VIDEO = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
-	msaa: false
+	msaa: false,
+	sceneFxaa: false
 } );
 
 /*

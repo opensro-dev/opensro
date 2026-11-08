@@ -77,6 +77,11 @@ export interface ExperimentalOptions {
 	// presents single-sampled). Off by default; off is byte-identical to
 	// the native pass order.
 	readonly msaa: boolean;
+	// Port-only, not native: FXAA 3.11 on the scene alone, before the
+	// world labels and the HUD draw, so text is never resampled. The
+	// scene renders into its own full-size colour and resolves into the
+	// frame through the FXAA pass. Off by default; off is the native frame.
+	readonly sceneFxaa: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
@@ -260,11 +265,6 @@ export interface ExperimentalOptions {
 	// tap's own action is unchanged. Touch only. On by default (the owner's
 	// choice, 2026-10-22); off is the brief hover a tap gives today.
 	readonly touchInspect: boolean;
-	// Port-only, not native: when the build publishes extra worldmap_mapinfo
-	// town pages (Alexandria) and a wider overview box, the M window uses them
-	// instead of the five native town pages and 28 x 8 overview (5758D0). Off
-	// unless turned on.
-	readonly expandedWorldMap: boolean;
 	// Port-only, not native (#840): every active quest's NPC target shows on
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
@@ -481,6 +481,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
 		msaa: enabled( "msaa" ),
+		sceneFxaa: enabled( "sceneFxaa" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
@@ -517,7 +518,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterPotions: record.petFilterPotions !== false,
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
-		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
@@ -592,6 +592,7 @@ export interface ExperimentalVideo {
 	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
 	readonly msaa: boolean;
+	readonly sceneFxaa: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
@@ -619,6 +620,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
 		msaa: options.msaa,
+		sceneFxaa: options.sceneFxaa,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,

@@ -34,7 +34,7 @@ func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -55,7 +55,7 @@ func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

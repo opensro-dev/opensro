@@ -183,7 +183,12 @@ export interface DeviceOwner extends Disposable {
 	// when it never does (foundation/assets/texture-variants.ts).
 	textureFeatures(): Promise<readonly string[]>;
 	upscale(): {
-		encodeUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
+		encodeUpscale(
+			encoder: GPUCommandEncoder,
+			source: GPUTextureView,
+			target: GPUTextureView,
+			antialias?: boolean
+		): void;
 		encodeDepthUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
 	};
 	/** Bracket one frame, from its first preparation to its last submit: a GPU
@@ -246,7 +251,7 @@ SurfaceOwner
 */
 export interface SurfaceOwner extends Disposable {
 	depth(): GPUTextureView;
-	acquire( viewport: Viewport, offscreen?: boolean, scale?: number ): GPUTextureView;
+	acquire( viewport: Viewport, offscreen?: boolean, scale?: number, separateScene?: boolean ): GPUTextureView;
 	frameView(): GPUTextureView;
 	frameDepth(): GPUTextureView;
 	/** Acquire the current swapchain texture only when encoding the final

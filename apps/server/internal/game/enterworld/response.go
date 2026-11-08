@@ -291,6 +291,10 @@ type BootstrapResult struct {
 	// MoonlitThiefSuit tells the client to draw the level-20 thief suits as
 	// Moonlit Ash (port-only, not native; false is native).
 	MoonlitThiefSuit bool
+	// Alexandria tells the client the shard runs the Alexandria area
+	// (SRO_ALEXANDRIA, port-only, not native; false is native): the M window
+	// then uses the published wider overview and town pages.
+	Alexandria bool
 	// RaisedGoldCaps tells the client's stall price editor and warehouse
 	// deposit dialog to raise their native caps (port-only, not native;
 	// false is native).
@@ -356,6 +360,7 @@ type bootstrapSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
@@ -443,6 +448,7 @@ type bootstrapBlobSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
@@ -488,6 +494,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	Alexandria                bool                     `json:"alexandria,omitempty"`
 	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
@@ -565,6 +572,7 @@ func (r *BootstrapResult) blobView() any {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	}
@@ -624,6 +632,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	}
@@ -697,6 +706,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		Alexandria:                r.Alexandria,
 		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	})

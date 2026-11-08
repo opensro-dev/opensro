@@ -34,6 +34,21 @@ export const MSAA_SAMPLE_COUNT = 4;
 
 /*
 ================
+transientUsage
+
+Port-only, not native: Chrome 146's TRANSIENT_ATTACHMENT usage, or 0 where
+the browser lacks it. A transient attachment lives for one render pass, so
+a tile-based GPU keeps its samples in tile memory and never writes them to
+VRAM. The 4x colour qualifies: it is cleared, resolved inside the pass and
+discarded. The 4x depth does not: the depth resolve samples it.
+================
+*/
+export function transientUsage( usage: object = GPUTextureUsage ) {
+	return (usage as { readonly TRANSIENT_ATTACHMENT?: number; }).TRANSIENT_ATTACHMENT ?? 0;
+}
+
+/*
+================
 createMsaa
 
 Owns the 4x scene buffers. prepare() with the stage off owns nothing; the
@@ -132,7 +147,7 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 					size: [ w, h ],
 					sampleCount: MSAA_SAMPLE_COUNT,
 					format,
-					usage: GPUTextureUsage.RENDER_ATTACHMENT
+					usage: GPUTextureUsage.RENDER_ATTACHMENT | transientUsage()
 				} );
 				depth = device.createTexture( {
 					label: "msaa-scene-depth",

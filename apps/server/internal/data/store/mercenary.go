@@ -43,7 +43,7 @@ func (door storeGuildDoor) UpdateMercenaryOwner(division string, c *domain.Chara
 			return false
 		}
 		var raw string
-		err := s.db.QueryRow("SELECT record FROM alliances WHERE division = ? AND alliance_id = ?", division, id).Scan(&raw)
+		err := s.syncDBLocked().QueryRow("SELECT record FROM alliances WHERE division = ? AND alliance_id = ?", division, id).Scan(&raw)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			log.WithError(err).Error("mercenary union lookup failed")
 			return false

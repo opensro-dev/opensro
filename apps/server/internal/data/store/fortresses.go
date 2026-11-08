@@ -77,7 +77,7 @@ func (door storeFortressDoor) FortressState(divisionID string) ([]domain.Fortres
 	if door.s.db == nil {
 		return nil, nil, errFortressUnavailable
 	}
-	rows, err := door.s.db.Query("SELECT fortress_id, record FROM fortresses WHERE division = ? ORDER BY fortress_id", divisionID)
+	rows, err := door.s.syncDBLocked().Query("SELECT fortress_id, record FROM fortresses WHERE division = ? ORDER BY fortress_id", divisionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -100,7 +100,7 @@ func (door storeFortressDoor) FortressState(divisionID string) ([]domain.Fortres
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	requests, err := door.s.db.Query("SELECT fortress_id, guild_id, request_type FROM fortress_requests WHERE division = ? ORDER BY fortress_id, guild_id", divisionID)
+	requests, err := door.s.syncDBLocked().Query("SELECT fortress_id, guild_id, request_type FROM fortress_requests WHERE division = ? ORDER BY fortress_id, guild_id", divisionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -203,7 +203,7 @@ func (door storeFortressDoor) SaveFortress(divisionID string, record domain.Fort
 	if _, err := decodeFortressRecord(record.FortressID, string(raw)); err != nil {
 		return err
 	}
-	_, err = s.db.Exec(
+	_, err = s.syncDBLocked().Exec(
 		"INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record",
 		divisionID, record.FortressID, string(raw))
 	if err != nil {
@@ -230,11 +230,11 @@ func (door storeFortressDoor) SaveFortressRequest(divisionID string, request dom
 	}
 	var err error
 	if present {
-		_, err = s.db.Exec(
+		_, err = s.syncDBLocked().Exec(
 			"INSERT INTO fortress_requests (division, fortress_id, guild_id, request_type) VALUES (?, ?, ?, ?) ON CONFLICT(division, fortress_id, guild_id) DO UPDATE SET request_type = excluded.request_type",
 			divisionID, request.FortressID, request.GuildID, request.Kind)
 	} else {
-		_, err = s.db.Exec("DELETE FROM fortress_requests WHERE division = ? AND fortress_id = ? AND guild_id = ?",
+		_, err = s.syncDBLocked().Exec("DELETE FROM fortress_requests WHERE division = ? AND fortress_id = ? AND guild_id = ?",
 			divisionID, request.FortressID, request.GuildID)
 	}
 	if err != nil {
@@ -254,7 +254,7 @@ func (door storeFortressDoor) FortressStructures(divisionID string) ([]domain.Fo
 	if door.s.db == nil {
 		return nil, errFortressUnavailable
 	}
-	rows, err := door.s.db.Query("SELECT fortress_id, event_struct_id, record FROM fortress_structures WHERE division = ? ORDER BY fortress_id, event_struct_id", divisionID)
+	rows, err := door.s.syncDBLocked().Query("SELECT fortress_id, event_struct_id, record FROM fortress_structures WHERE division = ? ORDER BY fortress_id, event_struct_id", divisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -318,11 +318,11 @@ func (door storeFortressDoor) SaveFortressStructure(divisionID string, structure
 		if raw, err = json.Marshal(structure); err != nil {
 			return err
 		}
-		_, err = s.db.Exec(
+		_, err = s.syncDBLocked().Exec(
 			"INSERT INTO fortress_structures (division, fortress_id, event_struct_id, record) VALUES (?, ?, ?, ?) ON CONFLICT(division, fortress_id, event_struct_id) DO UPDATE SET record = excluded.record",
 			divisionID, structure.FortressID, structure.EventStructID, string(raw))
 	} else {
-		_, err = s.db.Exec("DELETE FROM fortress_structures WHERE division = ? AND fortress_id = ? AND event_struct_id = ?",
+		_, err = s.syncDBLocked().Exec("DELETE FROM fortress_structures WHERE division = ? AND fortress_id = ? AND event_struct_id = ?",
 			divisionID, structure.FortressID, structure.EventStructID)
 	}
 	if err != nil {

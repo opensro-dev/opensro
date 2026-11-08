@@ -49,7 +49,7 @@ func TestPetGearDropFactorDB(t *testing.T) {
 		t.Fatalf("restart lost factor: %v %v", value, err)
 	}
 	for _, value := range []string{"NaN", "Inf", "-1", "2", "bad"} {
-		if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", value, PetGearDropFactorKey); err != nil {
+		if _, err := s.syncDBLocked().Exec("UPDATE meta SET value=? WHERE key=?", value, PetGearDropFactorKey); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.PetGearDropFactor(); err == nil {

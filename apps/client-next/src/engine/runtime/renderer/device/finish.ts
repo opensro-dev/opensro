@@ -45,6 +45,9 @@ const FXAA_SUBPIXEL = 0.25; // sub-texel blend on soft detail (quality preset; t
 // the guard and the typography lost its edge, which is how this value
 // earned its place.
 const FXAA_HARD_EDGE = 0.5; // sqrt-luma range of a near-binary edge (text, UI borders)
+// The scene-only resolve sees no UI: a range above any sqrt-luma swing
+// (at most 1) turns the guard off.
+const FXAA_NO_GUARD = 2.0;
 
 // Grade constants tuned against the v1.150 LDR palette: strong enough to
 // read as modern, weak enough never to crush the authored sky gradients.
@@ -70,8 +73,14 @@ export interface FinishPresent {
 	/** The plain linear upscale the render scale resolves its scene through
 	 * when the graded pass is off: same geometry and sampler, no FXAA, no
 	 * grade, so a scaled frame without the presentation pass stays an
-	 * honest linear resize. */
-	encodeUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
+	 * honest linear resize. With antialias the same resolve runs the FXAA
+	 * edge walk over the scene (Experimental > FXAA), still before the UI. */
+	encodeUpscale(
+		encoder: GPUCommandEncoder,
+		source: GPUTextureView,
+		target: GPUTextureView,
+		antialias?: boolean
+	): void;
 	encodeDepthUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
 	dispose(): void;
 }
@@ -116,7 +125,7 @@ fn noise(uv:vec2f,seed:vec2f)->f32{
 fn walkQuality(i:i32)->f32{
  if(i<5){return 1.0;}if(i==5){return 1.5;}if(i<10){return 2.0;}if(i==10){return 4.0;}return 8.0;
 }
-fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
+fn fxaa(uv:vec2f,offset:vec2f,hardEdge:f32)->vec3f{
  let center=tap(uv);
  let lumaM=lumaOf(center);
  let lumaD=lumaOf(tap(uv+vec2f(0,-offset.y)));
@@ -129,7 +138,7 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
  // Near-binary edges are typography and UI borders, not geometry: leave
  // them exactly as rasterized. FXAA's one-texel resample is what a glyph
  // stem cannot survive.
- if(hi-lo>${FXAA_HARD_EDGE}){return center;}
+ if(hi-lo>hardEdge){return center;}
  let lumaDL=lumaOf(tap(uv+vec2f(-offset.x,-offset.y)));
  let lumaUR=lumaOf(tap(uv+vec2f(offset.x,offset.y)));
  let lumaUL=lumaOf(tap(uv+vec2f(-offset.x,offset.y)));
@@ -190,11 +199,17 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 @fragment fn upscale(v:V)->@location(0) vec4f{
  return textureSampleLevel(source,linear,v.uv,0);
 }
+// Scene FXAA: the edge walk alone on the scene before any UI draws.
+// No text is in it, so the hard-edge guard is off: a high-contrast
+// geometry edge (a trunk against the sky) is exactly what it must smooth.
+@fragment fn sceneFxaa(v:V)->@location(0) vec4f{
+ return vec4f(fxaa(v.uv,vec2f(1.0)/vec2f(textureDimensions(source)),${FXAA_NO_GUARD}),1.0);
+}
 @fragment fn fs(v:V)->@location(0) vec4f{
  let offset=vec2f(1.0)/vec2f(textureDimensions(source));
  // Resolve the edge first; the sharpen below reads the raw neighbourhood
  // so its halo guard silences it exactly where FXAA just smoothed.
- let center=fxaa(v.uv,offset);
+ let center=fxaa(v.uv,offset,${FXAA_HARD_EDGE});
  let north=tap(v.uv+vec2f(0,-offset.y));
  let south=tap(v.uv+vec2f(0,offset.y));
  let west=tap(v.uv+vec2f(-offset.x,0));
@@ -227,7 +242,9 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 		]
 	} );
 	const pipelineLayout = created.createPipelineLayout( { bindGroupLayouts: [ layout ] } );
-	let pipeline: GPURenderPipeline | null = null, upscalePipeline: GPURenderPipeline | null = null;
+	let pipeline: GPURenderPipeline | null = null,
+		upscalePipeline: GPURenderPipeline | null = null,
+		fxaaPipeline: GPURenderPipeline | null = null;
 	const ready = module.getCompilationInfo().then( info => {
 		const errors = info.messages.filter( m => m.type === "error" );
 		if ( errors.length ) throw Error( errors.map( m => m.message ).join( "\n" ) );
@@ -243,6 +260,13 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 			layout: pipelineLayout,
 			vertex: { module, entryPoint: "vs" },
 			fragment: { module, entryPoint: "upscale", targets: [ { format } ] },
+			primitive: { topology: "triangle-list" }
+		} );
+		fxaaPipeline = created.createRenderPipeline( {
+			label: "scene-fxaa",
+			layout: pipelineLayout,
+			vertex: { module, entryPoint: "vs" },
+			fragment: { module, entryPoint: "sceneFxaa", targets: [ { format } ] },
 			primitive: { topology: "triangle-list" }
 		} );
 	} );
@@ -292,12 +316,14 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 		encodeUpscale
 
 		The render scale's plain linear resolve of the scaled scene into the
-		full-size frame: one fullscreen triangle, no FXAA, no grade, its own
-		binding cache (the scaled scene view is stable for one scale).
+		full-size frame: one fullscreen triangle, no grade, its own binding
+		cache (the scaled scene view is stable for one scale). With antialias
+		the triangle runs the FXAA edge walk instead of the plain sample.
 		================
 		*/
-		encodeUpscale( encoder, source, target ) {
-			if ( disposed || !upscalePipeline ) throw Error( "Presentation upscale is not ready" );
+		encodeUpscale( encoder, source, target, antialias = false ) {
+			const resolve = antialias ? fxaaPipeline : upscalePipeline;
+			if ( disposed || !resolve ) throw Error( "Presentation upscale is not ready" );
 			if ( source !== upbound ) {
 				upbound = source;
 				upbinding = created.createBindGroup( {
@@ -306,10 +332,10 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 				} );
 			}
 			const pass = encoder.beginRenderPass( {
-				label: "render-scale-upscale",
+				label: antialias ? "scene-fxaa" : "render-scale-upscale",
 				colorAttachments: [ { view: target, loadOp: "clear", storeOp: "store" } ]
 			} );
-			pass.setPipeline( upscalePipeline );
+			pass.setPipeline( resolve );
 			pass.setBindGroup( 0, upbinding! );
 			pass.draw( 3 );
 			pass.end();

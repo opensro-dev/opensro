@@ -14,6 +14,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const crowChargeCap = 5
@@ -261,5 +262,5 @@ func (rt *Runtime) publishCrowPrecision(division string, gid uint32, now int64) 
 		return
 	}
 	view := rt.crowPrecisionView(division, gid, now)
-	rt.queueMonsterLegRecipients(division, []RecipientFrames{{CharacterID: c.ID, Frames: []wire.Frame{{Opcode: 0x3fb9, Payload: view[:]}}}})
+	rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: gid, Frames: simFrames([]wire.Frame{{Opcode: 0x3fb9, Payload: view[:]}})}})
 }

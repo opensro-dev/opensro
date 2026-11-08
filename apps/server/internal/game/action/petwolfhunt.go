@@ -133,7 +133,7 @@ func (rt *Runtime) wolfBonusHit(step petCombatStep, mob monster.Instance, damage
 	}
 	public := []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(mob.Gid, 0, hit.impacts[0].CurrentHP)}}
 	result := rt.creditedHitResult(step.key.division, mob, hit, public, step.nowMs)
-	if reason == "pet-gear-element" {
+	if reason == "pet-gear-element" || reason == "pet-gear-proc" {
 		result.ActorPrivate = append(result.ActorPrivate, abnormalDamageFrame(mob.Gid, hit.impacts[0].Damage))
 	}
 	batches := []simulation.DivisionFrames{{DivisionID: step.key.division, SourceGID: mob.Gid, Frames: simFrames(result.Broadcast)}}

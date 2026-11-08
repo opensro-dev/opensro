@@ -57,7 +57,7 @@ func (door storeAllianceDoor) Alliances(divisionID string) ([]domain.AllianceRec
 	if door.s.db == nil {
 		return nil, errAllianceUnavailable
 	}
-	rows, err := door.s.db.Query("SELECT alliance_id, record FROM alliances WHERE division = ? ORDER BY alliance_id", divisionID)
+	rows, err := door.s.syncDBLocked().Query("SELECT alliance_id, record FROM alliances WHERE division = ? ORDER BY alliance_id", divisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,11 +188,11 @@ func (door storeAllianceDoor) SaveAlliance(divisionID string, record domain.Alli
 		if raw, err = json.Marshal(record); err != nil {
 			return err
 		}
-		_, err = s.db.Exec(
+		_, err = s.syncDBLocked().Exec(
 			"INSERT INTO alliances (division, alliance_id, record) VALUES (?, ?, ?) ON CONFLICT(division, alliance_id) DO UPDATE SET record = excluded.record",
 			divisionID, record.AllianceID, string(raw))
 	} else {
-		_, err = s.db.Exec("DELETE FROM alliances WHERE division = ? AND alliance_id = ?", divisionID, record.AllianceID)
+		_, err = s.syncDBLocked().Exec("DELETE FROM alliances WHERE division = ? AND alliance_id = ?", divisionID, record.AllianceID)
 	}
 	if err != nil {
 		s.recordWriteFailureLocked("alliance", err)

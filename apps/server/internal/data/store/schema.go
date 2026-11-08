@@ -138,7 +138,12 @@ func isVersionMismatch(err error) bool {
 // never be traded, sold or handed to another character; rows saved
 // earlier carry no mark and are unbound. The offline upgrade rewrites
 // no record.
-const CurrentVersion = 40
+// Version 41 adds the Halloween Gourd box count to the account record
+// (halloweenBoxes gourdCount, port-only, #2950): Gourd-kill boxes mint
+// against their own daily cap, so ordinary grinding no longer starves
+// a wave. Rows saved earlier carry no Gourd count and start at zero;
+// the offline upgrade rewrites no record.
+const CurrentVersion = 41
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

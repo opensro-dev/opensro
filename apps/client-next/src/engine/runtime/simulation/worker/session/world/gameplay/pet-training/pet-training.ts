@@ -19,7 +19,13 @@ u8 gearCount, gearCount x { u32 refObjId, u8 count, count x u64 }.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
-import type { InventoryItem, PetTraining, PetTrainingRow, PetTrainingSkill } from "@/engine/contracts/gameplay";
+import type {
+	InventoryItem,
+	PetRecipientBuffs,
+	PetTraining,
+	PetTrainingRow,
+	PetTrainingSkill
+} from "@/engine/contracts/gameplay";
 
 export const OP_PET_TRAINING_STATE = 0x3fb1;
 export const OP_PET_SKILL_COUNTERS = 0x3fb6;
@@ -39,9 +45,27 @@ unknown.
 export function createPetTraining(
 	item: ( refObjId: number, slot: number, magic: readonly string[] ) => InventoryItem | null
 ) {
+	const recipients = new Map<number, PetRecipientBuffs>();
+	/*
+================
+recordRecipient
+
+Port-only public buff metadata; the private training profile stays owner-only.
+================
+	*/
+	function recordRecipient(
+		gid: number,
+		kind: "tailwind" | "guidance" | "howl",
+		value: PetRecipientBuffs[typeof kind]
+	) {
+		const row = { ...recipients.get( gid ), gid, [kind]: value };
+		if ( row.tailwind || row.guidance || row.howl ) recipients.set( gid, row );
+		else recipients.delete( gid );
+	}
 	let state: PetTraining | undefined;
 	let tailwind: PetTraining["tailwind"];
 	let guidance: PetTraining["guidance"];
+	let howl: PetTraining["howl"];
 	const text = new TextDecoder( "utf-8", { fatal: true } );
 	return {
 		/*
@@ -52,7 +76,33 @@ Consumes a state frame; false for any other opcode. A malformed state is
 a protocol error, never a partial one.
 ================
 		*/
-		receive( frame: WireFrame, now: number ): boolean {
+		receive( frame: WireFrame, now: number, localGid?: number ): boolean {
+			if ( frame.opcode === 0x3fbd ) {
+				const p = frame.payload;
+				if ( p.length !== 11 ) throw Error( "Invalid Hunting Howl state length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const gid = v.getUint32( 0, true ),
+					book = p[4]!,
+					speedPercent = v.getUint16( 5, true ) / 10,
+					remaining = v.getUint32( 7, true );
+				if (
+					!gid || (book !== 0 && book !== 2 && book !== 3) || speedPercent > 500 || remaining > 8000 ||
+					(book === 0 ? speedPercent !== 0 || remaining !== 0 : speedPercent <= 0 || remaining === 0)
+				) {
+					throw Error( "Invalid Hunting Howl state" );
+				}
+				recordRecipient(
+					gid,
+					"howl",
+					book ? { gid, book, speedPercent, expiresAtMs: now + remaining } : undefined
+				);
+				if ( gid === localGid ) {
+					howl = book ?
+						{ gid, book, speedPercent, expiresAtMs: now + remaining } :
+						undefined;
+				}
+				return true;
+			}
 			if ( frame.opcode === 0x3fb9 ) {
 				const p = frame.payload;
 				if ( p.length !== 8 ) throw Error( "Invalid Guiding Feathers length" );
@@ -65,7 +115,12 @@ a protocol error, never a partial one.
 					!gid || (book !== 0 && (book < 58 || book > 60)) || stacks > 5 ||
 					(book === 0 && (stacks !== 0 || hitPercent !== 0)) || (stacks === 0 && hitPercent !== 0)
 				) throw Error( "Invalid Guiding Feathers state" );
-				guidance = book ? { gid, book, stacks, hitPercent } : undefined;
+				recordRecipient( gid, "guidance", book ? { gid, book, stacks, hitPercent } : undefined );
+				if ( localGid === undefined || gid === localGid ) {
+					guidance = book ?
+						{ gid, book, stacks, hitPercent } :
+						undefined;
+				}
 				return true;
 			}
 			if ( frame.opcode === 0x3fb7 ) {
@@ -80,7 +135,12 @@ a protocol error, never a partial one.
 					!gid || (book !== 0 && (book < 55 || book > 57)) || stacks > 10 ||
 					(book === 0 && (stacks !== 0 || speedPercent !== 0)) || (stacks === 0 && speedPercent !== 0)
 				) throw Error( "Invalid Tailwind state" );
-				tailwind = book ? { gid, book, stacks, speedPercent } : undefined;
+				recordRecipient( gid, "tailwind", book ? { gid, book, stacks, speedPercent } : undefined );
+				if ( localGid === undefined || gid === localGid ) {
+					tailwind = book ?
+						{ gid, book, stacks, speedPercent } :
+						undefined;
+				}
 				return true;
 			}
 			if ( frame.opcode === OP_PET_SKILL_COUNTERS ) {
@@ -179,14 +239,21 @@ a protocol error, never a partial one.
 			let stats: PetTraining["stats"];
 			if ( at < p.length ) {
 				const version = u8();
-				if ( version !== 1 && version !== 2 ) throw new Error( "Unknown pet combat profile" );
+				if ( version !== 1 && version !== 2 && version !== 3 ) throw new Error( "Unknown pet combat profile" );
 				const maxHp = u32(), magicPercent = u16(), magicDefensePercent = u16(), primary = u8();
 				if ( maxHp === 0 || primary > 1 ) throw new Error( "Invalid pet combat profile" );
 				stats = { maxHp, magicPercent, magicDefensePercent, magicPrimary: primary === 1 };
-				if ( version === 2 ) {
+				if ( version >= 2 ) {
 					const gearStats = Array.from( { length: 6 }, () => u32() ), cooldownPercent = u16();
 					if ( cooldownPercent > 80 ) throw new Error( "Invalid pet cooldown reduction" );
 					stats = { ...stats, gearStats, cooldownPercent };
+				}
+				if ( version >= 3 ) {
+					for ( let i = 0; i < 3; i++ ) {
+						const timerMs = u32(), durationMs = u32();
+						if ( timerMs > durationMs ) throw new Error( "Invalid pet passive cooldown" );
+						rows.push( { timerMs, durationMs, left: 0, kind: "Time" } );
+					}
 				}
 			}
 			if ( at !== p.length ) throw new Error( "Trailing pet training bytes" );
@@ -207,16 +274,23 @@ a protocol error, never a partial one.
 		},
 		state: () => state && (tailwind || guidance) ? { ...state, tailwind, guidance } : state,
 		guidance: () => guidance,
+		howl: () => howl,
 		tailwind: () => tailwind,
+		recipients: () => [ ...recipients.values() ],
+		removeRecipient( gid: number ) {
+			recipients.delete( gid );
+		},
 		/*
 ================
 clear
 ================
 		*/
 		clear() {
+			recipients.clear();
 			state = undefined;
 			tailwind = undefined;
 			guidance = undefined;
+			howl = undefined;
 		}
 	};
 }

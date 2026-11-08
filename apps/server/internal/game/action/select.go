@@ -372,6 +372,9 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.cosHP),
 		}}
 	}
+	if rt.AttackPetExpansion {
+		outcome.Frames = append(outcome.Frames, rt.petRecipientBuffFrames(divisionID, gid, rt.Now().UnixMilli())...)
+	}
 	return outcome
 }
 

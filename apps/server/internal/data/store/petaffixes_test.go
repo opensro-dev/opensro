@@ -22,13 +22,13 @@ func TestPetAffixRulesDB(t *testing.T) {
 	if rows, err := s.PetAffixRules(defaults); err != nil || len(rows) != 1 || rows[0].Maximum != 50 {
 		t.Fatalf("seed: %v %v", rows, err)
 	}
-	if _, err := s.db.Exec("UPDATE pet_affix_rules SET maximum=35,roll_power=5 WHERE code=77"); err != nil {
+	if _, err := s.syncDBLocked().Exec("UPDATE pet_affix_rules SET maximum=35,roll_power=5 WHERE code=77"); err != nil {
 		t.Fatal(err)
 	}
 	if rows, err := s.PetAffixRules(defaults); err != nil || rows[0].Maximum != 35 || rows[0].RollPower != 5 {
 		t.Fatalf("operator edit overwritten: %v %v", rows, err)
 	}
-	if _, err := s.db.Exec("UPDATE pet_affix_rules SET maximum=2 WHERE code=77"); err != nil {
+	if _, err := s.syncDBLocked().Exec("UPDATE pet_affix_rules SET maximum=2 WHERE code=77"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.PetAffixRules(defaults); err == nil {

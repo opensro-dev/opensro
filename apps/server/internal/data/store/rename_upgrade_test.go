@@ -33,7 +33,7 @@ func TestRenameUpgradeAddsReservationTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -54,14 +54,14 @@ func TestRenameUpgradeAddsReservationTable(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
 		t.Fatal("the upgrade rewrote the character")
 	}
 	var tables int
-	if err := reopened.db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = 'name_reservations'").Scan(&tables); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = 'name_reservations'").Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
 	if tables != 1 {
