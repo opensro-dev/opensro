@@ -248,3 +248,18 @@ func TestCaravanStarFramesListOnlyFiveStarTransports(t *testing.T) {
 		t.Fatalf("flag-off frames %+v, want none", frames)
 	}
 }
+
+/*
+================
+TestCaravanStarsOpcodeIsNotTheCrowVisual
+
+The roster must never take the pet-crow visual's opcode (#2968
+review): the client decodes 0x3FBB strictly as a crow frame and each
+owner throws on the other's body, so a shared opcode breaks both.
+================
+*/
+func TestCaravanStarsOpcodeIsNotTheCrowVisual(t *testing.T) {
+	if wire.OpCaravanStars == crowVisualOpcode {
+		t.Fatalf("caravan roster opcode %#04x collides with the pet-crow visual", wire.OpCaravanStars)
+	}
+}

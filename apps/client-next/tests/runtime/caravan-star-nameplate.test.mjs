@@ -20,6 +20,9 @@ const { overheadLayout, withoutBoardPass } = await import(
 const { createCaravanStars, OP_CARAVAN_STARS } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/caravan-stars/caravan-stars.ts"
 );
+const { createEntities } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
+);
 const { tradeStarTint } = await import( "../../src/engine/foundation/gameplay/cos-trade-info.ts" );
 const { defaultGameOptions } = await import( "../../src/engine/foundation/gameplay/game-options.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
@@ -97,6 +100,56 @@ test("the roster frame decodes by gid and replaces wholesale", () => {
 	assert.throws( () => stars.receive( { opcode: OP_CARAVAN_STARS, payload: new Uint8Array( 3 ) } ) );
 	stars.clear();
 	assert.deepEqual( stars.gids(), [] );
+});
+
+/*
+================
+flush
+
+Take one journal batch off an entities owner and ack it, as
+world.test.mjs does.
+================
+*/
+function flush( owner ) {
+	const batch = owner.take();
+	if ( batch ) owner.ack( batch.sequence );
+	return batch;
+}
+
+test("the crow frame and the roster frame decode only in their own owner", () => {
+	const entities = createEntities();
+	const stars = createCaravanStars();
+	// The pet-crow visual owns 0x3FBB (entities.ts): u32 gid, u8 cue, u8
+	// book, u16 region, three f32. While the roster shared that opcode
+	// (#2968 review) this body threw in the roster owner; now the roster
+	// owner refuses it by opcode, and the crow's owner still decodes it.
+	const crow = new Uint8Array( 20 );
+	const crowView = new DataView( crow.buffer );
+	crowView.setUint32( 0, 100002, true );
+	crow[4] = 1;
+	crow[5] = 3;
+	crowView.setUint16( 6, 257, true );
+	crowView.setFloat32( 8, 12, true );
+	crowView.setFloat32( 12, 3, true );
+	crowView.setFloat32( 16, 34, true );
+	assert.equal( stars.receive( { opcode: 0x3fbb, payload: crow } ), false );
+	assert.deepEqual( stars.gids(), [] );
+	entities.receive( { opcode: 0x3fbb, payload: crow } );
+	assert.equal( flush( entities ).events.at( -1 ).kind, "pet-crow-effect" );
+	// The roster under 0x3FBF decodes in its own owner; the entities
+	// owner never reads it as a crow frame, it only journals it onward.
+	const payload = new Uint8Array( 2 + 4 );
+	const view = new DataView( payload.buffer );
+	view.setUint16( 0, 1, true );
+	view.setUint32( 2, 9, true );
+	assert.equal( stars.receive( { opcode: OP_CARAVAN_STARS, payload } ), true );
+	assert.deepEqual( stars.gids(), [ 9 ] );
+	entities.receive( { opcode: OP_CARAVAN_STARS, payload } );
+	assert.ok(
+		flush( entities ).events.every( e => e.kind !== "pet-crow-effect" ),
+		"no crow event from a roster frame"
+	);
+	assert.notEqual( OP_CARAVAN_STARS, 0x3fbb, "the roster must never take the crow's opcode again" );
 });
 
 test("the production UI paints five stars over a rostered transport only", () => {

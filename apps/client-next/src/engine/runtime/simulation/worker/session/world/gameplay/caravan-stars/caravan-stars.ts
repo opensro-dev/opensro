@@ -1,12 +1,14 @@
 /*
 ===========================================================================
 
-caravan-stars.ts - the 5-star caravan roster (port-only 0x3FBB, not native)
+caravan-stars.ts - the 5-star caravan roster (port-only 0x3FBF, not native)
 
 Under SRO_TRADE_TIERS (#2958) the server pushes the division's 5-star
 caravan transport gids every two seconds, and the transport's nameplate
 shows its star (overhead-layout.ts). Nothing arrives with the flag off,
-and a client that predates the frame drops the unknown opcode.
+and a client that predates the frame drops the unknown opcode. 0x3FBB
+stays the pet-crow visual's (entities.ts): the two frames must never
+share an opcode, because each owner throws on the other's body.
 
 Body, little-endian: u16 count, then count x { u32 gid }.
 
@@ -14,7 +16,7 @@ Body, little-endian: u16 count, then count x { u32 gid }.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 
-export const OP_CARAVAN_STARS = 0x3fbb;
+export const OP_CARAVAN_STARS = 0x3fbf;
 const MAX_CARAVANS = 1024;
 
 /*
