@@ -26,6 +26,7 @@ import cap110_item_import  # noqa: E402
 import cap110_monsters  # noqa: E402
 import cap110_quest_items  # noqa: E402
 import cap110_quest_monsters  # noqa: E402
+import cap110_quest_tables  # noqa: E402
 import cap110_rewards  # noqa: E402
 import cap110_skill_import  # noqa: E402
 import import_vsro_alexandria  # noqa: E402
@@ -62,6 +63,7 @@ class FlagOffMainTests(unittest.TestCase):
 			(cap110_quest_items, common + ["--output", str(self.output)]),
 			(cap110_blue_berserk, common + ["--output", str(self.output)]),
 			(cap110_quest_monsters, common + ["--output", str(self.output)]),
+			(cap110_quest_tables, common + ["--output", str(self.output)]),
 			(cap110_item_import, common + ["--output-extracted", str(self.output / "items")]),
 			(cap110_skill_import, common + ["--output-extracted", str(self.output / "skills")]),
 		]

@@ -631,6 +631,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters the quests spawn (no nests) follow the quest switch.
 	from cap110_quest_monsters import add_quest_monsters
 	quest_monsters = add_quest_monsters(vsro_root, native, out)
+	# The quests' own rows and texts follow the quest switch.
+	from cap110_quest_tables import add_quest_tables
+	quest_tables = add_quest_tables(vsro_root, native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
 	# The later client's seasonal town decoration (Halloween and the other
@@ -658,6 +661,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"questItems": quest_items,
 		"blueBerserk": blue_berserk,
 		"questMonsters": quest_monsters,
+		"questTables": quest_tables,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
