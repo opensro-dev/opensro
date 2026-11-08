@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/combat"
@@ -102,11 +103,9 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 				t.Fatal(reason)
 			}
 			win := roll < 5000
-			if win {
-				assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
-			} else {
-				assertOpcodes(t, frames, 0x3645, 0xb053)
-			}
+			// A roll announces nothing, win or loss (#2852): the win is
+			// announced when its voucher is exchanged.
+			assertOpcodes(t, frames, 0x3645, 0xb053)
 			want := uint32(902)
 			code := byte(0)
 			if win {
@@ -141,53 +140,78 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 
 /*
 ================
-TestGachaWinAnnouncesToTheShard
+TestGachaWinAnnouncesOnTheExchange
 
-A committed win is announced to the whole shard as
-0x30C0 [prizeRef:u32][qty:u16] (#2425): the winner reads it at the tail
-of their own burst and every other session through the shard push,
-carrying the same frame. A loss, and a refused replay of the spent
-ticket, announce nothing. The payload is a literal on purpose: the test
-pins the wire values, not the server's names for them.
+The reference server announces a Magic Pang win when the WIN voucher is
+exchanged, never at the roll (SR_GameServer 4C7E20 sends nothing;
+4EDF80 broadcasts after the exchange reply, #2852). The roll's burst
+carries no banner and pushes nothing. The exchange answers B1BE [1][win]
+and, for a win, 0x30C0 [prizeRef:u32][qty:u16] at the tail of the
+winner's burst and through the shard push, carrying the same frame. A
+loss voucher's exchange answers [1][0] and announces nothing. The
+payloads are literals on purpose: the test pins the wire values.
 ================
 */
-func TestGachaWinAnnouncesToTheShard(t *testing.T) {
+func TestGachaWinAnnouncesOnTheExchange(t *testing.T) {
 	rt, c, p := gachaFixture(t)
-	except, pushes := "", 0
-	var shard []wire.Frame
-	rt.PushShardPeerFrames = func(_ string, name string, frames []wire.Frame) {
-		pushes++
-		except, shard = name, frames
-	}
+	pushes := 0
+	rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushes++ }
 	rt.GachaRoll = func() (uint32, error) { return 0, nil }
 	frames, reason := rt.HandleGachaRoll(testDivision, c, p)
 	if reason != "" {
 		t.Fatal(reason)
 	}
-	assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
-	announce := frames[2]
-	if want := []byte{0xC3, 0x2C, 0x00, 0x00, 0x01, 0x00}; !reflect.DeepEqual(announce.Payload, want) {
-		t.Fatalf("announce payload %v, want %v", announce.Payload, want)
-	}
-	if pushes != 1 || except != c.Name || len(shard) != 1 || !reflect.DeepEqual(shard[0], announce) {
-		t.Fatalf("shard pushes=%d except=%q frames=%+v, want the one announce", pushes, except, shard)
-	}
-	// The spent ticket refuses its replay: nothing more is announced.
-	if _, reason := rt.HandleGachaRoll(testDivision, c, p); reason == "" || pushes != 1 {
-		t.Fatalf("replay announced: reason=%q pushes=%d", reason, pushes)
-	}
-
-	rt, c, p = gachaFixture(t)
-	pushes = 0
-	rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushes++ }
-	rt.GachaRoll = func() (uint32, error) { return 9999, nil }
-	frames, reason = rt.HandleGachaRoll(testDivision, c, p)
-	if reason != "" {
-		t.Fatal(reason)
-	}
 	assertOpcodes(t, frames, 0x3645, 0xb053)
 	if pushes != 0 {
-		t.Fatalf("a loss announced %d times", pushes)
+		t.Fatalf("a roll pushed %d shard frames, want none", pushes)
+	}
+
+	for _, tc := range []struct {
+		name string
+		roll uint32
+		won  byte
+	}{{"win", 0, 1}, {"loss", 9999, 0}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, c, p := operatorFixture(t, tc.roll)
+			except, pushes := "", 0
+			var shard []wire.Frame
+			rt.PushShardPeerFrames = func(_ string, name string, frames []wire.Frame) {
+				pushes++
+				except, shard = name, frames
+			}
+			frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			result := -1
+			for index, frame := range frames {
+				if frame.Opcode == 0xb1be {
+					result = index
+					if !reflect.DeepEqual(frame.Payload, []byte{1, tc.won}) {
+						t.Fatalf("exchange result %v, want [1 %d]", frame.Payload, tc.won)
+					}
+				}
+			}
+			if result < 0 {
+				t.Fatalf("no B1BE exchange result: %+v", frames)
+			}
+			if tc.won == 0 {
+				if result != len(frames)-1 || pushes != 0 {
+					t.Fatalf("a loss announced: frames=%+v pushes=%d", frames, pushes)
+				}
+				return
+			}
+			announce := frames[len(frames)-1]
+			if announce.Opcode != 0x30c0 || result != len(frames)-2 {
+				t.Fatalf("burst tail %+v, want B1BE then 30C0", frames)
+			}
+			if want := []byte{0xC3, 0x2C, 0x00, 0x00, 0x01, 0x00}; !reflect.DeepEqual(announce.Payload, want) {
+				t.Fatalf("announce payload %v, want %v", announce.Payload, want)
+			}
+			if pushes != 1 || except != c.Name || len(shard) != 1 || !reflect.DeepEqual(shard[0], announce) {
+				t.Fatalf("shard pushes=%d except=%q frames=%+v, want the one announce", pushes, except, shard)
+			}
+		})
 	}
 }
 
@@ -294,7 +318,7 @@ func TestGachaRollIgnoresTheSelection(t *testing.T) {
 			if reason != "" {
 				t.Fatal(reason)
 			}
-			assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
+			assertOpcodes(t, frames, 0x3645, 0xb053)
 			if c.MissionInventory[0].RefObjID != rt.GachaCatalog.WinCard.RefObjID {
 				t.Fatalf("roll did not land: %+v", c.MissionInventory)
 			}
@@ -908,5 +932,42 @@ func TestGachaPoolOffRollKeepsTheRetailPool(t *testing.T) {
 	}
 	if !reflect.DeepEqual(c.MissionInventory[0].MagicOptions, []uint64{4140, 1}) {
 		t.Fatalf("retail win recorded %+v, want 4140 x1", c.MissionInventory[0].MagicOptions)
+	}
+}
+
+/*
+================
+TestGachaWinNoticeNamesTheWinner
+
+#2852, port-only: with SRO_ANNOUNCE_GACHA_WIN on, a WIN voucher's
+exchange also queues one channel-7 line naming the winner; off, or a
+loss voucher, queues none. The native banner is pinned separately
+(TestGachaWinAnnouncesOnTheExchange) and is sent in both settings.
+================
+*/
+func TestGachaWinNoticeNamesTheWinner(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		roll uint32
+		on   bool
+		want bool
+	}{{"on", 0, true, true}, {"off", 0, false, false}, {"loss", 9999, true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, c, p := operatorFixture(t, tc.roll)
+			rt.Announce.GachaWin = tc.on
+			if _, reason := rt.HandleGachaExchange(testDivision, c, p); reason != "" {
+				t.Fatal(reason)
+			}
+			got := drainedNotices(t, rt)
+			if !tc.want {
+				if len(got) != 0 {
+					t.Fatalf("%q, want no line", got)
+				}
+				return
+			}
+			if len(got) != 1 || !strings.HasPrefix(got[0], c.Name+" won ") || !strings.HasSuffix(got[0], " x1 from Magic Pang") {
+				t.Fatalf("%q, want one line naming %s", got, c.Name)
+			}
+		})
 	}
 }

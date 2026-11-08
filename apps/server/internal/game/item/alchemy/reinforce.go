@@ -34,11 +34,16 @@ type Roll func() (uint32, error)
 /*
 ================
 Outcome
+
+From is the target's plus before the attempt: a failure resets Items'
+plus (0, or the Astral floor), so the attempted level is From+1 and
+nothing else records it (#2852's failure notice).
 ================
 */
 type Outcome struct {
 	Items     []inventory.Item
 	Target    uint8
+	From      uint8
 	Success   bool
 	Destroyed bool
 }
@@ -429,7 +434,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if err != nil {
 		return zero, err
 	}
-	result := Outcome{Target: item.Slot, Success: int(n) < chance}
+	result := Outcome{Target: item.Slot, From: item.Plus, Success: int(n) < chance}
 	if result.Success {
 		item.Plus++
 	} else {

@@ -102,8 +102,22 @@ func TestAnnouncementsFromEnv(t *testing.T) {
 	t.Setenv(EnvAnnouncePlus, "")
 	t.Setenv(EnvAnnounceJobKill, "TRUE")
 	t.Setenv(EnvAlchemyBreakNotice, "on")
-	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true, Break: true}) {
+	t.Setenv(EnvAnnounceGachaWin, "")
+	t.Setenv(EnvAnnouncePlusFail, "")
+	t.Setenv(EnvAnnouncePlusFailMin, "")
+	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true, Break: true, PlusFailMin: 9}) {
 		t.Fatalf("flags %+v", got)
+	}
+	t.Setenv(EnvAnnounceGachaWin, "on")
+	t.Setenv(EnvAnnouncePlusFail, "1")
+	t.Setenv(EnvAnnouncePlusFailMin, "10")
+	if got := AnnouncementsFromEnv(); !got.GachaWin || !got.PlusFail || got.PlusFailMin != 10 {
+		t.Fatalf("flags %+v", got)
+	}
+	// An unreadable minimum keeps the default rather than announcing +1.
+	t.Setenv(EnvAnnouncePlusFailMin, "zero")
+	if got := AnnouncementsFromEnv(); got.PlusFailMin != 9 {
+		t.Fatalf("min %d, want the default 9", got.PlusFailMin)
 	}
 }
 
@@ -839,5 +853,60 @@ func TestMostWantedNoticesHaveTheirOwnCap(t *testing.T) {
 	rt.postJobKillNotice(jobKillNotice{testDivision, "a", "b", "A", "B", 0})
 	if got := drainedNotices(t, rt); len(got) != announcementsPerMinute+1 {
 		t.Fatalf("%d notices, want %d wanted and one kill", len(got), announcementsPerMinute)
+	}
+}
+
+/*
+================
+TestPlusFailNoticeFollowsTheFlag
+
+#2852 (owner 2026-11-08): a failed reinforcement whose attempted plus
+(From+1) reaches the minimum is announced naming the character, as
+"destroyed" or with the plus it fell to. Off, below the minimum, or a
+success: no line.
+================
+*/
+func TestPlusFailNoticeFollowsTheFlag(t *testing.T) {
+	const sword = "ITEM_CH_SWORD_01_A_DEF"
+	failed := func(from uint8, destroyed bool, after uint8) alchemy.Outcome {
+		o := alchemy.Outcome{Target: 13, From: from, Destroyed: destroyed}
+		if !destroyed {
+			o.Items = []inventory.Item{{Slot: 13, Codename: sword, Plus: after}}
+		}
+		return o
+	}
+	succeeded := failed(9, false, 10)
+	succeeded.Success = true
+	for _, tc := range []struct {
+		name    string
+		on      bool
+		outcome alchemy.Outcome
+		want    string
+	}{
+		{"off", false, failed(8, true, 0), ""},
+		{"below the minimum", true, failed(7, true, 0), ""},
+		{"a success", true, succeeded, ""},
+		{"destroyed at +9", true, failed(8, true, 0), "Smith failed +9 on "},
+		{"dropped at +10", true, failed(9, false, 0), "Smith failed +10 on "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, _ := newTestRuntime(testCharacter(), testItems())
+			rt.Announce.PlusFail, rt.Announce.PlusFailMin = tc.on, 9
+			announced := rt.announcePlusFail(testDivision, "Smith", sword, tc.outcome, 0)
+			got := drainedNotices(t, rt)
+			if tc.want == "" {
+				if announced || len(got) != 0 {
+					t.Fatalf("announced=%v %q, want no line", announced, got)
+				}
+				return
+			}
+			end := ": destroyed"
+			if !tc.outcome.Destroyed {
+				end = ": dropped to +0"
+			}
+			if !announced || len(got) != 1 || !strings.HasPrefix(got[0], tc.want) || !strings.HasSuffix(got[0], end) {
+				t.Fatalf("announced=%v %q, want one %q...%q line", announced, got, tc.want, end)
+			}
+		})
 	}
 }

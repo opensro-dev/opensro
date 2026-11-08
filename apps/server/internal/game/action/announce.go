@@ -15,6 +15,13 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED Lv <N>" on a new wanted level, and
 	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED Lv <N>"
+	SRO_ANNOUNCE_GACHA_WIN  "<player> won <prize> xN from Magic Pang" when a WIN
+	                        voucher is exchanged (#2852); the native 0x30C0
+	                        banner names no winner and never reaches chat
+	SRO_ANNOUNCE_PLUS_FAIL  "<player> failed +N on <item>: destroyed" or
+	                        "... dropped to +M" for a failed attempt at
+	                        +SRO_ANNOUNCE_PLUS_FAIL_MIN (default 9) or above,
+	                        naming the character (owner, 2026-11-08, #2852)
 	SRO_ALCHEMY_BREAK_NOTICE  "<alias> broke <item>" when a reinforcement destroys the
 	                          item of a character who opted in on the account page
 	                          (#1738, #1604 P7.2); no alias shows "a player",
@@ -40,6 +47,7 @@ package action
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf16"
@@ -70,6 +78,12 @@ const (
 	// reinforcement item by job alias (owner-approved vote 2026-10-26,
 	// #1604 P7.2 / #1738).
 	EnvAlchemyBreakNotice = "SRO_ALCHEMY_BREAK_NOTICE"
+	// EnvAnnounceGachaWin names a Magic Pang winner on channel 7 (#2852).
+	EnvAnnounceGachaWin = "SRO_ANNOUNCE_GACHA_WIN"
+	// EnvAnnouncePlusFail announces a failed high reinforcement (#2852);
+	// EnvAnnouncePlusFailMin is its lowest attempted plus.
+	EnvAnnouncePlusFail    = "SRO_ANNOUNCE_PLUS_FAIL"
+	EnvAnnouncePlusFailMin = "SRO_ANNOUNCE_PLUS_FAIL_MIN"
 )
 
 const (
@@ -92,6 +106,10 @@ const (
 	// "LEGENDARY!" (#1739, owner decision 2026-10-26).
 	announcePlusGreatAt     = 10
 	announcePlusLegendaryAt = 11
+	// announcePlusFailMinDefault is the lowest attempted plus a failure
+	// notice names when SRO_ANNOUNCE_PLUS_FAIL_MIN is unset: the owner's
+	// "+9 failed, +10 failed" (2026-11-08, #2852).
+	announcePlusFailMinDefault = 9
 )
 
 // sealCodenameSuffix marks a v1.150 rare (Seal of Star/Moon/Sun) item.
@@ -120,6 +138,10 @@ const (
 	// announceBreak has its own per-minute bucket and its own channel, so
 	// a run of breaks never starves the other notices.
 	announceBreak
+	// announceGachaWin and announcePlusFail each have their own bucket
+	// (#2852) and ride the drop/plus channel.
+	announceGachaWin
+	announcePlusFail
 	// announceHalloweenWave has its own bucket, so a run of drops never
 	// starves a wave's notice (port-only, halloween_waves.go).
 	announceHalloweenWave
@@ -141,6 +163,11 @@ type Announcements struct {
 	MostWanted             bool
 	// Break announces an opted-in character's destroyed item (#1738).
 	Break bool
+	// GachaWin names a Magic Pang winner; PlusFail announces a failed
+	// attempt at PlusFailMin or above (#2852).
+	GachaWin    bool
+	PlusFail    bool
+	PlusFailMin uint8
 }
 
 /*
@@ -156,9 +183,14 @@ func AnnouncementsFromEnv() Announcements {
 		}
 		return false
 	}
+	failMin := uint8(announcePlusFailMinDefault)
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(EnvAnnouncePlusFailMin))); err == nil && n >= 1 && n <= 255 {
+		failMin = uint8(n)
+	}
 	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), PlusTiers: on(EnvAnnouncePlusTiers),
 		JobKill: on(EnvAnnounceJobKill), JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted),
-		Break: on(EnvAlchemyBreakNotice)}
+		Break: on(EnvAlchemyBreakNotice), GachaWin: on(EnvAnnounceGachaWin), PlusFail: on(EnvAnnouncePlusFail),
+		PlusFailMin: failMin}
 }
 
 /*
@@ -446,6 +478,66 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, item.RefObjID, nowMs)
 		return
 	}
+}
+
+/*
+================
+Runtime.announceGachaWin
+
+Port-only, not native (#2852): a WIN voucher's exchange, after its
+commit, as a channel-7 notice naming the winner and the prize. The
+native 0x30C0 banner (HandleGachaExchange) still goes out in both
+settings; this line is what reaches the Event tab and the website feed.
+================
+*/
+func (rt *Runtime) announceGachaWin(division, player string, prizeRef uint32, quantity uint64, nowMs int64) {
+	if !rt.Announce.GachaWin {
+		return
+	}
+	name := fmt.Sprintf("item %d", prizeRef)
+	if items := rt.deps.ItemReferences(); items != nil {
+		if ref, found := items.ItemRefByID(prizeRef); found && ref != nil && ref.Name != "" {
+			name = ref.Name
+		}
+	}
+	text := fmt.Sprintf("%s won %s x%d from Magic Pang", player, name, quantity)
+	rt.announce(division, announceGachaWin, text, wire.NoticeLink{Player: player}, 0, nowMs)
+}
+
+/*
+================
+Runtime.announcePlusFail
+
+Port-only, not native (#2852, owner 2026-11-08: the line names the
+character): a failed reinforcement whose attempted plus (outcome.From+1)
+is at least PlusFailMin, after its commit. A destroyed item reads
+"destroyed"; one that survived (an Immortal save, a reset to +0 or the
+Astral floor) reads the plus it fell to. Reports whether it announced,
+so the opted-in alias break notice does not repeat the same failure.
+================
+*/
+func (rt *Runtime) announcePlusFail(division, player string, codename string, outcome alchemy.Outcome, nowMs int64) bool {
+	if !rt.Announce.PlusFail || outcome.Success || int(outcome.From)+1 < int(rt.Announce.PlusFailMin) {
+		return false
+	}
+	result := "destroyed"
+	if !outcome.Destroyed {
+		for _, item := range outcome.Items {
+			if item.Slot == outcome.Target {
+				codename = item.Codename
+				result = fmt.Sprintf("dropped to +%d", item.Plus)
+			}
+		}
+	}
+	name := codename
+	if items := rt.deps.ItemReferences(); items != nil {
+		if ref, found := items.ItemRefByCodename(codename); found && ref.Name != "" {
+			name = ref.Name
+		}
+	}
+	text := fmt.Sprintf("%s failed +%d on %s: %s", player, int(outcome.From)+1, name, result)
+	rt.announce(division, announcePlusFail, text, wire.NoticeLink{Player: player}, 0, nowMs)
+	return true
 }
 
 /*

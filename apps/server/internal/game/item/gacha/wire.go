@@ -23,9 +23,10 @@ const (
 	// OpExchangeResult answers OpExchange, as OpResult answers OpRoll.
 	OpExchangeResult uint16 = 0xB1BE
 	// OpWinAnnounce is the shard-wide win banner the client renders
-	// as UIIT_MSG_GACHA_ANNOUNCE. The native server reports a win on
-	// its server link and the shard relays it to every session as
-	// this frame; the port emits the client leg directly (#2425).
+	// as UIIT_MSG_GACHA_ANNOUNCE (client 768530, notice window only).
+	// The reference server broadcasts it to every world when a WIN
+	// voucher is exchanged (4EDF80; 0x3120 in v1.188), never at the
+	// roll (#2852).
 	OpWinAnnounce uint16 = 0x30C0
 
 	InteractionFlagGacha uint32 = 0x10000
@@ -99,6 +100,17 @@ func EncodeResult(code uint8) []byte {
 // every session that receives the banner.
 func EncodeWinAnnounce(prizeRefObjID uint32, quantity uint16) []byte {
 	return wire.NewWriter(6).U32(prizeRefObjID).U16(quantity).Payload()
+}
+
+// EncodeExchangeResult is the committed exchange's B1BE [1][win]: the
+// reference server writes the success byte and the voucher reference's
+// win flag (4EDF80); client 766A90 reads both and acts only on flag 2.
+func EncodeExchangeResult(won bool) []byte {
+	flag := uint8(0)
+	if won {
+		flag = 1
+	}
+	return []byte{1, flag}
 }
 
 // EncodeRefusal is the refused-request body a refused roll or exchange

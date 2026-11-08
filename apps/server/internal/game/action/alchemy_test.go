@@ -139,3 +139,51 @@ func TestAlchemyMalformedAndDuplicateSlotsDoNotDraw(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAlchemyPlusFailNamesTheCharacterOnce
+
+#2852 end to end: a failed attempt at +9 that destroys the weapon. With
+the failure notice on, the one line names the character, and the
+opted-in alias break line does not repeat it; with it off, the #1738
+alias line is unchanged. The outcome is identical either way.
+================
+*/
+func TestAlchemyPlusFailNamesTheCharacterOnce(t *testing.T) {
+	for _, on := range []bool{true, false} {
+		rt, character := alchemyRuntime()
+		rates, err := alchemy.ParseReinforceRates("2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt.Alchemy.Rates = rates
+		// 99 fails the 2% chance; 0 is under the destroy percent.
+		rolls := []uint32{99, 0}
+		rt.AlchemyRoll = func() (uint32, error) {
+			if len(rolls) == 0 {
+				return 0, nil
+			}
+			n := rolls[0]
+			rolls = rolls[1:]
+			return n, nil
+		}
+		character.MissionInventory[0].Plus = 8
+		character.BreakNotice = true
+		character.Job.Alias = "leChiffre"
+		rt.Announce.Break = true
+		rt.Announce.PlusFail, rt.Announce.PlusFailMin = on, 9
+		rt.HandleAlchemyReinforce(testDivision, character, []byte{2, 20, 21})
+		if len(character.MissionInventory) != 0 {
+			t.Fatalf("on=%v: inventory %+v, want the weapon destroyed", on, character.MissionInventory)
+		}
+		got := drainedNotices(t, rt)
+		if on {
+			if len(got) != 1 || !strings.HasPrefix(got[0], character.Name+" failed +9 on ") || !strings.HasSuffix(got[0], ": destroyed") {
+				t.Fatalf("on: %q, want one line naming the character", got)
+			}
+		} else if len(got) != 1 || !strings.HasPrefix(got[0], "leChiffre broke ") {
+			t.Fatalf("off: %q, want the unchanged alias break line", got)
+		}
+	}
+}

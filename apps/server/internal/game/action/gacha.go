@@ -267,8 +267,10 @@ Admission is the native one (gachaNpcAdmission, then gacha set, bag limit,
 ticket row, entry lookup); every refusal answers one B053 [2][u8 code],
 the native answer the client's waiting phase ends on. On commit the ticket
 row becomes a native win/loss result card; 0x3645 reaches the client before
-B053 so CIFGhaCha_ApplyResult observes the new ref and reward map. A
-committed win also publishes the shard-wide 0x30C0 banner (#2425).
+B053 so CIFGhaCha_ApplyResult observes the new ref and reward map. A roll
+announces nothing: the reference server's roll (SR_GameServer 4C7E20)
+sends no broadcast, the win is announced when its voucher is exchanged
+(HandleGachaExchange, #2852).
 ================
 */
 func (rt *Runtime) HandleGachaRoll(
@@ -419,19 +421,6 @@ func (rt *Runtime) HandleGachaRoll(
 		log.Infof("gacha pool v2: %s rolled entry %d at NPC %d: %s, reward %d x%d",
 			character.Name, request.SelectedEntryID, npc.RefObjID, outcome, rolledReward, rolledQuantity)
 	}
-	if rolledWin {
-		// The win is announced to the whole shard (#2425): the winner
-		// reads the banner at the tail of their own burst, every other
-		// session through the shard push, as for a Global Chatting line.
-		// A loss announces nothing, and a refused roll never reaches
-		// here, so no uncommitted win is ever published.
-		announce := wire.Frame{Opcode: gacha.OpWinAnnounce,
-			Payload: gacha.EncodeWinAnnounce(rolledReward, uint16(rolledQuantity))}
-		frames = append(frames, announce)
-		if rt.PushShardPeerFrames != nil {
-			rt.PushShardPeerFrames(divisionID, character.Name, []wire.Frame{announce})
-		}
-	}
 	return frames, ""
 }
 
@@ -502,6 +491,17 @@ a same-codename card without a pair in a lower slot would otherwise be eaten
 while the paid voucher stayed to be redeemed again. A stacked row or a pair
 that is not an enabled prize row is refused, so the exchange can only hand out
 what a roll could have written.
+
+A committed exchange answers 0xB1BE [1][win] - the reference server's
+CGObjPC_SendGachaExchangeResultAndAnnounceWin (4EDF80) writes the success
+byte and the voucher reference's win flag; client 766A90 reads both and
+acts only on a refusal. A WIN voucher then publishes the shard-wide
+0x30C0 [prizeRef:u32][qty:u16] banner (4EE029-4EE075 broadcasts it to
+every world; the u16 quantity is the asm's width 2 at 4EE056). The winner
+reads it at the tail of their own burst, every other session through the
+shard push. Port-only, not native (#2852, SRO_ANNOUNCE_GACHA_WIN): the
+same win also posts a channel-7 notice naming the winner, so it reaches
+the Event tab and the website feed.
 ================
 */
 func (rt *Runtime) HandleGachaExchange(
@@ -536,6 +536,9 @@ func (rt *Runtime) HandleGachaExchange(
 
 	failure := "no exchangeable voucher"
 	var frames []wire.Frame
+	var won bool
+	var wonRef uint32
+	var wonQuantity uint64
 	committed := rt.deps.Update(character, "gacha-exchange", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
@@ -559,6 +562,7 @@ func (rt *Runtime) HandleGachaExchange(
 			return false
 		}
 		rewardRef, quantity := uint32(row.MagicOptions[0]), row.MagicOptions[1]
+		won, wonRef, wonQuantity = row.RefObjID == rt.GachaCatalog.WinCard.RefObjID, rewardRef, quantity
 		if quantity < 1 || quantity > 0xFFFF || uint64(rewardRef) != row.MagicOptions[0] ||
 			!rt.GachaCatalog.IsPrizePair(rewardRef, quantity) {
 			failure = "voucher carries an invalid reward pair"
@@ -605,6 +609,16 @@ func (rt *Runtime) HandleGachaExchange(
 	})
 	if !committed {
 		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed), failure
+	}
+	frames = append(frames, wire.Frame{Opcode: gacha.OpExchangeResult, Payload: gacha.EncodeExchangeResult(won)})
+	if won {
+		announce := wire.Frame{Opcode: gacha.OpWinAnnounce,
+			Payload: gacha.EncodeWinAnnounce(wonRef, uint16(wonQuantity))}
+		frames = append(frames, announce)
+		if rt.PushShardPeerFrames != nil {
+			rt.PushShardPeerFrames(divisionID, character.Name, []wire.Frame{announce})
+		}
+		rt.announceGachaWin(divisionID, character.Name, wonRef, wonQuantity, rt.Now().UnixMilli())
 	}
 	return frames, ""
 }

@@ -176,7 +176,11 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	}
 	if op == alchemy.OpReinforceResult {
 		rt.announcePlus(division, character.Name, outcome, rt.Now().UnixMilli())
-		rt.announceBreak(division, character, broken, outcome, rt.Now().UnixMilli())
+		// A failure the named notice already announced is not repeated by
+		// the opted-in alias break line (#2852).
+		if !rt.announcePlusFail(division, character.Name, broken, outcome, rt.Now().UnixMilli()) {
+			rt.announceBreak(division, character, broken, outcome, rt.Now().UnixMilli())
+		}
 	}
 	return frames
 }
