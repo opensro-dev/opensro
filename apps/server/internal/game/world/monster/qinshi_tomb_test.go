@@ -72,7 +72,7 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 		// Chain-owned nests (Floor 5 #2372, Floor 6 #2373) keep the
 		// native limit 0: the TombChain spawns them, the nest lifecycle
 		// never does. The zeroing is region-scoped.
-		chainOwned := qinshiTombChainOwned(nest.RegionID, withTomb.Refs[nest.RefObjID].Codename)
+		chainOwned := QinShiTombChainOwned(nest.RegionID, withTomb.Refs[nest.RefObjID].Codename)
 		if !chainOwned && nest.InstanceLimit() <= 0 {
 			t.Fatalf("tomb nest %+v has non-positive instance limit %d", nest, nest.InstanceLimit())
 		}
