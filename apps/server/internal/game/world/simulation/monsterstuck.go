@@ -58,7 +58,9 @@ resolveStuck
 
 Answers a latched event-0x28 (mover.Stuck) at the end of advanceInstance using
 monster.NativeStuckResponse. The non-stuck fast path returns without acquiring
-a second population lock when no stop crossed nativeStuckFailureLimit.
+a second population lock when no stop crossed nativeStuckFailureLimit. That
+fast path reads only the latch, through the step's gid-verified slots
+(moverStuckAt, #2133): stale slots outside an armed step fall back to the gid.
 ================
 */
 func (ops *MonsterMoverOps) resolveStuck(
@@ -68,6 +70,9 @@ func (ops *MonsterMoverOps) resolveStuck(
 	nowMs int64,
 	frames []Frame,
 ) []Frame {
+	if !ops.Monsters.moverStuckAt(divisionID, gid, ops.stepSlot, ops.stepMonsterSlot) {
+		return frames
+	}
 	mover, ok := ops.Monsters.Mover(divisionID, gid)
 	if !ok || !mover.Stuck() {
 		return frames

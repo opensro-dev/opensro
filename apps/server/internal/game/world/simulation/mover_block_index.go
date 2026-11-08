@@ -214,16 +214,19 @@ func (x *moverBlockIndex) enter(gid uint32, block worldgeom.InterestBlock) {
 moverStorage.placeInBlock
 
 Put gid in the block of its live pose at nowMs. Gid 0 is the absent actor
-and the scan never yields it.
+and the scan never yields it. The slot is resolved once and read for both
+the pose and the segment mark: a moving actor is placed every leg (#2133).
 ================
 */
 func (s *moverStorage) placeInBlock(gid uint32, nowMs int64) {
 	x := &s.blocks
-	if _, ok := s.slotOf(gid); !ok || gid == 0 {
+	slot, ok := s.slotOf(gid)
+	if !ok || gid == 0 {
 		x.leave(gid)
 		return
 	}
-	pose, _ := s.livePoseAt(gid, nowMs, nil)
+	rec := s.slots[slot].rec
+	pose := rec.livePoseAt(nowMs, nil)
 	block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z})
 	if old, ok := x.blockOf[gid]; !ok {
 		x.enter(gid, block)
@@ -232,7 +235,7 @@ func (s *moverStorage) placeInBlock(gid uint32, nowMs int64) {
 		x.enter(gid, block)
 	}
 	// leave drops the segment mark, so it is set after the move.
-	if live := s.slots[s.byGID[gid]].rec.live; live != nil && live.ArriveMs > live.DepartMs {
+	if live := rec.live; live != nil && live.ArriveMs > live.DepartMs {
 		x.segments[gid] = struct{}{}
 	} else {
 		delete(x.segments, gid)
