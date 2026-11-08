@@ -40,6 +40,7 @@ import lzma
 import os
 import sqlite3
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -302,28 +303,55 @@ def apply_seed(payload, binary_path, rzdb_path, limit=0, opener=open_session):
 Returns (defined, named, sampled_ok, sampled) counts, read back
 from aflj after the definitions land: what rizin refused (an
 address inside a neighbour's block) is reported, never assumed.
+	The project is saved to a sibling temp file and os.replace()d
+	into place under an exclusive lock file, so two applies at one
+	.rzdb can never interleave writes into a corrupt project (two
+	concurrent applies raced exactly that way before the lock).
 	"""
 	functions = payload["functions"]
 	if limit:
 		functions = functions[:limit]
-	pipe = opener(binary_path)
+	lock_path = rzdb_path + ".lock"
 	try:
-		pipe.cmd("e scr.color=false")
-		_batched(pipe, _seed_commands(functions))
-		rows = pipe.cmdj("aflj") or []
-		present = {row["offset"]: row.get("name", "") for row in rows}
-		defined = [va for va, _ in functions if va in present]
-		named = sum(1 for va, name in functions if present.get(va) == name)
-		labelled = [(va, name) for va, name in functions
-					if va in present and not name.startswith("sub_")]
-		sample = labelled[::max(1, len(labelled) // 20)][:20] if labelled else []
-		sampled_ok = sum(1 for va, name in sample if present.get(va) == name)
-		pipe.cmd(f'Ps "{rzdb_path}"')
+		lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+	except FileExistsError as exc:
+		raise SeedError(
+			f"{lock_path} exists - another apply holds {rzdb_path}") from exc
+	tmp_path = f"{rzdb_path}.tmp-{os.getpid()}"
+	try:
+		os.write(lock_fd, f"{os.getpid()}\n".encode())
+		os.close(lock_fd)
+		lock_fd = None
+		pipe = opener(binary_path)
+		try:
+			pipe.cmd("e scr.color=false")
+			_batched(pipe, _seed_commands(functions))
+			rows = pipe.cmdj("aflj") or []
+			present = {row["offset"]: row.get("name", "") for row in rows}
+			defined = [va for va, _ in functions if va in present]
+			named = sum(1 for va, name in functions if present.get(va) == name)
+			labelled = [(va, name) for va, name in functions
+						if va in present and not name.startswith("sub_")]
+			sample = labelled[::max(1, len(labelled) // 20)][:20] if labelled else []
+			sampled_ok = sum(1 for va, name in sample if present.get(va) == name)
+			pipe.cmd(f'Ps "{tmp_path}"')
+		finally:
+			try:
+				pipe.cmd("q!")
+			except Exception:
+				pass
+		if not os.path.exists(tmp_path):
+			raise SeedError(f"rizin did not write {tmp_path}")
+		os.replace(tmp_path, rzdb_path)
 		return len(defined), named, sampled_ok, len(sample)
 	finally:
+		if lock_fd is not None:
+			os.close(lock_fd)
+		if os.path.exists(tmp_path):
+			os.remove(tmp_path)
 		try:
-			pipe.cmd("q!")
-		except Exception:
+			os.remove(lock_path)
+		except FileNotFoundError:
 			pass
 
 
@@ -432,13 +460,15 @@ def cmd_seed_apply(args, con):
 	rzdb = args.rzdb or os.path.splitext(args.seed)[0] + ".rzdb"
 	if os.path.exists(rzdb) and not args.force:
 		raise SystemExit(f"error: {rzdb} exists; pass --force to replace it")
+	started = time.monotonic()
 	try:
 		defined, named, sampled_ok, sampled = apply_seed(
 			payload, binary, rzdb, limit=args.limit)
 	except SeedError as exc:
 		raise SystemExit(f"error: {exc}") from exc
+	elapsed = time.monotonic() - started
 	total = min(len(payload["functions"]), args.limit) if args.limit else len(payload["functions"])
-	print(f"applied {os.path.basename(args.seed)} -> {rzdb}")
+	print(f"applied {os.path.basename(args.seed)} -> {rzdb} in {elapsed:.1f}s")
 	merged = f" (rizin refused {total - defined} inside neighbours)" if defined < total else ""
 	print(f"  functions defined {defined} of {total} seed rows{merged}")
 	print(f"  seed names in place {named}")
