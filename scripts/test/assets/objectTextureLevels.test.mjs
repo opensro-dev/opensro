@@ -42,6 +42,14 @@ test("a listed texture changes only blocks inside its listed level", () => {
 	assert.ok( out.subarray( 0, levelZero ).equals( source.subarray( 0, levelZero ) ) );
 	assert.ok( out.subarray( levelOne ).equals( source.subarray( levelOne ) ) );
 	assert.equal( source[levelZero], 0xaa, "the input buffer is never written" );
+	// The table's own words land on their own blocks: the first and
+	// last listed blocks carry their listed bytes at their listed
+	// offsets, and the unlisted 3948 between them stays filled - an
+	// index or hex typo in the table fails here, not in the world.
+	const at = index => levelZero + index * 8;
+	assert.equal( out.subarray( at( 3818 ), at( 3818 ) + 8 ).toString( "hex" ), "0a638431fb8b5037" );
+	assert.equal( out[at( 3948 )], 0xaa );
+	assert.equal( out.subarray( at( 3956 ), at( 3956 ) + 8 ).toString( "hex" ), "6b738531a1820800" );
 });
 
 test("an unlisted texture is returned as is", () => {
