@@ -83,8 +83,8 @@ const (
 // spans instead of per-step timing closures (#2030), measured
 // 39,284 B / 562 allocs.
 const (
-	tickBudgetBytesPerTick  = 43300
-	tickBudgetAllocsPerTick = 620
+	tickBudgetBytesPerTick  = 32900
+	tickBudgetAllocsPerTick = 352
 )
 
 /*

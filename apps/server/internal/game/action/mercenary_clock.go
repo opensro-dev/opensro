@@ -63,7 +63,9 @@ func (rt *Runtime) advanceMercenaryCooldownInDivision(key petOwnerKey, now int64
 		return
 	}
 	var deadline int64
-	rt.deps.Read(key.division, func() { deadline = state.character.MercenarySummonUntilMs })
+	guard := rt.deps.AcquireRead(key.division)
+	deadline = state.character.MercenarySummonUntilMs
+	guard.Release()
 	clock := &state.mercenaryPenalty
 	if deadline == 0 {
 		*clock = mercenaryPenaltyClock{lastMs: now}
