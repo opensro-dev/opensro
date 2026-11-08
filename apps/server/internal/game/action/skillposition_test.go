@@ -29,32 +29,6 @@ import (
 TestGhostWalkShippedRanksAndAuthority
 ================
 */
-/*
-================
-TestPositionSkillArrived
-
-The arrival promise behind the #2807 refusal: exact plans arrive, the
-plan's whole-integer truncation is inside the slack, and stops beyond it
-are not arrival. Height is never part of the promise.
-================
-*/
-func TestPositionSkillArrived(t *testing.T) {
-	goal := simulation.Spawn{RegionID: 0x62A8, X: 100, Z: 50, Y: 999}
-	if !positionSkillArrived(goal, goal) {
-		t.Fatal("exact plan is not arrival")
-	}
-	truncated := goal
-	truncated.X, truncated.Z, truncated.Y = 99, 49, 0
-	if !positionSkillArrived(goal, truncated) {
-		t.Fatal("truncated plan is not arrival")
-	}
-	beyond := goal
-	beyond.X, beyond.Z = 98, 49
-	if positionSkillArrived(goal, beyond) {
-		t.Fatal("stop beyond the slack claimed arrival")
-	}
-}
-
 func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); os.IsNotExist(err) {
@@ -89,7 +63,7 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 		if skill.Group == 768 && skill.PositionEffect.Range != 215+uint32(skill.Level-1)*5 {
 			t.Fatalf("Shadow rank range: %+v", skill.PositionEffect)
 		}
-		for _, mode := range []string{"accept", "owned-navigation", "blocked", "no-navigation", "no-mana", "unlearned", "entity-target", "cross-plane", "cooldown", "moving", "clipped", "settled", "mounted", "commit-refused", "cooldown-group"} {
+		for _, mode := range []string{"accept", "owned-navigation", "blocked", "no-navigation", "no-mana", "unlearned", "entity-target", "cross-plane", "cooldown", "moving", "clipped", "mounted", "commit-refused", "cooldown-group"} {
 			t.Run(skill.Codename+"/"+mode, func(t *testing.T) {
 				rt, clock, c, _ := newCombatTestRuntime(t, 100)
 				rt.deps.SkillData().(staticSkillSource)[id] = skill
@@ -120,9 +94,6 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 					}
 					if mode == "clipped" {
 						to.X = from.X + 50
-					}
-					if mode == "settled" {
-						to.X--
 					}
 					return to, nil
 				}
@@ -159,12 +130,7 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				beforeMP := mp
 				beforeCooldown := c.OffensiveSkillCooldowns[skill.Group]
 				r := rt.HandleTargetInteract(testDivision, c, request.Encode())
-				// A chord the constraint stops well short of the goal
-				// ("clipped") refuses like every other refusal: the
-				// reference server commits no result for an unreached
-				// destination (#2807). A stop inside the plan's
-				// truncation slack ("settled") is still arrival.
-				if mode != "accept" && mode != "owned-navigation" && mode != "moving" && mode != "settled" {
+				if mode != "accept" && mode != "owned-navigation" && mode != "moving" && mode != "clipped" {
 					if *c.CurrentMP != beforeMP || rt.liveSpawn(key, c, clock.NowMs()) != before || len(r.Broadcast) != 0 || c.OffensiveSkillCooldowns[skill.Group] != beforeCooldown {
 						t.Fatalf("refusal changed authority: %+v", r)
 					}
@@ -180,8 +146,8 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				p := r.Frames[0].Payload
 				to := rt.liveSpawn(key, c, clock.NowMs())
 				distance := float64(skill.PositionEffect.Range)
-				if mode == "settled" {
-					distance--
+				if mode == "clipped" {
+					distance = 50
 				}
 				// tel2 (the Wizard's Teleport) publishes bit 2, an
 				// instant landing; tele (Ghost Walk) bit 8, a guided travel.

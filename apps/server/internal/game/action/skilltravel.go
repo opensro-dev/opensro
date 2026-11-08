@@ -39,9 +39,7 @@ type skillTravelPlan struct {
 planSkillTravel
 
 The reference server queries movement from the caster's own cell. Navigation refusal leaves
-all authority unchanged; clipping retains the surface actually reached. Charges keep
-that reached surface; a ground-target position skill refuses a plan that stops short
-of its destination instead (acceptPositionSkill, #2807).
+all authority unchanged; clipping retains the surface actually reached.
 ================
 */
 func (rt *Runtime) planSkillTravel(name string, from simulation.Spawn, owner simulation.NavOwner, to simulation.Spawn) (skillTravelPlan, bool) {
