@@ -20,6 +20,14 @@ GameWorld's Nomad job turns them on:
 	                          (#1738, #1604 P7.2); no alias shows "a player",
 	                          never a character name, and one character is
 	                          rate-capped on top of the per-minute shard cap.
+	SRO_ANNOUNCE_GACHA_WIN  "<player> won <prize> xN from Magic Pang" on a
+	                          committed Magic Pop win (#2852); the native
+	                          0x30C0 banner is unchanged either way.
+	SRO_ANNOUNCE_PLUS_FAIL  "<alias> failed +N on <item>: ..." for an
+	                          opted-in character's failed reinforce at
+	                          SRO_ANNOUNCE_PLUS_FAIL_MIN (default 9) or
+	                          above (#2852; #1738's alias rule: never a
+	                          character name; rides the break channel).
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -40,6 +48,7 @@ package action
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf16"
@@ -70,7 +79,22 @@ const (
 	// reinforcement item by job alias (owner-approved vote 2026-10-26,
 	// #1604 P7.2 / #1738).
 	EnvAlchemyBreakNotice = "SRO_ALCHEMY_BREAK_NOTICE"
+	// EnvAnnounceGachaWin adds an Event-feed line naming the winner of a
+	// committed Magic Pop win (#2852). The native win banner (0x30C0)
+	// carries no winner and is sent either way.
+	EnvAnnounceGachaWin = "SRO_ANNOUNCE_GACHA_WIN"
+	// EnvAnnouncePlusFail announces an opted-in character's failed
+	// reinforce at or above EnvAnnouncePlusFailMin, by job alias
+	// (#2852; failures keep #1738's alias-only, opt-in rule).
+	EnvAnnouncePlusFail = "SRO_ANNOUNCE_PLUS_FAIL"
+	// EnvAnnouncePlusFailMin is the lowest attempted plus (the plus
+	// before the attempt, +1) a failure notice announces.
+	EnvAnnouncePlusFailMin = "SRO_ANNOUNCE_PLUS_FAIL_MIN"
 )
+
+// announcePlusFailMinDefault is the attempted plus a failure notice
+// starts at when SRO_ANNOUNCE_PLUS_FAIL_MIN names none (#2852).
+const announcePlusFailMinDefault = 9
 
 const (
 	// announcementsPerMinute caps the seal-drop and plus notices per
@@ -120,6 +144,12 @@ const (
 	// announceBreak has its own per-minute bucket and its own channel, so
 	// a run of breaks never starves the other notices.
 	announceBreak
+	// announceGachaWin has its own bucket, so a run of Magic Pop wins
+	// never starves the drop and plus notices it shares a channel with.
+	announceGachaWin
+	// announcePlusFail has its own bucket; its frame is the break
+	// channel's, like announceBreak's (it links nothing either).
+	announcePlusFail
 	// announceHalloweenWave has its own bucket, so a run of drops never
 	// starves a wave's notice (port-only, halloween_waves.go).
 	announceHalloweenWave
@@ -141,6 +171,13 @@ type Announcements struct {
 	MostWanted             bool
 	// Break announces an opted-in character's destroyed item (#1738).
 	Break bool
+	// GachaWin adds an Event-feed line naming a Magic Pop winner
+	// (#2852); the native win banner is sent either way.
+	GachaWin bool
+	// PlusFail announces an opted-in character's failed reinforce by
+	// job alias (#2852), from PlusFailMin attempted plus up.
+	PlusFail    bool
+	PlusFailMin int
 }
 
 /*
@@ -156,9 +193,16 @@ func AnnouncementsFromEnv() Announcements {
 		}
 		return false
 	}
+	failMin := announcePlusFailMinDefault
+	if text := strings.TrimSpace(os.Getenv(EnvAnnouncePlusFailMin)); text != "" {
+		if parsed, err := strconv.Atoi(text); err == nil && parsed >= 1 {
+			failMin = parsed
+		}
+	}
 	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), PlusTiers: on(EnvAnnouncePlusTiers),
 		JobKill: on(EnvAnnounceJobKill), JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted),
-		Break: on(EnvAlchemyBreakNotice)}
+		Break: on(EnvAlchemyBreakNotice), GachaWin: on(EnvAnnounceGachaWin), PlusFail: on(EnvAnnouncePlusFail),
+		PlusFailMin: failMin}
 }
 
 /*
@@ -231,7 +275,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	switch kind {
 	case announceJobKill, announceMostWanted:
 		frame = wire.JobKillNotificationFrame(text)
-	case announceBreak:
+	case announceBreak, announcePlusFail:
 		frame = wire.BreakNotificationFrame(text)
 	}
 	frames := make([]simulation.Frame, 0, 2)
@@ -507,7 +551,27 @@ func (rt *Runtime) announceBreak(division string, character *enterworld.Characte
 	if !rt.breakNoticeQuiet(division, character.Name, nowMs) {
 		return
 	}
-	name, seal := codename, ""
+	name, seal := rt.announceItemName(codename)
+	who := announceAlias(character)
+	text := fmt.Sprintf("%s broke %s%s", who, name, seal)
+	// The seal is the part to give up, as in the plus notice.
+	if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
+		text = fmt.Sprintf("%s broke %s", who, name)
+	}
+	rt.announce(division, announceBreak, text, wire.NoticeLink{}, 0, nowMs)
+}
+
+/*
+================
+Runtime.announceItemName
+
+An item's reference name and its " (Seal Of ...)" suffix, as the plus
+and break notices name one; the codename itself when no reference or
+name answers.
+================
+*/
+func (rt *Runtime) announceItemName(codename string) (name, seal string) {
+	name = codename
 	if items := rt.deps.ItemReferences(); items != nil {
 		if ref, found := items.ItemRefByCodename(codename); found && ref.Name != "" {
 			name = ref.Name
@@ -516,16 +580,106 @@ func (rt *Runtime) announceBreak(division string, character *enterworld.Characte
 			}
 		}
 	}
-	who := strings.TrimSpace(character.Job.Alias)
-	if who == "" {
-		who = "a player"
+	return name, seal
+}
+
+/*
+================
+announceAlias
+
+How an alias notice names its character (#1738): the job alias, or
+"a player" when they set none. Never the character name.
+================
+*/
+func announceAlias(character *enterworld.Character) string {
+	if who := strings.TrimSpace(character.Job.Alias); who != "" {
+		return who
 	}
-	text := fmt.Sprintf("%s broke %s%s", who, name, seal)
-	// The seal is the part to give up, as in the plus notice.
+	return "a player"
+}
+
+/*
+================
+Runtime.announcePlusFail
+
+#2852 (port-only, not native): a failed reinforce whose attempted plus
+(the plus before the attempt, +1, outcome.From) reaches
+SRO_ANNOUNCE_PLUS_FAIL_MIN, when the shard flag is on AND the character
+opted in on the account page - the break notice's opt-in
+(character.BreakNotice) and its privacy rule: the job alias or
+"a player", never the character name, and the line links nothing (the
+break channel), so the alias cannot lead to a character. The wording
+names the outcome: destroyed, saved by its Immortal option, or dropped
+to its new plus. Returns true when it posted, so the caller folds a
+destroyed item's break line into this one instead of posting both. A
+notice only: the reinforcement's outcome stands either way.
+================
+*/
+func (rt *Runtime) announcePlusFail(division string, character *enterworld.Character, codename string, outcome alchemy.Outcome, nowMs int64) bool {
+	if !rt.Announce.PlusFail || character == nil || !character.BreakNotice || outcome.Success {
+		return false
+	}
+	attempted := int(outcome.From) + 1
+	if attempted < rt.Announce.PlusFailMin {
+		return false
+	}
+	name, seal := rt.announceItemName(codename)
+	who := announceAlias(character)
+	var text string
+	switch {
+	case outcome.Destroyed:
+		text = fmt.Sprintf("%s failed +%d on %s%s: destroyed", who, attempted, name, seal)
+	case outcome.ImmortalSaved:
+		text = fmt.Sprintf("%s failed +%d on %s%s: saved by Immortal", who, attempted, name, seal)
+	default:
+		final := 0
+		for _, item := range outcome.Items {
+			if item.Slot == outcome.Target {
+				final = int(item.Plus)
+			}
+		}
+		text = fmt.Sprintf("%s failed +%d on %s%s: dropped to +%d", who, attempted, name, seal, final)
+	}
+	// The seal is the part to give up, as in the break notice.
 	if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
-		text = fmt.Sprintf("%s broke %s", who, name)
+		text = strings.Replace(text, seal, "", 1)
 	}
-	rt.announce(division, announceBreak, text, wire.NoticeLink{}, 0, nowMs)
+	rt.announce(division, announcePlusFail, text, wire.NoticeLink{}, 0, nowMs)
+	return true
+}
+
+/*
+================
+Runtime.announceGachaWin
+
+#2852 (port-only, not native): the Event-feed half of a committed
+Magic Pop win - "<player> won <prize> xN from Magic Pang" on the
+drop/plus channel, naming the winner the native 0x30C0 banner cannot
+(its body is prize and quantity only, one body for every session).
+The banner itself is sent by the caller either way; this line only
+adds the Event tab and the website's event feed. The winner is linked
+as a drop notice links its dropper; the prize is not, the win created
+no item body to link.
+================
+*/
+func (rt *Runtime) announceGachaWin(division, player string, rewardRefObjID, quantity uint32, nowMs int64) {
+	if !rt.Announce.GachaWin {
+		return
+	}
+	name := ""
+	if items := rt.deps.ItemReferences(); items != nil {
+		if ref, found := items.ItemRefByID(rewardRefObjID); found && ref != nil {
+			name = ref.Name
+			if name == "" {
+				name = ref.Codename
+			}
+		}
+	}
+	if name == "" {
+		name = fmt.Sprintf("item %d", rewardRefObjID)
+	}
+	text := fmt.Sprintf("%s won %s x%d from Magic Pang", player, name, quantity)
+	rt.announce(division, announceGachaWin, text, wire.NoticeLink{Player: player}, rewardRefObjID, nowMs)
 }
 
 // jobNames are the dressed jobs' names (domain.JobTrader/Thief/Hunter).

@@ -55,6 +55,7 @@ var unlistedSettings = map[string]string{
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
+	action.EnvAnnouncePlusFailMin:     "shown in the failed-reinforcement notice rule",
 	// Client presentation values (uiTuning): the Short notices row is a
 	// player's own Experimental choice, and the chat wait is the port's.
 	"SRO_SHORT_NOTICE_SHOW_MS":           "timing of a player's own Experimental Short notices row",
@@ -521,6 +522,15 @@ func publicRules() publicstats.RulesResponse {
 				Native: "An item destroyed by reinforcement is not announced.",
 				Now:    "Everyone sees the destroyed item of a player who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
 				Why:    "Owner-approved vote (#1604 P7.2); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
+			{Flag: action.EnvAnnounceGachaWin, On: action.AnnouncementsFromEnv().GachaWin,
+				Native: "A Magic Pop win shows the winner a banner naming the prize, and no one learns who won.",
+				Now:    "Everyone also sees \"<player> won <prize> xN from Magic Pang\" in the Event chat lines; the winner's banner is unchanged.",
+				Why:    "Owner report (#2852); the original banner-only win returns with one setting."},
+			{Flag: action.EnvAnnouncePlusFail, On: action.AnnouncementsFromEnv().PlusFail,
+				Native: "A failed reinforcement is private.",
+				Now: fmt.Sprintf("Everyone sees \"<alias> failed +N on <item>: destroyed\", \"saved by Immortal\" or \"dropped to +M\" for a failed reinforce attempted at +%d or above, for players who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
+					action.AnnouncementsFromEnv().PlusFailMin),
+				Why: "Owner report (#2852), keeping the break notice's alias rule (#1738); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),

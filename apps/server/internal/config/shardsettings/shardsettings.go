@@ -274,6 +274,16 @@ var Settings = []Setting{
 	// player's destroyed reinforcement item is announced by job alias.
 	// Off is native, in code and in the deployed default alike.
 	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
+	// Owner report, 2026-11-08 (#2852): a Magic Pop win also posts an
+	// Event-feed line naming the winner; the native win banner is
+	// unchanged. Off is native, in code and in the deployed default.
+	{Env: "SRO_ANNOUNCE_GACHA_WIN", NomadVar: "announce_gacha_win", Default: "off"},
+	// Owner report, 2026-11-08 (#2852): an opted-in player's failed
+	// reinforce at +9 attempted or above is announced by job alias
+	// (#1738's rule for failures: alias only, never a character name).
+	// Off is native, in code and in the deployed default alike.
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL", NomadVar: "announce_plus_fail", Default: "off"},
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL_MIN", NomadVar: "announce_plus_fail_min", Default: "9"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
 	// F10 trade group (game/tunables): the per-thief percent and its cap.
