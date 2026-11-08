@@ -15343,11 +15343,12 @@
 				"experimental-tab:8": {
 					"added": [
 						"experimental-ambient-occlusion",
+						"experimental-set-bonus-tooltip",
 						"experimental-sky-detail"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "94c3a8a67e661f5f",
+					"hash": "cebd04c9f68f8859",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
