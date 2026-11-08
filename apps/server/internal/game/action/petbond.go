@@ -268,6 +268,18 @@ scale HP/EXP recovery and the saved shared cooldown, surviving resummon.
 ================
 */
 func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
+	// Judge the refusal before taking bondSource's answer home (#2030):
+	// the SkillDef it returns escapes in this frame even when the
+	// admission refuses, so every pet owner paid 160 B a tick for
+	// a verdict the door-read facts already hold. Behind the same gate
+	// bondSource judges under; the facts abstain behind the
+	// companionCopy seam (judged false), and bondSource re-judges the
+	// same facts inside. Nothing about the verdict moves.
+	if rt.AttackPetExpansion && state != nil && state.ready && state.follower != nil {
+		if refused, judged := rt.bondSourceRefused(key, state); judged && refused {
+			return nil
+		}
+	}
 	owner, pet, skill, _, ok := rt.bondSource(key, state)
 	if !ok {
 		return nil
