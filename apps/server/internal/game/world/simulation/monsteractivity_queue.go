@@ -25,6 +25,8 @@ container - only the due set did, and the wheel keeps it exact.
 package simulation
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"sync"
 
@@ -869,17 +871,16 @@ func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state 
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
-	mover, ok := state.movers.lookupAt(ref.slot, ref.gid)
-	if !ok {
-		mover, ok = state.movers.lookup(ref.gid)
+	if !state.movers.lookupAtInto(&dst.mover, ref.slot, ref.gid) {
+		mover, ok := state.movers.lookup(ref.gid)
+		if !ok {
+			mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
+		}
+		dst.mover = mover
 	}
-	if !ok {
-		mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
-	}
-	if err := mover.Validate(); err != nil {
+	if err := dst.mover.Validate(); err != nil {
 		panic(err)
 	}
-	dst.mover = mover
 	dst.moverGen = state.movers.generationAt(ref.slot, ref.gid)
 	dst.slot, dst.monsterSlot, dst.ok = ref.slot, ref.monsterSlot, true
 }
@@ -936,7 +937,10 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
-		sort.Slice(batch.actors, func(i, j int) bool { return batch.actors[i].gid < batch.actors[j].gid })
+		// slices.SortFunc, not sort.Slice: no reflection swapper per
+		// batch (#2985). Gids are unique within a batch, so the order
+		// is the same total order either sort produces.
+		slices.SortFunc(batch.actors, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
 		out = append(out, batch)
 	}
 	return out
