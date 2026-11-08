@@ -143,10 +143,17 @@ of its whole observable output - every pushed frame plus the final mover
 values - against the golden digest. Any behaviour change in the leg,
 intended or not, moves this hash; regenerate it only with a behaviour
 change that has its own evidence.
+
+Re-pinned for #2136 (idle monsters step at their real dues): the
+run's 732 frames are the same multiset and the final movers are
+identical to the pre-change run; frames land on different legs
+because an idle actor's first timer check - which draws its
+acquisition interval from the state stream - now happens at its
+first due instead of the next tick, re-phasing later scans.
 ================
 */
 func TestSeededMonsterLegGolden(t *testing.T) {
-	const golden = "1abc853ba2724789362820d66888aead6d52e7f6ac63b0ca66a95e1b134a7b8f"
+	const golden = "6e9220fa62c2f64aedc7b1c1b66cf6882473d09edc01a43a75c9a0da2c7c3fa9"
 	ops, sessions, now := seededLegWorld(t, 240)
 	hash := sha256.New()
 	frameLines := 0

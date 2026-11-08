@@ -608,6 +608,11 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 			}
 		}
 		if !landed {
+			// The replan is due at once: the batch build armed the
+			// actor from its leg-start row, which for an idle actor
+			// is now a far due (#2136), not the next tick this
+			// stale-plan rule promises.
+			ops.Monsters.wakeBehavior(work.division, gid)
 			return
 		}
 	}
