@@ -283,6 +283,7 @@ test(
 					sunShadow: false,
 					perPixelLighting: false,
 					skyDetail: false,
+					msaa: false,
 					renderScale: 100
 				}
 			);
@@ -325,6 +326,7 @@ test(
 					sunShadow: false,
 					perPixelLighting: false,
 					skyDetail: false,
+					msaa: false,
 					renderScale: 100
 				}
 			);

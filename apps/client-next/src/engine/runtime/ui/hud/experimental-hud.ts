@@ -113,6 +113,15 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Smooths edges and adjusts color, including UI."
 					},
 					{
+						// Port-only, not native: beside the post-process
+						// anti-aliasing, the other edge smoothing. 4x is the
+						// one multisample count WebGPU guarantees besides 1.
+						key: "msaa",
+						id: "experimental-msaa",
+						label: "MSAA 4x",
+						description: "Scene edges smooth through 4x multisampling."
+					},
+					{
 						key: "anisotropicFiltering",
 						id: "experimental-anisotropic-filtering",
 						label: "Anisotropic filtering",

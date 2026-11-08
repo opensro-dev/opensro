@@ -81,6 +81,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		msaa: false,
 		ambientOcclusion: false,
 		skyDetail: false,
 		// Smooth camera is on by default (owner 2026-10-15).
@@ -102,7 +103,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"hdrToneMap",
 			"sunShadow",
 			"perPixelLighting",
-			"ambientOcclusion"
+			"ambientOcclusion",
+			"msaa"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );

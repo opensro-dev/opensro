@@ -254,13 +254,14 @@ export function createRenderer(
 		================
 		*/
 		experimentalVideo( value ) {
-			const hdrChanged = value.hdrToneMap !== experimental.hdrToneMap;
+			const sceneTargetChanged = value.hdrToneMap !== experimental.hdrToneMap ||
+				value.msaa !== experimental.msaa;
 			experimental = value;
 			device.experimentalVideo( value );
 			world.smoothCamera( value.smoothCamera );
-			if ( hdrChanged && draw ) {
+			if ( sceneTargetChanged && draw ) {
 				// The fullscreen image draw carries its pipeline; re-upload
-				// it in the new scene format.
+				// it for the new scene format and sample count.
 				device.images()?.release( draw );
 				draw = null;
 			}
@@ -787,7 +788,9 @@ export function createRenderer(
 						{
 							target: device.portraitTarget( "__portrait" + (i + 1) ),
 							depth: portraitDepth!.view,
-							draws: staleDraws.live( "party-portrait-" + (i + 1), draws )
+							draws: device.geometry()!.singleSampled(
+								staleDraws.live( "party-portrait-" + (i + 1), draws )
+							)
 						};
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
@@ -845,7 +848,7 @@ export function createRenderer(
 					partyDraws.push( {
 						target: device.portraitTarget( DOLL2_TEXTURE, w2, h2 ),
 						depth: doll2Depth.view,
-						draws: staleDraws.live( "doll2", draws )
+						draws: device.geometry()!.singleSampled( staleDraws.live( "doll2", draws ) )
 					} );
 				}
 				if ( dollTarget && (!dollDepth || dollWidth !== width || dollHeight !== height) ) {
@@ -879,7 +882,7 @@ export function createRenderer(
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
 					characters.completeDeferred();
 					// The continuation's draws reach the second submit: same rule.
-					return staleDraws.live(
+					return device.geometry()!.singleSampled( staleDraws.live(
 						"deferred-particles",
 						characters.prepare(
 							device.geometry()!,
@@ -890,7 +893,7 @@ export function createRenderer(
 							timeSeconds,
 							true
 						).filter( draw => draw.deferredParticle )
-					);
+					) );
 				};
 				const deferredPass = deferredPlan ?
 					{
@@ -965,11 +968,15 @@ export function createRenderer(
 						{
 							target: portraitTarget,
 							depth: portraitDepth!.view,
-							draws: staleDraws.live( "portrait", portraitDraws )
+							draws: device.geometry()!.singleSampled( staleDraws.live( "portrait", portraitDraws ) )
 						} :
 						undefined,
 					dollTarget ?
-						{ target: dollTarget, depth: dollDepth!.view, draws: staleDraws.live( "doll", dollDraws ) } :
+						{
+							target: dollTarget,
+							depth: dollDepth!.view,
+							draws: device.geometry()!.singleSampled( staleDraws.live( "doll", dollDraws ) )
+						} :
 						undefined,
 					partyDraws,
 					frameId,
@@ -983,6 +990,7 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
 						sceneScale: scaled ?
 							{
 								view: color,
