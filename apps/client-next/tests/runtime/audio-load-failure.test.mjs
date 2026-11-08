@@ -29,8 +29,10 @@ script runs out. Requests are logged by path.
 ================
 */
 function fixture( outcomes ) {
-	const sources = [], decoded = { length: 4399, sampleRate: 22050, numberOfChannels: 1 },
-		requests = [], pending = new Map();
+	const sources = [],
+		decoded = { length: 4399, sampleRate: 22050, numberOfChannels: 1 },
+		requests = [],
+		pending = new Map();
 	let next = 0;
 	const node = () => ({ connect() {}, disconnect() {} });
 	class Context {
@@ -117,9 +119,11 @@ function cue( id, path ) {
 }
 
 test("a transient load fault on a world sound drops the cue, not the session (#2863)", async t => {
-	const f = fixture( new Map( [
-		[ WALK, [ { kind: "error", error: "Error: TypeError: Load failed", transient: true } ] ]
-	] ) );
+	const f = fixture(
+		new Map( [
+			[ WALK, [ { kind: "error", error: "Error: TypeError: Load failed", transient: true } ] ]
+		] )
+	);
 	t.after( f.restore );
 	f.audio.enqueue( cue( "walk-1", WALK ) );
 	f.audio.step( 0, [ 0, 0, 0 ] );
@@ -139,28 +143,36 @@ test("a transient load fault on a world sound drops the cue, not the session (#2
 	assert.equal( f.sources.length, 1 );
 	assert.ok( f.sources[0].started );
 	assert.equal( f.audio.error(), null );
-} );
+});
 
 test("a permanent load fault on a world sound still names itself, as permanent (#2863)", t => {
-	const f = fixture( new Map( [
-		[ WALK, [ { kind: "error", error: "Error: Asset HTTP 404" } ] ]
-	] ) );
+	const f = fixture(
+		new Map( [
+			[ WALK, [ { kind: "error", error: "Error: Asset HTTP 404" } ] ]
+		] )
+	);
 	t.after( f.restore );
 	f.audio.enqueue( cue( "walk-1", WALK ) );
 	f.audio.step( 0, [ 0, 0, 0 ] );
 	f.audio.step( .01, [ 0, 0, 0 ] );
 	assert.equal( f.audio.error(), "Error: Asset HTTP 404" );
 	assert.deepEqual( f.audio.failure(), { path: WALK, message: "Error: Asset HTTP 404", transient: false } );
-} );
+});
 
 test("a transient fault on a critical sound keeps the standing error and names its cause (#2863)", t => {
-	const f = fixture( new Map( [
-		[ BUFF_END, [ { kind: "error", error: "Error: TypeError: Load failed", transient: true } ] ]
-	] ) );
+	const f = fixture(
+		new Map( [
+			[ BUFF_END, [ { kind: "error", error: "Error: TypeError: Load failed", transient: true } ] ]
+		] )
+	);
 	t.after( f.restore );
 	f.audio.enqueue( cue( "buff-end", BUFF_END ) );
 	f.audio.step( 0, [ 0, 0, 0 ] );
 	f.audio.step( .01, [ 0, 0, 0 ] );
 	assert.equal( f.audio.error(), "Error: TypeError: Load failed" );
-	assert.deepEqual( f.audio.failure(), { path: BUFF_END, message: "Error: TypeError: Load failed", transient: true } );
-} );
+	assert.deepEqual( f.audio.failure(), {
+		path: BUFF_END,
+		message: "Error: TypeError: Load failed",
+		transient: true
+	} );
+});

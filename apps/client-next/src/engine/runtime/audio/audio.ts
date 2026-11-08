@@ -758,9 +758,7 @@ step
 				const path = [
 					...candidates,
 					...(uiActive ? uiPaths.filter( path => !preparedPaths.has( path ) ) : [])
-				].find( path =>
-					!buffers.has( path ) && !decoding.has( path ) && (retryAt.get( path ) ?? 0) <= clock
-				);
+				].find( path => !buffers.has( path ) && !decoding.has( path ) && (retryAt.get( path ) ?? 0) <= clock );
 				if ( path ) job = { id: assets.request( new URL( path, origin ).href, SOUND_INPUT_BYTES ), path };
 			}
 		},
@@ -797,13 +795,14 @@ snapshot
 		names the file for the incident report.
 		================
 		*/
-		failure: () => failure ?
-			{
-				path: failurePath,
-				message: failure,
-				...(failureTransient !== undefined ? { transient: failureTransient } : {})
-			} :
-			null,
+		failure: () =>
+			failure ?
+				{
+					path: failurePath,
+					message: failure,
+					...(failureTransient !== undefined ? { transient: failureTransient } : {})
+				} :
+				null,
 		/*
 ================
 captureAudio
