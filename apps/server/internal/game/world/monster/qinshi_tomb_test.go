@@ -174,16 +174,17 @@ func TestQinShiTombFloor5BossesKeepV1188Stats(t *testing.T) {
 
 /*
 ================
-TestQinShiTombGeneralsKeepThreeSkills
+TestQinShiTombGeneralsFourthSkill
 
-#2947 (decided 2026-11-08): iSRO-R gives the Tomb and Snake Generals
-a fourth skill (its 31183 / 31187). Those skill rows exist nowhere in
-the shipped skill data - the v1.150 skill shards carry no tomb skills
-at all and the tomb skill overlay holds no fourth General skill - so
-the cherry-pick does not ship and the three-skill sets stay pinned.
+#2948 shipped the Generals' fourth skill while this PR waited:
+MSKILL_TQ_*_ATTACK07 exists only in iSRO-R (its 31183..31190), so
+#2960 converted the eight rows into the tomb skill overlay's gap IDs
+10731..10738 and set DefaultSkill_4 on all sixteen General rows. The
+four-skill sets are pinned here so a re-import drops or doubles none
+of them; #2947's Floor 5 decision is the separate pin below.
 ================
 */
-func TestQinShiTombGeneralsKeepThreeSkills(t *testing.T) {
+func TestQinShiTombGeneralsFourthSkill(t *testing.T) {
 	seed := TemplateFromParts(
 		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
 		nil,
@@ -197,8 +198,8 @@ func TestQinShiTombGeneralsKeepThreeSkills(t *testing.T) {
 		code   string
 		skills [10]uint32
 	}{
-		{14825, "MOB_TQ_TOMBGENERAL", [10]uint32{10653, 10654, 10655}},
-		{14829, "MOB_TQ_SNAKEGENERAL", [10]uint32{10665, 10666, 10667}},
+		{14825, "MOB_TQ_TOMBGENERAL", [10]uint32{10653, 10654, 10655, 10731}},
+		{14829, "MOB_TQ_SNAKEGENERAL", [10]uint32{10665, 10666, 10667, 10735}},
 	} {
 		ref, ok := withTomb.Refs[want.id]
 		if !ok || ref.Codename != want.code {
