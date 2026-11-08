@@ -12,9 +12,24 @@ and no set is ever listed.
 ===========================================================================
 */
 
-// The magicoption param ids a tier carries (the server's SetOptionReinforceItem
-// and SetOptionResistAll).
+/*
+================
+SET_OPTION_REINFORCE_ITEM
+
+The magicoption param id of a tier's set enhancement (the server's
+SetOptionReinforceItem).
+================
+*/
 export const SET_OPTION_REINFORCE_ITEM = 389;
+
+/*
+================
+SET_OPTION_RESIST_ALL
+
+The magicoption param id of a tier's all-resistance bonus (the server's
+SetOptionResistAll).
+================
+*/
 export const SET_OPTION_RESIST_ALL = 390;
 
 const MAX_SETS = 256;
