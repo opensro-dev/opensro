@@ -204,6 +204,15 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	}
 	// The GameWorld withholds the same goods permanently (action.ConfigureCommerce).
 	shops.WithholdGoods(action.SunShopExcluded)
+	// And hides Alexandria's degree-11 goods on the same switch
+	// (SRO_ALEXANDRIA_HIDE_D11_GOODS, port-only, #2842).
+	hideD11, err := commerce.AlexandriaHideD11GoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if hideD11 {
+		shops.WithholdAlexandriaD11()
+	}
 	// And prices trade goods the same way (SRO_TRADE_TIERS).
 	if action.TradeTiersFromEnv() {
 		shops.ScaleTradeGoodsPrices(enterworld.TradeGoodsPriceFactor)
