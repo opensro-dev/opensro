@@ -274,6 +274,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					pass.end();
 				}
 			}
+			// The passes after this one that read the scene depth: the flare
+			// probe, the deferred tail, the occlusion and labels drawn apart
+			// from the scene. With none this frame the depth is never stored,
+			// and under MSAA its 4x samples are never resolved either.
+			const sceneDepthRead = !!flares || !!deferred || !!experimental?.ao || (separateScene && !!worldUiBundle);
 			const pass = encoder.beginRenderPass( {
 				timestampWrites: timing?.pass( "main-pass" ),
 				label: "main-pass",
@@ -283,10 +288,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: msaa ? msaa.depth : depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: msaa || flares || deferred || experimental?.ao ||
-									(separateScene && worldUiBundle) ?
-								"store" as const :
-								"discard" as const
+							depthStoreOp: sceneDepthRead ? "store" as const : "discard" as const
 						}
 					} :
 					{}),
@@ -313,9 +315,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			pass.end();
 			// The multisampled depth cannot be resolved by the driver: write the
 			// samples' minimum into the scene's single-sampled depth now,
-			// before the deferred tail, the flare probe and the labels read it.
-			// The render-scale stage upscales this depth as it always does.
-			if ( msaa && depth ) msaa.resolveDepth( encoder, depth );
+			// before the deferred tail, the flare probe and the labels read it,
+			// and only when one of them does. The render-scale stage upscales
+			// this depth as it always does.
+			if ( msaa && depth && sceneDepthRead ) msaa.resolveDepth( encoder, depth );
 			/*
 			================
 			previewPass

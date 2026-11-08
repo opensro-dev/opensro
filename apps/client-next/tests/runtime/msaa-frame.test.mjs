@@ -41,7 +41,12 @@ function recordingCommands() {
 	});
 	const encoder = {
 		beginRenderPass( descriptor ) {
-			const row = { label: descriptor.label, depth: descriptor.depthStencilAttachment?.view, bundles: 0 };
+			const row = {
+				label: descriptor.label,
+				depth: descriptor.depthStencilAttachment?.view,
+				depthStore: descriptor.depthStencilAttachment?.depthStoreOp,
+				bundles: 0
+			};
 			passes.push( row );
 			return {
 				setBlendConstant() {},
@@ -89,15 +94,15 @@ drawFrame
 One frame with the world labels, no scene content and the given inputs.
 ================
 */
-/** @param {any} commands @param {{ deferred?: any, bloom?: any, experimental: any }} input */
-function drawFrame( commands, { deferred, experimental, bloom } ) {
+/** @param {any} commands @param {{ deferred?: any, bloom?: any, experimental: any, labels?: any[] }} input */
+function drawFrame( commands, { deferred, experimental, bloom, labels = [ WORLD_LABELS ] } ) {
 	return createFrame( commands ).draw(
 		/** @type {any} */ ("view"),
 		undefined,
 		undefined,
 		/** @type {any} */ ("scene-depth"),
 		[],
-		[ WORLD_LABELS ],
+		labels,
 		[],
 		undefined,
 		undefined,
@@ -152,4 +157,18 @@ test("the deferred tail leaves the labels to the pass after it", () => {
 	const labels = passes.filter( pass => pass.bundles > 0 ).map( pass => pass.label );
 	assert.deepEqual( labels, [ "hdr-world-ui" ], "the world labels draw exactly once" );
 	assert.equal( passes.find( pass => pass.label === "deferred-particles" ).depth, "scene-depth" );
+});
+
+test("with no pass reading the scene depth the 4x depth is neither stored nor resolved", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: msaaExperimental( passes ), labels: [] } );
+	assert.equal( passes.find( pass => pass.label === "msaa-resolve" ), undefined );
+	assert.equal( passes.find( pass => pass.label === "main-pass" )?.depthStore, "discard" );
+});
+
+test("labels drawn after the scene keep the 4x depth stored and resolved", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: msaaExperimental( passes ) } );
+	assert.ok( passes.some( pass => pass.label === "msaa-resolve" ) );
+	assert.equal( passes.find( pass => pass.label === "main-pass" )?.depthStore, "store" );
 });
