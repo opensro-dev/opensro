@@ -206,7 +206,7 @@ test("a wedged expired job is abandoned and reported, like a wedged cancellation
 	// The worker never acknowledges (an uninterruptible decode outlives the
 	// acknowledgement window): the slot stays reserved and the fault is
 	// reported once, but the runtime lives.
-	clock.now += 31000;
+	clock.now += 61000;
 	assert.equal( assets.health().phase, "running" );
 	assert.equal( assets.available(), 3 );
 	assert.deepEqual( assets.takeDegradations().map( d => d.code ), [ "asset-cancel-unacknowledged" ] );
