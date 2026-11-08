@@ -212,6 +212,48 @@ func TestPopulationForObjectHintNeverStale(t *testing.T) {
 
 /*
 ================
+TestPopulationForObjectAtAnswersAsPopulationForObject
+
+populationForObjectAt answers exactly what populationForObject
+answers - the same population pointer, popHint side effects
+included - under the real slot, the no-slot sentinel, an
+out-of-range slot and a slot naming another gid (#2133).
+================
+*/
+func TestPopulationForObjectAtAnswersAsPopulationForObject(t *testing.T) {
+	s := lookupBenchmarkState()
+	same := func(a, b *divisionMonsterState) bool {
+		return a == b ||
+			a.instances.len() == 0 && b.instances.len() == 0 && a.lease == b.lease
+	}
+	gids := []uint32{1, 2, benchWorldGIDOffset, benchWorldGIDOffset + benchWorldActors - 1, 999999}
+	for _, division := range []string{benchDivision, "missing"} {
+		for _, gid := range gids {
+			want := s.populationForObject(division, gid)
+			realSlot := behaviorNoMonsterSlot
+			if slot, hot := want.instances.hotSlotOf(gid); hot {
+				realSlot = slot
+			}
+			otherSlot := behaviorNoMonsterSlot
+			if slot, hot := want.instances.hotSlotOf(1); hot && gid != 1 {
+				otherSlot = slot
+			}
+			hints := []uint32{realSlot, behaviorNoMonsterSlot, 1 << 20, otherSlot}
+			for _, hint := range hints {
+				if got := s.populationForObjectAt(division, gid, hint); !same(got, want) {
+					t.Fatalf("%s/%d hint %d: populationForObjectAt answered a different population", division, gid, hint)
+				}
+				// The hint's side effects must not move the plain door.
+				if got := s.populationForObject(division, gid); !same(got, want) {
+					t.Fatalf("%s/%d hint %d: plain door moved after the carried read", division, gid, hint)
+				}
+			}
+		}
+	}
+}
+
+/*
+================
 TestGetInWorldFinishesExpiredSummonActionOnce
 
 The cheap expiry test keeps the write-back: an expired action is cleared in
