@@ -60,7 +60,7 @@ from alexandria_map_tables import (  # noqa: E402
 	MAP_ALEXANDRIA_ID, MAPINFO_COLUMNS, LOCALINFO_COLUMNS, MAP_PIN_IDS,
 	OVERVIEW_ID, OVERVIEW_KIND, OVERVIEW_BOX, OVERVIEW_TEXTURE, OVERVIEW_DRAW,
 	OVERVIEW_TILE_REGIONS, MAP_TEXTURES, table_text, append_rows, native_text_row,
-	merge_map_tables, overview_box, widen_overview, overview_tiles, map_media_paths
+	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -259,6 +259,17 @@ def enable_regions(mapinfo, regions):
 		region_id = (sector_y << 8) | sector_x
 		data[MFO_HEADER_BYTES + (region_id >> 3)] |= 0x80 >> (region_id & 7)
 	return bytes(data)
+
+
+# ================
+# region_available
+# ================
+def region_available(mapinfo, sector_x, sector_y):
+	"""Whether mapinfo.mfo marks the (sectorX, sectorY) region available; enable_regions' reader."""
+	if mapinfo[:len(MFO_SIGNATURE)] != MFO_SIGNATURE:
+		raise ValueError("not a JMXVMFO availability file")
+	region_id = (sector_y << 8) | sector_x
+	return bool(mapinfo[MFO_HEADER_BYTES + (region_id >> 3)] & (0x80 >> (region_id & 7)))
 
 
 #============================================================================
@@ -712,25 +723,36 @@ def add_map(vsro_root, native, out, regions, text_base):
 	overrides = set(overview_tiles(summary["overview"], regions))
 	icons = {row[2].replace("\\", "/").lower() for row in stage1.table_rows(merged["worldmap_localinfo.txt"])
 		if len(row) == LOCALINFO_COLUMNS and row[1] == "2" and row[2].lower().endswith(".ddj")}
+	native_box = overview_box(tables["worldmap_mapinfo.txt"])
+	native_mapinfo = (native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()
 	path, handle, data = stage1.open_archive(vsro_root, "Media")
 	try:
 		index = stage1.archive_index(data)
+
+		def differs(archive_path):
+			entry, native_file = index.get(archive_path), native / "Media_extracted" / archive_path
+			return entry is not None and native_file.is_file() and sro_pk2.payload(data, entry) != native_file.read_bytes()
+
+		seams = seam_tiles(summary["overview"], native_box, regions,
+			lambda x, y: region_available(native_mapinfo, x, y), differs)
+		overrides.update(seams)
 		added, absent = 0, []
-		paths = map_media_paths(regions, summary["overview"], overview_box(tables["worldmap_mapinfo.txt"]))
+		paths = map_media_paths(regions, summary["overview"], native_box) + seams
 		for archive_path in dict.fromkeys(paths + sorted(icons)):
 			entry = index.get(archive_path)
 			if entry is None:
 				absent.append(archive_path)
 			elif archive_path not in present or archive_path in overrides:
 				# Existing v1.150 overview art can show sea where these source
-				# regions now exist. Replace only the tiles that cover the import,
-				# unlinking the variant's hard link before writing later artwork.
+				# regions now exist. Replace only the tiles that cover the import
+				# and the seam tiles that join it to the page, unlinking the
+				# variant's hard link before writing later artwork.
 				replace_file(safe_target(out / "Media_extracted", entry.path), sro_pk2.payload(data, entry))
 				added += 1
 	finally:
 		data.close()
 		handle.close()
-	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent})
+	summary.update({"mediaFilesAdded": added, "mediaFilesAbsent": absent, "seamTiles": len(seams)})
 	return summary
 
 
