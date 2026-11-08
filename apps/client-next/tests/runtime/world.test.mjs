@@ -431,6 +431,39 @@ test("grouped removal count, incomplete data and operation bounds remain enforce
 	owner.receive( { opcode: 0x330a, payload: new Uint8Array() } );
 	owner.dispose();
 });
+test("object-list chunks without an open bracket are dropped instead of killing the session", () => {
+	// #2882: this exact 27-byte chunk arrived with no bracket open (the
+	// bracket was split away before it, or it is a replayed tail after the
+	// finalize) and "Unexpected object-list chunk" killed the session.
+	// Native 0x77BDC0 appends into the persistent key-0 buffer that the
+	// next start (0x77BD30) rewinds, so stray bytes are never consumed.
+	const owner = createEntities();
+	owner.bootstrap( bootstrap );
+	flush( owner );
+	const stray = Uint8Array.from(
+		Buffer.from( "b8050000008e6905006f5d05c08a439e3374454d6833448a590000", "hex" )
+	);
+	assert.doesNotThrow( () => owner.receive( { opcode: 0x3417, payload: stray } ) );
+	assert.equal( owner.count(), 0 );
+	assert.equal( owner.take(), null );
+	for ( const row of rows ) owner.receive( row );
+	flush( owner );
+	assert.equal( owner.count(), 1, "the next well-formed bracket still commits" );
+	assert.doesNotThrow(
+		() => owner.receive( rows[1] ),
+		"a replayed copy of the committed chunk after finalize is dropped too"
+	);
+	assert.equal( owner.count(), 1 );
+	assert.equal( owner.take(), null );
+	owner.receive( { opcode: 0x30cb, payload: Uint8Array.of( 1, 1, 0 ) } );
+	owner.receive( rows[1] );
+	assert.throws(
+		() => owner.receive( rows[1] ),
+		/Unexpected object-list chunk/,
+		"a chunk past the declared count of an open bracket still throws"
+	);
+	owner.dispose();
+});
 test("server-pinned monster rows commit atomically and synchronize only after acknowledgement", () => {
 	const owner = createEntities();
 	owner.bootstrap( bootstrap );

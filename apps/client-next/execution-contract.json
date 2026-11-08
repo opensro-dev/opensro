@@ -820,6 +820,20 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createGameplay:3"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/model/character/character.ts",
 			"functions": [

@@ -184,3 +184,27 @@ test("a grant that matches no shape still refuses", () => {
 	grant[0] = 1;
 	assert.throws( () => targeting.receive( 0xb45a, grant ), /Unsupported target grant/ );
 });
+
+test("an 11-byte fortress gate grant reads its shape from the replied entity, not the click", () => {
+	// #2870's live payload (meisterBoba/zomb1e): gid 252094 (0x0003D8BE,
+	// gate ref 2094), capability word 0x200000C0 (reverse return | recall |
+	// teleport), fortress tax 0. The click guessed "npc" during the entry
+	// burst; the replied entity is a fortress teleport gate, so the tax
+	// tail settles the shape.
+	const grant = new Uint8Array( [ 0x01, 0xbe, 0xd8, 0x03, 0x00, 0xc0, 0x00, 0x00, 0x20, 0x00, 0x00 ] );
+	const targeting = createTargeting(
+		() => {},
+		gid => gid === 252094 ? { kind: "teleport", teleport: { fortressId: 7 } } : undefined
+	);
+	targeting.select( 252094, 0, "npc" );
+	assert.equal( targeting.receive( 0xb45a, grant ), true );
+	assert.equal( targeting.state().target, 252094 );
+	assert.equal( targeting.state().targetCapabilities, 0x200000c0 );
+});
+
+test("the same 11 bytes for a plain NPC still refuse: the entity class, not the length, decides", () => {
+	const grant = new Uint8Array( [ 0x01, 0xbe, 0xd8, 0x03, 0x00, 0xc0, 0x00, 0x00, 0x20, 0x00, 0x00 ] );
+	const targeting = createTargeting( () => {}, () => ({ kind: "npc" }) );
+	targeting.select( 252094, 0, "npc" );
+	assert.throws( () => targeting.receive( 0xb45a, grant ), /Unsupported target grant/ );
+});
