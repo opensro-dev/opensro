@@ -7,7 +7,9 @@ itemgrade_test.go - equipment degree and seal from itemClass and rarity
 */
 package enterworld
 
-import "testing"
+import (
+	"testing"
+)
 
 /*
 ================
@@ -72,5 +74,34 @@ func TestItemDegree(t *testing.T) {
 	}
 	if ItemDegree(ref([4]int64{3, 3, 1, 1}, 0)) != 0 || ItemDegree(nil) != 0 {
 		t.Error("a class-0 row and a nil reference have no degree")
+	}
+}
+
+/*
+================
+TestSealedSetPieceNeedsTheExpansionRuntime
+
+Rarity 6 (_SET_A_RARE / _SET_B_RARE of the later client) is sealed, with the seal
+tier of its class, only while SRO_LEVEL_CAP=110. Rarity 2 does not depend on it.
+================
+*/
+func TestSealedSetPieceNeedsTheExpansionRuntime(t *testing.T) {
+	sword := [4]int64{3, 1, 6, 2}
+	piece := func(rarity float64) *ItemRef {
+		return &ItemRef{TypeIDs: sword, NativeFields: NewNativeFields(map[string]float64{"itemClass": 33, "rarity": rarity})}
+	}
+	t.Setenv(EnvLevelCap, "")
+	if _, sealed := EquipmentSeal(piece(6)); sealed {
+		t.Fatal("native shard: a set piece is sealed")
+	}
+	if tier, sealed := EquipmentSeal(piece(2)); !sealed || tier != SealSun {
+		t.Fatalf("native shard: rarity 2 = %d/%v", tier, sealed)
+	}
+	t.Setenv(EnvLevelCap, ExpansionLevelCapValue)
+	if tier, sealed := EquipmentSeal(piece(6)); !sealed || tier != SealSun {
+		t.Fatalf("expansion shard: rarity 6 = %d/%v", tier, sealed)
+	}
+	if _, sealed := EquipmentSeal(piece(3)); sealed {
+		t.Fatal("expansion shard: an unsealed set piece is sealed")
 	}
 }

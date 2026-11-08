@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"opensro.online/server/internal/game/enterworld"
 )
 
 /*
@@ -154,6 +156,37 @@ func TestEquipmentMagicAndNonRepairProperties(t *testing.T) {
 	_, entered, err = EquipmentMagic(code, func() (uint32, error) { return 31, nil })
 	if err != nil || entered {
 		t.Fatal("normal magic admission upper boundary")
+	}
+}
+
+/*
+================
+TestSealedSetPieceRollsLikeSealedOnlyOnAnExpansionShard
+
+A rarity 6 piece (the later client's sealed set piece) takes the sealed loot rules, no admission roll
+and no nonrepair option, only while SRO_LEVEL_CAP=110; on a native shard it rolls as a plain piece.
+================
+*/
+func TestSealedSetPieceRollsLikeSealedOnlyOnAnExpansionShard(t *testing.T) {
+	const code = "TEST_SET_B_RARE"
+	piece := properties.Items["ITEM_CH_SWORD_03_A"]
+	piece.Rarity = 6
+	properties.Items[code] = piece
+	defer delete(properties.Items, code)
+	missed := func() (uint32, error) { return 31, nil }
+	t.Setenv(enterworld.EnvLevelCap, "")
+	if _, entered, err := EquipmentMagic(code, missed); err != nil || entered {
+		t.Fatalf("native shard: a set piece rolled as sealed: %v/%v", entered, err)
+	}
+	if _, _, ok := NonRepairOption(code, 0); !ok {
+		t.Fatal("native shard: a set piece lost the nonrepair option")
+	}
+	t.Setenv(enterworld.EnvLevelCap, enterworld.ExpansionLevelCapValue)
+	if _, entered, err := EquipmentMagic(code, missed); err != nil || !entered {
+		t.Fatalf("expansion shard: a sealed set piece skipped its options: %v/%v", entered, err)
+	}
+	if _, _, ok := NonRepairOption(code, 0); ok {
+		t.Fatal("expansion shard: a sealed set piece got the nonrepair option")
 	}
 }
 
