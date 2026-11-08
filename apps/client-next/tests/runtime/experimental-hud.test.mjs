@@ -188,7 +188,11 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	// Effects holds the port-only image effects - the sky detail and the
 	// ambient occlusion (#2094), here for room; HD, appended last, holds
 	// the HD texture set's row (#2061).
-	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail", "ambientOcclusion", "setBonusTooltip" ] );
+	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [
+		"skyDetail",
+		"ambientOcclusion",
+		"setBonusTooltip"
+	] );
 	assert.deepEqual( EXPERIMENTAL_TABS[9].rows.map( row => row.key ), [ "hdTextures" ] );
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
