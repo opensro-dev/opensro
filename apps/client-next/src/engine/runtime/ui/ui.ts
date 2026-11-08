@@ -1736,6 +1736,7 @@ export function createUi( ports: UiPorts ) {
 		country: number | undefined;
 		sex: number | undefined;
 		sealUnderHeading: boolean;
+		expansion: boolean;
 		setGroups: unknown;
 		setEquipment: unknown;
 		rows: readonly TooltipRow[];
@@ -8959,7 +8960,7 @@ export function createUi( ports: UiPorts ) {
 						if ( item ) {
 							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
 							// items refuse a quick sell.
-							if ( itemIsMallItem( item ) || itemIsRare( item ) || item.summon?.state === 2 ) {
+							if ( itemIsMallItem( item ) || itemIsRare( item, game.levelCap === EXPANSION_LEVEL_CAP ) || item.summon?.state === 2 ) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;
@@ -11717,7 +11718,8 @@ export function createUi( ports: UiPorts ) {
 					r,
 					slotSeed( id + ":" + owned.refObjId ),
 					next.simulationTimeMs ?? 0,
-					flashes
+					flashes,
+					game?.levelCap === EXPANSION_LEVEL_CAP
 				);
 				for ( const overlay of overlays ) {
 					image( overlay.rect, overlay.path, white, overlay.uv );
@@ -27731,6 +27733,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								?.gender,
 							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
 							sealUnderHeading = experimental.state().saved.sealUnderHeading,
+							expansion = game.levelCap === EXPANSION_LEVEL_CAP,
 							// Port-only set block: the published groups with the bag they are counted in.
 							sets = tooltipSetViewer(
 								experimental.state().saved.setBonusTooltip,
@@ -27744,6 +27747,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
 							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading &&
+							tooltipMemo.expansion === expansion &&
 							tooltipMemo.setGroups === setGroups && tooltipMemo.setEquipment === setEquipment
 						) {
 							tooltip = tooltipMemo.rows;
@@ -27754,7 +27758,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading, sets }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								) :
 								skillTooltip(
 									{
@@ -27778,6 +27782,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								country,
 								sex,
 								sealUnderHeading,
+								expansion,
 								setGroups,
 								setEquipment,
 								rows: tooltip,
@@ -27791,7 +27796,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading, sets }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								)
 							);
 						}

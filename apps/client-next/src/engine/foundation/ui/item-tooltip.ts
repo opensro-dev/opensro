@@ -37,6 +37,8 @@ export function itemTooltip(
 		readonly country?: number;
 		readonly sex?: number;
 		readonly sealUnderHeading?: boolean;
+		// The shard publishes the cap-110 expansion: sealed set pieces and Seal of Nova apply (item-seal.ts).
+		readonly expansion?: boolean;
 		// Port-only (Experimental "Set bonus on item tooltips"): the shard's published sets and the
 		// character's equipment, which together decide the set block.
 		readonly sets?: { readonly groups: readonly EquipmentSet[]; readonly equipment: readonly InventoryItem[]; };
@@ -48,7 +50,7 @@ export function itemTooltip(
 		k = (item.typeFlags >>> 11) & 31,
 		equipment = (item.typeFlags & 0x7e) === 0x2c;
 	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ),
-		rare = itemRarityIsSealed( f?.rarity );
+		rare = itemRarityIsSealed( f?.rarity, viewer?.expansion );
 	const nameColor = rare ? (repaired ? 0xff6ce675 : 0xffffd953) : item.magic.length ? 0xff72bfff : 0xffffffff;
 	const petGear = item.refObjId !== undefined && isPetGearRef( item.refObjId );
 	const petDefinition = petGear ? petGearDefinition( item.refObjId ) : undefined;
@@ -87,7 +89,7 @@ export function itemTooltip(
 	// under-heading place is the Experimental sealUnderHeading row (#2496).
 	const seal = rare && f.itemClass ?
 		{
-			value: text( sealTextSymbol( f.rarity, f.itemClass )! ),
+			value: text( sealTextSymbol( f.rarity, f.itemClass, viewer?.expansion )! ),
 			color: nameColor,
 			strong: true
 		} :

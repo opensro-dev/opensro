@@ -29,8 +29,8 @@ itemRarityIsSealed
 Whether a rarity column value marks a sealed item.
 ================
 */
-export function itemRarityIsSealed( rarity: number | undefined ): boolean {
-	return rarity === RARITY_SEALED || rarity === RARITY_SEALED_SET;
+export function itemRarityIsSealed( rarity: number | undefined, expansion = false ): boolean {
+	return rarity === RARITY_SEALED || (expansion && rarity === RARITY_SEALED_SET);
 }
 
 /*
@@ -41,8 +41,12 @@ The seal tier (0 Star, 1 Moon, 2 Sun) of a sealed item, or undefined when
 the item is not sealed or has no class.
 ================
 */
-export function sealTier( rarity: number | undefined, itemClass: number | undefined ): number | undefined {
-	if ( !itemRarityIsSealed( rarity ) || !itemClass ) return undefined;
+export function sealTier(
+	rarity: number | undefined,
+	itemClass: number | undefined,
+	expansion = false
+): number | undefined {
+	if ( !itemRarityIsSealed( rarity, expansion ) || !itemClass ) return undefined;
 	return (itemClass - 1) % SEAL_TIER_COUNT;
 }
 
@@ -53,9 +57,13 @@ sealTextSymbol
 The text symbol naming an item's seal, or undefined when it has none.
 ================
 */
-export function sealTextSymbol( rarity: number | undefined, itemClass: number | undefined ): string | undefined {
-	const tier = sealTier( rarity, itemClass );
+export function sealTextSymbol(
+	rarity: number | undefined,
+	itemClass: number | undefined,
+	expansion = false
+): string | undefined {
+	const tier = sealTier( rarity, itemClass, expansion );
 	if ( tier === undefined ) return undefined;
-	if ( tier === 0 && itemClass! >= NOVA_FIRST_CLASS ) return SEAL_SYMBOL_NOVA;
+	if ( expansion && tier === 0 && itemClass! >= NOVA_FIRST_CLASS ) return SEAL_SYMBOL_NOVA;
 	return SEAL_SYMBOLS[tier];
 }
