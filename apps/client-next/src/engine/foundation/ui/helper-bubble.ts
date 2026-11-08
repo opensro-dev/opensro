@@ -16,6 +16,8 @@ import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 // The border's outset around the text, and the gap the bubble keeps from
 // the viewport's sides when it must be pushed back inside.
 const BUBBLE_BORDER = 8;
+// The side box starts this far below the main box's top, as in the later client.
+const SIDE_BUBBLE_DROP = 4;
 const BUBBLE_ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
 
 /*
@@ -162,4 +164,31 @@ export function tooltipBubble(
 			rect: [ x, y + i * pitch, width, pitch ] as UiRect
 		}) )
 	};
+}
+
+/*
+================
+sideBubble
+
+Port-only, not native (the Experimental set tooltip): a second box standing
+beside an item's own, as the later client draws a set's pieces and tiers. It
+sits to the right of the main box with their borders touching, a few pixels
+lower than its top, and goes to the left when the right side has no room.
+The main box is the first quad tooltipBubble returned (its fill).
+================
+*/
+export function sideBubble(
+	rows: readonly TooltipRow[],
+	main: UiRect,
+	viewport: UiRect,
+	measure: ( s: string, strong?: boolean ) => number,
+	fit = false
+) {
+	const y = main[1] + SIDE_BUBBLE_DROP;
+	// The anchor is wider by one border so the two boxes' borders meet, not overlap.
+	const right = tooltipBubble( rows, [ main[0], y, main[2] + BUBBLE_BORDER, main[3] ], viewport, measure, fit );
+	if ( right.quads[0]!.rect[0] > main[0] ) return right;
+	// No room on the right: an anchor spanning the viewport makes tooltipBubble place it to the left of
+	// the anchor's x, which sits one border left of the main box.
+	return tooltipBubble( rows, [ main[0] - BUBBLE_BORDER, y, viewport[2], main[3] ], viewport, measure, fit );
 }

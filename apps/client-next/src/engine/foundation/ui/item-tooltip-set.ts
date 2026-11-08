@@ -11,8 +11,8 @@ every piece of the set (worn ones bright, the rest dim), then each tier as
 force in colour and the others dim. The names and labels are the later
 client's own text (SN_ITEM_11_SET_*, PARAM_REINFORCE_ITEM_SET, ...), merged
 into the build's text tables; the English fallbacks below cover a build that
-lacks them. The original draws this as a second panel to the right of the item;
-the port draws it as a block at the end of the one panel.
+lacks them. Like the original this is a second box beside the item's own
+(sideBubble draws it); the item's own box carries only the set's name.
 
 ===========================================================================
 */
@@ -196,7 +196,9 @@ export function itemTooltipSet(
 		total = set.tiers[set.tiers.length - 1]!.pieces,
 		active = set.tiers.filter( tier => count >= tier.pieces ).at( -1 ),
 		name = setName( set, text );
-	const rows: TooltipRow[] = [ { value: `${name} (${count}/${total})`, color: COLOR_NAME, strong: true } ];
+	const rows: TooltipRow[] = [
+		{ value: `${name} (${count}/${total})`, color: COLOR_NAME, strong: true, ornament: "item" }
+	];
 	for ( const piece of set.pieces ) {
 		const label = known( text, piece.name, "" );
 		if ( label ) {

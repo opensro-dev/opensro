@@ -18,6 +18,7 @@ const { itemTooltipSet, itemTooltipSetName, tooltipSetViewer, wornSetPieces, wor
 	"../../src/engine/foundation/ui/item-tooltip-set.ts"
 );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
+const { sideBubble } = await import( "../../src/engine/foundation/ui/helper-bubble.ts" );
 const { publishedEquipmentSets } = await import( "../../src/engine/foundation/gameplay/equipment-sets.ts" );
 
 const SETS = publishedEquipmentSets( [ {
@@ -153,7 +154,7 @@ test("the Experimental row and a published set list decide whether the tooltip h
 	assert.deepEqual( tooltipSetViewer( true, SETS, undefined )?.equipment, [] );
 });
 
-test("an armor tooltip carries the set rows only when the viewer gives sets", () => {
+test("an armor tooltip carries only the set's name; the pieces and tiers are the side box", () => {
 	// Every stat column reads as 1, so the armor rows build; only the set rows are under test.
 	const fields = new Proxy( { setId: 13, rarity: 0, itemClass: 1 }, {
 		get: ( o, k ) => (k in o ? o[k] : 1),
@@ -174,10 +175,33 @@ test("an armor tooltip carries the set rows only when the viewer gives sets", ()
 	assert.equal( plain.some( value => value.includes( "Destruction" ) ), false, "no viewer, no set rows" );
 	const shown = rowsOf( { sets: tooltipSetViewer( true, SETS, [ item ] ) } );
 	assert.equal( shown[2], "Destruction", "the set's name sits under the title row and its spacer" );
-	assert.ok( shown.some( value => value === "Destruction (1/6)" ), "the block lists the pieces and tiers" );
+	assert.equal( shown.length, plain.length + 1, "only the name joins the item's own box" );
+	assert.equal(
+		shown.some( value => value.includes( "Destruction (" ) ),
+		false,
+		"the block is not in the item's box"
+	);
 	assert.deepEqual(
 		rowsOf( { sets: tooltipSetViewer( false, SETS, [ item ] ) } ),
 		plain,
 		"row off leaves the native rows"
 	);
+	const side = itemTooltipSet( item, SETS, [ item ], text );
+	assert.equal( side[0].value, "Destruction (1/6)" );
+	assert.equal( side[0].ornament, "item", "the side box's heading carries the icon" );
+});
+
+test("the side box stands right of the item's box with the borders meeting, else left of it", () => {
+	const measure = s => s.length * 7, rows = [ { value: "Destruction (2/6)", color: 0xffffffff } ];
+	/** @type {[number, number, number, number]} */ const main = [ 300, 100, 200, 400 ];
+	/** @type {[number, number, number, number]} */ const viewport = [ 0, 0, 1200, 900 ];
+	const right = sideBubble( rows, main, viewport, measure ).quads[0].rect;
+	assert.equal( right[0], 300 + 200 + 16, "8 for the main box's border and 8 for its own" );
+	assert.equal( right[1], 112, "12 pixels below the main box's top, as in the later client" );
+	// No room on the right: the side box goes to the left, its right border against the main box's left border.
+	/** @type {[number, number, number, number]} */ const crowded = [ 900, 100, 200, 400 ];
+	const left = sideBubble( rows, crowded, viewport, measure ).quads[0].rect;
+	assert.equal( left[0] + left[2] + 8 + 8, 900, "borders meet at the main box's left edge" );
+	assert.ok( left[0] >= 0 );
+	assert.ok( right[0] > main[0] + main[2] && left[0] + left[2] < crowded[0] );
 });

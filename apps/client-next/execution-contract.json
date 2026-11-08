@@ -444,6 +444,7 @@
 			"consumer": "src/engine/foundation/ui/helper-bubble.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
+				"callback:sideBubble:3",
 				"callback:tooltipBubble:3"
 			]
 		},
@@ -1702,6 +1703,7 @@
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
+				"callback:sideBubble:3",
 				"callback:tooltipBubble:3",
 				"callback:textLines:2",
 				"callback:captionWords:2",

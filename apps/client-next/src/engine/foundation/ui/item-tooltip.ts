@@ -18,7 +18,7 @@ import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
 import { itemTooltipRecovery } from "./item-tooltip-recovery";
 import { itemTooltipStone } from "./item-tooltip-stone";
-import { itemTooltipSet, itemTooltipSetName } from "./item-tooltip-set";
+import { itemTooltipSetName } from "./item-tooltip-set";
 import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
@@ -91,7 +91,8 @@ export function itemTooltip(
 		} :
 		undefined;
 	if ( seal && viewer?.sealUnderHeading ) rows.push( seal );
-	// Port-only (Experimental set tooltip): the set's name sits under the title, as in the later client.
+	// Port-only (Experimental set tooltip): the set's name sits under the title, as in the later client;
+	// its pieces and tiers are a second box (item-tooltip-set.ts, drawn by the UI).
 	const setNameRow = viewer?.sets && equipment ? itemTooltipSetName( item, viewer.sets.groups, text ) : undefined;
 	if ( setNameRow ) rows.push( setNameRow );
 
@@ -265,13 +266,6 @@ export function itemTooltip(
 	if ( magic.length ) {
 		space();
 		rows.push( ...magic );
-	}
-	if ( viewer?.sets && equipment ) {
-		const setRows = itemTooltipSet( item, viewer.sets.groups, viewer.sets.equipment, text );
-		if ( setRows.length ) {
-			space();
-			rows.push( ...setRows );
-		}
 	}
 	// 55A7B0: the published inventory/shop/COS item slots show stack capacity
 	// and the actual instance quantity. Timed COS extension uses quantity as

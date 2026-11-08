@@ -558,7 +558,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
-import { tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
+import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -708,7 +708,7 @@ import {
 	minimapRotation,
 	skillPointReadouts
 } from "@/engine/foundation/ui/hud-readouts";
-import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
+import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
@@ -1739,6 +1739,7 @@ export function createUi( ports: UiPorts ) {
 		setGroups: unknown;
 		setEquipment: unknown;
 		rows: readonly TooltipRow[];
+		side: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
@@ -27622,6 +27623,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				// Port-only set panel: the rows of the second box beside an item's own (Experimental set tooltip).
+				let sideTooltip: readonly TooltipRow[] = [];
 				const petBinding = control?.id.startsWith( "hotbar:" ) ?
 					game?.quickSlots?.find( entry =>
 						entry.slot === Number( control.id.slice( 7 ) ) && entry.kind === 0x4a &&
@@ -27742,8 +27745,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
 							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading &&
 							tooltipMemo.setGroups === setGroups && tooltipMemo.setEquipment === setEquipment
-						) tooltip = tooltipMemo.rows;
-						else {
+						) {
+							tooltip = tooltipMemo.rows;
+							sideTooltip = tooltipMemo.side;
+						} else {
 							tooltip = item ?
 								itemTooltip(
 									item,
@@ -27761,6 +27766,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									lookup,
 									id => lookup( hudData.skillUi.masteries.find( m => m.id === id )?.name ?? "" )
 								);
+							sideTooltip = item && sets ?
+								itemTooltipSet( item, sets.groups, sets.equipment, lookup ) :
+								[];
 							tooltipMemo = {
 								item,
 								skill,
@@ -27772,10 +27780,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								sealUnderHeading,
 								setGroups,
 								setEquipment,
-								rows: tooltip
+								rows: tooltip,
+								side: sideTooltip
 							};
 						}
 						if ( items.length > 1 ) {
+							sideTooltip = [];
 							tooltip = items.flatMap( item =>
 								itemTooltip(
 									item,
@@ -27822,6 +27832,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									fontStyle: row.strong ? 2 : 0
 								} )
 							);
+						}
+					}
+					// The set panel stands beside the item's own box, as in the later client.
+					if ( sideTooltip.length ) {
+						const side = sideBubble(
+							sideTooltip,
+							bubble.quads[0]!.rect,
+							full,
+							( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
+							experimental.state().saved.fitWindowLabels
+						);
+						paths.push( ...side.paths );
+						if ( side.paths.every( resources.has ) ) {
+							quads.push( ...side.quads );
+							for ( const row of side.lines ) {
+								quads.push(
+									...text.quads( row.value, row.rect, full, tooltipColor( row.color ), {
+										fontStyle: row.strong ? 2 : 0
+									} )
+								);
+							}
 						}
 					}
 				}
