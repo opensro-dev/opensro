@@ -1088,28 +1088,84 @@ test("a fresh entry retries a stalled admission and enters", async t => {
 	await settle();
 	world.step( 3 );
 	assert.deepEqual( mints, [ "transport", "enterworld" ] );
-	// The EnterWorld answer never comes: a full admission window of
+	// The EnterWorld answer never comes: a full answer window of
 	// silence fails the attempt, but the entry itself retries instead
 	// of rejecting back to character select (#1416).
-	world.step( 10004 );
+	world.step( 60004 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( world.status().error, "World connection timed out" );
-	world.step( 10254 );
+	world.step( 60254 );
 	await settle();
-	world.step( 10255 );
+	world.step( 60255 );
 	assert.equal( sockets.length, 2 );
 	const second = sockets[1];
 	second.onopen();
 	second.receive( 2, welcome() );
-	world.step( 10256 );
+	world.step( 60256 );
 	await settle();
-	world.step( 10257 );
+	world.step( 60257 );
 	second.receive( 7, entered() );
 	for ( const row of rows ) second.receive( row.opcode, row.payload );
-	world.step( 10258 );
+	world.step( 60258 );
 	flush( world );
-	world.step( 10259 );
+	world.step( 60259 );
 	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+});
+
+/*
+================
+a slow EnterWorld answer outlives the old admission window (#2867)
+
+The EnterWorld answer is one multi-megabyte record. On the
+WebTransport path its chunks prove the link as they land, but on the
+socket a WebSocket message is atomic: no byte of the answer is
+visible until the whole record lands, and the server's loading pings
+queue behind it on the same ordered stream. A slow socket therefore
+showed total silence well past the ten-second admission window, the
+entry tore down a healthy answer mid-flight, retried into the same
+download and gave up to character select with "World connection
+timed out" - the world_entry_rejected reports of #2867, whose server
+log shows each socket closing exactly one admission window after
+the entry was presented. The answer wait now runs to the transport's
+own idle bound, so an answer still streaming at half a minute lands.
+================
+*/
+test("a slow EnterWorld answer outlives the old admission window", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	// Thirty seconds without one visible byte: the old admission
+	// window failed this attempt at ten. The entry is still waiting.
+	world.step( 30003 );
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().error, undefined );
+	// The answer lands whole, as a socket message does, and the entry
+	// binds on the same attempt: no retry, no rejection.
+	socket.receive( 7, entered() );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	world.step( 30004 );
+	flush( world );
+	world.step( 30005 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().error, undefined );
 });
@@ -3845,7 +3901,8 @@ a silent socket still times out
 
 Byte liveness must not keep a dead wire alive: with the EnterWorld
 answer never arriving at all, the entry deadline still fires on the
-socket exactly as before (#2311).
+socket exactly as before (#2311) - at the answer wait's own bound
+(#2867), not instantly and not never.
 ================
 */
 test("a silent socket still times out", async t => {
@@ -3863,9 +3920,9 @@ test("a silent socket still times out", async t => {
 	world.step( 3 );
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
-	world.step( 9999 );
+	world.step( 59999 );
 	assert.equal( world.status().phase, "entering-world", "inside the window" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
 	world.dispose();
 });
@@ -3898,7 +3955,7 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	await settle();
 	assert.equal( world.status().phase, "entering-world" );
 	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
-	world.step( 10010 );
+	world.step( 60010 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const evidence = world.status().entryFailure;
 	assert.equal( evidence?.stage, "entering-world" );
@@ -3909,13 +3966,13 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	// would inherit the first WELCOME and report a streaming wire for a
 	// server that never answered.
 	assert.equal( world.status().phase, "reconnecting" );
-	world.step( 10300 );
+	world.step( 60300 );
 	await settle();
-	world.step( 10301 );
+	world.step( 60301 );
 	await settle();
 	assert.equal( world.status().phase, "connecting", "the retry is under way" );
 	assert.equal( sockets.length, 2, "the retry opened its own socket" );
-	world.step( 21000 );
+	world.step( 71000 );
 	assert.equal( world.status().error, "World connection timed out" );
 	const silent = world.status().entryFailure;
 	assert.equal( silent?.stage, "connecting" );
@@ -3923,24 +3980,24 @@ test("a timed-out entry records the bytes and stage it died with", async t => {
 	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
 	// The next attempt starts clean, and a world that binds keeps no
 	// failure evidence.
-	world.step( 21600 );
+	world.step( 71600 );
 	await settle();
 	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
-	world.step( 21601 );
+	world.step( 71601 );
 	await settle();
 	const third = sockets[2];
 	third.onopen();
 	third.receive( 2, welcome() );
-	world.step( 21602 );
+	world.step( 71602 );
 	await settle();
-	world.step( 21603 );
+	world.step( 71603 );
 	await settle();
 	third.receive( 7, entered() );
 	for ( const row of rows ) third.receive( row.opcode, row.payload );
-	world.step( 21604 );
+	world.step( 71604 );
 	const batch = world.take();
 	world.ack( batch.sequence );
-	world.step( 21605 );
+	world.step( 71605 );
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
 	world.dispose();
@@ -3975,9 +4032,9 @@ test("a record that stops streaming still times out", async t => {
 	await settle();
 	world.step( 4000 );
 	assert.equal( world.status().phase, "entering-world", "the third bought its window" );
-	world.step( 13999 );
+	world.step( 63999 );
 	assert.equal( world.status().phase, "entering-world", "window from the last byte still open" );
-	world.step( 14010 );
+	world.step( 64010 );
 	assert.equal( world.status().phase, "reconnecting", "silence after the bytes still fails" );
 	assert.equal( sockets.length, 0, "the retry has not run yet" );
 	world.dispose();

@@ -226,10 +226,12 @@ test("an unacknowledged cancellation is abandoned, keeps its slot and reports on
 	const { assets, worker } = fixture( t );
 	const first = assets.request( "https://assets.test/stalled" );
 	assets.cancel( first );
-	now = 29999;
+	// The acknowledgement window is the decode stall window (60 s): a
+	// worker inside a sanctioned decode is silent that long (#2871).
+	now = 59999;
 	assert.equal( assets.health().phase, "running" );
 	assert.deepEqual( assets.takeDegradations(), [] );
-	now = 30000;
+	now = 60000;
 	assert.equal( assets.health().phase, "running" );
 	assert.equal( assets.available(), 3 );
 	const reported = assets.takeDegradations();
@@ -247,7 +249,7 @@ test("every slot held by abandoned cancellations fails the owner with a named re
 	t.mock.method( performance, "now", () => now );
 	const { assets } = fixture( t );
 	for ( const name of [ "a", "b", "c", "d" ] ) assets.cancel( assets.request( "https://assets.test/" + name ) );
-	now = 30000;
+	now = 60000;
 	assert.equal( assets.health().phase, "failed" );
 	assert.match( assets.health().error, /stopped acknowledging cancellations: \/a, \/b, \/c, \/d/ );
 });

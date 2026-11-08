@@ -884,15 +884,21 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "cancel" ) {
 				const controller = pending.get( request.id );
-				if ( !controller ) return;
-				controller.abort();
-				pending.delete( request.id );
-				const queued = waiting.findIndex( entry => entry.request.id === request.id );
-				if ( queued >= 0 ) waiting.splice( queued, 1 );
+				if ( controller ) {
+					controller.abort();
+					pending.delete( request.id );
+					const queued = waiting.findIndex( entry => entry.request.id === request.id );
+					if ( queued >= 0 ) waiting.splice( queued, 1 );
+				}
 				// Acknowledged on receipt, not on settlement: an execution
 				// AbortSignal cannot stop (a native decode) may drain long
 				// past the caller's acknowledgement window, but it delivers
 				// nothing more for this id; its slot frees when it settles.
+				// A cancel read after its execution settled is acknowledged
+				// too: the result already crossed, and the caller's slot is
+				// freed by this message - dropping it strands the slot on a
+				// healthy worker (#2871). The caller ignores an
+				// acknowledgement for a job it no longer holds.
 				send( { kind: "released", id: request.id }, [] );
 				return;
 			}
