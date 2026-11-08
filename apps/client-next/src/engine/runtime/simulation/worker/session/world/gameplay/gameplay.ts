@@ -526,6 +526,9 @@ export function createGameplay(
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
 	let moonlitThiefSuit = false;
+	// The shard runs the port-only Alexandria area (SRO_ALEXANDRIA): the M
+	// window may use the published wider overview and town pages.
+	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
@@ -1793,6 +1796,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
+			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
@@ -6026,6 +6030,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),

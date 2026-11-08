@@ -190,6 +190,20 @@ export function decodeWorldMapLayout( raw: unknown ): WorldMapLayout {
 
 /*
 ================
+expandedWorldMapOn
+
+Port-only, not native: the published wider overview and Alexandria town
+pages are used only while the shard runs Alexandria (SRO_ALEXANDRIA, the
+world-entry "alexandria" switch). Off, the M window keeps the native five
+towns and 28 x 8 overview (5758D0), whatever the build published.
+================
+*/
+export function expandedWorldMapOn( game: { readonly alexandria?: boolean; } | null | undefined ): boolean {
+	return game?.alexandria === true;
+}
+
+/*
+================
 worldMapPages
 
 The shipped worldmap_mapinfo.txt fields; 5758D0 probes towns 1..5 in order.

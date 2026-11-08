@@ -248,11 +248,6 @@ export interface ExperimentalOptions {
 	// tap's own action is unchanged. Touch only. On by default (the owner's
 	// choice, 2026-10-22); off is the brief hover a tap gives today.
 	readonly touchInspect: boolean;
-	// Port-only, not native: when the build publishes extra worldmap_mapinfo
-	// town pages (Alexandria) and a wider overview box, the M window uses them
-	// instead of the five native town pages and 28 x 8 overview (5758D0). Off
-	// unless turned on.
-	readonly expandedWorldMap: boolean;
 	// Port-only, not native (#840): every active quest's NPC target shows on
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
@@ -503,7 +498,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterPotions: record.petFilterPotions !== false,
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
-		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),

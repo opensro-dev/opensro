@@ -15290,7 +15290,6 @@
 				},
 				"experimental-tab:6": {
 					"added": [
-						"experimental-expanded-world-map",
 						"experimental-pet-click-opens-window",
 						"experimental-pet-pickup-filter",
 						"experimental-quest-tracker-markers",
@@ -15300,7 +15299,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "ccdc8569341bdc3b",
+					"hash": "ca235bb979e09d80",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

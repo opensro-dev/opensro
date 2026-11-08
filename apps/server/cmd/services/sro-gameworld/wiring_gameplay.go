@@ -307,6 +307,9 @@ func newGameplayPlane(
 		return nil, err
 	}
 	water.HideAlexandria(hiddenAlexandria)
+	// The client's M window shows Alexandria's wider map only while the shard
+	// runs it; wiring.go's alexandria.Check has already refused a bad value.
+	deps.Alexandria, _ = alexandria.EnabledFromEnv()
 	if err := water.ValidateSecurityAssets(); err != nil {
 		return nil, err
 	}

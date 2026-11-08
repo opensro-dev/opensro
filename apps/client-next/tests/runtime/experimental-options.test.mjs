@@ -130,8 +130,6 @@ const OFF = Object.freeze( {
 	// On by default (#1451 step 3): WebTransport is the
 	// default connect and the WebSocket the fallback; off is one setting.
 	webTransport: true,
-	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.
@@ -933,16 +931,14 @@ test("smart pet pickup defaults on unless explicitly false and reaches the worke
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "smartPetPickup" ) ) );
 });
 
-test("expanded world map defaults off (native five towns and 28 x 8 overview) and stays out of the worker's slices", () => {
-	for ( const value of [ undefined, null, {}, { expandedWorldMap: 1 }, { expandedWorldMap: "true" } ] ) {
-		const options = experimentalOptions( value );
-		assert.equal( options.expandedWorldMap, false );
-		assert.equal( "expandedWorldMap" in experimentalGameplay( options ), false );
-		assert.equal( "expandedWorldMap" in experimentalVideo( options ), false );
+// The Alexandria map follows the server's SRO_ALEXANDRIA switch (world-entry
+// "alexandria"), not a player option: a stored preference from the old row
+// is ignored.
+test("the expanded world map has no option and no row; the server's switch owns it", () => {
+	for ( const value of [ undefined, {}, { expandedWorldMap: true } ] ) {
+		assert.equal( "expandedWorldMap" in experimentalOptions( value ), false );
 	}
-	const on = experimentalOptions( { expandedWorldMap: true } );
-	assert.equal( on.expandedWorldMap, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
+	assert.ok( !EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "expandedWorldMap" ) ) );
 });
 
 test("interpolated own movement has no option, no row, and no video slice (#1564)", () => {

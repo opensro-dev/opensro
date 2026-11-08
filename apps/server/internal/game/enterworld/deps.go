@@ -134,6 +134,9 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	// Alexandria publishes the port-only SRO_ALEXANDRIA switch
+	// (world/alexandria); false is native.
+	Alexandria bool
 	// RaisedGoldCaps publishes the port-only SRO_RAISED_GOLD_CAPS rule
 	// (action/goldcaps.go): the client's stall price editor and warehouse
 	// deposit dialog raise their native caps; false is native.

@@ -342,11 +342,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Pickup pet item filter",
 			description: "Choose what the pickup pet collects: Pickup tab."
 		}, {
-			key: "expandedWorldMap",
-			id: "experimental-expanded-world-map",
-			label: "Expanded world map",
-			description: "Show extra town pages and wider overview."
-		}, {
 			key: "vHidesCompanions",
 			id: "experimental-v-hides-companions",
 			label: "V hides pets and transports",
