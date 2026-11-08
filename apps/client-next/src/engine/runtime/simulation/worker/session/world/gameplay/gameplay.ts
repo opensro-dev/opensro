@@ -5913,6 +5913,9 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
+		// The inventory owner's skipped cosmetic steps, for the world's
+		// degraded reports (core takeDegradations drains both owners).
+		takeDegradations: () => inventory.takeDegradations(),
 		/*
 ================
 cancelCast
