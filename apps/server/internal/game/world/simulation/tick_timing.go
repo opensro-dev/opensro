@@ -164,13 +164,19 @@ func (s *StepTimer) Begin(name string) StepSpan {
 StepSpan.End
 
 Closes the span: the timing record first, then the zone, Time's order.
+End records at most once, so a caller may defer it as a panic backstop
+beside an explicit end - the deferred call then keeps a panicking
+step's record (and closes its zone) exactly as Time's own defer did,
+and the explicit end on the calm path keeps the wait out of the spans
+that follow.
 ================
 */
-func (sp StepSpan) End() {
+func (sp *StepSpan) End() {
 	if sp.timer == nil {
 		return
 	}
 	if sp.live {
+		sp.live = false
 		elapsed := sp.now().Sub(sp.started)
 		if sp.timer.Total != nil {
 			sp.timer.Total(sp.name, elapsed)
@@ -180,7 +186,9 @@ func (sp StepSpan) End() {
 		}
 	}
 	if sp.zoneEnd != nil {
-		sp.zoneEnd()
+		zoneEnd := sp.zoneEnd
+		sp.zoneEnd = nil
+		zoneEnd()
 	}
 }
 

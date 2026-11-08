@@ -99,10 +99,14 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 			// boxes its captures on every step of every tick (#2030).
 			// The gate span ends explicitly so a lost wait is recorded
 			// before the cut and the wait never swallows the step's
-			// own span; the step span's End is deferred so a panicking
-			// step still records, exactly as StepTimer.Time's defer
-			// did, and still ahead of the gate release below.
+			// own span; its End is also deferred as a backstop so a
+			// panicking gate wait still records (and closes its
+			// zone), exactly as StepTimer.Time's defer did - End
+			// records at most once, so the calm path is unchanged.
+			// The step span's End is deferred for the same reason,
+			// still ahead of the gate release below.
 			gate := rt.Steps.Begin("tickPublicationGate")
+			defer gate.End()
 			acquired := rt.acquireTickGate()
 			gate.End()
 			if !acquired {
@@ -204,13 +208,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
 		// Pending pickups take the gate themselves (publishPendingPickup).
 		if !cut {
-			// A span like the steps' (#2030); it ends explicitly
-			// because there is no narrower scope to defer it in.
-			span := rt.Steps.Begin("advancePendingPickups")
-			out = append(out, rt.advancePendingPickups(nowMs)...)
-			out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
-			sealed = len(out)
-			span.End()
+			out, sealed = rt.runPendingPickups(nowMs, out, sealed)
 		}
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
@@ -223,6 +221,25 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out
 	}
+}
+
+/*
+================
+runPendingPickups
+
+TickHook's pending-pickup span, scoped in a method so its End can be
+deferred: an explicit end alone would lose the record (and leave the
+zone open) when advancePendingPickups panics, where StepTimer.Time's
+own defer kept both. The helper is a plain method, not a closure, so
+the span conversion's zero-allocation property holds (#2030).
+================
+*/
+func (rt *Runtime) runPendingPickups(nowMs int64, out []simulation.DivisionFrames, sealed int) ([]simulation.DivisionFrames, int) {
+	span := rt.Steps.Begin("advancePendingPickups")
+	defer span.End()
+	out = append(out, rt.advancePendingPickups(nowMs)...)
+	out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+	return out, len(out)
 }
 
 /*

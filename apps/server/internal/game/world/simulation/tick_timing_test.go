@@ -230,7 +230,37 @@ func TestStepTimerBeginEndMatchesTime(t *testing.T) {
 		}
 	}
 	var zero StepTimer
-	zero.Begin("unwired").End()
+	unwired := zero.Begin("unwired")
+	unwired.End()
+}
+
+/*
+================
+TestStepSpanEndRecordsOnce
+
+A span ended explicitly and again by a deferred backstop records
+once: the driver defers gate.End beside its explicit end so a
+panicking gate wait still records, and the calm path must not
+double-count the wait or close the zone twice.
+================
+*/
+func TestStepSpanEndRecordsOnce(t *testing.T) {
+	clock := time.UnixMilli(0)
+	totals, zones := 0, 0
+	steps := StepTimer{
+		Now:   func() time.Time { return clock },
+		Total: func(string, time.Duration) { totals++ },
+		Zone: func(string) func() {
+			return func() { zones++ }
+		},
+	}
+	span := steps.Begin("step")
+	clock = clock.Add(10 * time.Millisecond)
+	span.End()
+	span.End()
+	if totals != 1 || zones != 1 {
+		t.Fatalf("double End recorded totals=%d zones=%d, want 1 and 1", totals, zones)
+	}
 }
 
 // spanAllocTimer / spanAllocSink keep TestStepSpanBeginEndAllocatesNothing's
