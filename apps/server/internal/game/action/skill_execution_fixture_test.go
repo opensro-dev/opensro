@@ -54,7 +54,9 @@ func loadFixtureSkills(t *testing.T) *enterworld.TextdataSkills {
 	if err := os.WriteFile(filepath.Join(dir, "shard_a.txt"), []byte(shard), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	source := enterworld.NewTextdataSkills(dir)
+	// The fixture is the datum: state the native position at
+	// construction so no shell export can add the tomb rows (#2850).
+	source := enterworld.NewTextdataSkillsWithTomb(dir, false)
 	if err := source.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}

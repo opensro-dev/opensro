@@ -33,6 +33,9 @@ has no reference row in v1.150, so it moves nobody.
 ================
 */
 func TestWalkInGatesLoadFromTheReferenceData(t *testing.T) {
+	// The census is v1.150's gate set: a tomb-variant shell must
+	// not add the tomb gates to it (#2850).
+	t.Setenv(monster.EnvQinShiTomb, "off")
 	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
