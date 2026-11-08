@@ -15,6 +15,7 @@ import { createBloom } from "./bloom";
 import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
+import { createAmbientOcclusion } from "./ambient-occlusion";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -101,6 +102,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
@@ -472,6 +474,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			occlusion = createAmbientOcclusion( created, retirement.retire );
+
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -566,6 +570,28 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		},
 		/*
 		================
+		ambientOcclusion
+
+		The experimental occlusion owner (port-only, not native; #2094):
+		prepared per frame against the scene size and camera, and its
+		blurred view installed as geometry binding 15 whenever the
+		answer changes (enable, disable, resize) through the geometry
+		owner's refresh seam. While off it owns nothing.
+		================
+		*/
+		ambientOcclusion(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
+			if ( phase !== "running" || !occlusion ) throw Error( "Ambient occlusion device is not ready" );
+			const draw = occlusion.prepare( width, height, enabled, camera );
+			geometry?.refreshAmbientOcclusion( draw?.view ?? null );
+			return draw;
+		},
+		/*
+		================
 		sunShadow
 
 		The experimental cascade owner, created by the geometry resources on
@@ -637,7 +663,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,
-				0
+				value.ambientOcclusion ? 1 : 0
 			] );
 			// The HDR stage flips every scene target's format: geometry
 			// re-pipelines, the mirror reformats, the portraits retire.
@@ -877,6 +903,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			occlusion?.dispose();
+			occlusion = null;
 			finish?.dispose();
 			finish = null;
 			particleQuery?.dispose();

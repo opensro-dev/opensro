@@ -417,6 +417,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-sky-detail",
 			label: "Sky detail",
 			description: "Drifting clouds, sun glow and rim light."
+		}, {
+			// Port-only, not native (#2094): here for room - the Image
+			// and Lighting tabs hold their seven rows already; the
+			// option, its key and its default are unaffected.
+			key: "ambientOcclusion",
+			id: "experimental-ambient-occlusion",
+			label: "Ambient occlusion",
+			description: "Shade corners and contact seams from depth."
 		} ]
 	},
 	{
