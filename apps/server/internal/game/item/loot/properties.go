@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 )
 
@@ -155,7 +156,7 @@ func EquipmentMagic(code string, roll func() (uint32, error)) ([]uint64, bool, e
 	if !exists || roll == nil {
 		return nil, false, fmt.Errorf("missing loot properties for %s", code)
 	}
-	if item.Rarity != 2 {
+	if !enterworld.RaritySealed(int(item.Rarity)) {
 		chance, err := roll()
 		if err != nil {
 			return nil, false, err
@@ -218,7 +219,7 @@ Client magicoption.txt encodes its fixed value as [6,400,...]: +400% durability.
 */
 func NonRepairOption(code string, currentOptions int) (uint64, uint32, bool) {
 	item, exists := properties.Items[code]
-	if !exists || item.Rarity == 2 || currentOptions >= item.MaxMagic {
+	if !exists || enterworld.RaritySealed(int(item.Rarity)) || currentOptions >= item.MaxMagic {
 		return 0, 0, false
 	}
 	option := properties.nonRepair

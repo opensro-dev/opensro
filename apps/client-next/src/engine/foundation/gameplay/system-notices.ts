@@ -9,6 +9,7 @@ the shard's job-kill and drop/plus notices (0x3667), and the command restriction
 
 ===========================================================================
 */
+import { sealTier } from "./item-seal";
 import { decodeNoticeLinks } from "./notice-links";
 
 /*
@@ -165,7 +166,7 @@ export const EVENT_NOTICE_COLOR_ARGB = 0xffff4a4a;
 ================
 sealNoticeColorArgb
 
-The notice colour for an item's seal fields (rarity 2 and the
+The notice colour for an item's seal fields (a sealed rarity and the
 itemClass whose (itemClass - 1) % 3 is Star, Moon, Sun), or undefined
 when the item carries no seal.
 ================
@@ -174,8 +175,9 @@ export function sealNoticeColorArgb(
 	rarity: number | undefined,
 	itemClass: number | undefined
 ): number | undefined {
-	if ( rarity !== 2 || !itemClass ) return undefined;
-	return [ SEAL_NOTICE_COLOR_STAR, SEAL_NOTICE_COLOR_MOON, SEAL_NOTICE_COLOR_SUN ][(itemClass - 1) % 3];
+	const tier = sealTier( rarity, itemClass );
+	if ( tier === undefined ) return undefined;
+	return [ SEAL_NOTICE_COLOR_STAR, SEAL_NOTICE_COLOR_MOON, SEAL_NOTICE_COLOR_SUN ][tier];
 }
 
 /*

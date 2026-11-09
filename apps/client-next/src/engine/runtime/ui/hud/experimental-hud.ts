@@ -294,6 +294,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Show a rare item's seal right under its name."
 					},
 					{
+						key: "setBonusTooltip",
+						id: "experimental-set-bonus-tooltip",
+						label: "Set bonus on item tooltips",
+						description: "List an armor piece's set tiers and worn pieces."
+					},
+					{
 						key: "silkHistory",
 						id: "experimental-silk-history",
 						label: "Silk charge history",

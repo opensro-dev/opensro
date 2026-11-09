@@ -54,10 +54,18 @@ def archive_bytes(files):
 	server = builder.folder([])
 	silkroad = builder.folder([])
 	textdata = builder.folder([])
-	builder.blocks[root] = [(1, b"server_dep", server, 0)]
+	resinfo = builder.folder([])
+	builder.blocks[root] = [(1, b"server_dep", server, 0), (1, b"resinfo", resinfo, 0)]
 	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
 	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
-	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	# A name under resinfo/ is a Media root file of the resinfo folder; the rest are textdata tables.
+	builder.blocks[textdata] = [
+		(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items() if not name.startswith("resinfo/")
+	]
+	builder.blocks[resinfo] = [
+		(2, name.split("/", 1)[1].encode("ascii"), *builder.add_payload(raw))
+		for name, raw in files.items() if name.startswith("resinfo/")
+	]
 	return builder.build()
 
 
@@ -445,8 +453,20 @@ class ImportTests(unittest.TestCase):
 			(base / "itemdata.txt").write_bytes(original_manifest)
 			(base / "itemdata_5000.txt").write_bytes(utf16([weapon()]))
 			(base / "textdataname.txt").write_bytes(utf16([]))
-			for name in ("itemdata.txt", "textdataname.txt"):
+			native_ui = utf16([["1", "PARAM_REINFORCE", "ko", "", "tw", "cn", "de", "ja", "enhancement", "vi"]])
+			(base / "textuisystem.txt").write_bytes(native_ui)
+			for name in ("itemdata.txt", "textdataname.txt", "textuisystem.txt"):
 				os.link(base / name, target / name)
+			glow_native, glow_target = native / importer.GLOW_ROOT, output / importer.GLOW_ROOT
+			glow_native.mkdir(parents=True)
+			glow_target.mkdir(parents=True)
+			(glow_native / importer.GLOW_TIERS).write_bytes(b"1\t3\t0,0\ta.ddj\t4\t7\t1,1,1\t1,1,1\t1000\t0\r\n")
+			native_glow = b"ITEM_CH_SWORD_10_A\t1\r\n"
+			(glow_native / importer.GLOW_TABLE).write_bytes(native_glow)
+			os.link(glow_native / importer.GLOW_TABLE, glow_target / importer.GLOW_TABLE)
+			native_rare = b"ITEM_EU_SWORD_11_B_RARE\tsystem\\system_raretype_a_step2.efp\t175\tai_end\tnone\r\n"
+			(glow_native / importer.RARE_TABLE).write_bytes(native_rare)
+			os.link(glow_native / importer.RARE_TABLE, glow_target / importer.RARE_TABLE)
 			with patch.dict(os.environ, {importer.FLAG: "off"}):
 				self.assertFalse(importer.add_items(later, native, output)["enabled"])
 			new = weapon("ITEM_EU_SWORD_11_A", 11, "1", 31)
@@ -460,13 +480,30 @@ class ImportTests(unittest.TestCase):
 				"refsetitemgroup.txt": utf16([set_group(13)]),
 				"refmagicoptgroup.txt": utf16([magic_group(2), magic_group(3), magic_group(4)]),
 				"magicoption.txt": utf16([magic_option(389)]),
+				"textuisystem.txt": utf16([
+					["1", "PARAM_REINFORCE_ITEM_SET", "ko", "", "tw", "cn", "de", "ja", "Set enforcement", "vi"],
+					["1", "PARAM_REINFORCE", "ko", "", "tw", "cn", "de", "ja", "different", "vi"],
+					["1", "PARAM_UNRELATED", "ko", "", "tw", "cn", "de", "ja", "other", "vi"],
+					["1", "PARAM_RARE_FIRST2", "ko", "", "tw", "cn", "de", "ja", "Seal of Nova", "vi"]]),
 			}
+			# The later file lists the new piece and one the import does not carry; a group the tier table lacks is refused.
+			files["resinfo/itemoption.txt"] = b"ITEM_EU_SWORD_11_A\t1\r\nITEM_EU_AXE_11_A\t1\r\nITEM_EU_SWORD_11_B\t9\r\n"
 			(later / "Media.pk2").write_bytes(archive_bytes(files))
 			(later / "Data.pk2").write_bytes(archive_bytes({}))
 			(later / "Particles.pk2").write_bytes(archive_bytes({}))
 			with patch.dict(os.environ, {importer.FLAG: "on"}), patch.object(importer, "copy_asset_closure", return_value=[]):
 				first = importer.add_items(later, native, output)
 				second = importer.add_items(later, native, output)
+			self.assertEqual(first["glowRowsAdded"], ["ITEM_EU_SWORD_11_A"])
+			self.assertEqual(
+				(glow_target / importer.GLOW_TABLE).read_bytes(), native_glow + b"ITEM_EU_SWORD_11_A\t1\r\n")
+			self.assertEqual((glow_native / importer.GLOW_TABLE).read_bytes(), native_glow)
+			# Only the set symbols the table lacks are added; a symbol it has keeps its row.
+			self.assertEqual(first["setUiTexts"], ["PARAM_RARE_FIRST2", "PARAM_REINFORCE_ITEM_SET"])
+			ui_rows = {r[1]: r[8] for r in importer.tables.table_rows((target / "textuisystem.txt").read_bytes())}
+			self.assertEqual(ui_rows, {
+				"PARAM_REINFORCE": "enhancement", "PARAM_REINFORCE_ITEM_SET": "Set enforcement",
+				"PARAM_RARE_FIRST2": "Seal of Nova"})
 			self.assertEqual(first["idMap"], second["idMap"])
 			self.assertEqual(first["setCatalogue"], {"groups": 1, "magicGroups": 3, "optionIds": [389], "setItems": 0})
 			self.assertEqual(importer.tables.table_rows((target / items.SET_GROUP_TABLE).read_bytes()), [set_group(13)])
@@ -478,6 +515,48 @@ class ImportTests(unittest.TestCase):
 			self.assertFalse((target / items.SET_GROUP_TABLE).exists())
 			self.assertFalse((target / items.MAGIC_GROUP_TABLE).exists())
 			self.assertEqual((target / "itemdata.txt").read_bytes(), original_manifest)
+			self.assertEqual((glow_target / importer.GLOW_TABLE).read_bytes(), native_glow)
+			self.assertEqual((glow_target / importer.RARE_TABLE).read_bytes(), native_rare)
+			self.assertEqual((target / "textuisystem.txt").read_bytes(), native_ui)
+
+	# ================
+	# test_rare_rows_give_set_pieces_their_seal_particle
+	# ================
+	def test_rare_rows_give_set_pieces_their_seal_particle(self):
+		effect = "system\\system_raretype_a_step%d.efp"
+		row = lambda step, scale: f"{effect % step}\t{scale}\tai_end\tnone"
+		native = f"ITEM_CH_SWORD_11_A_RARE\t{row(1, 175)}\r\nITEM_CH_SWORD_11_B_RARE\t{row(2, 175)}\r\n"
+		later = (
+			f"ITEM_CH_SWORD_11_SET_A_RARE\t{row(3, 185)}\r\nITEM_CH_SWORD_11_SET_B_RARE\t{row(3, 215)}\r\n"
+			f"ITEM_CH_AXE_11_SET_A_RARE\t{row(3, 160)}\r\n"
+			f"ITEM_CH_AXE_11_SET_B_RARE\t{row(3, 170)}\r\n"
+		)
+		codes = {
+			"ITEM_CH_SWORD_11_A_RARE", "ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE",
+			"ITEM_CH_SWORD_11_SET_A", "ITEM_CH_SHIELD_11_SET_A_RARE", "ITEM_CH_AXE_11_SET_A_RARE",
+		}
+		text, added = items.rare_rows(native, later, codes)
+		# Set A keeps the later row's scale and bone with the family's moon effect; set B keeps the later row whole;
+		# a set A piece with no family row keeps the later (sun) effect; the rest are untouched.
+		self.assertEqual(added, ["ITEM_CH_AXE_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_A_RARE", "ITEM_CH_SWORD_11_SET_B_RARE"])
+		self.assertEqual(text, native
+			+ f"ITEM_CH_AXE_11_SET_A_RARE\t{row(3, 160)}\r\n"
+			+ f"ITEM_CH_SWORD_11_SET_A_RARE\t{row(2, 185)}\r\n"
+			+ f"ITEM_CH_SWORD_11_SET_B_RARE\t{row(3, 215)}\r\n")
+		self.assertEqual(items.rare_rows(native, later, {"ITEM_CH_SWORD_11_A_RARE"}), (native, []))
+
+	# ================
+	# test_glow_rows_follow_the_imported_codenames
+	# ================
+	def test_glow_rows_follow_the_imported_codenames(self):
+		native = "ITEM_CH_SWORD_10_A\t1\r\n// note\r\n"
+		later = "ITEM_CH_SWORD_10_A\t3\r\nITEM_X_11_SET_B_RARE\t3\r\nITEM_Y_11_SET_B\t2\r\nITEM_Z_11\t8\r\n"
+		text, added = items.glow_rows(native, later, {"ITEM_CH_SWORD_10_A", "ITEM_X_11_SET_B_RARE", "ITEM_Z_11"}, {1, 2, 3, 4})
+		# A listed code keeps its group; an unimported code and a group the tier table lacks add nothing.
+		self.assertEqual(added, ["ITEM_X_11_SET_B_RARE"])
+		self.assertEqual(text, native + "ITEM_X_11_SET_B_RARE\t3\r\n")
+		self.assertEqual(items.glow_rows(native, later, set(), {1, 2, 3, 4}), (native, []))
+		self.assertEqual(items.glow_rows("A\t1", "B\t1\r\n", {"B"}, {1})[0], "A\t1\r\nB\t1\r\n")
 
 	# ================
 	# test_set_item_without_its_group_fails_the_import
