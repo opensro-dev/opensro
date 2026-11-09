@@ -94,9 +94,12 @@ const (
 // judged pet tick refilling the session's retained owner-world
 // slot instead of cloning the world per tick, and its stuck answer
 // and movement constraint built once per session (#2033), measured
-// 23,897 B / 249 allocs; with the crow-brood recharge verdict read
-// under the stack read guard instead of the callback door's boxed
-// closure per crow tick (#2033), measured 22,584 B / 217 allocs.
+// 23,897 B / 249 allocs; with the identity key's composition
+// memoized (namekey.Key), so the world store's lanes stop building
+// the same key strings every tick (#2033), measured 23,227 B / 221
+// allocs; with the crow-brood recharge verdict read under the stack
+// read guard instead of the callback door's boxed closure per crow
+// tick (#2033), measured 22,584 B / 217 allocs.
 const (
 	tickBudgetBytesPerTick  = 24800
 	tickBudgetAllocsPerTick = 238
