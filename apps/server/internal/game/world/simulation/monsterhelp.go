@@ -35,6 +35,11 @@ func (s *MonsterState) DeliverMonsterHelp(division string, receiver uint32, payl
 // executes outside the population lock; inbox generation and mover admission
 // prevent a replacement event or fresh hit from being overwritten afterward.
 func (ops *MonsterMoverOps) handleHelp(division string, expected *monster.Instance, mover monster.MoverState, players []playerPose, now int64) ([]Frame, bool) {
+	// The inbox value is only worth copying out when a command
+	// pends at all; Pending then still refuses a non-help command.
+	if !expected.Help.HasPending() {
+		return nil, false
+	}
 	event, pending := expected.Help.Pending()
 	if !pending {
 		return nil, false

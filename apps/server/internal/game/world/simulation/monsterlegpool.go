@@ -586,14 +586,11 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 		case legPlanOpMover:
 			landed = armed.commitSteppedMover(work.division, gid, op.mover)
 		case legPlanOpNavigation:
-			armed.commitSteppedNavigation(work.division,
+			// The transaction hands back its landing and the
+			// generation it wrote, so the replay rebases and
+			// judges the op without a stored-value witness read.
+			_, landed = armed.commitSteppedNavigation(work.division,
 				ops.Monsters.prepareNavigation(work.division, gid), op.mover, op.frames)
-			// commitNavigation's frame return cannot tell a landed
-			// commit with no frames from a dropped one; the stored
-			// value equalling next is the acceptance witness, the
-			// same one commitSteppedNavigation chains off.
-			stored, _, ok := ops.Monsters.MoverGenerationAt(work.division, gid, actor.slot, actor.monsterSlot)
-			landed = ok && stored == op.mover
 		case legPlanOpActivity:
 			landed, _ = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
 		case legPlanOpFollow:

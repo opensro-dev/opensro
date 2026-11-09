@@ -29,7 +29,8 @@ startReturnLeg
 func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	mover, frames := ops.planReturnLeg(instance, mover, event, nowMs)
-	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	return committed
 }
 
 // homingArrivalDistance is the fixed 3-D arrival radius around the stored

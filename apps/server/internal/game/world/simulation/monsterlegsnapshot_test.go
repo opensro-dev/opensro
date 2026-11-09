@@ -17,6 +17,9 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -257,4 +260,96 @@ func TestLegSnapshotReusedSlotOfAGoneActor(t *testing.T) {
 	if kept, ok := next.actorAt(1); !ok || kept.instance.Gid != batch.actors[1].gid {
 		t.Fatalf("the surviving actor %d did not read through its slot", batch.actors[1].gid)
 	}
+}
+
+/*
+================
+TestLegSnapshotRecycledSlotCarriesNoPriorActor
+
+A build writes its actor into the slot field by field
+(residentMonster.fill plus the sparse join in hotFill); nothing
+re-zeroes the slot wholesale first, so a fully populated actor
+built into a slot must leave nothing behind for the actor built
+into the same slot next: the second build's instance must equal
+its own storage lookup, field for field. A future Instance field
+that fill forgets fails here, not in production.
+================
+*/
+func TestLegSnapshotRecycledSlotCarriesNoPriorActor(t *testing.T) {
+	ops, _, now := seededLegWorld(t, 24)
+	batches := ops.Monsters.behaviorBatches(*now)
+	if len(batches) == 0 || len(batches[0].actors) < 2 {
+		t.Fatal("seeded leg produced no batch of two actors")
+	}
+	batch := batches[0]
+	first, second := batch.actors[0], batch.actors[1]
+
+	// Fully populate the first actor: every sparse family set.
+	ops.Monsters.mu.Lock()
+	state := ops.Monsters.populationForLease(batch.key.division, batch.key.lease)
+	row, ok := state.instances.lookup(first.gid)
+	if ok {
+		row.LinkedEffects = &monster.EffectSnapshot{}
+		row.Abnormal = &abnormal.Block{}
+		row.SelfEffects[0] = monster.SelfEffect{SkillID: 1, Token: 1, UntilMs: 1 << 40}
+		row.TargetEffects[0] = monster.SelfEffect{SkillID: 2, Token: 2, UntilMs: 1 << 40}
+		state.instances.set(first.gid, row)
+	}
+	ops.Monsters.mu.Unlock()
+	if !ok {
+		t.Fatalf("actor %d not resident", first.gid)
+	}
+
+	view := ops.Monsters.legSnapshot(batch.key, []behaviorActorRef{first})
+	full, found := view.actorAt(0)
+	if !found || full.instance.LinkedEffects == nil || full.instance.Abnormal == nil ||
+		full.instance.SelfEffects[0].Token != 1 || full.instance.TargetEffects[0].Token != 2 {
+		t.Fatalf("first build did not carry every sparse family: linked %v abnormal %v self %+v target %+v",
+			full.instance.LinkedEffects != nil, full.instance.Abnormal != nil,
+			full.instance.SelfEffects[0], full.instance.TargetEffects[0])
+	}
+	ops.Monsters.releaseLegSnapshot(view)
+
+	next := ops.Monsters.legSnapshot(batch.key, []behaviorActorRef{second})
+	defer ops.Monsters.releaseLegSnapshot(next)
+	if next != view {
+		t.Fatal("the rebuild did not reuse the released view")
+	}
+	clean, found := next.actorAt(0)
+	if !found || clean.instance.Gid != second.gid {
+		t.Fatalf("second build did not read actor %d through the recycled slot", second.gid)
+	}
+	ops.Monsters.mu.Lock()
+	want, wantOk := state.instances.lookup(second.gid)
+	wantMover, wantMoverOk := state.movers.lookup(second.gid)
+	ops.Monsters.mu.Unlock()
+	if !wantOk || !wantMoverOk {
+		t.Fatalf("actor %d not resident", second.gid)
+	}
+	if !reflect.DeepEqual(clean.instance, want) {
+		t.Fatalf("recycled slot carried the prior actor over in Instance.%s", instanceDifference(clean.instance, want))
+	}
+	if !reflect.DeepEqual(clean.mover, wantMover) {
+		t.Fatalf("recycled slot carried the prior mover over:\n got %+v\nwant %+v", clean.mover, wantMover)
+	}
+}
+
+/*
+================
+instanceDifference
+
+The first Instance field two values disagree in, for the recycled
+slot test's failure line (the whole value is 2 KB; the field name
+is the actionable part).
+================
+*/
+func instanceDifference(got, want monster.Instance) string {
+	gotValue, wantValue := reflect.ValueOf(got), reflect.ValueOf(want)
+	fields := gotValue.Type()
+	for i := 0; i < fields.NumField(); i++ {
+		if !reflect.DeepEqual(gotValue.Field(i).Interface(), wantValue.Field(i).Interface()) {
+			return fields.Field(i).Name
+		}
+	}
+	return ""
 }

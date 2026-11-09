@@ -20,5 +20,6 @@ func (ops *MonsterMoverOps) planIdleEntry(actor *monster.Instance, mover monster
 func (ops *MonsterMoverOps) commitIdleEntry(division string, actor *monster.Instance, mover monster.MoverState, frames []Frame, now int64) []Frame {
 	before := ops.Monsters.prepareNavigation(division, actor.Gid)
 	mover, home := ops.planIdleEntry(actor, mover, now)
-	return ops.commitSteppedNavigation(division, before, mover, append(frames, home...))
+	committed, _ := ops.commitSteppedNavigation(division, before, mover, append(frames, home...))
+	return committed
 }
