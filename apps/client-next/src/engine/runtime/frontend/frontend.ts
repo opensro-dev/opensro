@@ -22,6 +22,27 @@ import { selectedDockCamera } from "@/engine/foundation/rendering/dock-camera";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SessionState, CharacterOperationCommand, SessionCommand } from "@/engine/contracts/session";
+import type { FrontendSnapshot } from "@/engine/contracts/frontend";
+/*
+================
+LOADING_STALL_LIMIT_SECONDS
+
+How long one of the post-login loading phases (loading-create,
+loading-race, loading-dock) may sit with none of the facts its
+completion gate waits on changing - the displayed progress, the stage
+status, the stage/dock/creation readiness, the preview actor count -
+before the wait is declared failed. The gate polls those owners and a
+poll that stalls after every asset has arrived reports no error
+(BR-261108-1908-A644: the bar full, the asset queue idle for minutes,
+the session still at character-select, clicks dead), so without a
+bound the loading screen is permanent. The bound runs on the step
+clock (flow.elapsed), so a hidden tab does not spend it, and it only
+runs while nothing changes at all: a slow load that keeps moving is
+never cut. The worker's admission deadline (session/world.ts) is the
+model; this is its frontend counterpart.
+================
+*/
+const LOADING_STALL_LIMIT_SECONDS = 60;
 /*
 ================
 pageHidden
@@ -68,8 +89,68 @@ export function createFrontend(
 		cameraMoving = false;
 	let roster: NonNullable<SessionState["characters"]> = [];
 	let pointer: readonly [number, number] | null = null;
+	// The loading gate's last seen shape (stepLoadingWatch below): the
+	// phase generation it belongs to, the gate facts as one signature,
+	// and the phase elapsed at which that signature was first seen.
+	let loadingWatch: { generation: number; signature: string; at: number; } | null = null;
 	// Native CPSTitle 0x748630 disables terrain LOD; 0x741B80 restores it on release.
 	stage.install( "/assets/title/constantinople/manifest.json", "full", "settle" );
+	/*
+	================
+	stepLoadingWatch
+
+	One step of the loading stall watch (LOADING_STALL_LIMIT_SECONDS).
+	Outside the post-login loading phases the watch is cleared. Inside
+	one, any change in the facts the completion gate waits on restarts
+	the bound; a full bound with no change at all means the gate's
+	owners have stalled without reporting an error, so the stall is
+	reported with the facts the gate was missing and the load fails
+	like a stage failure: the player gets the "Unable to finish
+	loading" screen and its way back instead of a permanent bar.
+	True when this step failed the flow.
+	================
+	*/
+	function stepLoadingWatch(
+		state: FrontendSnapshot,
+		progress: number,
+		stageReady: boolean,
+		dockReady: boolean,
+		creationReady: boolean
+	): boolean {
+		if ( ![ "loading-create", "loading-race", "loading-dock" ].includes( state.phase ) ) {
+			loadingWatch = null;
+			return false;
+		}
+		const signature = [
+			progress,
+			stageReady,
+			dockReady,
+			creationReady,
+			stageName === "creation" ? renderer.characterStats().actors : -1,
+			stage.status() ?? ""
+		].join( "|" );
+		if (
+			!loadingWatch || loadingWatch.generation !== state.generation ||
+			loadingWatch.signature !== signature
+		) {
+			loadingWatch = { generation: state.generation, signature, at: state.elapsed };
+			return false;
+		}
+		if ( state.elapsed - loadingWatch.at < LOADING_STALL_LIMIT_SECONDS ) return false;
+		loadingWatch = null;
+		// The player sees only the failed screen: report the stage and
+		// the gate's facts, so a stalled entry is never silent (the
+		// world_entry_rejected report above is the model).
+		send( {
+			kind: "client-report",
+			incidentKind: "runtime",
+			code: "frontend_loading_stalled",
+			message: `Loading stalled at ${state.phase}: stage ready ${stageReady}, dock ready ${dockReady}, ` +
+				`creation ready ${creationReady}, progress ${progress}, status ${stage.status() ?? "none"}`
+		} );
+		flow.fail( "Loading stalled: " + (stage.status() ?? state.phase) );
+		return true;
+	}
 	return {
 		/*
 		================
@@ -495,22 +576,27 @@ export function createFrontend(
 			if ( frame && state.phase !== "world" && state.phase !== "loading-world" ) {
 				renderer.setWorldCamera( frame.camera );
 			}
+			const stageReady = stage.ready();
 			if ( stage.error() ) flow.fail( stage.error()! );
 			if (
-				stage.ready() && (stageName !== "dock" || dockReady) &&
+				stageReady && (stageName !== "dock" || dockReady) &&
 				(stageName !== "creation" || creationReady && renderer.characterStats().actors === 1)
 			) flow.ready( state.generation );
 			if ( state.phase === "intro" && frame?.complete ) flow.reveal();
 			flow.advance( delta, frame?.complete );
 			state = flow.snapshot();
+			const progress = state.phase === "loading-create" ?
+				(stage.progress() + Number( creationReady )) / 2 :
+				state.phase === "loading-dock" ?
+				(stage.progress() + Number( dockReady )) / 2 :
+				stage.progress();
+			if ( stepLoadingWatch( state, progress, stageReady, dockReady, creationReady ) ) {
+				state = flow.snapshot();
+			}
 			return {
 				...state,
 				loadingStatus: stage.status(),
-				loadingProgress: state.phase === "loading-create" ?
-					(stage.progress() + Number( creationReady )) / 2 :
-					state.phase === "loading-dock" ?
-					(stage.progress() + Number( dockReady )) / 2 :
-					stage.progress(),
+				loadingProgress: progress,
 				entryPending,
 				selectedCharacter,
 				cameraMoving,
