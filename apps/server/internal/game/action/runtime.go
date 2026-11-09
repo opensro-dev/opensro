@@ -136,6 +136,9 @@ type Runtime struct {
 	// could not kill: the roster gate's invariant made audible (#2030).
 	surpriseFatalCount atomic.Uint64
 	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// recallWindows holds the open Guild Recall Scroll summons
+	// (guildrecall.go); the division lock owns changes.
+	recallWindows sync.Map // guildRecallKey -> *guildRecallWindow
 	// arrivalLane holds the due return arrivals the tick handed off
 	// for the return lane to complete (returnscroll.go).
 	arrivalLane         returnArrivalLane

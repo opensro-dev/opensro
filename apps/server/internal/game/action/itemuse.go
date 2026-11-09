@@ -194,6 +194,10 @@ func (rt *Runtime) HandleItemUse(
 	// A crest delete the closure admitted: the crest clears after this
 	// door closes, then the item is spent (crestdelete.go).
 	var crestDelete string
+	// A guild recall the closure admitted: the gates judge, the scroll
+	// is spent and the guild is asked after this door closes
+	// (guildrecall.go).
+	var recallUse *guildRecallUse
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -381,6 +385,14 @@ func (rt *Runtime) HandleItemUse(
 			// cannot run inside this character door: admit here, clear
 			// and spend after the door closes (finishCrestDeleteUse).
 			crestDelete = rt.admitCrestDeleteUse(character, ref, tail, &result)
+			return false
+		}
+		if family == itemUseGuildRecall {
+			// The recall's gates read the guild through its own store
+			// and its fan-out pushes to other sessions: admit here,
+			// judge, spend and ask after the door closes
+			// (finishGuildRecallUse).
+			recallUse = rt.admitGuildRecallUse(character, ref, tail, nowMs, &result)
 			return false
 		}
 		if family == itemUseGenderTool {
@@ -795,6 +807,9 @@ func (rt *Runtime) HandleItemUse(
 	}
 	if crestDelete != "" {
 		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
+	}
+	if recallUse != nil {
+		rt.finishGuildRecallUse(divisionID, character, request, used, recallUse, &result)
 	}
 	return result
 }

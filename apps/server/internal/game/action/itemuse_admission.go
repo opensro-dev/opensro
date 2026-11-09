@@ -60,6 +60,7 @@ const (
 	itemUseReverseReturn
 	itemUseNameChange
 	itemUseCrestDelete
+	itemUseGuildRecall
 )
 
 /*
@@ -84,6 +85,12 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
+	}
+	// Native expendable dispatch case 3 (type 4 = 3): the Guild Member
+	// Summon Scroll (guildrecall.go), beside the mercenary (1) and the
+	// crest deletes (2) in the same type block.
+	if ref.TypeIDs == [4]int64{3, 3, 12, 3} {
+		return itemUseGuildRecall
 	}
 	// Native item use case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
 	if ref.TypeIDs == globalChatTypeIDs {
