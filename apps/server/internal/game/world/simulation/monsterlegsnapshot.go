@@ -39,6 +39,10 @@ batch's backing from being pinned forever.
 
 package simulation
 
+import (
+	"opensro.online/server/internal/game/world/monster"
+)
+
 /*
 ================
 legSnapshot
@@ -151,17 +155,29 @@ func (view *legSnapshot) actorAt(i int) (*behaviorActorSnapshot, bool) {
 ================
 MonsterState.releaseLegSnapshot
 
-Takes the view back once its batch has been dispatched. The stored
-copies are cleared, so a retained view holds no actor (or anything
-its pointers reach) alive between batches; a view past the retained
-bounds is left to the collector instead.
+Takes the view back once its batch has been dispatched. The wipe
+covers only what the next build does not write: the instance's
+effect families (fill writes the rest of the instance field by
+field, and hotFill joins an effect only where the sparse mask
+sets it, so a built slot's effect fields must arrive zero) and
+the mover (its expansion writes only the fields it owns). A
+retained view so holds no actor (or anything its pointers reach)
+alive between batches; a view past the retained bounds is left
+to the collector instead.
 ================
 */
 func (s *MonsterState) releaseLegSnapshot(view *legSnapshot) {
 	if view == nil || cap(view.actors) > maxRetainedLegSnapshotActors {
 		return
 	}
-	clear(view.actors)
+	for i := range view.actors {
+		actor := &view.actors[i]
+		actor.instance.LinkedEffects = nil
+		actor.instance.Abnormal = nil
+		actor.instance.SelfEffects = monster.SelfEffects{}
+		actor.instance.TargetEffects = monster.TargetEffects{}
+		actor.mover = monster.MoverState{}
+	}
 	view.actors = view.actors[:0]
 	view.key = populationKey{}
 	s.legViewMu.Lock()

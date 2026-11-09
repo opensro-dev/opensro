@@ -17,6 +17,8 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -256,5 +258,62 @@ func TestLegSnapshotReusedSlotOfAGoneActor(t *testing.T) {
 	}
 	if kept, ok := next.actorAt(1); !ok || kept.instance.Gid != batch.actors[1].gid {
 		t.Fatalf("the surviving actor %d did not read through its slot", batch.actors[1].gid)
+	}
+}
+
+/*
+================
+TestLegSnapshotRecycledSlotCarriesNoPriorEffects
+
+The build writes a slot's effect families only where the actor's
+sparse mask sets them (monsterStorage.hotFill), trusting the wipe
+releaseLegSnapshot leaves behind. The test parks an actor carrying
+a self effect in slot 0, releases the view, then builds a different,
+effect-free actor into the same slot of the same backing: its
+effect fields must read zero, exactly as its own lookup reads.
+================
+*/
+func TestLegSnapshotRecycledSlotCarriesNoPriorEffects(t *testing.T) {
+	ops, _, now := seededLegWorld(t, 24)
+	batches := ops.Monsters.behaviorBatches(*now)
+	if len(batches) == 0 || len(batches[0].actors) < 2 {
+		t.Fatal("seeded leg produced no batch of two actors")
+	}
+	batch := batches[0]
+	first, second := batch.actors[0], batch.actors[1]
+
+	// Give the first actor a self effect, so its resident row carries
+	// the sparse self mask into the build.
+	ops.Monsters.mu.Lock()
+	state := ops.Monsters.populationForLease(batch.key.division, batch.key.lease)
+	row, ok := state.instances.lookup(first.gid)
+	if ok {
+		row.SelfEffects[0] = monster.SelfEffect{SkillID: 1, Token: 1, UntilMs: 1 << 40}
+		state.instances.set(first.gid, row)
+	}
+	ops.Monsters.mu.Unlock()
+	if !ok {
+		t.Fatalf("actor %d not resident", first.gid)
+	}
+
+	view := ops.Monsters.legSnapshot(batch.key, []behaviorActorRef{first})
+	withEffects, found := view.actorAt(0)
+	if !found || withEffects.instance.SelfEffects[0].Token != 1 {
+		t.Fatalf("first build did not carry the installed self effect: %+v", withEffects.instance.SelfEffects)
+	}
+	ops.Monsters.releaseLegSnapshot(view)
+
+	next := ops.Monsters.legSnapshot(batch.key, []behaviorActorRef{second})
+	defer ops.Monsters.releaseLegSnapshot(next)
+	if next != view {
+		t.Fatal("the rebuild did not reuse the released view")
+	}
+	clean, found := next.actorAt(0)
+	if !found || clean.instance.Gid != second.gid {
+		t.Fatalf("second build did not read actor %d through the recycled slot", second.gid)
+	}
+	if clean.instance.LinkedEffects != nil || clean.instance.Abnormal != nil ||
+		clean.instance.SelfEffects != (monster.SelfEffects{}) || clean.instance.TargetEffects != (monster.TargetEffects{}) {
+		t.Fatalf("recycled slot leaked the prior actor's effects: self %+v target %+v", clean.instance.SelfEffects, clean.instance.TargetEffects)
 	}
 }

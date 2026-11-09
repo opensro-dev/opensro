@@ -246,16 +246,34 @@ fill
 
 value written in place: the leg-start snapshot builds every due actor
 straight into its view slot, so the 2 KB expansion is not copied again
-through a return value (#2982).
+through a return value (#2982). The write is field by field, never a
+whole-value literal: a recycled view slot is not re-zeroed here, and
+the effect families are hotFill's to join - dst arrives with them
+zero (a fresh value, or a slot releaseLegSnapshot wiped), so a new
+Instance field belongs either in this list or in hotFill's families.
 ================
 */
 func (r residentMonster) fill(dst *monster.Instance, gid uint32) {
-	*dst = monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
-		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached, GMSpawned: r.gmSpawned,
-		SpawnHeading: r.spawnHeading, TradeVariant: r.tradeVariant, StructureState: r.structureState, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
-		LastSummonCommandMs: r.lastSummonCommandMs,
-		Opponents:           r.opponents, SummonActionUntilMs: r.summonActionUntilMs, SummonerGID: r.summonerGID,
-		SummonSightRange: r.summonSightRange, SummonerFollowRange: r.summonerFollowRange}
+	dst.ConditionalUsed = r.conditionalUsed
+	dst.Gid = gid
+	dst.Ref = r.ref.Value()
+	dst.Nest = r.nest.Value()
+	dst.Help = r.help
+	dst.Motion = r.motion
+	dst.Spawn = r.spawn
+	dst.NestDetached = r.nestDetached
+	dst.GMSpawned = r.gmSpawned
+	dst.SpawnHeading = r.spawnHeading
+	dst.TradeVariant = r.tradeVariant
+	dst.StructureState = r.structureState
+	dst.CurrentHP = r.currentHP
+	dst.DamageSinceSummon = r.damageSinceSummon
+	dst.LastSummonCommandMs = r.lastSummonCommandMs
+	dst.Opponents = r.opponents
+	dst.SummonActionUntilMs = r.summonActionUntilMs
+	dst.SummonerGID = r.summonerGID
+	dst.SummonSightRange = r.summonSightRange
+	dst.SummonerFollowRange = r.summonerFollowRange
 }
 
 /*
@@ -277,14 +295,14 @@ func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instanc
 ================
 hotFill
 
-hotValue written in place (#2982): see residentMonster.fill.
+hotValue written in place (#2982): see residentMonster.fill. A sparse
+family whose bit is clear is left untouched, not zeroed: the mask
+says the storage holds no entry for the actor, and dst's effect
+fields arrive zero (fill's contract), which is the same answer.
 ================
 */
 func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r residentMonster) {
 	r.fill(dst, gid)
-	if r.sparse == 0 {
-		return
-	}
 	if r.sparse&sparseLinked != 0 {
 		dst.LinkedEffects = s.linkedEffects[gid]
 	}
@@ -418,7 +436,9 @@ func (s *monsterStorage) lookupAt(slot uint32, gid uint32) (monster.Instance, bo
 ================
 lookupAtInto
 
-lookupAt written in place (#2982); dst is untouched on a miss.
+lookupAt written in place (#2982); dst is untouched on a miss. On a
+hit dst's effect fields must arrive zero (fill's contract): a fresh
+value, or a leg-view slot releaseLegSnapshot wiped.
 ================
 */
 func (s *monsterStorage) lookupAtInto(dst *monster.Instance, slot uint32, gid uint32) bool {
