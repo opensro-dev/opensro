@@ -84,6 +84,11 @@ type petSession struct {
 	judgedCosKey     cosAbnormalKey
 	judgedCosKeyFrom petOwnerKey
 	judgedCosKeySet  bool
+	// broodRecharge is the crow session's recharge verdict memo
+	// (petbrood.go): the still verdict and the record fields it
+	// was derived from, so an idle crow tick answers without
+	// re-walking the skill table and the modifiers graph (#2033).
+	broodRecharge petBroodRechargeMemo
 	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState

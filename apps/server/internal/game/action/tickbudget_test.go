@@ -125,13 +125,17 @@ const (
 // every read (#2033), measured 17,790 B / 93 allocs; with the
 // elemental arm's capture reading on the stack read guard instead
 // of the callback door (#2033), measured 17,214 B / 75 allocs; with
-// the timed-window sweeps' owner lists cached on their index and
+// the population doors' sorted key list cached on the monster
+// state and rebuilt only when a population registers or releases,
+// instead of rebuilt and re-sorted on every door (#2033), measured
+// 16,413 B / 66 allocs on the combined tree; with the
+// timed-window sweeps' owner lists cached on their index and
 // rebuilt only when an owner tracks or is forgotten, instead of
-// rebuilt and re-sorted on every sweep (#2033), measured 17,125 B /
-// 71 allocs.
+// rebuilt and re-sorted on every sweep (#2033), measured
+// 16,343 B / 63 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 18900
-	tickBudgetAllocsPerTick = 79
+	tickBudgetBytesPerTick  = 18000
+	tickBudgetAllocsPerTick = 70
 )
 
 /*

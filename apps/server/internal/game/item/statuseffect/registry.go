@@ -183,10 +183,25 @@ func NewRegistry() *Registry {
 /*
 ================
 ownerKey
+
+The registry's owner identity: division and character name
+case-folded into one lookup string. It is the only fold.
 ================
 */
 func ownerKey(divisionID, characterName string) string {
 	return strings.ToLower(divisionID) + "\x00" + strings.ToLower(characterName)
+}
+
+/*
+================
+OwnerKey
+
+The ownerKey fold for lanes in other packages that hold one owner's
+key across ticks instead of refolding every read (#2033).
+================
+*/
+func OwnerKey(divisionID, characterName string) string {
+	return ownerKey(divisionID, characterName)
 }
 
 /*

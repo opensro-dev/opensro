@@ -96,6 +96,19 @@ Return the committed snapshot. Callers copy it before changing any slot.
 ================
 */
 func (rt *Runtime) playerAbnormal(division, name string) *abnormal.Block {
+	return rt.playerAbnormalKeyed(playerAbnormalKey(division, name))
+}
+
+/*
+================
+playerAbnormalKeyed
+
+playerAbnormal for a caller already holding the folded key
+(playerAbnormalKey): the recovery session folds once at bind, not per
+pulse (#2033).
+================
+*/
+func (rt *Runtime) playerAbnormalKeyed(key string) *abnormal.Block {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
 	// The common read is a character with no block in a store holding
@@ -103,7 +116,7 @@ func (rt *Runtime) playerAbnormal(division, name string) *abnormal.Block {
 	if len(rt.playerAbnormals.blocks) == 0 {
 		return nil
 	}
-	return rt.playerAbnormals.blocks[playerAbnormalKey(division, name)].block
+	return rt.playerAbnormals.blocks[key].block
 }
 
 /*

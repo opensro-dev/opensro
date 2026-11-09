@@ -133,8 +133,13 @@ type MonsterState struct {
 	// division's population once and never replaces or removes
 	// it, so the remembered pair can only ever repeat the map's
 	// own answer. See divisionState (#3027).
-	divHintName          string
-	divHintState         *divisionMonsterState
+	divHintName  string
+	divHintState *divisionMonsterState
+	// popKeysMemo is populationKeys' sorted key list, rebuilt only
+	// when a membership writer (division, AllocatePopulation,
+	// OpenInstanceLayer, ReleasePopulation) drops it; see
+	// populationKeys (#2033).
+	popKeysMemo          []populationKey
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest
@@ -375,6 +380,7 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 		panic("catalog has no default world")
 	}
 	s.divs[divisionID] = state
+	s.popKeysMemo = nil
 	return state
 }
 
