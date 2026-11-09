@@ -20182,8 +20182,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const box = authoredRect( at( 3 ), px, py ),
 						messages = authoredRect( chat.GDR_CHAT_CHATMESSAGE!, box[0], box[1] ),
 						rows = Math.max( 0, Math.floor( messages[3] / STALL_CHAT_ROW ) ),
-						said = stallHud.messages().flatMap( line =>
-							textBoxLines( line.name + ":" + line.text, messages[2], value => text.run( value ).width )
+						// Players print "name:text" in white; the stall's own state,
+						// sale and network lines print in the system message gold.
+						said = stallHud.messages().flatMap( entry =>
+							textBoxLines(
+								entry.kind === "chat" ?
+									entry.line.name + ":" + entry.line.text :
+									noticeText( hudCopy, {
+										key: entry.line.key,
+										value: 0,
+										arguments: entry.line.args
+									} ),
+								messages[2],
+								value => text.run( value ).width
+							).map( value => ({ value, color: entry.kind === "chat" ? white : gold }) )
 						),
 						end = Math.max( 0, said.length - stallChatScroll.offset() ),
 						first = Math.max( 0, end - rows ),
@@ -20198,7 +20210,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							STALL_CHAT_ROW
 						];
 						quads.push(
-							...text.quads( line, row, messages, white, { overflow: "clip" } )
+							...text.quads( line.value, row, messages, line.color, { overflow: "clip" } )
 						);
 					}
 					const messageScroll = chatScrollbar(
