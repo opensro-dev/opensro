@@ -130,10 +130,14 @@ const (
 // instead of rebuilt and re-sorted on every door (#2033), measured
 // 16,413 B / 66 allocs on the combined tree; with the satiety tick
 // judging off the shared catalog row instead of a MaxHP-adjusted
-// copy (#2033), measured 15,065 B / 63 allocs on the combined tree.
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
+// with the pets tick's session walk list cached on the runtime and
+// rebuilt only on session membership writes, instead of rebuilt
+// and re-sorted every tick (#2033), measured 13,542 B / 59 allocs
+// on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 16600
-	tickBudgetAllocsPerTick = 70
+	tickBudgetBytesPerTick  = 14900
+	tickBudgetAllocsPerTick = 65
 )
 
 /*
