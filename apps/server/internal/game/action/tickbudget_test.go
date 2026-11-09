@@ -119,10 +119,13 @@ const (
 // recovery lock instead of rebuilding the list every tick (#2033),
 // measured 19,516 B / 170 allocs; with the companion-admitted
 // snapshot reading on the stack read guard instead of the callback
-// door (#2033), measured 18,127 B / 115 allocs.
+// door (#2033), measured 18,127 B / 115 allocs; with the judged
+// pet's COS abnormal identity weighed as a folded struct key,
+// folded once per session binding, instead of a string rebuilt on
+// every read (#2033), measured 17,790 B / 93 allocs.
 const (
-	tickBudgetBytesPerTick  = 20000
-	tickBudgetAllocsPerTick = 127
+	tickBudgetBytesPerTick  = 19700
+	tickBudgetAllocsPerTick = 103
 )
 
 /*
