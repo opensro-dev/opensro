@@ -282,6 +282,22 @@ func (q *behaviorQueue) liveCopy(e behaviorCopy) bool {
 
 /*
 ================
+behaviorQueue.armedAt
+
+Whether the actor's queue row still holds a live due: a fired row
+stays dead until a set revives it, so this reads the drain's pop
+contract back - true when some door has re-armed the actor since
+its due fired. The slot is verified against the gid before use
+(#2133): a row recycled onto another actor answers for its new
+owner, never for the stale ref.
+================
+*/
+func (q *behaviorQueue) armedAt(queueSlot uint32, gid uint32) bool {
+	return queueSlot < uint32(len(q.slots)) && q.slots[queueSlot].gid == gid && q.slots[queueSlot].live
+}
+
+/*
+================
 behaviorQueue.filterDue
 
 One list under drain at now: live copies due by now fire (their slot
@@ -652,28 +668,38 @@ dst reads as the zero snapshot (ok false) when the actor is gone.
 func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state *divisionMonsterState, ref behaviorActorRef) {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
-	if !state.instances.lookupAtInto(&dst.instance, ref.monsterSlot, ref.gid) {
+	// The snapshot stamps the slot the read actually resolved, so a
+	// hint left stale by a row swap since the last remainder arm
+	// costs the fill one gid resolve, never the step's doors a
+	// second one.
+	monsterSlot := ref.monsterSlot
+	if !state.instances.lookupAtInto(&dst.instance, monsterSlot, ref.gid) {
 		actor, ok := state.instances.lookup(ref.gid)
 		if !ok {
 			*dst = behaviorActorSnapshot{}
 			return
 		}
 		dst.instance = actor
+		_, monsterSlot, _ = state.instances.hotRowSlot(ref.gid)
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
-	if !state.movers.lookupAtInto(&dst.mover, ref.slot, ref.gid) {
+	slot := ref.slot
+	if !state.movers.lookupAtInto(&dst.mover, slot, ref.gid) {
 		mover, ok := state.movers.lookup(ref.gid)
 		if !ok {
 			mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
+			slot = behaviorNoMoverSlot
+		} else if resolved, found := state.movers.slotOf(ref.gid); found {
+			slot = resolved
 		}
 		dst.mover = mover
 	}
 	if err := dst.mover.Validate(); err != nil {
 		panic(err)
 	}
-	dst.moverGen = state.movers.generationAt(ref.slot, ref.gid)
-	dst.slot, dst.monsterSlot, dst.ok = ref.slot, ref.monsterSlot, true
+	dst.moverGen = state.movers.generationAt(slot, ref.gid)
+	dst.slot, dst.monsterSlot, dst.ok = slot, monsterSlot, true
 }
 
 /*
@@ -688,6 +714,17 @@ func (s *MonsterState) behaviorBatches(now int64) []behaviorBatch {
 /*
 ================
 MonsterState.behaviorBatchesForDivision
+
+The due batches for one leg. Building a batch consumes the actors'
+dues WITHOUT re-arming them: the carried re-arm used to run here,
+for every due actor, before its step - and an actor whose step then
+committed (the gate's activity commit, a mover wake, an event door)
+re-armed itself from its post-step rows, so the build's computation
+was pure waste for exactly the actors that acted, while actors the
+dispatch dropped paid it too. The dispatcher now arms the remainder
+(armBehaviorRemainders) once the batches are through: actors a door
+re-armed meanwhile are skipped, the rest are armed from the same
+computation the build ran, on the rows their step left.
 ================
 */
 func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []behaviorBatch {
@@ -724,7 +761,6 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
-			s.scheduleBehaviorCarried(state, &ref, now)
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
@@ -735,6 +771,51 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		out = append(out, batch)
 	}
 	return out
+}
+
+/*
+================
+MonsterState.armBehaviorRemainders
+
+The deferred half of the batch build: arm every actor the dispatch
+left unscheduled. behaviorBatchesForDivision consumed the dues
+without re-arming; an actor whose step committed through a door
+(the activity commit, a mover wake, any event lane's set) already
+holds its next due from its post-step rows and is skipped - the
+carried computation the build used to spend on it was overwritten
+by that due anyway. The rest get the build's own carried arm, on
+the rows their step left: a step that committed nothing scheduling
+left those rows as they were, and a step that moved its actor
+without arming is covered by the idle due's own proof (the earliest
+of deadline, gate and acquisition is the actor's next act time
+either way).
+
+An actor a door put dormant during the dispatch keeps the door's
+decision: it is registered in state.dormant, and re-running the
+carried arm would forget the registration and re-evaluate a sleep
+the door already settled. A population that left mid-leg is
+skipped whole.
+================
+*/
+func (s *MonsterState) armBehaviorRemainders(batches []behaviorBatch, now int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range batches {
+		state := s.populationForLease(batches[i].key.division, batches[i].key.lease)
+		if state == nil {
+			continue
+		}
+		for j := range batches[i].actors {
+			ref := &batches[i].actors[j]
+			if _, sleeping := state.dormant[ref.gid]; sleeping {
+				continue
+			}
+			if state.behavior.armedAt(ref.queueSlot, ref.gid) {
+				continue
+			}
+			s.scheduleBehaviorCarried(state, ref, now)
+		}
+	}
 }
 
 /*

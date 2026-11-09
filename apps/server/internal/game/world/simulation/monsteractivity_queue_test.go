@@ -225,10 +225,13 @@ func TestBehaviorBatchBuildAllocations(t *testing.T) {
 	tick := int64(0)
 	build := func() {
 		got := s.behaviorBatches(tick)
-		tick++
 		if len(got) != 1 || len(got[0].actors) != 1024 {
 			t.Fatalf("batch build lost actors: %d batches", len(got))
 		}
+		// The leg's full batch cost: arm the remainder it left,
+		// then hand the backings back.
+		s.armBehaviorRemainders(got, tick)
+		tick++
 		s.releaseBehaviorBatches(got)
 	}
 	build()
@@ -240,6 +243,45 @@ func TestBehaviorBatchBuildAllocations(t *testing.T) {
 	}
 	if fewest > 10 {
 		t.Fatalf("batch build allocates %.2f per run in steady state, want at most 10", fewest)
+	}
+}
+
+/*
+================
+TestBehaviorBuildLeavesRemainderToArm
+
+The build consumes dues without re-arming: a popped actor stays
+unscheduled until the dispatcher arms the remainder, an actor a
+door re-armed during its dispatch keeps the door's due (the
+remainder must not overwrite it with the carried computation), and
+the rest land on the carried arm's own due.
+================
+*/
+func TestBehaviorBuildLeavesRemainderToArm(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	batches := s.behaviorBatches(0)
+	if len(batches) != 1 || len(batches[0].actors) != 3 {
+		t.Fatalf("first build batched %v, want 3 actors", batches)
+	}
+	if next := s.behaviorBatches(1); len(next[0].actors) != 0 {
+		t.Fatalf("build re-armed %v; the remainder is the dispatcher's to arm", next[0].actors)
+	}
+	// Actor 1's step re-arms it through a door, far past the
+	// carried due: the remainder leaves the door's due standing.
+	d.behavior.set(1, 5000)
+	s.armBehaviorRemainders(batches, 0)
+	next := s.behaviorBatches(1)
+	if len(next) != 1 || len(next[0].actors) != 2 {
+		t.Fatalf("remainder build batched %v, want the 2 carried actors", next)
+	}
+	for _, ref := range next[0].actors {
+		if ref.gid == 1 {
+			t.Fatal("remainder overwrote the door's due for actor 1")
+		}
+	}
+	next = s.behaviorBatches(5000)
+	if len(next) != 1 || len(next[0].actors) != 1 || next[0].actors[0].gid != 1 {
+		t.Fatalf("door-armed actor fired as %v, want actor 1 alone at its door due", next)
 	}
 }
 
