@@ -119,10 +119,12 @@ const (
 // recovery lock instead of rebuilding the list every tick (#2033),
 // measured 19,516 B / 170 allocs; with the companion-admitted
 // snapshot reading on the stack read guard instead of the callback
-// door (#2033), measured 18,127 B / 115 allocs.
+// door (#2033), measured 18,127 B / 115 allocs; with the elemental
+// arm's capture reading on the stack read guard instead of the
+// callback door (#2033), measured 17,552 B / 97 allocs.
 const (
-	tickBudgetBytesPerTick  = 20000
-	tickBudgetAllocsPerTick = 127
+	tickBudgetBytesPerTick  = 19400
+	tickBudgetAllocsPerTick = 107
 )
 
 /*
