@@ -40,6 +40,8 @@ export const OFF = Object.freeze( {
 	ambientOcclusion: false,
 	// Off by default: sky detail is a port-only deviation.
 	skyDetail: false,
+	// Off by default: water refraction is a port-only deviation.
+	waterRefraction: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,

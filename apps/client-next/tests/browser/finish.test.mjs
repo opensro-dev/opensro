@@ -61,6 +61,7 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					waterRefraction: false,
 					msaa: false,
 					sceneFxaa: false
 				} );

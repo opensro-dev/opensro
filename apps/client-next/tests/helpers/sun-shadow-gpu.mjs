@@ -52,6 +52,7 @@ export async function captureSunShadowPlacement() {
 		perPixelLighting: false,
 		ambientOcclusion: false,
 		skyDetail: false,
+		waterRefraction: false,
 		msaa: false,
 		sceneFxaa: false,
 		smoothCamera: false,

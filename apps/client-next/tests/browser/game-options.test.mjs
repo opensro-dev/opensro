@@ -283,6 +283,7 @@ test(
 					sunShadow: false,
 					perPixelLighting: false,
 					skyDetail: false,
+					waterRefraction: false,
 					msaa: false,
 					sceneFxaa: false,
 					renderScale: 100
@@ -327,6 +328,7 @@ test(
 					sunShadow: false,
 					perPixelLighting: false,
 					skyDetail: false,
+					waterRefraction: false,
 					msaa: false,
 					sceneFxaa: false,
 					renderScale: 100

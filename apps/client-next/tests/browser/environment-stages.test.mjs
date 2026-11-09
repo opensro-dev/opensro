@@ -70,6 +70,7 @@ test( "the float bloom chain composites, resizes and hands quality back", { time
 							hdrToneMap: false,
 							sunShadow: false,
 							perPixelLighting: false,
+							waterRefraction: false,
 							msaa: false
 						} );
 						canvas.width = canvas.height = size;

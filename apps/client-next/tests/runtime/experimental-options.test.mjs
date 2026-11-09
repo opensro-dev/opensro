@@ -85,6 +85,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		sceneFxaa: false,
 		ambientOcclusion: false,
 		skyDetail: false,
+		waterRefraction: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -105,6 +106,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"sunShadow",
 			"perPixelLighting",
 			"ambientOcclusion",
+			"waterRefraction",
 			"msaa",
 			"sceneFxaa"
 		]
