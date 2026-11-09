@@ -228,12 +228,20 @@ export function createMovement(
 	let navigationRequestId: number | undefined;
 	let navigationFailure: { region: number; requestId?: number; error: string; } | undefined;
 	let navigationRegion: number | undefined, owner: NavOwner | undefined;
+	// Terrain retention beside owner: true when the stand is terrain the
+	// mover walked to (the server's retained TerrainOwner), false at a
+	// fresh point (seed, teleport, a correction's resolve-cell) where
+	// FindNavCell arbitrates. A retained terrain stand inside a placed
+	// object's cell seats that cell for the walk (#3006); an object
+	// owner (owner set) makes the flag meaningless.
+	let terrainRetained = false;
 	let surfaceCursor: import("@/engine/contracts/navigation").SurfaceCursor = {};
 	let speed = 50, walkSpeed = 20, runSpeed = 50, mode = 3;
 	let movementRevision = 0;
 	// The last main-thread movement input processed (#1441a, movement-input.ts).
 	let inputSeq = 0;
 	let transitionOwner: NavOwner | undefined;
+	let transitionTerrainRetained = false;
 	let transition: import("@/engine/contracts/gameplay").MovementTransition = {
 		relocation: 0,
 		reason: "spawn",
@@ -287,6 +295,7 @@ changes survive multiple worker steps being delivered in one publication.
 	function beginTransition( reason: typeof transition.reason, reset = false ) {
 		movementRevision++;
 		transitionOwner = owner;
+		transitionTerrainRetained = terrainRetained;
 		transition = { relocation: transition.relocation + Number( reset ), reason, eligible: !reset };
 	}
 	/*
@@ -298,7 +307,12 @@ This query does not change the authoritative pose or its surface owner.
 ================
 	*/
 	function admitCorrection( before: Pose, after: Pose ) {
-		const query = { slide: false, sourceOwner: transitionOwner, status: 0 };
+		const query = {
+			slide: false,
+			sourceOwner: transitionOwner,
+			sourceTerrainRetained: transitionTerrainRetained,
+			status: 0
+		};
 		const resolved = sameNavigationSpace( before, after ) ?
 			navigation.clip( before, after, query ) :
 			null;
@@ -329,6 +343,7 @@ the tiny connector alone cannot prove the last actually displayed position.
 			from: before,
 			to: after,
 			sourceOwner: transitionOwner,
+			sourceTerrainRetained: transitionTerrainRetained,
 			clip: navigation.clip
 		} );
 		if ( !walkingPath ) return;
@@ -412,13 +427,21 @@ float Y is the better witness.
 	*/
 	function reconcile( from: Pose, blocked: "keep-cell" | "resolve-cell" | "receipt-cell" ): Pose {
 		if ( pose && (owner || blocked !== RESOLVE_CELL) ) {
-			const query: { slide: boolean; sourceOwner?: NavOwner; owner?: NavOwner; } = {
+			const query: {
+				slide: boolean;
+				sourceOwner?: NavOwner;
+				sourceTerrainRetained?: boolean;
+				owner?: NavOwner;
+			} = {
 				slide: false,
-				sourceOwner: owner
+				sourceOwner: owner,
+				sourceTerrainRetained: terrainRetained
 			};
 			const resolved = navigation.clip( pose, from, query );
 			if ( resolved && poseDistance( resolved, from ) < .01 ) {
 				owner = query.owner;
+				// The walk reached the corrected point: retained there.
+				terrainRetained = !owner;
 				return { ...from, y: resolved.y };
 			}
 			// A walk that stopped short is blocked; no answer (navigation not
@@ -426,6 +449,8 @@ float Y is the better witness.
 			if ( resolved && blocked === KEEP_CELL ) return pose;
 		}
 		owner = undefined;
+		// Resolve-cell seats the point afresh by nearest height: unretained.
+		terrainRetained = false;
 		return navigation.surface( from );
 	}
 	/*
@@ -498,6 +523,7 @@ catches up no faster than CATCHUP_SPEED_FACTOR.
 		accepted: boolean,
 		predicted: Pose | null,
 		predictedOwner: NavOwner | undefined,
+		predictedTerrainRetained: boolean,
 		server: NonNullable<typeof segment>,
 		to: Pose
 	): ReceiptReconciliation<NonNullable<typeof segment>> {
@@ -511,7 +537,12 @@ catches up no faster than CATCHUP_SPEED_FACTOR.
 		if ( walked[0] * ahead[0] + walked[1] * ahead[1] > remaining * (remaining + ENDPOINT_EPSILON) ) {
 			return { kind: "settle", reason: "passed the server's stop", tail, remaining };
 		}
-		const routeQuery = { slide: false, sourceOwner: predictedOwner, status: 0 };
+		const routeQuery = {
+			slide: false,
+			sourceOwner: predictedOwner,
+			sourceTerrainRetained: predictedTerrainRetained,
+			status: 0
+		};
 		const route = navigation.clip( predicted, to, routeQuery );
 		if ( !route ) return { kind: "server", reason: "route blocked", tail, remaining };
 		if (
@@ -520,9 +551,14 @@ catches up no faster than CATCHUP_SPEED_FACTOR.
 		) {
 			const serverCheck = navigation.clip( predicted, authoritative, {
 				slide: false,
-				sourceOwner: predictedOwner
+				sourceOwner: predictedOwner,
+				sourceTerrainRetained: predictedTerrainRetained
 			} );
-			const serverRoute = navigation.clip( authoritative, to, { slide: false, sourceOwner: owner } );
+			const serverRoute = navigation.clip( authoritative, to, {
+				slide: false,
+				sourceOwner: owner,
+				sourceTerrainRetained: terrainRetained
+			} );
 			if (
 				serverCheck && poseDistance( serverCheck, authoritative ) >= .01 ||
 				!serverRoute || poseDistance( route, serverRoute ) >= ENDPOINT_EPSILON
@@ -673,9 +709,16 @@ bindOwners
 ================
 	*/
 	function bindOwners( value: NonNullable<typeof segment> ) {
-		const query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; status: number; } = {
+		const query: {
+			slide: boolean;
+			sourceOwner?: NavOwner;
+			sourceTerrainRetained?: boolean;
+			owners?: readonly NavOwnerSpan[];
+			status: number;
+		} = {
 			slide: false,
 			sourceOwner: owner,
+			sourceTerrainRetained: terrainRetained,
 			status: 0
 		};
 		const resolved = navigation.clip( value.from, value.to, query );
@@ -778,6 +821,7 @@ new leg from the live pose; the walk's own heading is kept for later legs.
 		if ( drift.heading === segment.direction.heading && drift.factor === walk.factor ) return;
 		walk.factor = drift.factor;
 		owner = liveOwner( now );
+		terrainRetained = liveTerrainRetained( now );
 		pose = navigation.surface( local, pose ?? local, owner, surfaceCursor );
 		poseAtMs = now;
 		segment = directionSegment( pose, drift.heading, now, segment.lead, drift.factor );
@@ -804,6 +848,7 @@ every high-latency acknowledgement and skill press.
 				segment,
 				// A fixed-timing leg surfaces at the live owner (a deck that moved).
 				owner: segment.fixedTiming ? liveOwner( now ) : owner,
+				terrainRetained: segment.fixedTiming ? liveTerrainRetained( now ) : terrainRetained,
 				cursor: surfaceCursor,
 				now,
 				clip: navigation.clip,
@@ -813,6 +858,7 @@ every high-latency acknowledgement and skill press.
 			if ( result.kind === "sampled" ) {
 				pose = result.pose;
 				owner = result.owner;
+				terrainRetained = !owner;
 			} else if ( result.kind === "rejected" ) {
 				// Native 86D6D0 retires a rejected move without accepting the
 				// collision candidate, even when its coordinates are unchanged.
@@ -830,6 +876,7 @@ every high-latency acknowledgement and skill press.
 					from: result.from,
 					to: result.pose,
 					sourceOwner: owner,
+					sourceTerrainRetained: terrainRetained,
 					clip: navigation.clip
 				} );
 				pose = result.pose;
@@ -840,6 +887,8 @@ every high-latency acknowledgement and skill press.
 					turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
 				};
 				owner = result.owner;
+				// A stepped stand is retained where it now stands.
+				terrainRetained = !owner;
 				surfaceCursor = {};
 				if ( result.segment ) {
 					segment = { ...result.segment, admittedFrom, history, presentationHistory: undefined };
@@ -872,7 +921,12 @@ every high-latency acknowledgement and skill press.
 			};
 		}
 		const desired = sampleMovement( segment, segment.start + PRESENTATION_LOOKAHEAD_MS );
-		const query = { slide: false, sourceOwner: owner, status: 0 };
+		const query = {
+			slide: false,
+			sourceOwner: owner,
+			sourceTerrainRetained: terrainRetained,
+			status: 0
+		};
 		const resolved = navigation.clip( pose, desired, query );
 		const admitted = !!resolved && !(query.status & (NAVIGATION_STOP | NAVIGATION_REJECT)) &&
 			poseDistance( resolved, desired ) < ENDPOINT_EPSILON;
@@ -892,6 +946,7 @@ every high-latency acknowledgement and skill press.
 					from: pose,
 					to: resolved!,
 					sourceOwner: owner,
+					sourceTerrainRetained: terrainRetained,
 					clip: navigation.clip
 				} ) :
 				segment.history;
@@ -921,6 +976,24 @@ liveOwner
 			if ( t >= span.from && t <= span.to ) result = { placement: span.placement, cell: span.cell };
 		}
 		return result;
+	}
+
+	/*
+================
+liveTerrainRetained
+
+Terrain retention at the segment's live point: inside an owned span the
+mover is on that object; everywhere else on an admitted walk it stands
+on terrain it walked to.
+================
+	*/
+	function liveTerrainRetained( now: number ) {
+		if ( !segment?.owners ) return terrainRetained;
+		const t = segment.duration ? Math.max( 0, Math.min( 1, (now - segment.start) / segment.duration ) ) : 1;
+		for ( const span of segment.owners ) {
+			if ( t >= span.from && t <= span.to ) return false;
+		}
+		return true;
 	}
 	return {
 		/*
@@ -979,6 +1052,7 @@ displace
 				// does. Resolving it against the old height and owner put a
 				// Wizard who teleported from the ground onto stairs under them.
 				owner = undefined;
+				terrainRetained = false;
 				pose = authoritative = navigation.surface( next.from );
 			}
 			poseAtMs = now;
@@ -1081,7 +1155,8 @@ constrainDisplacement
 			const to = { ...command.destination, angle: from.angle },
 				resolved = navigation.clip( from, to, {
 					slide: true,
-					sourceOwner: local ? liveOwner( now ) : undefined
+					sourceOwner: local ? liveOwner( now ) : undefined,
+					sourceTerrainRetained: local ? liveTerrainRetained( now ) : undefined
 				} );
 			return resolved ? { ...command, destination: resolved } : command;
 		},
@@ -1096,7 +1171,13 @@ groundSkillGoal
 			const picked = navigation.pick( query ),
 				from = pose,
 				to = positionSkillGoal( from, query, picked );
-			const clipped = to ? navigation.clip( from, to, { slide: false, sourceOwner: liveOwner( now ) } ) : null;
+			const clipped = to ?
+				navigation.clip( from, to, {
+					slide: false,
+					sourceOwner: liveOwner( now ),
+					sourceTerrainRetained: liveTerrainRetained( now )
+				} ) :
+				null;
 			return clipped;
 		},
 		pick: navigation.pick,
@@ -1137,6 +1218,7 @@ standing character turns where it stands.
 			// the drift reference rather than pull the turn back onto it.
 			walk.reference = null;
 			owner = liveOwner( now );
+			terrainRetained = liveTerrainRetained( now );
 			pose = navigation.surface( pose, pose, owner, surfaceCursor );
 			poseAtMs = now;
 			segment = directionSegment( pose, angle, now, segment.lead, walk.factor );
@@ -1288,6 +1370,9 @@ navigation
 			transition = { ...transition, walkingPath: undefined };
 			surfaceCursor = {};
 			owner = navigation.relocate( kept );
+			// A retained object cell that no longer resolves leaves the
+			// stand unretained; a terrain stand is untouched by reinstall.
+			if ( kept && !owner ) terrainRetained = false;
 			if ( segment ) {
 				segment = {
 					...segment,
@@ -1321,6 +1406,8 @@ seed
 			life = "alive";
 			surfaceCursor = {};
 			owner = undefined;
+			// A spawn is a fresh point: FindNavCell arbitrates its stand.
+			terrainRetained = false;
 			acknowledged = nextId;
 			pose = authoritative = navigation.surface( admitPose( value ) );
 			poseAtMs = 0;
@@ -1777,9 +1864,12 @@ receive
 					limit: blocked ? poseDistance( start, to ) : Infinity
 				};
 				const walkingOwner = owner;
+				const walkingTerrainRetained = terrainRetained;
 				authoritative = reconcile( start, RECEIPT_CELL );
-				if ( segment?.direction && !blocked ) owner = walkingOwner;
-				else {
+				if ( segment?.direction && !blocked ) {
+					owner = walkingOwner;
+					terrainRetained = walkingTerrainRetained;
+				} else {
 					// Nothing was predicted: follow the server's leg.
 					pose = authoritative;
 					segment = replacement ?
@@ -1803,6 +1893,7 @@ receive
 			if ( command.direction !== undefined ) walk = null;
 			beginTransition( "receipt" );
 			const predictedOwner = owner;
+			const predictedTerrainRetained = terrainRetained;
 			authoritative = reconcile( replacement?.from ?? to, RECEIPT_CELL );
 			// A receipt confirms an endpoint, not the client's old frame. The
 			// server's endpoint is the one that counts, and it is accepted from
@@ -1818,11 +1909,12 @@ receive
 			// rejection or a blocked route still wins.
 			const predicted = pose;
 			const reconciled: ReceiptReconciliation<NonNullable<typeof segment>> = replacement ?
-				reconcileReceipt( r.accepted, predicted, predictedOwner, replacement, to ) :
+				reconcileReceipt( r.accepted, predicted, predictedOwner, predictedTerrainRetained, replacement, to ) :
 				{ kind: "server", reason: r.accepted ? "no server walk" : "rejected" };
 			if ( reconciled.kind === "keep" ) {
 				pose = predicted!;
 				owner = predictedOwner;
+				terrainRetained = predictedTerrainRetained;
 				replacement = reconciled.segment ?? null;
 			} else if ( reconciled.kind === "settle" ) {
 				// The prediction already passed the server's stop: settle on the
@@ -2012,6 +2104,7 @@ state
 				navigationRegion,
 				navigationBlock: navigation.block( pose, owner ),
 				navigationOwner: owner ? { ...owner } : undefined,
+				navigationTerrainRetained: terrainRetained,
 				moving: !!segment && segment.duration > 0,
 				// The heading of the direction walk in progress, if any.
 				directionWalk: walk ? walk.heading : undefined,
@@ -2038,6 +2131,7 @@ clear
 			mode = 3;
 			surfaceCursor = {};
 			owner = undefined;
+			terrainRetained = false;
 			pose = authoritative = null;
 			poseAtMs = 0;
 			segment = null;

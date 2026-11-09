@@ -183,3 +183,96 @@ func TestRealHotanGateDeckWalkThroughHandleMove(t *testing.T) {
 		t.Fatalf("committed goal must stand on the deck plane, got y=%v", fixed.Spawn.Y)
 	}
 }
+
+// Published v1.150 Hotan terrace (region 0x5E87, #3006): the gate structure's
+// flat deck cell (y 243.85) covers the plaza lip, and its ramp descends to
+// the street at y 146. The terrain under the deck samples 242.68, so the
+// entry arbitration puts a fresh stand on the terrain - and a mover that
+// ends a terrain walk at the lip keeps that terrain owner while standing
+// inside the deck cell. From that stand every town-ward click clipped at
+// the first blocked terrain tile under the ramp, so the committed goal was
+// the start itself and the player could not walk back to town. A retained
+// mover is resident on the cell it stands in (navowner.go), so the walk
+// boards the deck and descends the ramp; a fresh point still arbitrates.
+func TestRealHotanTerraceResidentStandDescendsStairs(t *testing.T) {
+	v := realAuthorityValidator(t)
+	stand := simulation.Spawn{RegionID: 0x5E87, X: 1138.18, Y: 242.68, Z: 160.01}
+
+	// The trap's precondition: entry arbitration keeps this stand on the
+	// terrain even though the deck cell contains it.
+	if owner, _, ok := v.ResolveNavOwner(stand, simulation.NavOwner{}); !ok || owner.Kind != simulation.NavOwnerTerrain {
+		t.Fatalf("fixture changed: stand owner %+v ok=%v", owner, ok)
+	}
+
+	// Negative control: without a retained owner the same click still
+	// clips at the ramp's blocked terrain - the teleport rule is intact.
+	street := simulation.Spawn{RegionID: 0x5D87, X: 1159, Y: 146, Z: 1832}
+	if trap := v.ClipMovementPath(stand, street); trap.Outcome != ClipBlocked {
+		t.Fatalf("fresh-point control no longer clips: %+v", trap)
+	}
+
+	// The retained terrain mover boards the deck and walks the ramp down
+	// to the clicked street point across the region boundary.
+	clip := v.ClipMovementPathFrom(stand, simulation.TerrainOwner(), street)
+	if clip.Outcome != ClipArrived || clip.Rest.RegionID != street.RegionID ||
+		math.Abs(clip.Rest.X-street.X) > .01 || math.Abs(clip.Rest.Z-street.Z) > .01 {
+		t.Fatalf("resident stand did not reach the street: %+v", clip)
+	}
+	if math.Abs(clip.Rest.Y-street.Y) > .5 {
+		t.Fatalf("street rest must stand at street height, got y=%v", clip.Rest.Y)
+	}
+	if guard := v.ValidateMovementPathFrom(stand, simulation.TerrainOwner(), street); guard.Verdict != PathLegal {
+		t.Fatalf("pathguard on the descent: %+v", guard)
+	}
+
+	// A deck-level click from the same stand arrives standing on the deck
+	// plane with the deck as its owner.
+	deck := v.ClipMovementPathFrom(stand, simulation.TerrainOwner(), simulation.Spawn{RegionID: 0x5E87, X: 1107, Y: 243, Z: 156})
+	if deck.Outcome != ClipArrived || deck.RestOwner.Kind != simulation.NavOwnerObject {
+		t.Fatalf("resident stand did not board the deck: %+v", deck)
+	}
+	if math.Abs(deck.Rest.Y-243.85) > .05 {
+		t.Fatalf("deck rest must stand on the deck plane, got y=%v", deck.Rest.Y)
+	}
+}
+
+// End to end through the 0x7738 handler on the published Hotan terrace data:
+// a character standing at the #3006 lip pose (terrain-owned, inside the deck
+// cell) clicks the street below. The committed move must reach the click.
+func TestRealHotanTerraceDescentThroughHandleMove(t *testing.T) {
+	v := realAuthorityValidator(t)
+	character := testCharacter()
+	regionID := int64(0x5E87)
+	x, y, z := 1138.18, 242.68, 160.01
+	angle := int64(0)
+	character.World = &enterworld.CharacterWorld{
+		Spawn:    &enterworld.WorldSpawn{RegionID: &regionID, X: &x, Y: &y, Z: &z, Angle: &angle},
+		SpawnSet: true,
+	}
+	rt := testRuntime(character)
+	rt.ClientClip = &ClientClip{Mode: ClipApply, Validator: v}
+	rt.PathGuard = &PathGuard{Mode: PathGuardEnforce, Validator: v}
+	rt.Nav = v
+	nowMs := testStartMs
+	rt.Now = func() time.Time { return time.UnixMilli(nowMs) }
+	key := simulation.WorldKey("0", character.Name)
+	// The journal's state: the last committed plaza walk left the mover
+	// terrain-owned at the lip, inside the deck cell.
+	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(character) }, func(w *simulation.WorldState) {
+		w.SetGoalOwner(simulation.TerrainOwner())
+	})
+	if out := rt.HandleMove("0", character, encodeMoveBody(1, 0x5D87, 1159, 146, 1832)); out.Refusal != nil {
+		t.Fatalf("descent refused: %v", out.Refusal)
+	}
+	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+	if world.MoveSegment != nil {
+		nowMs = world.MoveSegment.ArrivesAtMs + 1
+		world = rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+	}
+	if world.Spawn.RegionID != 0x5D87 || math.Abs(world.Spawn.X-1159) > .01 || math.Abs(world.Spawn.Z-1832) > .01 {
+		t.Fatalf("descent did not commit the clicked street point: %+v", world.Spawn)
+	}
+	if math.Abs(world.Spawn.Y-146) > .5 {
+		t.Fatalf("descent must stand at street height, got y=%v", world.Spawn.Y)
+	}
+}

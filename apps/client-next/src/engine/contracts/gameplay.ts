@@ -975,6 +975,9 @@ export interface GameplayState extends MoverPublication {
 	// worker's movement owner holds it; the main-thread mover (#1440) starts
 	// its walk from it.
 	readonly navigationOwner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner;
+	// Terrain retention beside navigationOwner (#3006): the stand is
+	// terrain the mover walked to, not a fresh FindNavCell point.
+	readonly navigationTerrainRetained?: boolean;
 	readonly navigationBlock?: number;
 	readonly activeCos?: {
 		readonly gid: number;
