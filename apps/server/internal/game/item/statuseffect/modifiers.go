@@ -63,6 +63,21 @@ func (r *Registry) ModifierWrites(division, name string) []paramkeeper.Write {
 	if r == nil {
 		return nil
 	}
+	return r.ModifierWritesKeyed(ownerKey(division, name))
+}
+
+/*
+================
+ModifierWritesKeyed
+
+ModifierWrites for a caller already holding the folded owner key
+(OwnerKey): a per-tick reader folds once, not per read (#2033).
+================
+*/
+func (r *Registry) ModifierWritesKeyed(key string) []paramkeeper.Write {
+	if r == nil {
+		return nil
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// A registry holding no owner answers without folding a fresh key
@@ -71,7 +86,7 @@ func (r *Registry) ModifierWrites(division, name string) []paramkeeper.Write {
 		return nil
 	}
 	var out []paramkeeper.Write
-	for _, e := range r.byOwner[ownerKey(division, name)] {
+	for _, e := range r.byOwner[key] {
 		if e.Modifiers.data == nil {
 			continue
 		}

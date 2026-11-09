@@ -350,7 +350,21 @@ effects, then the streak's and the worn suit tier's (both port-only).
 ================
 */
 func (rt *Runtime) statModifierWrites(division string, c *enterworld.Character) []paramkeeper.Write {
-	writes := append(rt.effects.ModifierWrites(division, c.Name), rt.mostWantedWrites(c)...)
+	return rt.statModifierWritesFrom(division, rt.effects.ModifierWrites(division, c.Name), c)
+}
+
+/*
+================
+statModifierWritesFrom
+
+Every write after the installed effects', in statModifierWrites'
+order: the streak's and the worn suit tier's (both port-only), then
+the wolf and penguin lanes. The recovery pulse seeds it from the
+session's held effects key (#2033).
+================
+*/
+func (rt *Runtime) statModifierWritesFrom(division string, writes []paramkeeper.Write, c *enterworld.Character) []paramkeeper.Write {
+	writes = append(writes, rt.mostWantedWrites(c)...)
 	writes = append(writes, rt.jobSuitWrites(c)...)
 	writes = append(writes, rt.wolfHowlWrites(division, c)...)
 	writes = append(writes, rt.wolfBloodWrites(division, c)...)
