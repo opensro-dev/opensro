@@ -39,3 +39,32 @@ func TestResidentPendingPreservesIndependentActorState(t *testing.T) {
 		t.Fatal("resident representation did not shrink")
 	}
 }
+
+/*
+================
+TestPendingScheduleModeReadsTheCachedBit
+
+scheduleRow derives a pending row's mode from the record's cached
+spawning bit, not from the interned shared row: the bit must track
+what set last wrote, in both directions, or a spawning actor would
+schedule as merely pending (and the other way around).
+================
+*/
+func TestPendingScheduleModeReadsTheCachedBit(t *testing.T) {
+	s := newMoverStorage(nil)
+	pending := func(spawning bool) monster.MoverState {
+		row := monster.PendingMover{Spawning: spawning, Pose: monster.Pose{RegionID: monsterTestRegion, X: 1, Z: 2},
+			Activity: monster.ActivityCadence{Interval: 1000, LastCheck: 7}}
+		var m monster.MoverState
+		row.ExpandInto(&m)
+		return m
+	}
+	s.set(7, pending(true))
+	if got, ok := s.schedule(7); !ok || got.mode != monster.MoverSpawning {
+		t.Fatalf("spawning row scheduled as mode %v (ok %v), want MoverSpawning", got.mode, ok)
+	}
+	s.set(7, pending(false))
+	if got, ok := s.schedule(7); !ok || got.mode != monster.MoverPending {
+		t.Fatalf("re-settled row scheduled as mode %v (ok %v), want MoverPending", got.mode, ok)
+	}
+}
