@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
@@ -213,6 +214,59 @@ func TestNaturalRecoveryScratchWritesDoNotLeakAcrossPulses(t *testing.T) {
 	rt.effects.Forget(testDivision, c.Name)
 	if got := rt.advanceNaturalRecovery(now + 12000); len(got) != 0 || enterworld.CurrentHP(c) != healed {
 		t.Fatalf("forgotten boost still rode the pulse: frames %+v hp %d", got, enterworld.CurrentHP(c))
+	}
+}
+
+/*
+================
+TestRecoverySessionHeldKeysFindPopulatedEntries
+
+The session folds its abnormal and effects keys once at bind (#2033):
+with both stores populated by someone else, the keyed reads still find
+the resident's own entries however the writer cased the name, and miss
+cleanly once they are gone.
+================
+*/
+func TestRecoverySessionHeldKeysFindPopulatedEntries(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	rt.BindRecoverySession(testDivision, c, 1)
+	rt.recoveryMu.Lock()
+	session := rt.recoverySessions[recoveryKey{testDivision, "asd2"}]
+	rt.recoveryMu.Unlock()
+	if session == nil || session.abnormalKey != playerAbnormalKey(testDivision, c.Name) ||
+		session.effectsKey != statuseffect.OwnerKey(testDivision, c.Name) {
+		t.Fatalf("session keys %+v", session)
+	}
+	otherBlock := &abnormal.Block{Mask: 2}
+	rt.storePlayerAbnormal(testDivision, "SomeoneElse", otherBlock)
+	modifiers, err := statuseffect.NewModifiers([]paramkeeper.Write{{Parameter: 5, Value: 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: "SomeoneElse",
+		SkillID: 901, SkillGroup: 901, InstanceToken: 901, State: statuseffect.StateActive, Modifiers: modifiers}) {
+		t.Fatal("install other")
+	}
+	ownBlock := &abnormal.Block{Mask: 1}
+	rt.storePlayerAbnormal(testDivision, "ASD2", ownBlock)
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: "ASD2",
+		SkillID: 902, SkillGroup: 902, InstanceToken: 902, State: statuseffect.StateActive, Modifiers: modifiers}) {
+		t.Fatal("install own")
+	}
+	if got := rt.playerAbnormalKeyed(session.abnormalKey); got != ownBlock {
+		t.Fatalf("keyed abnormal read %+v", got)
+	}
+	if got := rt.effects.ModifierWritesKeyed(session.effectsKey); len(got) != 1 || got[0].Value != 20 {
+		t.Fatalf("keyed modifier read %+v", got)
+	}
+	rt.storePlayerAbnormal(testDivision, c.Name, nil)
+	rt.effects.Forget(testDivision, c.Name)
+	if got := rt.playerAbnormalKeyed(session.abnormalKey); got != nil {
+		t.Fatalf("forgotten block read %+v", got)
+	}
+	if got := rt.effects.ModifierWritesKeyed(session.effectsKey); len(got) != 0 {
+		t.Fatalf("forgotten writes read %+v", got)
 	}
 }
 
