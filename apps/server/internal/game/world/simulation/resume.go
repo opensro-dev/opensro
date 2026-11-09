@@ -96,7 +96,7 @@ func (t *Ticker) resumedMonsterFrames(state *divisionTickState, session SessionS
 	if ops == nil || ops.Monsters == nil {
 		return nil
 	}
-	shown := ops.shownMonsters[session.SessionID]
+	shown := ops.scopeShown(session.SessionID)
 	if len(shown) == 0 {
 		return nil
 	}

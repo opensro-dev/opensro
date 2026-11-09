@@ -54,7 +54,7 @@ func TestSummonEntersShownMonstersAfterTheBeforeHook(t *testing.T) {
 		}
 		shown := false
 		if state := ticker.states["summon"]; state != nil && state.monsters != nil && child != 0 {
-			shown = state.monsters.shownMonsters["viewer"][child]
+			shown = state.monsters.scopeShown("viewer")[child]
 		}
 		seen[at] = shown
 		if child == 0 {

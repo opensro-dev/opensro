@@ -117,7 +117,7 @@ func TestFirstSightReconcilesAgainstTheRecordedObjectList(t *testing.T) {
 	if created != 1 || len(removed) != 1 || removed[0] != b.Gid {
 		t.Fatalf("first-sight deltas created=%d removed=%v, want one create (A2) and B removed", created, removed)
 	}
-	shown := ops.shownMonsters["viewer"]
+	shown := ops.scopeShown("viewer")
 	if !shown[a1.Gid] || !shown[a2.Gid] || shown[b.Gid] || len(shown) != 2 {
 		t.Fatalf("shown after reconciliation = %v, want exactly A1 and A2", shown)
 	}
@@ -257,11 +257,8 @@ func TestMonsterScopeStreamDeltas(t *testing.T) {
 
 	// Departed session: bookkeeping must not leak.
 	ops.RunMonsterLeg(t0+1750, nil, push)
-	if len(ops.shownMonsters) != 0 {
-		t.Fatalf("shownMonsters retains %d departed sessions", len(ops.shownMonsters))
-	}
-	if len(ops.scopeMemo) != 0 {
-		t.Fatalf("scopeMemo retains %d departed sessions", len(ops.scopeMemo))
+	if len(ops.scopeViewers) != 0 {
+		t.Fatalf("scopeViewers retains %d departed sessions", len(ops.scopeViewers))
 	}
 }
 
@@ -366,10 +363,11 @@ func TestScopeLegSkipsTheUnchangedLeg(t *testing.T) {
 	if frames := leg(t0); len(frames) != 0 {
 		t.Fatalf("seed leg emitted %d scope deltas, want 0", len(frames))
 	}
-	memo, ok := ops.scopeMemo["viewer"]
-	if !ok {
-		t.Fatalf("no scope memo recorded after the seed leg (recorded %v)", ok)
+	viewerState := ops.scopeViewers["viewer"]
+	if viewerState == nil || !viewerState.memoOK {
+		t.Fatal("no scope memo recorded after the seed leg")
 	}
+	memo := viewerState.memo
 	if stamp, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, viewers["viewer"], t0); !ok || stamp != memo.stamp {
 		t.Fatal("the seed leg's memo is not the stamp a fresh scope read keys on")
 	}
@@ -475,10 +473,11 @@ func TestScopeLegFarViewerSkipsNearChurn(t *testing.T) {
 		ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
 	}
 	leg(t0)
-	farMemo, ok := ops.scopeMemo["far"]
-	if !ok {
+	farState := ops.scopeViewers["far"]
+	if farState == nil || !farState.memoOK {
 		t.Fatal("no scope memo recorded for the far viewer after the seed leg")
 	}
+	farMemo := farState.memo
 
 	// Walk A2 east out of the near viewer's neighbourhood, as in
 	// TestScopeLegSkipsTheUnchangedLeg: the near leg runs in full and
@@ -507,7 +506,7 @@ func TestScopeLegFarViewerSkipsNearChurn(t *testing.T) {
 	if frames := scopeDeltaFrames(push, "far"); len(frames) != 0 {
 		t.Fatalf("far leg emitted %d scope deltas, want 0: %+v", len(frames), frames)
 	}
-	if got := ops.scopeMemo["far"]; got != farMemo {
+	if got := farState.memo; got != farMemo {
 		t.Fatalf("far viewer's memo moved on near churn: %+v -> %+v", farMemo, got)
 	}
 }
@@ -674,7 +673,7 @@ func TestScopeLegRebuildRetiresTheVacatedBlock(t *testing.T) {
 	if frames := leg(t0 + 100); len(frames) != 1 || frames[0].Opcode != wire.OpObjectDespawn || frames[0].ScopeGID != 1 {
 		t.Fatalf("post-rebuild leg frames = %+v, want one despawn for gid 1", frames)
 	}
-	if ops.shownMonsters["viewer"][1] {
+	if ops.scopeShown("viewer")[1] {
 		t.Fatal("gid 1 is still shown after the rebuild retired its block")
 	}
 }
@@ -749,8 +748,8 @@ func BenchmarkScopeVisibilityLeg(b *testing.B) {
 				nowMs += 100
 				ops.runScopeVisibility(nowMs, sessions, viewerMap, live, push)
 			}
-			if len(ops.shownMonsters) != shape.viewers {
-				b.Fatalf("seeded %d viewers, want %d", len(ops.shownMonsters), shape.viewers)
+			if len(ops.scopeViewers) != shape.viewers {
+				b.Fatalf("seeded %d viewers, want %d", len(ops.scopeViewers), shape.viewers)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()

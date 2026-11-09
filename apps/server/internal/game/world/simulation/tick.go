@@ -715,9 +715,9 @@ func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 		return nil
 	}
 	clone := *source
-	clone.shownMonsters = nil
+	clone.scopeViewers = nil
+	clone.scopeSlots = nil
 	clone.breachLogged = nil
-	clone.scopeMemo = nil
 	return &clone
 }
 
@@ -868,7 +868,7 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 					cos = cos || viewer.ownsCompanion(routed.SourceGID)
 					monster := false
 					if ops := division.state.monsters; ops != nil {
-						monster = ops.shownMonsters[viewer.SessionID][routed.SourceGID]
+						monster = ops.scopeShown(viewer.SessionID)[routed.SourceGID]
 					}
 					if peer || published || cos || monster {
 						t.Push.PushToSession(viewer.SessionID, routed.Frames)
