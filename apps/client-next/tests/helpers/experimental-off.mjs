@@ -32,10 +32,16 @@ export const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
+	// Off by default: the multisampled scene is a port-only deviation.
+	msaa: false,
+	// Off by default: scene FXAA is a port-only deviation.
+	sceneFxaa: false,
 	// Off by default: ambient occlusion is a port-only stage (#2094).
 	ambientOcclusion: false,
 	// Off by default: sky detail is a port-only deviation.
 	skyDetail: false,
+	// Off by default: water refraction is a port-only deviation.
+	waterRefraction: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,
@@ -112,7 +118,6 @@ export const OFF = Object.freeze( {
 	// default connect and the WebSocket the fallback; off is one setting.
 	webTransport: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.

@@ -220,6 +220,14 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200", Catalogue: true},
 	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300",
 		Catalogue: true},
+	// #2958 (game/tunables): the 5-star caravan stakes - a bigger thief
+	// cut, a bigger hunter escort share, and the bounty on a thief who
+	// attacked a 5-star caravan. They bite only under SRO_TRADE_TIERS.
+	// Like the trade job bonus numbers below they are runtime stakes the
+	// rules page states, not catalogue inputs, so no Catalogue flag.
+	{Env: "SRO_TRADE_FIVE_STAR_THIEF_PERCENT", NomadVar: "trade_five_star_thief_percent", Default: "50"},
+	{Env: "SRO_TRADE_FIVE_STAR_HUNTER_PERCENT", NomadVar: "trade_five_star_hunter_percent", Default: "50"},
+	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", NomadVar: "trade_five_star_bounty_percent", Default: "50"},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
@@ -275,6 +283,16 @@ var Settings = []Setting{
 	// player's destroyed reinforcement item is announced by job alias.
 	// Off is native, in code and in the deployed default alike.
 	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
+	// Owner report, 2026-11-08 (#2852): a Magic Pop win also posts an
+	// Event-feed line naming the winner; the native win banner is
+	// unchanged. Off is native, in code and in the deployed default.
+	{Env: "SRO_ANNOUNCE_GACHA_WIN", NomadVar: "announce_gacha_win", Default: "off"},
+	// Owner report, 2026-11-08 (#2852): an opted-in player's failed
+	// reinforce at +9 attempted or above is announced by job alias
+	// (#1738's rule for failures: alias only, never a character name).
+	// Off is native, in code and in the deployed default alike.
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL", NomadVar: "announce_plus_fail", Default: "off"},
+	{Env: "SRO_ANNOUNCE_PLUS_FAIL_MIN", NomadVar: "announce_plus_fail_min", Default: "9"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
 	// F10 trade group (game/tunables): the per-thief percent and its cap.

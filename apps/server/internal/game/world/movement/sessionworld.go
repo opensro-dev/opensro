@@ -131,8 +131,34 @@ lock, which does not re-enter (see peerAppearance).
 ==================
 */
 func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
+	var snap simulation.SessionSnapshot
+	p.WorldSnapshotInto(&snap)
+	return snap
+}
+
+/*
+==================
+sessionWorld.WorldSnapshotInto
+
+WorldSnapshot written into a retained slot (#2989): the world fills the
+slot's own Ground and MoveSegment buffers (WorldStore.SnapshotInto), so
+the bridge's per-tick publish allocates neither the snapshot nor its
+world pointees in the steady state.
+
+The slot's buffers are refilled by the next tick, so the one read that
+may outlive the tick - MovementCurrent, invoked by the transport writer
+at delivery time against work queued this tick - must not capture them:
+its expected segment is copied by value, and MovementCurrent compares
+segments by value, so the predicate answers for this tick's segment
+exactly as the fresh-clone capture did. Every other field is read
+within the tick or, like Appearance, only ever read.
+
+The bridge-owned fields (SessionID, Population, PublishedObjects) are
+the bridge's to write and are left alone here.
+==================
+*/
+func (p *sessionWorld) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	key := simulation.WorldKey(p.divisionID, p.character.Name)
-	var world simulation.WorldState
 	var anchor simulation.Spawn
 	var captured peerAppearanceCapture
 	var bodyRadius simulation.BodyRadius
@@ -140,7 +166,7 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 	var nativeBodyStatus uint8
 	var worldInstance uint32
 	p.rt.deps.Read(p.divisionID, func() {
-		world = p.rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(p.character) })
+		p.rt.Worlds.SnapshotInto(key, &dst.World, func() simulation.WorldState { return simulation.SeedWorldState(p.character) })
 		anchor = p.rt.npcAnchor(p.character)
 		// Peer rows must resolve the model through the exact same chain as
 		// local-player entry: explicit ref, roster codename, race/gender
@@ -163,21 +189,35 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 		cos = p.rt.PetPresentation(p.divisionID, captured.name)
 	}
 	appearance := p.appearanceFor(captured)
-	return simulation.SessionSnapshot{
-		DivisionID:       p.divisionID,
-		WorldInstance:    worldInstance,
-		CharacterID:      captured.charID,
-		CombatEligible:   combatEligible,
-		NativeBodyStatus: nativeBodyStatus,
-		World:            world,
-		MovementCurrent:  func() bool { return p.rt.Worlds.MovementCurrent(key, world) },
-		BodyRadius:       bodyRadius,
-		NpcAnchor:        anchor,
-		NpcsEnabled:      p.rt.npcsEnabled,
-		Appearance:       appearance,
-		COS:              cos,
-		Companions:       companions,
+	// MovementCurrent compares only these fields of the world
+	// (WorldStore.MovementCurrent); capture them, with the segment by
+	// value, so the predicate answers for this tick's world and never
+	// for the slot's next fill.
+	worlds := p.rt.Worlds
+	lifeRevision, spawn, movementMode := dst.World.LifeRevision, dst.World.Spawn, dst.World.MovementMode
+	var segment simulation.MoveSegment
+	hasSegment := dst.World.MoveSegment != nil
+	if hasSegment {
+		segment = *dst.World.MoveSegment
 	}
+	dst.DivisionID = p.divisionID
+	dst.WorldInstance = worldInstance
+	dst.CharacterID = captured.charID
+	dst.CombatEligible = combatEligible
+	dst.NativeBodyStatus = nativeBodyStatus
+	dst.MovementCurrent = func() bool {
+		expected := simulation.WorldState{LifeRevision: lifeRevision, Spawn: spawn, MovementMode: movementMode}
+		if hasSegment {
+			expected.MoveSegment = &segment
+		}
+		return worlds.MovementCurrent(key, expected)
+	}
+	dst.BodyRadius = bodyRadius
+	dst.NpcAnchor = anchor
+	dst.NpcsEnabled = p.rt.npcsEnabled
+	dst.Appearance = appearance
+	dst.COS = cos
+	dst.Companions = companions
 }
 
 /*

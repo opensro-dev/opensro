@@ -37,7 +37,7 @@ func TestOrdinaryAcquisitionRankingAndOrder(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			before := append([]playerPose(nil), c.players...)
-			got, ok := nearestEligiblePlayer(monster.Instance{}, from, c.players, c.sight)
+			got, ok := nearestEligiblePlayer(&monster.Instance{}, from, c.players, c.sight)
 			if got.Gid != c.want || ok != (c.want != 0) {
 				t.Fatalf("target=%d found=%v want=%d", got.Gid, ok, c.want)
 			}
@@ -47,7 +47,7 @@ func TestOrdinaryAcquisitionRankingAndOrder(t *testing.T) {
 			for left, right := 0, len(c.players)-1; left < right; left, right = left+1, right-1 {
 				c.players[left], c.players[right] = c.players[right], c.players[left]
 			}
-			got, _ = nearestEligiblePlayer(monster.Instance{}, from, c.players, c.sight)
+			got, _ = nearestEligiblePlayer(&monster.Instance{}, from, c.players, c.sight)
 			if got.Gid != c.want {
 				t.Fatal("session enumeration order changed result")
 			}
@@ -80,7 +80,7 @@ func TestAcquisitionOrdinarySelectorScope(t *testing.T) {
 		if tc.thief {
 			players[0].JobState, players[1].JobState = jobStateThief, jobStateThief
 		}
-		got, _ := nearestEligiblePlayer(actor, from, players, 115)
+		got, _ := nearestEligiblePlayer(&actor, from, players, 115)
 		if got.Gid != tc.want {
 			t.Fatalf("flags %x took %d, want %d", tc.flags, got.Gid, tc.want)
 		}
@@ -102,13 +102,13 @@ func TestJobQueryPrefersJobModeThenNearest(t *testing.T) {
 		return playerPose{Gid: gid, Pose: Spawn{RegionID: monsterTestRegion, X: x, Z: 1000}, JobState: job}
 	}
 	players := []playerPose{at(1, 1010, 0), at(2, 1005, jobStateThief), at(3, 1060, jobStateTrader), at(4, 1040, jobStateHunter)}
-	got, ok := jobQueryAcquisition(monster.Instance{}, from, players, 100, jobQuery{})
+	got, ok := jobQueryAcquisition(&monster.Instance{}, from, players, 100, jobQuery{})
 	if !ok || got.Gid != 4 {
 		t.Fatalf("selector 3 took %d", got.Gid)
 	}
 	transport := at(5, 1020, 0)
 	transport.OwnerGid, transport.Band = 3, 2
-	got, _ = jobQueryAcquisition(monster.Instance{}, from, append(players, transport), 100, jobQuery{})
+	got, _ = jobQueryAcquisition(&monster.Instance{}, from, append(players, transport), 100, jobQuery{})
 	if got.Gid != 5 {
 		t.Fatalf("the trader's nearer transport was not taken: %d", got.Gid)
 	}
@@ -121,7 +121,7 @@ func TestAcquisitionBlockOrderPrecedesGID(t *testing.T) {
 		{{RegionID: monsterTestRegion, X: 321, Z: 319}, {RegionID: monsterTestRegion, X: 319, Z: 321}},
 	} {
 		players := []playerPose{{Gid: 1, Pose: poses[1]}, {Gid: 9, Pose: poses[0]}}
-		got, ok := nearestEligiblePlayer(monster.Instance{}, from, players, 10)
+		got, ok := nearestEligiblePlayer(&monster.Instance{}, from, players, 10)
 		if !ok || got.Gid != 9 {
 			t.Fatalf("block row/column order lost: %+v", got)
 		}

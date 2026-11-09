@@ -67,6 +67,7 @@ const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
 const preWantedDecayVersion = 39
 const preSookArenaVersion = 40
+const preGourdCountVersion = 40
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -276,6 +277,15 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		// streak is stamped fresh at its first judging door, so no
 		// saved streak decays early (#2721). It also has no forge-bound
 		// mark on its item rows; its items read unbound (#1980).
+		// Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preGourdCountVersion:
+		// Schema 40 ran at layout 12 and counted every Halloween box
+		// against the one account cap; its account rows carry no
+		// Gourd count and start the Gourd allowance at zero (#2950).
 		// Records read unchanged.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)

@@ -3615,14 +3615,17 @@ test("wind burst is ordered feedback independent of a despawned clone", () => {
 	p.writeFloatLE( 12, 6 );
 	p.writeFloatLE( 3, 10 );
 	p.writeFloatLE( 34, 14 );
-	owner.receive( { opcode: 0x3fba, payload: p } );
+	// Main's most-wanted packet belongs to gameplay, not crow-effect parsing.
+	assert.doesNotThrow( () => owner.receive( { opcode: 0x3fba, payload: new Uint8Array( 12 ) } ) );
+	assert.equal( flush( owner ).events[0].kind, "native" );
+	owner.receive( { opcode: 0x3fbe, payload: p } );
 	assert.deepEqual( flush( owner ).events, [ {
 		kind: "pet-crow-effect",
 		source: { regionId: 257, x: 12, y: 3, z: 34 }
 	} ] );
-	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p.subarray( 1 ) } ) );
+	assert.throws( () => owner.receive( { opcode: 0x3fbe, payload: p.subarray( 1 ) } ) );
 	p.writeFloatLE( NaN, 6 );
-	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p } ) );
+	assert.throws( () => owner.receive( { opcode: 0x3fbe, payload: p } ) );
 });
 
 /*

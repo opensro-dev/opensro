@@ -148,6 +148,7 @@ export function createActorSnapshots() {
 		target.deferredParticle = source.deferredParticle ? { ...source.deferredParticle } : undefined;
 		target.modifierId = source.modifierId;
 		target.groundItem = source.groundItem;
+		target.dungeonBlock = source.dungeonBlock;
 		target.previewClip = source.previewClip;
 		target.gid = source.gid;
 		target.model = source.model;
@@ -249,6 +250,7 @@ export function createActorSnapshots() {
 				copyVector( old.ambient, value.ambient );
 				copyVector( old.diffuse, value.diffuse );
 				old.attenuation = value.attenuation;
+				old.attenuationConstant = value.attenuationConstant;
 				old.range = value.range;
 			} else {
 				target.pointLight = {
@@ -288,6 +290,9 @@ export function createActorSnapshots() {
 	*/
 	function finitePointLight( light: NonNullable<CharacterActor["pointLight"]> ) {
 		if ( !Number.isFinite( light.attenuation ) || !Number.isFinite( light.range ) ) return false;
+		if ( light.attenuationConstant !== undefined && !Number.isFinite( light.attenuationConstant ) ) {
+			return false;
+		}
 		for ( const value of light.ambient ) if ( !Number.isFinite( value ) ) return false;
 		for ( const value of light.diffuse ) if ( !Number.isFinite( value ) ) return false;
 		// Own properties only, as Object.values read them.

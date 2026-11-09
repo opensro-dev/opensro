@@ -19,7 +19,7 @@ func helpFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, playerPose) 
 	ops, instance, mover, target := pursuitControlsFixture(t)
 	mover.Pose.X = 1000
 	mustMoverTransition(&mover, monster.MoverEventTraceAbandoned, 0)
-	mover, _ = ops.planIdleEntry(instance, mover, 10000)
+	mover, _ = ops.planIdleEntry(&instance, mover, 10000)
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 	ops.PlanPath = func(from, to monster.Pose) *monster.NavigationPath {
 		return monster.NewNavigationPath(from, to, to, 0, func(float64, monster.Pose) (float64, bool) { return 20, true })

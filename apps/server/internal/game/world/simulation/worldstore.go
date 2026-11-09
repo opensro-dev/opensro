@@ -106,6 +106,56 @@ func (st *WorldStore) Snapshot(key string, seed func() WorldState) WorldState {
 }
 
 /*
+==================
+WorldStore.SnapshotInto
+
+Snapshot written into a retained slot (#2989), under the same lock and
+with the same ground advance; the slot keeps its Ground and MoveSegment
+buffers across fills (CloneWorldStateInto).
+==================
+*/
+func (st *WorldStore) SnapshotInto(key string, dst *WorldState, seed func() WorldState) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state := st.state(key, seed)
+	st.advanceGroundWalk(key, state)
+	CloneWorldStateInto(*state, dst)
+}
+
+/*
+==================
+CloneWorldStateInto
+
+CloneWorldState written into a retained slot (#2989): the slot's Ground
+and MoveSegment buffers are refilled instead of replaced, so a publisher
+that reuses its snapshot slots does not allocate fresh pointees per tick.
+The pointees stay private to the slot's current fill: a caller whose
+read can outlive the fill (a queued frame's Current predicate) must
+capture the segment by value, as WorldSnapshotInto does, never the
+buffer.
+==================
+*/
+func CloneWorldStateInto(w WorldState, dst *WorldState) {
+	ground, segment := dst.Ground, dst.MoveSegment
+	*dst = w
+	if w.Ground != nil {
+		if ground == nil {
+			ground = &GroundWalkState{}
+		}
+		*ground = *w.Ground
+		dst.Ground = ground
+	}
+	if w.MoveSegment != nil {
+		if segment == nil {
+			segment = &MoveSegment{}
+		}
+		*segment = *w.MoveSegment
+		dst.MoveSegment = segment
+	}
+}
+
+/*
 ================
 SnapshotExisting
 

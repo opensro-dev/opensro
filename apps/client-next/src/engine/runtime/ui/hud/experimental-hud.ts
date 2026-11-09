@@ -113,6 +113,23 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Smooths edges and adjusts color, including UI."
 					},
 					{
+						// Port-only, not native: beside the post-process
+						// anti-aliasing, the other edge smoothing. 4x is the
+						// one multisample count WebGPU guarantees besides 1.
+						key: "msaa",
+						id: "experimental-msaa",
+						label: "MSAA 4x",
+						description: "Scene edges smooth through 4x multisampling."
+					},
+					{
+						// Port-only, not native: the cheap edge smoothing, the
+						// scene alone, so the labels and the UI stay sharp.
+						key: "sceneFxaa",
+						id: "experimental-scene-fxaa",
+						label: "FXAA",
+						description: "Light scene edge smoothing; text stays sharp."
+					},
+					{
 						key: "anisotropicFiltering",
 						id: "experimental-anisotropic-filtering",
 						label: "Anisotropic filtering",
@@ -171,6 +188,13 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-ambient-occlusion",
 						label: "Ambient occlusion",
 						description: "Shade corners and contact seams from depth."
+					},
+					{
+						// Port-only, not native (device/water-refraction.ts).
+						key: "waterRefraction",
+						id: "experimental-water-refraction",
+						label: "Water refraction",
+						description: "Water bends the ground under it and foams at the shore."
 					}
 				]
 			},
@@ -404,12 +428,6 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-monster-guide",
 						label: "Monster hunting guide",
 						description: "Monster portraits and approximate level ranges on M."
-					},
-					{
-						key: "expandedWorldMap",
-						id: "experimental-expanded-world-map",
-						label: "Expanded world map",
-						description: "Show extra town pages and wider overview."
 					}
 				]
 			},

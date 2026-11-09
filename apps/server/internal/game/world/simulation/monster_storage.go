@@ -236,8 +236,23 @@ Expand shared catalog handles without exposing mutable population storage.
 ================
 */
 func (r residentMonster) value(gid uint32) monster.Instance {
-	return monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
-		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached, GMSpawned: r.gmSpawned, Arena: r.arena,
+	var row monster.Instance
+	r.fill(&row, gid)
+	return row
+}
+
+/*
+================
+fill
+
+value written in place: the leg-start snapshot builds every due actor
+straight into its view slot, so the 2 KB expansion is not copied again
+through a return value (#2982).
+================
+*/
+func (r residentMonster) fill(dst *monster.Instance, gid uint32) {
+	*dst = monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
+		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached, GMSpawned: r.gmSpawned, Arena:r.arena,
 		SpawnHeading: r.spawnHeading, TradeVariant: r.tradeVariant, StructureState: r.structureState, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
 		LastSummonCommandMs: r.lastSummonCommandMs,
 		Opponents:           r.opponents, SummonActionUntilMs: r.summonActionUntilMs, SummonerGID: r.summonerGID,
@@ -254,23 +269,35 @@ r.value already carries.
 ================
 */
 func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instance {
-	row := r.value(gid)
+	var row monster.Instance
+	s.hotFill(&row, gid, r)
+	return row
+}
+
+/*
+================
+hotFill
+
+hotValue written in place (#2982): see residentMonster.fill.
+================
+*/
+func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r residentMonster) {
+	r.fill(dst, gid)
 	if r.sparse == 0 {
-		return row
+		return
 	}
 	if r.sparse&sparseLinked != 0 {
-		row.LinkedEffects = s.linkedEffects[gid]
+		dst.LinkedEffects = s.linkedEffects[gid]
 	}
 	if r.sparse&sparseAbnormal != 0 {
-		row.Abnormal = s.abnormal[gid]
+		dst.Abnormal = s.abnormal[gid]
 	}
 	if r.sparse&sparseSelf != 0 {
-		row.SelfEffects = s.selfEffects[gid]
+		dst.SelfEffects = s.selfEffects[gid]
 	}
 	if r.sparse&sparseTarget != 0 {
-		row.TargetEffects = s.targetEffects[gid]
+		dst.TargetEffects = s.targetEffects[gid]
 	}
-	return row
 }
 
 /*
@@ -383,10 +410,24 @@ read's contract). No fallback here: the miss is the signal.
 ================
 */
 func (s *monsterStorage) lookupAt(slot uint32, gid uint32) (monster.Instance, bool) {
+	var row monster.Instance
+	ok := s.lookupAtInto(&row, slot, gid)
+	return row, ok
+}
+
+/*
+================
+lookupAtInto
+
+lookupAt written in place (#2982); dst is untouched on a miss.
+================
+*/
+func (s *monsterStorage) lookupAtInto(dst *monster.Instance, slot uint32, gid uint32) bool {
 	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
-		return monster.Instance{}, false
+		return false
 	}
-	return s.hotValue(gid, s.hot[slot].row), true
+	s.hotFill(dst, gid, s.hot[slot].row)
+	return true
 }
 
 // monsterSlot.residency values.

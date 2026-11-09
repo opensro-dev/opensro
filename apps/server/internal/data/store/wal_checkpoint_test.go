@@ -360,6 +360,9 @@ func TestWALResetNeverHoldsTheDoorBehindAReader(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Every queued write is on disk before the WAL is measured and the
+	// reader pins its snapshot (a no-op on the synchronous door).
+	s.syncDBLocked()
 	if got := walFileBytes(s.dbPath); got <= ceiling {
 		t.Fatalf("WAL at %d bytes, want past the %d-byte ceiling", got, ceiling)
 	}

@@ -54,7 +54,7 @@ func MonsterAreaStrikes(actor monster.Instance, candidate MonsterAreaCandidate) 
 		return false
 	}
 	if pose.OwnerGid != 0 {
-		return ordinaryCompanionHostility(actor, pose)
+		return ordinaryCompanionHostility(&actor, pose)
 	}
-	return ordinaryPlayerHostility(actor, pose)
+	return ordinaryPlayerHostility(&actor, pose)
 }

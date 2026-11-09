@@ -73,30 +73,31 @@ test("the light scratch zeroes retired rows when the lights disappear", () => {
 	];
 	const both = fillRowPointLights( batch, lit, 0 );
 	assert.equal( both.length, 24 );
-	// Layout per row: placed position (x,y,z), attenuation, ambient rgb,
-	// zero padding, diffuse rgb, zero padding - Float32 rounded.
+	// Layout per row: placed position (x,y,z), constant attenuation, ambient
+	// rgb, linear attenuation, diffuse rgb, quadratic attenuation - Float32
+	// rounded. The fixture authors only the linear term.
 	const f = v => Math.fround( v );
 	assert.deepEqual( [ ...both.slice( 0, 12 ) ], [
 		1,
 		2,
 		3,
-		f( .5 ),
+		0,
 		f( .1 ),
 		f( .2 ),
 		f( .3 ),
-		0,
+		f( .5 ),
 		f( .4 ),
 		f( .5 ),
 		f( .6 ),
 		0
 	] );
-	// Slots 7 and 11 stay zero padding.
-	assert.equal( both[7], 0 );
-	assert.equal( both[19], 0 );
+	// Slot 11 (quadratic attenuation) stays zero.
+	assert.equal( both[11], 0 );
+	assert.equal( both[23], 0 );
 	// The second row keeps its own light.
 	assert.deepEqual(
 		[ ...both.slice( 12, 24 ) ],
-		[ 1, 2, 3, f( .5 ), f( .7 ), f( .8 ), f( .9 ), 0, f( .15 ), f( .25 ), f( .35 ), 0 ]
+		[ 1, 2, 3, 0, f( .7 ), f( .8 ), f( .9 ), f( .5 ), f( .15 ), f( .25 ), f( .35 ), 0 ]
 	);
 	// Rows that lose their lights: the retired span reads zero, and a shorter
 	// view never exposes stale bytes.
@@ -111,11 +112,11 @@ test("the light scratch zeroes retired rows when the lights disappear", () => {
 		1,
 		2,
 		3,
-		f( .5 ),
+		0,
 		f( .7 ),
 		f( .8 ),
 		f( .9 ),
-		0,
+		f( .5 ),
 		f( .15 ),
 		f( .25 ),
 		f( .35 ),
@@ -141,8 +142,9 @@ test("one scratch owner stays bounded through repeated full-roster submissions",
 		assert.deepEqual( opacity, Float32Array.from( batch, row => row.opacity ) );
 		assert.equal( pointLights.length, count * 12 );
 		for ( let i = 0; i < count; i++ ) {
-			assert.equal( pointLights[i * 12 + 3], batch[i].pointLight ? .5 : 0 );
-			assert.equal( pointLights[i * 12 + 7], 0 );
+			// Constant term absent (0), linear authored (.5), quadratic 0.
+			assert.equal( pointLights[i * 12 + 3], 0 );
+			assert.equal( pointLights[i * 12 + 7], batch[i].pointLight ? .5 : 0 );
 			assert.equal( pointLights[i * 12 + 11], 0 );
 		}
 	}

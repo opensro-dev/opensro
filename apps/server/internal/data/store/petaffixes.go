@@ -33,7 +33,7 @@ PetAffixRules
 func (s *Store) PetAffixRules(defaults []PetAffixRule) ([]PetAffixRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
+	tx, err := s.syncDBLocked().Begin()
 	if err != nil {
 		return nil, err
 	}

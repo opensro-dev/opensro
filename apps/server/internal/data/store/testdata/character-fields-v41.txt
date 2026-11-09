@@ -1,3 +1,6 @@
+# character-fields record fields owned by store schema 41 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 42, its upgrade
+# step and character-fields-v42.txt.
 accountId
 activeCos
 activeCos.codename
@@ -396,9 +399,6 @@ skillActionRecoveryUntilMs
 skillExp
 skillPoints
 skills
-sookArenaActive
-sookArenaDay
-sookArenaEntries
 stallDecoration
 statPoints
 strength

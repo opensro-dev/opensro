@@ -52,16 +52,16 @@ func TestHomingBoundaryUsesNestNotRandomizedSpawn(t *testing.T) {
 	instance.Nest.Radius = 200
 	instance.Spawn.X += 150
 	inside := monster.Pose{RegionID: instance.Nest.RegionID, X: instance.Nest.X - 100, Y: instance.Nest.Y, Z: instance.Nest.Z}
-	if needsHoming(instance, inside) {
+	if needsHoming(&instance, inside) {
 		t.Fatal("random spawn shifted the nest's home boundary")
 	}
 	inside.Y += 1000
-	if needsHoming(instance, inside) {
+	if needsHoming(&instance, inside) {
 		t.Fatal("homing containment used combat's 3D helper")
 	}
 	outside := inside
 	outside.X = instance.Nest.X + 200
-	if !needsHoming(instance, outside) {
+	if !needsHoming(&instance, outside) {
 		t.Fatal("nest boundary became relative to randomized spawn")
 	}
 }
@@ -69,14 +69,14 @@ func TestHomingBoundaryUsesNestNotRandomizedSpawn(t *testing.T) {
 func TestProductionPursuitTimerAndExactBoundary(t *testing.T) {
 	ops, instance, mover, target := pursuitControlsFixture(t)
 	live := mover.Pose
-	if _, handled := ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 10000); handled {
+	if _, handled := ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, live, 10000); handled {
 		t.Fatal("recent nearby target interrupted")
 	}
 	target.Pose.X = live.X + 500
-	if _, handled := ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 11499); handled {
+	if _, handled := ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, live, 11499); handled {
 		t.Fatal("trace ignored timer")
 	}
-	frames, handled := ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 11500)
+	frames, handled := ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, live, 11500)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if !handled || after.Mode() != monster.MoverIdle || after.TargetGID() != 0 || len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
 		t.Fatalf("boundary must abandon to idle: %v, %v", after.Mode(), frames)
@@ -101,7 +101,7 @@ func TestPursuitSpeedDecisionPreservesTargetAndReplansWire(t *testing.T) {
 	s.mu.Unlock()
 	live := mover.LivePoseAt(10000, nil)
 	target.Pose.X = live.X + 150
-	frames, handled := ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 10000)
+	frames, handled := ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, live, 10000)
 	after, _ := s.Mover(monsterTestDivision, instance.Gid)
 	if !handled || after.TargetGID() != target.Gid || after.Mode() != monster.MoverChasing || after.Channel != wire.MoveStateWalk || len(frames) < 2 {
 		t.Fatalf("speed branch discarded target/packets: %+v %v", after, frames)
@@ -129,7 +129,7 @@ func TestPursuitRejectsStalePacketsAndTimerAfterSameTargetHit(t *testing.T) {
 		s.division(monsterTestDivision).instances.set(instance.Gid, row)
 		return 0.5
 	}
-	frames, _ := ops.advancePursuitControls(monsterTestDivision, instance, mover, target, mover.Pose, 10000)
+	frames, _ := ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, mover.Pose, 10000)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if len(frames) != 0 || after != mover {
 		t.Fatal("stale abandonment published")
@@ -147,7 +147,7 @@ func TestAuthoredHomingPublishesRunAndMatchesDuration(t *testing.T) {
 	ops, instance, mover, _ := pursuitControlsFixture(t)
 	mover.Pose.X += 110
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-	frames := ops.startReturnLeg(monsterTestDivision, instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+	frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	// radius 20, CRT sample 16384: 20/3 + (16384 % 7) = 10.6667,
 	// wire goal rounds to 1011. Native homing does not choose the center.
@@ -204,7 +204,7 @@ func TestIdleHomeAdmissionRunsOnEntryNotEveryTick(t *testing.T) {
 	ops, actor, mover, _ := pursuitControlsFixture(t)
 	mustMoverTransition(&mover, monster.MoverEventTraceAbandoned, 0)
 	mover.BehaviorDeadlineMs = 100000
-	mover, _ = ops.planIdleEntry(actor, mover, 10000)
+	mover, _ = ops.planIdleEntry(&actor, mover, 10000)
 	if mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
 		t.Fatal("initial entry not consumed")
 	}
@@ -221,7 +221,7 @@ func TestIdleHomeAdmissionRunsOnEntryNotEveryTick(t *testing.T) {
 	}
 	// Re-entering IDLE must perform the check at the live (outside) position.
 	mustMoverTransition(&after, monster.MoverEventIdleRepeated, 0)
-	after, frames := ops.planIdleEntry(actor, after, 15000)
+	after, frames := ops.planIdleEntry(&actor, after, 15000)
 	if after.Mode() != monster.MoverReturning || len(frames) == 0 {
 		t.Fatal("new idle entry failed to run homing")
 	}
@@ -242,7 +242,7 @@ func TestCavePursuitTraceIsExtendedIndoors(t *testing.T) {
 	ops, instance, mover, target := pursuitControlsFixtureIn(t, cave)
 	live := mover.Pose
 	target.Pose.X = live.X + 500
-	ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 11500)
+	ops.advancePursuitControls(monsterTestDivision, &instance, mover, target, live, 11500)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if after.Mode() == monster.MoverIdle || after.TargetGID() != target.Gid {
 		t.Fatalf("a cave target at the outdoor boundary ended the pursuit: %v, target %d", after.Mode(), after.TargetGID())

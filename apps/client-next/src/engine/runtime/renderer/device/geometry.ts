@@ -13,18 +13,20 @@ writes a member's stream (or a patched range of it) straight to its slot.
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
 import { createWaterReflection } from "./water-reflection";
+import { WATER_SKIN_BLENDED } from "./water-refraction";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
 import { destroyNow, type Retire } from "./retirement";
+import { MSAA_SAMPLE_COUNT } from "./msaa";
 import { createBufferSlabs, type BufferSlice } from "./buffer-slabs";
 import { DeviceDraw } from "./device-draw";
 import { createGeometryUploads } from "./geometry-uploads";
 import type { createParticlePresentation } from "./particles";
 import type { createGpuAnimationResources } from "./animation";
-import { DEFAULT_BLEND, type GeometryPipelineState } from "./pipelines";
+import { DEFAULT_BLEND, type GeometryPipelineState, type SceneSurface } from "./pipelines";
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
@@ -75,9 +77,10 @@ export function createGeometryResources(
 	created: GPUDevice,
 	current: () => GPUDevice,
 	fail: ( error: unknown ) => void,
-	// The geometry pipeline for state; the rgba16float sibling (the HDR
-	// stage's scene intermediate) resolves through the second argument.
-	pipelines: ( state: GeometryPipelineState, sceneFloat?: boolean, previewCoverage?: boolean ) => GPURenderPipeline,
+	// The geometry pipeline for state on a scene surface: the HDR stage's
+	// rgba16float intermediate, the MSAA stage's 4x sibling, or the
+	// preview pass's coverage sibling.
+	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface ) => GPURenderPipeline,
 	// Each draw holds a lease on its images for as long as it binds them.
 	images: ImageLeases,
 	worldSampler: GPUSampler,
@@ -95,13 +98,15 @@ export function createGeometryResources(
 ) {
 	let filtered = true, detail = 2, anisotropic = false, mixedCpuUploadBytes = 0;
 	// The HDR stage's scene intermediate flips the colour format every
-	// geometry pipeline renders into; sceneBindings swaps every draw over.
-	let floatScene = false, shadowEnabled = false;
+	// geometry pipeline renders into, and the MSAA stage flips the sample
+	// count; sceneBindings swaps every draw over to the current pair.
+	let floatScene = false, msaaScene = false, shadowEnabled = false;
 	const waterReflection = createWaterReflection( created, format, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
 	const previewBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
+	const singleSampledBindings: typeof previewBindings = new WeakMap();
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
 	// Released draws and their release records (releasedDraw).
 	const releasedDraws = new WeakMap<GeometryDraw, { atMs: number; error: Error; }>();
@@ -143,6 +148,14 @@ export function createGeometryResources(
 	// through refreshAmbientOcclusion when the view changes).
 	const aoDummyView = white.createView();
 	let aoBoundView = aoDummyView;
+	// Bindings 16/17, the port-only water refraction (device
+	// /water-refraction.ts): the frame's colour copy and its r32float depth
+	// copy. While the row is off both bind the 1x1 white view (a float
+	// texture, like the depth copy) and the stage-gated branch never
+	// samples them; device.ts installs the real views through
+	// refreshWaterRefraction when they change.
+	const refractionDummyView = white.createView();
+	let refractionColourView = refractionDummyView, refractionDepthView = refractionDummyView;
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
@@ -271,6 +284,8 @@ export function createGeometryResources(
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
 				{ binding: 15, resource: aoBoundView },
+				{ binding: 16, resource: refractionColourView },
+				{ binding: 17, resource: refractionDepthView },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -358,6 +373,76 @@ export function createGeometryResources(
 			},
 			retire
 		);
+	/*
+	================
+	rebindEveryDraw
+
+	A shared binding (the sun cascade, the occlusion factor, the water
+	refraction copies) now names another view. Bind groups hold their
+	views, so every draw rebinds against its current pipeline through
+	the one geometryBinding funnel.
+	================
+	*/
+	function rebindEveryDraw() {
+		for ( const [draw, meta] of metadata ) {
+			DeviceDraw.rebind(
+				meta.selection,
+				geometryBinding(
+					meta.uniform,
+					meta.instances,
+					meta.material,
+					draw.pipeline,
+					meta.clampedSampling,
+					meta.image,
+					meta.skin,
+					meta.bones,
+					meta.environmentImage
+				)
+			);
+		}
+	}
+	/*
+	================
+	passSibling
+
+	One draw's single-sampled sibling. Borrows buffers without changing source
+	handles; bindings follow their source revision and counts are refreshed
+	for each prepared frame.
+	================
+	*/
+	function passSibling( draw: GeometryDraw, bindings: typeof previewBindings, previewCoverage: boolean ) {
+		const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
+		if ( !meta || !buffers ) throw Error( "Unknown or released sibling draw" );
+		let cached = bindings.get( draw );
+		if ( !cached || cached.source !== draw.binding ) {
+			const pipeline = pipelines( meta.state, { sceneFloat: floatScene, fullscreenPreview: previewCoverage } );
+			cached = {
+				source: draw.binding,
+				draw: {
+					...draw,
+					pipeline,
+					binding: geometryBinding(
+						meta.uniform,
+						meta.instances,
+						meta.material,
+						pipeline,
+						meta.clampedSampling,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage
+					)
+				}
+			};
+			bindings.set( draw, cached );
+		}
+		return {
+			...cached.draw,
+			indexCount: draw.indexCount,
+			instanceCount: draw.instanceCount,
+			instanceCapacity: draw.instanceCapacity
+		};
+	}
 	const commands: GeometryCommands = Object.freeze( {
 		/*
 		================
@@ -365,51 +450,25 @@ export function createGeometryResources(
 
 		Port-only, not native: only the fullscreen preview resolve consumes
 		coverage alpha. Portrait and doll UI textures retain authored alpha.
-		Borrow buffers without changing source handles; bindings follow their
-		source revision and counts are refreshed for each prepared frame.
+		The preview pass is single-sampled, so the MSAA stage needs siblings
+		here even without HDR.
 		================
 		*/
 		hdrPreview( draws: readonly GeometryDraw[] ): readonly GeometryDraw[] {
-			if ( !floatScene ) return draws;
-			return draws.map( draw => {
-				const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
-				if ( !meta || !buffers ) throw Error( "Unknown or released HDR preview draw" );
-				let cached = previewBindings.get( draw );
-				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( meta.state, true, true );
-					cached = {
-						source: draw.binding,
-						draw: {
-							...draw,
-							pipeline,
-							binding: geometryBinding(
-								meta.uniform,
-								meta.instances,
-								meta.material,
-								pipeline,
-								meta.clampedSampling,
-								meta.image,
-								meta.skin,
-								meta.bones,
-								meta.environmentImage
-							),
-							vertices: draw.vertices,
-							indices: draw.indices,
-							count: draw.count,
-							indexCount: draw.indexCount,
-							instanceCount: draw.instanceCount,
-							instanceCapacity: draw.instanceCapacity
-						}
-					};
-					previewBindings.set( draw, cached );
-				}
-				return {
-					...cached.draw,
-					indexCount: draw.indexCount,
-					instanceCount: draw.instanceCount,
-					instanceCapacity: draw.instanceCapacity
-				};
-			} );
+			if ( !floatScene && !msaaScene ) return draws;
+			return draws.map( draw => passSibling( draw, previewBindings, floatScene ) );
+		},
+		/*
+		================
+		singleSampled
+
+		Port-only, not native: the siblings of the MSAA stage's 4x draws for
+		passes that stay single-sampled (portraits, dolls, deferred particles).
+		================
+		*/
+		singleSampled( draws: readonly GeometryDraw[] ): readonly GeometryDraw[] {
+			if ( !msaaScene ) return draws;
+			return draws.map( draw => passSibling( draw, singleSampledBindings, false ) );
 		},
 		/*
         ================
@@ -450,7 +509,7 @@ export function createGeometryResources(
 				if ( !meta || meta.water || draw.deferredParticle ) continue;
 				let cached = reflectedBindings.get( draw );
 				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( meta.state, floatScene );
+					const pipeline = pipelines( meta.state, { sceneFloat: floatScene, msaa: msaaScene } );
 					const binding = geometryBinding(
 						meta.uniform,
 						meta.instances,
@@ -507,9 +566,10 @@ export function createGeometryResources(
 						{ instances: meta.instances, material: meta.material, skin: meta.skin, bones: meta.bones } :
 						undefined;
 				},
-				// The receiver draws land in the scene target: the getter
-				// follows the HDR stage's scene format.
+				// The receiver draws land in the scene target: the getters
+				// follow the HDR stage's format and the MSAA stage's samples.
 				() => (floatScene ? "rgba16float" : format),
+				() => (msaaScene ? MSAA_SAMPLE_COUNT : 1),
 				retire
 			);
 			return shadows.prepare( requests, blob );
@@ -1048,7 +1108,9 @@ export function createGeometryResources(
 								data.bones.length / 16 / Math.max( 1, count )) :
 							0,
 						mat?.lightmap ? 1 : 0,
-						mat?.water ? 1 : 0,
+						// skin.z: water, with blended surfaces marked apart for
+						// the port-only refraction branch (device/water-refraction.ts).
+						mat?.water ? (mat.blend ? WATER_SKIN_BLENDED : 1) : 0,
 						mat?.sky ?? 0,
 						1,
 						1,
@@ -1110,7 +1172,7 @@ export function createGeometryResources(
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),
 					material = slice( materialSlabs.allocate( materialData.byteLength ), materialData );
-				const selected = pipelines( geometryPipelineState( mat ), floatScene ),
+				const selected = pipelines( geometryPipelineState( mat ), { sceneFloat: floatScene, msaa: msaaScene } ),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const binding = geometryBinding(
 					uniform,
@@ -1126,6 +1188,7 @@ export function createGeometryResources(
 				const draw = new DeviceDraw(
 					{
 						deferredParticle: mat?.deferredParticle,
+						water: !!mat?.water,
 						blended: data.material?.sky ? false : data.material?.blend ?? false,
 						pipeline: selected,
 						vertices,
@@ -1334,18 +1397,19 @@ export function createGeometryResources(
 		================
 		sceneBindings
 
-		The HDR stage's scene-format flip: every live draw moves to its
-		rgba16float pipeline sibling (a new implicit layout, so a new
-		 binding), and the water mirror reformats to match the reflected
+		The scene surface flip: every live draw moves to the pipeline of the
+		current scene format and sample count (a new implicit layout, so a
+		new binding), and the water mirror reformats to match the reflected
 		pass. Nothing renders between the flip and the walk's completion.
 		================
 		*/
-		sceneBindings( sceneFloat: boolean ) {
-			if ( floatScene === sceneFloat ) return;
+		sceneBindings( sceneFloat: boolean, sceneMsaa = false ) {
+			if ( floatScene === sceneFloat && msaaScene === sceneMsaa ) return;
 			floatScene = sceneFloat;
-			waterReflection.reformat( sceneFloat ? "rgba16float" : format );
+			msaaScene = sceneMsaa;
+			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
-				const pipeline = pipelines( meta.state, sceneFloat );
+				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa } );
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,
@@ -1375,22 +1439,7 @@ export function createGeometryResources(
 			if ( shadowEnabled === enabled ) return;
 			// Bind the selected target before prepare() activates the first frame.
 			shadowEnabled = enabled;
-			for ( const [draw, meta] of metadata ) {
-				DeviceDraw.rebind(
-					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
-				);
-			}
+			rebindEveryDraw();
 		},
 		/*
 		================
@@ -1412,22 +1461,26 @@ export function createGeometryResources(
 				return;
 			}
 			aoBoundView = next;
-			for ( const [draw, meta] of metadata ) {
-				DeviceDraw.rebind(
-					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
-				);
-			}
+			rebindEveryDraw();
+		},
+		/*
+		================
+		refreshWaterRefraction
+
+		Port-only, not native: the water refraction stage's copies
+		(device/water-refraction.ts), or null while the row is off, when
+		both bindings fall back to the white view the stage gate never
+		samples. The copies' views are stable per scene size and format,
+		so, as with the occlusion factor, only an enable, disable, resize
+		or format flip rebinds.
+		================
+		*/
+		refreshWaterRefraction( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
+			const nextColour = colour ?? refractionDummyView, nextDepth = depth ?? refractionDummyView;
+			if ( nextColour === refractionColourView && nextDepth === refractionDepthView ) return;
+			refractionColourView = nextColour;
+			refractionDepthView = nextDepth;
+			rebindEveryDraw();
 		},
 		/*
 		================

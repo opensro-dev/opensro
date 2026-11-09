@@ -1,6 +1,6 @@
-# training-camp-fields record fields owned by store schema 32 (persisted_shape_test.go).
-# Never edit after it ships: a new persisted field takes schema 33, its upgrade
-# step and training-camp-fields-fields-v33.txt.
+# training-camp-fields record fields owned by store schema 41 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 42, its upgrade
+# step and training-camp-fields-v42.txt.
 contents
 createdAtMs
 evaluationPoints

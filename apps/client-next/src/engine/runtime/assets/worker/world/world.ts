@@ -60,6 +60,7 @@ import {
 import type { WorldScene, WorldGroup, WorldMaterial, TerrainRange } from "@/engine/contracts/scene";
 import { dungeonObjectMatrix, identity, mapPlacement } from "@/engine/foundation/rendering/world-math";
 import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-contract";
+import { validDungeonBlocks } from "./internal/dungeon-block-publication";
 import { sceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
 import { sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
 import { worldObjectMaterial } from "@/engine/foundation/rendering/world-material";
@@ -166,13 +167,7 @@ measurable for staying provably alive.
 			const objectPart = part !== "terrain", terrainPart = part !== "objects";
 			if (
 				b.dungeonBlocks &&
-				(!featuresAt( region ).rooms || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
-					b.dungeonBlocks.some( ( block, index ) =>
-						block.index !== index || !Array.isArray( block.visibleBlocks ) ||
-						(block.ambientColor !== undefined &&
-							(!Number.isInteger( block.ambientColor ) || block.ambientColor < 0 ||
-								block.ambientColor > 0xffffffff))
-					))
+				(!featuresAt( region ).rooms || !validDungeonBlocks( b.dungeonBlocks ))
 			) throw Error( "Invalid dungeon block publication" );
 			const refs = new Map( b.objects.resources.bsr.map( row => [ row.objectId, row ] ) ),
 				meshes = new Map( b.objects.resources.meshes.map( row => [ row.sourcePath.toLowerCase(), row ] ) ),
@@ -970,6 +965,7 @@ noteMaterial
 				dungeonAmbient: b.dungeonBlocks?.map(
 					block => block.ambientColor ?? DEFAULT_DUNGEON_AMBIENT_COLOR
 				),
+				dungeonLights: b.dungeonBlocks?.map( block => block.lights ?? [] ),
 				waterBump: b.water?.reflectionBumpPublicPath,
 				flareTextures: !featuresAt( region ).sky || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
 				starRandomState: objectPart ? b.sky?.starPrimitive?.nativeRand?.stateAfterConstruction : undefined,

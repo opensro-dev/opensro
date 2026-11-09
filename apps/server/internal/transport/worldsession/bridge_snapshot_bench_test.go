@@ -7,8 +7,9 @@ A live tick takes the full scene snapshot once (the coordinator) and the
 light session views once per view hook (skill objects, ground scope,
 hunting points, party updates, beta silk). This bench builds that tick's
 walks over a hub of in-world sessions, each publishing a realistic object
-set, behind a provider shaped like the movement lane's (a cloned world
-with a live ground walk and segment, and a fresh peer appearance).
+set, behind a provider shaped like the movement lane's (the world fills
+the retained slot, over a live ground walk and segment, with the lane's
+kept peer appearance).
 
 ===========================================================================
 */
@@ -35,23 +36,34 @@ const (
 ================
 benchProvider
 
-The movement lane's provider shape: the world is cloned under its own lock
-for every face, and the full face builds a fresh appearance.
+The movement lane's provider shape: the world fills the retained slot
+under its own lock for every face (WorldSnapshotInto, #2989), the
+appearance is the lane's kept one, and the movement predicate captures
+its segment by value.
 ================
 */
 type benchProvider struct {
-	mu    *sync.Mutex
-	world *simulation.WorldState
-	char  int64
+	mu         *sync.Mutex
+	world      *simulation.WorldState
+	char       int64
+	appearance *simulation.PeerAppearance
 }
 
 func (p benchProvider) WorldSnapshot() simulation.SessionSnapshot {
+	var snap simulation.SessionSnapshot
+	p.WorldSnapshotInto(&snap)
+	return snap
+}
+
+func (p benchProvider) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	p.mu.Lock()
-	world := simulation.CloneWorldState(*p.world)
+	simulation.CloneWorldStateInto(*p.world, &dst.World)
 	p.mu.Unlock()
-	return simulation.SessionSnapshot{DivisionID: "DIV_A", CharacterID: p.char, World: world,
-		MovementCurrent: func() bool { return world.MoveSegment != nil },
-		Appearance:      &simulation.PeerAppearance{Name: "hero", ActionSpeed: 125}}
+	hasSegment := dst.World.MoveSegment != nil
+	dst.DivisionID = "DIV_A"
+	dst.CharacterID = p.char
+	dst.MovementCurrent = func() bool { return hasSegment }
+	dst.Appearance = p.appearance
 }
 
 func (p benchProvider) WorldView() simulation.SessionView {
@@ -100,7 +112,8 @@ func benchSnapshotBridge(b *testing.B) *Bridge {
 		world := simulation.DefaultWorldState(simulation.EuropeStartProfile())
 		world.MoveSegment = &simulation.MoveSegment{From: world.Spawn, StartedAtMs: 1, ArrivesAtMs: 2}
 		world.Ground = &simulation.GroundWalkState{At: 1, Pose: world.Spawn}
-		sess.SetWorldSnapshot("DIV_A", benchProvider{mu: &sync.Mutex{}, world: &world, char: int64(i + 1)})
+		sess.SetWorldSnapshot("DIV_A", benchProvider{mu: &sync.Mutex{}, world: &world, char: int64(i + 1),
+			appearance: &simulation.PeerAppearance{Name: "hero", ActionSpeed: 125}})
 	}
 	return New(srv.Hub)
 }

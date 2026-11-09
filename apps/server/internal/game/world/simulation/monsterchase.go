@@ -31,7 +31,7 @@ client's current pursuit segment expires. Non-chase segments emit nothing.
 */
 func (ops *MonsterMoverOps) chaseRetarget(
 	divisionID string,
-	instance monster.Instance,
+	instance *monster.Instance,
 	tactics monster.Tactics,
 	mover monster.MoverState,
 	divisionPlayers []playerPose,
@@ -85,7 +85,7 @@ Target guidance and the derived destination remain separate state by design.
 */
 func (ops *MonsterMoverOps) startChaseLeg(
 	divisionID string,
-	instance monster.Instance,
+	instance *monster.Instance,
 	tactics monster.Tactics,
 	mover monster.MoverState,
 	target playerPose,

@@ -10,6 +10,7 @@ World leases isolate actors; interest queries use current movement geometry.
 package simulation
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -190,21 +191,39 @@ populationForObject
 ================
 */
 func (s *MonsterState) populationForObject(division string, gid uint32) *divisionMonsterState {
+	return s.populationForObjectAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+populationForObjectAt
+
+populationForObject through the monster slot the caller's step
+carried (#2133): every candidate's membership test goes through
+containsAt, which answers from the slot when it still names the
+gid and delegates to the gid probe otherwise, so the candidate
+order - and therefore the answer, popHint side effects included -
+is populationForObject's either way. The step's membership tests
+(moverStuckAt, the AI timer check) run per actor per leg; their
+gid probes were the store map walk this removes.
+================
+*/
+func (s *MonsterState) populationForObjectAt(division string, gid uint32, monsterSlot uint32) *divisionMonsterState {
 	if state := s.divs[division]; state != nil {
-		if state.instances.contains(gid) {
+		if state.instances.containsAt(monsterSlot, gid) {
 			return state
 		}
 	}
 	if s.popHintState != nil {
 		if s.popHintKey.division == division && s.worldPopulations[s.popHintKey] == s.popHintState &&
-			s.popHintState.instances.contains(gid) {
+			s.popHintState.instances.containsAt(monsterSlot, gid) {
 			return s.popHintState
 		}
 		s.popHintState = nil
 	}
 	for key, state := range s.worldPopulations {
 		if key.division == division {
-			if state.instances.contains(gid) {
+			if state.instances.containsAt(monsterSlot, gid) {
 				s.popHintKey, s.popHintState = key, state
 				return state
 			}
@@ -496,6 +515,118 @@ func (s *MonsterState) scopeInterestStamp(division string, lease instance.Lease,
 
 /*
 ================
+scopePopulations
+
+One leg phase's population resolutions under a single lock hold:
+each division/lease resolves once, each state reconciles once at
+the phase instant, and consecutive sessions in the same
+population skip the map entirely (the snapshot walks players in
+place order).
+================
+*/
+type scopePopulations struct {
+	states     map[populationKey]*divisionMonsterState
+	reconciled map[*divisionMonsterState]bool
+	lastKey    populationKey
+	lastState  *divisionMonsterState
+	haveLast   bool
+}
+
+/*
+================
+scopePopulations.resolve
+
+The session's division state, reconciled at nowMs on first sight
+this phase; nil when the population does not resolve.
+================
+*/
+func (c *scopePopulations) resolve(s *MonsterState, session *SessionSnapshot, nowMs int64) *divisionMonsterState {
+	key := populationKey{session.DivisionID, session.Population}
+	var state *divisionMonsterState
+	if c.haveLast && key == c.lastKey {
+		state = c.lastState
+	} else {
+		if c.states == nil {
+			c.states = make(map[populationKey]*divisionMonsterState)
+		}
+		resolved, cached := c.states[key]
+		if cached {
+			state = resolved
+		} else {
+			state = s.populationForLease(session.DivisionID, session.Population)
+			c.states[key] = state
+		}
+		c.lastKey, c.lastState, c.haveLast = key, state, true
+	}
+	if state != nil && state.movers != nil && !c.reconciled[state] {
+		if c.reconciled == nil {
+			c.reconciled = make(map[*divisionMonsterState]bool)
+		}
+		state.movers.reconcileBlocks(nowMs)
+		c.reconciled[state] = true
+	}
+	return state
+}
+
+/*
+================
+MonsterState.fillScopeStamps
+
+The scope leg's stamps, sampled together under one lock hold
+into the viewers' dense slots (#2988, #2994). The reconcile is
+idempotent per instant and the generations it advances are the
+stamps' whole input, so one hold at leg start yields exactly the
+stamp each viewer would have sampled on its own turn, and the
+leg's answers all key on one instant the way the batch snapshot
+keys the monster leg's. Viewers share blocks (a town crowd
+stands in a handful) and the stamp is a pure function of the
+reconciled generations, so each distinct block folds once per
+population per leg. A population that does not resolve leaves
+stampOK false, the answer scopeInterestStamp gives for it.
+Commits landing mid-leg publish next leg - indistinguishable
+from landing just after it.
+================
+*/
+func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []SessionSnapshot, nowMs int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var populations scopePopulations
+	type stampKey struct {
+		state *divisionMonsterState
+		block worldgeom.InterestBlock
+	}
+	// Made on first use: consecutive viewers usually share the
+	// last fold, and a leg with one block never touches the map.
+	var folded map[stampKey]interestMemoStamp
+	lastFold := stampKey{}
+	var lastStamp interestMemoStamp
+	for i := range slots {
+		slot := &slots[i]
+		state := populations.resolve(s, &sessions[i], nowMs)
+		if state == nil {
+			continue
+		}
+		foldKey := stampKey{state, slot.block}
+		var stamp interestMemoStamp
+		if foldKey == lastFold {
+			stamp = lastStamp
+		} else if cached, okFold := folded[foldKey]; okFold {
+			stamp = cached
+		} else {
+			stamp = state.interestStampAt(slot.block)
+			if folded == nil {
+				folded = make(map[stampKey]interestMemoStamp)
+			}
+			folded[foldKey] = stamp
+		}
+		lastFold, lastStamp = foldKey, stamp
+		slot.stamp = stamp
+		slot.stampOK = true
+	}
+}
+
+/*
+================
 regionStatics
 
 The entries of byRegion[region] that have no mover. Most generated actors
@@ -597,7 +728,24 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 	}
 	block := worldgeom.InterestBlockAt(viewer)
 	state.movers.reconcileBlocks(nowMs)
-	stamp := state.interestStampAt(block)
+	return populationInterestGIDsFolded(state, viewer, block, state.interestStampAt(block))
+}
+
+/*
+================
+populationInterestGIDsFolded
+
+populationInterestGIDs with the reconcile done and the stamp
+already folded by the caller: the scope leg samples both once per
+leg (#2988) instead of once per viewer per query. The stamp is a
+pure function of the reconciled generations and the memo keys on
+its value, so the answers are the same.
+================
+*/
+func populationInterestGIDsFolded(state *divisionMonsterState, viewer worldgeom.RegionXZ, block worldgeom.InterestBlock, stamp interestMemoStamp) []uint32 {
+	if state.movers == nil {
+		return appendInterestStatics(state, viewer, nil)
+	}
 	if state.interestMemo == nil {
 		state.interestMemo = make(map[worldgeom.InterestBlock]*interestMemoEntry)
 	}
@@ -624,45 +772,75 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 
 /*
 ================
-populationInterestBlockDelta
+MonsterState.resolveScopeDeltas
 
 The scope leg's fast path (#2134): the viewer's shown set still equals
 the block answer computed under base, and the memo remembers how that
 answer changed, so the leg applies only the difference. entered is
 filtered to gids the viewer does not show, with their snapshots; left
 to gids it does. total is the current answer's size, for the scope
-budget read. ok is false when the memo cannot bridge base - the
-caller then runs the full pass.
+budget read. A viewer the memo cannot bridge from its memo stamp
+keeps bridged=false - the leg then runs its full pass. The stamps
+ride the leg's leg-start slots (#2988): the memo keys on the stamp
+value, so answering from it is the answer a fresh reconcile and
+fold would give, and the answers are the ones the per-viewer
+populationInterestBlockDelta computed before #2994 - same memo
+reads, same entered/left filters, one hold instead of one per
+viewer.
 ================
 */
-func (s *MonsterState) populationInterestBlockDelta(division string, lease instance.Lease, viewer worldgeom.RegionXZ, nowMs int64, base interestMemoStamp, known map[uint32]bool) (entered []uint32, snapshots map[uint32]monster.Instance, left []uint32, total int, ok bool) {
+func (s *MonsterState) resolveScopeDeltas(sessions []SessionSnapshot, slots []scopeViewerSlot, nowMs int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForLease(division, lease)
-	if state == nil || state.movers == nil {
-		return nil, nil, nil, 0, false
-	}
-	gids := populationInterestGIDs(state, viewer, nowMs)
-	entry := state.interestMemo[worldgeom.InterestBlockAt(viewer)]
-	if entry == nil || entry.fromStamp != base {
-		return nil, nil, nil, 0, false
-	}
-	for _, gid := range entry.entered {
-		if known[gid] {
+	var populations scopePopulations
+	// Consecutive viewers usually stand in the same block of the
+	// same population, where the stamp - and so the memo entry -
+	// is the same one the last viewer resolved.
+	var lastState *divisionMonsterState
+	var lastBlock worldgeom.InterestBlock
+	var lastEntry *interestMemoEntry
+	for i := range slots {
+		slot := &slots[i]
+		// An unchanged viewer (stamp == memo stamp) can never
+		// bridge: the memo entry's fromStamp is the stamp its last
+		// recompute replaced, never the stamp it now holds. The
+		// leg skips it outright, so resolving it would be waste.
+		if slot.state == nil || !slot.stampOK || !slot.sameScope || slot.stamp == slot.state.memo.stamp {
 			continue
 		}
-		entered = append(entered, gid)
-		if snapshots == nil {
-			snapshots = make(map[uint32]monster.Instance, len(entry.entered))
+		state := populations.resolve(s, &sessions[i], nowMs)
+		if state == nil || state.movers == nil {
+			continue
 		}
-		snapshots[gid] = state.instances.get(gid)
-	}
-	for _, gid := range entry.left {
-		if known[gid] {
-			left = append(left, gid)
+		var entry *interestMemoEntry
+		if state == lastState && slot.block == lastBlock && lastEntry != nil {
+			entry = lastEntry
+		} else {
+			populationInterestGIDsFolded(state, slot.viewer, slot.block, slot.stamp)
+			entry = state.interestMemo[slot.block]
+			lastState, lastBlock, lastEntry = state, slot.block, entry
 		}
+		if entry == nil || entry.fromStamp != slot.state.memo.stamp {
+			continue
+		}
+		for _, gid := range entry.entered {
+			if slot.shown[gid] {
+				continue
+			}
+			slot.entered = append(slot.entered, gid)
+			if slot.snapshots == nil {
+				slot.snapshots = make(map[uint32]monster.Instance, len(entry.entered))
+			}
+			slot.snapshots[gid] = state.instances.get(gid)
+		}
+		for _, gid := range entry.left {
+			if slot.shown[gid] {
+				slot.left = append(slot.left, gid)
+			}
+		}
+		slot.total = len(entry.gids)
+		slot.bridged = true
 	}
-	return entered, snapshots, left, len(gids), true
 }
 
 /*
@@ -682,7 +860,7 @@ func appendInterestStatics(state *divisionMonsterState, viewer worldgeom.RegionX
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 
@@ -701,7 +879,36 @@ func (s *MonsterState) populationInterestDelta(division string, lease instance.L
 	if state == nil {
 		return nil, nil
 	}
-	gids := populationInterestGIDs(state, viewer, nowMs)
+	return populationInterestDeltaOf(state, populationInterestGIDs(state, viewer, nowMs), known)
+}
+
+/*
+================
+MonsterState.populationInterestDeltaSampled
+
+The scope leg's full pass (#2988): the populationInterestDelta
+answer keyed on the leg's leg-start sample instead of a fresh
+reconcile and fold per viewer.
+================
+*/
+func (s *MonsterState) populationInterestDeltaSampled(division string, lease instance.Lease, viewer worldgeom.RegionXZ, block worldgeom.InterestBlock, stamp interestMemoStamp, known map[uint32]bool) ([]uint32, map[uint32]monster.Instance) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(division, lease)
+	if state == nil {
+		return nil, nil
+	}
+	return populationInterestDeltaOf(state, populationInterestGIDsFolded(state, viewer, block, stamp), known)
+}
+
+/*
+================
+populationInterestDeltaOf
+
+The gids among gids the viewer does not know yet, with snapshots.
+================
+*/
+func populationInterestDeltaOf(state *divisionMonsterState, gids []uint32, known map[uint32]bool) ([]uint32, map[uint32]monster.Instance) {
 	var snapshots map[uint32]monster.Instance
 	for _, gid := range gids {
 		if known[gid] {

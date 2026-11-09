@@ -1661,6 +1661,34 @@ function roarEffects( play = _event => {} ) {
 		createPresentationRandom( 1 )
 	);
 }
+
+test("merged penguin casts and gear procs retain their independent effect lifetimes", () => {
+	for ( const action of [ 34, 35, 36, 0xd3, 0xd7, 0xd8, 0xd9, 0xda ] ) {
+		const effects = roarEffects();
+		const entity = {
+			gid: 7,
+			refObjId: 7,
+			kind: "cos",
+			regionId: 257,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0,
+			emote: { action, revision: 1, atMs: 0 }
+		};
+		const step = now => effects.step( [ entity ], null, now, () => true, () => 1, [] );
+		step( 0 );
+		entity.emote = { action: 0, revision: 2, atMs: 1 };
+		assert.ok( step( .2 ).length > 0, `effect ${action} was lost when its actor changed action` );
+		if ( action === 0xd3 ) {
+			assert.ok( step( 4.8 ).length > 0 );
+			assert.equal( step( 5 ).length, 0 );
+		} else if ( action < 0xd0 ) {
+			assert.equal( step( 1.25 ).length, 0 );
+		}
+		effects.dispose();
+	}
+});
 test("challenging roar follows the storyboard without changing the bear or replaying", () => {
 	const effects = roarEffects();
 	const bear = {

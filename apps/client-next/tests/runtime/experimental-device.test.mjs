@@ -280,8 +280,30 @@ test("HDR coverage is derived only for fullscreen preview and leaves portrait so
 	assert.equal( geometry.hdrPreview( sources ), sources );
 	owner.experimentalVideo( options( { hdrToneMap: true } ) );
 	geometry.release( local );
-	assert.throws( () => geometry.hdrPreview( sources ), /Unknown or released HDR preview draw/ );
-	assert.throws( () => geometry.hdrPreview( [ preview ] ), /Unknown or released HDR preview draw/ );
+	assert.throws( () => geometry.hdrPreview( sources ), /Unknown or released sibling draw/ );
+	assert.throws( () => geometry.hdrPreview( [ preview ] ), /Unknown or released sibling draw/ );
+});
+
+test("the MSAA stage's draws keep single-sampled siblings for single-sampled passes", async t => {
+	const { owner, upload, pipelineDescriptor } = await deviceHarness( t );
+	const material = { blend: true };
+	const draw = upload( false, false, material ), sources = [ draw ];
+	const geometry = owner.geometry() ?? assert.fail( "missing geometry" );
+	assert.equal( geometry.singleSampled( sources ), sources, "the native path returns original draws" );
+	assert.equal( pipelineDescriptor( draw ).multisample, undefined );
+
+	owner.experimentalVideo( options( { msaa: true } ) );
+	assert.equal( pipelineDescriptor( draw ).multisample.count, 4, "the shared draw follows the 4x scene" );
+	const [sibling] = geometry.singleSampled( sources );
+	const [preview] = geometry.hdrPreview( sources );
+	assert.equal( pipelineDescriptor( sibling ).multisample, undefined, "portraits and particles stay 1x" );
+	assert.equal( pipelineDescriptor( preview ).multisample, undefined, "the preview pass stays 1x without HDR" );
+	assert.notEqual( sibling.binding, draw.binding );
+	assert.equal( geometry.singleSampled( sources )[0].binding, sibling.binding, "an unchanged binding is cached" );
+
+	owner.experimentalVideo( options() );
+	assert.equal( geometry.singleSampled( sources ), sources );
+	assert.equal( pipelineDescriptor( draw ).multisample, undefined, "off restores the native pipeline" );
 });
 
 test("only HDR fullscreen additive siblings preserve coverage while portrait sources retain native alpha", async t => {

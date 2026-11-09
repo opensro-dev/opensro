@@ -47,7 +47,6 @@ import (
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
-	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
@@ -123,6 +122,7 @@ func newGameplayPlane(
 		return captureObjectFrames(ts.Hub, division, gid)
 	}
 	items.PetPolicies = companion.PoliciesFromEnv()
+	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -316,12 +316,9 @@ func newGameplayPlane(
 	appendGroundObjectRows(deps, items)
 
 	water := movement.NewAuthorityValidator(worldAuthorityDir)
-	// Port-only, not native: Alexandria's regions exist only with SRO_ALEXANDRIA.
-	hiddenAlexandria, err := alexandria.Hidden(devPaths.TextdataDir)
-	if err != nil {
+	if err := wireAlexandria(water, deps, devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	water.HideAlexandria(hiddenAlexandria)
 	if err := water.ValidateSecurityAssets(); err != nil {
 		return nil, err
 	}
@@ -749,7 +746,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
-	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
 	if err != nil {
 		return err
@@ -942,6 +938,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	moderationLog := chatlog.Open(store.DirForShardFromEnv(game.divisionID), chatlog.RetainDaysFromEnv())
 	game.chat.ModerationLog = moderationLog
 	game.items.ModerationLog = moderationLog
+	wireChatReports(game)
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {

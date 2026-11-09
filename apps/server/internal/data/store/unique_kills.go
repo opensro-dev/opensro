@@ -136,7 +136,7 @@ func (s *Store) UniqueKillsAfter(division string, afterSeq int64) ([]domain.Uniq
 	if s.db == nil {
 		return nil, fmt.Errorf("unique kill: store unavailable")
 	}
-	rows, err := s.db.Query(`SELECT seq, record FROM unique_kills
+	rows, err := s.syncDBLocked().Query(`SELECT seq, record FROM unique_kills
 WHERE division = ? AND seq > ? ORDER BY seq LIMIT ?`, division, afterSeq, UniqueKillPage)
 	if err != nil {
 		return nil, err

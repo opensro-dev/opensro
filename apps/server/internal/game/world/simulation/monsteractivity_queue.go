@@ -5,8 +5,8 @@ monsteractivity_queue.go - the monster behaviour queue and its due batches
 
 Every materialized actor has one update entry, due at a millisecond
 time. PENDING sleeps until its activity deadline (or earlier movement
-arrival); combat events reschedule the same entry. No viewer ring owns
-actor liveness.
+arrival); IDLE sleeps until its earliest real due (#2136); combat
+events reschedule the same entry. No viewer ring owns actor liveness.
 
 The queue is a timer wheel: buckets of 8 ms over a 4096 ms ring, an
 immediate list for dues in the past and a far list for dues beyond the
@@ -25,6 +25,8 @@ container - only the due set did, and the wheel keeps it exact.
 package simulation
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"sync"
 
@@ -457,6 +459,24 @@ func (s *MonsterState) scheduleBehavior(state *divisionMonsterState, gid uint32,
 
 /*
 ================
+MonsterState.wakeBehavior
+
+Re-arm an actor for the next leg, the event doors' set(gid, 0)
+through the division door: a dropped pooled plan replans at its
+next due, and the far idle due the batch build armed from the
+leg-start row (#2136) must not strand that replan.
+================
+*/
+func (s *MonsterState) wakeBehavior(division string, gid uint32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if state := s.populationForObject(division, gid); state != nil {
+		state.behavior.set(gid, 0)
+	}
+}
+
+/*
+================
 MonsterState.scheduleBehaviorSlot
 
 scheduleBehavior, also returning the mover slot the read resolved.
@@ -479,23 +499,24 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 		return slot
 	}
 	resident, _ := state.instances.hotRow(gid)
-	state.behavior.set(gid, nextBehaviorDue(m, resident, now))
+	state.behavior.set(gid, s.nextBehaviorDue(state, gid, m, resident, now))
 	return slot
 }
 
 /*
 ================
-nextBehaviorDue
+MonsterState.nextBehaviorDue
 
 When the actor's next behaviour step falls due: the next tick, or
 the pending row's cadence phase when it is armed and no help
 command pends - the activity cadence's own deadline, brought
-forward to the arrival when the mover lands sooner. The gid door
-and the batch build's carried door share it, so both arm the same
-due for the same rows.
+forward to the arrival when the mover lands sooner. An idle row
+arms at its real next due instead (idleBehaviorDue, #2136). The
+gid door and the batch build's carried door share it, so both arm
+the same due for the same rows.
 ================
 */
-func nextBehaviorDue(m moverSchedule, resident residentMonster, now int64) int64 {
+func (s *MonsterState) nextBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) int64 {
 	at := now + 1
 	commandPending := resident.help.HasPending()
 	if m.mode == monster.MoverPending && m.activity.Interval != 0 && !commandPending {
@@ -507,7 +528,98 @@ func nextBehaviorDue(m moverSchedule, resident residentMonster, now int64) int64
 			at = m.arriveMs
 		}
 	}
+	if m.mode == monster.MoverIdle && !commandPending {
+		if due, gated := s.idleBehaviorDue(state, gid, m, resident, now); gated {
+			at = due
+		}
+	}
 	return at
+}
+
+/*
+================
+MonsterState.idleBehaviorDue
+
+When an idle monster next needs its step, and whether that time is
+knowable from the rows the scheduler already reads. The step of an
+idle monster at rest can only act at three times: its idle deadline
+(advanceIdle's decideIdle), its activity-gate cadence (the gate's
+Due test, in the pending branch's own phase arithmetic) and, for an
+aggressive nest, its acquisition timer (the sight scan; deferring
+to the timer's fire time defers nothing, the check consumes the
+timer when read). Everything else that can move it - damage, help,
+hostility, a queued tactics event - arrives through an event door
+that reschedules it at once, so sleeping until the earliest of the
+three changes no outcome. Any fact this read cannot prove keeps
+the next tick: a pending idle entry or stuck latch, a summoned
+control or a held target (the step's own branches), a corpse or a
+detached nest, an active abnormal or motion hold, a zero gate
+interval, or an acquisition bank not yet created (its first check
+arms the timer; the step that runs next tick creates it).
+
+The aggressive read mirrors monster.ResolveTactics' nest branch;
+the ops' TacticsFor override is a test seam the scheduler sits
+below, so a nest the tables call passive keeps the gate cadence.
+================
+*/
+func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) (int64, bool) {
+	if m.idleEntryPending || m.stuck || m.controlMode == monster.ControlSummoned || m.targetGID != 0 {
+		return 0, false
+	}
+	if resident.currentHP == 0 || resident.nestDetached || resident.sparse&sparseAbnormal != 0 {
+		return 0, false
+	}
+	if resident.motion.StateAt(now) != 0 || m.activity.Interval == 0 {
+		return 0, false
+	}
+	at := m.deadlineMs + 1
+	if at < now+1 {
+		at = now + 1
+	}
+	if elapsed := uint32(now) - m.activity.LastCheck; elapsed <= uint32(m.activity.Interval) {
+		if due := now + int64(uint32(m.activity.Interval)-elapsed) + 1; due < at {
+			at = due
+		}
+	} else {
+		at = now + 1
+	}
+	nest := resident.nest.Value()
+	if (nest.PolicyPinned || nest.RetailEvidence || nest.HasControls) && nest.Aggressive {
+		due, known := s.acquisitionDue(state, gid, now)
+		if !known {
+			return 0, false
+		}
+		if due < at {
+			at = due
+		}
+	}
+	return at, true
+}
+
+/*
+================
+MonsterState.acquisitionDue
+
+When the actor's acquisition timer next fires, read off its bank
+without consuming it: an armed-immediate entry fires at the first
+check, so the next tick; otherwise the first millisecond whose
+uint32 clock reaches LastCheckMs + IntervalMs, the fire test's own
+arithmetic. False when the bank does not exist yet.
+================
+*/
+func (s *MonsterState) acquisitionDue(state *divisionMonsterState, gid uint32, now int64) (int64, bool) {
+	timers := state.aiTimer(gid)
+	if timers == nil {
+		return 0, false
+	}
+	entry := timers.GetTimer(monster.TimerIDAcquisition)
+	if entry.ArmedImmediate {
+		return now + 1, true
+	}
+	if delta := entry.LastCheckMs + entry.IntervalMs - uint32(now); delta <= 1<<31 {
+		return now + int64(delta), true
+	}
+	return now + 1, true
 }
 
 /*
@@ -544,7 +656,7 @@ func (s *MonsterState) scheduleBehaviorCarried(state *divisionMonsterState, ref 
 	if !hot {
 		resident, _ = state.instances.hotRow(gid)
 	}
-	state.behavior.setAt(*ref, nextBehaviorDue(m, resident, now))
+	state.behavior.setAt(*ref, s.nextBehaviorDue(state, gid, m, resident, now))
 }
 
 /*
@@ -731,33 +843,46 @@ actor and a dispatch-read actor are the same values by construction.
 ================
 */
 func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref behaviorActorRef) behaviorActorSnapshot {
+	var actor behaviorActorSnapshot
+	s.behaviorActorMoverInto(&actor, state, ref)
+	return actor
+}
+
+/*
+================
+MonsterState.behaviorActorMoverInto
+
+behaviorActorMoverLocked written in place (#2982): the leg snapshot
+builds each actor straight into its view slot, so the 2.7 KB value
+is expanded once instead of copied out through two return values.
+dst reads as the zero snapshot (ok false) when the actor is gone.
+================
+*/
+func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state *divisionMonsterState, ref behaviorActorRef) {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
-	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
-	if !ok {
-		actor, ok = state.instances.lookup(ref.gid)
-	}
-	if !ok {
-		return behaviorActorSnapshot{}
+	if !state.instances.lookupAtInto(&dst.instance, ref.monsterSlot, ref.gid) {
+		actor, ok := state.instances.lookup(ref.gid)
+		if !ok {
+			*dst = behaviorActorSnapshot{}
+			return
+		}
+		dst.instance = actor
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
-	mover, ok := state.movers.lookupAt(ref.slot, ref.gid)
-	if !ok {
-		mover, ok = state.movers.lookup(ref.gid)
-	}
-	gen := state.movers.generationAt(ref.slot, ref.gid)
-	if ok {
-		if err := mover.Validate(); err != nil {
-			panic(err)
+	if !state.movers.lookupAtInto(&dst.mover, ref.slot, ref.gid) {
+		mover, ok := state.movers.lookup(ref.gid)
+		if !ok {
+			mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
 		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
+		dst.mover = mover
 	}
-	mover = monster.NewSpawnMover(actor, s.nowMillis())
-	if err := mover.Validate(); err != nil {
+	if err := dst.mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
+	dst.moverGen = state.movers.generationAt(ref.slot, ref.gid)
+	dst.slot, dst.monsterSlot, dst.ok = ref.slot, ref.monsterSlot, true
 }
 
 /*
@@ -812,7 +937,10 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
-		sort.Slice(batch.actors, func(i, j int) bool { return batch.actors[i].gid < batch.actors[j].gid })
+		// slices.SortFunc, not sort.Slice: no reflection swapper per
+		// batch (#2985). Gids are unique within a batch, so the order
+		// is the same total order either sort produces.
+		slices.SortFunc(batch.actors, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
 		out = append(out, batch)
 	}
 	return out

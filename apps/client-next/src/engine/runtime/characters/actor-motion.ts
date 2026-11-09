@@ -882,6 +882,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				blindable: blindableCharacter( entity, gameplay?.localGid ),
 				blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
 				groundItem: !!entity.groundItem,
+				dungeonBlock: entity.dungeonBlock,
 				previewClip: resource.clips.includes( armedIdle ) ? armedIdle : "stand",
 				materialTint: appearance.materialTint,
 				pointLight: appearance.pointLight,

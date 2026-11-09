@@ -227,7 +227,7 @@ func TestMonsterWanderUsesLivePositionNotSharedNestOrSpawn(t *testing.T) {
 			ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 			for leg := 0; leg < 3; leg++ {
 				from := mover.Pose
-				frames := ops.startWanderLeg(monsterTestDivision, instance, passiveTactics(), mover, int64(leg)*10000)
+				frames := ops.startWanderLeg(monsterTestDivision, &instance, passiveTactics(), mover, int64(leg)*10000)
 				if len(frames) == 0 {
 					t.Fatalf("controls=%v x=%v leg=%d: wander emitted no goal", hasControls, x, leg)
 				}
@@ -335,7 +335,7 @@ func TestMonsterAggroAcquisition(t *testing.T) {
 	// Aggressive: chase goal toward the player at run speed. Player
 	// geometry derives from the PRODUCTION SightRange (half of it away).
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
-	sight := ops.resolveTactics(instance).SightRange
+	sight := ops.resolveTactics(&instance).SightRange
 	playerX := 1000 + math.Floor(sight/2)
 	sessions := []SessionSnapshot{playerSessionAt(1, playerX, 1000)}
 	push := &fakePusher{}
@@ -851,7 +851,7 @@ func TestMonsterMidMotionScopeExit(t *testing.T) {
 				t.Fatalf("tick1 delivered %d goals, want 1 (the in-flight leg)", goals)
 			}
 			var gid uint32
-			for shownGid := range ops.shownMonsters["viewer"] {
+			for shownGid := range ops.scopeShown("viewer") {
 				gid = shownGid
 			}
 			mover, _ := ops.Monsters.Mover(monsterTestDivision, gid)

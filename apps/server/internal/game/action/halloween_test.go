@@ -437,11 +437,13 @@ func TestHalloweenBoxDropGates(t *testing.T) {
 ================
 TestHalloweenBoxDropCapAndGourd
 
-The daily cap gates the rolled drop and the Gourd alike; a Gourd kill
-pays on a losing draw, and a day that has rolled over at 04:00 UTC
-opens the cap again. The count lands on the winner's account per
-committed box, restarts when the settlement crosses the reset, and
-the mint that reaches the cap names its owner exactly once.
+Each cap gates its own source (#2950): the ordinary cap stops the
+rolled drop but not a Gourd kill, the Gourd cap stops the Gourd, and
+a day that has rolled over at 04:00 UTC opens both again. A Gourd
+kill pays on a losing draw. The count lands on the winner's account
+per committed box under the kill's allowance, restarts when the
+settlement crosses the reset, and the mint that reaches a cap names
+its owner exactly once.
 ================
 */
 func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
@@ -454,19 +456,27 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	inside := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 	account := rt.deps.HalloweenAccount(c.AccountID)
 
-	// At the cap for the current day nothing mints, gourd included.
+	// At the ordinary cap an ordinary kill mints nothing, but the
+	// Gourd draws on its own allowance (#2950): the wave still pays
+	// a player who ground out the ordinary cap before it landed.
 	account.Day = progression.HalloweenDayKey(inside)
 	account.Count = progression.HalloweenBoxDailyCap
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	if _, ok := rt.halloweenBoxDrop(c, ordinary, at, c.Name, inside); ok {
 		t.Fatal("a capped winner minted a box")
 	}
-	if _, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside); ok {
-		t.Fatal("a capped winner's gourd paid a box")
+	if _, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside); !ok {
+		t.Fatal("the ordinary cap starved a gourd kill")
 	}
 
-	// One under the cap: the gourd pays even on a losing draw.
-	account.Count = progression.HalloweenBoxDailyCap - 1
+	// At the Gourd cap the gourd pays nothing.
+	account.GourdCount = progression.HalloweenGourdBoxDailyCap
+	if _, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside); ok {
+		t.Fatal("a gourd-capped winner's gourd paid a box")
+	}
+
+	// One under the Gourd cap: the gourd pays even on a losing draw.
+	account.GourdCount = progression.HalloweenGourdBoxDailyCap - 1
 	rt.DropRoll = func() (uint32, error) { return 32767, nil }
 	box, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside)
 	if !ok || box.Codename != progression.HalloweenBoxCodename {
@@ -492,14 +502,14 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	counted := rt.deps.HalloweenAccount(winner.AccountID)
 	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{
 		winnerBox, winnerBox, {Codename: "ITEM_ETC_HP_POTION_01"},
-	}, inside.UnixMilli()); len(reached) != 0 {
+	}, inside.UnixMilli(), false); len(reached) != 0 {
 		t.Fatal("reached the cap at two boxes", reached)
 	}
 	if counted.Count != 2 || counted.Day != progression.HalloweenDayKey(inside) {
 		t.Fatal("count after two boxes", counted.Day, counted.Count)
 	}
 	rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox},
-		time.Date(1970, 1, 2, 4, 0, 1, 0, time.UTC).UnixMilli())
+		time.Date(1970, 1, 2, 4, 0, 1, 0, time.UTC).UnixMilli(), false)
 	if counted.Count != 1 || counted.Day != progression.HalloweenDayKey(nextDay) {
 		t.Fatal("count across the reset", counted.Day, counted.Count)
 	}
@@ -507,12 +517,24 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	// The mint that reaches the cap names its owner once; the next
 	// settlement the same day names nobody.
 	counted.Day, counted.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
-	reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli())
-	if len(reached) != 1 || reached[0] != winner {
+	reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli(), false)
+	if len(reached) != 1 || reached[0].owner != winner || reached[0].gourd {
 		t.Fatal("cap mint did not name the winner", reached)
 	}
-	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli()); len(reached) != 0 {
+	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli(), false); len(reached) != 0 {
 		t.Fatal("cap named twice in one day", reached)
+	}
+
+	// A Gourd settlement counts on the Gourd allowance alone: the
+	// ordinary count does not move, and the Gourd cap names its
+	// owner the same once-a-day way.
+	counted.Day, counted.Count, counted.GourdCount = progression.HalloweenDayKey(inside), 0, progression.HalloweenGourdBoxDailyCap-1
+	gourdReached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli(), true)
+	if len(gourdReached) != 1 || gourdReached[0].owner != winner || !gourdReached[0].gourd {
+		t.Fatal("gourd cap mint did not name the winner", gourdReached)
+	}
+	if counted.Count != 0 || counted.GourdCount != progression.HalloweenGourdBoxDailyCap {
+		t.Fatal("gourd counting moved the wrong allowance", counted.Count, counted.GourdCount)
 	}
 }
 
@@ -556,12 +578,12 @@ func TestHalloweenGourdBoxesPayEveryDamager(t *testing.T) {
 		{CreditGID: 99, Damage: 0},
 	}
 
-	// The winner's account sits one under the cap with the winner's
-	// own box already promised in the plan.
+	// The winner's account sits one under the Gourd cap with the
+	// winner's own box already promised in the plan.
 	shared := rt.deps.HalloweenAccount("shared-account")
-	shared.Day, shared.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
+	shared.Day, shared.GourdCount = progression.HalloweenDayKey(inside), progression.HalloweenGourdBoxDailyCap-1
 	rt.deps.HalloweenAccount("full-account").Day = progression.HalloweenDayKey(inside)
-	rt.deps.HalloweenAccount("full-account").Count = progression.HalloweenBoxDailyCap
+	rt.deps.HalloweenAccount("full-account").GourdCount = progression.HalloweenGourdBoxDailyCap
 	planned := []grounditem.Item{{Codename: progression.HalloweenBoxCodename, OwnerJID: enterworld.ObjectIDForCharacter(winner)}}
 	boxes := rt.halloweenGourdBoxes(winner, gourd, planned, contributions, actors, at, inside)
 	if len(boxes) != 1 || boxes[0].OwnerJID != enterworld.ObjectIDForCharacter(other) ||
@@ -644,8 +666,11 @@ func TestHalloweenGourdSettlementPaysDamagers(t *testing.T) {
 	if !owners[enterworld.ObjectIDForCharacter(winner)] || !owners[enterworld.ObjectIDForCharacter(damager)] {
 		t.Fatal("first gourd boxes carry the wrong owners", boxes)
 	}
-	if winnerAccount.Count != 1 || damagerAccount.Count != 1 {
-		t.Fatal("counts after the first gourd", winnerAccount.Count, damagerAccount.Count)
+	if winnerAccount.GourdCount != 1 || damagerAccount.GourdCount != 1 {
+		t.Fatal("counts after the first gourd", winnerAccount.GourdCount, damagerAccount.GourdCount)
+	}
+	if winnerAccount.Count != 0 || damagerAccount.Count != 0 {
+		t.Fatal("gourd boxes drew on the ordinary allowance", winnerAccount.Count, damagerAccount.Count)
 	}
 	if len(first.others) != 0 {
 		t.Fatal("a cap message before the cap", first.others)
@@ -653,10 +678,10 @@ func TestHalloweenGourdSettlementPaysDamagers(t *testing.T) {
 
 	// The damager's next box reaches their cap: the message goes to
 	// the damager, once.
-	damagerAccount.Count = progression.HalloweenBoxDailyCap - 1
+	damagerAccount.GourdCount = progression.HalloweenGourdBoxDailyCap - 1
 	second := settle()
-	if len(boxesOf(second)) != 2 || damagerAccount.Count != progression.HalloweenBoxDailyCap {
-		t.Fatal("second gourd miscounted", boxesOf(second), damagerAccount.Count)
+	if len(boxesOf(second)) != 2 || damagerAccount.GourdCount != progression.HalloweenGourdBoxDailyCap {
+		t.Fatal("second gourd miscounted", boxesOf(second), damagerAccount.GourdCount)
 	}
 	var capFrames []wire.Frame
 	for _, other := range second.others {
@@ -664,14 +689,14 @@ func TestHalloweenGourdSettlementPaysDamagers(t *testing.T) {
 			capFrames = append(capFrames, other.Frames...)
 		}
 	}
-	wantPayload := chat.EncodeChatNotice(fmt.Sprintf(halloweenBoxCapBanner, progression.HalloweenBoxDailyCap))
+	wantPayload := chat.EncodeChatNotice(fmt.Sprintf(halloweenGourdBoxCapBanner, progression.HalloweenGourdBoxDailyCap))
 	if len(capFrames) != 1 || capFrames[0].Opcode != chat.OpChatBroadcast || !bytes.Equal(capFrames[0].Payload, wantPayload) {
 		t.Fatal("cap message to the damager", capFrames)
 	}
 
 	// Past the cap the Gourd pays neither account again, and the
 	// message does not repeat.
-	winnerAccount.Count = progression.HalloweenBoxDailyCap
+	winnerAccount.GourdCount = progression.HalloweenGourdBoxDailyCap
 	third := settle()
 	if len(boxesOf(third)) != 0 {
 		t.Fatal("a capped gourd paid out", boxesOf(third))

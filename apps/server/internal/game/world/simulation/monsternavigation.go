@@ -14,7 +14,7 @@ func routedBehavior(m monster.MoverState) bool {
 // The shared owner for chase/follow/home intent. Geometry is cached only on
 // the admitted mover. Every corner is a normal B738 leg with the same surface
 // sampler used by combat, scope and death. No player path semantics change.
-func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster.MoverState, goal monster.Pose, speed float64, channel uint8, now int64) (monster.MoverState, []Frame) {
+func (ops *MonsterMoverOps) planSegment(instance *monster.Instance, mover monster.MoverState, goal monster.Pose, speed float64, channel uint8, now int64) (monster.MoverState, []Frame) {
 	if ops.PlanRoute == nil || !routedBehavior(mover) {
 		return ops.planDirectSegment(instance, mover, goal, speed, channel, now)
 	}

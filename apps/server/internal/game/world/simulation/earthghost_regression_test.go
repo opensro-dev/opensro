@@ -150,7 +150,7 @@ func TestEarthGhostFarFromHomeAbandonsCloseTarget(t *testing.T) {
 func TestEarthGhostHomeCheckDoesNotWaitForTraceTimer(t *testing.T) {
 	ops, actor, target := earthGhostFixture(t)
 	m, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	ops.advancePursuitControls(monsterTestDivision, actor, m, target, m.Pose, 10000)
+	ops.advancePursuitControls(monsterTestDivision, &actor, m, target, m.Pose, 10000)
 	m.Pose.X += 1600
 	m.Pose = normalizeMonsterPose(m.Pose)
 	ops.Monsters.CommitMover(monsterTestDivision, actor.Gid, m)
@@ -196,7 +196,7 @@ func TestEarthGhostContinuousRetreatEventuallyDisengages(t *testing.T) {
 		}
 	}
 	m, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	if firstReturn < 0 || m.TargetGID() != 0 || attacks == 0 || m.Mode() != monster.MoverIdle || needsHoming(actor, m.LivePoseAt(60000, nil)) {
+	if firstReturn < 0 || m.TargetGID() != 0 || attacks == 0 || m.Mode() != monster.MoverIdle || needsHoming(&actor, m.LivePoseAt(60000, nil)) {
 		t.Fatalf("retreat failed: attacks=%d firstReturn=%d mode=%s target=%d", attacks, firstReturn, m.Mode(), m.TargetGID())
 	}
 	t.Logf("accepted attacks=%d first return after %dms final mode=%s", attacks, firstReturn, m.Mode())

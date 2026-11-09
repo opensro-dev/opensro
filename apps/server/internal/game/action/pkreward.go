@@ -181,14 +181,23 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
 			after.notices = append(after.notices, notice)
 		}
+		// Port-only, not native (#2958): a hunter's kill of a thief marked
+		// for attacking a 5-star caravan raises every job EXP share.
+		bountyPercent := rt.fiveStarBountyPercent(killer, victim, now)
 		if party == nil {
-			if frames, ok := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
+			exp := jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))
+			exp += exp * bountyPercent / 100
+			if frames, ok := rt.addJobExperience(division, killer, exp); ok {
 				actor = append(actor, frames...)
 			}
 		} else {
 			fallen := jobKillVictim{level: rewardLevel(victim), world: domain.CharacterWorldInstance(victim),
 				at: rt.liveSpawn(simulation.WorldKey(division, victim.Name), victim, now)}
-			for _, share := range rt.jobKillShares(division, killer, fallen, party, now) {
+			shares := rt.jobKillShares(division, killer, fallen, party, now)
+			for i := range shares {
+				shares[i].exp += shares[i].exp * bountyPercent / 100
+			}
+			for _, share := range shares {
 				if share.member != killer {
 					after.shares = append(after.shares, share)
 					continue

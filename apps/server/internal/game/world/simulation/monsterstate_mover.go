@@ -37,7 +37,7 @@ func (s *MonsterState) moverStuckAt(divisionID string, gid uint32, slot, monster
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
 	if !state.instances.containsAt(monsterSlot, gid) {
 		return false
 	}
@@ -62,7 +62,7 @@ func (s *MonsterState) MoverAt(divisionID string, gid uint32, slot, monsterSlot 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
 	if !state.instances.containsAt(monsterSlot, gid) {
 		return monster.MoverState{}, false
 	}
@@ -96,14 +96,32 @@ synthesized spawn mover Mover would build, so the pose is Mover's.
 ================
 */
 func (s *MonsterState) livePose(divisionID string, gid uint32, nowMs int64) (monster.Pose, bool) {
+	return s.livePoseAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, nowMs)
+}
+
+/*
+================
+livePoseAt
+
+livePose through the slots the behaviour batch carried for the
+actor (#2133): the population, the mover row and the instance the
+spawn synthesis reads go through the verified hints and fall back
+to the gid resolve whenever a hint no longer names the gid, so
+the pose is livePose's either way.
+================
+*/
+func (s *MonsterState) livePoseAt(divisionID string, gid uint32, slot, monsterSlot uint32, nowMs int64) (monster.Pose, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
-	if pose, ok := state.movers.livePoseAt(gid, nowMs, nil); ok {
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
+	if pose, ok := state.movers.livePoseAtSlot(slot, gid, nowMs, nil); ok {
 		return pose, true
 	}
-	instance, ok := state.instances.lookup(gid)
+	instance, ok := state.instances.lookupAt(monsterSlot, gid)
+	if !ok {
+		instance, ok = state.instances.lookup(gid)
+	}
 	if !ok {
 		return monster.Pose{}, false
 	}
@@ -281,7 +299,7 @@ func (s *MonsterState) MoverGenerationAt(divisionID string, gid uint32, slot, mo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
 	if !state.instances.containsAt(monsterSlot, gid) {
 		return monster.MoverState{}, 0, false
 	}

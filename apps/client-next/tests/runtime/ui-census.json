@@ -16,7 +16,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1260,
+			"line": 1274,
 			"name": "consolePhase",
 			"shared": true
 		},
@@ -31,7 +31,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1260,
+			"line": 1274,
 			"name": "consoleY",
 			"shared": true
 		},
@@ -42,7 +42,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1260,
+			"line": 1274,
 			"name": "consoleLast",
 			"shared": false
 		},
@@ -65,7 +65,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1260,
+			"line": 1274,
 			"name": "consoleText",
 			"shared": true
 		},
@@ -76,7 +76,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1260,
+			"line": 1274,
 			"name": "gmObserved",
 			"shared": false
 		},
@@ -95,7 +95,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1261,
+			"line": 1275,
 			"name": "consoleRows",
 			"shared": true
 		},
@@ -114,7 +114,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1261,
+			"line": 1275,
 			"name": "consoleHistory",
 			"shared": true
 		},
@@ -133,7 +133,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1261,
+			"line": 1275,
 			"name": "consoleHistoryIndex",
 			"shared": true
 		},
@@ -144,7 +144,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1263,
+			"line": 1277,
 			"name": "debugMessages",
 			"shared": false
 		},
@@ -159,7 +159,7 @@
 					"writes": 7
 				}
 			},
-			"line": 1266,
+			"line": 1280,
 			"name": "debugClock",
 			"shared": true
 		},
@@ -170,7 +170,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1272,
+			"line": 1286,
 			"name": "debugZoomRail",
 			"shared": false
 		},
@@ -181,7 +181,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1273,
+			"line": 1287,
 			"name": "debugFreeCamera",
 			"shared": false
 		},
@@ -192,7 +192,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1274,
+			"line": 1288,
 			"name": "debugCursorVisible",
 			"shared": false
 		},
@@ -203,7 +203,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1284,
+			"line": 1298,
 			"name": "cameraWaypointsLoaded",
 			"shared": false
 		},
@@ -214,7 +214,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1298,
+			"line": 1312,
 			"name": "debugCameraSpeed",
 			"shared": false
 		},
@@ -225,7 +225,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1299,
+			"line": 1313,
 			"name": "debugFast",
 			"shared": false
 		},
@@ -236,13 +236,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1300,
+			"line": 1314,
 			"name": "debugFrameStats",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@22354": {
+				"anonymous@22435": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -255,7 +255,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1301,
+			"line": 1315,
 			"name": "debugShowIds",
 			"shared": true
 		},
@@ -266,7 +266,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1302,
+			"line": 1316,
 			"name": "debugMoveSpeed",
 			"shared": false
 		},
@@ -277,7 +277,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1308,
+			"line": 1322,
 			"name": "debugWireFrame",
 			"shared": false
 		},
@@ -288,7 +288,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1309,
+			"line": 1323,
 			"name": "debugGround",
 			"shared": false
 		},
@@ -299,7 +299,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1310,
+			"line": 1324,
 			"name": "debugSky",
 			"shared": false
 		},
@@ -310,7 +310,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1311,
+			"line": 1325,
 			"name": "debugMapObjects",
 			"shared": false
 		},
@@ -321,7 +321,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1312,
+			"line": 1326,
 			"name": "debugCharacters",
 			"shared": false
 		},
@@ -332,7 +332,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1313,
+			"line": 1327,
 			"name": "debugLevelOfDetail",
 			"shared": false
 		},
@@ -347,7 +347,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1319,
+			"line": 1333,
 			"name": "debugUiVisible",
 			"shared": true
 		},
@@ -370,7 +370,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1320,
+			"line": 1334,
 			"name": "video",
 			"shared": true
 		},
@@ -393,7 +393,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1320,
+			"line": 1334,
 			"name": "videoDraft",
 			"shared": true
 		},
@@ -412,7 +412,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1320,
+			"line": 1334,
 			"name": "videoScroll",
 			"shared": true
 		},
@@ -431,7 +431,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1320,
+			"line": 1334,
 			"name": "videoCombo",
 			"shared": true
 		},
@@ -454,7 +454,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1321,
+			"line": 1335,
 			"name": "bindings",
 			"shared": true
 		},
@@ -477,7 +477,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1321,
+			"line": 1335,
 			"name": "bindingDraft",
 			"shared": true
 		},
@@ -500,7 +500,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1321,
+			"line": 1335,
 			"name": "bindingSelected",
 			"shared": true
 		},
@@ -519,7 +519,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1321,
+			"line": 1335,
 			"name": "bindingScroll",
 			"shared": true
 		},
@@ -538,7 +538,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1322,
+			"line": 1336,
 			"name": "sight",
 			"shared": true
 		},
@@ -561,7 +561,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1322,
+			"line": 1336,
 			"name": "sightDraft",
 			"shared": true
 		},
@@ -588,7 +588,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1323,
+			"line": 1337,
 			"name": "audioSaved",
 			"shared": true
 		},
@@ -615,7 +615,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1323,
+			"line": 1337,
 			"name": "audioDraft",
 			"shared": true
 		},
@@ -634,7 +634,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1324,
+			"line": 1338,
 			"name": "localBlocks",
 			"shared": true
 		},
@@ -653,7 +653,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1325,
+			"line": 1339,
 			"name": "blockTab",
 			"shared": true
 		},
@@ -676,7 +676,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1325,
+			"line": 1339,
 			"name": "blockOffset",
 			"shared": true
 		},
@@ -699,7 +699,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1325,
+			"line": 1339,
 			"name": "blockSelected",
 			"shared": true
 		},
@@ -718,7 +718,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1325,
+			"line": 1339,
 			"name": "blockInput",
 			"shared": true
 		},
@@ -749,17 +749,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1326,
+			"line": 1340,
 			"name": "blockDialog",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20537": {
+				"anonymous@20618": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20542": {
+				"anonymous@20623": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -780,7 +780,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1329,
+			"line": 1343,
 			"name": "friendSelected",
 			"shared": true
 		},
@@ -803,7 +803,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1329,
+			"line": 1343,
 			"name": "friendOffset",
 			"shared": true
 		},
@@ -822,7 +822,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1329,
+			"line": 1343,
 			"name": "friendInput",
 			"shared": true
 		},
@@ -857,13 +857,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1330,
+			"line": 1344,
 			"name": "friendDialog",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20739": {
+				"anonymous@20820": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -884,7 +884,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1334,
+			"line": 1348,
 			"name": "letterSelected",
 			"shared": true
 		},
@@ -907,13 +907,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1334,
+			"line": 1348,
 			"name": "letterOffset",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20705": {
+				"anonymous@20786": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -926,7 +926,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1334,
+			"line": 1348,
 			"name": "letterSortByTime",
 			"shared": true
 		},
@@ -941,7 +941,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1334,
+			"line": 1348,
 			"name": "letterSortDescending",
 			"shared": true
 		},
@@ -968,7 +968,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1335,
+			"line": 1349,
 			"name": "letterDraft",
 			"shared": true
 		},
@@ -999,7 +999,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1335,
+			"line": 1349,
 			"name": "letterDeleting",
 			"shared": true
 		},
@@ -1034,7 +1034,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1388,
+			"line": 1402,
 			"name": "petNameDialog",
 			"shared": true
 		},
@@ -1057,21 +1057,21 @@
 					"writes": 1
 				}
 			},
-			"line": 1389,
+			"line": 1403,
 			"name": "petNameInput",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13071": {
+				"anonymous@13138": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22354": {
+				"anonymous@22435": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1096,7 +1096,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1390,
+			"line": 1404,
 			"name": "options",
 			"shared": true
 		},
@@ -1119,7 +1119,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1390,
+			"line": 1404,
 			"name": "optionDraft",
 			"shared": true
 		},
@@ -1138,7 +1138,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1391,
+			"line": 1405,
 			"name": "optionTab",
 			"shared": true
 		},
@@ -1157,7 +1157,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1392,
+			"line": 1406,
 			"name": "optionScroll",
 			"shared": true
 		},
@@ -1176,7 +1176,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1393,
+			"line": 1407,
 			"name": "beginnerDraft",
 			"shared": true
 		},
@@ -1195,7 +1195,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1394,
+			"line": 1408,
 			"name": "potionCombo",
 			"shared": true
 		},
@@ -1210,7 +1210,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1395,
+			"line": 1409,
 			"name": "potionComboOffset",
 			"shared": true
 		},
@@ -1229,7 +1229,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1396,
+			"line": 1410,
 			"name": "potionDraft",
 			"shared": true
 		},
@@ -1240,13 +1240,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1420,
+			"line": 1434,
 			"name": "buffTick",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1255,13 +1255,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1422,
+			"line": 1436,
 			"name": "berserkActor",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1270,7 +1270,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1422,
+			"line": 1436,
 			"name": "berserkStarted",
 			"shared": true
 		},
@@ -1281,7 +1281,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1422,
+			"line": 1436,
 			"name": "berserkFrame",
 			"shared": false
 		},
@@ -1292,7 +1292,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1422,
+			"line": 1436,
 			"name": "berserkDisplayed",
 			"shared": false
 		},
@@ -1307,7 +1307,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1423,
+			"line": 1437,
 			"name": "equipmentWarningPhase",
 			"shared": true
 		},
@@ -1318,7 +1318,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1423,
+			"line": 1437,
 			"name": "equipmentWarningDue",
 			"shared": false
 		},
@@ -1333,7 +1333,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1423,
+			"line": 1437,
 			"name": "equipmentWarningVisible",
 			"shared": true
 		},
@@ -1344,18 +1344,18 @@
 					"writes": 2
 				}
 			},
-			"line": 1425,
+			"line": 1439,
 			"name": "cautionVisible",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12530": {
+				"anonymous@12597": {
 					"reads": 3,
 					"writes": 0
 				}
 			},
-			"line": 1425,
+			"line": 1439,
 			"name": "cautionFrame",
 			"shared": false
 		},
@@ -1366,7 +1366,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1426,
+			"line": 1440,
 			"name": "targetGradeIcon",
 			"shared": false
 		},
@@ -1381,13 +1381,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1432,
+			"line": 1446,
 			"name": "targetBuffState",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12530": {
+				"anonymous@12597": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1400,7 +1400,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1434,
+			"line": 1448,
 			"name": "petBuffState",
 			"shared": true
 		},
@@ -1411,7 +1411,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1435,
+			"line": 1449,
 			"name": "skillIndex",
 			"shared": false
 		},
@@ -1422,7 +1422,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1448,
+			"line": 1462,
 			"name": "partyBuffs",
 			"shared": false
 		},
@@ -1437,7 +1437,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1449,
+			"line": 1463,
 			"name": "partyBuffStates",
 			"shared": true
 		},
@@ -1448,17 +1448,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1450,
+			"line": 1464,
 			"name": "partyRoster",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@1517": {
+				"anonymous@1531": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@1529": {
+				"anonymous@1543": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1471,7 +1471,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1451,
+			"line": 1465,
 			"name": "boardSuppressed",
 			"shared": true
 		},
@@ -1482,7 +1482,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1451,
+			"line": 1465,
 			"name": "boardSuppressionDue",
 			"shared": false
 		},
@@ -1505,13 +1505,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1537,
+			"line": 1551,
 			"name": "recallConfirm",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10436": {
+				"anonymous@10503": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -1528,7 +1528,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1538,
+			"line": 1552,
 			"name": "buffDismiss",
 			"shared": true
 		},
@@ -1547,7 +1547,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1540,
+			"line": 1554,
 			"name": "academyBuffPass",
 			"shared": true
 		},
@@ -1558,7 +1558,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1541,
+			"line": 1555,
 			"name": "loading",
 			"shared": false
 		},
@@ -1569,7 +1569,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1542,
+			"line": 1556,
 			"name": "loadingGeneration",
 			"shared": false
 		},
@@ -1580,7 +1580,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1542,
+			"line": 1556,
 			"name": "loadingTravelRevision",
 			"shared": false
 		},
@@ -1595,7 +1595,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1545,
+			"line": 1559,
 			"name": "nextLoadingVariant",
 			"shared": true
 		},
@@ -1614,7 +1614,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1548,
+			"line": 1562,
 			"name": "leaveRequested",
 			"shared": true
 		},
@@ -1645,7 +1645,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1579,
+			"line": 1593,
 			"name": "specialtyCombo",
 			"shared": true
 		},
@@ -1656,7 +1656,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1588,
+			"line": 1602,
 			"name": "productionClock",
 			"shared": false
 		},
@@ -1667,7 +1667,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1588,
+			"line": 1602,
 			"name": "productionSecond",
 			"shared": false
 		},
@@ -1678,7 +1678,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1591,
+			"line": 1605,
 			"name": "alchemyOutcomeSeen",
 			"shared": false
 		},
@@ -1693,7 +1693,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1591,
+			"line": 1605,
 			"name": "alchemyClock",
 			"shared": true
 		},
@@ -1708,7 +1708,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1592,
+			"line": 1606,
 			"name": "alchemyEffect",
 			"shared": true
 		},
@@ -1719,7 +1719,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1614,
+			"line": 1628,
 			"name": "gmCatalogSeen",
 			"shared": false
 		},
@@ -1730,7 +1730,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1614,
+			"line": 1628,
 			"name": "gmCatalogAcked",
 			"shared": false
 		},
@@ -1741,7 +1741,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1622,
+			"line": 1636,
 			"name": "academyWasVisible",
 			"shared": false
 		},
@@ -1752,7 +1752,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1625,
+			"line": 1639,
 			"name": "academyOpenedSeen",
 			"shared": false
 		},
@@ -1767,8 +1767,38 @@
 					"writes": 2
 				}
 			},
-			"line": 1641,
+			"line": 1655,
 			"name": "mallNotice",
+			"shared": true
+		},
+		{
+			"buckets": {
+				"event": {
+					"reads": 0,
+					"writes": 1
+				},
+				"step": {
+					"reads": 3,
+					"writes": 2
+				}
+			},
+			"line": 1660,
+			"name": "eventGate",
+			"shared": true
+		},
+		{
+			"buckets": {
+				"event": {
+					"reads": 0,
+					"writes": 1
+				},
+				"step": {
+					"reads": 3,
+					"writes": 2
+				}
+			},
+			"line": 1661,
+			"name": "eventPcRoom",
 			"shared": true
 		},
 		{
@@ -1782,7 +1812,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1646,
+			"line": 1666,
 			"name": "guideThumbTravel",
 			"shared": true
 		},
@@ -1797,7 +1827,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1646,
+			"line": 1666,
 			"name": "guideScrollMax",
 			"shared": true
 		},
@@ -1812,7 +1842,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1646,
+			"line": 1666,
 			"name": "guideIndexMax",
 			"shared": true
 		},
@@ -1839,7 +1869,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1647,
+			"line": 1667,
 			"name": "guideX",
 			"shared": true
 		},
@@ -1866,7 +1896,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1647,
+			"line": 1667,
 			"name": "guideY",
 			"shared": true
 		},
@@ -1885,7 +1915,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1648,
+			"line": 1668,
 			"name": "academySelection",
 			"shared": true
 		},
@@ -1900,7 +1930,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1648,
+			"line": 1668,
 			"name": "academySort",
 			"shared": true
 		},
@@ -1915,7 +1945,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1648,
+			"line": 1668,
 			"name": "academyAscending",
 			"shared": true
 		},
@@ -1930,7 +1960,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1649,
+			"line": 1669,
 			"name": "academyName",
 			"shared": true
 		},
@@ -1945,7 +1975,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1649,
+			"line": 1669,
 			"name": "academyGrade",
 			"shared": true
 		},
@@ -1960,7 +1990,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1649,
+			"line": 1669,
 			"name": "academyKind",
 			"shared": true
 		},
@@ -1975,7 +2005,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1649,
+			"line": 1669,
 			"name": "academyCombo",
 			"shared": true
 		},
@@ -1990,7 +2020,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1650,
+			"line": 1670,
 			"name": "academyFilter",
 			"shared": true
 		},
@@ -2009,7 +2039,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1651,
+			"line": 1671,
 			"name": "guideSidebar",
 			"shared": true
 		},
@@ -2028,7 +2058,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1651,
+			"line": 1671,
 			"name": "guideTab",
 			"shared": true
 		},
@@ -2047,7 +2077,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1651,
+			"line": 1671,
 			"name": "guideIndexScroll",
 			"shared": true
 		},
@@ -2066,7 +2096,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1653,
+			"line": 1673,
 			"name": "guideEvent",
 			"shared": true
 		},
@@ -2077,7 +2107,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1653,
+			"line": 1673,
 			"name": "guideObserved",
 			"shared": false
 		},
@@ -2088,7 +2118,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1653,
+			"line": 1673,
 			"name": "guideRequested",
 			"shared": false
 		},
@@ -2107,7 +2137,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1653,
+			"line": 1673,
 			"name": "guidePending",
 			"shared": true
 		},
@@ -2126,7 +2156,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1653,
+			"line": 1673,
 			"name": "guideScroll",
 			"shared": true
 		},
@@ -2137,7 +2167,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1654,
+			"line": 1674,
 			"name": "guideOrigin",
 			"shared": false
 		},
@@ -2156,7 +2186,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1655,
+			"line": 1675,
 			"name": "rememberedMainPopup",
 			"shared": true
 		},
@@ -2167,13 +2197,13 @@
 					"writes": 4
 				}
 			},
-			"line": 1675,
+			"line": 1695,
 			"name": "layoutResourcesRevision",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2186,7 +2216,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1676,
+			"line": 1696,
 			"name": "chatHidden",
 			"shared": true
 		},
@@ -2205,13 +2235,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1676,
+			"line": 1696,
 			"name": "whispersOpen",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@13071": {
+				"anonymous@13138": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2224,13 +2254,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1676,
+			"line": 1696,
 			"name": "statusFilterOpen",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2243,13 +2273,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1678,
+			"line": 1698,
 			"name": "chatRows",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2262,13 +2292,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1678,
+			"line": 1698,
 			"name": "chatTab",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@13071": {
+				"anonymous@13138": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2281,7 +2311,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1678,
+			"line": 1698,
 			"name": "statusRows",
 			"shared": true
 		},
@@ -2292,7 +2322,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1679,
+			"line": 1699,
 			"name": "minimapZoom",
 			"shared": false
 		},
@@ -2307,7 +2337,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1679,
+			"line": 1699,
 			"name": "minimapTarget",
 			"shared": true
 		},
@@ -2318,7 +2348,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1679,
+			"line": 1699,
 			"name": "minimapLast",
 			"shared": false
 		},
@@ -2329,7 +2359,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1682,
+			"line": 1702,
 			"name": "minimapRoomName",
 			"shared": false
 		},
@@ -2339,7 +2369,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2348,7 +2378,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1683,
+			"line": 1703,
 			"name": "abilityDetails",
 			"shared": true
 		},
@@ -2359,7 +2389,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1683,
+			"line": 1703,
 			"name": "mapWorldLoading",
 			"shared": false
 		},
@@ -2386,7 +2416,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1685,
+			"line": 1705,
 			"name": "serverList",
 			"shared": true
 		},
@@ -2396,7 +2426,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@2623": {
+				"anonymous@2659": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2413,7 +2443,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1686,
+			"line": 1706,
 			"name": "serverDraft",
 			"shared": true
 		},
@@ -2428,21 +2458,21 @@
 					"writes": 0
 				}
 			},
-			"line": 1687,
+			"line": 1707,
 			"name": "serverOffset",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13071": {
+				"anonymous@13138": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27814": {
+				"anonymous@28021": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2527,17 +2557,17 @@
 					"writes": 2
 				}
 			},
-			"line": 1688,
+			"line": 1708,
 			"name": "hover",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13071": {
+				"anonymous@13138": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2622,7 +2652,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1689,
+			"line": 1709,
 			"name": "pressed",
 			"shared": true
 		},
@@ -2637,7 +2667,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1692,
+			"line": 1712,
 			"name": "diagnosticError",
 			"shared": true
 		},
@@ -2656,7 +2686,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1697,
+			"line": 1717,
 			"name": "worldShown",
 			"shared": true
 		},
@@ -2667,7 +2697,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1698,
+			"line": 1718,
 			"name": "minimapQueryKey",
 			"shared": false
 		},
@@ -2682,7 +2712,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1699,
+			"line": 1719,
 			"name": "deathIdentity",
 			"shared": true
 		},
@@ -2705,7 +2735,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1699,
+			"line": 1719,
 			"name": "deathDismissed",
 			"shared": true
 		},
@@ -2728,7 +2758,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1699,
+			"line": 1719,
 			"name": "deathPosition",
 			"shared": true
 		},
@@ -2739,7 +2769,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1700,
+			"line": 1720,
 			"name": "deathLifeAt",
 			"shared": false
 		},
@@ -2750,7 +2780,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1700,
+			"line": 1720,
 			"name": "deathStateAt",
 			"shared": false
 		},
@@ -2773,7 +2803,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1700,
+			"line": 1720,
 			"name": "rebirthDue",
 			"shared": true
 		},
@@ -2792,7 +2822,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1700,
+			"line": 1720,
 			"name": "deathRequested",
 			"shared": true
 		},
@@ -2803,7 +2833,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1701,
+			"line": 1721,
 			"name": "deathObserved",
 			"shared": false
 		},
@@ -2814,7 +2844,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1762,
+			"line": 1782,
 			"name": "inviteIdentity",
 			"shared": false
 		},
@@ -2829,7 +2859,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1763,
+			"line": 1783,
 			"name": "invitePosition",
 			"shared": true
 		},
@@ -2844,7 +2874,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1764,
+			"line": 1784,
 			"name": "disconnectPosition",
 			"shared": true
 		},
@@ -2855,7 +2885,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1765,
+			"line": 1785,
 			"name": "noticeDialogSequence",
 			"shared": false
 		},
@@ -2874,7 +2904,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1766,
+			"line": 1786,
 			"name": "activeNoticeDialog",
 			"shared": true
 		},
@@ -2889,7 +2919,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1772,
+			"line": 1792,
 			"name": "noticeDialogPosition",
 			"shared": true
 		},
@@ -2904,7 +2934,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1773,
+			"line": 1793,
 			"name": "noticeDialogFrame",
 			"shared": true
 		},
@@ -2919,7 +2949,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1774,
+			"line": 1794,
 			"name": "systemX",
 			"shared": true
 		},
@@ -2934,7 +2964,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1774,
+			"line": 1794,
 			"name": "systemY",
 			"shared": true
 		},
@@ -2949,7 +2979,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1775,
+			"line": 1795,
 			"name": "dollYaw",
 			"shared": true
 		},
@@ -2968,7 +2998,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1775,
+			"line": 1795,
 			"name": "avatarView",
 			"shared": true
 		},
@@ -2983,7 +3013,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1776,
+			"line": 1796,
 			"name": "tooltipMemo",
 			"shared": true
 		},
@@ -3046,7 +3076,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1790,
+			"line": 1810,
 			"name": "carriedItem",
 			"shared": true
 		},
@@ -3069,7 +3099,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1792,
+			"line": 1812,
 			"name": "structureRemoval",
 			"shared": true
 		},
@@ -3084,7 +3114,7 @@
 					"writes": 4
 				}
 			},
-			"line": 1831,
+			"line": 1851,
 			"name": "titleNotice",
 			"shared": true
 		},
@@ -3115,7 +3145,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1838,
+			"line": 1858,
 			"name": "uiNow",
 			"shared": true
 		},
@@ -3126,7 +3156,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1839,
+			"line": 1859,
 			"name": "nextPoll",
 			"shared": false
 		},
@@ -3137,7 +3167,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1840,
+			"line": 1860,
 			"name": "lastSessionRevision",
 			"shared": false
 		},
@@ -3152,7 +3182,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1841,
+			"line": 1861,
 			"name": "serversRequested",
 			"shared": true
 		},
@@ -3163,7 +3193,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1842,
+			"line": 1862,
 			"name": "serversRetryAt",
 			"shared": false
 		},
@@ -3174,7 +3204,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1843,
+			"line": 1863,
 			"name": "lastNativeTitleStatus",
 			"shared": false
 		},
@@ -3189,7 +3219,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1844,
+			"line": 1864,
 			"name": "loginReplyPending",
 			"shared": true
 		},
@@ -3207,7 +3237,7 @@
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@2451": {
+				"anonymous@2487": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -3648,7 +3678,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1845,
+			"line": 1865,
 			"name": "view",
 			"shared": true
 		},
@@ -3659,7 +3689,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1846,
+			"line": 1866,
 			"name": "revision",
 			"shared": false
 		},
@@ -3719,7 +3749,7 @@
 				},
 				"event": {
 					"reads": 0,
-					"writes": 67
+					"writes": 69
 				},
 				"executeAction": {
 					"reads": 0,
@@ -3959,7 +3989,7 @@
 				},
 				"step": {
 					"reads": 3,
-					"writes": 82
+					"writes": 84
 				},
 				"structure": {
 					"reads": 0,
@@ -3986,7 +4016,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1847,
+			"line": 1867,
 			"name": "dirty",
 			"shared": true
 		},
@@ -4005,7 +4035,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1848,
+			"line": 1868,
 			"name": "disposed",
 			"shared": true
 		},
@@ -4015,11 +4045,11 @@
 					"reads": 0,
 					"writes": 2
 				},
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@9475": {
+				"anonymous@9521": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4156,7 +4186,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1849,
+			"line": 1869,
 			"name": "focus",
 			"shared": true
 		},
@@ -4166,7 +4196,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4271,13 +4301,13 @@
 					"writes": 0
 				}
 			},
-			"line": 1850,
+			"line": 1870,
 			"name": "composing",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -4346,7 +4376,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1851,
+			"line": 1871,
 			"name": "selection",
 			"shared": true
 		},
@@ -4365,7 +4395,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1852,
+			"line": 1872,
 			"name": "lastProduct",
 			"shared": true
 		},
@@ -4392,7 +4422,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1859,
+			"line": 1879,
 			"name": "servers",
 			"shared": true
 		},
@@ -4407,7 +4437,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1860,
+			"line": 1880,
 			"name": "roster",
 			"shared": true
 		},
@@ -4417,7 +4447,7 @@
 					"reads": 0,
 					"writes": 1
 				},
-				"anonymous@10612": {
+				"anonymous@10679": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4438,13 +4468,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1861,
+			"line": 1881,
 			"name": "selectedServer",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10638": {
+				"anonymous@10705": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4461,7 +4491,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1862,
+			"line": 1882,
 			"name": "selectedCharacter",
 			"shared": true
 		},
@@ -4488,7 +4518,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1863,
+			"line": 1883,
 			"name": "account",
 			"shared": true
 		},
@@ -4515,7 +4545,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1864,
+			"line": 1884,
 			"name": "password",
 			"shared": true
 		},
@@ -4534,7 +4564,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1865,
+			"line": 1885,
 			"name": "endpoint",
 			"shared": true
 		},
@@ -4553,7 +4583,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1866,
+			"line": 1886,
 			"name": "partySettings",
 			"shared": true
 		},
@@ -4568,7 +4598,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1866,
+			"line": 1886,
 			"name": "partyDraft",
 			"shared": true
 		},
@@ -4615,7 +4645,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1867,
+			"line": 1887,
 			"name": "popupPosition",
 			"shared": true
 		},
@@ -4634,7 +4664,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1869,
+			"line": 1889,
 			"name": "socialName",
 			"shared": true
 		},
@@ -4657,7 +4687,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1870,
+			"line": 1890,
 			"name": "socialSubject",
 			"shared": true
 		},
@@ -4680,7 +4710,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1871,
+			"line": 1891,
 			"name": "socialContents",
 			"shared": true
 		},
@@ -4699,17 +4729,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1872,
+			"line": 1892,
 			"name": "socialAmount",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20933": {
+				"anonymous@21014": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21019": {
+				"anonymous@21100": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4738,7 +4768,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1873,
+			"line": 1893,
 			"name": "socialMember",
 			"shared": true
 		},
@@ -4765,7 +4795,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1874,
+			"line": 1894,
 			"name": "socialPage",
 			"shared": true
 		},
@@ -4788,7 +4818,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1875,
+			"line": 1895,
 			"name": "confirmSocial",
 			"shared": true
 		},
@@ -4815,7 +4845,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1876,
+			"line": 1896,
 			"name": "partyOptions",
 			"shared": true
 		},
@@ -4834,7 +4864,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1878,
+			"line": 1898,
 			"name": "grantAsk",
 			"shared": true
 		},
@@ -4853,7 +4883,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1881,
+			"line": 1901,
 			"name": "crestDeleteAsk",
 			"shared": true
 		},
@@ -4872,7 +4902,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1885,
+			"line": 1905,
 			"name": "crestRegisterAsk",
 			"shared": true
 		},
@@ -4907,7 +4937,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1890,
+			"line": 1910,
 			"name": "goldAmount",
 			"shared": true
 		},
@@ -4938,7 +4968,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1891,
+			"line": 1911,
 			"name": "confirmDrop",
 			"shared": true
 		},
@@ -4985,7 +5015,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1892,
+			"line": 1912,
 			"name": "goldDialog",
 			"shared": true
 		},
@@ -5016,7 +5046,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1893,
+			"line": 1913,
 			"name": "groundDrop",
 			"shared": true
 		},
@@ -5051,7 +5081,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1894,
+			"line": 1914,
 			"name": "splitStack",
 			"shared": true
 		},
@@ -5070,7 +5100,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1894,
+			"line": 1914,
 			"name": "splitAmount",
 			"shared": true
 		},
@@ -5101,7 +5131,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1897,
+			"line": 1917,
 			"name": "exchangeCount",
 			"shared": true
 		},
@@ -5120,7 +5150,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1897,
+			"line": 1917,
 			"name": "exchangeAmount",
 			"shared": true
 		},
@@ -5139,7 +5169,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1898,
+			"line": 1918,
 			"name": "shopOpenRequest",
 			"shared": true
 		},
@@ -5170,7 +5200,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1899,
+			"line": 1919,
 			"name": "shopWarning",
 			"shared": true
 		},
@@ -5193,13 +5223,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1902,
+			"line": 1922,
 			"name": "sellAllPhase",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@9901": {
+				"anonymous@9968": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5212,7 +5242,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1902,
+			"line": 1922,
 			"name": "sellAllGid",
 			"shared": true
 		},
@@ -5227,7 +5257,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1903,
+			"line": 1923,
 			"name": "sellAllRun",
 			"shared": true
 		},
@@ -5250,7 +5280,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1906,
+			"line": 1926,
 			"name": "allBuyProgress",
 			"shared": true
 		},
@@ -5269,7 +5299,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1907,
+			"line": 1927,
 			"name": "shopPage",
 			"shared": true
 		},
@@ -5288,7 +5318,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1907,
+			"line": 1927,
 			"name": "shopTab",
 			"shared": true
 		},
@@ -5323,7 +5353,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1907,
+			"line": 1927,
 			"name": "shopDialog",
 			"shared": true
 		},
@@ -5354,7 +5384,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1907,
+			"line": 1927,
 			"name": "shopChoice",
 			"shared": true
 		},
@@ -5373,7 +5403,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1907,
+			"line": 1927,
 			"name": "shopQuantity",
 			"shared": true
 		},
@@ -5396,7 +5426,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1908,
+			"line": 1928,
 			"name": "shopPosition",
 			"shared": true
 		},
@@ -5419,7 +5449,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1909,
+			"line": 1929,
 			"name": "cosTab",
 			"shared": true
 		},
@@ -5438,7 +5468,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1910,
+			"line": 1930,
 			"name": "cosDraft",
 			"shared": true
 		},
@@ -5465,7 +5495,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1912,
+			"line": 1932,
 			"name": "petTrainingAskedRef",
 			"shared": true
 		},
@@ -5484,7 +5514,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1914,
+			"line": 1934,
 			"name": "petStateAsked",
 			"shared": true
 		},
@@ -5499,7 +5529,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1915,
+			"line": 1935,
 			"name": "cosBoundGid",
 			"shared": true
 		},
@@ -5514,7 +5544,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1916,
+			"line": 1936,
 			"name": "cosBoundMode",
 			"shared": true
 		},
@@ -5541,7 +5571,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1917,
+			"line": 1937,
 			"name": "guildDialog",
 			"shared": true
 		},
@@ -5568,7 +5598,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1918,
+			"line": 1938,
 			"name": "guildTab",
 			"shared": true
 		},
@@ -5583,7 +5613,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1919,
+			"line": 1939,
 			"name": "guildSort",
 			"shared": true
 		},
@@ -5598,7 +5628,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1920,
+			"line": 1940,
 			"name": "guildDescending",
 			"shared": true
 		},
@@ -5613,7 +5643,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1921,
+			"line": 1941,
 			"name": "guildNameMode",
 			"shared": true
 		},
@@ -5628,7 +5658,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1922,
+			"line": 1942,
 			"name": "alchemyMode",
 			"shared": true
 		},
@@ -5651,7 +5681,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1923,
+			"line": 1943,
 			"name": "alchemySlots",
 			"shared": true
 		},
@@ -5666,7 +5696,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1924,
+			"line": 1944,
 			"name": "alchemyQuantity",
 			"shared": true
 		},
@@ -5681,7 +5711,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1925,
+			"line": 1945,
 			"name": "processPage",
 			"shared": true
 		},
@@ -5692,7 +5722,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1926,
+			"line": 1946,
 			"name": "gachaWasVisible",
 			"shared": false
 		},
@@ -5711,7 +5741,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1927,
+			"line": 1947,
 			"name": "selectedAction",
 			"shared": true
 		},
@@ -5734,7 +5764,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1928,
+			"line": 1948,
 			"name": "partyMatchSelection",
 			"shared": true
 		},
@@ -5753,7 +5783,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1928,
+			"line": 1948,
 			"name": "partyMatchOffset",
 			"shared": true
 		},
@@ -5768,7 +5798,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1929,
+			"line": 1949,
 			"name": "partyMatchSort",
 			"shared": true
 		},
@@ -5783,7 +5813,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1929,
+			"line": 1949,
 			"name": "partyMatchDescending",
 			"shared": true
 		},
@@ -5802,7 +5832,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1930,
+			"line": 1950,
 			"name": "partySearch",
 			"shared": true
 		},
@@ -5817,7 +5847,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1931,
+			"line": 1951,
 			"name": "partySearchDraft",
 			"shared": true
 		},
@@ -5836,7 +5866,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1932,
+			"line": 1952,
 			"name": "partyPurposeOpen",
 			"shared": true
 		},
@@ -5847,7 +5877,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1933,
+			"line": 1953,
 			"name": "partyProgressTick",
 			"shared": false
 		},
@@ -5862,13 +5892,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1933,
+			"line": 1953,
 			"name": "partyProgressVisible",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@23607": {
+				"anonymous@23814": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5877,7 +5907,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1934,
+			"line": 1954,
 			"name": "partyAuto",
 			"shared": true
 		},
@@ -5896,7 +5926,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1935,
+			"line": 1955,
 			"name": "partyDialog",
 			"shared": true
 		},
@@ -5911,7 +5941,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1936,
+			"line": 1956,
 			"name": "partyForm",
 			"shared": true
 		},
@@ -5926,7 +5956,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1945,
+			"line": 1965,
 			"name": "questPosition",
 			"shared": true
 		},
@@ -5945,7 +5975,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1945,
+			"line": 1965,
 			"name": "questDetailScroll",
 			"shared": true
 		},
@@ -5964,7 +5994,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1945,
+			"line": 1965,
 			"name": "questDetailMax",
 			"shared": true
 		},
@@ -5999,7 +6029,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1946,
+			"line": 1966,
 			"name": "practice",
 			"shared": true
 		},
@@ -6026,7 +6056,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1946,
+			"line": 1966,
 			"name": "questDetails",
 			"shared": true
 		},
@@ -6045,7 +6075,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1947,
+			"line": 1967,
 			"name": "skillTab",
 			"shared": true
 		},
@@ -6064,7 +6094,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1947,
+			"line": 1967,
 			"name": "selectedMastery",
 			"shared": true
 		},
@@ -6083,7 +6113,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1947,
+			"line": 1967,
 			"name": "skillScroll",
 			"shared": true
 		},
@@ -6106,7 +6136,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1952,
+			"line": 1972,
 			"name": "selectedSkill",
 			"shared": true
 		},
@@ -6121,13 +6151,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1952,
+			"line": 1972,
 			"name": "skillPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@13265": {
+				"anonymous@13351": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6144,7 +6174,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1952,
+			"line": 1972,
 			"name": "hotbarPage",
 			"shared": true
 		},
@@ -6159,7 +6189,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1952,
+			"line": 1972,
 			"name": "trainingMode",
 			"shared": true
 		},
@@ -6178,7 +6208,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1952,
+			"line": 1972,
 			"name": "clearHotbar",
 			"shared": true
 		},
@@ -6205,13 +6235,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1953,
+			"line": 1973,
 			"name": "carriedShortcut",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@9956": {
+				"anonymous@10023": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6236,7 +6266,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1954,
+			"line": 1974,
 			"name": "quickslotTime",
 			"shared": true
 		},
@@ -6247,7 +6277,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1954,
+			"line": 1974,
 			"name": "quickslotTick",
 			"shared": false
 		},
@@ -6270,7 +6300,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1955,
+			"line": 1975,
 			"name": "extVertical",
 			"shared": true
 		},
@@ -6293,7 +6323,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1956,
+			"line": 1976,
 			"name": "extDouble",
 			"shared": true
 		},
@@ -6316,7 +6346,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1957,
+			"line": 1977,
 			"name": "extOpen",
 			"shared": true
 		},
@@ -6339,7 +6369,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1958,
+			"line": 1978,
 			"name": "extTransparent",
 			"shared": true
 		},
@@ -6366,7 +6396,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1959,
+			"line": 1979,
 			"name": "extSlotLock",
 			"shared": true
 		},
@@ -6389,7 +6419,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1960,
+			"line": 1980,
 			"name": "extPositionLock",
 			"shared": true
 		},
@@ -6404,7 +6434,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1961,
+			"line": 1981,
 			"name": "extOptions",
 			"shared": true
 		},
@@ -6431,7 +6461,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1962,
+			"line": 1982,
 			"name": "extPosition",
 			"shared": true
 		},
@@ -6446,13 +6476,13 @@
 					"writes": 0
 				}
 			},
-			"line": 1963,
+			"line": 1983,
 			"name": "extDraft",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@16619": {
+				"anonymous@16706": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6465,13 +6495,13 @@
 					"writes": 1
 				}
 			},
-			"line": 2058,
+			"line": 2078,
 			"name": "selectedQuest",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10028": {
+				"anonymous@10095": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6488,7 +6518,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2058,
+			"line": 2078,
 			"name": "trackedQuest",
 			"shared": true
 		},
@@ -6515,7 +6545,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2058,
+			"line": 2078,
 			"name": "confirmAbandon",
 			"shared": true
 		},
@@ -6538,7 +6568,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2058,
+			"line": 2078,
 			"name": "questPage",
 			"shared": true
 		},
@@ -6557,13 +6587,13 @@
 					"writes": 1
 				}
 			},
-			"line": 2058,
+			"line": 2078,
 			"name": "chatPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6596,7 +6626,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2059,
+			"line": 2079,
 			"name": "chatText",
 			"shared": true
 		},
@@ -6623,7 +6653,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2059,
+			"line": 2079,
 			"name": "chatTarget",
 			"shared": true
 		},
@@ -6642,7 +6672,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2059,
+			"line": 2079,
 			"name": "chatChannel",
 			"shared": true
 		},
@@ -6653,7 +6683,7 @@
 					"writes": 3
 				}
 			},
-			"line": 2059,
+			"line": 2079,
 			"name": "chatFeedbackObserved",
 			"shared": false
 		},
@@ -6668,13 +6698,13 @@
 					"writes": 3
 				}
 			},
-			"line": 2060,
+			"line": 2080,
 			"name": "caretDue",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12978": {
+				"anonymous@13045": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6711,7 +6741,7 @@
 					"writes": 3
 				}
 			},
-			"line": 2060,
+			"line": 2080,
 			"name": "caretVisible",
 			"shared": true
 		},
@@ -6782,7 +6812,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2061,
+			"line": 2081,
 			"name": "focusRevision",
 			"shared": true
 		},
@@ -6857,7 +6887,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2062,
+			"line": 2082,
 			"name": "focusRequest",
 			"shared": true
 		},
@@ -6880,7 +6910,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2063,
+			"line": 2083,
 			"name": "windowMissing",
 			"shared": true
 		},
@@ -7099,7 +7129,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2065,
+			"line": 2085,
 			"name": "panel",
 			"shared": true
 		},
@@ -7182,7 +7212,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2066,
+			"line": 2086,
 			"name": "inventorySlot",
 			"shared": true
 		},
@@ -7201,7 +7231,7 @@
 					"writes": 3
 				},
 				"panel:Shop": {
-					"reads": 2,
+					"reads": 3,
 					"writes": 1
 				},
 				"step": {
@@ -7209,7 +7239,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2067,
+			"line": 2087,
 			"name": "inventoryPage",
 			"shared": true
 		},
@@ -7244,7 +7274,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2068,
+			"line": 2088,
 			"name": "cosSlot",
 			"shared": true
 		},
@@ -7271,7 +7301,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2069,
+			"line": 2089,
 			"name": "cosPage",
 			"shared": true
 		},
@@ -7290,21 +7320,21 @@
 					"writes": 1
 				}
 			},
-			"line": 2070,
+			"line": 2090,
 			"name": "cosPlayerPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@1826": {
+				"anonymous@1846": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@2459": {
+				"anonymous@2495": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@3482": {
+				"anonymous@3518": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7345,7 +7375,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2071,
+			"line": 2091,
 			"name": "cosGid",
 			"shared": true
 		},
@@ -7356,7 +7386,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2072,
+			"line": 2092,
 			"name": "serverPage",
 			"shared": false
 		},
@@ -7399,7 +7429,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2073,
+			"line": 2093,
 			"name": "pending",
 			"shared": true
 		},
@@ -7414,7 +7444,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2074,
+			"line": 2094,
 			"name": "rosterRequested",
 			"shared": true
 		},
@@ -7425,7 +7455,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2075,
+			"line": 2095,
 			"name": "lastPhase",
 			"shared": false
 		},
@@ -7436,7 +7466,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2076,
+			"line": 2096,
 			"name": "message",
 			"shared": false
 		},
@@ -7446,71 +7476,71 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10879": {
+				"anonymous@10946": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10967": {
+				"anonymous@11034": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11015": {
+				"anonymous@11082": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13436": {
+				"anonymous@13522": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13460": {
+				"anonymous@13546": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13634": {
+				"anonymous@13720": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@20487": {
+				"anonymous@20568": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21019": {
+				"anonymous@21100": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@23607": {
+				"anonymous@23814": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24899": {
+				"anonymous@25106": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24973": {
+				"anonymous@25180": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@25278": {
+				"anonymous@25485": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26704": {
+				"anonymous@26911": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26817": {
+				"anonymous@27024": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26836": {
+				"anonymous@27043": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@28100": {
+				"anonymous@28307": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7735,45 +7765,45 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 81,
+					"reads": 83,
 					"writes": 52
 				}
 			},
-			"line": 2079,
+			"line": 2099,
 			"name": "controls",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10879": {
+				"anonymous@10946": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10967": {
+				"anonymous@11034": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11015": {
+				"anonymous@11082": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@12530": {
+				"anonymous@12597": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13265": {
+				"anonymous@13351": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13340": {
+				"anonymous@13426": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13634": {
+				"anonymous@13720": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7798,6 +7828,10 @@
 					"writes": 1
 				},
 				"drawCosHud": {
+					"reads": 1,
+					"writes": 0
+				},
+				"eventInterfaceWindow": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7890,45 +7924,45 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 47,
+					"reads": 48,
 					"writes": 43
 				}
 			},
-			"line": 2079,
+			"line": 2099,
 			"name": "blocks",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10879": {
+				"anonymous@10946": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10967": {
+				"anonymous@11034": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@11015": {
+				"anonymous@11082": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12233": {
+				"anonymous@12300": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12530": {
+				"anonymous@12597": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13265": {
+				"anonymous@13351": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13340": {
+				"anonymous@13426": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13460": {
+				"anonymous@13546": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -8101,7 +8135,7 @@
 					"writes": 0
 				},
 				"step": {
-					"reads": 92,
+					"reads": 94,
 					"writes": 2
 				},
 				"unionPage": {
@@ -8109,7 +8143,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2079,
+			"line": 2099,
 			"name": "paths",
 			"shared": true
 		},
@@ -8124,7 +8158,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2084,
+			"line": 2104,
 			"name": "contentImages",
 			"shared": true
 		}
@@ -8133,4664 +8167,4676 @@
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3796,
+			"line": 3832,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3799,
+			"line": 3835,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3802,
+			"line": 3838,
 			"pattern": "gm-helper-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3811,
+			"line": 3847,
 			"pattern": "gm-helper-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3823,
+			"line": 3859,
 			"pattern": "experimental-"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3826,
+			"line": 3862,
 			"pattern": "experimental-scroll-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3826,
+			"line": 3862,
 			"pattern": "experimental-scroll-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3828,
+			"line": 3864,
 			"pattern": "experimental-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3829,
+			"line": 3865,
 			"pattern": "experimental-render-scale:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3832,
+			"line": 3868,
 			"pattern": "experimental-default"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3833,
+			"line": 3869,
 			"pattern": "experimental-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3836,
+			"line": 3872,
 			"pattern": "experimental-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3843,
+			"line": 3879,
 			"pattern": "cos-status:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3844,
+			"line": 3880,
 			"pattern": "cos-command-toggle"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3849,
+			"line": 3885,
 			"pattern": "cos-command:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3854,
+			"line": 3890,
 			"pattern": "pet-skill-up:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3863,
+			"line": 3899,
 			"pattern": "pet-skill:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3876,
+			"line": 3912,
 			"pattern": "pet-skill-reset"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3880,
+			"line": 3916,
 			"pattern": "item-mall-"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3884,
+			"line": 3920,
+			"pattern": "event-interface-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 3925,
+			"pattern": "event-interface-pcroom-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 3930,
 			"pattern": "mall-notice-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3884,
+			"line": 3930,
 			"pattern": "mall-notice-enter"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3898,
+			"line": 3944,
 			"pattern": "mall-notice-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3901,
+			"line": 3947,
 			"pattern": "item-mall"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3908,
+			"line": 3954,
 			"pattern": "item-mall-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3908,
+			"line": 3954,
 			"pattern": "item-mall-close-button"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3913,
+			"line": 3959,
 			"pattern": "item-mall-home"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3918,
+			"line": 3964,
 			"pattern": "item-mall-silk-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3923,
+			"line": 3969,
 			"pattern": "item-mall-silk-combo"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3928,
+			"line": 3974,
 			"pattern": "item-mall-silk-period:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3933,
+			"line": 3979,
 			"pattern": "item-mall-silk-inquire"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3941,
+			"line": 3987,
 			"pattern": "item-mall-category:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3947,
+			"line": 3993,
 			"pattern": "item-mall-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3953,
+			"line": 3999,
 			"pattern": "item-mall-buy:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3960,
+			"line": 4006,
 			"pattern": "item-mall-page:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3966,
+			"line": 4012,
 			"pattern": "item-mall-bag-page:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3973,
+			"line": 4019,
 			"pattern": "item-mall-reserve:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3980,
+			"line": 4026,
 			"pattern": "item-mall-wear:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3990,
+			"line": 4036,
 			"pattern": "item-mall-root:4"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3990,
+			"line": 4036,
 			"pattern": "item-mall-buy-all"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3991,
+			"line": 4037,
 			"pattern": "item-mall-root:4"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3995,
+			"line": 4041,
 			"pattern": "item-mall-question-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4000,
+			"line": 4046,
 			"pattern": "item-mall-question-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4005,
+			"line": 4051,
 			"pattern": "item-mall-root:5"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4011,
+			"line": 4057,
 			"pattern": "item-mall-points"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4016,
+			"line": 4062,
 			"pattern": "item-mall-points-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4021,
+			"line": 4067,
 			"pattern": "item-mall-points-apply"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4029,
+			"line": 4075,
 			"pattern": "item-mall-purchase"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4035,
+			"line": 4081,
 			"pattern": "item-mall-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4040,
+			"line": 4086,
 			"pattern": "item-mall-quantity-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4040,
+			"line": 4086,
 			"pattern": "item-mall-quantity-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4047,
+			"line": 4093,
 			"pattern": "return-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4051,
+			"line": 4097,
 			"pattern": "gathering-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4057,
+			"line": 4103,
 			"pattern": "ground-drop-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4060,
+			"line": 4106,
 			"pattern": "ground-drop-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4068,
+			"line": 4114,
 			"pattern": "withdrawal-"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4069,
+			"line": 4115,
 			"pattern": "withdrawal-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4072,
+			"line": 4118,
 			"pattern": "withdrawal-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4073,
+			"line": 4119,
 			"pattern": "withdrawal-decrease"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4074,
+			"line": 4120,
 			"pattern": "withdrawal-recover"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4075,
+			"line": 4121,
 			"pattern": "withdrawal-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4077,
+			"line": 4123,
 			"pattern": "withdrawal-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4092,
+			"line": 4138,
 			"pattern": "skill-confirm-"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4093,
+			"line": 4139,
 			"pattern": "quest-abandon-"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4099,
+			"line": 4145,
 			"pattern": "npc-recall-designate"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4109,
+			"line": 4155,
 			"pattern": "npc-guild-soldier:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4120,
+			"line": 4166,
 			"pattern": "npc-guild:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4151,
+			"line": 4197,
 			"pattern": "npc-academy-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4159,
+			"line": 4205,
 			"pattern": "npc-academy-honor"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4167,
+			"line": 4213,
 			"pattern": "npc-job-"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4172,
+			"line": 4218,
 			"pattern": "npc-job-join:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4173,
+			"line": 4219,
 			"pattern": "npc-job-withdraw:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4174,
+			"line": 4220,
 			"pattern": "npc-job-alias:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4177,
+			"line": 4223,
 			"pattern": "npc-job-rank:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4177,
+			"line": 4223,
 			"pattern": "npc-job-contribution:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4183,
+			"line": 4229,
 			"pattern": "npc-job-rank:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4185,
+			"line": 4231,
 			"pattern": "npc-job-outcome:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4185,
+			"line": 4231,
 			"pattern": "npc-job-collect:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4190,
+			"line": 4236,
 			"pattern": "npc-job-outcome:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4192,
+			"line": 4238,
 			"pattern": "npc-job-previous:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4199,
+			"line": 4245,
 			"pattern": "npc-return-point"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4208,
+			"line": 4254,
 			"pattern": "npc-gate-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4215,
+			"line": 4261,
 			"pattern": "npc-reverse-return:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4227,
+			"line": 4273,
 			"pattern": "npc-portal:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4240,
+			"line": 4286,
 			"pattern": "npc-talk"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4240,
+			"line": 4286,
 			"pattern": "npc-withdraw"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4240,
+			"line": 4286,
 			"pattern": "npc-event-exchange"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4240,
+			"line": 4286,
 			"pattern": "npc-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4241,
+			"line": 4287,
 			"pattern": "npc-talkend"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4241,
+			"line": 4287,
 			"pattern": "npc-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4244,
+			"line": 4290,
 			"pattern": "npc-talk"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4246,
+			"line": 4292,
 			"pattern": "npc-withdraw"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4248,
+			"line": 4294,
 			"pattern": "npc-event-exchange"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4250,
+			"line": 4296,
 			"pattern": "npc-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4257,
+			"line": 4303,
 			"pattern": "rebirth-point"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4257,
-			"pattern": "rebirth-alternate"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4259,
-			"pattern": "rebirth-alternate"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4264,
-			"pattern": "rebirth-point"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4269,
-			"pattern": "submit"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4270,
-			"pattern": "stall-prompt-ok"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4270,
-			"pattern": "stall-prompt-cancel"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4276,
-			"pattern": "submit"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4278,
-			"pattern": "split-confirm"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4301,
-			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 4303,
+			"pattern": "rebirth-alternate"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4305,
+			"pattern": "rebirth-alternate"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4310,
+			"pattern": "rebirth-point"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4315,
+			"pattern": "submit"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4316,
+			"pattern": "stall-prompt-ok"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4316,
+			"pattern": "stall-prompt-cancel"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4322,
+			"pattern": "submit"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4324,
+			"pattern": "split-confirm"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4347,
+			"pattern": "submit"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4349,
 			"pattern": "exchange-count-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4342,
+			"line": 4388,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4346,
+			"line": 4392,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4350,
+			"line": 4396,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4354,
+			"line": 4400,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4359,
+			"line": 4405,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4361,
+			"line": 4407,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4364,
+			"line": 4410,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4414,
+			"line": 4460,
 			"pattern": "submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4415,
+			"line": 4461,
 			"pattern": "submit"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4419,
-			"pattern": "submit"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4427,
-			"pattern": "server:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4427,
-			"pattern": "map-town:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4437,
-			"pattern": "friend-row:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4439,
-			"pattern": "friend-sort"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4440,
-			"pattern": "friend-up"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4441,
-			"pattern": "friend-down"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4442,
-			"pattern": "friend-whisper"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4445,
-			"pattern": "friend-add"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4445,
-			"pattern": "friend-remove"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4446,
-			"pattern": "friend-remove"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4447,
-			"pattern": "friend-add"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4456,
-			"pattern": "cos-name"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 4465,
-			"pattern": "pet-name-cancel"
+			"pattern": "submit"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4473,
+			"pattern": "server:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4473,
+			"pattern": "map-town:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4483,
+			"pattern": "friend-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4469,
-			"pattern": "pet-name-ok"
+			"line": 4485,
+			"pattern": "friend-sort"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4489,
-			"pattern": "friend-cancel"
+			"line": 4486,
+			"pattern": "friend-up"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4487,
+			"pattern": "friend-down"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4488,
+			"pattern": "friend-whisper"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4491,
+			"pattern": "friend-add"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4491,
+			"pattern": "friend-remove"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4492,
+			"pattern": "friend-remove"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 4493,
-			"pattern": "friend-ok"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4500,
-			"pattern": "friend-accept"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4500,
-			"pattern": "friend-refuse"
+			"pattern": "friend-add"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 4502,
+			"pattern": "cos-name"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4511,
+			"pattern": "pet-name-cancel"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4515,
+			"pattern": "pet-name-ok"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4535,
+			"pattern": "friend-cancel"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4539,
+			"pattern": "friend-ok"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4546,
+			"pattern": "friend-accept"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4546,
+			"pattern": "friend-refuse"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4548,
 			"pattern": "friend-conclusion-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4504,
+			"line": 4550,
 			"pattern": "letter-"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4506,
+			"line": 4552,
 			"pattern": "blocking-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4507,
+			"line": 4553,
 			"pattern": "blocking-tab:1"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4510,
+			"line": 4556,
 			"pattern": "blocking-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4513,
+			"line": 4559,
 			"pattern": "blocking-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4514,
+			"line": 4560,
 			"pattern": "blocking-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4515,
+			"line": 4561,
 			"pattern": "blocking-add"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4515,
+			"line": 4561,
 			"pattern": "blocking-remove"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4517,
+			"line": 4563,
 			"pattern": "blocking-remove"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4518,
+			"line": 4564,
 			"pattern": "blocking-add"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4523,
+			"line": 4569,
 			"pattern": "blocking-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4527,
+			"line": 4573,
 			"pattern": "blocking-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4551,
+			"line": 4597,
 			"pattern": "stat-str"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4551,
+			"line": 4597,
 			"pattern": "stat-int"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4552,
+			"line": 4598,
 			"pattern": "stat-str"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4553,
+			"line": 4599,
 			"pattern": "option-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4560,
+			"line": 4606,
 			"pattern": "option-toggle:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4563,
+			"line": 4609,
 			"pattern": "option-video-record:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4569,
+			"line": 4615,
 			"pattern": "option-video-combo:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4576,
+			"line": 4622,
 			"pattern": "option-video-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4589,
+			"line": 4635,
 			"pattern": "option-video-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4589,
+			"line": 4635,
 			"pattern": "option-video-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4592,
+			"line": 4638,
 			"pattern": "option-bind:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4595,
+			"line": 4641,
 			"pattern": "option-mouse:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4598,
+			"line": 4644,
 			"pattern": "option-input-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4598,
+			"line": 4644,
 			"pattern": "option-input-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4600,
+			"line": 4646,
 			"pattern": "option-sight:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4601,
+			"line": 4647,
 			"pattern": "option-beginner"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4602,
+			"line": 4648,
 			"pattern": "option-mute:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4607,
+			"line": 4653,
 			"pattern": "option-audio-step:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4615,
+			"line": 4661,
 			"pattern": "option-default"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4631,
+			"line": 4677,
 			"pattern": "option-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4632,
+			"line": 4678,
 			"pattern": "option-apply"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4632,
+			"line": 4678,
 			"pattern": "option-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4648,
+			"line": 4694,
 			"pattern": "option-ok"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4650,
-			"pattern": "option-scroll:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4658,
-			"pattern": "potion-save"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4662,
-			"pattern": "potion-tab:character"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4662,
-			"pattern": "potion-tab:companion"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4663,
-			"pattern": "potion-tab:character"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4665,
-			"pattern": "companion-potion-step:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4673,
-			"pattern": "companion-potion-enable:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4676,
-			"pattern": "potion-enable:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 4691,
-			"pattern": "potion-combo:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4694,
-			"pattern": "potion-combo-up"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 4694,
-			"pattern": "potion-combo-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
 			"line": 4696,
+			"pattern": "option-scroll:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4704,
+			"pattern": "potion-save"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4708,
+			"pattern": "potion-tab:character"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4708,
+			"pattern": "potion-tab:companion"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4709,
+			"pattern": "potion-tab:character"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4711,
+			"pattern": "companion-potion-step:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4719,
+			"pattern": "companion-potion-enable:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4722,
+			"pattern": "potion-enable:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4737,
+			"pattern": "potion-combo:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4740,
+			"pattern": "potion-combo-up"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 4740,
+			"pattern": "potion-combo-down"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 4742,
 			"pattern": "potion-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4706,
+			"line": 4752,
 			"pattern": "potion-step:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4736,
+			"line": 4782,
 			"pattern": "potion-delay"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4738,
+			"line": 4784,
 			"pattern": "potion-time-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4738,
+			"line": 4784,
 			"pattern": "potion-time-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4742,
+			"line": 4788,
 			"pattern": "potion-time-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4744,
+			"line": 4790,
 			"pattern": "gacha-exchange"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4751,
+			"line": 4797,
 			"pattern": "gacha-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4753,
+			"line": 4799,
 			"pattern": "alchemy-mode:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4757,
+			"line": 4803,
 			"pattern": "alchemy-slot:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4771,
+			"line": 4817,
 			"pattern": "alchemy-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4772,
+			"line": 4818,
 			"pattern": "alchemy-start"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4781,
+			"line": 4827,
 			"pattern": "gacha-prize:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4784,
+			"line": 4830,
 			"pattern": "gacha-bag-page:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4785,
+			"line": 4831,
 			"pattern": "gacha-play"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4788,
+			"line": 4834,
 			"pattern": "process-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4789,
+			"line": 4835,
 			"pattern": "process-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4790,
+			"line": 4836,
 			"pattern": "invite-accept"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4790,
+			"line": 4836,
 			"pattern": "invite-refuse"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4790,
+			"line": 4836,
 			"pattern": "invite-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4792,
+			"line": 4838,
 			"pattern": "resurrection-accept"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4792,
+			"line": 4838,
 			"pattern": "resurrection-refuse"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4794,
+			"line": 4840,
 			"pattern": "instance-accept"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4794,
+			"line": 4840,
 			"pattern": "instance-refuse"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4796,
+			"line": 4842,
 			"pattern": "party-invite"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4802,
+			"line": 4848,
 			"pattern": "party-settings"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4805,
+			"line": 4851,
 			"pattern": "party-settings-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4806,
+			"line": 4852,
 			"pattern": "party-settings-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4809,
+			"line": 4855,
 			"pattern": "party-setting:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4814,
+			"line": 4860,
 			"pattern": "party-option:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4815,
+			"line": 4861,
 			"pattern": "social-member:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4818,
+			"line": 4864,
 			"pattern": "social-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4819,
+			"line": 4865,
 			"pattern": "social-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4820,
+			"line": 4866,
 			"pattern": "party-leave"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4820,
+			"line": 4866,
 			"pattern": "party-disband"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4822,
+			"line": 4868,
 			"pattern": "party-member-kick:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4824,
+			"line": 4870,
 			"pattern": "party-leave"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4827,
+			"line": 4873,
 			"pattern": "guild-kick"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4844,
+			"line": 4890,
 			"pattern": "social-confirm-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4858,
+			"line": 4904,
 			"pattern": "social-confirm-no"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4861,
+			"line": 4907,
 			"pattern": "crest-delete-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4876,
+			"line": 4922,
 			"pattern": "crest-delete-no"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4878,
+			"line": 4924,
 			"pattern": "crest-register-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4916,
+			"line": 4962,
 			"pattern": "crest-register-no"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4918,
+			"line": 4964,
 			"pattern": "guild-create"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4920,
+			"line": 4966,
 			"pattern": "guild-invite"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4925,
+			"line": 4971,
 			"pattern": "guild-union-invite"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4929,
+			"line": 4975,
 			"pattern": "stall-chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4935,
+			"line": 4981,
 			"pattern": "stall-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4935,
+			"line": 4981,
 			"pattern": "stall-leave"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4937,
+			"line": 4983,
 			"pattern": "stall-trading"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4943,
+			"line": 4989,
 			"pattern": "stall-change-title"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4946,
+			"line": 4992,
 			"pattern": "stall-change-greeting"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4949,
+			"line": 4995,
 			"pattern": "stall-slot:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4954,
+			"line": 5000,
 			"pattern": "stall-modify:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4971,
+			"line": 5017,
 			"pattern": "stall-net-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4973,
+			"line": 5019,
 			"pattern": "stall-net-combo:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4975,
+			"line": 5021,
 			"pattern": "stall-net-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4977,
+			"line": 5023,
 			"pattern": "stall-net-sort:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 4979,
+			"line": 5025,
 			"pattern": "stall-net-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4981,
+			"line": 5027,
 			"pattern": "stall-net-search"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4981,
+			"line": 5027,
 			"pattern": "stall-net-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4981,
+			"line": 5027,
 			"pattern": "stall-net-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4987,
+			"line": 5033,
 			"pattern": "stall-net-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4988,
+			"line": 5034,
 			"pattern": "stall-net-search"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4989,
+			"line": 5035,
 			"pattern": "stall-net-search"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4990,
+			"line": 5036,
 			"pattern": "stall-net-search"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4996,
+			"line": 5042,
 			"pattern": "stall-net-buy"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4999,
+			"line": 5045,
 			"pattern": "exchange-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4999,
+			"line": 5045,
 			"pattern": "exchange-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 4999,
+			"line": 5045,
 			"pattern": "exchange-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5000,
+			"line": 5046,
 			"pattern": "exchange-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5001,
+			"line": 5047,
 			"pattern": "exchange-gold-set"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5009,
+			"line": 5055,
 			"pattern": "exchange-my:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5014,
+			"line": 5060,
 			"pattern": "war-"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5017,
+			"line": 5063,
 			"pattern": "war-scroll-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5017,
+			"line": 5063,
 			"pattern": "war-scroll-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5017,
+			"line": 5063,
 			"pattern": "war-members-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5018,
+			"line": 5064,
 			"pattern": "war-members-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5018,
+			"line": 5064,
 			"pattern": "war-combo-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5018,
+			"line": 5064,
 			"pattern": "war-combo-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5020,
+			"line": 5066,
 			"pattern": "war-combo"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5022,
+			"line": 5068,
 			"pattern": "war-members"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5037,
+			"line": 5083,
 			"pattern": "war-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5059,
+			"line": 5105,
 			"pattern": "war-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5061,
+			"line": 5107,
 			"pattern": "war-declare"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5062,
+			"line": 5108,
 			"pattern": "war-money-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5064,
+			"line": 5110,
 			"pattern": "union-sort:name"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5064,
+			"line": 5110,
 			"pattern": "union-sort:level"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5065,
+			"line": 5111,
 			"pattern": "union-sort:name"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5066,
+			"line": 5112,
 			"pattern": "guild-union-exit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5067,
+			"line": 5113,
 			"pattern": "guild-union-expel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5071,
+			"line": 5117,
 			"pattern": "union-ask-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5071,
+			"line": 5117,
 			"pattern": "union-ask-no"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5073,
+			"line": 5119,
 			"pattern": "union-ask-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5080,
+			"line": 5126,
 			"pattern": "academy-notice-submit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5083,
+			"line": 5129,
 			"pattern": "guild-notice"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5085,
+			"line": 5131,
 			"pattern": "guild-donate"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5086,
+			"line": 5132,
 			"pattern": "guild-title"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5099,
+			"line": 5145,
 			"pattern": "guild-role"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5101,
+			"line": 5147,
 			"pattern": "party-match-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5102,
+			"line": 5148,
 			"pattern": "party-match:56"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5102,
+			"line": 5148,
 			"pattern": "party-match-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5102,
+			"line": 5148,
 			"pattern": "party-match-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5108,
+			"line": 5154,
 			"pattern": "party-match-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5108,
+			"line": 5154,
 			"pattern": "party-match-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5111,
+			"line": 5157,
 			"pattern": "party-match:15"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5113,
+			"line": 5159,
 			"pattern": "party-match:16"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5118,
+			"line": 5164,
 			"pattern": "party-match:55"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5136,
+			"line": 5182,
 			"pattern": "party-match:purpose"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5137,
+			"line": 5183,
 			"pattern": "party-purpose:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5150,
+			"line": 5196,
 			"pattern": "party-match:18"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5150,
+			"line": 5196,
 			"pattern": "party-match:19"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5152,
+			"line": 5198,
 			"pattern": "party-match:19"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5165,
+			"line": 5211,
 			"pattern": "party-match:20"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5166,
+			"line": 5212,
 			"pattern": "party-match:17"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5167,
+			"line": 5213,
 			"pattern": "party-auto-stop"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5168,
+			"line": 5214,
 			"pattern": "party-form-auto:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5173,
+			"line": 5219,
 			"pattern": "party-form-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5176,
+			"line": 5222,
 			"pattern": "party-form-purpose:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5184,
+			"line": 5230,
 			"pattern": "party-form-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5237,
+			"line": 5283,
 			"pattern": "party-answer:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5247,
+			"line": 5293,
 			"pattern": "action:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5248,
+			"line": 5294,
 			"pattern": "skills-mode"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5252,
+			"line": 5298,
 			"pattern": "hotbar-clear"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5253,
+			"line": 5299,
 			"pattern": "skill-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5257,
+			"line": 5303,
 			"pattern": "skill-mastery:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5261,
+			"line": 5307,
 			"pattern": "skill-scroll-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5261,
+			"line": 5307,
 			"pattern": "skill-scroll-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5263,
+			"line": 5309,
 			"pattern": "quest-track:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5266,
+			"line": 5312,
 			"pattern": "quest-expand:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5271,
+			"line": 5317,
 			"pattern": "quest-scroll-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5271,
+			"line": 5317,
 			"pattern": "quest-scroll-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5273,
+			"line": 5319,
 			"pattern": "skill-learn:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5274,
+			"line": 5320,
 			"pattern": "skill-confirm-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5275,
+			"line": 5321,
 			"pattern": "skill-confirm-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5291,
+			"line": 5337,
 			"pattern": "quest-details-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5292,
+			"line": 5338,
 			"pattern": "quest-info-icon"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5293,
+			"line": 5339,
 			"pattern": "quest-info-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5294,
+			"line": 5340,
 			"pattern": "quest-detail-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5294,
+			"line": 5340,
 			"pattern": "quest-detail-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5299,
+			"line": 5345,
 			"pattern": "mastery:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5303,
+			"line": 5349,
 			"pattern": "skill:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5304,
-			"pattern": "skills-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5305,
-			"pattern": "skills-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5306,
-			"pattern": "guide-indicator"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5312,
-			"pattern": "guide-article:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5315,
-			"pattern": "academy-open"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5316,
-			"pattern": "academy-row:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5317,
-			"pattern": "academy-sort:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5321,
-			"pattern": "academy-search"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5324,
-			"pattern": "academy-whisper"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5329,
-			"pattern": "academy-combo:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5332,
-			"pattern": "academy-option:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5337,
-			"pattern": "academy-join"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5338,
-			"pattern": "academy-refresh"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5338,
-			"pattern": "academy-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5338,
-			"pattern": "academy-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5343,
-			"pattern": "academy-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5345,
-			"pattern": "academy-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5350,
-			"pattern": "guide-sidebar"
+			"pattern": "skills-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5351,
+			"pattern": "skills-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5352,
+			"pattern": "guide-indicator"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5351,
-			"pattern": "guide-tab:"
+			"line": 5358,
+			"pattern": "guide-article:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5361,
+			"pattern": "academy-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
 			"line": 5362,
-			"pattern": "guide-group:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5368,
-			"pattern": "guide-index-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5368,
-			"pattern": "guide-index-down"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5369,
-			"pattern": "guide-index-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5369,
-			"pattern": "guide-index-up"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5371,
-			"pattern": "guide-down"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5372,
-			"pattern": "guide-up"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5373,
-			"pattern": "hud-menu"
+			"pattern": "academy-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5374,
-			"pattern": "compact-"
+			"line": 5363,
+			"pattern": "academy-sort:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5377,
-			"pattern": "chat-hide"
+			"line": 5367,
+			"pattern": "academy-search"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
+			"line": 5370,
+			"pattern": "academy-whisper"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5375,
+			"pattern": "academy-combo:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
 			"line": 5378,
-			"pattern": "chat-whispers"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5379,
-			"pattern": "whisper-name:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5381,
-			"pattern": "chat-line:"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5381,
-			"pattern": "notice-name:"
+			"pattern": "academy-option:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5385,
-			"pattern": "status-filter"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5386,
-			"pattern": "status-filter:"
+			"line": 5383,
+			"pattern": "academy-join"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5390,
-			"pattern": "status-size"
+			"line": 5384,
+			"pattern": "academy-refresh"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5384,
+			"pattern": "academy-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5384,
+			"pattern": "academy-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5389,
+			"pattern": "academy-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5391,
-			"pattern": "chat-size"
+			"pattern": "academy-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5396,
+			"pattern": "guide-sidebar"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5392,
-			"pattern": "chat-tab:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
 			"line": 5397,
-			"pattern": "berserk"
+			"pattern": "guide-tab:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5408,
+			"pattern": "guide-group:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5401,
-			"pattern": "ability-details"
+			"line": 5414,
+			"pattern": "guide-index-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5402,
-			"pattern": "minimap-in"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5403,
-			"pattern": "minimap-out"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5404,
-			"pattern": "hotbar-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5405,
-			"pattern": "hotbar-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5406,
-			"pattern": "skill-cast"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5412,
-			"pattern": "ext-open"
+			"line": 5414,
+			"pattern": "guide-index-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5415,
-			"pattern": "ext-horizontal"
+			"pattern": "guide-index-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5415,
+			"pattern": "guide-index-up"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5417,
+			"pattern": "guide-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5418,
-			"pattern": "ext-vertical"
+			"pattern": "guide-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5421,
-			"pattern": "ext-options"
+			"line": 5419,
+			"pattern": "hud-menu"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5420,
+			"pattern": "compact-"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5423,
+			"pattern": "chat-hide"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5424,
-			"pattern": "ext-double"
+			"pattern": "chat-whispers"
 		},
 		{
 			"fn": "activate",
-			"kind": "exact",
+			"kind": "prefix",
 			"line": 5425,
-			"pattern": "ext-transparent"
+			"pattern": "whisper-name:"
 		},
 		{
 			"fn": "activate",
-			"kind": "exact",
-			"line": 5426,
-			"pattern": "ext-slot-lock"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
+			"kind": "prefix",
 			"line": 5427,
-			"pattern": "ext-position-lock"
+			"pattern": "chat-line:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5427,
+			"pattern": "notice-name:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5428,
-			"pattern": "ext-options-close"
+			"line": 5431,
+			"pattern": "status-filter"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5432,
+			"pattern": "status-filter:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5429,
-			"pattern": "ext-options-ok"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5429,
-			"pattern": "ext-options-apply"
+			"line": 5436,
+			"pattern": "status-size"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5437,
-			"pattern": "ext-options-ok"
+			"pattern": "chat-size"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
 			"line": 5438,
+			"pattern": "chat-tab:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5443,
+			"pattern": "berserk"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5447,
+			"pattern": "ability-details"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5448,
+			"pattern": "minimap-in"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5449,
+			"pattern": "minimap-out"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5450,
+			"pattern": "hotbar-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5451,
+			"pattern": "hotbar-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5452,
+			"pattern": "skill-cast"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5458,
+			"pattern": "ext-open"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5461,
+			"pattern": "ext-horizontal"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5464,
+			"pattern": "ext-vertical"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5467,
+			"pattern": "ext-options"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5470,
+			"pattern": "ext-double"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5471,
+			"pattern": "ext-transparent"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5472,
+			"pattern": "ext-slot-lock"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5473,
+			"pattern": "ext-position-lock"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5474,
+			"pattern": "ext-options-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5475,
+			"pattern": "ext-options-ok"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5475,
+			"pattern": "ext-options-apply"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5483,
+			"pattern": "ext-options-ok"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5484,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5487,
+			"line": 5533,
 			"pattern": "quest-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5492,
+			"line": 5538,
 			"pattern": "quest-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5493,
+			"line": 5539,
 			"pattern": "chat-older"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5494,
+			"line": 5540,
 			"pattern": "chat-newer"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5495,
+			"line": 5541,
 			"pattern": "quest:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5503,
+			"line": 5549,
 			"pattern": "quest-abandon"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5504,
+			"line": 5550,
 			"pattern": "quest-abandon-yes"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5508,
+			"line": 5554,
 			"pattern": "quest-abandon-no"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5509,
+			"line": 5555,
 			"pattern": "quest-reward"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5513,
+			"line": 5559,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5527,
+			"line": 5573,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5560,
+			"line": 5606,
 			"pattern": "premium-reverse:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5562,
+			"line": 5608,
 			"pattern": "premium-reverse-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5563,
+			"line": 5609,
 			"pattern": "reverse-scroll:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5567,
+			"line": 5613,
 			"pattern": "reverse-scroll-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5570,
+			"line": 5616,
 			"pattern": "reverse-scroll-map"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5574,
+			"line": 5620,
 			"pattern": "reverse-map-point:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5590,
+			"line": 5636,
 			"pattern": "academy-buff-saved"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5604,
+			"line": 5650,
 			"pattern": "count-job:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5608,
+			"line": 5654,
 			"pattern": "composite-item:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5620,
+			"line": 5666,
 			"pattern": "composite-item-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5620,
+			"line": 5666,
 			"pattern": "composite-item-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5623,
+			"line": 5669,
 			"pattern": "unique-rank-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5623,
+			"line": 5669,
 			"pattern": "unique-rank-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5626,
+			"line": 5672,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5668,
+			"line": 5714,
 			"pattern": "chat-channel:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5671,
+			"line": 5717,
 			"pattern": "native:servers"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5678,
+			"line": 5724,
 			"pattern": "native:server-accept"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5679,
+			"line": 5725,
 			"pattern": "native:server-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5680,
+			"line": 5726,
 			"pattern": "native:server-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5681,
+			"line": 5727,
 			"pattern": "native:server-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5683,
+			"line": 5729,
 			"pattern": "login"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5690,
+			"line": 5736,
 			"pattern": "servers"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5691,
+			"line": 5737,
 			"pattern": "server:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5692,
+			"line": 5738,
 			"pattern": "dock:back"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5693,
+			"line": 5739,
 			"pattern": "enter"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5696,
+			"line": 5742,
 			"pattern": "logout"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5696,
+			"line": 5742,
 			"pattern": "disconnect-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5703,
+			"line": 5749,
 			"pattern": "reconnect"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5706,
+			"line": 5752,
 			"pattern": "disconnect"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5707,
+			"line": 5753,
 			"pattern": "system-restart"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5711,
+			"line": 5757,
 			"pattern": "system-exit"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5715,
+			"line": 5761,
 			"pattern": "companion-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5715,
+			"line": 5761,
 			"pattern": "potion-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5720,
+			"line": 5766,
 			"pattern": "select-window:Character-stats"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5722,
+			"line": 5768,
 			"pattern": "select-window:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5723,
+			"line": 5769,
 			"pattern": "open-window:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5724,
+			"line": 5770,
 			"pattern": "toggle-window:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5725,
+			"line": 5771,
 			"pattern": "cos-bag"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5727,
+			"line": 5773,
 			"pattern": "pet-mini-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5727,
+			"line": 5773,
 			"pattern": "cos-status:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5730,
+			"line": 5776,
 			"pattern": "pet-mini-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5751,
+			"line": 5797,
 			"pattern": "cos-cycle"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5758,
+			"line": 5804,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5759,
+			"line": 5805,
 			"pattern": "cos-player:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5760,
+			"line": 5806,
 			"pattern": "cos-drop"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5760,
+			"line": 5806,
 			"pattern": "cos-pickup"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5763,
+			"line": 5809,
 			"pattern": "cos-drop"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5768,
+			"line": 5814,
 			"pattern": "cos-pickup"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5772,
+			"line": 5818,
 			"pattern": "cos-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5775,
+			"line": 5821,
 			"pattern": "cos-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5778,
+			"line": 5824,
 			"pattern": "cos-player-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5781,
+			"line": 5827,
 			"pattern": "cos-player-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5784,
+			"line": 5830,
 			"pattern": "to-cos"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5784,
+			"line": 5830,
 			"pattern": "from-cos"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5812,
+			"line": 5858,
 			"pattern": "npc-fortress-staff"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5812,
-			"pattern": "npc-fortress-hire:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5815,
-			"pattern": "npc-fortress-staff"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5824,
-			"pattern": "npc-fortress-schedule"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5832,
-			"pattern": "npc-fortress-production:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5856,
-			"pattern": "fortress-production-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
 			"line": 5858,
+			"pattern": "npc-fortress-hire:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5861,
+			"pattern": "npc-fortress-staff"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5870,
+			"pattern": "npc-fortress-schedule"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5878,
+			"pattern": "npc-fortress-production:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 5902,
+			"pattern": "fortress-production-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 5904,
 			"pattern": "fortress-production-make:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5867,
+			"line": 5913,
 			"pattern": "fortress-production-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5869,
+			"line": 5915,
 			"pattern": "fortress-production-complete"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5881,
+			"line": 5927,
 			"pattern": "npc-fortress-structure"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5897,
+			"line": 5943,
 			"pattern": "fortress-map-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5899,
+			"line": 5945,
 			"pattern": "fortress-map-zone:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5902,
+			"line": 5948,
 			"pattern": "fortress-map-construct"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5902,
+			"line": 5948,
 			"pattern": "fortress-map-repair"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5902,
+			"line": 5948,
 			"pattern": "fortress-map-upgrade"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5913,
+			"line": 5959,
 			"pattern": "fortress-map-construct"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5914,
+			"line": 5960,
 			"pattern": "fortress-map-repair"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5915,
+			"line": 5961,
 			"pattern": "fortress-map-upgrade"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 5921,
+			"line": 5967,
 			"pattern": "fortress-map-type:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5924,
+			"line": 5970,
 			"pattern": "fortress-map-type-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5924,
+			"line": 5970,
 			"pattern": "fortress-map-type-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5924,
+			"line": 5970,
 			"pattern": "fortress-map-type-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5928,
+			"line": 5974,
 			"pattern": "npc-fortress-tax"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5939,
+			"line": 5985,
 			"pattern": "fortress-tax-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5941,
+			"line": 5987,
 			"pattern": "fortress-tax-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5941,
-			"pattern": "fortress-tax-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5942,
-			"pattern": "fortress-tax-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5943,
-			"pattern": "fortress-tax-modify"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5943,
-			"pattern": "fortress-tax-collect"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5946,
-			"pattern": "fortress-tax-modify"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5954,
-			"pattern": "fortress-schedule-close"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5956,
-			"pattern": "job-rank-close"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5958,
-			"pattern": "academy-honor-close"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5958,
-			"pattern": "academy-honor-confirm"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5960,
-			"pattern": "academy-honor-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5960,
-			"pattern": "academy-honor-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5962,
-			"pattern": "academy-honor-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5963,
-			"pattern": "job-rank-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5963,
-			"pattern": "job-rank-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5966,
-			"pattern": "job-rank-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5967,
-			"pattern": "fortress-schedule-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5967,
-			"pattern": "fortress-schedule-next"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5969,
-			"pattern": "fortress-schedule-prev"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5972,
-			"pattern": "npc-fortress-war"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5979,
-			"pattern": "fortress-war-close"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
-			"line": 5981,
-			"pattern": "fortress-war-slot:"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5985,
-			"pattern": "skin-cancel"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 5985,
-			"pattern": "skin-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 5987,
-			"pattern": "skin-confirm"
+			"pattern": "fortress-tax-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5993,
-			"pattern": "skin:male"
+			"line": 5988,
+			"pattern": "fortress-tax-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5993,
-			"pattern": "skin:female"
+			"line": 5989,
+			"pattern": "fortress-tax-modify"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 5994,
-			"pattern": "skin:male"
+			"line": 5989,
+			"pattern": "fortress-tax-collect"
 		},
 		{
 			"fn": "activate",
-			"kind": "prefix",
-			"line": 5995,
-			"pattern": "skin:"
+			"kind": "exact",
+			"line": 5992,
+			"pattern": "fortress-tax-modify"
 		},
 		{
 			"fn": "activate",
-			"kind": "prefix",
+			"kind": "exact",
 			"line": 6000,
-			"pattern": "skin-rotate:"
+			"pattern": "fortress-schedule-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6001,
-			"pattern": "skin-rotate:left"
-		},
-		{
-			"fn": "activate",
-			"kind": "exact",
-			"line": 6001,
-			"pattern": "skin-rotate:right"
-		},
-		{
-			"fn": "activate",
-			"kind": "prefix",
 			"line": 6002,
-			"pattern": "shop-repair:"
+			"pattern": "job-rank-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6004,
+			"pattern": "academy-honor-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6004,
+			"pattern": "academy-honor-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 6006,
-			"pattern": "shop-repair:GDR_STORE_BTN_REPAIR"
+			"pattern": "academy-honor-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6006,
+			"pattern": "academy-honor-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6008,
+			"pattern": "academy-honor-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6009,
+			"pattern": "job-rank-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6009,
+			"pattern": "job-rank-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6012,
+			"pattern": "job-rank-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6013,
+			"pattern": "fortress-schedule-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6013,
+			"pattern": "fortress-schedule-next"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6015,
+			"pattern": "fortress-schedule-prev"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6018,
+			"pattern": "npc-fortress-war"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6025,
+			"pattern": "fortress-war-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6019,
-			"pattern": "slot:"
+			"line": 6027,
+			"pattern": "fortress-war-slot:"
 		},
 		{
 			"fn": "activate",
-			"kind": "prefix",
-			"line": 6023,
-			"pattern": "slot:"
+			"kind": "exact",
+			"line": 6031,
+			"pattern": "skin-cancel"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6031,
+			"pattern": "skin-close"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6033,
+			"pattern": "skin-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 6039,
-			"pattern": "use"
+			"pattern": "skin:male"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6039,
+			"pattern": "skin:female"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
 			"line": 6040,
+			"pattern": "skin:male"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 6041,
+			"pattern": "skin:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 6046,
+			"pattern": "skin-rotate:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6047,
+			"pattern": "skin-rotate:left"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6047,
+			"pattern": "skin-rotate:right"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 6048,
+			"pattern": "shop-repair:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6052,
+			"pattern": "shop-repair:GDR_STORE_BTN_REPAIR"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 6065,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "activate",
+			"kind": "prefix",
+			"line": 6069,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6085,
+			"pattern": "use"
+		},
+		{
+			"fn": "activate",
+			"kind": "exact",
+			"line": 6086,
 			"pattern": "drop-item"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6046,
+			"line": 6092,
 			"pattern": "inventory-gold"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6062,
+			"line": 6108,
 			"pattern": "gold-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6065,
+			"line": 6111,
 			"pattern": "drop-gold"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6083,
+			"line": 6129,
 			"pattern": "drop-gold"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6116,
+			"line": 6162,
 			"pattern": "drop-gold"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6127,
+			"line": 6173,
 			"pattern": "npc-flagwar"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6130,
+			"line": 6176,
 			"pattern": "magic-option-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6133,
+			"line": 6179,
 			"pattern": "magic-option-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6134,
+			"line": 6180,
 			"pattern": "magic-option-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6134,
+			"line": 6180,
 			"pattern": "magic-option-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6139,
+			"line": 6185,
 			"pattern": "magic-option-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6142,
+			"line": 6188,
 			"pattern": "magic-option-confirm"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6145,
+			"line": 6191,
 			"pattern": "magic-option-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6145,
+			"line": 6191,
 			"pattern": "magic-option-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6146,
+			"line": 6192,
 			"pattern": "storage-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6152,
+			"line": 6198,
 			"pattern": "storage-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6152,
+			"line": 6198,
 			"pattern": "storage-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6153,
+			"line": 6199,
 			"pattern": "storage-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6154,
+			"line": 6200,
 			"pattern": "storage-gold"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6158,
+			"line": 6204,
 			"pattern": "shop-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6158,
+			"line": 6204,
 			"pattern": "shop-group:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6161,
+			"line": 6207,
 			"pattern": "shop-open"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6171,
+			"line": 6217,
 			"pattern": "shop-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6174,
+			"line": 6220,
 			"pattern": "shop-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6177,
+			"line": 6223,
 			"pattern": "shop-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6187,
+			"line": 6233,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6187,
+			"line": 6233,
 			"pattern": "shop-buyback:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6188,
+			"line": 6234,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6196,
+			"line": 6242,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6204,
+			"line": 6250,
 			"pattern": "shop-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6205,
+			"line": 6251,
 			"pattern": "shop-quantity-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6205,
+			"line": 6251,
 			"pattern": "shop-quantity-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6215,
+			"line": 6261,
 			"pattern": "shop-quantity-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6218,
+			"line": 6264,
 			"pattern": "cos-allsell"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6226,
+			"line": 6272,
 			"pattern": "cos-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6238,
+			"line": 6284,
 			"pattern": "cos-setting:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6239,
+			"line": 6285,
 			"pattern": "cos-radio:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6244,
+			"line": 6290,
 			"pattern": "cos-save"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6249,
+			"line": 6295,
 			"pattern": "cos-reset"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6251,
+			"line": 6297,
 			"pattern": "guild-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6261,
+			"line": 6307,
 			"pattern": "academy-notice"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6268,
+			"line": 6314,
 			"pattern": "academy-dismiss"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6273,
+			"line": 6319,
 			"pattern": "academy-slot-action:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6279,
+			"line": 6325,
 			"pattern": "guild-notice-read"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6284,
+			"line": 6330,
 			"pattern": "guild-notice-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6285,
+			"line": 6331,
 			"pattern": "guild-notice-scroll-up"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6285,
+			"line": 6331,
 			"pattern": "guild-notice-scroll-down"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6287,
+			"line": 6333,
 			"pattern": "guild-dialog:authority"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6291,
+			"line": 6337,
 			"pattern": "guild-grant:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6294,
+			"line": 6340,
 			"pattern": "guild-grant-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6294,
+			"line": 6340,
 			"pattern": "guild-grant-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6295,
+			"line": 6341,
 			"pattern": "guild-grant-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6296,
+			"line": 6342,
 			"pattern": "guild-grant-ok"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6300,
+			"line": 6346,
 			"pattern": "guild-grant-cancel"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6301,
+			"line": 6347,
 			"pattern": "guild-dialog:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6309,
+			"line": 6355,
 			"pattern": "guild-dialog-close"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6310,
+			"line": 6356,
 			"pattern": "guild-role-choice:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6312,
+			"line": 6358,
 			"pattern": "guild-sort:126"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6313,
+			"line": 6359,
 			"pattern": "guild-sort:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6318,
+			"line": 6364,
 			"pattern": "alchemy-count:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6320,
+			"line": 6366,
 			"pattern": "alchemy-all"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6328,
+			"line": 6374,
 			"pattern": "shop-trade"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6344,
+			"line": 6390,
 			"pattern": "mount"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6346,
+			"line": 6392,
 			"pattern": "pickup"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6348,
+			"line": 6394,
 			"pattern": "attack"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6350,
+			"line": 6396,
 			"pattern": "party-target:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6352,
+			"line": 6398,
 			"pattern": "self-target"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6355,
+			"line": 6401,
 			"pattern": "clear-target"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6356,
+			"line": 6402,
 			"pattern": "target-structure-remove"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6369,
+			"line": 6415,
 			"pattern": "inventory-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6379,
+			"line": 6425,
 			"pattern": "inventory-prev"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6380,
+			"line": 6426,
 			"pattern": "inventory-page:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6381,
+			"line": 6427,
 			"pattern": "equipment-view"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 6385,
+			"line": 6431,
 			"pattern": "avatar:"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6386,
+			"line": 6432,
 			"pattern": "doll-left"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6387,
+			"line": 6433,
 			"pattern": "doll-right"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6388,
+			"line": 6434,
 			"pattern": "doll-reset"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6389,
+			"line": 6435,
 			"pattern": "server-next"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 6390,
+			"line": 6436,
 			"pattern": "server-prev"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6539,
+			"line": 6585,
 			"pattern": "item-mall-point-value"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6542,
+			"line": 6588,
 			"pattern": "item-mall-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6567,
+			"line": 6613,
 			"pattern": "item-mall"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6590,
+			"line": 6636,
 			"pattern": "notice-dialog-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6596,
+			"line": 6642,
 			"pattern": "notice-dialog-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6636,
+			"line": 6682,
 			"pattern": "specialty-allbuy-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6654,
+			"line": 6700,
 			"pattern": "cos-allsell-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6654,
+			"line": 6700,
 			"pattern": "cos-allsell-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6663,
+			"line": 6709,
 			"pattern": "cos-allsell-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6679,
+			"line": 6725,
 			"pattern": "shop-warning-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6687,
+			"line": 6733,
 			"pattern": "shop-warning-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6712,
+			"line": 6758,
 			"pattern": "recall-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6720,
+			"line": 6766,
 			"pattern": "recall-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6737,
+			"line": 6783,
 			"pattern": "fortress-production-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6750,
+			"line": 6796,
 			"pattern": "fortress-production-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6771,
+			"line": 6817,
 			"pattern": "fortress-map-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6779,
+			"line": 6825,
 			"pattern": "fortress-map-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6807,
+			"line": 6853,
 			"pattern": "fortress-tax-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6820,
+			"line": 6866,
 			"pattern": "fortress-tax-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6854,
+			"line": 6900,
 			"pattern": "fortress-staff-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6862,
+			"line": 6908,
 			"pattern": "fortress-staff-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6878,
+			"line": 6924,
 			"pattern": "fortress-war-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6886,
+			"line": 6932,
 			"pattern": "fortress-war-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6905,
+			"line": 6951,
 			"pattern": "guild-manager-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6915,
+			"line": 6961,
 			"pattern": "guild-manager-text"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6925,
+			"line": 6971,
 			"pattern": "guild-election-pick:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6934,
+			"line": 6980,
 			"pattern": "guild-election-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 6950,
+			"line": 6996,
 			"pattern": "guild-transfer-member:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6960,
+			"line": 7006,
 			"pattern": "guild-transfer-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 6976,
+			"line": 7022,
 			"pattern": "guild-manager-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7063,
+			"line": 7109,
 			"pattern": "job-confirm-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7071,
+			"line": 7117,
 			"pattern": "job-confirm-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7091,
+			"line": 7137,
 			"pattern": "academy-confirm-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7099,
+			"line": 7145,
 			"pattern": "academy-confirm-yes"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7112,
+			"line": 7158,
 			"pattern": "academy-judge-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7112,
+			"line": 7158,
 			"pattern": "academy-judge-close"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7118,
+			"line": 7164,
 			"pattern": "academy-judge-select:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7125,
+			"line": 7171,
 			"pattern": "academy-judge-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7140,
+			"line": 7186,
 			"pattern": "specialty-deal-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7153,
+			"line": 7199,
 			"pattern": "specialty-deal-scale"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7158,
+			"line": 7204,
 			"pattern": "specialty-deal-row:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7165,
+			"line": 7211,
 			"pattern": "specialty-deal-ok"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7177,
+			"line": 7223,
 			"pattern": "wholechat-exit"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7177,
+			"line": 7223,
 			"pattern": "wholechat-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7191,
+			"line": 7237,
 			"pattern": "wholechat-use"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7203,
+			"line": 7249,
 			"pattern": "rename-exit"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7203,
+			"line": 7249,
 			"pattern": "rename-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7217,
+			"line": 7263,
 			"pattern": "rename-use"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7230,
+			"line": 7276,
 			"pattern": "job-alias-no"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7244,
+			"line": 7290,
 			"pattern": "job-alias-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7244,
+			"line": 7290,
 			"pattern": "job-alias-close"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7250,
+			"line": 7296,
 			"pattern": "job-alias-text"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7255,
+			"line": 7301,
 			"pattern": "job-alias-check"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7272,
+			"line": 7318,
 			"pattern": "job-alias-ok"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7285,
+			"line": 7331,
 			"pattern": "repair-all-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7293,
+			"line": 7339,
 			"pattern": "repair-all-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7327,
+			"line": 7373,
 			"pattern": "mall-use-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7335,
+			"line": 7381,
 			"pattern": "mall-use-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7354,
+			"line": 7400,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7375,
+			"line": 7421,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7387,
+			"line": 7433,
 			"pattern": "structure-remove-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7395,
+			"line": 7441,
 			"pattern": "structure-remove-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7411,
+			"line": 7457,
 			"pattern": "cos-clean-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7419,
+			"line": 7465,
 			"pattern": "cos-clean-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7434,
+			"line": 7480,
 			"pattern": "map-teleport-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7442,
+			"line": 7488,
 			"pattern": "map-teleport-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7472,
+			"line": 7518,
 			"pattern": "buff-dismiss-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7480,
+			"line": 7526,
 			"pattern": "buff-dismiss-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7503,
+			"line": 7549,
 			"pattern": "academy-buff-pass-cancel"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7511,
+			"line": 7557,
 			"pattern": "academy-buff-pass-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7537,
+			"line": 7583,
 			"pattern": "ground-drop-"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7562,
+			"line": 7608,
 			"pattern": "party-answer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7562,
+			"line": 7608,
 			"pattern": "party-form-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7567,
+			"line": 7613,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7576,
+			"line": 7622,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7580,
+			"line": 7626,
 			"pattern": "shop-dialog-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 7701,
+			"line": 7747,
 			"pattern": "stall-prompt-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7813,
+			"line": 7859,
 			"pattern": "letter-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7827,
+			"line": 7873,
 			"pattern": "friend-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 7841,
+			"line": 7887,
 			"pattern": "blocking-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8032,
+			"line": 8078,
 			"pattern": "quest-detail-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8040,
+			"line": 8086,
 			"pattern": "quest-detail-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8106,
+			"line": 8152,
 			"pattern": "ext-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8128,
+			"line": 8174,
 			"pattern": "skill:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8128,
+			"line": 8174,
 			"pattern": "pet-skill:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8129,
+			"line": 8175,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8130,
+			"line": 8176,
 			"pattern": "action:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8150,
+			"line": 8196,
 			"pattern": "ext-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8157,
+			"line": 8203,
 			"pattern": "map-town:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8168,
+			"line": 8214,
 			"pattern": "experimental-scroll-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8184,
+			"line": 8230,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8199,
+			"line": 8245,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8213,
+			"line": 8259,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8214,
+			"line": 8260,
 			"pattern": "avatar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8220,
+			"line": 8266,
 			"pattern": "pet-gear:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8256,
+			"line": 8302,
 			"pattern": "gacha-card"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8256,
+			"line": 8302,
 			"pattern": "gacha-bag:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8258,
+			"line": 8304,
 			"pattern": "gacha-card"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8268,
+			"line": 8314,
 			"pattern": "stall-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8279,
+			"line": 8325,
 			"pattern": "storage-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8315,
+			"line": 8361,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8350,
+			"line": 8396,
 			"pattern": "avatar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8546,
+			"line": 8592,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8566,
+			"line": 8612,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8571,
+			"line": 8617,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8577,
+			"line": 8623,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8577,
+			"line": 8623,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8591,
+			"line": 8637,
 			"pattern": "guild-notice-scroll-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8604,
+			"line": 8650,
 			"pattern": "war-combo-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8606,
+			"line": 8652,
 			"pattern": "war-members-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8634,
+			"line": 8680,
 			"pattern": "potion-combo-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8650,
+			"line": 8696,
 			"pattern": "experimental-scroll-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8664,
+			"line": 8710,
 			"pattern": "option-video-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8673,
+			"line": 8719,
 			"pattern": "option-input-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8679,
+			"line": 8725,
 			"pattern": "option-scroll:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8707,
+			"line": 8753,
 			"pattern": "gacha-card"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8728,
+			"line": 8774,
 			"pattern": "npc-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 8728,
+			"line": 8774,
 			"pattern": "window-drag:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8745,
+			"line": 8791,
 			"pattern": "resurrection-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8756,
+			"line": 8802,
 			"pattern": "instance-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8766,
+			"line": 8812,
 			"pattern": "invite-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8775,
+			"line": 8821,
 			"pattern": "disconnect-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8786,
+			"line": 8832,
 			"pattern": "rebirth-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8799,
+			"line": 8845,
 			"pattern": "main-popup-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8809,
+			"line": 8855,
 			"pattern": "system-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8819,
+			"line": 8865,
 			"pattern": "disconnect-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8822,
+			"line": 8868,
 			"pattern": "disconnect-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8825,
+			"line": 8871,
 			"pattern": "disconnect-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8828,
+			"line": 8874,
 			"pattern": "disconnect-confirm"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8858,
+			"line": 8904,
 			"pattern": "skill-scroll-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8859,
+			"line": 8905,
 			"pattern": "quest-scroll-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8900,
+			"line": 8946,
 			"pattern": "fortress-map-pan"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8912,
+			"line": 8958,
 			"pattern": "guide-index-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8920,
+			"line": 8966,
 			"pattern": "guide-thumb"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 8928,
+			"line": 8974,
 			"pattern": "guide-drag"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9033,
+			"line": 9079,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9038,
+			"line": 9084,
 			"pattern": "shop-offer:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9081,
+			"line": 9127,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9097,
+			"line": 9143,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9097,
+			"line": 9143,
 			"pattern": "storage-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9124,
+			"line": 9170,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9125,
+			"line": 9171,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9141,
+			"line": 9187,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9149,
+			"line": 9195,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9177,
+			"line": 9223,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9177,
+			"line": 9223,
 			"pattern": "cos-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9179,
+			"line": 9225,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9207,
+			"line": 9253,
 			"pattern": "pet-gear:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9219,
+			"line": 9265,
 			"pattern": "cos-status:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9230,
+			"line": 9276,
 			"pattern": "cos-command:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9234,
+			"line": 9280,
 			"pattern": "action:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9238,
+			"line": 9284,
 			"pattern": "skill:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9242,
+			"line": 9288,
 			"pattern": "hotbar:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9247,
+			"line": 9293,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9247,
+			"line": 9293,
 			"pattern": "storage-slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9263,
-			"pattern": "slot:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9279,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9303,
-			"pattern": "avatar:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9310,
-			"pattern": "action:"
-		},
-		{
-			"fn": "event",
-			"kind": "prefix",
-			"line": 9314,
+			"line": 9309,
 			"pattern": "slot:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
 			"line": 9325,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9349,
+			"pattern": "avatar:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9356,
+			"pattern": "action:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9360,
+			"pattern": "slot:"
+		},
+		{
+			"fn": "event",
+			"kind": "prefix",
+			"line": 9371,
 			"pattern": "server:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9341,
+			"line": 9387,
 			"pattern": "party-search-"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9347,
+			"line": 9393,
 			"pattern": "party-form-"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9353,
+			"line": 9399,
 			"pattern": "experimental-ui-scale"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9357,
+			"line": 9403,
 			"pattern": "option-audio:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9363,
+			"line": 9409,
 			"pattern": "companion-potion-percent:"
 		},
 		{
 			"fn": "event",
 			"kind": "prefix",
-			"line": 9368,
+			"line": 9414,
 			"pattern": "potion-percent:"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9380,
+			"line": 9426,
 			"pattern": "blocking-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9382,
+			"line": 9428,
 			"pattern": "pet-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9384,
+			"line": 9430,
 			"pattern": "friend-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9386,
+			"line": 9432,
 			"pattern": "letter-receiver"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9390,
+			"line": 9436,
 			"pattern": "academy-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9391,
+			"line": 9437,
 			"pattern": "alchemy-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9395,
+			"line": 9441,
 			"pattern": "shop-quantity"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9409,
+			"line": 9455,
 			"pattern": "split-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9412,
+			"line": 9458,
 			"pattern": "exchange-count"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9415,
+			"line": 9461,
 			"pattern": "gold-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9431,
+			"line": 9477,
 			"pattern": "social-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9432,
+			"line": 9478,
 			"pattern": "social-subject"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9433,
+			"line": 9479,
 			"pattern": "social-contents"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9434,
+			"line": 9480,
 			"pattern": "social-amount"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9437,
+			"line": 9483,
 			"pattern": "war-name"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9437,
+			"line": 9483,
 			"pattern": "war-money"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9441,
+			"line": 9487,
 			"pattern": "exchange-gold"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9443,
+			"line": 9489,
 			"pattern": "gm-input"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9444,
+			"line": 9490,
 			"pattern": "chat-text"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9446,
+			"line": 9492,
 			"pattern": "chat-target"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9447,
+			"line": 9493,
 			"pattern": "account"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9448,
+			"line": 9494,
 			"pattern": "password"
 		},
 		{
 			"fn": "event",
 			"kind": "exact",
-			"line": 9449,
+			"line": 9495,
 			"pattern": "endpoint"
 		}
 	],
 	"source": "src/engine/runtime/ui/ui.ts",
 	"summary": {
-		"fields": 309,
-		"routes": 776,
-		"sharedFields": 245
+		"fields": 311,
+		"routes": 778,
+		"sharedFields": 247
 	}
 }

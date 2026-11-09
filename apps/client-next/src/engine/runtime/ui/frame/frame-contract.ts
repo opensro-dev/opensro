@@ -15,6 +15,7 @@ import type { PanelCloseId } from "@/engine/foundation/ui/panels";
 import type { PortalCatalog } from "@/engine/foundation/gameplay/portal";
 import type { TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import type { MallNotify } from "@/engine/foundation/ui/mall-notify";
+import type { EventInterfaceData } from "@/engine/foundation/ui/event-interface";
 import type { JobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import type { ActionSlot } from "@/engine/foundation/ui/action-layout";
@@ -46,6 +47,9 @@ export interface HudData {
 	// levelgold.txt column 2 by level: the trade scale's basis (649050).
 	readonly tradeGoldBases: Readonly<Record<number, number>>;
 	readonly mallNotify: MallNotify;
+	// CIFEventInterface's three layouts (547750); PC-room and winter are
+	// null when the later import never published them.
+	readonly eventInterface: EventInterfaceData;
 	// config\command.txt: the debug console's command names by id (68D9C0).
 	readonly commandTable: ReadonlyMap<string, number>;
 	// config\cameradata.txt rows: the /cw* waypoint store's keyframes (#1716).

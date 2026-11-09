@@ -83,7 +83,7 @@ func (ops *MonsterMoverOps) DevelopmentMoveLeader(division string, gid uint32, d
 		return nil, fmt.Errorf("leader not script-idle")
 	}
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
-	return ops.commitSegment(division, instance, mover, destination, instance.RunSpeed(), wire.MoveStateRun, now), nil
+	return ops.commitSegment(division, &instance, mover, destination, instance.RunSpeed(), wire.MoveStateRun, now), nil
 }
 
 /*

@@ -639,6 +639,10 @@ characters' legacy per-character counts (schema 34 fields above).
 type HalloweenBoxAccount struct {
 	Day   int64 `json:"day"`
 	Count int64 `json:"count"`
+	// GourdCount is the day's Gourd-kill boxes, under their own cap
+	// (progression.HalloweenGourdBoxDailyCap, #2950). Rows written
+	// before it existed decode it as zero.
+	GourdCount int64 `json:"gourdCount"`
 }
 
 /*

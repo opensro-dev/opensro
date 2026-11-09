@@ -93,10 +93,15 @@ to a farther candidate. The fixed query always uses selectors 1/2, so a
 fixed-query row's 0x100 bit does not select the 0x11/5 query.
 ==================
 */
-func (ops *MonsterMoverOps) acquireSightTarget(division string, instance monster.Instance, from monster.Pose, players []playerPose, tactics monster.Tactics) (playerPose, bool) {
+func (ops *MonsterMoverOps) acquireSightTarget(division string, instance *monster.Instance, from monster.Pose, players []playerPose, tactics monster.Tactics) (playerPose, bool) {
 	query := instance
 	if instance.Nest.HasControls && instance.Nest.Controls.FixedQuery() {
-		query.Nest.NativeTacticsFlags &^= 0x100
+		// The clear is the query's own: the caller reads the actor
+		// by pointer into the leg view (#2982) under a read-only
+		// contract, so it lands in a copy that dies with the call.
+		cleared := *instance
+		cleared.Nest.NativeTacticsFlags &^= 0x100
+		query = &cleared
 	}
 	target, found := nearestEligiblePlayer(query, from, players, tactics.SightRange)
 	if !found {
@@ -124,7 +129,7 @@ against the new target. A forced registration cannot fail here, so the abandon
 return is unreachable.
 ==================
 */
-func (ops *MonsterMoverOps) switchToSecondaryOpponent(division string, instance monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
+func (ops *MonsterMoverOps) switchToSecondaryOpponent(division string, instance *monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
 	if !instance.Nest.HasControls || !instance.Nest.Controls.FixedQuery() {
 		return false
 	}
@@ -196,7 +201,7 @@ valid and at least vehicleRedirectMargin closer, and the target set takes
 it (forced by the flag). BATTLE then ends its tick (return 2).
 ==================
 */
-func (ops *MonsterMoverOps) redirectToVehicle(division string, instance monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
+func (ops *MonsterMoverOps) redirectToVehicle(division string, instance *monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
 	if !instance.Nest.HasControls {
 		return false
 	}

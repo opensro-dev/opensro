@@ -9,6 +9,15 @@ mip generation, and the samplers they bind.
 ===========================================================================
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
+import { MSAA_SAMPLE_COUNT } from "./msaa";
+import {
+	WATER_BEHIND_WEIGHT,
+	WATER_REFLECTION_MIX,
+	WATER_REFRACTION_STRENGTH,
+	WATER_SHORE_BAND,
+	WATER_SHORE_FOAM,
+	WATER_SKIN_BLENDED
+} from "./water-refraction";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
@@ -28,6 +37,35 @@ import {
 	type BlendPair,
 	validBlend
 } from "@/engine/foundation/rendering/blend-state";
+
+/*
+================
+SceneSurface
+
+The scene target a scene-drawing pipeline renders into: the HDR stage's
+float intermediate (sceneFloat) and the MSAA stage's sample count
+(msaa). Both absent is the native canvas-format, single-sampled target.
+fullscreenPreview selects the geometry family's coverage-alpha sibling
+for the HDR preview pass.
+================
+*/
+export interface SceneSurface {
+	readonly sceneFloat?: boolean;
+	readonly msaa?: boolean;
+	readonly fullscreenPreview?: boolean;
+}
+
+/*
+================
+sceneStageKey
+
+The one cache key for a surface's stage pair: the sky and image pipeline
+families here and the device's sky draws (device.ts) key by it.
+================
+*/
+export function sceneStageKey( { sceneFloat = false, msaa = false }: SceneSurface ) {
+	return (sceneFloat ? "hdr" : "ldr") + (msaa ? "|msaa" : "");
+}
 
 // The pair a material that blends without naming one draws with.
 export const DEFAULT_BLEND: BlendPair = Object.freeze( {
@@ -295,9 +333,45 @@ fn skyNoise(p:vec2f)->f32{
 		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
 	} );
 	let skyPipeline: GPURenderPipeline | null = null;
-	// Lazy HDR siblings: like the float bloom chain, they compile only on
-	// first enabled use, so a native-only device never pays for them.
-	let skyFloatPipeline: GPURenderPipeline | null = null, imageFloatPipeline: GPURenderPipeline | null = null;
+	// Lazy HDR/MSAA siblings: like the float bloom chain, they compile only
+	// on first enabled use, so a native-only device never pays for them.
+	// The stage formats and sample counts pair up, so each family keeps one
+	// lazily-filled map keyed by the pair.
+	const skyStagePipelines = new Map<string, GPURenderPipeline>(),
+		imageStagePipelines = new Map<string, GPURenderPipeline>();
+	/*
+	================
+	stageSibling
+
+	The sky or fullscreen image pipeline for a non-native scene surface,
+	compiled on first use into its family's map. Both families share one
+	shape: a fullscreen draw that never tests or writes depth.
+	================
+	*/
+	function stageSibling(
+		family: Map<string, GPURenderPipeline>,
+		module: GPUShaderModule,
+		{ sceneFloat = false, msaa = false }: SceneSurface
+	) {
+		const key = sceneStageKey( { sceneFloat, msaa } );
+		let selected = family.get( key );
+		if ( !selected ) {
+			selected = created.createRenderPipeline( {
+				layout: "auto",
+				vertex: { module, entryPoint: "vs" },
+				fragment: {
+					module,
+					entryPoint: "fs",
+					targets: [ { format: sceneFloat ? SCENE_FLOAT_FORMAT : format } ]
+				},
+				primitive: { topology: "triangle-list" },
+				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+				multisample: { count: msaa ? MSAA_SAMPLE_COUNT : 1 }
+			} );
+			family.set( key, selected );
+		}
+		return selected;
+	}
 	const geometryShader = created.createShaderModule( {
 		code: environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
@@ -354,6 +428,13 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // ambient-occlusion.ts after the scene. While the stage is off every
 // draw binds a 1x1 white view and the gated read below never samples
 // it, so the native frame is untouched.
+// Port-only water refraction (device/water-refraction.ts): the frame's
+// colour before the blended water drew, and the view-space depth behind
+// each pixel (r32float: a depth attachment cannot be sampled while
+// attached). While the row is off every draw binds the 1x1 white view
+// and the stage-gated branch below never samples either.
+@group(0) @binding(16) var sceneBehind:texture_2d<f32>;
+@group(0) @binding(17) var sceneBehindDepth:texture_2d<f32>;
 @group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
 fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
  let size=vec2i(textureDimensions(ambientOcclusionMap));
@@ -400,6 +481,14 @@ struct WaterPass {matrix:mat4x4f,plane:vec4f,bump:vec4f,projection:vec4f}
 // 8BA130: stage 0 bump clamps; stage 1 reflection wraps. Both filter linearly.
 @group(0) @binding(11) var waterBumpSampler:sampler;
 @group(0) @binding(12) var waterMirrorSampler:sampler;
+// The water's bump offset: the dudv pair of stage 0's bump map, turned by
+// the pass's bump matrix. 8BA130 cell corners use bump UV (0,1)..(1,0);
+// ordinary water tiles four times. Water without a bump map is flat.
+fn waterBumpOffset(uv:vec2f)->vec2f{
+ if(material.reflection.w<0.5){return vec2f(0);}
+ let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+ return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
+}
 struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
@@ -437,10 +526,17 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  let ambientFactor=select(material.ambient.rgb,o.materialTint,material.policy.w>0.5);
 	var illumination=diffuseFactor*env.diffuse.rgb*max(0.0,dot(lightingNormal,lightDirection()))+env.ambient.rgb*ambientFactor*material.lighting.x;
  let light=instances[i];
- if(nativeCharacterLighting&&(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0)))){
+ // The row's point light is a native per-actor input, not a mode: a
+ // bound descriptor lights (RenderLight_ApplyLight1 0xA5A7F0), a zero
+ // row disables, exactly as the dungeon pass binds each block's nearest
+ // authored light per entity. The falloff is the descriptor's quadratic
+ // 1/(c + l*d + q*d*d) over the three packed w terms; effect lights pack
+ // c = q = 0 and keep their authored 1/(k*d).
+ if(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0))){
   let localLight=transpose(cofactors)*(light.pointPosition.xyz-instance[3].xyz)/select(1.0,determinant,determinant!=0.0);
   let delta=localLight-p.xyz;let distance=length(delta);let normalObject=select(n.xyz,normalize(n.xyz),material.skin.x!=0);
-  let lambert=select(0.0,max(0.0,dot(normalObject,delta/max(distance,0.000001)))/max(light.pointPosition.w*distance,0.000001),distance>0.0);
+  let falloff=1.0/max(light.pointPosition.w+light.pointAmbient.w*distance+light.pointDiffuse.w*distance*distance,0.000001);
+  let lambert=select(0.0,max(0.0,dot(normalObject,delta/max(distance,0.000001)))*falloff,distance>0.0);
   illumination+=light.pointAmbient.rgb+diffuseFactor*light.pointDiffuse.rgb*lambert;
  }
  o.objectLighting=clamp(illumination,vec3f(0),vec3f(1));
@@ -469,9 +565,7 @@ fn shadeGeometry(input:Out)->vec4f {
  var objectLightmap=vec3f(1);
  if(material.stagePolicy.z>0.5){objectLightmap=textureSample(sphereMap,waterBumpSampler,input.maskUV,0).rgb;}
  var waterColor=vec3f(0);
- if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;var offset=vec2f(0);
- // 8BA130 cell corners use bump UV (0,1)..(1,0); ordinary water tiles four times.
- if(material.reflection.w>0.5){let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;offset=vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));}
+ if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;let offset=waterBumpOffset(input.uv);
  waterColor=textureSampleLevel(waterMirror,waterMirrorSampler,projected*waterPass.projection.xy+waterPass.projection.zw+offset,0).rgb;}
  let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
  if(material.skin.w>0){let k=material.skin.w;
@@ -506,8 +600,8 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same
  // terms per pixel from the interpolated, skinned world normal. The vertex
- // point-light path (NATIVE_CHARACTER_LIGHTING) stays per-vertex: it is a
- // compatibility mode of its own and is off.
+ // point-light term above stays per-vertex: the row carries the bound
+ // descriptor and per-vertex is how the native pass consumes it.
  if(env.stages2.z>0.5&&material.lighting.y>0.5){
   surfaceLight=illumination;
  }
@@ -619,7 +713,28 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
+ if(animated&&waterPass.plane.w<0.5){
+  if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
+   // Port-only refraction (stages.z, device/water-refraction.ts): the
+   // blended water draws after a copy of the opaque frame, so it bends
+   // what lies under the surface by its own bump offset and whitens
+   // where the depth behind it comes within the shore band of its own
+   // (input.viewZ, view-space metres like the copy). The planar
+   // reflection, or the water's own lit texture without a mirror, stays
+   // the surface term it natively is.
+   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
+   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
+   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
+   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
+   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
+   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
+   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
+  }else if(waterPass.plane.z>0.5){
+   // Native: the planar reflection where a mirror exists, the water's lit
+   // texture untouched where one does not.
+   lit=waterColor;
+  }
+ }
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,
@@ -763,46 +878,40 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
 		lightmapSampling( anisotropic: boolean ) {
 			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
 		},
-		sky( sceneFloat = false ) {
-			if ( !sceneFloat ) return skyPipeline!;
-			skyFloatPipeline ??= created.createRenderPipeline( {
-				layout: "auto",
-				vertex: { module: skyShader, entryPoint: "vs" },
-				fragment: { module: skyShader, entryPoint: "fs", targets: [ { format: SCENE_FLOAT_FORMAT } ] },
-				primitive: { topology: "triangle-list" },
-				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
-			} );
-			return skyFloatPipeline;
+		sky( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return skyPipeline!;
+			return stageSibling( skyStagePipelines, skyShader, surface );
 		},
 		mips: () => mipPipeline!,
-		image( sceneFloat = false ) {
-			if ( !sceneFloat ) return pipeline!;
-			imageFloatPipeline ??= created.createRenderPipeline( {
-				layout: "auto",
-				vertex: { module: shader, entryPoint: "vs" },
-				fragment: { module: shader, entryPoint: "fs", targets: [ { format: SCENE_FLOAT_FORMAT } ] },
-				primitive: { topology: "triangle-list" },
-				depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
-			} );
-			return imageFloatPipeline;
+		image( surface: SceneSurface = {} ) {
+			if ( !surface.sceneFloat && !surface.msaa ) return pipeline!;
+			return stageSibling( imageStagePipelines, shader, surface );
 		},
 		/*
 ================
 geometry
 
 The geometry pipeline for state, compiled on first use. The HDR stage's
-rgba16float sibling compiles lazily under the same rule.
+rgba16float sibling and the MSAA stage's 4x sibling compile lazily under
+the same rule.
 ================
 		*/
-		geometry( state: GeometryPipelineState, sceneFloat = false, fullscreenPreview = false ) {
+		geometry(
+			state: GeometryPipelineState,
+			{ sceneFloat = false, fullscreenPreview = false, msaa = false }: SceneSurface = {}
+		) {
 			const previewCoverage = sceneFloat && fullscreenPreview;
 			const key = geometryPipelineKey( state ) + (sceneFloat ? "|hdr" : "") +
-				(previewCoverage ? "|preview" : "");
+				(previewCoverage ? "|preview" : "") + (msaa ? "|msaa" : "");
 			let selected = geometryPipelines.get( key );
 			if ( !selected ) {
-				selected = created.createRenderPipeline(
-					geometryDescriptor( state, sceneFloat ? SCENE_FLOAT_FORMAT : format, previewCoverage )
+				const descriptor = geometryDescriptor(
+					state,
+					sceneFloat ? SCENE_FLOAT_FORMAT : format,
+					previewCoverage
 				);
+				if ( msaa ) descriptor.multisample = { count: MSAA_SAMPLE_COUNT };
+				selected = created.createRenderPipeline( descriptor );
 				geometryPipelines.set( key, selected );
 			}
 			return selected;

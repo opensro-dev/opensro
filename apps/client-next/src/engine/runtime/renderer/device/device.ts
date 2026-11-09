@@ -16,6 +16,8 @@ import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
 import { createAmbientOcclusion } from "./ambient-occlusion";
+import { createWaterRefraction } from "./water-refraction";
+import { createMsaa, MSAA_SAMPLE_COUNT } from "./msaa";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -23,10 +25,10 @@ import { createGpuTiming } from "./timing";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
-import { createPipelines } from "./pipelines";
+import { createPipelines, sceneStageKey, type SceneSurface } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
-import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import { ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES, frameStages, packStages } from "./environment-block";
 import { isOutOfMemoryRefusal } from "@/engine/foundation/rendering/device-recovery";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
@@ -84,15 +86,29 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	// Experimental > Image / World / Lighting. All off is the native frame:
 	// the plain copy to the swapchain, retail samplers, env.stages zero and
 	// env.stages2 zero.
-	let finishEnabled = false, anisotropic = false, bloomFloat = false, hdrOn = false, sunShadowOn = false;
-	const stages = new Float32Array( 8 );
+	let finishEnabled = false,
+		anisotropic = false,
+		bloomFloat = false,
+		hdrOn = false,
+		sunShadowOn = false,
+		msaaOn = false;
+	const stages = new Float32Array( 8 ), frameStageWords = new Float32Array( 8 );
+	/*
+	================
+	sceneFormat
+
+	The format every scene target renders in: the canvas format, or the
+	HDR stage's float intermediate while that stage is on.
+	================
+	*/
+	const sceneFormat = (): GPUTextureFormat => hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat();
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
 		sky: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
-		skyFloat: import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw | null = null,
+		skyStages = new Map<string, import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw>(),
 		skyFactory:
-			| (( sceneFloat: boolean ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw)
+			| (( surface: SceneSurface ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw)
 			| null = null;
 	let geometry: ReturnType<typeof createGeometryResources> | null = null,
 		animation: ReturnType<typeof createGpuAnimationResources> | undefined,
@@ -104,6 +120,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
 	let occlusion: ReturnType<typeof createAmbientOcclusion> | null = null;
+	let waterStage: ReturnType<typeof createWaterRefraction> | null = null;
+	let msaaStage: ReturnType<typeof createMsaa> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
@@ -265,9 +283,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 						current().createRenderBundleEncoder( {
 							label: "retained-scene",
 							// Scene bundles execute into the frame's scene target: the
-							// canvas format, or the HDR stage's float intermediate.
-							colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
-							...(depth ? { depthStencilFormat: "depth24plus" as const } : {})
+							// canvas format, or the HDR stage's float intermediate, at
+							// the MSAA stage's sample count when that row is on.
+							colorFormats: [ scene ? sceneFormat() : navigator.gpu.getPreferredCanvasFormat() ],
+							...(depth ? { depthStencilFormat: "depth24plus" as const } : {}),
+							...(scene && msaaOn ? { sampleCount: MSAA_SAMPLE_COUNT } : {})
 						} )
 					),
 				/*
@@ -393,7 +413,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				fail,
 				// The fullscreen image draws in the main pass, so its pipeline
 				// follows the scene format the HDR stage selects.
-				pipeline: () => pipelines.image( hdrOn ),
+				pipeline: () => pipelines.image( { sceneFloat: hdrOn, msaa: msaaOn } ),
 				sampler: pipelines.sampler,
 
 				/*
@@ -468,9 +488,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				retirement.retire,
 				pipelines.lightmapSampling
 			);
-			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), () => (
-				hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat()
-			), retirement.retire );
+			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), sceneFormat, retirement.retire );
 
 			thunder = createThunder( created, navigator.gpu.getPreferredCanvasFormat() );
 
@@ -481,6 +499,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
 			occlusion = createAmbientOcclusion( created, retirement.retire );
+			waterStage = createWaterRefraction( created, retirement.retire );
+			msaaStage = createMsaa( created, retirement.retire );
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
@@ -493,8 +513,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			HDR stage's float sibling lazily on first use.
 			================
 			*/
-			const skyDraw = ( sceneFloat: boolean ) => {
-				const pipeline = pipelines.sky( sceneFloat );
+			const skyDraw = ( surface: SceneSurface ) => {
+				const pipeline = pipelines.sky( surface );
 				return {
 					pipeline,
 					binding: created.createBindGroup( {
@@ -514,11 +534,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				finish.ready
 			] ).then( () => {
 				if ( generation === epoch && phase === "starting" ) {
-					sky = skyDraw( false );
+					skyStages.clear();
+					sky = skyDraw( {} );
 					skyFactory = skyDraw;
 					phase = "running";
 					geometry!.textureOptions( textureFiltered, textureDetail, anisotropic );
-					geometry!.sceneBindings( hdrOn );
+					geometry!.sceneBindings( hdrOn, msaaOn );
 					geometry!.refreshShadowBindings( sunShadowOn );
 				}
 			} ).catch( fail );
@@ -598,6 +619,48 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		},
 		/*
 		================
+		waterRefraction
+
+		The experimental refracted water stage (port-only, not native;
+		device/water-refraction.ts): its copy targets prepared per frame in
+		the scene format against the camera's near/far, and their views
+		installed as geometry bindings 16/17 whenever they change. While
+		off it owns nothing and the bindings fall back to the white view.
+		================
+		*/
+		waterRefraction(
+			width: number,
+			height: number,
+			enabled: boolean,
+			camera: import("@/engine/contracts/scene").WorldCamera
+		) {
+			if ( phase !== "running" || !waterStage ) throw Error( "Water refraction device is not ready" );
+			const stage = waterStage.prepare( width, height, sceneFormat(), enabled, camera );
+			geometry?.refreshWaterRefraction( stage?.colourView ?? null, stage?.depthView ?? null );
+			return stage;
+		},
+		/*
+		================
+		msaa
+
+		Prepare the 4x scene buffers only after device initialization
+		succeeds. The format follows the stage chain's own scene target: the
+		HDR intermediate's float format when that stage is on, the canvas
+		format otherwise (the bloom capture and the render-scale frame keep
+		the canvas format; the float chain lives past the scene view).
+		================
+		*/
+		msaa( width, height, enabled ) {
+			if ( phase !== "running" || !msaaStage ) throw Error( "MSAA device is not ready" );
+			return msaaStage.prepare(
+				width,
+				height,
+				sceneFormat(),
+				enabled && msaaOn
+			);
+		},
+		/*
+		================
 		sunShadow
 
 		The experimental cascade owner, created by the geometry resources on
@@ -658,27 +721,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		experimentalVideo( value ) {
 			finishEnabled = value.postProcessing;
 			bloomFloat = value.floatBloom;
-			stages.set( [
-				value.heightFog ? 1 : 0,
-				value.dynamicSun ? 1 : 0,
-				// z was terrain relief, removed at the owner's request
-				// (2026-10-11); w was the textured horizon, and now gates the
-				// port-only sky detail (clouds, glow, rim).
-				0,
-				value.skyDetail ? 1 : 0,
-				value.hdrToneMap ? 1 : 0,
-				value.sunShadow ? 1 : 0,
-				value.perPixelLighting ? 1 : 0,
-				value.ambientOcclusion ? 1 : 0
-			] );
-			// The HDR stage flips every scene target's format: geometry
-			// re-pipelines, the mirror reformats, the portraits retire.
-			if ( hdrOn !== value.hdrToneMap && phase === "running" ) {
-				hdrOn = value.hdrToneMap;
-				skyFloat = null;
-				geometry?.sceneBindings( hdrOn );
-				ui?.releasePortraits();
-			} else hdrOn = value.hdrToneMap;
+			packStages( stages, value );
+			// The HDR stage flips every scene target's format and the MSAA
+			// stage its sample count: geometry re-pipelines and the mirror
+			// reformats once for both, so flipping the two rows together
+			// walks the live draws once. Only the format retires portraits.
+			const hdrChanged = hdrOn !== value.hdrToneMap, msaaChanged = msaaOn !== value.msaa;
+			hdrOn = value.hdrToneMap;
+			msaaOn = value.msaa;
+			if ( (hdrChanged || msaaChanged) && phase === "running" ) {
+				skyStages.clear();
+				geometry?.sceneBindings( hdrOn, msaaOn );
+				if ( hdrChanged ) ui?.releasePortraits();
+			}
 			// The cascade toggling only changes bindings 13/14's view.
 			const shadowWasOn = sunShadowOn;
 			sunShadowOn = value.sunShadow;
@@ -731,13 +786,20 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		================
 		sky
 
-		Expose the current sky draw without transferring its resource ownership.
+		Expose the current sky draw without transferring its resource
+		ownership: the native pipeline at startup, the HDR float and MSAA
+		siblings lazily per enabled stage.
 		================
 		*/
 		sky: () => {
-			if ( !hdrOn || !skyFactory ) return sky;
-			skyFloat ??= skyFactory( true );
-			return skyFloat;
+			if ( !skyFactory || (!hdrOn && !msaaOn) ) return sky;
+			const surface = { sceneFloat: hdrOn, msaa: msaaOn }, key = sceneStageKey( surface );
+			let draw = skyStages.get( key );
+			if ( !draw ) {
+				draw = skyFactory( surface );
+				skyStages.set( key, draw );
+			}
+			return draw;
 		},
 		/*
 		================
@@ -771,8 +833,6 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		*/
 		worldView( transform, environment, shadowEnabled = true, directional = false ) {
 			if ( phase === "running" ) {
-				// Preview scenes have no cascade; keep the saved preference for world re-entry.
-				stages[5] = sunShadowOn && shadowEnabled ? 1 : 0;
 				geometry?.worldView( transform );
 				device!.queue.writeBuffer(
 					environmentBuffer!,
@@ -781,12 +841,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 					environment.byteOffset,
 					environment.byteLength
 				);
-				// The viewer's studio light uses the sun-direction stage's switch for
-				// its own frames only; the saved Experimental choice is kept.
-				const dynamicSun = stages[1]!;
-				if ( directional ) stages[1] = 1;
-				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_STAGES_OFFSET, stages );
-				stages[1] = dynamicSun;
+				frameStages( stages, frameStageWords, shadowEnabled, directional );
+				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_STAGES_OFFSET, frameStageWords );
 			}
 		},
 		/*
@@ -919,6 +975,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			hdr = null;
 			occlusion?.dispose();
 			occlusion = null;
+			waterStage?.dispose();
+			waterStage = null;
+			msaaStage?.dispose();
+			msaaStage = null;
 			finish?.dispose();
 			finish = null;
 			particleQuery?.dispose();

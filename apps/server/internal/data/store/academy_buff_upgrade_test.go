@@ -33,7 +33,7 @@ func TestAcademyBuffUpgradeRewritesNothing(t *testing.T) {
 	}
 	camp := openTestCamp(t, s, master)
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM training_camp_members WHERE division = ? AND camp_id = ? AND char_id = ?", testDivision, camp.ID, master.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM training_camp_members WHERE division = ? AND camp_id = ? AND char_id = ?", testDivision, camp.ID, master.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -43,7 +43,7 @@ func TestAcademyBuffUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM training_camp_members WHERE division = ? AND camp_id = ? AND char_id = ?", testDivision, camp.ID, master.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM training_camp_members WHERE division = ? AND camp_id = ? AND char_id = ?", testDivision, camp.ID, master.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

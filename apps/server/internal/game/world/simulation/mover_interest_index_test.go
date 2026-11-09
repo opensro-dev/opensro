@@ -232,6 +232,119 @@ func TestMoverInterestLocalCandidatesAndNilStorage(t *testing.T) {
 
 /*
 ================
+TestMoverBlockIndexMembershipAcrossSwapRemove
+
+The block index keys membership by slot (#2133): a remove swaps
+the last row into the hole, and membership - the member sets, the
+per-slot entries and the segment sweep - must still answer exactly
+the live poses afterwards: the departed gid nowhere, the swapped
+row in its own block, and a segment carrier re-placed by the sweep
+as time carries it into its destination block.
+================
+*/
+func TestMoverBlockIndexMembershipAcrossSwapRemove(t *testing.T) {
+	settled := func(region uint16, x, z float64) monster.MoverState {
+		return monster.PendingMover{Pose: monster.Pose{RegionID: region, X: x, Z: z}}.Expand()
+	}
+	carrier := monster.MoverState{
+		Pose:     monster.Pose{RegionID: 0x6860, X: 10, Z: 10},
+		From:     monster.Pose{RegionID: 0x6860, X: 10, Z: 10},
+		To:       monster.Pose{RegionID: 0x7868, X: 10, Z: 10},
+		ArriveMs: 10000,
+	}
+	storage := newMoverStorage(map[uint32]monster.MoverState{
+		1: settled(0x6060, 10, 10),
+		2: settled(0x6068, 10, 10),
+		3: carrier,
+		4: settled(0x7070, 10, 10),
+		5: settled(0x6060, 20, 20),
+	})
+	assertMembership := func(now int64) {
+		t.Helper()
+		want := map[worldgeom.InterestBlock]map[uint32]bool{}
+		for gid, row := range storage.values() {
+			pose := row.LivePoseAt(now, nil)
+			block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z})
+			if want[block] == nil {
+				want[block] = map[uint32]bool{}
+			}
+			want[block][gid] = true
+		}
+		placed, wanted := 0, 0
+		for _, set := range want {
+			wanted += len(set)
+		}
+		for at, stored := range storage.blocks.keys {
+			if stored == 0 || storage.blocks.lists[at] < 0 {
+				continue
+			}
+			block := storage.blocks.blocks[at]
+			for _, gid := range storage.blocks.blockLists[storage.blocks.lists[at]] {
+				if !want[block][gid] {
+					t.Fatalf("at %d: gid %d indexed in %+v, live poses say %+v", now, gid, block, want)
+				}
+				placed++
+			}
+		}
+		for block, set := range want {
+			for gid := range set {
+				found := false
+				if at := storage.blocks.find(block); at >= 0 && storage.blocks.lists[at] >= 0 {
+					found = slices.Contains(storage.blocks.blockLists[storage.blocks.lists[at]], gid)
+				}
+				if !found {
+					t.Fatalf("at %d: gid %d missing from its live block %+v", now, gid, block)
+				}
+			}
+		}
+		if placed != wanted {
+			t.Fatalf("at %d: %d memberships for %d live rows", now, placed, wanted)
+		}
+		for i := range storage.slots {
+			slot := uint32(i)
+			gid := storage.slots[i].gid
+			if !storage.blocks.inBlockBySlot[slot] {
+				t.Fatalf("at %d: slot %d (gid %d) carries no block entry", now, slot, gid)
+			}
+			pose := storage.get(gid).LivePoseAt(now, nil)
+			block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z})
+			if storage.blocks.blockBySlot[slot] != block {
+				t.Fatalf("at %d: slot %d (gid %d) entry %+v, live block %+v", now, slot, gid, storage.blocks.blockBySlot[slot], block)
+			}
+		}
+	}
+
+	storage.reconcileBlocks(0)
+	assertMembership(0)
+
+	// Seeded ascending, gid 2 sits mid-slice: removing it swaps
+	// gid 5's row into its slot.
+	storage.remove(2)
+	storage.reconcileBlocks(0)
+	assertMembership(0)
+	for at, stored := range storage.blocks.keys {
+		if stored == 0 || storage.blocks.lists[at] < 0 {
+			continue
+		}
+		if slices.Contains(storage.blocks.blockLists[storage.blocks.lists[at]], 2) {
+			t.Fatalf("departed gid 2 still indexed in %+v", storage.blocks.blocks[at])
+		}
+	}
+
+	// Time carries the segment row into its destination block on
+	// the sweep alone (no row write in between).
+	storage.reconcileBlocks(10000)
+	assertMembership(10000)
+
+	// A dirty note still re-places after the swap: gid 4 settles
+	// somewhere else entirely.
+	storage.set(4, settled(0x7878, 10, 10))
+	storage.reconcileBlocks(10000)
+	assertMembership(10000)
+}
+
+/*
+================
 filteredMoverInterest
 ================
 */

@@ -136,7 +136,8 @@ test("new environment preferences persist only on Confirm and Default remains a 
 			"hdrToneMap",
 			"sunShadow",
 			"perPixelLighting",
-			"ambientOcclusion"
+			"ambientOcclusion",
+			"waterRefraction"
 		])
 	) {
 		const hud = createExperimentalHud();
@@ -180,6 +181,11 @@ test("six tabs group every preference once, in the spec's sections", () => {
 		"Light and sky",
 		"Textures and effects"
 	] );
+	// The 4x multisampled scene sits beside the post-process anti-aliasing.
+	const image = EXPERIMENTAL_TABS[0].sections[0].rows.map( row => row.key );
+	assert.equal( image.indexOf( "msaa" ), image.indexOf( "postProcessing" ) + 1 );
+	// Scene FXAA, the cheap edge smoothing, follows MSAA.
+	assert.equal( image.indexOf( "sceneFxaa" ), image.indexOf( "msaa" ) + 1 );
 	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
 		"smartPetPickup",
 		"petPickupFilter",
@@ -191,7 +197,7 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	assert.equal( keys.length, 60 );
+	assert.equal( keys.length, 62 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(
@@ -238,9 +244,10 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 });
 
 test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide; no HD set.
+	// No world session: no hunting guide, so its emptied World map (M)
+	// section goes and the next section leads the tab; no HD set.
 	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "expandedWorldMap" ] );
+	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "questTrackerMarkers" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 
