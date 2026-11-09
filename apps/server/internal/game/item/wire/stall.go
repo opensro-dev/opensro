@@ -93,6 +93,31 @@ const (
 
 // Category 0x0A codes: the low byte of the GameServer's 0x3Cxx stall
 // errors, as the v1.150 notice table words them.
+//
+// #2358: seven of these words name no row of the client's notice
+// dispatch - packed category*256+code addresses 0x0A06, 0x0A07,
+// 0x0A09, 0x0A0A, 0x0A0F, 0x0A10 and 0x0A14 are absent from the
+// generated native-notice-data.ts (the v1.150 client's dispatch
+// instructions; sha256
+// 375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a),
+// so StallErrBadBagSlot, StallErrBadCount,
+// StallErrNameLength, StallErrGreeting, StallErrNotVisiting,
+// StallErrBadSlot and StallErrHasStall print nothing, as they do
+// natively: the refusal is the [2][code] answer and no state
+// change. The later sources hold no wording for them either. The
+// v1.188 client's text table (server_dep/silkroad/textdata/
+// textuisystem.txt out of the vsro_client Media.pk2) has no string
+// for an empty bag slot, an out-of-stack count, an over-long title
+// or greeting, a stale visit, an empty stall slot or a second
+// stall; its two later additions, NOT_INPUT_FMARKETNAME (the
+// client's own empty-name prompt) and NOT_BATTLE_FMARKET (the
+// battle state), name other refusals, and the later client's own
+// 0x3Cxx dispatch switch (SilkroadDoc, 007B9C50, cases
+// 0x3C08..0x3C55) words none of the seven words. The iSRO-R SHARD
+// backup names no stall string at all (its FLEAMARKET hits are
+// enter-world limit codenames). stall_test.go pins each of the
+// seven bytes so the silence is not "fixed" into a wrong line the
+// way 0x30 -> 0x18 was (#2414, reverted by #2633).
 const (
 	StallErrInvalidTarget uint8 = 0x03
 	StallErrTooFar        uint8 = 0x04
