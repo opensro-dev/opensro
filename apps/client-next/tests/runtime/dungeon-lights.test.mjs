@@ -26,6 +26,12 @@ values: ambient (3.34, 1.67, 0.835) divides by the native 1.67 scale to
 (2, 1, 0.5).
 ================
 */
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @returns {import("@/engine/contracts/scene").DungeonBlockLight}
+ */
 function entry( x, y, z ) {
 	return {
 		name: `light@(${x},${y},${z})`,
@@ -50,16 +56,22 @@ test("the nearest authored entry is bound, first entry wins ties", () => {
 	const far = entry( 500, 0, 0 );
 	const near = entry( 30, 40, 0 );
 	const tie = entry( -50, 0, 0 );
-	const blocks = [ [ far, near ] ];
-	assert.equal( dungeonPointLight( blocks, 0, 32773, 10, 0, 0 ).pose.x, 30 );
+	const bound = dungeonPointLight( [ [ far, near ] ], 0, 32773, 10, 0, 0 );
+	assert.ok( bound );
+	assert.equal( bound.pose.x, 30 );
 	// Two entries at distance 50: the authored order decides, not the
 	// coordinate sign.
-	assert.equal( dungeonPointLight( [ [ tie, entry( 50, 0, 0 ) ] ], 0, 32773, 0, 0, 0 ).pose.x, -50 );
-	assert.equal( dungeonPointLight( [ [ entry( 50, 0, 0 ), tie ] ], 0, 32773, 0, 0, 0 ).pose.x, 50 );
+	const firstTie = dungeonPointLight( [ [ tie, entry( 50, 0, 0 ) ] ], 0, 32773, 0, 0, 0 );
+	assert.ok( firstTie );
+	assert.equal( firstTie.pose.x, -50 );
+	const secondTie = dungeonPointLight( [ [ entry( 50, 0, 0 ), tie ] ], 0, 32773, 0, 0, 0 );
+	assert.ok( secondTie );
+	assert.equal( secondTie.pose.x, 50 );
 });
 
 test("channels follow RenderLight_ApplyLight1: ambient over 1.67, the rest raw", () => {
 	const light = dungeonPointLight( [ [ entry( 10, 20, 30 ) ] ], 0, 32773, 0, 0, 0 );
+	assert.ok( light );
 	assert.deepEqual( light.pose, { regionId: 32773, x: 10, y: 20, z: 30 } );
 	assert.deepEqual( light.ambient, [ 2, 1, 0.5 ] );
 	assert.deepEqual( light.diffuse, [ 0.6, 0.5, 0.4 ] );
