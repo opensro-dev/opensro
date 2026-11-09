@@ -104,9 +104,12 @@ const (
 // StallErrNameLength, StallErrGreeting, StallErrNotVisiting,
 // StallErrBadSlot and StallErrHasStall print nothing, as they do
 // natively: the refusal is the [2][code] answer and no state
-// change. The later sources hold no wording for them either. The
-// v1.188 client's text table (server_dep/silkroad/textdata/
-// textuisystem.txt out of the vsro_client Media.pk2) has no string
+// change. The later sources hold no wording for them either: the
+// v1.188 server pack's TextUISystem.txt (SMC_Independent/
+// SR_GameRefData in the Eternity modules) carries the same set,
+// and the v1.188 client's text table (server_dep/silkroad/
+// textdata/textuisystem.txt out of the vsro_client Media.pk2) has
+// no string
 // for an empty bag slot, an out-of-stack count, an over-long title
 // or greeting, a stale visit, an empty stall slot or a second
 // stall; its two later additions, NOT_INPUT_FMARKETNAME (the
