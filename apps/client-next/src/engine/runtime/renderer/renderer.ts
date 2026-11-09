@@ -692,6 +692,7 @@ export function createRenderer(
 					scene.environment.set( viewerLight.direction, ENVIRONMENT_SUN_DIRECTION );
 				}
 				const shadowOn = experimental.sunShadow && !preview;
+				characters.dungeonLights( preview ? undefined : world.dungeonLights() );
 				device.worldView( scene.matrix, scene.environment, shadowOn, viewerLight !== null );
 				presentationCamera = {
 					regionId: scene.originRegion,

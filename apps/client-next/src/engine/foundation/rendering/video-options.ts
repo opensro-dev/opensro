@@ -12,7 +12,10 @@ lays out at the resulting pixel size rather than resampling its bitmap font.
 ===========================================================================
 */
 // User-selected compatibility mode while whole-scene lighting parity is open.
-// true restores actor ambient .6 and temporary hit lighting.
+// true restores actor ambient .6 and temporary hit lighting. Per-actor point
+// lights are not part of the mode: a bound descriptor row lights and a zero
+// row disables (RenderLight_ApplyLight1), so dungeon block and effect
+// lights follow the authored data in both modes (dungeon-lights.ts).
 // Metal Detail independently controls the existing sphere-reflection pass.
 export const NATIVE_CHARACTER_LIGHTING = false;
 // Zero follows requestAnimationFrame at the current display refresh rate.

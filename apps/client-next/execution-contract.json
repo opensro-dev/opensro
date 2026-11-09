@@ -785,6 +785,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/assets/worker/world/world.ts",
+			"provider": "src/engine/runtime/assets/worker/world/internal/dungeon-block-publication.ts",
+			"functions": [
+				"validDungeonBlocks"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/world/resources/resources.ts",
 			"functions": [

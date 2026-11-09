@@ -97,6 +97,21 @@ export interface Bundle {
 		visibleBlocks: number[];
 		ambientColor?: number;
 		fog: NonNullable<import("@/engine/contracts/scene").WorldMaterial["fog"]>;
+		// The block's authored Light1 point lights (DunBlockLightEntry,
+		// CRTDunBlock_ReadFromArchive 0x00AD8090): dungeon-space position,
+		// the diffuse/ambient/specular triplets, the range the port's
+		// character channel does not consume, and the attenuation pair
+		// [constant, linear]. See buildDungeonResources.mjs for the
+		// recorded field-semantics inference (#2991).
+		lights?: {
+			name: string;
+			position: readonly [number, number, number];
+			diffuse: readonly [number, number, number];
+			ambient: readonly [number, number, number];
+			specular: readonly [number, number, number];
+			range: number;
+			attenuation: readonly [number, number];
+		}[];
 	}[];
 	dungeonWater?: import("@/engine/foundation/rendering/dungeon-water").DungeonWaterSurface[];
 	animated?: AnimatedResource[];
