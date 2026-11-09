@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-hwan-level.ts - the Blue Berserk level (port-only 0x3FBF, not native)
+hwan-level.ts - the Blue Berserk level (port-only 0x3FC0, not native)
 
 With the server's cap-110 Blue Berserk quests, a character who finished the
 Army / Military Test line is told its Blue Berserk level (0 to 6) at world
@@ -21,7 +21,7 @@ server also sends a notice with the title).
 */
 import type { WireFrame } from "@/engine/contracts/network";
 
-export const OP_HWAN_LEVEL = 0x3fbf;
+export const OP_HWAN_LEVEL = 0x3fc0;
 // Mirrors the server's domain.HwanLevelMax.
 export const HWAN_LEVEL_MAX = 6;
 const BODY_BYTES = 5;

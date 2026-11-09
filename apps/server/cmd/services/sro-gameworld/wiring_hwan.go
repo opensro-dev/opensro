@@ -56,7 +56,7 @@ wireHwanLevel
 
 The Blue Berserk level's seats (and the operator knobs, which refuse a malformed value): the quest owner derives it, the action lane
 spends it (absorption, scroll requirements, the length of a Berserk), and the
-port-only 0x3FBF frames tell the owner at world entry and when it rises.
+port-only 0x3FC0 frames tell the owner at world entry and when it rises.
 ================
 */
 func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) error {

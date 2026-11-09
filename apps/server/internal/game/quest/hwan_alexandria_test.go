@@ -123,7 +123,7 @@ func TestInscriptionDeliveryRaisesTheBlueBerserkLevel(t *testing.T) {
 	announced := 0
 	rt.HwanLevelFrames = func(*enterworld.Character) []wire.Frame {
 		announced++
-		return []wire.Frame{{Opcode: 0x3FBF}}
+		return []wire.Frame{{Opcode: 0x3FC0}}
 	}
 	last, _ := defs.ByCodename("QNO_SD_HW_008")
 	c := hwanCharacter("CHAR_CH_MAN_ADVENTURER", 105)
@@ -146,7 +146,7 @@ func TestInscriptionDeliveryRaisesTheBlueBerserkLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rt.HwanLevel(c) != 3 || announced != 1 || result.Frames[len(result.Frames)-1].Opcode != 0x3FBF {
+	if rt.HwanLevel(c) != 3 || announced != 1 || result.Frames[len(result.Frames)-1].Opcode != 0x3FC0 {
 		t.Fatalf("level %d announced %d frames %v", rt.HwanLevel(c), announced, result.Frames)
 	}
 }

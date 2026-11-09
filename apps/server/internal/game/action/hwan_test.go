@@ -57,9 +57,20 @@ func TestHwanAbsorptionIsTenPlusFivePerLevelOnlyWhileBerserk(t *testing.T) {
 	}
 }
 
+// The port's own opcodes share one space; 0x3FBF was taken by the caravan roster while this
+// frame was written, and a collision made the client decode a level as a roster.
+func TestHwanLevelOpcodeIsNotAnotherPortFrames(t *testing.T) {
+	for name, other := range map[string]uint16{"caravan stars": wire.OpCaravanStars, "pet training": wire.OpPetTrainingState,
+		"unique damage rank": wire.OpUniqueDamageRank, "beta player map": wire.OpBetaPlayerMap} {
+		if OpHwanLevel == other {
+			t.Errorf("OpHwanLevel %#x is the %s opcode", OpHwanLevel, name)
+		}
+	}
+}
+
 func TestHwanLevelFrameCarriesTheObjectAndTheLevel(t *testing.T) {
 	frame := HwanLevelFrame(0x01020304, 4)
-	if frame.Opcode != 0x3FBF || string(frame.Payload) != string([]byte{4, 3, 2, 1, 4}) {
+	if frame.Opcode != 0x3FC0 || string(frame.Payload) != string([]byte{4, 3, 2, 1, 4}) {
 		t.Fatalf("frame = %#x % X", frame.Opcode, frame.Payload)
 	}
 	c := testCharacter()
@@ -68,7 +79,7 @@ func TestHwanLevelFrameCarriesTheObjectAndTheLevel(t *testing.T) {
 		t.Fatal("level 0 sent frames")
 	}
 	rt.HwanLevel = func(*enterworld.Character) uint8 { return 2 }
-	if got := rt.HwanEntryFrames(c); len(got) != 1 || got[0].Opcode != 0x3FBF {
+	if got := rt.HwanEntryFrames(c); len(got) != 1 || got[0].Opcode != 0x3FC0 {
 		t.Fatalf("entry frames %+v", got)
 	}
 	notice := HwanTitleNotice(c, 2)
