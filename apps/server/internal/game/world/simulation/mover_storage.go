@@ -29,8 +29,10 @@ type moverRecord struct {
 	pending *residentPendingMover
 }
 
-// Positions and activity clocks remain per actor. All other immutable pending
-// fields commonly repeat across thousands of actors; handles share those values
+// Positions, activity clocks and the spawning bit remain per actor (the bit
+// is the schedule read's per-leg need, read off the record instead of
+// expanding the interned row for it). All other immutable pending fields
+// commonly repeat across thousands of actors; handles share those values
 // without sharing mutable state. Float speed bits preserve signed zero exactly.
 /*
 ================
@@ -50,6 +52,7 @@ residentPendingMover
 type residentPendingMover struct {
 	pose     monster.Pose
 	activity monster.ActivityCadence
+	spawning bool
 	shared   unique.Handle[pendingMoverShared]
 }
 
@@ -60,6 +63,7 @@ set
 */
 func (p *residentPendingMover) set(row monster.PendingMover) {
 	p.pose, p.activity = row.Pose, row.Activity
+	p.spawning = row.Spawning
 	shared := pendingMoverShared{row: row, speedBits: math.Float64bits(row.NavigationSpeed)}
 	shared.row.Pose = monster.Pose{}
 	shared.row.Activity = monster.ActivityCadence{}
@@ -692,7 +696,11 @@ scheduleRow
 
 The schedule facts of the row in slot: a live row's mode, cadence,
 arrival and region, a pending row's stored mode, pose cadence and
-region with no segment, a neither row's zero schedule.
+region with no segment, a neither row's zero schedule. The pending
+mode reads the record's cached spawning bit: this read runs per
+due actor per leg, and expanding the interned shared row out of
+its handle for the one field was the mover schedule's flat cost
+in the seeded profile (#3027).
 ================
 */
 func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
@@ -705,7 +713,7 @@ func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending
-		if r.pending.shared.Value().row.Spawning {
+		if r.pending.spawning {
 			mode = monster.MoverSpawning
 		}
 		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}

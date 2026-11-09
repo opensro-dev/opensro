@@ -91,12 +91,16 @@ const (
 // refusal on door-read facts before bondSource's answer comes
 // home, instead of paying for the escaped SkillDef on every pet
 // owner's tick (#2030), measured 25,150 B / 258 allocs; with the
-// identity key's composition memoized (namekey.Key), so the world
-// store's lanes stop building the same key strings every tick
-// (#2033), measured 24,477 B / 230 allocs.
+// judged pet tick refilling the session's retained owner-world
+// slot instead of cloning the world per tick, and its stuck answer
+// and movement constraint built once per session (#2033), measured
+// 23,897 B / 249 allocs; with the identity key's composition
+// memoized (namekey.Key), so the world store's lanes stop building
+// the same key strings every tick (#2033), measured 23,227 B / 221
+// allocs.
 const (
-	tickBudgetBytesPerTick  = 26900
-	tickBudgetAllocsPerTick = 253
+	tickBudgetBytesPerTick  = 25500
+	tickBudgetAllocsPerTick = 243
 )
 
 /*

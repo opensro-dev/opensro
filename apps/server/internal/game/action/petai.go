@@ -62,6 +62,21 @@ type petSession struct {
 	// (readPetTickFactsInto, runtime_position.go), zeroed per tick:
 	// the settled follow tick judges without allocating.
 	tickFacts petTickFacts
+	// judgedOwnerWorld is the judged tick's retained owner-world slot:
+	// WorldStore.SnapshotExistingInto refills it per tick and the tick
+	// consumes it before returning, so the follow pays no world clone.
+	judgedOwnerWorld simulation.WorldState
+	// judgedStuckAnswer is the judged tick's lazy stuck answer, built
+	// once per session. It reads the two cells below, which every judged
+	// tick refreshes before installing it, so installing the answer
+	// allocates nothing; advancePet's deferred call runs it as before.
+	judgedStuckAnswer  func() []simulation.Frame
+	judgedStuckNowMs   int64
+	judgedStuckTidWord uint16
+	// judgedConstraint is the judged tick's movement constraint, built
+	// once per session; it reads the session's character at call time,
+	// exactly as the per-tick closure did.
+	judgedConstraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
