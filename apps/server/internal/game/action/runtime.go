@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/namefilter"
+	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
@@ -356,7 +357,12 @@ type Runtime struct {
 	// (naturalrecovery.go): refilled under recoveryMu on every tick
 	// step and consumed in line by the same pass, so a steady tick
 	// grows nothing. Tick goroutine only (#2033).
-	recoveryKeys    []recoveryKey
+	recoveryKeys []recoveryKey
+	// recoveryWrites is the recovery pulse's modifier-write scratch
+	// (naturalrecovery.go): refilled and consumed inside one deferred
+	// character update, and the stats memo clones what it keeps, so a
+	// steady pulse grows nothing. Tick goroutine only (#2033).
+	recoveryWrites  []paramkeeper.Write
 	petSkillWindows petSkillWindowIndex
 	paramJobOwners  petSkillWindowIndex
 	// premiumSpend is the online premium clocks' uncommitted spend

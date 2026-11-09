@@ -98,6 +98,11 @@ Return the committed snapshot. Callers copy it before changing any slot.
 func (rt *Runtime) playerAbnormal(division, name string) *abnormal.Block {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
+	// The common read is a character with no block in a store holding
+	// none: answer it without folding a fresh key (#2033).
+	if len(rt.playerAbnormals.blocks) == 0 {
+		return nil
+	}
 	return rt.playerAbnormals.blocks[playerAbnormalKey(division, name)].block
 }
 
