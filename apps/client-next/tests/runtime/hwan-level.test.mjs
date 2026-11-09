@@ -88,3 +88,14 @@ test("the title symbol follows the level and the race, and is empty below level 
 	assert.equal( hwanTitleKey( 0, 1 ), "" );
 	assert.equal( hwanTitleKey( undefined, 0 ), "" );
 });
+
+test("the roster keeps every player's level and drops one told as 0", () => {
+	const levels = createHwanLevel();
+	levels.receive( levelFrame( 7, 3 ) );
+	levels.receive( levelFrame( 9, 1 ) );
+	assert.deepEqual( levels.all(), { 7: 3, 9: 1 } );
+	levels.receive( levelFrame( 7, 0 ) );
+	assert.deepEqual( levels.all(), { 9: 1 } );
+	levels.clear();
+	assert.deepEqual( levels.all(), {} );
+});

@@ -2126,7 +2126,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			combat.clear();
 			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
-			inventory.bootstrap( value );
+			inventory.bootstrap( value, receivedAtMs );
 			journalBagChange( receivedAtMs, INVENTORY_JOURNAL_ENTRY, NO_PAYLOAD );
 			guide = queueGuide( guide, [
 				...guideInventoryEvents(
@@ -6414,6 +6414,7 @@ The published plane when something changed since the last take, else null.
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				hwanLevel: localGid === undefined ? undefined : hwanLevel.levelOf( localGid ) || undefined,
+				hwanLevels: hwanLevel.all(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),

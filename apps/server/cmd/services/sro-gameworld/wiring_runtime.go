@@ -117,6 +117,15 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return nil
 		}},
 	}
+	// Port-only: every client learns each online player's Blue Berserk level (body
+	// colour and title); the runtime paces the push, and a native shard sends nothing.
+	hooks = append(hooks, simulation.NamedTickHook{Name: "hwan-levels", Hook: func(nowMs int64) []simulation.DivisionFrames {
+		frames := game.items.HwanRosterFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+		if len(frames) != 0 {
+			ticker.Push.PushToDivision(game.divisionID, frames, "")
+		}
+		return nil
+	}})
 	// Native/off installs no hook and takes no extra session snapshots.
 	if game.betaSilk != nil {
 		hooks = append(hooks, simulation.NamedTickHook{Name: "beta-silk", Hook: func(nowMs int64) []simulation.DivisionFrames {

@@ -40,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/paramkeeper"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -336,4 +337,50 @@ func (rt *Runtime) SetGMBerserkGauge(division, sender, name string, balls uint8)
 		rt.PushCharacterFrames(division, target.Name, []wire.Frame{frame})
 	}
 	return true
+}
+
+// hwanRosterPushIntervalMs paces the Blue level roster: a body colour and a
+// title are slow views, like the 5-star caravan mark.
+const hwanRosterPushIntervalMs = 2000
+
+/*
+================
+HwanRosterFrames
+
+Port-only, not native: every online character's Blue Berserk level as 0x3FC0
+frames for the whole division, so other players see the blue body and the
+title, not only the owner. Recomputed at the push pace; a level that fell back
+to 0 is sent once as 0 so the clients drop it. Nil off the pace, and nil when
+no one is blue and nothing needs clearing (a native shard sends nothing).
+================
+*/
+func (rt *Runtime) HwanRosterFrames(division string, views []simulation.SessionView, nowMs int64) []simulation.Frame {
+	if rt.HwanLevel == nil || nowMs < rt.hwanRosterDueMs {
+		return nil
+	}
+	rt.hwanRosterDueMs = nowMs + hwanRosterPushIntervalMs
+	var frames []simulation.Frame
+	now := map[uint32]uint8{}
+	for _, view := range views {
+		if view.DivisionID != division {
+			continue
+		}
+		c := rt.findCharacterByID(division, view.CharacterID)
+		if c == nil {
+			continue
+		}
+		level := rt.hwanLevel(c)
+		oid := enterworld.ObjectIDForCharacter(c)
+		if level > 0 {
+			now[oid] = level
+			frames = append(frames, simulation.Frame{Opcode: OpHwanLevel, Payload: HwanLevelFrame(oid, level).Payload})
+		}
+	}
+	for oid := range rt.hwanRosterSent {
+		if now[oid] == 0 {
+			frames = append(frames, simulation.Frame{Opcode: OpHwanLevel, Payload: HwanLevelFrame(oid, 0).Payload})
+		}
+	}
+	rt.hwanRosterSent = now
+	return frames
 }

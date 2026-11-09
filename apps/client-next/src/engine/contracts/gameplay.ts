@@ -820,6 +820,8 @@ export interface GameplayState extends MoverPublication {
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only Blue Berserk level of the local player (hwan-level.ts); absent at 0.
 	readonly hwanLevel?: number;
+	// Port-only Blue Berserk level of every player told (hwan-level.ts), by object id.
+	readonly hwanLevels?: Readonly<Record<number, number>>;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly arenaChest?: ArenaChest;

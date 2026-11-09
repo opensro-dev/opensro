@@ -13,12 +13,14 @@ tested on plain values.
 package action
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
@@ -269,5 +271,52 @@ func TestGMSetGaugeSetsTheBallsAndTellsTheTarget(t *testing.T) {
 	gm.GMPrivilege = false
 	if rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 0) || target.BerserkPoints != 2 {
 		t.Fatal("a non-GM set the gauge")
+	}
+}
+
+/*
+================
+TestHwanRosterTellsEveryoneEachBlueLevelAndClearsAFallenOne
+
+The level is pushed to the whole division, not only its owner, at the push pace;
+a level that fell back to 0 is sent once as 0; a native shard sends nothing.
+================
+*/
+func TestHwanRosterTellsEveryoneEachBlueLevelAndClearsAFallenOne(t *testing.T) {
+	blue, plain := testCharacter(), testCharacter()
+	blue.ID, plain.ID = 11, 12
+	rt, _ := newTestRuntime(blue, nil)
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {blue, plain}}
+	level := uint8(3)
+	rt.HwanLevel = func(c *enterworld.Character) uint8 {
+		if c == blue {
+			return level
+		}
+		return 0
+	}
+	views := []simulation.SessionView{
+		{SessionID: "a", DivisionID: testDivision, CharacterID: blue.ID},
+		{SessionID: "b", DivisionID: testDivision, CharacterID: plain.ID},
+	}
+	frames := rt.HwanRosterFrames(testDivision, views, 10_000)
+	want := HwanLevelFrame(enterworld.ObjectIDForCharacter(blue), 3).Payload
+	if len(frames) != 1 || frames[0].Opcode != OpHwanLevel || !bytes.Equal(frames[0].Payload, want) {
+		t.Fatalf("roster %+v, want one level-3 frame for the blue character only", frames)
+	}
+	if got := rt.HwanRosterFrames(testDivision, views, 10_000); got != nil {
+		t.Fatalf("off-pace roster %+v, want none", got)
+	}
+	level = 0
+	frames = rt.HwanRosterFrames(testDivision, views, 10_000+hwanRosterPushIntervalMs)
+	clear := HwanLevelFrame(enterworld.ObjectIDForCharacter(blue), 0).Payload
+	if len(frames) != 1 || !bytes.Equal(frames[0].Payload, clear) {
+		t.Fatalf("fallen roster %+v, want one level-0 frame", frames)
+	}
+	if got := rt.HwanRosterFrames(testDivision, views, 10_000+2*hwanRosterPushIntervalMs); got != nil {
+		t.Fatalf("settled roster %+v, want none", got)
+	}
+	rt.HwanLevel = nil
+	if got := rt.HwanRosterFrames(testDivision, views, 99_000); got != nil {
+		t.Fatalf("native roster %+v, want none", got)
 	}
 }

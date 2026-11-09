@@ -306,6 +306,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		RefObjSnapshot:       refObjSnapshot,
 		RefSkillSnapshot:     skillSnapshot,
 		SkillCooldowns:       entrySkillCooldowns(deps, character),
+		ItemCooldowns:        entryItemCooldowns(deps, character),
 		RefItemSnapshot:      buildRefItemSnapshot(deps, divisionID, character),
 		MagicOptionSnapshot:  buildMagicOptionSnapshot(deps, character),
 		AvatarMagicOptions:   buildAvatarMagicOptions(deps),

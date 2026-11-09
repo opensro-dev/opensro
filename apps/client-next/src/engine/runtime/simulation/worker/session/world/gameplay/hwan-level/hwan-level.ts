@@ -6,7 +6,7 @@ hwan-level.ts - the Blue Berserk level (port-only 0x3FC0, not native)
 With the server's cap-110 Blue Berserk quests, a character who finished the
 Army / Military Test line is told its Blue Berserk level (0 to 6) at world
 entry and whenever it rises. This owner decodes the frame whole or not at
-all and keeps the latest level per object; every rule (what raises it, what
+all and keeps the latest level per object (the owner's, and every other online player's from the roster push); every rule (what raises it, what
 it absorbs, what the scrolls need) is the server's. Nothing arrives on a
 native shard.
 
@@ -61,6 +61,15 @@ The level last told for one object (0 when none).
 ================
 		*/
 		levelOf: ( gid: number ): number => levels.get( gid ) ?? 0,
+		/*
+================
+all
+
+Every level told, by object id: the owner's and, from the server's roster push,
+the other players' (their body colour and title).
+================
+		*/
+		all: (): Readonly<Record<number, number>> => Object.fromEntries( levels ),
 		/*
 ================
 clear

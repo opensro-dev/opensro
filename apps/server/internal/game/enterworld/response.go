@@ -250,6 +250,7 @@ type BootstrapResult struct {
 	RefObjSnapshot       []RefObjRow
 	RefSkillSnapshot     []SpawnSkillRow
 	SkillCooldowns       []EntrySkillCooldown
+	ItemCooldowns        []EntryItemCooldown
 	RefItemSnapshot      []RefItemRow
 	MagicOptionSnapshot  []MagicOptionRow
 	AvatarMagicOptions   []AvatarMagicOptionRow
@@ -340,6 +341,7 @@ type bootstrapSuccessView struct {
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
 	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns             []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
@@ -430,6 +432,7 @@ type bootstrapBlobSuccessView struct {
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
 	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns             []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
@@ -477,6 +480,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
+	ItemCooldowns             []EntryItemCooldown      `json:"itemCooldowns,omitempty"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
@@ -556,6 +560,7 @@ func (r *BootstrapResult) blobView() any {
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
@@ -617,6 +622,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
@@ -691,6 +697,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
 		SkillCooldowns:            cooldowns,
+		ItemCooldowns:             r.ItemCooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,

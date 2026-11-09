@@ -73,3 +73,41 @@ func RemainingSkillCooldowns(skills SkillDataSource, character *Character, now i
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Skill < rows[j].Skill })
 	return rows
 }
+
+/*
+================
+EntryItemCooldown
+
+An item cooldown group still running at entry (an Energy of Life scroll, a
+premium item). Remaining time is relative to entry creation; the browser
+reads the sweep's length from the group's authored duration.
+================
+*/
+type EntryItemCooldown struct {
+	Group       uint32 `json:"group"`
+	RemainingMs uint32 `json:"remainingMs"`
+}
+
+/*
+================
+entryItemCooldowns
+
+The character's item cooldown groups that have not ended. A teleport or a
+reconnect re-enters the world and must not forget them: the server keeps
+refusing the item ("still have time to reuse"), so the icon must keep
+showing it.
+================
+*/
+func entryItemCooldowns(deps *Deps, character *Character) []EntryItemCooldown {
+	now := deps.clock().UnixMilli()
+	rows := []EntryItemCooldown{}
+	for group, until := range character.ItemGroupCooldowns {
+		remaining := until - now
+		if remaining <= 0 || remaining > int64(^uint32(0)) {
+			continue
+		}
+		rows = append(rows, EntryItemCooldown{Group: group, RemainingMs: uint32(remaining)})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Group < rows[j].Group })
+	return rows
+}

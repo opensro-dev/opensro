@@ -22687,9 +22687,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					}
 					// Port-only Blue Berserk title (not native): bold gold, just before the
-					// character's name. Only the owner is told its level (0x3FC0).
-					const titleText = entity.gid === game?.localGid ?
-						hudCopy( hwanTitleKey( game?.hwanLevel, entity.countryByte9c ) ) :
+					// character's name, for every player the server's level roster named (0x3FC0).
+					const titleText = entity.kind === "local-player" || entity.kind === "player" ?
+						hudCopy( hwanTitleKey( game?.hwanLevels?.[entity.gid], entity.countryByte9c ) ) :
 						"";
 					if ( titleText && name && height ) {
 						const titleWidth = text.run( titleText, 2 ).width;
