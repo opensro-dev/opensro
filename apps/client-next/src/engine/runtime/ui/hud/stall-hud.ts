@@ -17,7 +17,7 @@ and an open stall closes for modification without asking.
 
 ===========================================================================
 */
-import type { StallCommand, StallListing, StallState } from "@/engine/foundation/gameplay/stall";
+import type { StallCommand, StallLine, StallListing, StallState } from "@/engine/foundation/gameplay/stall";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 
 // CIFStallSlot_UpdateContents 0x5B0500 and Clear 0x5B06F0 select these backplates.
@@ -55,6 +55,18 @@ export const STALL_CHAT_LIMIT = 100;
 // CIFChatModule's message textbox retains 50 logical entries (545BE0 / 53A150).
 const STALL_HISTORY_LIMIT = 50;
 const STALL_CHANNEL = 9;
+
+/*
+================
+StallChatEntry
+
+One row of the stall window's chat module: a player's channel-9 line,
+printed "name:text", or one of the stall's own system lines.
+================
+*/
+export type StallChatEntry =
+	| { readonly kind: "chat"; readonly line: ChatLine; }
+	| { readonly kind: "system"; readonly line: StallLine; };
 // CIFStall OnCreate 5A2F76..5A2FA0 configures its display manager: 6px inset,
 // two columns, 206px column pitch and 41px row pitch. Layout 6F3D43..6F3D81
 // adds the inset to the display origin; slot art's final 3px are transparent.
@@ -279,15 +291,17 @@ export function createStallHud( raisedGoldCaps = false ) {
 	let chat = "";
 	let chatOwner: number | undefined;
 	let observedLine: ChatLine | undefined;
-	let messages: readonly ChatLine[] = [];
+	let observedLog = 0;
+	let messages: readonly StallChatEntry[] = [];
 	return {
 		/*
 		================
 		observeChat
 
 		5457C0 clears the module when a stall is left. Global chat survives
-		that exit; only newly delivered channel-9 lines belong to this module.
-		Sequence numbers also survive cloned worker snapshots.
+		that exit; only newly delivered channel-9 lines belong to this module,
+		with the stall's own system lines past the last one seen. Sequence
+		numbers also survive cloned worker snapshots.
 		================
 		*/
 		observeChat( stall: StallState | undefined, lines: readonly ChatLine[] ) {
@@ -300,23 +314,30 @@ export function createStallHud( raisedGoldCaps = false ) {
 			if ( cleared ) {
 				chat = "";
 				messages = [];
+				observedLog = 0;
 			}
 			const added = owner !== undefined && !same( last ) ?
 				lines.slice( observedLine ? lines.findIndex( same ) + 1 : 0 ).filter( line =>
 					line.channel === STALL_CHANNEL
 				) :
 				[];
-			if ( added.length ) messages = [ ...messages, ...added ].slice( -STALL_HISTORY_LIMIT );
+			const system = owner !== undefined && stall ? stall.log.filter( line => line.sequence > observedLog ) : [];
+			const entries: StallChatEntry[] = [
+				...added.map( line => ({ kind: "chat" as const, line }) ),
+				...system.map( line => ({ kind: "system" as const, line }) )
+			];
+			if ( entries.length ) messages = [ ...messages, ...entries ].slice( -STALL_HISTORY_LIMIT );
 			chatOwner = owner;
 			observedLine = last;
-			return { cleared, appended: added.length > 0 };
+			observedLog = Math.max( observedLog, stall?.logSequence ?? 0 );
+			return { cleared, appended: entries.length > 0 };
 		},
 		/*
 		================
 		messages
 		================
 		*/
-		messages(): readonly ChatLine[] {
+		messages(): readonly StallChatEntry[] {
 			return messages;
 		},
 		/*

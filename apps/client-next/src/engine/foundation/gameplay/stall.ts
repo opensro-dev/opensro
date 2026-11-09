@@ -70,6 +70,8 @@ const NETWORK_REGISTERED = 1;
 // same fee, the client only prints it.
 const NETWORK_COMMISSION_MIN_GOLD = 1;
 const NETWORK_COMMISSION_MAX_GOLD = 100_000;
+// The chat module's message textbox keeps 50 entries (545BE0 / 53A150).
+const STALL_LOG_LIMIT = 50;
 
 /*
 ================
@@ -100,6 +102,22 @@ export interface StallListing {
 
 /*
 ================
+StallLine
+
+A system line the stall window's chat module prints (the open and
+modify state lines, a sale, the network's registration and commission).
+sequence only grows across stalls, so the window, which reads cloned
+worker snapshots, appends each line once.
+================
+*/
+export interface StallLine {
+	readonly sequence: number;
+	readonly key: string;
+	readonly args: readonly string[];
+}
+
+/*
+================
 StallState
 ================
 */
@@ -121,6 +139,10 @@ export interface StallState {
 	// land first, so the slot's offer stays here until that answer lands.
 	readonly soldPending: readonly StallOffer[];
 	readonly visitors: readonly number[];
+	// The current stall's system lines, oldest first, and the last
+	// sequence handed out (kept across stalls by stallFrame).
+	readonly log: readonly StallLine[];
+	readonly logSequence: number;
 	readonly network: {
 		readonly open: boolean;
 		readonly rows: readonly StallListing[];
@@ -150,6 +172,8 @@ export function emptyStall( namingSequence = 0 ): StallState {
 		offers: [],
 		soldPending: [],
 		visitors: [],
+		log: [],
+		logSequence: 0,
 		network: { open: false, rows: [], pages: 0, page: 0, category: 0, buying: null }
 	};
 }
@@ -161,6 +185,7 @@ StallOutcome
 The next state, a notice (category and code), the bag changes the
 frame makes (items to place in the first empty bag slots, bag slots
 to reduce by a count), and the chat lines the frame prints, in order.
+stallFrame also appends those lines to the next state's log.
 ================
 */
 export interface StallOutcome {
@@ -180,6 +205,8 @@ export interface StallContext {
 	readonly localGid: number;
 	readonly refs: ReadonlyMap<number, number>;
 	readonly objRefs?: ReadonlyMap<number, number>;
+	// Item display names by reference id, for the sale line.
+	readonly names?: ReadonlyMap<number, string>;
 	// Port-only, not native: SRO_RAISED_GOLD_CAPS writes the offer price as
 	// u64, so a ten-billion price fits. Absent is the native u32 field.
 	readonly widePrice?: boolean;
@@ -196,6 +223,36 @@ number here only feeds the commission chat line.
 */
 function networkCommission( price: number ): number {
 	return Math.min( Math.max( Math.floor( price / 100 ), NETWORK_COMMISSION_MIN_GOLD ), NETWORK_COMMISSION_MAX_GOLD );
+}
+
+/*
+================
+appendStallLog
+
+751A60 and 755960 print their state, sale, registration and commission
+lines into the stall window's own chat module, where the visitors' chat
+also lands, not into the HUD system messages. Inferred: the binary was
+not at hand when this was written, and the owner confirmed the window
+as the place. The sequence carries over from the previous state even
+when the frame starts a fresh stall, so it never repeats.
+================
+*/
+function appendStallLog( previous: StallState, outcome: StallOutcome ): StallOutcome {
+	const base = Math.max( previous.logSequence, outcome.state.logSequence ),
+		lines = (outcome.messages ?? []).map( ( message, i ) => ({
+			sequence: base + i + 1,
+			key: message.key,
+			args: message.args
+		}) );
+	if ( !lines.length && base === outcome.state.logSequence ) return outcome;
+	return {
+		...outcome,
+		state: {
+			...outcome.state,
+			log: [ ...outcome.state.log, ...lines ].slice( -STALL_LOG_LIMIT ),
+			logSequence: base + lines.length
+		}
+	};
 }
 
 /*
@@ -243,7 +300,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 	};
 	const done = ( outcome: StallOutcome ) => {
 		if ( o !== p.length ) throw Error( "Trailing stall bytes" );
-		return outcome;
+		return appendStallLog( state, outcome );
 	};
 	const refusal = ( category = STALL_NOTICE_CATEGORY ): StallOutcome => {
 		if ( p.length !== 2 ) throw Error( "Invalid stall refusal" );
@@ -381,7 +438,9 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 					key: kind === EVENT_SOLD ?
 						"UIIT_MSG_STREET_STORE_SELL_COMMODITY" :
 						"UIIT_MSG_WARENETWORK_BUY_SUCCESS",
-					args: [ buyer, sold.item.name ?? "" ]
+					// The offer is the wire's bare item; its display name comes
+					// from the reference names the bag presents items with.
+					args: [ buyer, ctx.names?.get( sold.item.refObjId ) ?? sold.item.name ?? "" ]
 				} ];
 				// 755960 kind 4: under the sale line, the network's
 				// commission on a price above zero, digits grouped.
