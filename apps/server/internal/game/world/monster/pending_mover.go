@@ -71,11 +71,39 @@ value out through two return values (#2985).
 ================
 */
 func (p *PendingMover) ExpandInto(dst *MoverState) {
+	p.expandInto(dst, p.Pose, p.Activity)
+}
+
+/*
+================
+PendingMover.ExpandIntoWith
+
+ExpandInto with the row's settled pose and activity cadence
+replaced by the caller's: compact storage (residentPendingMover)
+keeps those two per actor and interns the rest, so its fill
+expands straight from the interned row it cached instead of
+copying the row out of the handle to amend it first (#3027).
+The navigation speed stays the row's own.
+================
+*/
+func (p *PendingMover) ExpandIntoWith(dst *MoverState, pose Pose, activity ActivityCadence) {
+	p.expandInto(dst, pose, activity)
+}
+
+/*
+================
+PendingMover.expandInto
+
+ExpandInto's body over an explicit pose and cadence: every other
+field is the row's own.
+================
+*/
+func (p *PendingMover) expandInto(dst *MoverState, pose Pose, activity ActivityCadence) {
 	mode := MoverPending
 	if p.Spawning {
 		mode = MoverSpawning
 	}
-	*dst = MoverState{mode: mode, BehaviorDeadlineMs: p.BehaviorDeadlineMs, Pose: p.Pose, Activity: p.Activity,
+	*dst = MoverState{mode: mode, BehaviorDeadlineMs: p.BehaviorDeadlineMs, Pose: pose, Activity: activity,
 		previousEvent: p.PreviousEvent, lastEvent: p.LastEvent, transitionSerial: p.TransitionSerial,
 		retaliationRevision: p.RetaliationRevision, AttackIntervalMs: p.AttackIntervalMs,
 		LastBattleActivityMs: p.LastBattleActivityMs, HomingStartedMs: p.HomingStartedMs,

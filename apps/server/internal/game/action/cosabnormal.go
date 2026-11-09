@@ -13,7 +13,6 @@ authority store while its write lock is held.
 package action
 
 import (
-	"fmt"
 	"opensro.online/server/internal/domain"
 	"strings"
 	"sync"
@@ -51,18 +50,34 @@ Keep immutable pet blocks separate from the character's player block.
 */
 type cosAbnormalStore struct {
 	mu     sync.Mutex
-	blocks map[string]cosAbnormalEntry
+	blocks map[cosAbnormalKey]cosAbnormalEntry
 }
 
 /*
 ================
 cosAbnormalKey
 
-Include the summoned object's identity so a replacement pet inherits no status.
+The map identity of one summoned pet: the division and owner name
+case-folded, with the summoned object's gid, so a replacement pet
+inherits no status. A comparable triple, not a built string - the
+judged pet tick weighs this identity twice a tick and it never
+changes for a summoned pet's life (#2033).
 ================
 */
-func cosAbnormalKey(division, name string, gid uint32) string {
-	return strings.ToLower(division) + "\x00" + strings.ToLower(name) + "\x00" + fmt.Sprint(gid)
+type cosAbnormalKey struct {
+	division, name string
+	gid            uint32
+}
+
+/*
+================
+cosAbnormalKeyFor
+
+Fold one raw (division, name, gid) triple into its map identity.
+================
+*/
+func cosAbnormalKeyFor(division, name string, gid uint32) cosAbnormalKey {
+	return cosAbnormalKey{division: strings.ToLower(division), name: strings.ToLower(name), gid: gid}
 }
 
 /*
@@ -73,9 +88,20 @@ Return the committed immutable block for one summoned pet.
 ================
 */
 func (rt *Runtime) cosAbnormal(division, name string, gid uint32) *abnormal.Block {
+	return rt.cosAbnormalKeyed(cosAbnormalKeyFor(division, name, gid))
+}
+
+/*
+================
+cosAbnormalKeyed
+
+Return the committed immutable block for one folded pet identity.
+================
+*/
+func (rt *Runtime) cosAbnormalKeyed(key cosAbnormalKey) *abnormal.Block {
 	rt.cosAbnormals.mu.Lock()
 	defer rt.cosAbnormals.mu.Unlock()
-	return rt.cosAbnormals.blocks[cosAbnormalKey(division, name, gid)].block
+	return rt.cosAbnormals.blocks[key].block
 }
 
 /*
@@ -88,13 +114,13 @@ Copy on publication so a later callback cannot mutate a committed block.
 func (rt *Runtime) storeCosAbnormal(division, name string, gid uint32, block *abnormal.Block) {
 	rt.cosAbnormals.mu.Lock()
 	defer rt.cosAbnormals.mu.Unlock()
-	key := cosAbnormalKey(division, name, gid)
+	key := cosAbnormalKeyFor(division, name, gid)
 	if block == nil || (block.Mask == 0 && !block.Active()) {
 		delete(rt.cosAbnormals.blocks, key)
 		return
 	}
 	if rt.cosAbnormals.blocks == nil {
-		rt.cosAbnormals.blocks = map[string]cosAbnormalEntry{}
+		rt.cosAbnormals.blocks = map[cosAbnormalKey]cosAbnormalEntry{}
 	}
 	copied := *block
 	rt.cosAbnormals.blocks[key] = cosAbnormalEntry{division: division, name: name, gid: gid, block: &copied}
@@ -589,14 +615,14 @@ Tick a detached candidate list so registry and authority locks never nest.
 */
 func (rt *Runtime) advanceCosAbnormals(now int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
-	seen := map[string]bool{}
+	seen := map[cosAbnormalKey]bool{}
 	for _, entry := range rt.cosAbnormalCandidates() {
-		seen[cosAbnormalKey(entry.division, entry.name, entry.gid)] = true
+		seen[cosAbnormalKeyFor(entry.division, entry.name, entry.gid)] = true
 		out = append(out, rt.advanceOneCosAbnormal(entry, now)...)
 	}
 	// A pet can hold hostile words (cosdebuff.go) without any block.
 	for _, entry := range rt.cosDebuffCandidates() {
-		if seen[cosAbnormalKey(entry.division, entry.name, entry.gid)] {
+		if seen[cosAbnormalKeyFor(entry.division, entry.name, entry.gid)] {
 			continue
 		}
 		out = append(out, rt.advanceOneCosAbnormal(entry, now)...)

@@ -77,6 +77,13 @@ type petSession struct {
 	// once per session; it reads the session's character at call time,
 	// exactly as the per-tick closure did.
 	judgedConstraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
+	// judgedCosKey is the judged tick's folded COS abnormal map key
+	// (cosabnormal.go), folded once for the binding judgedCosKeyFrom
+	// names and folded again only when that binding changes, so the
+	// tick's two abnormal reads allocate nothing (#2033).
+	judgedCosKey     cosAbnormalKey
+	judgedCosKeyFrom petOwnerKey
+	judgedCosKeySet  bool
 	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState

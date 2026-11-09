@@ -161,7 +161,7 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	if !after.Activity.Due(uint32(now + 1001)) {
 		t.Fatal("fixture cadence did not fire")
 	}
-	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), before, after, now+1001); !committed || !cadenceOnly {
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, genOf(), before, after, now+1001); !committed || !cadenceOnly {
 		t.Fatal("cadence-only commitActivityAt rejected or misread")
 	}
 	got, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -169,12 +169,12 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 		t.Fatalf("stored mover differs from cadence-only commitActivityAt:\n got %+v\nwant %+v", got, after)
 	}
 	// The consumed before can never commit twice, hint or not.
-	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), before, after, now+1001); committed {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, genOf(), before, after, now+1001); committed {
 		t.Fatal("stale cadence commit accepted through carried slots")
 	}
 	moved := after
 	moved.Pose.X += 25
-	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), after, moved, now+1001); !committed || cadenceOnly {
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, genOf(), after, moved, now+1001); !committed || cadenceOnly {
 		t.Fatal("pose-carrying commitActivityAt rejected or misread as cadence-only")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -187,7 +187,7 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	mateBefore, _ := ops.Monsters.Mover(monsterTestDivision, mate.Gid)
 	mateMoverSlot, mateMonsterSlot := carriedSlots(t, ops, mate.Gid)
 	moved.Pose.X += 25
-	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, genOf(), got, moved, now+1001); !committed {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, behaviorNoQueueSlot, genOf(), got, moved, now+1001); !committed {
 		t.Fatal("commitActivityAt with foreign slots did not fall back to its actor")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -324,7 +324,7 @@ func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
 		t.Helper()
 		before, _ := s.Mover("sleep", actor.Gid)
 		_, gen, _ := s.MoverGeneration("sleep", actor.Gid)
-		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
+		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, behaviorNoQueueSlot, gen, before, before, now); !committed || !cadenceOnly {
 			t.Fatal("cadence-only commitActivityAt rejected or misread")
 		}
 		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
@@ -333,6 +333,62 @@ func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
 	}
 	commit(moverSlot, monsterSlot)
 	commit(mateMoverSlot, mateMonsterSlot)
+}
+
+/*
+================
+TestCommitActivityAtCarriedQueueSlotArmsTheSameDue
+
+The commit's reschedule arms through the queue slot its snapshot
+carried (setAtSlot) instead of resolving the gid through byGID:
+the armed due is the gid door's, the queue row is the actor's own
+and keeps the storage slots it noted. A slot naming another
+actor delegates to the gid arm and leaves that actor's due alone,
+and the no-queue-slot caller arms as before (#3027).
+================
+*/
+func TestCommitActivityAtCarriedQueueSlotArmsTheSameDue(t *testing.T) {
+	const now int64 = 100000
+	s, d := idleScheduleFixture(t)
+	resting := monster.NestRow{Respawn: true}
+	actor := idleScheduleActor(t, s, d, 7, resting, 2000, now+5000, now)
+	mate := idleScheduleActor(t, s, d, 8, resting, 2000, now+5000, now)
+	moverSlot, _ := d.movers.slotOf(actor.Gid)
+	_, monsterSlot, _ := d.instances.hotRowSlot(actor.Gid)
+
+	// Both actors hold a live due; the mate's queue row is the
+	// foreign slot a stale carry could name.
+	d.behavior.set(actor.Gid, now)
+	d.behavior.set(mate.Gid, now+9000)
+	queueSlot, _ := d.behavior.byGID[actor.Gid]
+	mateQueueSlot, _ := d.behavior.byGID[mate.Gid]
+	row := d.behavior.slots[queueSlot]
+	row.moverSlot, row.monsterSlot = moverSlot, monsterSlot
+	d.behavior.slots[queueSlot] = row
+
+	commit := func(queueSlot uint32) {
+		t.Helper()
+		before, _ := s.Mover("sleep", actor.Gid)
+		_, gen, _ := s.MoverGeneration("sleep", actor.Gid)
+		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, queueSlot, gen, before, before, now); !committed || !cadenceOnly {
+			t.Fatal("cadence-only commitActivityAt rejected or misread")
+		}
+		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
+			t.Fatalf("carried-queue reschedule armed %d, want the gate due %d", got, want)
+		}
+	}
+	commit(queueSlot)
+	if got := d.behavior.slots[queueSlot]; got.moverSlot != moverSlot || got.monsterSlot != monsterSlot {
+		t.Fatalf("queue row notes (%d, %d), want the noted (%d, %d)", got.moverSlot, got.monsterSlot, moverSlot, monsterSlot)
+	}
+	if slot, _ := d.behavior.byGID[actor.Gid]; slot != queueSlot {
+		t.Fatalf("actor resolved to queue slot %d, want its carried slot %d", slot, queueSlot)
+	}
+	commit(mateQueueSlot)
+	if got, want := scheduleDue(t, d, mate.Gid), now+9000; got != want {
+		t.Fatalf("foreign-slot commit moved the mate's due to %d, want %d", got, want)
+	}
+	commit(behaviorNoQueueSlot)
 }
 
 /*
@@ -365,7 +421,7 @@ func TestCommitActivityAtFastGuardMatchesValueGuard(t *testing.T) {
 	if _, moved, _ := s.MoverGeneration("sleep", actor.Gid); moved == gen {
 		t.Fatal("whole-value rewrite did not move the generation")
 	}
-	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
+	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, gen, before, before, now); !committed || !cadenceOnly {
 		t.Fatal("commit after a same-value rewrite refused or misread")
 	}
 
@@ -377,13 +433,13 @@ func TestCommitActivityAtFastGuardMatchesValueGuard(t *testing.T) {
 	if _, unmoved, _ := s.MoverGeneration("sleep", actor.Gid); unmoved != gen {
 		t.Fatal("cadence stamp moved the generation")
 	}
-	if committed, _ := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); committed {
+	if committed, _ := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, gen, before, before, now); committed {
 		t.Fatal("commit accepted over a foreign cadence stamp")
 	}
 
 	before, _ = s.Mover("sleep", actor.Gid)
 	_, gen, _ = s.MoverGeneration("sleep", actor.Gid)
-	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
+	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, behaviorNoQueueSlot, gen, before, before, now); !committed || !cadenceOnly {
 		t.Fatal("commit against the stamped row refused or misread")
 	}
 }

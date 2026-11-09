@@ -174,7 +174,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
-	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoBaseGen, before, after, now)
+	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
 	return committed
 }
 
@@ -183,8 +183,9 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 commitActivityAt
 
 commitActivity through the slots the behaviour batch carried for
-the actor (#2133): the population, the guard read, the death check
-and the write go through the verified hints and fall back to the gid resolve
+the actor (#2133): the population, the guard read, the death check,
+the write and the reschedule's queue arm go through the verified
+hints and fall back to the gid resolve
 whenever a hint no longer names the gid, so the commit lands - or
 is refused - exactly as commitActivity's. The gate runs this once
 per due actor per tick, which is where the profile charged the
@@ -211,7 +212,7 @@ anything else expands the row and compares it whole, exactly
 as every commit did before (#3027).
 ================
 */
-func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, baseGen uint64, before, after monster.MoverState, now int64) (bool, bool) {
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, queueSlot uint32, baseGen uint64, before, after monster.MoverState, now int64) (bool, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObjectAt(division, gid, monsterSlot)
@@ -247,7 +248,7 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		// rides only this full write and the mover commits (#2136).
 		state.syncApproachActor(gid, after)
 	}
-	s.scheduleBehaviorCommitted(state, gid, scheduleOf(after), monsterSlot, now)
+	s.scheduleBehaviorCommitted(state, gid, scheduleOf(&after), monsterSlot, queueSlot, now)
 	return true, cadenceOnly
 }
 
