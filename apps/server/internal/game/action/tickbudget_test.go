@@ -90,10 +90,13 @@ const (
 // 263 allocs; with the bond lane's revival walk judging its
 // refusal on door-read facts before bondSource's answer comes
 // home, instead of paying for the escaped SkillDef on every pet
-// owner's tick (#2030), measured 25,150 B / 258 allocs.
+// owner's tick (#2030), measured 25,150 B / 258 allocs; with the
+// identity key's composition memoized (namekey.Key), so the world
+// store's lanes stop building the same key strings every tick
+// (#2033), measured 24,477 B / 230 allocs.
 const (
-	tickBudgetBytesPerTick  = 27700
-	tickBudgetAllocsPerTick = 284
+	tickBudgetBytesPerTick  = 26900
+	tickBudgetAllocsPerTick = 253
 )
 
 /*
