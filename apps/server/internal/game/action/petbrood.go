@@ -551,6 +551,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 			output = append(output, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()})
 			rt.petMu.Lock()
 			delete(rt.petSessions, petOwnerKey{division: key.division, name: strings.ToLower(key.name), gid: pet.GID})
+			rt.petSessionKeys = nil
 			rt.petMu.Unlock()
 			continue
 		}
