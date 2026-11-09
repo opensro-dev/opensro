@@ -532,6 +532,47 @@ class TestDoctorRizin(unittest.TestCase):
 		self.assertIn("PASS  ledger-claims", out)
 
 
+class Rizin082Pipe:
+	"""
+	================
+	Rizin082Pipe
+
+	What rizin 0.8.2 does with a newline script, as measured on
+	2026-11-09: `?e` does not exist and `@@` starts an iterator, so a
+	script holding either fails to parse whole and answers nothing;
+	`echo` prints its word; afsj on an address with no function
+	prints nothing at all.
+	================
+	"""
+
+	def __init__(self, known):
+		self.known = known
+
+	def cmd(self, text):
+		if "?e " in text or "@@" in text:
+			return ""
+		out = []
+		for line in text.split("\n"):
+			if line.startswith("echo "):
+				out.append(line[5:] + "\n")
+			elif line.startswith("afsj @ "):
+				va = int(line[7:], 16)
+				if va in self.known:
+					out.append(json.dumps(self.known[va]) + "\n")
+		return "".join(out)
+
+
+class TestSignatureBatch(unittest.TestCase):
+	def test_batch_survives_rizin_parsing_and_gaps(self):
+		session = object.__new__(rz.RizinSession)
+		session._pipe = Rizin082Pipe(AFSJ)
+		vas = [0x401000, 0x7FFFFF] + sorted(AFSJ)
+		parts = session.signature_parts_many(vas)
+		self.assertEqual(parts[0x7FFFFF], {})
+		for va, want in AFSJ.items():
+			self.assertEqual(parts[va], want, hex(va))
+
+
 @unittest.skipIf(_MISSING, _MISSING)
 @unittest.skipUnless(os.environ.get("SRO_RIZIN_IT"),
                      "set SRO_RIZIN_IT=1 (+SRO_RIZIN_BINARY) for the live run")
@@ -551,6 +592,11 @@ class TestLiveRizin(unittest.TestCase):
 			self.assertEqual(rc, 0)
 			n = con.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
 			self.assertGreater(n, 1000)
+			# The batched afsj must reach real rizin intact: a separator
+			# rizin cannot parse empties every answer silently.
+			vas = [f["offset"] for f in session.functions()[:50]]
+			parts = session.signature_parts_many(vas)
+			self.assertGreater(sum(1 for p in parts.values() if p), 40)
 		finally:
 			session.close()
 

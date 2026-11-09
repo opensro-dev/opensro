@@ -94,8 +94,18 @@ ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
 # What `index` runs on a loaded project before it reads the function
 # set: `aar` finds references without redrawing the seed's functions.
 PROJECT_REFS_CHOICES = ("aar", "aac", "none")
-SIGNATURE_SEPARATOR = "@@revtool-afsj@@"
+# rizin 0.8 has no `?e` and parses `@@` as an iterator: a batch
+# using either failed to parse whole and every signature came back
+# empty (blind dogfood, 2026-11-09). `echo` of a plain word is safe.
+SIGNATURE_SEPARATOR = "REVTOOL-AFSJ-SEP"
 SIGNATURE_BATCH_BYTES = 4096
+
+
+def signature_command(va):
+	"""One batch entry: the function's afsj, then the echoed separator."""
+	return f"afsj @ {va:#x}\necho {SIGNATURE_SEPARATOR}"
+
+
 # Character widths of izj string types, for walking a string's
 # character boundaries when its first one carries no reference.
 STRING_REF_SCAN_MAX = 16
@@ -164,7 +174,7 @@ class RizinSession:
 		batch = []
 		size = 0
 		for va in vas:
-			command = f"afsj @ {va:#x}\n?e {SIGNATURE_SEPARATOR}"
+			command = signature_command(va)
 			if batch and size + len(command) + 1 > SIGNATURE_BATCH_BYTES:
 				parts.update(self._signature_batch(batch))
 				batch, size = [], 0
@@ -175,7 +185,7 @@ class RizinSession:
 		return parts
 
 	def _signature_batch(self, vas):
-		text = "\n".join(f"afsj @ {va:#x}\n?e {SIGNATURE_SEPARATOR}" for va in vas)
+		text = "\n".join(signature_command(va) for va in vas)
 		answers = self.cmd(text).split(SIGNATURE_SEPARATOR)
 		parts = {}
 		for va, answer in zip(vas, answers):

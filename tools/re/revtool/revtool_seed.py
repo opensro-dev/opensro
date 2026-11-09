@@ -64,6 +64,9 @@ APPLY_CHUNK_BYTES = 4096
 MANIFEST_NAME = "seed-manifest.json"
 BN_NAMES_FORMAT = "sro-bn-function-names"
 BN_NAMES_VERSION = 1
+RIZIN_UNSAFE_RE = re.compile(r"[^A-Za-z0-9_.]")
+# A BN name that is not printable ASCII is a mis-decoded string, not a label.
+PRINTABLE_NAME_RE = re.compile(r"^[!-~]+$")
 ANONYMOUS_NAME_RE = re.compile(r"^(?:j_)*(?:sub|nullsub)_[0-9a-fA-F]+(?:_\d+)?$")
 
 
@@ -103,7 +106,8 @@ def load_bn_names(path, target):
 		if not (isinstance(row, list) and len(row) == 2 and isinstance(row[0], int)
 		        and isinstance(row[1], str)):
 			raise SeedError(f"{path}: bad function row {row!r}")
-		names[row[0]] = row[1]
+		if PRINTABLE_NAME_RE.match(row[1]):
+			names[row[0]] = row[1]
 	return names
 
 
@@ -336,6 +340,30 @@ def _batched(pipe, commands):
 		pipe.cmd("\n".join(batch))
 
 
+def rizin_names(functions):
+	"""{va: the name rizin is given}, safe for its command line and unique.
+
+	rizin parses `@` (temporary seek), `$`, `?`, `;`, `>` and friends in
+	a command, so a C++ mangled BN name (`?register_filter@?$...`) would
+	cut the af+ short; anything outside [A-Za-z0-9_.] becomes `_`. It
+	also refuses a second function under an existing name, and BN names
+	repeat (433 names over 958 client rows, 2026-11-09: thunks such as
+	j_CAllocPool_Alloc x16), so a repeat gets its address appended the
+	way BN's own `sub_` spelling would.
+	"""
+	names = {}
+	used = set()
+	for va, name in sorted(functions):
+		if not name or name[0].isdigit():
+			name = f"sub_{va:x}"
+		name = RIZIN_UNSAFE_RE.sub("_", name)
+		if name in used:
+			name = f"{name}_{va:x}"
+		used.add(name)
+		names[va] = name
+	return names
+
+
 def _seed_commands(functions, existing=()):
 	"""af+/afb+ pairs for the seed rows, in address order.
 
@@ -346,19 +374,17 @@ function (duplicated)", once per row, which buried the output.
 Each function gets one block reaching to the next function's
 start (the last reuses the previous extent, 16 at the limit):
 starts and names are the seed's facts; extents are the honest
-bound those facts imply. A name rizin's command line cannot take
-(whitespace, a leading digit) defines under the sub_<hex>
-placeholder and is counted by the caller's name check.
+bound those facts imply. Names go through rizin_names.
 	"""
 	rows = sorted(functions)
 	existing = set(existing)
+	safe = rizin_names(rows)
 	commands = []
 	previous_gap = 16
-	for at, (va, name) in enumerate(rows):
+	for at, (va, _seed_name) in enumerate(rows):
 		if at + 1 < len(rows):
 			previous_gap = rows[at + 1][0] - va
-		if not name or name[0].isdigit() or any(c.isspace() for c in name):
-			name = f"sub_{va:x}"
+		name = safe[va]
 		if va in existing:
 			commands.append(f"afn {name} @ {va:#x}")
 			continue
@@ -403,9 +429,11 @@ address inside a neighbour's block) is reported, never assumed.
 			present = {row["offset"]: row.get("name", "") for row in rows}
 			defined = [va for va, _ in functions if va in present]
 			stats["preexisting"] = sum(1 for va, _ in functions if va in preexisting)
-			named = sum(1 for va, name in functions if present.get(va) == name)
-			labelled = [(va, name) for va, name in functions
-						if va in present and not name.startswith("sub_")]
+			safe = rizin_names(functions)
+			stats["respelled"] = sum(1 for va, name in functions if safe[va] != name)
+			named = sum(1 for va, _ in functions if present.get(va) == safe[va])
+			labelled = [(va, safe[va]) for va, name in functions
+						if va in present and not is_anonymous(name)]
 			sample = labelled[::max(1, len(labelled) // 20)][:20] if labelled else []
 			sampled_ok = sum(1 for va, name in sample if present.get(va) == name)
 			pipe.cmd(f'Ps "{tmp_path}"')
@@ -560,6 +588,8 @@ def cmd_seed_apply(args, con):
 	print(f"applied {os.path.basename(args.seed)} -> {rzdb} in {elapsed:.1f}s")
 	merged = f" (rizin refused {total - defined} inside neighbours)" if defined < total else ""
 	print(f"  functions defined {defined} of {total} seed rows{merged}")
+	if stats.get("respelled"):
+		print(f"  {stats['respelled']} names respelled for rizin (unsafe characters -> _, repeats get _<va>)")
 	if stats.get("preexisting"):
 		print(f"  of those, {stats['preexisting']} rizin defined on load and were renamed in place")
 	print("  next: `revtool_rizin.py index` runs the reference pass (aar) that xref/strings need")
