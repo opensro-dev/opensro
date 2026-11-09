@@ -632,8 +632,7 @@ func segmentBlockDue(rec moverRecord, block worldgeom.InterestBlock, nowMs int64
 	if live == nil || live.ArriveMs <= live.DepartMs || nowMs >= live.ArriveMs {
 		return math.MaxInt64
 	}
-	if worldgeom.IsDungeonRegion(live.From.RegionID) != worldgeom.IsDungeonRegion(live.To.RegionID) ||
-		worldgeom.IsDungeonRegion(live.From.RegionID) && live.From.RegionID != live.To.RegionID {
+	if !worldgeom.SameFloor(live.From.RegionID, live.To.RegionID) {
 		return nowMs
 	}
 	if nowMs < live.DepartMs {
