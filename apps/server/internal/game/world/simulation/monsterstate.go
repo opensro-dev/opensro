@@ -126,8 +126,15 @@ type MonsterState struct {
 	// populationForObject scan answered with. populationForObject
 	// verifies it against the registry and the population's own rows
 	// before believing it; see there (#2029).
-	popHintKey           populationKey
-	popHintState         *divisionMonsterState
+	popHintKey   populationKey
+	popHintState *divisionMonsterState
+	// divHint is the division name and population the last
+	// divisionState read answered with; division registers a
+	// division's population once and never replaces or removes
+	// it, so the remembered pair can only ever repeat the map's
+	// own answer. See divisionState (#3027).
+	divHintName          string
+	divHintState         *divisionMonsterState
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest
@@ -368,6 +375,35 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 		panic("catalog has no default world")
 	}
 	s.divs[divisionID] = state
+	return state
+}
+
+/*
+================
+divisionState
+
+s.divs[division] through the last answer's memo. The population
+doors (populationForObjectAt and the reads it feeds) resolve the
+same division back to back - a leg steps one division's actors
+through door after door - and every resolve paid the string map's
+hash to re-find the population it had just found (three quarters
+of populationForObjectAt in the seeded profile, #3027). division
+registers a division's population once and never replaces or
+removes it, so the remembered pair is the map's answer for that
+name for the life of the process: the memo repeats the map, it
+never guesses (popHint's discipline, without its scan to verify
+against, because there is no retirement to outlive). Callers hold
+s.mu, as the map already requires.
+================
+*/
+func (s *MonsterState) divisionState(division string) *divisionMonsterState {
+	if state := s.divHintState; state != nil && s.divHintName == division {
+		return state
+	}
+	state := s.divs[division]
+	if state != nil {
+		s.divHintName, s.divHintState = division, state
+	}
 	return state
 }
 

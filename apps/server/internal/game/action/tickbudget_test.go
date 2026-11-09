@@ -109,13 +109,21 @@ const (
 // rebuilt from empty every tick (#2033), measured 21,755 B /
 // 184 allocs; with the compound-job advance refilling its key
 // scratch under the job lock instead of rebuilding the list every
-// tick (#2033), measured 21,732 B / 183 allocs; with the judged
-// pet's COS abnormal identity weighed as a folded struct key,
-// folded once per session binding, instead of a string rebuilt on
-// every read (#2033), measured 21,399 B / 160 allocs.
+// tick (#2033), measured 21,732 B / 183 allocs; with the bond tick
+// judging its expansion, refusal and idle verdicts ahead of
+// bondSource's escaping answer - an admitted bear whose cooldown
+// runs, or with nobody dead in band to revive, and any owner whose
+// pet is not even out, never pays for the call or its companion
+// copy (#2033), measured 19,651 B / 170 allocs; with the
+// natural-recovery pass refilling its due-key scratch under the
+// recovery lock instead of rebuilding the list every tick (#2033),
+// measured 19,516 B / 170 allocs; with the judged pet's COS
+// abnormal identity weighed as a folded struct key, folded once
+// per session binding, instead of a string rebuilt on every read
+// (#2033), measured 19,241 B / 148 allocs.
 const (
-	tickBudgetBytesPerTick  = 23700
-	tickBudgetAllocsPerTick = 177
+	tickBudgetBytesPerTick  = 21200
+	tickBudgetAllocsPerTick = 163
 )
 
 /*
