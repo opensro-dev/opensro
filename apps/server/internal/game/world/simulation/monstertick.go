@@ -91,6 +91,13 @@ type MonsterMoverOps struct {
 	// commit through these gid-verified hints while armed.
 	stepSlot        uint32
 	stepMonsterSlot uint32
+	// stepQueueSlot is the running step actor's behaviour queue
+	// slot, armed with the storage slots above: the activity
+	// commit's re-arm lands on the queue row through it
+	// (setAtSlot) instead of resolving the gid through byGID
+	// again (#3027). Read only while stepGenArmed, like the
+	// storage slots.
+	stepQueueSlot uint32
 	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
 	// #2205): the zero value (everywhere but production wiring) runs
 	// the serial leg; >= 1 plans each batch on a pool - one worker

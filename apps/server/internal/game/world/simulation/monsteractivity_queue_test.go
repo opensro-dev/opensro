@@ -470,6 +470,85 @@ func TestBehaviorQueueSetAtCarriesAndRecycles(t *testing.T) {
 
 /*
 ================
+TestBehaviorQueueSetAtSlotVerified
+
+setAtSlot arms through the carried queue slot alone: the row
+keeps the storage slots it noted and a same-at re-arm places no
+second copy. A slot that names another actor, and the
+no-queue-slot sentinel, delegate to the gid set, so the asked
+actor is scheduled and the slot owner's due is untouched
+(#3027).
+================
+*/
+func TestBehaviorQueueSetAtSlotVerified(t *testing.T) {
+	var q behaviorQueue
+	q.set(1, 100)
+	q.set(2, 100)
+	due := q.takeDue(100, nil)
+	if len(due) != 2 {
+		t.Fatalf("drain fired %v, want gids 1 and 2", due)
+	}
+	refs := make(map[uint32]behaviorActorRef, len(due))
+	for _, ref := range due {
+		refs[ref.gid] = ref
+	}
+	// Note storage slots on gid 1's row, as a setAt re-arm would.
+	noted := refs[1]
+	noted.slot = 7
+	noted.monsterSlot = 9
+	q.setAt(noted, 200)
+
+	q.setAtSlot(noted.queueSlot, 1, 200)
+	copies := 0
+	countCopies := func(list []behaviorCopy) {
+		for _, e := range list {
+			if e.slot == noted.queueSlot {
+				copies++
+			}
+		}
+	}
+	countCopies(q.due)
+	countCopies(q.far)
+	for i := range q.buckets {
+		countCopies(q.buckets[i])
+	}
+	if copies != 1 {
+		t.Fatalf("same-at setAtSlot left %d copies of gid 1's slot, want the one placed copy", copies)
+	}
+
+	q.setAtSlot(noted.queueSlot, 1, 300)
+	if q.byGID[1] != noted.queueSlot {
+		t.Fatalf("gid 1 resolved to slot %d, want its carried slot %d", q.byGID[1], noted.queueSlot)
+	}
+	if row := q.slots[noted.queueSlot]; row.at != 300 || !row.live || row.moverSlot != 7 || row.monsterSlot != 9 {
+		t.Fatalf("gid 1 row %+v, want due 300 live with the noted slots (7, 9)", row)
+	}
+
+	// Another actor's slot: gid 2 arms by gid, gid 1 keeps its due.
+	q.setAtSlot(noted.queueSlot, 2, 400)
+	if got := q.slots[q.byGID[2]].at; got != 400 {
+		t.Fatalf("gid 2 due %d, want 400 from the delegated set", got)
+	}
+	if row := q.slots[noted.queueSlot]; row.at != 300 {
+		t.Fatalf("gid 1 row due %d, want its untouched 300", row.at)
+	}
+	// The sentinel delegates the same way.
+	q.setAtSlot(behaviorNoQueueSlot, 2, 500)
+	if got := q.slots[q.byGID[2]].at; got != 500 {
+		t.Fatalf("gid 2 due %d, want 500 from the sentinel's delegated set", got)
+	}
+
+	fired := make(map[uint32]int)
+	for _, ref := range q.takeDue(500, nil) {
+		fired[ref.gid]++
+	}
+	if len(fired) != 2 || fired[1] != 1 || fired[2] != 1 {
+		t.Fatalf("drain fired %v, want gids 1 and 2 once each", fired)
+	}
+}
+
+/*
+================
 TestBehaviorQueueRemoveAtVerified
 
 removeAt through the ref's queue slot retires its own actor; a slot

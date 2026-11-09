@@ -38,7 +38,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	// actor was snapshot at (#2137 slice 1): a slower lane's set
 	// since the snapshot drops them instead of being overwritten.
 	ops.stepBaseGen, ops.stepGenArmed = actor.moverGen, true
-	ops.stepSlot, ops.stepMonsterSlot = actor.slot, actor.monsterSlot
+	ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot = actor.slot, actor.monsterSlot, actor.queueSlot
 	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, &actor.mover, players, nowMs)
 	ops.stepGenArmed = false
 	for _, session := range ops.divisionSessions(divisionID, sessions) {
@@ -128,9 +128,9 @@ func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, b
 	// (#3027). The doors verify each hint against the gid, so
 	// this is the gid commit with the map resolves left out.
 	if ops.stepGenArmed {
-		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepBaseGen, before, after, now)
+		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot, ops.stepBaseGen, before, after, now)
 	}
-	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoBaseGen, before, after, now)
+	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
 }
 
 /*

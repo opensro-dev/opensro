@@ -744,7 +744,7 @@ in the seeded profile (#3027).
 func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	r := s.slots[slot].rec
 	if r.live != nil {
-		return scheduleOf(*r.live)
+		return scheduleOf(r.live)
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending
@@ -764,10 +764,13 @@ scheduleRow for a mover value in hand: the activity commit has
 just written its row under the state lock it still holds, so its
 reschedule reads the schedule off the written value instead of
 re-reading the stored row (#3027). scheduleRow's live branch is
-this same projection, so the two can never drift.
+this same projection, so the two can never drift. The row
+arrives by pointer: the projection reads a dozen scalars, and
+copying the whole mover to read them was the schedule read's
+flat cost in the seeded profile (#3027).
 ================
 */
-func scheduleOf(row monster.MoverState) moverSchedule {
+func scheduleOf(row *monster.MoverState) moverSchedule {
 	return moverSchedule{mode: row.Mode(), activity: row.Activity, arriveMs: row.ArriveMs,
 		regionID: row.Pose.RegionID, deadlineMs: row.BehaviorDeadlineMs,
 		idleEntryPending: row.IdleEntryPending(), controlMode: row.ControlMode(),

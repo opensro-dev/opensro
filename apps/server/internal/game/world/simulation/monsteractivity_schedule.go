@@ -94,12 +94,14 @@ branch (retire an actor whose row is gone) cannot fire here:
 the row exists because the commit wrote it. The resident row
 still resolves through the verified monster-slot hint the
 commit carried, delegating to the gid resolve on a miss, so
-the armed due is scheduleBehaviorSlot's either way. The commit
-holds no queue slot, so the re-arm itself still lands through
-behavior.set.
+the armed due is scheduleBehaviorSlot's either way. The re-arm
+itself lands through the queue slot the caller's snapshot carried
+(setAtSlot), verified against the gid and delegating to
+behavior.set when the caller holds none, so the commit's arm
+resolves no gid through byGID either (#3027).
 ================
 */
-func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gid uint32, m moverSchedule, monsterSlot uint32, now int64) {
+func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gid uint32, m moverSchedule, monsterSlot uint32, queueSlot uint32, now int64) {
 	state.forgetDormant(gid)
 	if s.tryDormant(state, gid, m, now) {
 		return
@@ -108,7 +110,7 @@ func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gi
 	if !hot {
 		resident, _ = state.instances.hotRow(gid)
 	}
-	state.behavior.set(gid, s.nextBehaviorDue(state, gid, m, resident, now))
+	state.behavior.setAtSlot(queueSlot, gid, s.nextBehaviorDue(state, gid, m, resident, now))
 }
 
 /*
