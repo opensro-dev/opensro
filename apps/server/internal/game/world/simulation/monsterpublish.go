@@ -109,13 +109,17 @@ commitSteppedActivity
 
 The activity gate's commit routed through the step's funnel
 (monsteractivity.go's runActivityGate): applied at once outside a
-plan, recorded for the ordered commit inside one (#2205).
+plan, recorded for the ordered commit inside one (#2205). The
+second answer is the write's cadence verdict (commitActivityAt's,
+or the pair's own comparison on the plan path, which records
+without writing): the gate reads its generation rule from it
+instead of comparing the rows again (#2029).
 ================
 */
-func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
+func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) (bool, bool) {
 	if ops.plan != nil {
 		ops.plan.recordActivity(before, after)
-		return true
+		return true, cadenceOnlyWrite(before, after)
 	}
 	// The step's own actor is armed: commit through its carried
 	// slots (#2133). The doors verify each hint against the gid, so
@@ -123,7 +127,7 @@ func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, b
 	if ops.stepGenArmed {
 		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, before, after, now)
 	}
-	return ops.Monsters.commitActivity(division, gid, before, after, now)
+	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
 }
 
 /*
