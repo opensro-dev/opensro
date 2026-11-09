@@ -19,14 +19,19 @@ type activityWorld struct {
 	world      uint32
 	generation uint64
 }
-type activityBucket struct {
-	owner activityWorld
-	block worldgeom.MessageBlock
-}
 type monsterActivitySnapshot struct {
-	counts     map[activityBucket]uint16
+	// counts is the census kept by world, then block: the gate
+	// asks one world at a time (the world rotates per batch), so
+	// its probe hashes the small block key alone, never the whole
+	// bucket with its division string (#3027).
+	counts     map[activityWorld]map[worldgeom.MessageBlock]uint16
 	unresolved map[activityWorld]bool
 	world      activityWorld
+	// bound is the asked world's count map, bound on rotation
+	// (countedHere): per batch, not per due actor.
+	bound      map[worldgeom.MessageBlock]uint16
+	boundWorld activityWorld
+	boundSet   bool
 }
 
 func (ops *MonsterMoverOps) activityBlock(p Spawn) (worldgeom.MessageBlock, bool) {
@@ -39,7 +44,7 @@ func (ops *MonsterMoverOps) activityBlock(p Spawn) (worldgeom.MessageBlock, bool
 }
 
 func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int64) *monsterActivitySnapshot {
-	a := &monsterActivitySnapshot{counts: make(map[activityBucket]uint16), unresolved: make(map[activityWorld]bool)}
+	a := &monsterActivitySnapshot{counts: make(map[activityWorld]map[worldgeom.MessageBlock]uint16), unresolved: make(map[activityWorld]bool)}
 	type identity struct {
 		owner activityWorld
 		gid   uint32
@@ -62,11 +67,39 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 		}
 		// The retail server's spawn broadcast counts every admitted PC, including dead PCs. Counts live
 		// in that actor partition, not the combat-eligible player list.
+		inner := a.counts[owner]
+		if inner == nil {
+			// Sized for one NeighborsEach ring (3x3 blocks).
+			inner = make(map[worldgeom.MessageBlock]uint16, 16)
+			a.counts[owner] = inner
+		}
 		b.NeighborsEach(func(n worldgeom.MessageBlock) {
-			a.counts[activityBucket{owner, n}]++
+			inner[n]++
 		})
 	}
 	return a
+}
+
+/*
+================
+monsterActivitySnapshot.countedHere
+
+Whether the census counted any admitted PC into the snapshot's
+current world at block b - the gate's activity verdict. The
+census only ever increments, so a nonzero count is membership.
+The gate used to probe the census by the whole bucket key,
+hashing the division string into every due actor's probe. The
+nested census plus the per-rotation binding pays one small
+block hash per actor instead: the world-keyed lookup happens
+once per batch rotation, where world itself is assigned
+(#3027).
+================
+*/
+func (a *monsterActivitySnapshot) countedHere(b worldgeom.MessageBlock) bool {
+	if !a.boundSet || a.boundWorld != a.world {
+		a.bound, a.boundWorld, a.boundSet = a.counts[a.world], a.world, true
+	}
+	return a.bound[b] != 0
 }
 
 /*
@@ -134,7 +167,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 	if m.Activity.Due(uint32(now)) {
 		b, ok := ops.activityBlockFor(actor.Gid, poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
 		resolved := ok && !ops.activity.unresolved[ops.activity.world]
-		active := resolved && ops.activity.counts[activityBucket{ops.activity.world, b}] != 0
+		active := resolved && ops.activity.countedHere(b)
 		if pending && active {
 			mustMoverTransition(&m, monster.MoverEventActivityResumed, 0)
 			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), m, true, true
