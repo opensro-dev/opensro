@@ -191,6 +191,32 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 
 /*
 ================
+TestCommitActivityAtArmsTheGidDoorsDue
+
+The commit's reschedule resolves the mover and resident rows
+through the slots the commit carried (scheduleBehaviorCommitted);
+the due it arms must be the gid door's: re-arming the same actor
+through scheduleBehavior on the same rows changes nothing.
+================
+*/
+func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
+	before, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	after := before
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); !committed || !cadenceOnly {
+		t.Fatal("cadence-only commitActivityAt rejected or misread")
+	}
+	state := ops.Monsters.division(monsterTestDivision)
+	armed := scheduleDue(t, state, actor.Gid)
+	ops.Monsters.scheduleBehavior(state, actor.Gid, now+1001)
+	if due := scheduleDue(t, state, actor.Gid); due != armed {
+		t.Fatalf("carried reschedule armed %d, the gid door arms %d on the same rows", armed, due)
+	}
+}
+
+/*
+================
 TestCarriedStorageReadsMatchGidReads
 
 The batch build's carried reads answer as the gid reads do: the

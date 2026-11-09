@@ -505,6 +505,38 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 
 /*
 ================
+MonsterState.scheduleBehaviorCommitted
+
+scheduleBehaviorSlot for the activity commit's own reschedule
+(monsteractivity.go's commitActivityAt): the commit has just read
+and written the mover row through the slot it carries, and holds
+the actor's monster slot too, so the re-arm resolves both rows
+through the verified hints instead of the storages' gid maps -
+scheduleSlotAt and hotRowAt delegate to the gid resolve when a
+hint no longer names the actor, so the armed due is
+scheduleBehaviorSlot's either way. The commit holds no queue
+slot, so the re-arm itself still lands through behavior.set.
+================
+*/
+func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gid uint32, slot, monsterSlot uint32, now int64) {
+	state.forgetDormant(gid)
+	m, _, ok := state.movers.scheduleSlotAt(slot, gid)
+	if !ok {
+		state.behavior.remove(gid)
+		return
+	}
+	if s.tryDormant(state, gid, m, now) {
+		return
+	}
+	resident, hot := state.instances.hotRowAt(monsterSlot, gid)
+	if !hot {
+		resident, _ = state.instances.hotRow(gid)
+	}
+	state.behavior.set(gid, s.nextBehaviorDue(state, gid, m, resident, now))
+}
+
+/*
+================
 MonsterState.nextBehaviorDue
 
 When the actor's next behaviour step falls due: the next tick, or
