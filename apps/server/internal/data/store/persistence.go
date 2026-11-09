@@ -612,7 +612,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 	// already holds, so it costs no encode and no hash. The digest
 	// below remains the write gate for characters that did move - and
 	// the debug check that the comparison told the truth.
-	if committed, known := w.committedRows[key]; known && len(characterSectionsChanged(c, committed)) == 0 {
+	if committed, known := w.committedRows[key]; known && !characterChanged(c, committed) {
 		w.rows.skipped++
 		return nil
 	}
