@@ -67,6 +67,23 @@ type ViewProvider interface {
 	WorldView() simulation.SessionView
 }
 
+/*
+==================
+SnapshotIntoProvider
+
+An optional SnapshotProvider face that fills a retained snapshot slot
+in place (#2989), the fill-in-place pattern of the monster leg
+(#2984/#2985): every field of the slot is written, so the bridge can
+publish from the same slots each tick instead of allocating a fresh
+snapshot of every session. The bridge-owned fields (SessionID,
+Population, PublishedObjects) stay the bridge's to write. A provider
+without it is read through WorldSnapshot and copied into the slot.
+==================
+*/
+type SnapshotIntoProvider interface {
+	WorldSnapshotInto(dst *simulation.SessionSnapshot)
+}
+
 // SessionIDString is the canonical mapping from a transport session ID to
 // the string ids the simulation package speaks.
 func SessionIDString(id uint64) string { return strconv.FormatUint(id, 10) }
@@ -84,8 +101,25 @@ type Bridge struct {
 	// tickViews is the light face of the most recent full snapshot walk,
 	// shared read-only by that tick's view hooks (SnapshotSessionViews).
 	// The next full walk replaces it wholesale; it is never mutated.
+	//
+	// snapshots is the full face of that same walk, retained with it
+	// (#2989): every reader of the full walk is tick-scoped (the tick's
+	// prepare and the legs and hooks it feeds - the lifetime the monster
+	// leg snapshot already relies on), so the next walk fills the same
+	// slots in place instead of allocating a fresh snapshot of every
+	// session each tick. snapIDs keeps each scene's canonical id string
+	// across walks: a scene's id changes only with its revision, so the
+	// string built for it is built once. viewsMu guards all three.
 	viewsMu   sync.Mutex
 	tickViews []simulation.SessionView
+	snapshots []simulation.SessionSnapshot
+	snapIDs   map[sceneIDKey]string
+}
+
+// sceneIDKey identifies one scene admission: the transport session and
+// its scene revision, the two inputs of sceneSessionID.
+type sceneIDKey struct {
+	id, revision uint64
 }
 
 // New builds the bridge. One per Hub is enough.
@@ -230,22 +264,38 @@ Every in-world session's full snapshot for one tick, in hub order.
 */
 func (b *Bridge) SnapshotSessions() []simulation.SessionSnapshot {
 	sessions := b.hub.Sessions()
-	out := make([]simulation.SessionSnapshot, 0, len(sessions))
+	b.viewsMu.Lock()
+	defer b.viewsMu.Unlock()
+	// Scene ids outlive their scenes in the cache (a closed session's id
+	// is never asked again); bound it by the live hub size and rebuild
+	// lazily rather than tracking closures.
+	if len(b.snapIDs) > 4*len(sessions)+64 {
+		clear(b.snapIDs)
+	}
+	snaps := b.snapshots
+	n := 0
 	for _, s := range sessions {
-		if snap, ok := b.sessionSnapshot(s, false); ok {
-			out = append(out, snap)
+		if n == len(snaps) {
+			snaps = append(snaps, simulation.SessionSnapshot{})
+		}
+		if b.sessionSnapshotInto(&snaps[n], s, false) {
+			n++
 		}
 	}
+	snaps = snaps[:n]
+	b.snapshots = snaps
 	// The tick's view hooks read the light face of this same walk
 	// (SnapshotSessionViews), so no hook walks the hub again this tick.
-	views := make([]simulation.SessionView, len(out))
-	for i := range out {
-		views[i] = out[i].View()
+	// The views stay a fresh slice per walk as before: out-of-tick
+	// readers (the public API's online checks) hold them across walks,
+	// so only their elements' world pointees are shared with the slots,
+	// and those readers never read the world.
+	views := make([]simulation.SessionView, len(snaps))
+	for i := range snaps {
+		views[i] = snaps[i].View()
 	}
-	b.viewsMu.Lock()
 	b.tickViews = views
-	b.viewsMu.Unlock()
-	return out
+	return snaps
 }
 
 /*
@@ -268,15 +318,15 @@ kept.
 */
 func (b *Bridge) SnapshotSessionViews() []simulation.SessionView {
 	b.viewsMu.Lock()
-	views := b.tickViews
-	b.viewsMu.Unlock()
-	if views != nil {
+	defer b.viewsMu.Unlock()
+	if views := b.tickViews; views != nil {
 		return views
 	}
 	sessions := b.hub.Sessions()
-	views = make([]simulation.SessionView, 0, len(sessions))
+	views := make([]simulation.SessionView, 0, len(sessions))
 	for _, s := range sessions {
-		if snap, ok := b.sessionSnapshot(s, true); ok {
+		var snap simulation.SessionSnapshot
+		if b.sessionSnapshotInto(&snap, s, true) {
 			views = append(views, snap.View())
 		}
 	}
@@ -285,67 +335,97 @@ func (b *Bridge) SnapshotSessionViews() []simulation.SessionView {
 
 /*
 ==================
-sessionSnapshot
+sessionSnapshotInto
 
-One session's snapshot for both faces: light skips the peer presentation
-where the provider offers WorldView. Every session filter is here, so the
-full walk and the views agree on which sessions are in the world.
+One session's snapshot for both faces, written into dst: light skips the
+peer presentation where the provider offers WorldView. Every session
+filter is here, so the full walk and the views agree on which sessions
+are in the world. A false return leaves dst holding a previous fill;
+callers only publish slots this call filled.
 ==================
 */
-func (b *Bridge) sessionSnapshot(s *transport.Session, light bool) (simulation.SessionSnapshot, bool) {
+func (b *Bridge) sessionSnapshotInto(dst *simulation.SessionSnapshot, s *transport.Session, light bool) bool {
 	if s.Evicted() {
 		// A session evicted by the single-bind swap is a
 		// lame duck — it neither drives the tick nor receives its
 		// pushes while the BYE drains. (Delivery is also refused at
 		// the Session level; this skip stops its snapshot from
 		// feeding the world computation at all.)
-		return simulation.SessionSnapshot{}, false
+		return false
 	}
 	revision, active := s.SceneRevision()
 	if !active {
-		return simulation.SessionSnapshot{}, false
+		return false
 	}
 	v, ok := s.WorldSnapshot()
 	if !ok {
-		return simulation.SessionSnapshot{}, false
+		return false
 	}
 	provider, ok := v.(SnapshotProvider)
 	if !ok {
-		return simulation.SessionSnapshot{}, false
+		return false
 	}
-	var snap simulation.SessionSnapshot
 	if viewer, ok := v.(ViewProvider); ok && light {
 		view := viewer.WorldView()
-		snap = simulation.SessionSnapshot{DivisionID: view.DivisionID, CharacterID: view.CharacterID,
+		*dst = simulation.SessionSnapshot{DivisionID: view.DivisionID, CharacterID: view.CharacterID,
 			WorldInstance: view.WorldInstance, World: view.World}
+	} else if into, ok := v.(SnapshotIntoProvider); ok {
+		into.WorldSnapshotInto(dst)
 	} else {
-		snap = provider.WorldSnapshot()
+		*dst = provider.WorldSnapshot()
 	}
 	if b.PopulationLease != nil {
 		division, name, bound := s.CharacterBinding()
 		if !bound {
-			return simulation.SessionSnapshot{}, false
+			return false
 		}
 		lease, valid := b.PopulationLease(division, name, s.ID)
-		if !valid || uint32(lease.ID) != snap.WorldInstance {
-			return simulation.SessionSnapshot{}, false
+		if !valid || uint32(lease.ID) != dst.WorldInstance {
+			return false
 		}
-		snap.Population = lease
+		dst.Population = lease
+	} else {
+		// A retained slot may carry a previous walk's lease; the field
+		// is the bridge's, so a bridge without leases clears it.
+		dst.Population = instance.Lease{}
 	}
-	snap.SessionID = sceneSessionID(s.ID, revision)
+	dst.SessionID = b.sceneID(s.ID, revision)
 	// Shared, not copied: the full walk and every view hook read this set
 	// each tick, and every tick reader only reads it (SessionSnapshot).
 	published, current := s.PublishedObjectsShared(revision)
 	if !current {
-		return simulation.SessionSnapshot{}, false
+		return false
 	}
-	snap.PublishedObjects = published
-	if snap.DivisionID == "" {
+	dst.PublishedObjects = published
+	if dst.DivisionID == "" {
 		if div, ok := s.DivisionID(); ok {
-			snap.DivisionID = div
+			dst.DivisionID = div
 		}
 	}
-	return snap, true
+	return true
+}
+
+/*
+==================
+sceneID
+
+The canonical scene id string for one session admission, kept across
+walks (#2989): the id is a pure function of (session, revision), both
+stable for an admission's life, so the string is built once per
+admission instead of once per session per tick. Callers hold viewsMu.
+==================
+*/
+func (b *Bridge) sceneID(id, revision uint64) string {
+	key := sceneIDKey{id: id, revision: revision}
+	if cached, ok := b.snapIDs[key]; ok {
+		return cached
+	}
+	built := sceneSessionID(id, revision)
+	if b.snapIDs == nil {
+		b.snapIDs = make(map[sceneIDKey]string)
+	}
+	b.snapIDs[key] = built
+	return built
 }
 
 /*

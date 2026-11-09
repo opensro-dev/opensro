@@ -851,7 +851,7 @@ func TestMonsterMidMotionScopeExit(t *testing.T) {
 				t.Fatalf("tick1 delivered %d goals, want 1 (the in-flight leg)", goals)
 			}
 			var gid uint32
-			for shownGid := range ops.shownMonsters["viewer"] {
+			for shownGid := range ops.scopeShown("viewer") {
 				gid = shownGid
 			}
 			mover, _ := ops.Monsters.Mover(monsterTestDivision, gid)

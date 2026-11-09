@@ -13,6 +13,7 @@ writes a member's stream (or a patched range of it) straight to its slot.
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
 import { createWaterReflection } from "./water-reflection";
+import { WATER_SKIN_BLENDED } from "./water-refraction";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
@@ -147,6 +148,14 @@ export function createGeometryResources(
 	// through refreshAmbientOcclusion when the view changes).
 	const aoDummyView = white.createView();
 	let aoBoundView = aoDummyView;
+	// Bindings 16/17, the port-only water refraction (device
+	// /water-refraction.ts): the frame's colour copy and its r32float depth
+	// copy. While the row is off both bind the 1x1 white view (a float
+	// texture, like the depth copy) and the stage-gated branch never
+	// samples them; device.ts installs the real views through
+	// refreshWaterRefraction when they change.
+	const refractionDummyView = white.createView();
+	let refractionColourView = refractionDummyView, refractionDepthView = refractionDummyView;
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
@@ -275,6 +284,8 @@ export function createGeometryResources(
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
 				{ binding: 15, resource: aoBoundView },
+				{ binding: 16, resource: refractionColourView },
+				{ binding: 17, resource: refractionDepthView },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -362,6 +373,34 @@ export function createGeometryResources(
 			},
 			retire
 		);
+	/*
+	================
+	rebindEveryDraw
+
+	A shared binding (the sun cascade, the occlusion factor, the water
+	refraction copies) now names another view. Bind groups hold their
+	views, so every draw rebinds against its current pipeline through
+	the one geometryBinding funnel.
+	================
+	*/
+	function rebindEveryDraw() {
+		for ( const [draw, meta] of metadata ) {
+			DeviceDraw.rebind(
+				meta.selection,
+				geometryBinding(
+					meta.uniform,
+					meta.instances,
+					meta.material,
+					draw.pipeline,
+					meta.clampedSampling,
+					meta.image,
+					meta.skin,
+					meta.bones,
+					meta.environmentImage
+				)
+			);
+		}
+	}
 	/*
 	================
 	passSibling
@@ -1069,7 +1108,9 @@ export function createGeometryResources(
 								data.bones.length / 16 / Math.max( 1, count )) :
 							0,
 						mat?.lightmap ? 1 : 0,
-						mat?.water ? 1 : 0,
+						// skin.z: water, with blended surfaces marked apart for
+						// the port-only refraction branch (device/water-refraction.ts).
+						mat?.water ? (mat.blend ? WATER_SKIN_BLENDED : 1) : 0,
 						mat?.sky ?? 0,
 						1,
 						1,
@@ -1147,6 +1188,7 @@ export function createGeometryResources(
 				const draw = new DeviceDraw(
 					{
 						deferredParticle: mat?.deferredParticle,
+						water: !!mat?.water,
 						blended: data.material?.sky ? false : data.material?.blend ?? false,
 						pipeline: selected,
 						vertices,
@@ -1397,22 +1439,7 @@ export function createGeometryResources(
 			if ( shadowEnabled === enabled ) return;
 			// Bind the selected target before prepare() activates the first frame.
 			shadowEnabled = enabled;
-			for ( const [draw, meta] of metadata ) {
-				DeviceDraw.rebind(
-					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
-				);
-			}
+			rebindEveryDraw();
 		},
 		/*
 		================
@@ -1434,22 +1461,26 @@ export function createGeometryResources(
 				return;
 			}
 			aoBoundView = next;
-			for ( const [draw, meta] of metadata ) {
-				DeviceDraw.rebind(
-					meta.selection,
-					geometryBinding(
-						meta.uniform,
-						meta.instances,
-						meta.material,
-						draw.pipeline,
-						meta.clampedSampling,
-						meta.image,
-						meta.skin,
-						meta.bones,
-						meta.environmentImage
-					)
-				);
-			}
+			rebindEveryDraw();
+		},
+		/*
+		================
+		refreshWaterRefraction
+
+		Port-only, not native: the water refraction stage's copies
+		(device/water-refraction.ts), or null while the row is off, when
+		both bindings fall back to the white view the stage gate never
+		samples. The copies' views are stable per scene size and format,
+		so, as with the occlusion factor, only an enable, disable, resize
+		or format flip rebinds.
+		================
+		*/
+		refreshWaterRefraction( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
+			const nextColour = colour ?? refractionDummyView, nextDepth = depth ?? refractionDummyView;
+			if ( nextColour === refractionColourView && nextDepth === refractionDepthView ) return;
+			refractionColourView = nextColour;
+			refractionDepthView = nextDepth;
+			rebindEveryDraw();
 		},
 		/*
 		================

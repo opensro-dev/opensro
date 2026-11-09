@@ -32,7 +32,7 @@ from revtool_ingest import cmd_ingest_layout, cmd_reconstruct, cmd_sync
 from revtool_overlay import cmd_find, cmd_view, cmd_xref
 from revtool_paths import DEFAULT_DB, DEFAULT_DUMP, DEFAULT_EVIDENCE_LOCK
 from revtool_pe import cmd_deref, cmd_vtable
-from revtool_seed import cmd_seed_apply, cmd_seed_build, cmd_seed_verify
+from revtool_seed import cmd_seed_apply, cmd_seed_build, cmd_seed_publish, cmd_seed_verify
 from revtool_store import open_db
 from revtool_syntax import ASSERT_STATUS, BASES, TIERS
 
@@ -53,7 +53,8 @@ def build_parser():
 	p.add_argument("--backend", default="dump", choices=("dump", "rizin"),
 				   help="where index/view/xref/coverage/find/audit get their facts: "
 						"the Binary Ninja dump (default) or rizin on the retail "
-						"binary (dispatched by revtool.py; see revtool_rizin.py)")
+						"binary (dispatched by revtool.py; see revtool_rizin.py); "
+						"rename/doctor/sync act on the overlay store either way")
 	sub = p.add_subparsers(dest="cmd", required=True)
 
 	sp = sub.add_parser("index", help="scan the dump and build the function index")
@@ -449,6 +450,19 @@ def build_parser():
 	sa.add_argument("--force", action="store_true",
 					help="replace an existing .rzdb")
 	sa.set_defaults(handler=cmd_seed_apply)
+	spb = ssub.add_parser("publish",
+						help="publish the manifest-pinned seeds as a GitHub release (#2830)")
+	spb.add_argument("--seed-dir", default=None,
+					help="directory holding the built seeds (default: <data dir>/seed)")
+	spb.add_argument("--manifest", default=None,
+					help="pin manifest (default: seed-manifest.json beside revtool)")
+	spb.add_argument("--tag", default=None,
+					help="release tag (default: revtool-seed-<UTC date>)")
+	spb.add_argument("--repo", default="opensro-dev/opensro",
+					help="repository that holds the release")
+	spb.add_argument("--dry-run", action="store_true",
+					help="verify the pins and print the gh commands, run none")
+	spb.set_defaults(handler=cmd_seed_publish)
 
 	return p
 

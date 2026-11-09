@@ -274,8 +274,12 @@ func TestMoverBlockIndexMembershipAcrossSwapRemove(t *testing.T) {
 		for _, set := range want {
 			wanted += len(set)
 		}
-		for block, set := range storage.blocks.members {
-			for gid := range set {
+		for at, stored := range storage.blocks.keys {
+			if stored == 0 || storage.blocks.lists[at] < 0 {
+				continue
+			}
+			block := storage.blocks.blocks[at]
+			for _, gid := range storage.blocks.blockLists[storage.blocks.lists[at]] {
 				if !want[block][gid] {
 					t.Fatalf("at %d: gid %d indexed in %+v, live poses say %+v", now, gid, block, want)
 				}
@@ -284,7 +288,11 @@ func TestMoverBlockIndexMembershipAcrossSwapRemove(t *testing.T) {
 		}
 		for block, set := range want {
 			for gid := range set {
-				if _, ok := storage.blocks.members[block][gid]; !ok {
+				found := false
+				if at := storage.blocks.find(block); at >= 0 && storage.blocks.lists[at] >= 0 {
+					found = slices.Contains(storage.blocks.blockLists[storage.blocks.lists[at]], gid)
+				}
+				if !found {
 					t.Fatalf("at %d: gid %d missing from its live block %+v", now, gid, block)
 				}
 			}
@@ -314,9 +322,12 @@ func TestMoverBlockIndexMembershipAcrossSwapRemove(t *testing.T) {
 	storage.remove(2)
 	storage.reconcileBlocks(0)
 	assertMembership(0)
-	for block, set := range storage.blocks.members {
-		if _, ok := set[2]; ok {
-			t.Fatalf("departed gid 2 still indexed in %+v", block)
+	for at, stored := range storage.blocks.keys {
+		if stored == 0 || storage.blocks.lists[at] < 0 {
+			continue
+		}
+		if slices.Contains(storage.blocks.blockLists[storage.blocks.lists[at]], 2) {
+			t.Fatalf("departed gid 2 still indexed in %+v", storage.blocks.blocks[at])
 		}
 	}
 

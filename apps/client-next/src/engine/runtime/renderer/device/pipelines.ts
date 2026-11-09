@@ -11,6 +11,14 @@ mip generation, and the samplers they bind.
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
+	WATER_BEHIND_WEIGHT,
+	WATER_REFLECTION_MIX,
+	WATER_REFRACTION_STRENGTH,
+	WATER_SHORE_BAND,
+	WATER_SHORE_FOAM,
+	WATER_SKIN_BLENDED
+} from "./water-refraction";
+import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
 	D3DBLEND_BOTHSRCALPHA,
@@ -420,6 +428,13 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // ambient-occlusion.ts after the scene. While the stage is off every
 // draw binds a 1x1 white view and the gated read below never samples
 // it, so the native frame is untouched.
+// Port-only water refraction (device/water-refraction.ts): the frame's
+// colour before the blended water drew, and the view-space depth behind
+// each pixel (r32float: a depth attachment cannot be sampled while
+// attached). While the row is off every draw binds the 1x1 white view
+// and the stage-gated branch below never samples either.
+@group(0) @binding(16) var sceneBehind:texture_2d<f32>;
+@group(0) @binding(17) var sceneBehindDepth:texture_2d<f32>;
 @group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
 fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
  let size=vec2i(textureDimensions(ambientOcclusionMap));
@@ -466,6 +481,14 @@ struct WaterPass {matrix:mat4x4f,plane:vec4f,bump:vec4f,projection:vec4f}
 // 8BA130: stage 0 bump clamps; stage 1 reflection wraps. Both filter linearly.
 @group(0) @binding(11) var waterBumpSampler:sampler;
 @group(0) @binding(12) var waterMirrorSampler:sampler;
+// The water's bump offset: the dudv pair of stage 0's bump map, turned by
+// the pass's bump matrix. 8BA130 cell corners use bump UV (0,1)..(1,0);
+// ordinary water tiles four times. Water without a bump map is flat.
+fn waterBumpOffset(uv:vec2f)->vec2f{
+ if(material.reflection.w<0.5){return vec2f(0);}
+ let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+ return vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
+}
 struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
@@ -542,9 +565,7 @@ fn shadeGeometry(input:Out)->vec4f {
  var objectLightmap=vec3f(1);
  if(material.stagePolicy.z>0.5){objectLightmap=textureSample(sphereMap,waterBumpSampler,input.maskUV,0).rgb;}
  var waterColor=vec3f(0);
- if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;var offset=vec2f(0);
- // 8BA130 cell corners use bump UV (0,1)..(1,0); ordinary water tiles four times.
- if(material.reflection.w>0.5){let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;offset=vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));}
+ if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;let offset=waterBumpOffset(input.uv);
  waterColor=textureSampleLevel(waterMirror,waterMirrorSampler,projected*waterPass.projection.xy+waterPass.projection.zw+offset,0).rgb;}
  let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
  if(material.skin.w>0){let k=material.skin.w;
@@ -692,7 +713,28 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
+ if(animated&&waterPass.plane.w<0.5){
+  if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
+   // Port-only refraction (stages.z, device/water-refraction.ts): the
+   // blended water draws after a copy of the opaque frame, so it bends
+   // what lies under the surface by its own bump offset and whitens
+   // where the depth behind it comes within the shore band of its own
+   // (input.viewZ, view-space metres like the copy). The planar
+   // reflection, or the water's own lit texture without a mirror, stays
+   // the surface term it natively is.
+   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
+   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
+   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
+   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
+   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
+   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
+   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
+  }else if(waterPass.plane.z>0.5){
+   // Native: the planar reflection where a mirror exists, the water's lit
+   // texture untouched where one does not.
+   lit=waterColor;
+  }
+ }
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,

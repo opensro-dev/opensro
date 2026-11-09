@@ -117,6 +117,20 @@ export interface AmbientOcclusionDraw {
 }
 /*
 ================
+WaterRefractionDraw
+
+The experimental refracted water stage (port-only; device
+/water-refraction.ts). The device prepares it per frame and installs its
+copies as the surfaces' bindings 16/17; the frame owner encodes the
+copies after the opaque scene pass, then draws the water and the
+transparent tail over the frame in their own pass.
+================
+*/
+export interface WaterRefractionDraw {
+	encode( encoder: GPUCommandEncoder, frameColour: GPUTextureView, frameDepth: GPUTextureView ): void;
+}
+/*
+================
 MsaaDraw
 
 The experimental 4x multisampled scene buffers (device/msaa.ts). The
@@ -169,6 +183,14 @@ export interface ExperimentalFrame {
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
 	readonly ao?: AmbientOcclusionDraw;
+	// Port-only water refraction: the armed stage, and where the world
+	// list's transparent tail begins. The frame owner draws the opaque
+	// world without its blended water, copies the frame, then draws that
+	// water and the tail in order.
+	readonly water?: {
+		readonly stage: WaterRefractionDraw;
+		readonly transparentStart: number;
+	};
 	readonly msaa?: MsaaDraw;
 }
 /*
@@ -205,6 +227,12 @@ export interface DeviceOwner extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
+	waterRefraction(
+		width: number,
+		height: number,
+		enabled: boolean,
+		camera: import("@/engine/contracts/scene").WorldCamera
+	): WaterRefractionDraw | undefined;
 	msaa( width: number, height: number, enabled: boolean ): MsaaDraw | undefined;
 	sunShadow(): SunShadowOwner;
 	ambientOcclusion(
@@ -338,6 +366,9 @@ GeometryDraw
 export interface GeometryDraw {
 	readonly deferredParticle?: boolean;
 	readonly blended?: boolean;
+	// The draw shades a water surface: the refraction stage draws these
+	// apart from the main pass (device/water-refraction.ts).
+	readonly water?: boolean;
 	readonly pipeline: GPURenderPipeline;
 	readonly binding: GPUBindGroup;
 	readonly vertices: GPUBuffer;

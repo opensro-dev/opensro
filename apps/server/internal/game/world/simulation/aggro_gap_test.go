@@ -32,7 +32,7 @@ func TestDeadPlayerExcludedFromAggroCandidateList(t *testing.T) {
 	ops.RunMonsterLeg(t0+1, []SessionSnapshot{deadPlayer}, push)
 
 	// Dead player must be tracked in the viewer map.
-	if !ops.shownMonsters[deadPlayer.SessionID][instance.Gid] {
+	if !ops.scopeShown(deadPlayer.SessionID)[instance.Gid] {
 		t.Fatal("dead player was excluded from world viewer scope visibility")
 	}
 

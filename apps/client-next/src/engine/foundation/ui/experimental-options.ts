@@ -72,6 +72,11 @@ export interface ExperimentalOptions {
 	// atmospheric glow and a rim light against the sky (pipelines.ts's
 	// stages.w). Off by default; off is the native gradient and disc.
 	readonly skyDetail: boolean;
+	// Port-only, not native: the water refracts the frame behind it and
+	// whitens at the shore (device/water-refraction.ts), drawing apart
+	// from the main pass. Off by default; off is the native blended
+	// reflection, byte for byte.
+	readonly waterRefraction: boolean;
 	// Port-only, not native: the scene renders through a 4x multisampled
 	// colour and depth buffer and resolves into the frame (the original
 	// presents single-sampled). Off by default; off is byte-identical to
@@ -480,6 +485,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		perPixelLighting: enabled( "perPixelLighting" ),
 		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
+		waterRefraction: enabled( "waterRefraction" ),
 		msaa: enabled( "msaa" ),
 		sceneFxaa: enabled( "sceneFxaa" ),
 		predictedRunUp: record.predictedRunUp !== false,
@@ -591,6 +597,7 @@ export interface ExperimentalVideo {
 	readonly perPixelLighting: boolean;
 	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
+	readonly waterRefraction: boolean;
 	readonly msaa: boolean;
 	readonly sceneFxaa: boolean;
 	readonly smoothCamera: boolean;
@@ -619,6 +626,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		perPixelLighting: options.perPixelLighting,
 		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
+		waterRefraction: options.waterRefraction,
 		msaa: options.msaa,
 		sceneFxaa: options.sceneFxaa,
 		smoothCamera: options.smoothCamera,

@@ -163,21 +163,22 @@ type MonsterMoverOps struct {
 	// nil means no companion is ever a target.
 	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 
-	// shownMonsters tracks which monster gids each viewer session has
-	// been sent a spawn for (the peervis shownPeers pattern). On first sight,
-	// the bootstrap object list already owns the create set and live pose;
-	// this plane publishes only any in-flight mover continuation. Only the
-	// owning division shard touches it.
-	shownMonsters map[string]map[uint32]bool
+	// scopeViewers is each viewer session's scope record: which
+	// monster gids it has been sent a spawn for (the peervis
+	// shownPeers pattern) and the memo of the pass its shown set
+	// last synced under. On first sight, the bootstrap object list
+	// already owns the create set and live pose; this plane
+	// publishes only any in-flight mover continuation. One record
+	// per session behind one map, so a leg reads a viewer's whole
+	// state with a single lookup (#2994). Only the owning division
+	// shard touches it.
+	scopeViewers map[string]*scopeViewerState
+	// scopeSlots is the leg's retained dense per-viewer slot row,
+	// regrown to the session count and rewritten every leg (#2994).
+	scopeSlots []scopeViewerSlot
 	// breachLogged keeps the A19-b budget-breach log to once per
 	// division (a per-tick log line would be its own flood).
 	breachLogged map[string]bool
-	// scopeMemo is each seeded viewer's last full scope pass: the
-	// block and interest stamp its shown set synced under. A later
-	// leg matching all of them faces the same in-scope set and
-	// skips the delta work (#2134). Only the owning division shard
-	// touches it, like shownMonsters.
-	scopeMemo map[string]scopeViewerMemo
 }
 
 /*

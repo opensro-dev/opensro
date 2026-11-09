@@ -81,6 +81,8 @@ py tools/re/revtool/revtool.py --backend rizin --db revtool.db xref data_f0c90c
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db coverage sub_402a70
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db find CIFMain
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db audit some_writeup.md
+py tools/re/revtool/revtool.py --backend rizin --db revtool.db rename global sub_402a70 WidgetDraw
+py tools/re/revtool/revtool.py --backend rizin --db revtool.db doctor
 ```
 
 The first `index` runs rizin's call analysis (`aac`, ~1 minute on
@@ -98,6 +100,9 @@ reload it instead of re-analyzing. `--analyze` chooses `aac` (default),
 | xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run) |
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |
 | audit    | overlay DB (delegated)     | identical to the dump backend |
+| rename   | overlay DB (delegated)     | the strict depth gate measures the function's disassembly (below) |
+| doctor   | overlay DB + artifact rows | rizin provenance audit; the BN evidence checks do not apply |
+| sync     | overlay DB (delegated)     | identical to the dump backend |
 
 ### Semantics that differ from the dump backend
 
@@ -121,6 +126,14 @@ These are properties of the data source, not bugs to paper over:
 * `start_byte`/`start_line` in the functions table are dump
   geometry; rizin rows store a stable ordinal. Use one backend's
   `index` per DB file (meta records `backend=rizin`).
+* `rename`'s can-fire test consults the function index, so it stays
+  silent for `data_` keys (absent from a function index by
+  construction), and its depth gate measures disassembly - which
+  rarely carries the `ident + 0xNN` shape, so a confident rename
+  normally passes unmeasured rather than refusing on a guess.
+  `doctor` audits this backend's chain (binary/index binding, the
+  saved project, the ledger) and passes a fresh seed setup that has
+  no claims yet.
 
 ## The contributor seed
 
@@ -131,8 +144,9 @@ every function's address and current (overlay-applied) name, plus
 the target's JSONL evidence ledger. No executable bytes, no
 decompiler text: the payload is JSON, and `seed verify` proves no
 16-byte run of the binary's `.text` appears in it. Both seeds are
-~0.2 MB against a 5 MB cap. Released as GitHub release assets;
-`seed-manifest.json` beside the tool pins their hashes.
+~0.2 MB against a 5 MB cap. Publication as release assets waits on
+the owner's go; `seed-manifest.json` beside the tool pins the hashes
+either way.
 
 ```
 rem maintainer: build (hashes must agree across DB, ledger, binary)
@@ -144,10 +158,13 @@ py revtool.py --binary SRO_Client.exe seed apply revtool-seed-client.xz --rzdb S
 ```
 
 `apply` hand-defines every seed function (`af+` name, one `afb+`
-block to the next start), saves the project and samples the result
-against the seed: client 94,865 of 95,290 rows defined in ~73 s
-(the rest are import thunks rizin already owns), sampled labelled
-names 20/20. Run rizin's own analysis on top for blocks and xrefs.
+block to the next start), samples the result against the seed, and
+saves the project via a temp file + `os.replace` under an exclusive
+lock, so two applies at one `.rzdb` refuse rather than race: client
+94,865 of 95,290 rows defined in 66 s on the maintainer's box with
+the locked save (the rest are import thunks rizin already owns),
+sampled labelled names 20/20. Run rizin's own analysis on top for
+blocks and xrefs.
 
 ## Tests
 

@@ -10,7 +10,7 @@ package simulation
 
 import (
 	"opensro.online/server/internal/domain"
-	"sort"
+	"slices"
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -47,6 +47,68 @@ type scopeViewerMemo struct {
 	lease    instance.Lease
 	block    worldgeom.InterestBlock
 	stamp    interestMemoStamp
+}
+
+/*
+================
+scopeViewerState
+
+One session's scope record: the monster gids it has been sent
+spawns for, and the memo of the pass its shown set last synced
+under. The record is born at the seeding store, with the shown
+set, so memoOK implies a shown set exists - the purge and the
+unchanged-leg skip both rely on that pairing.
+================
+*/
+type scopeViewerState struct {
+	shown  map[uint32]bool
+	memo   scopeViewerMemo
+	memoOK bool
+}
+
+/*
+================
+scopeViewerSlot
+
+One viewer's dense leg slot (#2994, the per-leg snapshot shape of
+#2984): everything the leg reads for the viewer, gathered by index
+once per leg - the stamp sampled at leg start, the block and pose
+it keys on, and the viewer's scope record. The leg used to re-key
+every session in every phase instead. The resolve phase's delta
+answer rides at the end for the publish phase. shown aliases the
+record's set; state is nil until the session seeds, which is also
+what seeded means.
+================
+*/
+type scopeViewerSlot struct {
+	stamp   interestMemoStamp
+	block   worldgeom.InterestBlock
+	viewer  worldgeom.RegionXZ
+	shown   map[uint32]bool
+	state   *scopeViewerState
+	stampOK bool
+
+	sameScope bool
+	entered   []uint32
+	snapshots map[uint32]monster.Instance
+	left      []uint32
+	total     int
+	bridged   bool
+}
+
+/*
+================
+MonsterMoverOps.scopeShown
+
+The monster gids session has been sent spawns for, nil when the
+session holds no scope record.
+================
+*/
+func (ops *MonsterMoverOps) scopeShown(sessionID string) map[uint32]bool {
+	if state := ops.scopeViewers[sessionID]; state != nil {
+		return state.shown
+	}
+	return nil
 }
 
 // InterestInstances returns the instances whose live position lies inside the
@@ -122,31 +184,58 @@ difference runs the full pass below.
 ==================
 */
 func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSnapshot, viewers map[string]worldgeom.RegionXZ, live map[string]bool, push Pusher) {
-	if ops.shownMonsters == nil {
-		ops.shownMonsters = make(map[string]map[uint32]bool)
+	if ops.scopeViewers == nil {
+		ops.scopeViewers = make(map[string]*scopeViewerState)
 	}
-	if ops.scopeMemo == nil {
-		ops.scopeMemo = make(map[string]scopeViewerMemo)
+	if cap(ops.scopeSlots) < len(sessions) {
+		ops.scopeSlots = make([]scopeViewerSlot, len(sessions))
 	}
+	slots := ops.scopeSlots[:len(sessions)]
 
-	inScopeGids := make(map[uint32]bool)
-	for _, session := range sessions {
-		viewer := viewers[session.SessionID]
-		shown, seeded := ops.shownMonsters[session.SessionID]
-		stamp, stampOK := ops.Monsters.scopeInterestStamp(session.DivisionID, session.Population, viewer, nowMs)
-		memo, memoOK := ops.scopeMemo[session.SessionID]
-		sameScope := memoOK && memo.division == session.DivisionID && memo.lease == session.Population &&
-			worldgeom.InterestBlockAt(viewer) == memo.block
+	// Gather each viewer's leg inputs into its dense slot by index
+	// (#2994): the leg used to re-key every session in every phase
+	// - stamp sampling, the skip read, the shown read, the purge -
+	// and range a by-value copy of every snapshot to do it.
+	for i := range sessions {
+		slot := &slots[i]
+		*slot = scopeViewerSlot{}
+		slot.viewer = viewers[sessions[i].SessionID]
+		slot.block = worldgeom.InterestBlockAt(slot.viewer)
+		if state := ops.scopeViewers[sessions[i].SessionID]; state != nil {
+			slot.state = state
+			slot.shown = state.shown
+		}
+	}
+	ops.Monsters.fillScopeStamps(slots, sessions, nowMs)
+	for i := range sessions {
+		slot := &slots[i]
+		if slot.state == nil || !slot.state.memoOK {
+			continue
+		}
+		memo := slot.state.memo
+		slot.sameScope = memo.division == sessions[i].DivisionID && memo.lease == sessions[i].Population &&
+			slot.block == memo.block
+	}
+	ops.Monsters.resolveScopeDeltas(sessions, slots, nowMs)
+
+	var inScopeGids map[uint32]bool
+	for i := range sessions {
+		session := &sessions[i]
+		slot := &slots[i]
+		stamp, stampOK := slot.stamp, slot.stampOK
 
 		// The unchanged-leg skip (#2134): a seeded viewer whose block
 		// and interest stamp match its last pass faces the in-scope
 		// set its shown set already equals, so the delta below would
 		// publish nothing. The budget-breach size is the one already
 		// logged for this division occupancy, so it is not re-read
-		// either.
-		if seeded && stampOK && sameScope && stamp == memo.stamp {
+		// either. sameScope is only set for a memo-holding viewer,
+		// and a memo exists only beside a seeded shown set, so the
+		// skip needs no shown read (#2988).
+		if stampOK && slot.sameScope && stamp == slot.state.memo.stamp {
 			continue
 		}
+		shown := slot.shown
 
 		// enterOne publishes one scope-enter: one 0x30D7 single at the
 		// monster's LIVE pose (a wanderer spawns where it is, not at
@@ -197,7 +286,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 					Payload:  despawn.Encode(),
 				}})
 			} else if len(exits) > 1 {
-				sort.Slice(exits, func(i, j int) bool { return exits[i] < exits[j] })
+				slices.Sort(exits)
 				push.PushToSession(session.SessionID, MonsterDespawnBracketFrames(exits))
 			}
 		}
@@ -206,37 +295,36 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 		// in blocks some other neighbourhood reads - or this block's
 		// answer changed by a difference the per-block memo recorded.
 		// A viewer whose shown set still equals the replaced answer
-		// applies just that difference. Anything the memo cannot
-		// bridge falls through to the full pass, which is always
-		// correct.
-		if seeded && stampOK && sameScope {
-			if entered, enteredSnapshots, left, total, ok := ops.Monsters.populationInterestBlockDelta(session.DivisionID, session.Population, viewer, nowMs, memo.stamp, shown); ok {
-				// Detection only: never truncate the server-owned existence set.
-				if total > monsterScopeSoftLimit {
-					ops.logScopeBudgetBreach(session.DivisionID, total)
-				}
-				for _, gid := range entered {
-					enterOne(enteredSnapshots[gid])
-				}
-				for _, gid := range left {
-					delete(shown, gid)
-				}
-				emitExits(left)
-				ops.scopeMemo[session.SessionID] = scopeViewerMemo{
-					division: session.DivisionID, lease: session.Population,
-					block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
-				}
-				continue
+		// applies just that difference, resolved into the slot under
+		// one lock hold before this loop (#2994). Anything the memo
+		// cannot bridge falls through to the full pass, which is
+		// always correct.
+		if slot.state != nil && stampOK && slot.sameScope && slot.bridged {
+			// Detection only: never truncate the server-owned existence set.
+			if slot.total > monsterScopeSoftLimit {
+				ops.logScopeBudgetBreach(session.DivisionID, slot.total)
 			}
+			for _, gid := range slot.entered {
+				enterOne(slot.snapshots[gid])
+			}
+			for _, gid := range slot.left {
+				delete(shown, gid)
+			}
+			emitExits(slot.left)
+			slot.state.memo = scopeViewerMemo{
+				division: session.DivisionID, lease: session.Population,
+				block: slot.block, stamp: stamp,
+			}
+			continue
 		}
 
-		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewer, nowMs, shown)
+		inScope, snapshots := ops.Monsters.populationInterestDeltaSampled(session.DivisionID, session.Population, slot.viewer, slot.block, slot.stamp, shown)
 		// Detection only: never truncate the server-owned existence set.
 		if len(inScope) > monsterScopeSoftLimit {
 			ops.logScopeBudgetBreach(session.DivisionID, len(inScope))
 		}
 
-		if !seeded {
+		if slot.state == nil {
 			// First sight of this session: the client already holds the
 			// bootstrap object list, recorded when it was built. The session
 			// reaches the tick only after 0x3012 game-ready, so that list may
@@ -290,9 +378,14 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 					monsterInFlightSnapshotFrames(instance, mover, source),
 				)
 			}
-			ops.shownMonsters[session.SessionID] = shown
+			state := &scopeViewerState{shown: shown}
+			ops.scopeViewers[session.SessionID] = state
+			slot.state, slot.shown = state, shown
 		}
 
+		if inScopeGids == nil {
+			inScopeGids = make(map[uint32]bool, len(inScope))
+		}
 		clear(inScopeGids)
 		for _, gid := range inScope {
 			inScopeGids[gid] = true
@@ -315,20 +408,25 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 		// Remember the pass for the unchanged-leg skip: the stamp
 		// sampled before it ran and the block it read.
 		if stampOK {
-			ops.scopeMemo[session.SessionID] = scopeViewerMemo{
+			slot.state.memo = scopeViewerMemo{
 				division: session.DivisionID, lease: session.Population,
-				block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+				block: slot.block, stamp: stamp,
 			}
+			slot.state.memoOK = true
 		} else {
-			delete(ops.scopeMemo, session.SessionID)
+			slot.state.memoOK = false
 		}
 	}
 
 	// Departed viewers must not leak show bookkeeping (the settled-map rule).
-	for sessionID := range ops.shownMonsters {
-		if !live[sessionID] {
-			delete(ops.shownMonsters, sessionID)
-			delete(ops.scopeMemo, sessionID)
+	// The loop above leaves a record for every session it served,
+	// so when the counts agree every record belongs to a served
+	// session and none can be departed; only a surplus sweeps.
+	if len(ops.scopeViewers) > len(sessions) {
+		for sessionID := range ops.scopeViewers {
+			if !live[sessionID] {
+				delete(ops.scopeViewers, sessionID)
+			}
 		}
 	}
 
@@ -339,8 +437,8 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 	// A19-b detection intent. Tick-goroutine-only state, like shownMonsters.
 	if len(ops.breachLogged) > 0 {
 		liveDivisions := make(map[string]bool, len(sessions))
-		for _, session := range sessions {
-			liveDivisions[session.DivisionID] = true
+		for i := range sessions {
+			liveDivisions[sessions[i].DivisionID] = true
 		}
 		for divisionID := range ops.breachLogged {
 			if !liveDivisions[divisionID] {

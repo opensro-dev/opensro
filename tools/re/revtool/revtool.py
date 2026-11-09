@@ -88,8 +88,9 @@ from revtool_dump import _DUMP_HIT_MEMO  # noqa: F401
 ================
 main
 
-Dispatch: --backend rizin hands the six dump-reading commands to
-revtool_rizin (same argument shapes, facts from the retail binary);
+Dispatch: --backend rizin hands the whole command line to
+revtool_rizin (same argument shapes; function facts from the retail
+binary, overlay commands delegated back to revtool's own handlers);
 everything else is the dump backend in revtool_cli. The flag is
 stripped before either parser sees the arguments.
 ================

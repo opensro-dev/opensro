@@ -188,6 +188,13 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-ambient-occlusion",
 						label: "Ambient occlusion",
 						description: "Shade corners and contact seams from depth."
+					},
+					{
+						// Port-only, not native (device/water-refraction.ts).
+						key: "waterRefraction",
+						id: "experimental-water-refraction",
+						label: "Water refraction",
+						description: "Water bends the ground under it and foams at the shore."
 					}
 				]
 			},

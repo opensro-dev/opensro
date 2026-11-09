@@ -507,6 +507,7 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 			hdrToneMap: false,
 			sunShadow: false,
 			perPixelLighting: false,
+			waterRefraction: false,
 			msaa: false,
 			sceneFxaa: false
 		} );
