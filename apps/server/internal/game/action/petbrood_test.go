@@ -155,6 +155,70 @@ func TestCrowRechargeIdleTickTakesNoUpdateDoor(t *testing.T) {
 
 /*
 ================
+TestBroodRechargeVerdictMemoAnswersAsTheRow
+
+The session's recharge verdict memo (petbrood.go) answers idle
+ticks from the fields the full row walk reads: its verdict equals
+crowRechargeRow's on every tick of a scripted life - settled,
+idle, the charge deadline itself, a skill level raising the
+period's input, and the ticks after each door write lands.
+================
+*/
+func TestBroodRechargeVerdictMemoAnswersAsTheRow(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	learnPetBook(t, c, 51)
+	now := clock.NowMs()
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	live := c.ActiveCOS
+	verdict := func(at int64) {
+		t.Helper()
+		row, moved := state.broodRechargeVerdict(live, at)
+		wantRow, wantMoved := crowRechargeRow(live, at)
+		if row != wantRow || moved != wantMoved {
+			t.Fatalf("verdict at %d = (%+v, %v), want the row walk's (%+v, %v)", at, row, moved, wantRow, wantMoved)
+		}
+		if moved {
+			// The update door lands the judged row before the
+			// next tick reads the record.
+			live.Training.Rows[1] = row
+		}
+	}
+
+	// Settle the hand-written row through one judged write.
+	live.Training.Rows[1] = domain.PetRowCooldown{Kind: companion.ChargeKind, Capacity: 3, Charges: 1, RechargeMs: 300000, ReadyAtMs: now + 3600000}
+	verdict(now)
+	if state.broodRecharge.set {
+		t.Fatal("a moving verdict was memoised")
+	}
+	// Idle ticks ride the memo until the row's own deadline.
+	verdict(now + 1000)
+	if !state.broodRecharge.set || state.broodRecharge.untilMs != live.Training.Rows[1].ReadyAtMs {
+		t.Fatalf("idle verdict left the memo %+v, want it set to the row deadline", state.broodRecharge)
+	}
+	verdict(now + 2000)
+	verdict(now + 3599999)
+	// The deadline tick itself re-derives and grants the charge.
+	verdict(now + 3600000)
+	if live.Training.Rows[1].Charges != 2 {
+		t.Fatalf("deadline verdict left %+v, want the second charge", live.Training.Rows[1])
+	}
+	// A level on the brood book moves the period's input: the
+	// next tick judges it, memo or not.
+	for _, def := range companion.SkillsForPet(live) {
+		if def.EffectName() == companion.BroodSkill {
+			live.Training.Levels[def.Index()]++
+		}
+	}
+	verdict(now + 3600001)
+	verdict(now + 3600002)
+	// A gear swap is a compared field too.
+	live.Training.Gear[0].RefObjID++
+	verdict(now + 3600003)
+	verdict(now + 3600004)
+}
+
+/*
+================
 TestCrowBroodDestroyedEggAndCaps
 ================
 */
