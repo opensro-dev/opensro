@@ -103,10 +103,14 @@ const (
 // owner-expiry probe reading the registry's stamps under its lock
 // instead of a division list and the cached copies, and the
 // pending-pickup due probe building nothing while nothing matured
-// (#2033), measured 21,875 B / 187 allocs.
+// (#2033), measured 21,875 B / 187 allocs; with the basic-attack
+// intent snapshot, the live-chain owner set and the tick-start
+// action-owner snapshot refilled into runtime scratch instead of
+// rebuilt from empty every tick (#2033), measured 21,755 B /
+// 184 allocs.
 const (
-	tickBudgetBytesPerTick  = 24100
-	tickBudgetAllocsPerTick = 206
+	tickBudgetBytesPerTick  = 24000
+	tickBudgetAllocsPerTick = 203
 )
 
 /*
