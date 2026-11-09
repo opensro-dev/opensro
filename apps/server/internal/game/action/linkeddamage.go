@@ -14,7 +14,8 @@ The moved shares register on a queued area context the attacker's manager
 drains (the reference server's area-effect queue), so each taker receives its share as
 the attacker's hit, published as a deferred damage tick: a victim label
 with no hit reaction, the HP itself riding the vitals refresh.
-INFERENCE: a moved share does not run its taker's own links again; the
+INFERENCE: a moved share does not run its taker's own links again, nor
+the skc damage cancellation (a Bard's dance or music survives it); the
 queued context is not a hit outcome, as damagereturn.go reasons for dmgr.
 
 ===========================================================================

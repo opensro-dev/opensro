@@ -179,7 +179,7 @@ func TestCharacterSectionsDetectEveryPersistedField(t *testing.T) {
 			if !mutatePersistedFieldValue(target) {
 				t.Fatalf("no generic mutation for persisted field %s (%s)", field.Name, field.Type)
 			}
-			if changed := characterSectionsChanged(c, committed); len(changed) == 0 {
+			if !characterChanged(c, committed) {
 				t.Fatalf("mutation of persisted field %s was not detected", field.Name)
 			}
 		})
@@ -215,8 +215,8 @@ func TestCharacterSectionsIgnoreEveryEphemeralField(t *testing.T) {
 			if !mutatePersistedFieldValue(target) {
 				t.Skipf("no generic mutation for ephemeral field %s (%s)", field.Name, field.Type)
 			}
-			if changed := characterSectionsChanged(c, committed); len(changed) != 0 {
-				t.Fatalf("ephemeral field %s forced sections %v", field.Name, changed)
+			if characterChanged(c, committed) {
+				t.Fatalf("ephemeral field %s forced an encode", field.Name)
 			}
 		})
 	}

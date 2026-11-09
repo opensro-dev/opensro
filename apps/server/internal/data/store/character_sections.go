@@ -127,32 +127,34 @@ func buildCharacterSections() [][]int {
 
 /*
 ================
-characterSectionsChanged
+characterChanged
 
-The sections in which current differs from the committed copy, most
-volatile first; nil when the two records are value-equal and would
-encode to the same row. A section stops at its first unequal field.
+Whether current differs from the committed copy at all: the commit's
+skip question. It stops at the first unequal field, so a row that
+moved (the world section, searched first) is convicted without
+walking its bags, skills and quests - the former section
+list kept walking every remaining section to name them all, which
+the commit never read (#2150 live profile: equalPersistedValues 4.3%
+cum).
 ================
 */
-func characterSectionsChanged(current, committed *domain.Character) []int {
+func characterChanged(current, committed *domain.Character) bool {
 	if current == committed {
-		return nil
+		return false
 	}
 	if current == nil || committed == nil {
-		return []int{0}
+		return true
 	}
 	currentValue := reflect.ValueOf(current).Elem()
 	committedValue := reflect.ValueOf(committed).Elem()
-	var changed []int
-	for section, fields := range characterSections {
+	for _, fields := range characterSections {
 		for _, field := range fields {
 			if !equalPersistedValues(currentValue.Field(field), committedValue.Field(field)) {
-				changed = append(changed, section)
-				break
+				return true
 			}
 		}
 	}
-	return changed
+	return false
 }
 
 /*

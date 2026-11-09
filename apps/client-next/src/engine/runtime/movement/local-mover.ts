@@ -592,12 +592,6 @@ export function createLocalMover() {
 			const navigation = viewFor( world );
 			if ( !navigation || world.navigationRequestId !== walk.requestId ) return end();
 			walk.inputs = walk.inputs.filter( input => input.seq > world.inputSeq );
-			// The cap follows the speed the worker walks at, a direction walk's
-			// drift factor included, or the body falls behind a faster drift.
-			// A fixed segment is exempt: it is drawn at its authored rate (a
-			// dash is not a correction to throttle to walking speed), so the
-			// speed the prediction started with stands while it runs.
-			if ( world.speed && !walk.walker.segment?.fixedTiming ) walk.speed = world.speed * world.speedFactor;
 			advance( walk.walker, now, navigation );
 			let snapped = false;
 			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
@@ -624,6 +618,16 @@ export function createLocalMover() {
 				}
 				walk.walker = rebuilt;
 			}
+			// The cap follows the speed the worker walks at, a direction walk's
+			// drift factor included, or the body falls behind a faster drift.
+			// A fixed segment is drawn at its authored rate: a dash is not a
+			// correction to throttle to walking speed. That holds as well when
+			// the rebuild adopted the dash over a walk already predicted (Ghost
+			// Walk cast while walking): kept at the walk's cap, the body trailed
+			// the dash and glided the rest of the way after the skill's motion.
+			const segment = walk.walker.segment;
+			if ( segment?.fixedTiming ) walk.speed = startWalking( segment ).walking?.speed ?? walk.speed;
+			else if ( world.speed ) walk.speed = world.speed * world.speedFactor;
 			// The drawn body heads for the prediction; the shared cap
 			// (drawn-step.ts) limits how far it moves this frame, so what a
 			// rebuild moved is given back within the margin, never in a jump.

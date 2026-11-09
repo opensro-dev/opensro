@@ -275,7 +275,13 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		rt.endJobActivation(s.division, c)
 		out.owner.applyHit(hit, s.records)
 		// Reference server: a landed hit tests the victim's skc damage masks.
-		rt.cancelEffectsOnDamage(s.division, c, s.skill.Attack.Flags, s.now)
+		// INFERENCE: a fence or Pain Quota share is the queued area context's
+		// deferred tick, not a hit outcome (linkeddamage.go), so it does not
+		// run the damage-effect pass: a Bard taking a share keeps its dance
+		// or music.
+		if !s.linkedShare {
+			rt.cancelEffectsOnDamage(s.division, c, s.skill.Attack.Flags, s.now)
+		}
 	}
 	return out
 }
