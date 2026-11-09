@@ -138,7 +138,6 @@ const (
 const (
 	tickBudgetBytesPerTick  = 14900
 	tickBudgetAllocsPerTick = 65
-
 )
 
 /*
