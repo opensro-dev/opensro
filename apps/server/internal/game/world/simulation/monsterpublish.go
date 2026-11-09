@@ -122,12 +122,13 @@ func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, b
 		return true, cadenceOnlyWrite(before, after)
 	}
 	// The step's own actor is armed: commit through its carried
-	// slots (#2133). The doors verify each hint against the gid, so
+	// slots (#2133) and the base generation its snapshot read
+	// (#3027). The doors verify each hint against the gid, so
 	// this is the gid commit with the map resolves left out.
 	if ops.stepGenArmed {
-		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, before, after, now)
+		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepBaseGen, before, after, now)
 	}
-	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoBaseGen, before, after, now)
 }
 
 /*

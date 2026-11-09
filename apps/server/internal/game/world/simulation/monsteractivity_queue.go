@@ -53,6 +53,12 @@ const (
 	// dispatch read resolves it by gid.
 	behaviorNoMonsterSlot = ^uint32(0)
 
+	// behaviorNoBaseGen marks a commitActivityAt caller with no
+	// snapshot generation in hand (a lane door whose before was
+	// read fresh): the commit guards on the whole row value, as
+	// every commit did before the generation guard (#3027).
+	behaviorNoBaseGen = ^uint64(0)
+
 	// behaviorNoQueueSlot marks an actor ref built without the
 	// drain (a hand-built ref): its queue doors resolve by gid.
 	behaviorNoQueueSlot = ^uint32(0)
