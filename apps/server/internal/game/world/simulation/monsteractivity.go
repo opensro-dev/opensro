@@ -28,7 +28,9 @@ type monsterActivitySnapshot struct {
 	unresolved map[activityWorld]bool
 	world      activityWorld
 	// bound is the asked world's count map, bound on rotation
-	// (countedHere): per batch, not per due actor.
+	// (countedHere): per batch, not per due actor. The snapshot
+	// is walked by the one leg goroutine that owns this ops
+	// clone, so the binding needs no lock.
 	bound      map[worldgeom.MessageBlock]uint16
 	boundWorld activityWorld
 	boundSet   bool
