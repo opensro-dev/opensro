@@ -124,6 +124,28 @@ var hwanArenas = []hwanArena{
 	{35, hwanRaces[1], 2, hwanRitual, sp(27728, 1779, 724, 1596), sp(27728, 1752, 693, 1673), sp(27728, 1752, 693, 1673)},
 }
 
+/*
+================
+HwanTrialRegions
+
+The regions of the two trial arenas (the quests 1_1 and 2_1 of each race): isolated
+regions only the later client has, whose floor is a sealed object-nav deck. The rituals
+use native regions and are not listed.
+================
+*/
+func HwanTrialRegions() []uint16 {
+	seen := map[uint16]bool{}
+	var regions []uint16
+	for _, arena := range hwanArenas {
+		if arena.kind != hwanTrial || seen[arena.entry.RegionID] {
+			continue
+		}
+		seen[arena.entry.RegionID] = true
+		regions = append(regions, arena.entry.RegionID)
+	}
+	return regions
+}
+
 func sp(region uint16, x, y, z float64) simulation.Spawn {
 	return simulation.Spawn{RegionID: region, X: x, Y: y, Z: z}
 }

@@ -338,3 +338,18 @@ func insideLayer(w *hwanWorld) *enterworld.CharacterWorld {
 	packed := uint32(w.lease.ID)
 	return &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
 }
+
+/*
+================
+TestHwanTrialRegionsAreTheTwoIsolatedArenas
+
+The rescue exemption covers the two trial regions only; the rituals' native regions stay
+under the ordinary stranded-spawn rescue.
+================
+*/
+func TestHwanTrialRegionsAreTheTwoIsolatedArenas(t *testing.T) {
+	got := HwanTrialRegions()
+	if len(got) != 2 || got[0] != 22966 || got[1] != 22454 {
+		t.Fatalf("trial regions %v, want [22966 22454]", got)
+	}
+}

@@ -677,3 +677,23 @@ func standHasUnresolvedLink(s *objectDeckStand) bool {
 	}
 	return s.placement.linkEdgeCount > len(s.placement.links)
 }
+
+// TestExemptStrandedRescueLeavesAnArenaSpawnAlone pins the arena exemption: the
+// sealed-deck spawn the rescue strands is untouched in an exempt region, and the
+// exemption names only the regions it was given.
+func TestExemptStrandedRescueLeavesAnArenaSpawnAlone(t *testing.T) {
+	validator := NewWaterValidator(syntheticObjectNavRoot(t))
+	spawn := simulation.Spawn{RegionID: 0x6B4F, X: 100, Y: 10, Z: 100, Angle: 11}
+	if _, stranded, _ := validator.RelocateStrandedSpawn(spawn); !stranded {
+		t.Fatal("control: the sealed-deck spawn must strand before the exemption")
+	}
+	validator.ExemptStrandedRescue([]uint16{0x1234})
+	if _, stranded, _ := validator.RelocateStrandedSpawn(spawn); !stranded {
+		t.Fatal("an exemption for another region must not free this one")
+	}
+	validator.ExemptStrandedRescue([]uint16{0x6B4F})
+	got, stranded, found := validator.RelocateStrandedSpawn(spawn)
+	if stranded || found || got != spawn {
+		t.Fatalf("exempt region: got %+v stranded=%v found=%v, want the spawn untouched", got, stranded, found)
+	}
+}

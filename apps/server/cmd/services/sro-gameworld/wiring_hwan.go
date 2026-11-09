@@ -63,6 +63,11 @@ func (game *gameplayPlane) wireHwanLevel(quests *quest.Runtime) error {
 	if err := applyHwanKnobs(quests); err != nil {
 		return err
 	}
+	// The trial arenas exist only with the quest rows (the build switch); their sealed floor
+	// must not be rescued away (water.ExemptStrandedRescue).
+	if _, hwan := quests.Defs.ByCodename("QNO_CH_HWAN_1_1"); hwan {
+		game.water.ExemptStrandedRescue(quest.HwanTrialRegions())
+	}
 	game.items.HwanLevel = quests.HwanLevel
 	game.items.SetHwanLevel = quests.SetGMHwanLevel
 	quests.HwanLevelFrames = game.items.HwanLevelFrames

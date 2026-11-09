@@ -56,6 +56,9 @@ bundle degrades to ACCEPT (.catch(() => null)), never to a refusal or a fault.
 ================
 */
 type WaterValidator struct {
+	// rescueExempt: regions whose spawns the stranded-spawn rescue leaves alone
+	// (ExemptStrandedRescue): an arena's floor is a sealed deck by design.
+	rescueExempt map[uint16]bool
 	// closedObjectRescue: RelocateStrandedSpawn also frees a spawn inside a
 	// closed object (placementguard.go, SRO_CLOSED_OBJECT_RESCUE).
 	closedObjectRescue bool
@@ -192,6 +195,24 @@ as regions that do not exist. Called once at boot, before first use.
 */
 func (v *WaterValidator) HideAlexandria(hidden *alexandria.Overlay) {
 	v.hidden = hidden
+}
+
+/*
+================
+ExemptStrandedRescue
+
+Port-only, not native: regions whose spawns RelocateStrandedSpawn never strands.
+The Blue Berserk trial arenas (quest/hwan_arena.go) are walled rooms whose floor
+is a sealed object-nav deck with no open exit by design; the rescue would drop
+every arrival off it, or refuse the entry when the isolated region has no mainland
+to drop onto. Called once at boot, before the first entry.
+================
+*/
+func (v *WaterValidator) ExemptStrandedRescue(regions []uint16) {
+	v.rescueExempt = map[uint16]bool{}
+	for _, region := range regions {
+		v.rescueExempt[region] = true
+	}
 }
 
 /*
