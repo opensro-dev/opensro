@@ -17,8 +17,10 @@ old heap, kept verbatim as the oracle.
 package simulation
 
 import (
+	"cmp"
 	"container/heap"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -243,6 +245,74 @@ func TestBehaviorBatchBuildAllocations(t *testing.T) {
 	}
 	if fewest > 10 {
 		t.Fatalf("batch build allocates %.2f per run in steady state, want at most 10", fewest)
+	}
+}
+
+/*
+================
+TestSortBehaviorRefsMatchesComparisonSort
+
+The batch build orders its refs by gid in linear time; the order
+must be the comparison sort's exactly, at every batch size -
+across the counting threshold - and across scratch reuse (the
+pooled backing outlives its batch, and the next build sorts a
+different set in it). Gids are drawn unique, the queue's own
+contract (byGID), from one deterministic shuffle.
+================
+*/
+func TestSortBehaviorRefsMatchesComparisonSort(t *testing.T) {
+	rng := rand.New(rand.NewSource(3027))
+	scratch := &behaviorRefScratch{}
+	for _, n := range []int{0, 1, 2, 63, 64, 127, 128, 129, 255, 600, 1024, 5000} {
+		gids := make([]uint32, n)
+		for i := range gids {
+			gids[i] = uint32(100000+i*7) | uint32(i%3)<<24
+		}
+		rng.Shuffle(n, func(i, j int) { gids[i], gids[j] = gids[j], gids[i] })
+		refs := make([]behaviorActorRef, n)
+		for i, gid := range gids {
+			refs[i] = behaviorActorRef{gid: gid, queueSlot: uint32(i), slot: uint32(n - i), monsterSlot: uint32(i * 3)}
+		}
+		want := make([]behaviorActorRef, n)
+		copy(want, refs)
+		slices.SortFunc(want, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		sortBehaviorRefs(refs, scratch)
+		for i := range want {
+			if refs[i] != want[i] {
+				t.Fatalf("n=%d: refs[%d] = %+v, want %+v", n, i, refs[i], want[i])
+			}
+		}
+	}
+
+	// The two drain shapes the counting path special-cases: an
+	// already ordered batch (a population armed in spawn order)
+	// and a reversed one (a descent on the first pair) must both
+	// come out in the comparison sort's order.
+	for _, n := range []int{128, 600} {
+		refs := make([]behaviorActorRef, n)
+		for i := range refs {
+			refs[i] = behaviorActorRef{gid: uint32(100000 + i*7), queueSlot: uint32(i)}
+		}
+		want := make([]behaviorActorRef, n)
+		copy(want, refs)
+		sortBehaviorRefs(refs, scratch)
+		for i := range want {
+			if refs[i] != want[i] {
+				t.Fatalf("ordered n=%d: refs[%d] = %+v, want %+v", n, i, refs[i], want[i])
+			}
+		}
+		for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
+			refs[i], refs[j] = refs[j], refs[i]
+		}
+		want = make([]behaviorActorRef, n)
+		copy(want, refs)
+		slices.SortFunc(want, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		sortBehaviorRefs(refs, scratch)
+		for i := range want {
+			if refs[i] != want[i] {
+				t.Fatalf("reversed n=%d: refs[%d] = %+v, want %+v", n, i, refs[i], want[i])
+			}
+		}
 	}
 }
 
