@@ -87,7 +87,9 @@ export interface DiagnosticState {
 	readonly gameplay: import("@/engine/contracts/gameplay").GameplayState | null;
 	readonly target: import("@/engine/contracts/world").EntityState | undefined;
 	readonly entities: number;
-	readonly actors: readonly DiagnosticActor[];
+	// A thunk, not a list: state() runs on every HUD assembly (refusal) and
+	// each timeline sample, and only a composed report needs the sorted poses.
+	readonly actors: () => readonly DiagnosticActor[];
 }
 
 /*
@@ -649,7 +651,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			session: current.session,
 			target: current.target ?? null,
 			entities: current.entities,
-			actors: current.actors,
+			actors: current.actors(),
 			gameplay
 		};
 		return {

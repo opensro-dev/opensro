@@ -529,7 +529,7 @@ export function startRuntime(
 						gameplay,
 						target: gameplay?.target ? presentation.read( gameplay.target ) : undefined,
 						entities: presentation.entities().length,
-						actors: diagnosticActors( presentation.entities(), gameplay?.pose )
+						actors: () => diagnosticActors( presentation.entities(), gameplay?.pose )
 					};
 				}
 			} )
