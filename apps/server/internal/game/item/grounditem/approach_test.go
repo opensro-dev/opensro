@@ -215,6 +215,42 @@ func TestPendingTrackerArmAndTake(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPendingTrackerDueSkipsUnmatured
+
+The tick's due probe: armed-but-travelling approaches read as no work
+(nil, nothing allocated), and only the matured ones come back, in the
+deterministic division/name/gid order the publisher walks.
+================
+*/
+func TestPendingTrackerDueSkipsUnmatured(t *testing.T) {
+	tracker := NewPendingTracker()
+	start := time.Unix(1000, 0)
+
+	if due := tracker.Due(start); due != nil {
+		t.Fatalf("an empty tracker reported due work %v", due)
+	}
+	tracker.ArmOwned(PendingKey("1", "asd"), "1", "asd", 300001, start.Add(2*time.Second))
+	tracker.ArmOwned(PendingKey("1", "qwe"), "1", "qwe", 300002, start.Add(time.Hour))
+	if due := tracker.Due(start); due != nil {
+		t.Fatalf("unmatured approaches reported due %v", due)
+	}
+	if got := testing.AllocsPerRun(10, func() { tracker.Due(start) }); got != 0 {
+		t.Fatalf("an idle Due allocated %.0f times per run, want 0", got)
+	}
+
+	tracker.ArmOwned(PendingKey("2", "asd"), "2", "asd", 300003, start)
+	due := tracker.Due(start)
+	if len(due) != 1 || due[0].ItemGid != 300003 {
+		t.Fatalf("due = %v, want only the matured approach", due)
+	}
+	// The snapshot consumes nothing: TakeMatured still owns the grant.
+	if _, ok := tracker.Peek(PendingKey("2", "asd")); !ok {
+		t.Fatal("Due consumed the matured approach")
+	}
+}
+
 // An execute request for a different item must not consume the approach in flight.
 func TestTakeMaturedIgnoresAnotherItem(t *testing.T) {
 	tracker := NewPendingTracker()

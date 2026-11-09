@@ -246,6 +246,8 @@ func (t *PendingTracker) Clear(key string) {
 // timer matured. Entries remain in the tracker until TakeMatured consumes
 // them under the division operation lock; this makes a concurrent cancel or
 // replacement win cleanly instead of granting from a stale snapshot.
+// Nothing matured reads as nil and builds nothing: the tick asks every
+// 100 ms and the answer is almost always empty (#2033).
 /*
 ================
 Due
@@ -255,7 +257,17 @@ func (t *PendingTracker) Due(now time.Time) []Pending {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	out := make([]Pending, 0, len(t.pending))
+	matured := 0
+	for _, entry := range t.pending {
+		if entry.DivisionID == "" || entry.CharacterName == "" || entry.ArrivesAt.After(now) {
+			continue
+		}
+		matured++
+	}
+	if matured == 0 {
+		return nil
+	}
+	out := make([]Pending, 0, matured)
 	for _, entry := range t.pending {
 		if entry.DivisionID == "" || entry.CharacterName == "" || entry.ArrivesAt.After(now) {
 			continue

@@ -142,3 +142,50 @@ func TestRegistryHasExpired(t *testing.T) {
 		t.Fatal("the peek still reports expired after the sweep took the entry")
 	}
 }
+
+/*
+================
+TestRegistryHasExpiredOwner
+
+The read-only owner peek agrees with the release it gates, across
+divisions: a reserved drop at exactly its owner lifetime counts, one
+second short does not, and public or untimed drops never do. The peek
+must leave the reservation in place for the real pass.
+================
+*/
+func TestRegistryHasExpiredOwner(t *testing.T) {
+	registry := NewRegistry()
+	now := time.Unix(10_000, 0)
+
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("an empty registry reported an expired owner")
+	}
+	registry.Add("1", Item{RefObjID: 4, OwnerJID: 7})
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a reserved entry without a timestamp reported expired")
+	}
+	registry.Add("1", Item{RefObjID: 5, DroppedAt: now.Add(-OwnerLifetime)})
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a public entry at its lifetime reported an expired owner")
+	}
+	registry.Add("2", Item{RefObjID: 3, OwnerJID: 7, DroppedAt: now.Add(-OwnerLifetime + time.Second)})
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a reserved entry one second short of its lifetime reported expired")
+	}
+	reserved := registry.Add("2", Item{RefObjID: 1, OwnerJID: 9, DroppedAt: now.Add(-OwnerLifetime)})
+	if !registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a reserved entry exactly at its lifetime did not report expired")
+	}
+	// The peek is read-only: the release pass still takes the row, and
+	// clears only its reservation.
+	released := registry.ReleaseExpiredOwners("2", now, OwnerLifetime)
+	if len(released) != 1 || released[0].Gid != reserved.Gid {
+		t.Fatalf("release after the peek freed %v, want only the elapsed reservation", released)
+	}
+	if got, ok := registry.Get("2", reserved.Gid); !ok || got.OwnerJID != 0 {
+		t.Fatalf("released row = %+v (present %v), want it public and present", got, ok)
+	}
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("the peek still reports an expired owner after the release")
+	}
+}
