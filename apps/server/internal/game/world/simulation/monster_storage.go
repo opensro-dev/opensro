@@ -247,15 +247,36 @@ fill
 value written in place: the leg-start snapshot builds every due actor
 straight into its view slot, so the 2 KB expansion is not copied again
 through a return value (#2982).
+
+Written field by field, not as one struct literal: the literal zeroes
+the whole 2 KB Instance first, and 660 of those bytes are the four
+sparse fields (LinkedEffects, SelfEffects, TargetEffects, Abnormal)
+this function never writes - hotFill owns them and assigns every one
+right after fill runs, so the literal's zero pass over them was pure
+waste on top of the copies the fields themselves need.
 ================
 */
 func (r residentMonster) fill(dst *monster.Instance, gid uint32) {
-	*dst = monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
-		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached, GMSpawned: r.gmSpawned,
-		SpawnHeading: r.spawnHeading, TradeVariant: r.tradeVariant, StructureState: r.structureState, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
-		LastSummonCommandMs: r.lastSummonCommandMs,
-		Opponents:           r.opponents, SummonActionUntilMs: r.summonActionUntilMs, SummonerGID: r.summonerGID,
-		SummonSightRange: r.summonSightRange, SummonerFollowRange: r.summonerFollowRange}
+	dst.ConditionalUsed = r.conditionalUsed
+	dst.Gid = gid
+	dst.Ref = r.ref.Value()
+	dst.Nest = r.nest.Value()
+	dst.Help = r.help
+	dst.Motion = r.motion
+	dst.Spawn = r.spawn
+	dst.NestDetached = r.nestDetached
+	dst.GMSpawned = r.gmSpawned
+	dst.SpawnHeading = r.spawnHeading
+	dst.TradeVariant = r.tradeVariant
+	dst.StructureState = r.structureState
+	dst.CurrentHP = r.currentHP
+	dst.DamageSinceSummon = r.damageSinceSummon
+	dst.LastSummonCommandMs = r.lastSummonCommandMs
+	dst.Opponents = r.opponents
+	dst.SummonActionUntilMs = r.summonActionUntilMs
+	dst.SummonerGID = r.summonerGID
+	dst.SummonSightRange = r.summonSightRange
+	dst.SummonerFollowRange = r.summonerFollowRange
 }
 
 /*
@@ -277,25 +298,35 @@ func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instanc
 ================
 hotFill
 
-hotValue written in place (#2982): see residentMonster.fill.
+Patch the sparse fields onto a filled instance: the effect snapshots and
+the abnormal block live behind sparse bits beside the value because they
+are wide and usually absent. Every sparse field is assigned, bit set or
+not: the view slots this fills are no longer zeroed between batches
+(releaseLegSnapshot only drops the heap fields), so dst cannot be trusted
+to arrive zero here.
 ================
 */
 func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r residentMonster) {
 	r.fill(dst, gid)
-	if r.sparse == 0 {
-		return
-	}
 	if r.sparse&sparseLinked != 0 {
 		dst.LinkedEffects = s.linkedEffects[gid]
+	} else {
+		dst.LinkedEffects = nil
 	}
 	if r.sparse&sparseAbnormal != 0 {
 		dst.Abnormal = s.abnormal[gid]
+	} else {
+		dst.Abnormal = nil
 	}
 	if r.sparse&sparseSelf != 0 {
 		dst.SelfEffects = s.selfEffects[gid]
+	} else {
+		dst.SelfEffects = monster.SelfEffects{}
 	}
 	if r.sparse&sparseTarget != 0 {
 		dst.TargetEffects = s.targetEffects[gid]
+	} else {
+		dst.TargetEffects = monster.TargetEffects{}
 	}
 }
 
