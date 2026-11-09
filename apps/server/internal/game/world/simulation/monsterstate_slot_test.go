@@ -18,7 +18,11 @@ another actor's slots must land on its own actor or not at all.
 
 package simulation
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/world/monster"
+)
 
 /*
 ================
@@ -195,24 +199,39 @@ TestCommitActivityAtArmsTheGidDoorsDue
 
 The commit's reschedule resolves the mover and resident rows
 through the slots the commit carried (scheduleBehaviorCommitted);
-the due it arms must be the gid door's: re-arming the same actor
-through scheduleBehavior on the same rows changes nothing.
+the due it arms must be the gid door's. The actor rests idle with
+its gate cadence nearest, so the due reads the resident row: a
+commit addressed with another actor's slots delegates both reads
+to the gid resolves and still arms the gate due, where a dropped
+hotRowAt fallback would arm the next tick from a zero resident.
 ================
 */
 func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
-	ops, actor, now := activityFixture(t)
-	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
-	before, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-	after := before
-	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); !committed || !cadenceOnly {
-		t.Fatal("cadence-only commitActivityAt rejected or misread")
+	const now int64 = 100000
+	s, d := idleScheduleFixture(t)
+	resting := monster.NestRow{Respawn: true}
+	actor := idleScheduleActor(t, s, d, 7, resting, 2000, now+5000, now)
+	mate := idleScheduleActor(t, s, d, 8, resting, 2000, now+5000, now)
+	slotsOf := func(gid uint32) (uint32, uint32) {
+		moverSlot, _ := d.movers.slotOf(gid)
+		_, monsterSlot, _ := d.instances.hotRowSlot(gid)
+		return moverSlot, monsterSlot
 	}
-	state := ops.Monsters.division(monsterTestDivision)
-	armed := scheduleDue(t, state, actor.Gid)
-	ops.Monsters.scheduleBehavior(state, actor.Gid, now+1001)
-	if due := scheduleDue(t, state, actor.Gid); due != armed {
-		t.Fatalf("carried reschedule armed %d, the gid door arms %d on the same rows", armed, due)
+	moverSlot, monsterSlot := slotsOf(actor.Gid)
+	mateMoverSlot, mateMonsterSlot := slotsOf(mate.Gid)
+
+	commit := func(slot, monsterSlot uint32) {
+		t.Helper()
+		before, _ := s.Mover("sleep", actor.Gid)
+		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, before, before, now); !committed || !cadenceOnly {
+			t.Fatal("cadence-only commitActivityAt rejected or misread")
+		}
+		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
+			t.Fatalf("carried reschedule armed %d, want the gate due %d", got, want)
+		}
 	}
+	commit(moverSlot, monsterSlot)
+	commit(mateMoverSlot, mateMonsterSlot)
 }
 
 /*
