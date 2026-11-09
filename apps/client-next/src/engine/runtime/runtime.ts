@@ -35,7 +35,7 @@ import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBuildInfo } from "./build-info/build-info";
-import { createBugReport } from "./bug-report/bug-report";
+import { createBugReport, diagnosticActors } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
@@ -528,7 +528,8 @@ export function startRuntime(
 						session: sessionState,
 						gameplay,
 						target: gameplay?.target ? presentation.read( gameplay.target ) : undefined,
-						entities: presentation.entities().length
+						entities: presentation.entities().length,
+						actors: () => diagnosticActors( presentation.entities(), gameplay?.pose )
 					};
 				}
 			} )
