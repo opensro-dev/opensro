@@ -99,14 +99,18 @@ const (
 // the same key strings every tick (#2033), measured 23,227 B / 221
 // allocs; with the crow-brood recharge verdict read under the stack
 // read guard instead of the callback door's boxed closure per crow
-// tick (#2033), measured 22,584 B / 217 allocs; with the basic-attack
+// tick (#2033), measured 22,584 B / 217 allocs; with the ground
+// owner-expiry probe reading the registry's stamps under its lock
+// instead of a division list and the cached copies, and the
+// pending-pickup due probe building nothing while nothing matured
+// (#2033), measured 21,875 B / 187 allocs; with the basic-attack
 // intent snapshot, the live-chain owner set and the tick-start
 // action-owner snapshot refilled into runtime scratch instead of
-// rebuilt from empty every tick (#2033), measured 21,796 B /
-// 186 allocs.
+// rebuilt from empty every tick (#2033), measured 21,755 B /
+// 184 allocs.
 const (
 	tickBudgetBytesPerTick  = 24000
-	tickBudgetAllocsPerTick = 205
+	tickBudgetAllocsPerTick = 203
 )
 
 /*

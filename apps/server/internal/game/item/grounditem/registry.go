@@ -447,6 +447,34 @@ func (r *Registry) HasExpired(divisionID string, now time.Time, lifetime time.Du
 	return false
 }
 
+/*
+================
+HasExpiredOwner
+
+The owner-expiry peek behind ReleaseExpiredOwners, across every
+division: some reserved drop sits at or past its owner lifetime.
+Reads only the stored OwnerJID and DroppedAt stamps under the
+registry lock and never detaches a record, so the per-tick probe
+costs no division list and no snapshot walk (#2033; the action-side
+probe used to rebuild both just to read two fields per row, #2030).
+A false negative only delays the release one tick; a false positive
+only costs one no-op commit - both self-heal.
+================
+*/
+func (r *Registry) HasExpiredOwner(now time.Time, lifetime time.Duration) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, items := range r.byDivision {
+		for _, item := range items {
+			if item.OwnerJID != 0 && !item.DroppedAt.IsZero() && now.Sub(item.DroppedAt) >= lifetime {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ReleaseExpiredOwners makes reserved drops public at the native 30-second
 // boundary without replacing their entity identity. The caller broadcasts
 // 0x31E2 for each returned row; subsequent calls return nothing.
