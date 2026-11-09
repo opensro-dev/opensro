@@ -281,3 +281,17 @@ test("mercenary cooldown restores remaining time and replaces its category", () 
 	assert.deepEqual( owner.state().itemCooldowns, rows );
 	assert.throws( () => owner.receive( 0x3792, state( 30 ).slice( 0, 5 ), 203, context ), /guild soldier cooldown/ );
 });
+
+test("a spent count-job charge starts the authored cooldown group on the shared lane", () => {
+	const owner = createInventory( () => {} ), fields = { useCooldownGroup524: 201, useCooldownDuration528: 1200000 };
+	owner.bootstrap( fixture() );
+	owner.references( [ { refObjId: 77, typeFlags: 0x40ec, name: "Energy", tooltip: { fields } } ] );
+	owner.startAuthoredCooldown( 77, 500 );
+	assert.deepEqual( owner.state().itemCooldowns, [
+		{ category: 18, group: 201, refObjId: 77, startedAtMs: 500, durationMs: 1200000 }
+	] );
+	owner.startAuthoredCooldown( 77, 900 );
+	assert.equal( owner.state().itemCooldowns.length, 1, "a repeat restarts the group, never stacks" );
+	owner.startAuthoredCooldown( 1, 900 );
+	assert.equal( owner.state().itemCooldowns.length, 1, "a reference without an authored cooldown starts nothing" );
+});

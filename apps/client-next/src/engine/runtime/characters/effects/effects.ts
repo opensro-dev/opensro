@@ -136,7 +136,10 @@ type EffectGameplay = Pick<
 	| "movementRevision"
 	| "movementPath"
 	| "movementTransition"
+	| "hwanLevel"
 >;
+// Port-only (Blue Berserk, not native): the 2nd Hwan body record the owner wears from Blue level 1.
+const HWAN2_MODE_RECORD = "SYSTEM_CH_HWAN2MODE";
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
 // The effect actors drawn at once: cast visuals, state and attached
@@ -1301,7 +1304,8 @@ export function createCharacterEffects(
 			load(
 				now,
 				entities.length > 0 || external.size > 0,
-				gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false
+				(gameplay?.vitals?.some( v => !!((v.abnormal ?? 0) & STATUS_DECORATION_MASK) ) ?? false) ||
+					!!gameplay?.hwanLevel
 			);
 			failure = null;
 			try {
@@ -2960,9 +2964,21 @@ export function createCharacterEffects(
 				}
 				if ( catalog && models ) {
 					const wanted = new Set<string>();
+					// A Blue Berserk owner wears the 2nd Hwan record (blue) when the named catalog has it.
+					const blueBody = !!gameplay?.hwanLevel && !!namedCatalog?.[HWAN2_MODE_RECORD];
 					const stateEffects: Attachment[] = [ ...hwan ].filter( ( [, row] ) => row.active ).map( (
 						[gid, row]
-					) => ({ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }) );
+					) => blueBody && gid === gameplay?.localGid ?
+						{
+							gid,
+							recordName: HWAN2_MODE_RECORD,
+							skill: 0,
+							token: -1,
+							phase: 0,
+							receivedAtMs: row.revision
+						} :
+						{ gid, skill: -2147483648, token: -1, phase: 0, receivedAtMs: row.revision }
+					);
 					for ( const [gid, row] of statuses ) {
 						for ( const [recordName, revision] of row.revisions ) {
 							stateEffects.push( {

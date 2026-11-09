@@ -231,3 +231,21 @@ test("the reverse return runs from its type word", () => {
 	assert.equal( commandOfType( 0x36ec ), "resurrection" );
 	assert.equal( commandOfType( 0x72ec ), null );
 });
+
+/*
+================
+The Energy of Life buff (port-only, cap-110 Blue Berserk)
+================
+*/
+test("the Energy of Life buff's package window button sends its use", async () => {
+	const { rowAdmission } = await import( "../../src/engine/foundation/gameplay/count-job.ts" );
+	const HWAN_TYPE = (3 << 2) | (3 << 5) | (1 << 7) | (8 << 11);
+	assert.equal( commandOfType( HWAN_TYPE ), "hwan-charge" );
+	const row = { packageRefObjId: PACKAGE, itemRefObjId: 23937, uses: 1, remainingSec: 3600, receivedAtMs: 0 };
+	assert.deepEqual( rowAdmission( row, HWAN_TYPE, facts ), { row, command: "hwan-charge" } );
+	// A spent row is a disabled button; a dead player is refused with the client's own notice.
+	assert.equal( rowAdmission( { ...row, uses: 0 }, HWAN_TYPE, facts ), null );
+	assert.deepEqual( rowAdmission( row, HWAN_TYPE, { ...facts, alive: false } ), { code: COUNT_JOB_DEAD } );
+	// Another item of the same type family keeps its own meaning: the old types still resolve.
+	assert.equal( commandOfType( (3 << 2) | (3 << 5) | (3 << 7) | (1 << 11) ), "return" );
+});

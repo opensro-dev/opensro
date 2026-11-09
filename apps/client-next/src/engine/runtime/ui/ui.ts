@@ -61,6 +61,9 @@ const CHAT_STRIP_INPUT = 20;
 const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
+// Gap between a Blue Berserk title and the name, and its bold gold.
+const HWAN_TITLE_GAP = 4;
+const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 const JOB_MARK_GAP = 5.5;
 const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
 const STALL_PROMPT_PRICE = "stall-prompt-price";
@@ -120,7 +123,7 @@ import {
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { hwanSkin } from "@/engine/foundation/gameplay/hwan-skin";
+import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -22673,6 +22676,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								color: white
 							} );
 						}
+					}
+					// Port-only Blue Berserk title (not native): bold gold, just before the
+					// character's name. Only the owner is told its level (0x3FC0).
+					const titleText = entity.gid === game?.localGid ?
+						hudCopy( hwanTitleKey( game?.hwanLevel, entity.countryByte9c ) ) :
+						"";
+					if ( titleText && name && height ) {
+						const titleWidth = text.run( titleText, 2 ).width;
+						quads.push(
+							...text.quads(
+								titleText,
+								[ left - titleWidth - HWAN_TITLE_GAP, top, titleWidth, height ],
+								full,
+								HWAN_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: 2
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
 					}
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.

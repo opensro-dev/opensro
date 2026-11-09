@@ -80,3 +80,11 @@ test("the level frame does not share an opcode with another port frame", async (
 	);
 	assert.notEqual( OP_HWAN_LEVEL, OP_CARAVAN_STARS );
 });
+
+test("the title symbol follows the level and the race, and is empty below level 1", async () => {
+	const { hwanTitleKey } = await import( "../../src/engine/foundation/gameplay/hwan-skin.ts" );
+	assert.equal( hwanTitleKey( 1, 1 ), "UIO_SECOND_HWAN_EU_NAME_LEVEL_1" );
+	assert.equal( hwanTitleKey( 6, 0 ), "UIO_SECOND_HWAN_CH_NAME_LEVEL_6" );
+	assert.equal( hwanTitleKey( 0, 1 ), "" );
+	assert.equal( hwanTitleKey( undefined, 0 ), "" );
+});

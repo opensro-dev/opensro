@@ -4574,6 +4574,10 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( countUpdate ) {
 					// 770820: a refused limited use is a category-1 notice.
 					const notice = countUpdate.kind === "refused" ? constantNativeNotice( 1, countUpdate.code ) : null;
+					// A spent use starts its item's authored cooldown (the Energy of Life charge's 20 minutes).
+					if ( countUpdate.kind === "spent" ) {
+						inventory.startAuthoredCooldown( countUpdate.itemRefObjId, now );
+					}
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;

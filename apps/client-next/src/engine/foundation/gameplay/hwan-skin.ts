@@ -34,3 +34,18 @@ export function hwanSkin( path: string, level: number | undefined ): string {
 	const next = path[end];
 	return next === "_" || next === "." ? path.slice( 0, end ) + BLUE_MARK + path.slice( end ) : path;
 }
+
+/*
+================
+hwanTitleKey
+
+The system-text symbol of a Blue Berserk level's title (Knight, Baronet, ... for
+the European race, the generals for the Chinese), or "" below level 1. The race
+is the character's country byte (0 Chinese, 1 European), as the server's notice
+chooses it.
+================
+*/
+export function hwanTitleKey( level: number | undefined, country: number | undefined ): string {
+	if ( !level || level < 1 ) return "";
+	return "UIO_SECOND_HWAN_" + (country === 1 ? "EU" : "CH") + "_NAME_LEVEL_" + Math.floor( level );
+}
