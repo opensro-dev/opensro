@@ -12116,8 +12116,12 @@ export function createUi( ports: UiPorts ) {
 								}
 							}
 						} else {for ( let i = 0; i < Math.min( 5, gauge?.displayed ?? 0 ); i++ ) {
-								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!;
-								authoredImage( circle, px, py, blue( circle.texture ) );
+								const circle = p["GDR_PMI_CIRCLE" + (4 - i)]!, art = blue( circle.texture );
+								// The filled ball is requested like any gauge picture: on a cold cache (first login
+								// after clearing site data) it was drawn before it loaded and the rings stayed empty
+								// until a refresh.
+								paths.push( art );
+								authoredImage( circle, px, py, art );
 							}}
 						if (
 							gauge?.displayed === 5 &&
