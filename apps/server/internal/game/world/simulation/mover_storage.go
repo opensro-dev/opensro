@@ -496,6 +496,44 @@ func (s *moverStorage) stuckAt(slot uint32, gid uint32) (stuck, found bool) {
 
 /*
 ================
+retaliationAt
+
+lookup(gid)'s retaliation revision and mode, without expanding
+the row: the mover commit's stale-plan guard reads the pair for
+every commit and compares two scalars (#3027). The slot is
+verified against the gid before use and delegates to the gid
+resolve on a miss, as every carried read does (#2133); found is
+false only when the storage holds no row for gid - a present but
+empty record answers the zero pair lookup returns for it. A
+pending row's mode is its expansion's: spawning or pending.
+================
+*/
+func (s *moverStorage) retaliationAt(slot uint32, gid uint32) (uint64, monster.MoverMode, bool) {
+	if s == nil {
+		return 0, 0, false
+	}
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		var ok bool
+		if slot, ok = s.slotOf(gid); !ok {
+			return 0, 0, false
+		}
+	}
+	rec := s.slots[slot].rec
+	switch {
+	case rec.live != nil:
+		return rec.live.RetaliationRevision(), rec.live.Mode(), true
+	case rec.pending != nil:
+		row := rec.pending.shared.Value().row
+		if row.Spawning {
+			return row.RetaliationRevision, monster.MoverSpawning, true
+		}
+		return row.RetaliationRevision, monster.MoverPending, true
+	}
+	return 0, 0, true
+}
+
+/*
+================
 has
 
 Whether gid has a row, without building its MoverState.
