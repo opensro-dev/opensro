@@ -38,14 +38,32 @@ func (s *MonsterState) checkAITimerAt(divisionID string, gid uint32, monsterSlot
 }
 
 func (s *MonsterState) selectedAITimerReady(divisionID string, gid uint32, nowMs int64) bool {
+	return s.selectedAITimerReadyAt(divisionID, gid, behaviorNoMonsterSlot, nowMs)
+}
+
+/*
+================
+selectedAITimerReadyAt
+
+selectedAITimerReady through the monster slot the behaviour
+batch carried for the actor (#2133): the population and the
+timer facts go through the verified hint and fall back to the
+gid resolve whenever the hint no longer names the gid, so the
+verdict is selectedAITimerReady's either way. The facts are
+read off the resident row instead of expanding the full
+Instance (#2029): hit points and the nest tactics flags are
+all the check uses.
+================
+*/
+func (s *MonsterState) selectedAITimerReadyAt(divisionID string, gid uint32, monsterSlot uint32, nowMs int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(divisionID, gid)
-	instance, exists := state.instances.lookup(gid)
-	if !exists || instance.CurrentHP == 0 {
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
+	hp, tacticsFlags, ok := state.instances.timerFactsAt(monsterSlot, gid)
+	if !ok || hp == 0 {
 		return false
 	}
-	return s.aiTimersLocked(state, instance, nowMs).CheckSelectedTimer(uint32(nowMs))
+	return s.aiTimerBankLocked(state, gid, tacticsFlags, nowMs).CheckSelectedTimer(uint32(nowMs))
 }
 
 // CompleteMonsterSkillCommand owns the event-4 success timer independently
@@ -110,6 +128,15 @@ func (ops *MonsterMoverOps) acquisitionReady(divisionID string, instance *monste
 		return ops.Monsters.checkAITimerAt(divisionID, instance.Gid, ops.stepMonsterSlot, monster.TimerIDAcquisition, nowMs)
 	}
 	return ops.Monsters.checkAITimer(divisionID, instance.Gid, monster.TimerIDAcquisition, nowMs)
+}
+
+func (ops *MonsterMoverOps) selectedTimerReady(divisionID string, instance *monster.Instance, nowMs int64) bool {
+	// The attack step's selected-timer check, through the same
+	// armed slot as the acquisition check above (#2133).
+	if ops.stepGenArmed {
+		return ops.Monsters.selectedAITimerReadyAt(divisionID, instance.Gid, ops.stepMonsterSlot, nowMs)
+	}
+	return ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs)
 }
 
 // FOLLOW OnEnter replaces Timer 0 with 100ms (the retail server's timer
