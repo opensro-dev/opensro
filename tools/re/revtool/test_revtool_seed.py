@@ -178,6 +178,26 @@ class NameMergeTests(unittest.TestCase):
 		self.assertIn([0x401000, "CNetClient_Send"], revtool_seed.load_seed(out)["functions"])
 
 
+class RizinNameTests(unittest.TestCase):
+	def test_names_are_unique_and_rizin_safe(self):
+		# BN repeats names and keeps C++ spelling; rizin refuses both.
+		names = revtool_seed.rizin_names([
+			(0x402000, "CObj::Run"),
+			(0x401000, "CObj::Run"),
+			(0x403000, "operator<"),
+			(0x404000, "9lives"),
+			(0x405000, ""),
+		])
+		self.assertEqual(names[0x401000], "CObj__Run")
+		self.assertEqual(names[0x402000], "CObj__Run_402000")
+		self.assertEqual(names[0x403000], "operator_")
+		self.assertEqual(names[0x404000], "sub_404000")
+		self.assertEqual(names[0x405000], "sub_405000")
+		self.assertEqual(len(set(names.values())), 5)
+		for name in names.values():
+			self.assertRegex(name, r"^[A-Za-z0-9_.]+$")
+
+
 class ScanTests(unittest.TestCase):
 	def test_planted_binary_run_is_caught(self):
 		run = b"CIFMainFrame::DrawText"  # 22 printable bytes
