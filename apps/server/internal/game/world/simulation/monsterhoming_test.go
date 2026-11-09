@@ -76,7 +76,7 @@ func TestMonsterHomingStoresOneGoalForTheWholeWalk(t *testing.T) {
 				if goal.X <= 1000 || goal.Z != 1000 {
 					t.Fatalf("stored goal = %+v, want east of the anchor on its row", goal)
 				}
-				if d := tacticsDistance3D(anchorPose(instance), goal); d < 6 || d > 14 {
+				if d := tacticsDistance3D(anchorPose(&instance), goal); d < 6 || d > 14 {
 					t.Fatalf("stored goal distance from anchor = %v, want the nest scatter band", d)
 				}
 			} else if stored != goal {
@@ -103,7 +103,7 @@ func TestMonsterHomingStoresOneGoalForTheWholeWalk(t *testing.T) {
 	// begun from the west side, it lands west of the anchor.
 	final.Pose.X = 880
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, final)
-	next, _ := ops.planReturnLeg(instance, final, monster.MoverEventHomingRequired, nowMs+100_000)
+	next, _ := ops.planReturnLeg(&instance, final, monster.MoverEventHomingRequired, nowMs+100_000)
 	fresh, ok := next.HomingGoal()
 	if !ok {
 		t.Fatal("second walk home stored no goal")
@@ -128,7 +128,7 @@ func TestMonsterHomingArrivalEndsWalkAtEntry(t *testing.T) {
 	ops.Rand = func() float64 { return 0 }
 	mover.Pose.X = 1008
 
-	next, frames := ops.planReturnLeg(instance, mover, monster.MoverEventTargetLost, 20_000)
+	next, frames := ops.planReturnLeg(&instance, mover, monster.MoverEventTargetLost, 20_000)
 	if len(frames) != 0 {
 		t.Fatalf("arrival at entry emitted %d frames, want none", len(frames))
 	}
@@ -150,7 +150,7 @@ func TestMonsterHomingArrivalEndsWalkAtEntry(t *testing.T) {
 	ops2.Rand = func() float64 { return 0 }
 	ops2.PlanPath = testShortNavPath
 	mover2.Pose = monster.Pose{RegionID: 0x62a9, X: 1008, Y: 20, Z: 1000}
-	planned, _ := ops2.planReturnLeg(instance2, mover2, monster.MoverEventTargetLost, 20_000)
+	planned, _ := ops2.planReturnLeg(&instance2, mover2, monster.MoverEventTargetLost, 20_000)
 	if planned.Mode() != monster.MoverReturning {
 		t.Fatalf("mode with goal in another region = %v, want returning (no cross-region arrival)", planned.Mode())
 	}

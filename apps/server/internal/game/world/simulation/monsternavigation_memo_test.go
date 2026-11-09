@@ -45,7 +45,7 @@ func memoFixture(t *testing.T, status monster.NavigationRouteStatus) (*MonsterMo
 func TestRouteMemoStationaryTargetSearchesOnce(t *testing.T) {
 	ops, instance, mover, goal, calls := memoFixture(t, monster.NavigationRouteBlocked)
 
-	mover, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	mover, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 	if *calls != 1 || len(frames) != 0 || !mover.NavigationWaiting(10001) {
 		t.Fatalf("first failure: calls=%d frames=%d waiting=%v", *calls, len(frames), mover.NavigationWaiting(10001))
 	}
@@ -55,7 +55,7 @@ func TestRouteMemoStationaryTargetSearchesOnce(t *testing.T) {
 	// Retries at the unchanged 1000 ms cadence are answered from the
 	// record: no new search, still waiting, no frames.
 	for _, retry := range []int64{11000, 12000, 13000} {
-		mover, frames = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, retry)
+		mover, frames = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, retry)
 		if *calls != 1 {
 			t.Fatalf("retry at %d searched again (calls=%d)", retry, *calls)
 		}
@@ -91,7 +91,7 @@ func TestRouteMemoOwnerIsPartOfTheKey(t *testing.T) {
 	ops.RouteMemo = func(from, goal monster.Pose) bool { return true }
 	ops.Navigation = &NavigationMetrics{}
 
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 	if calls != 1 {
 		t.Fatalf("first failure: calls=%d, want 1", calls)
 	}
@@ -99,7 +99,7 @@ func TestRouteMemoOwnerIsPartOfTheKey(t *testing.T) {
 		t.Fatalf("recorded owner = %+v (failed %v), want the deck owner", owner, failed)
 	}
 	// Same pose, same goal, owner now unresolved: not a memo hit.
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 11000)
 	if calls != 2 {
 		t.Fatalf("retry under a different owner: calls=%d, want 2 (the owner is part of the key)", calls)
 	}
@@ -107,7 +107,7 @@ func TestRouteMemoOwnerIsPartOfTheKey(t *testing.T) {
 		t.Fatalf("re-recorded owner = %+v, want unresolved", owner)
 	}
 	// The re-recorded failure answers the next retry.
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 12000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 12000)
 	if calls != 2 || ops.Navigation.Snapshot()["plan.chase.memo"] != 1 {
 		t.Fatalf("third retry: calls=%d memo=%d, want 2/1", calls, ops.Navigation.Snapshot()["plan.chase.memo"])
 	}
@@ -115,31 +115,31 @@ func TestRouteMemoOwnerIsPartOfTheKey(t *testing.T) {
 
 func TestRouteMemoMovedTargetOrMoverSearchesAgain(t *testing.T) {
 	ops, instance, mover, goal, calls := memoFixture(t, monster.NavigationRouteBlocked)
-	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 
 	// The target moved: the changed goal cancels the intent, record and
 	// all, and the retry searches.
 	movedGoal := goal
 	movedGoal.X += 40
-	mover, _ = ops.planSegment(instance, mover, movedGoal, 20, wire.MoveStateRun, 11000)
+	mover, _ = ops.planSegment(&instance, mover, movedGoal, 20, wire.MoveStateRun, 11000)
 	if *calls != 2 {
 		t.Fatalf("moved target: calls=%d, want 2", *calls)
 	}
 	// The record now tracks the new goal: its retry is memoized.
-	mover, _ = ops.planSegment(instance, mover, movedGoal, 20, wire.MoveStateRun, 12000)
+	mover, _ = ops.planSegment(&instance, mover, movedGoal, 20, wire.MoveStateRun, 12000)
 	if *calls != 2 {
 		t.Fatalf("retry at moved goal searched (calls=%d)", *calls)
 	}
 
 	// Fresh failure at the new goal, then the mover itself is pushed:
 	// the recorded pose no longer matches and the retry searches.
-	mover, _ = ops.planSegment(instance, mover, movedGoal, 20, wire.MoveStateRun, 12000)
+	mover, _ = ops.planSegment(&instance, mover, movedGoal, 20, wire.MoveStateRun, 12000)
 	if *calls != 2 {
 		t.Fatalf("memoized retry searched (calls=%d)", *calls)
 	}
 	pushed := mover
 	pushed.Pose.X += 5
-	pushed, _ = ops.planSegment(instance, pushed, movedGoal, 20, wire.MoveStateRun, 13000)
+	pushed, _ = ops.planSegment(&instance, pushed, movedGoal, 20, wire.MoveStateRun, 13000)
 	if *calls != 3 {
 		t.Fatalf("pushed mover: calls=%d, want 3", *calls)
 	}
@@ -173,8 +173,8 @@ func TestRouteMemoGates(t *testing.T) {
 				return monster.UnresolvedNavigationRoute(to, tc.status)
 			}
 			ops.RouteMemo = tc.memo
-			mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
-			mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11000)
+			mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
+			mover, _ = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 11000)
 			if calls != tc.wantCalls {
 				t.Fatalf("searches after first retry = %d, want %d", calls, tc.wantCalls)
 			}
@@ -210,13 +210,13 @@ func memoFrameStream(t *testing.T, memoOn bool) (string, int) {
 			stream += fmt.Sprintf("%04x:%x;", f.Opcode, f.Payload)
 		}
 	}
-	mover, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	mover, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000)
 	emit(frames)
 	arrive := mover.ArriveMs
-	mover, frames = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, arrive)
+	mover, frames = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, arrive)
 	emit(frames)
 	for _, retry := range []int64{arrive + 1000, arrive + 2000} {
-		mover, frames = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, retry)
+		mover, frames = ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, retry)
 		emit(frames)
 	}
 	return stream, calls

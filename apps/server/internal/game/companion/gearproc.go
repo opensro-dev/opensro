@@ -24,8 +24,9 @@ Chances add across equipment; power uses the strongest contributing item.
 ================
 */
 type GearProc struct {
-	Chance float64
-	Damage uint32
+	Chance    float64
+	Damage    uint32
+	MaxDamage uint32
 }
 
 /*
@@ -33,7 +34,7 @@ type GearProc struct {
 addProc
 ================
 */
-func (m *Modifiers) addProc(group string, chance float64, damage uint32) bool {
+func (m *Modifiers) addProc(group string, chance float64, degree GearDegree) bool {
 	trigger := 0
 	if strings.HasSuffix(group, "Taken") {
 		trigger = 1
@@ -58,7 +59,12 @@ func (m *Modifiers) addProc(group string, chance float64, damage uint32) bool {
 	p := &m.Procs[kind][trigger]
 	p.Chance = min(100, p.Chance+chance)
 	if chance > 0 {
-		p.Damage = max(p.Damage, damage)
+		lo, hi := degree.ProcDamage, degree.ProcDamage
+		if kind <= ProcFire {
+			lo, hi = degree.ProcRanges[kind][0], degree.ProcRanges[kind][1]
+		}
+		p.Damage = max(p.Damage, lo)
+		p.MaxDamage = max(p.MaxDamage, hi)
 	}
 	return true
 }

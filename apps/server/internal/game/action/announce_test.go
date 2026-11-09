@@ -102,8 +102,18 @@ func TestAnnouncementsFromEnv(t *testing.T) {
 	t.Setenv(EnvAnnouncePlus, "")
 	t.Setenv(EnvAnnounceJobKill, "TRUE")
 	t.Setenv(EnvAlchemyBreakNotice, "on")
-	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true, Break: true}) {
+	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true, Break: true, PlusFailMin: announcePlusFailMinDefault}) {
 		t.Fatalf("flags %+v", got)
+	}
+	t.Setenv(EnvAnnounceGachaWin, "on")
+	t.Setenv(EnvAnnouncePlusFail, "on")
+	t.Setenv(EnvAnnouncePlusFailMin, "12")
+	if got := AnnouncementsFromEnv(); !got.GachaWin || !got.PlusFail || got.PlusFailMin != 12 {
+		t.Fatalf("event-feed flags %+v, want gacha win and plus fail on from +12", got)
+	}
+	t.Setenv(EnvAnnouncePlusFailMin, "junk")
+	if got := AnnouncementsFromEnv(); got.PlusFailMin != announcePlusFailMinDefault {
+		t.Fatalf("an unreadable fail minimum reads as %+v, want the default %d", got, announcePlusFailMinDefault)
 	}
 }
 

@@ -147,7 +147,7 @@ func (door storeGuildWarDoor) GuildWars(division string) ([]domain.GuildWarRecor
 	if door.s.db == nil {
 		return nil, errors.New("guild war: authority unavailable")
 	}
-	return readGuildWars(door.s.db, division)
+	return readGuildWars(door.s.syncDBLocked(), division)
 }
 
 /*
@@ -185,7 +185,7 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 	if war.Guilds[0] == war.Guilds[1] || war.Stake > guildWarMaxCombinedStake || war.Stake%2 != 0 || war.ScoreIndex >= guildWarScoreOptions {
 		return record, 3, nil
 	}
-	wars, err := readGuildWars(s.db, division)
+	wars, err := readGuildWars(s.syncDBLocked(), division)
 	if err != nil {
 		return record, 2, err
 	}
@@ -276,7 +276,7 @@ func (door storeGuildWarDoor) AccountGuildWarCombat(division string, combat doma
 			s.recordWriteFailureLocked("guild-war-combat", err)
 		}
 	}()
-	wars, err := readGuildWars(s.db, division)
+	wars, err := readGuildWars(s.syncDBLocked(), division)
 	if err != nil {
 		return record, 2, err
 	}
@@ -363,7 +363,7 @@ func (door storeGuildWarDoor) EndGuildWar(division string, id uint32, winner int
 			s.recordWriteFailureLocked("guild-war-end", err)
 		}
 	}()
-	wars, err := readGuildWars(s.db, division)
+	wars, err := readGuildWars(s.syncDBLocked(), division)
 	if err != nil {
 		return 2, err
 	}

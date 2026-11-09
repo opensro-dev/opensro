@@ -87,7 +87,7 @@ func TestLoadRefusesGroundGIDCounterOutsideAllocatableRange(t *testing.T) {
 			s := openTest(t, t.TempDir(), newTestClock())
 			defer s.Close()
 
-			if _, err := s.db.Exec(
+			if _, err := s.syncDBLocked().Exec(
 				"INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
 				metaKeyGidCounter,
 				value,
@@ -95,7 +95,7 @@ func TestLoadRefusesGroundGIDCounterOutsideAllocatableRange(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := loadDB(s.db, CurrentVersion, CurrentLayoutVersion); err == nil ||
+			if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
 				!strings.Contains(err.Error(), "ground gid counter") {
 				t.Fatalf("loadDB ground gid counter %s error = %v", value, err)
 			}
@@ -119,7 +119,7 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.db.Exec(
+		if _, err := s.syncDBLocked().Exec(
 			"UPDATE characters SET id = ?, record = ? WHERE division = ? AND id = ?",
 			corrupt.ID,
 			string(record),
@@ -128,7 +128,7 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := loadDB(s.db, CurrentVersion, CurrentLayoutVersion); err == nil ||
+		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
 			!strings.Contains(err.Error(), "outside") {
 			t.Fatalf("loadDB aliasing character id error = %v", err)
 		}
@@ -137,14 +137,14 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 	t.Run("character watermark beyond exhaustion sentinel", func(t *testing.T) {
 		s := openTest(t, t.TempDir(), newTestClock())
 		defer s.Close()
-		if _, err := s.db.Exec(
+		if _, err := s.syncDBLocked().Exec(
 			"INSERT INTO next_char_id (division, next_id) VALUES (?, ?)",
 			testDivision,
 			domain.MaxCharacterID+2,
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := loadDB(s.db, CurrentVersion, CurrentLayoutVersion); err == nil ||
+		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
 			!strings.Contains(err.Error(), "next character id") {
 			t.Fatalf("loadDB exhausted character watermark error = %v", err)
 		}

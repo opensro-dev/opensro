@@ -118,7 +118,7 @@ func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.Me
 // base still names the row; every other commit rewrites the row and
 // the caller must re-read before chaining generation-guarded commits
 // off it. The answer is load-bearing only on the unhandled return.
-func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool, bool) {
+func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool, bool) {
 	if ops.activity == nil {
 		return nil, m, false, false
 	}
@@ -181,8 +181,8 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 commitActivityAt
 
 commitActivity through the slots the behaviour batch carried for
-the actor (#2133): the guard read, the death check and the write
-go through the verified hints and fall back to the gid resolve
+the actor (#2133): the population, the guard read, the death check
+and the write go through the verified hints and fall back to the gid resolve
 whenever a hint no longer names the gid, so the commit lands - or
 is refused - exactly as commitActivity's. The gate runs this once
 per due actor per tick, which is where the profile charged the
@@ -194,7 +194,7 @@ the stamp alone (#2029).
 func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	current, exists := state.movers.lookupAt(slot, gid)
 	if !exists {
 		current, exists = state.movers.lookup(gid)

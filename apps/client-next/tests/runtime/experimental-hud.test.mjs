@@ -184,6 +184,8 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// The 4x multisampled scene sits beside the post-process anti-aliasing.
 	const image = EXPERIMENTAL_TABS[0].sections[0].rows.map( row => row.key );
 	assert.equal( image.indexOf( "msaa" ), image.indexOf( "postProcessing" ) + 1 );
+	// Scene FXAA, the cheap edge smoothing, follows MSAA.
+	assert.equal( image.indexOf( "sceneFxaa" ), image.indexOf( "msaa" ) + 1 );
 	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
 		"smartPetPickup",
 		"petPickupFilter",
@@ -242,9 +244,10 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 });
 
 test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide; no HD set.
+	// No world session: no hunting guide, so its emptied World map (M)
+	// section goes and the next section leads the tab; no HD set.
 	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "expandedWorldMap" ] );
+	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "questTrackerMarkers" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 

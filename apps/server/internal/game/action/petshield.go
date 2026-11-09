@@ -260,7 +260,7 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 				if recipient != nil {
 					at = rt.liveSpawn(simulation.WorldKey(s.key.division, recipient.Name), recipient, now)
 				}
-				out = append(out, rt.burstPetShield(s, owner, at, remaining/2, now)...)
+				out = append(out, rt.burstPetShield(s, owner, at, uint32(uint64(remaining)*40/100), now)...)
 			}
 		}
 		out = append(out, simulation.DivisionFrames{DivisionID: s.key.division, SourceGID: s.key.gid, Frames: simFrames([]wire.Frame{petShieldFrame(s, now, explode)})})

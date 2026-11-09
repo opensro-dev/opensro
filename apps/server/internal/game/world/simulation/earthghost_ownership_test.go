@@ -73,7 +73,7 @@ func TestEarthGhostHomeBoundaryAndPolicyModes(t *testing.T) {
 			target.Pose = poseToSpawn(m.Pose)
 			target.Pose.X += 10
 			target.Pose = NormalizeSpawnFrame(target.Pose)
-			ops.advancePursuitControls(monsterTestDivision, a, m, target, m.Pose, 10000)
+			ops.advancePursuitControls(monsterTestDivision, &a, m, target, m.Pose, 10000)
 			after, _ := s.Mover(monsterTestDivision, a.Gid)
 			if (after.TargetGID() == 0) != tc.abandon {
 				t.Fatalf("mode=%s target=%d want abandon=%v", after.Mode(), after.TargetGID(), tc.abandon)
@@ -103,7 +103,7 @@ func TestEarthGhostDistantHomeRegionAbandonsOnlyBoundedTrace(t *testing.T) {
 			m, _ := ops.Monsters.Mover(monsterTestDivision, a.Gid)
 			m.Pose.X += 2 * NativeRegionSize
 			m.Pose = normalizeMonsterPose(m.Pose)
-			if monster.FollowLocationCompatible(m.Pose.RegionID, anchorPose(a).RegionID) {
+			if monster.FollowLocationCompatible(m.Pose.RegionID, anchorPose(&a).RegionID) {
 				t.Fatal("fixture did not leave the adjacent home regions")
 			}
 			s := ops.Monsters
@@ -115,7 +115,7 @@ func TestEarthGhostDistantHomeRegionAbandonsOnlyBoundedTrace(t *testing.T) {
 			target.Pose = poseToSpawn(m.Pose)
 			target.Pose.X += 10
 			target.Pose = NormalizeSpawnFrame(target.Pose)
-			if _, handled := ops.advancePursuitControls(monsterTestDivision, a, m, target, m.Pose, 10000); handled != tc.abandon {
+			if _, handled := ops.advancePursuitControls(monsterTestDivision, &a, m, target, m.Pose, 10000); handled != tc.abandon {
 				t.Fatalf("pursuit handled=%v want abandon=%v", handled, tc.abandon)
 			}
 		})
@@ -183,7 +183,7 @@ func TestEarthGhostHomePlanRejectsChangedNest(t *testing.T) {
 				}
 				return .5
 			}
-			frames, _ := ops.advancePursuitControls(monsterTestDivision, a, m, target, m.Pose, 10000)
+			frames, _ := ops.advancePursuitControls(monsterTestDivision, &a, m, target, m.Pose, 10000)
 			after, _ := s.Mover(monsterTestDivision, a.Gid)
 			if !changed || len(frames) != 0 || after != m {
 				t.Fatal("stale home decision escaped admission")

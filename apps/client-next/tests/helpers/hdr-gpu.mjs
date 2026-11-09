@@ -62,6 +62,7 @@ export async function captureLightingStages(
 		skyDetail: false,
 		waterRefraction: false,
 		msaa: false,
+		sceneFxaa: false,
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,

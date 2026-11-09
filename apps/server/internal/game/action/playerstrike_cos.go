@@ -292,6 +292,11 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		// After the last refusal: a refused door must leave the owner's
 		// aggression map as it found it.
 		attacked = rt.registerPlayerAttacked(division, owner, character, now)
+		// Port-only, not native (#2958): a thief's landed hit on a 5-star
+		// caravan's transport marks the thief for the hunter bounty.
+		if target.cos != nil && owner.ActiveCOS == target.cos && target.cosRef.TidWord>>11 == cosBandTransport {
+			rt.noteCaravanAttack(character, owner, now)
+		}
 		if hit.strike.fatal {
 			// Natively the kill is booked against the owner (payCOSKillInDoor)
 			// before the hostile target is registered below and before

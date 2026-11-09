@@ -91,7 +91,7 @@ func (door storeFortressDoor) FortressItemForges(divisionID string) ([]domain.Fo
 	if s.db == nil {
 		return nil, errFortressUnavailable
 	}
-	rows, err := s.db.Query("SELECT fortress_id, item_ref_id, record FROM fortress_item_forges WHERE division = ? ORDER BY fortress_id, item_ref_id", divisionID)
+	rows, err := s.syncDBLocked().Query("SELECT fortress_id, item_ref_id, record FROM fortress_item_forges WHERE division = ? ORDER BY fortress_id, item_ref_id", divisionID)
 	if err != nil {
 		return nil, err
 	}

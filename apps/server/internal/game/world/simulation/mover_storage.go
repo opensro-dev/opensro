@@ -75,11 +75,24 @@ value
 ================
 */
 func (p *residentPendingMover) value() monster.MoverState {
+	var m monster.MoverState
+	p.fill(&m)
+	return m
+}
+
+/*
+================
+residentPendingMover.fill
+
+value written in place (#2985): the interned shared row is read out of
+its handle once and expanded straight into dst.
+================
+*/
+func (p *residentPendingMover) fill(dst *monster.MoverState) {
 	shared := p.shared.Value()
-	row := shared.row
-	row.Pose, row.Activity = p.pose, p.activity
-	row.NavigationSpeed = math.Float64frombits(shared.speedBits)
-	return row.Expand()
+	shared.row.Pose, shared.row.Activity = p.pose, p.activity
+	shared.row.NavigationSpeed = math.Float64frombits(shared.speedBits)
+	shared.row.ExpandInto(dst)
 }
 
 /*
@@ -310,13 +323,27 @@ value
 ================
 */
 func (r moverRecord) value() monster.MoverState {
-	if r.live != nil {
-		return *r.live
+	var m monster.MoverState
+	r.fill(&m)
+	return m
+}
+
+/*
+================
+moverRecord.fill
+
+value written in place (#2985).
+================
+*/
+func (r moverRecord) fill(dst *monster.MoverState) {
+	switch {
+	case r.live != nil:
+		*dst = *r.live
+	case r.pending != nil:
+		r.pending.fill(dst)
+	default:
+		*dst = monster.MoverState{}
 	}
-	if r.pending != nil {
-		return r.pending.value()
-	}
-	return monster.MoverState{}
 }
 
 /*
@@ -412,10 +439,24 @@ here: the miss is the signal.
 ================
 */
 func (s *moverStorage) lookupAt(slot uint32, gid uint32) (monster.MoverState, bool) {
+	var m monster.MoverState
+	ok := s.lookupAtInto(&m, slot, gid)
+	return m, ok
+}
+
+/*
+================
+moverStorage.lookupAtInto
+
+lookupAt written in place (#2985); dst is untouched on a miss.
+================
+*/
+func (s *moverStorage) lookupAtInto(dst *monster.MoverState, slot uint32, gid uint32) bool {
 	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
-		return monster.MoverState{}, false
+		return false
 	}
-	return s.slots[slot].rec.value(), true
+	s.slots[slot].rec.fill(dst)
+	return true
 }
 
 /*
@@ -482,6 +523,24 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 	slot, ok := s.slotOf(gid)
 	if !ok {
 		return monster.Pose{}, false
+	}
+	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
+}
+
+/*
+================
+livePoseAtSlot
+
+livePoseAt through a slot carried from the behaviour batch build,
+verified against the gid before use (#2133): a hit reads the row in
+its slot; a miss (the row moved, or the hint is the no-slot
+sentinel) delegates to livePoseAt, so the answer is the storage's
+either way.
+================
+*/
+func (s *moverStorage) livePoseAtSlot(slot uint32, gid uint32, nowMs int64, ground monster.GroundResolver) (monster.Pose, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return s.livePoseAt(gid, nowMs, ground)
 	}
 	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
 }
@@ -581,6 +640,14 @@ type moverSchedule struct {
 	activity monster.ActivityCadence
 	arriveMs int64
 	regionID uint16
+	// The idle gate's facts (#2136): an idle row's decision deadline
+	// and the latches that keep its step awake. Live rows only; a
+	// pending row's zeros keep the pending cadence branch.
+	deadlineMs       int64
+	idleEntryPending bool
+	controlMode      monster.ControlMode
+	targetGID        uint32
+	stuck            bool
 }
 
 /*
@@ -632,7 +699,9 @@ func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	r := s.slots[slot].rec
 	if r.live != nil {
 		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
-			regionID: r.live.Pose.RegionID}
+			regionID: r.live.Pose.RegionID, deadlineMs: r.live.BehaviorDeadlineMs,
+			idleEntryPending: r.live.IdleEntryPending(), controlMode: r.live.ControlMode(),
+			targetGID: r.live.TargetGID(), stuck: r.live.Stuck()}
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending

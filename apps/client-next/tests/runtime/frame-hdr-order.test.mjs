@@ -326,7 +326,6 @@ test("HDR weather and flares finish before depth-tested labels and foreground UI
 			"weather-thunder",
 			"hdr-resolve",
 			"flare-chain",
-			"hdr-world-ui",
 			"hud-after-flares"
 		] );
 		assert.deepEqual( f.visible, [ "world", "thunder", "background", "foreground" ] );
@@ -345,7 +344,7 @@ test("HDR preview preserves scene depth consumers and composites between backgro
 			} );
 			assert.deepEqual( f.visible, [ "world", "background", "preview", "foreground" ] );
 			const rows = f.passes.map( p => p.descriptor.label );
-			assert.ok( rows.indexOf( "hdr-world-ui" ) < rows.indexOf( "character-preview" ) );
+			assert.ok( rows.indexOf( "hud-after-flares" ) < rows.indexOf( "character-preview" ) );
 			assert.deepEqual( rows.slice( -4 ), [
 				"hud-after-flares",
 				"character-preview",

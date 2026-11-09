@@ -871,6 +871,9 @@ export function createRenderer(
 				// the native surface and pass order. UI keeps its full resolution.
 				const renderScale = sceneRenderScale( experimental, viewport, phone ),
 					scaled = renderScale < 100,
+					// Port-only, not native: Experimental > FXAA renders the scene
+					// apart and resolves it through the edge walk before the UI.
+					separate = scaled || experimental.sceneFxaa,
 					sceneWidth = Math.max( 1, Math.round( viewport.width * renderScale / 100 ) ),
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
@@ -879,7 +882,8 @@ export function createRenderer(
 						// texture cannot be bound, the retained frame can.
 						experimental.postProcessing || !!deferredPlan?.query ||
 							(experimental.waterRefraction && !preview),
-						renderScale
+						renderScale,
+						experimental.sceneFxaa
 					);
 				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
@@ -968,7 +972,7 @@ export function createRenderer(
 					scene.camera
 				);
 				const pending = frame!.draw(
-					scaled ? targetSurface.frameView() : color,
+					separate ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
 					staleDraws.single( "mesh", meshDraw ?? undefined ),
 					surface.depth(),
@@ -1007,18 +1011,21 @@ export function createRenderer(
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
 						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
 						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
-						sceneScale: scaled ?
+						sceneScale: separate ?
 							{
 								view: color,
 								frameDepth: targetSurface.frameDepth(),
 								resolve: ( encoder, target ) =>
-									device.upscale().encodeUpscale( encoder, color, target ),
-								resolveDepth: encoder =>
+									device.upscale().encodeUpscale( encoder, color, target, experimental.sceneFxaa ),
+								// At full size the scene's depth is the frame's: nothing to upscale.
+								resolveDepth: encoder => {
+									if ( !scaled ) return;
 									device.upscale().encodeDepthUpscale(
 										encoder,
 										targetSurface.depth(),
 										targetSurface.frameDepth()
-									)
+									);
+								}
 							} :
 							undefined,
 						sunShadow,

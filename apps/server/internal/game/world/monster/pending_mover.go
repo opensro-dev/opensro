@@ -48,12 +48,34 @@ func (m MoverState) PendingSnapshot() (PendingMover, bool) {
 	return p, true
 }
 
+/*
+================
+PendingMover.Expand
+
+The full mover a compact pending row stands for.
+================
+*/
 func (p PendingMover) Expand() MoverState {
+	var m MoverState
+	p.ExpandInto(&m)
+	return m
+}
+
+/*
+================
+PendingMover.ExpandInto
+
+Expand written in place: the leg snapshot expands every due actor's
+mover straight into its view slot instead of copying the 632-byte
+value out through two return values (#2985).
+================
+*/
+func (p *PendingMover) ExpandInto(dst *MoverState) {
 	mode := MoverPending
 	if p.Spawning {
 		mode = MoverSpawning
 	}
-	return MoverState{mode: mode, BehaviorDeadlineMs: p.BehaviorDeadlineMs, Pose: p.Pose, Activity: p.Activity,
+	*dst = MoverState{mode: mode, BehaviorDeadlineMs: p.BehaviorDeadlineMs, Pose: p.Pose, Activity: p.Activity,
 		previousEvent: p.PreviousEvent, lastEvent: p.LastEvent, transitionSerial: p.TransitionSerial,
 		retaliationRevision: p.RetaliationRevision, AttackIntervalMs: p.AttackIntervalMs,
 		LastBattleActivityMs: p.LastBattleActivityMs, HomingStartedMs: p.HomingStartedMs,

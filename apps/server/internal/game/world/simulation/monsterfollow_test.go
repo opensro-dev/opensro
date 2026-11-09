@@ -30,7 +30,7 @@ func TestFollowAdmissionDistanceBoundary(t *testing.T) {
 			s.mu.Lock()
 			s.division("summon").instances.set(child.Gid, child)
 			s.mu.Unlock()
-			frames, _ := ops.followSummoner("summon", child, mover, now)
+			frames, _ := ops.followSummoner("summon", &child, mover, now)
 			current, _ := s.Mover("summon", child.Gid)
 			if (current.Mode() == monster.MoverFollowing) != sample.admitted || len(frames) != 0 {
 				t.Fatal("wrong threshold admission")
@@ -63,7 +63,7 @@ func followTimers(s *MonsterState, gid uint32) monster.AITimeManager {
 func startFixtureFollow(t *testing.T, ops *MonsterMoverOps, child monster.Instance, now int64) monster.MoverState {
 	t.Helper()
 	mover, _ := ops.Monsters.Mover("summon", child.Gid)
-	frames, _ := ops.followSummoner("summon", child, mover, now)
+	frames, _ := ops.followSummoner("summon", &child, mover, now)
 	mover, _ = ops.Monsters.Mover("summon", child.Gid)
 	if len(frames) != 0 || mover.Mode() != monster.MoverFollowing || mover.FollowLeaderGID() != child.SummonerGID {
 		t.Fatal("FOLLOW entry failed")
@@ -79,7 +79,7 @@ func TestFollowAdmissionLocationAndTimer7(t *testing.T) {
 	leader.Pose.RegionID += 3
 	s.CommitMover("summon", parent.Gid, leader)
 	mover, _ := s.Mover("summon", child.Gid)
-	if frames, handled := ops.followSummoner("summon", child, mover, now); handled || len(frames) != 0 {
+	if frames, handled := ops.followSummoner("summon", &child, mover, now); handled || len(frames) != 0 {
 		t.Fatal("incompatible region admitted")
 	}
 	timers := followTimers(s, child.Gid)
@@ -87,7 +87,7 @@ func TestFollowAdmissionLocationAndTimer7(t *testing.T) {
 		t.Fatalf("negative scan did not consume Timer 7: %+v", got)
 	}
 	s.CommitMover("summon", parent.Gid, original)
-	if frames, handled := ops.followSummoner("summon", child, mover, now+29); handled || len(frames) != 0 {
+	if frames, handled := ops.followSummoner("summon", &child, mover, now+29); handled || len(frames) != 0 {
 		t.Fatal("admitted before Timer 7")
 	}
 	startFixtureFollow(t, ops, child, now+30)
@@ -106,16 +106,16 @@ func TestFollowTimerAndMovementCompletionAreIndependent(t *testing.T) {
 	}
 	initialTimers := followTimers(s, child.Gid)
 	seven := initialTimers.GetTimer(7)
-	if frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, now+1); len(frames) == 0 {
+	if frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, now+1); len(frames) == 0 {
 		t.Fatal("first Timer 0 callback did not steer")
 	}
 	mover, _ = s.Mover("summon", child.Gid)
-	if frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, now+100); len(frames) != 0 {
+	if frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, now+100); len(frames) != 0 {
 		t.Fatal("steered before Timer 0")
 	}
 	s.ApplyDamage("summon", parent.Gid, parent.CurrentHP)
 	before := mover
-	if frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, now+101); len(frames) != 0 {
+	if frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, now+101); len(frames) != 0 {
 		t.Fatal("dead controller emitted cancellation")
 	}
 	mover, _ = s.Mover("summon", child.Gid)
@@ -126,7 +126,7 @@ func TestFollowTimerAndMovementCompletionAreIndependent(t *testing.T) {
 		t.Fatal("wrong timer owner/order")
 	}
 	arrival := mover.ArriveMs
-	frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, arrival)
+	frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, arrival)
 	mover, _ = s.Mover("summon", child.Gid)
 	if len(frames) != 1 || mover.Mode() != monster.MoverFollowing || mover.ArriveMs != 0 || mover.ControllerGID() != parent.Gid {
 		t.Fatal("arrival must settle movement while retaining FOLLOW and binding")
@@ -139,7 +139,7 @@ func TestFollowMissingControllerAndCreationProvenanceDoNotCancel(t *testing.T) {
 			ops, parent, child, now := followFixture(t)
 			s := ops.Monsters
 			mover := startFixtureFollow(t, ops, child, now)
-			ops.stopOrAdvanceFollow("summon", child, mover, now+1)
+			ops.stopOrAdvanceFollow("summon", &child, mover, now+1)
 			mover, _ = s.Mover("summon", child.Gid)
 			switch reason {
 			case "death":
@@ -152,7 +152,7 @@ func TestFollowMissingControllerAndCreationProvenanceDoNotCancel(t *testing.T) {
 				s.division("summon").instances.set(child.Gid, child)
 				s.mu.Unlock()
 			}
-			frames, _ := ops.stopOrAdvanceFollow("summon", child, mover, now+2)
+			frames, _ := ops.stopOrAdvanceFollow("summon", &child, mover, now+2)
 			current, _ := s.Mover("summon", child.Gid)
 			if len(frames) != 0 || current != mover {
 				t.Fatal("closed timer/controller lifetime changed movement")
@@ -165,7 +165,7 @@ func TestFollowRetaliationBypassesClosedGatesAndRemovalRetiresTimers(t *testing.
 	ops, _, child, now := followFixture(t)
 	s := ops.Monsters
 	mover := startFixtureFollow(t, ops, child, now)
-	ops.stopOrAdvanceFollow("summon", child, mover, now+1)
+	ops.stopOrAdvanceFollow("summon", &child, mover, now+1)
 	before := followTimers(s, child.Gid)
 	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 1, Reach: 20, CooldownMs: 1000, ActionLifecycleMs: 500}, true
@@ -210,7 +210,7 @@ func TestRejectedFollowPlansPreservePacketsAndBothTimers(t *testing.T) {
 				if phase != "entry" {
 					mover = startFixtureFollow(t, ops, child, now)
 				}
-				plan, ok := s.prepareFollow("summon", child, mover, now)
+				plan, ok := s.prepareFollow("summon", &child, mover, now)
 				if !ok {
 					t.Fatal("snapshot refused")
 				}
@@ -274,7 +274,7 @@ func TestFollowLeaderReadingSharedPerLeg(t *testing.T) {
 		t.Fatal("summon wave holds no second follower")
 	}
 	mover, _ := s.Mover("summon", child.Gid)
-	first, ok := s.prepareFollow("summon", child, mover, now)
+	first, ok := s.prepareFollow("summon", &child, mover, now)
 	if !ok || !first.leaderExists {
 		t.Fatal("first follower snapshot refused")
 	}
@@ -284,7 +284,7 @@ func TestFollowLeaderReadingSharedPerLeg(t *testing.T) {
 		t.Fatal("leader move refused")
 	}
 	otherMover, _ := s.Mover("summon", other.Gid)
-	second, ok := s.prepareFollow("summon", other, otherMover, now)
+	second, ok := s.prepareFollow("summon", &other, otherMover, now)
 	if !ok || !second.leaderExists {
 		t.Fatal("second follower snapshot refused")
 	}
@@ -294,7 +294,7 @@ func TestFollowLeaderReadingSharedPerLeg(t *testing.T) {
 	if frames, accepted := s.commitFollow(second, otherMover, nil); accepted || len(frames) != 0 {
 		t.Fatal("commit on the shared reading accepted a moved leader")
 	}
-	next, ok := s.prepareFollow("summon", other, otherMover, now+1)
+	next, ok := s.prepareFollow("summon", &other, otherMover, now+1)
 	if !ok {
 		t.Fatal("next leg snapshot refused")
 	}
@@ -307,7 +307,7 @@ func TestRejectedFollowArrivalKeepsRetaliationAndCadence(t *testing.T) {
 	ops, _, child, now := followFixture(t)
 	s := ops.Monsters
 	mover := startFixtureFollow(t, ops, child, now)
-	plan, ok := s.prepareFollow("summon", child, mover, mover.ArriveMs)
+	plan, ok := s.prepareFollow("summon", &child, mover, mover.ArriveMs)
 	if !ok {
 		t.Fatal("arrival snapshot refused")
 	}

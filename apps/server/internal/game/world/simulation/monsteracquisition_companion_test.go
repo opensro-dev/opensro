@@ -48,7 +48,7 @@ func TestAcquisitionWeighsOwnersCompanions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := nearestEligiblePlayer(monster.Instance{}, from, c.players, 100)
+			got, ok := nearestEligiblePlayer(&monster.Instance{}, from, c.players, 100)
 			if got.Gid != c.want || ok != (c.want != 0) {
 				t.Fatalf("target=%d found=%v want=%d", got.Gid, ok, c.want)
 			}
@@ -70,7 +70,7 @@ func TestCompanionTargetsJoinTheTick(t *testing.T) {
 	if len(players) != 2 || players[1].OwnerGid != owner.Gid || players[1].Guard != owner.Guard || players[1].Band != 3 {
 		t.Fatalf("entries %+v", players)
 	}
-	if target, ok := eligiblePlayerByGid(monster.Instance{}, players, 7); !ok || target.OwnerGid != owner.Gid {
+	if target, ok := eligiblePlayerByGid(&monster.Instance{}, players, 7); !ok || target.OwnerGid != owner.Gid {
 		t.Fatal("a companion target was not found by gid")
 	}
 }
@@ -136,7 +136,7 @@ func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
 	owner := playerPose{Gid: 100001, Pose: at(50, 0)}
 	pet := playerPose{Gid: 7, Pose: at(20, 0), OwnerGid: owner.Gid, Band: 3}
 
-	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{owner, pet}, 100); !ok || got.Gid != pet.Gid {
+	if got, ok := nearestEligiblePlayer(&regular, from, []playerPose{owner, pet}, 100); !ok || got.Gid != pet.Gid {
 		t.Fatalf("dungeon nearer companion: got=%+v ok=%v, want pet %d", got, ok, pet.Gid)
 	}
 
@@ -145,7 +145,7 @@ func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
 	fearedOfOwner.Abnormal.Slots[abnormal.Fear].Active = true
 	fearedOfOwner.Abnormal.Slots[abnormal.Fear].SourceGID = owner.Gid
 	other := playerPose{Gid: 100002, Pose: at(70, 0)}
-	if got, ok := nearestEligiblePlayer(fearedOfOwner, from, []playerPose{owner, pet, other}, 100); !ok || got.Gid != other.Gid {
+	if got, ok := nearestEligiblePlayer(&fearedOfOwner, from, []playerPose{owner, pet, other}, 100); !ok || got.Gid != other.Gid {
 		t.Fatalf("dungeon Fear of owner: got=%+v ok=%v, want other %d", got, ok, other.Gid)
 	}
 
@@ -153,7 +153,7 @@ func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
 	fearedOfPet.Abnormal = &abnormal.Block{Mask: abnormal.Fear.Bit()}
 	fearedOfPet.Abnormal.Slots[abnormal.Fear].Active = true
 	fearedOfPet.Abnormal.Slots[abnormal.Fear].SourceGID = pet.Gid
-	if got, ok := nearestEligiblePlayer(fearedOfPet, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+	if got, ok := nearestEligiblePlayer(&fearedOfPet, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
 		t.Fatalf("dungeon Fear of pet: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
 	}
 
@@ -161,12 +161,12 @@ func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
 	guardedOwner.Guard = monster.FirstAttackGuard{Mask: 0x7, Level: 25}
 	guardedPet := pet
 	guardedPet.Guard = guardedOwner.Guard
-	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{guardedOwner, guardedPet}, 100); ok {
+	if got, ok := nearestEligiblePlayer(&regular, from, []playerPose{guardedOwner, guardedPet}, 100); ok {
 		t.Fatalf("dungeon Noise-guarded owner and companion should be skipped, got=%+v", got)
 	}
 
 	highPlayer := playerPose{Gid: 100003, Pose: at(10, 200)}
-	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{highPlayer}, 100); ok {
+	if got, ok := nearestEligiblePlayer(&regular, from, []playerPose{highPlayer}, 100); ok {
 		t.Fatalf("dungeon 3D distance out of sight should be rejected, got=%+v", got)
 	}
 }
@@ -187,13 +187,13 @@ func TestMountedOwnerRedirectsCompanionTargetToOwner(t *testing.T) {
 	owner := playerPose{Gid: 100001, Pose: at(60), Mounted: true, JobState: jobStateTrader}
 	pet := playerPose{Gid: 7, Pose: at(20), OwnerGid: owner.Gid, Band: 3}
 
-	if got, ok := nearestEligiblePlayer(monster.Instance{}, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+	if got, ok := nearestEligiblePlayer(&monster.Instance{}, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
 		t.Fatalf("Selector 2 mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
 	}
 
 	thiefHunter := monster.Instance{}
 	thiefHunter.Nest.NativeTacticsFlags = 0x4
-	if got, ok := nearestEligiblePlayer(thiefHunter, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+	if got, ok := nearestEligiblePlayer(&thiefHunter, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
 		t.Fatalf("Selector 3 mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
 	}
 
@@ -212,7 +212,7 @@ func TestMountedOwnerRedirectsCompanionTargetToOwner(t *testing.T) {
 		{Gid: owner.Gid, Pose: Spawn{RegionID: parent.Spawn.RegionID, X: 1000, Z: 100}, Mounted: true},
 		{Gid: pet.Gid, Pose: Spawn{RegionID: parent.Spawn.RegionID, X: 950, Z: 100}, OwnerGid: owner.Gid, Band: 3},
 	}
-	if got, ok := ops.summonedCandidate("summon", child, mover, players, *now); !ok || got.Gid != owner.Gid {
+	if got, ok := ops.summonedCandidate("summon", &child, mover, players, *now); !ok || got.Gid != owner.Gid {
 		t.Fatalf("summonedCandidate parent-opponent mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
 	}
 }

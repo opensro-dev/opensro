@@ -339,6 +339,7 @@ import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
+import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -526,6 +527,9 @@ export function createGameplay(
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
 	let moonlitThiefSuit = false;
+	// The shard runs the port-only Alexandria area (SRO_ALEXANDRIA): the M
+	// window may use the published wider overview and town pages.
+	let alexandria = false;
 	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
@@ -580,6 +584,7 @@ export function createGameplay(
 		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
+		caravanStars = createCaravanStars(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
@@ -1575,6 +1580,7 @@ selected entities, cooldowns or world-entry state.
 		walkHeld = false;
 		moveReservation.clear();
 		betaMap.clear();
+		caravanStars.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -1794,6 +1800,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
+			alexandria = (value as { alexandria?: unknown; } | null)?.alexandria === true;
 			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
@@ -4086,11 +4093,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( caravanStars.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
 					dirty = true;
 					return true;
 				}
-				if ( petTraining.receive( frame, now ) ) {
+				if ( petTraining.receive( frame, now, localGid ) ) {
 					dirty = true;
 					return true;
 				}
@@ -6000,6 +6011,9 @@ The published plane when something changed since the last take, else null.
 			}
 			dirty = false;
 			const m = movement.state(), i = inventory.state(), c = combat.state();
+			for ( const row of petTraining.recipients() ) {
+				if ( row.gid !== localGid && !readEntity( row.gid ) ) petTraining.removeRecipient( row.gid );
+			}
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
@@ -6041,6 +6055,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(alexandria ? { alexandria } : {}),
 				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
@@ -6100,11 +6115,14 @@ The published plane when something changed since the last take, else null.
 				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
+				caravanStars: caravanStars.gids(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
+				petHowl: petTraining.howl(),
+				petRecipientBuffs: petTraining.recipients(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null

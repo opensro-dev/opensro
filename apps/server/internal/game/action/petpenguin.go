@@ -11,7 +11,6 @@ package action
 import (
 	"strings"
 
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
@@ -207,12 +206,12 @@ func (rt *Runtime) penguinMagicWrites(division string, c *enterworld.Character) 
 ================
 penguinShards
 
-Frozen kills release one bounded burst. Proc damage does not re-enter this hook.
+Immobilized kills release one bounded burst. Proc damage does not re-enter this hook.
 ================
 */
 func (rt *Runtime) penguinShards(step petCombatStep, mob monster.Instance, damage uint32) {
 	s, _, ok := companion.Passive(step.pet, "Shatter", companion.ModifiersFor(step.pet))
-	if !ok || s.Option != 3 || mob.Abnormal == nil || !mob.Abnormal.Has(abnormal.Freeze) || damage == 0 {
+	if !ok || s.Option != 3 || !petTargetImmobilized(mob) || damage == 0 {
 		return
 	}
 	lease, ok := rt.casterPopulation(step.key.division, step.snapshot)
@@ -454,7 +453,7 @@ penguinOwnerShatter
 */
 func (rt *Runtime) penguinOwnerShatter(division string, c *enterworld.Character, target monster.Instance, hits []combat.Result, now int64) {
 	step, ok := rt.penguinCompanion(division, c, now)
-	if !ok || !petTargetChilled(target) {
+	if !ok || !(petTargetChilled(target) || petTargetImmobilized(target)) {
 		return
 	}
 	s, level, ok := companion.Passive(step.pet, "Shatter", companion.ModifiersFor(step.pet))

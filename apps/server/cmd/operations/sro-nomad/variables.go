@@ -253,21 +253,27 @@ func (deployment *deployment) planVariables(
 				err,
 			)
 		}
-		// The one item each variable may change while its job runs: the
-		// webhook its template renders with change_mode noop or restart.
-		restartable := ""
+		// The items each variable may change while its job runs without
+		// demanding a stop: the Agent's bug-report webhook (its template
+		// restarts the Agent with it), and the GameWorld's two webhooks
+		// (their templates are change_mode noop - the new value reaches
+		// the running task's files and applies as their banners say:
+		// the staff file at the next post, the bug-report env at the
+		// next boot). A difference confined to these never needs a stop.
+		var restartable []string
 		if variable.path == agentVariablePath {
 			variable.items = keepBugReportWebhook(variable.items, existing, deployment.BugReports.Off)
 			desired[index] = variable
-			restartable = bugReportWebhookItem
+			restartable = []string{bugReportWebhookItem}
 		} else if _, gameWorld := managedGameWorldVariableJobID(variable.path); gameWorld {
 			variable.items = keepStaffWebhook(variable.items, existing, deployment.StaffWebhookOff)
+			variable.items = keepBugReportWebhook(variable.items, existing, deployment.BugReports.Off)
 			desired[index] = variable
-			restartable = staffWebhookItem
+			restartable = []string{staffWebhookItem, bugReportWebhookItem}
 		}
 		current[variable.path] = existing
 		if existing == nil ||
-			!stringMapsEqual(existing.Items, variable.items) && !onlyItemDiffers(existing.Items, variable.items, restartable) {
+			!stringMapsEqual(existing.Items, variable.items) && !onlyItemsDiffer(existing.Items, variable.items, restartable) {
 			changedJobs[variable.jobID] = variable.path
 		}
 	}
@@ -335,22 +341,29 @@ remove it while the Agent runs.
 ================
 */
 func onlyBugReportWebhookDiffers(current, desired nomad.VariableItems) bool {
-	return onlyItemDiffers(current, desired, bugReportWebhookItem)
+	return onlyItemsDiffer(current, desired, []string{bugReportWebhookItem})
 }
 
 /*
 ================
-onlyItemDiffers
+onlyItemsDiffer
 
-Whether the two item sets are equal once item is set aside. An empty item
-sets nothing aside.
+Whether the two item sets are equal once the named items are set aside.
+No named items sets nothing aside.
 ================
 */
-func onlyItemDiffers(current, desired nomad.VariableItems, item string) bool {
+func onlyItemsDiffer(current, desired nomad.VariableItems, names []string) bool {
 	strip := func(items nomad.VariableItems) map[string]string {
 		out := make(map[string]string, len(items))
 		for name, value := range items {
-			if item == "" || name != item {
+			skip := false
+			for _, named := range names {
+				if name == named {
+					skip = true
+					break
+				}
+			}
+			if !skip {
 				out[name] = value
 			}
 		}
@@ -473,6 +486,15 @@ func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
 		// file and the GameWorld's certificate alert only logs.
 		if webhook := deployment.StaffWebhook; webhook != "" {
 			gameWorldItems[staffWebhookItem] = webhook
+		}
+		// Absent, not empty, without one: the same item the Agent's
+		// variable carries, mirrored so the /report chat intake
+		// (opensro#2959) delivers through the sink exactly when the
+		// Agent's bug reports do. The GameWorld job reads only its own
+		// variable, so its template renders SRO_BUG_REPORT_DISCORD_WEBHOOK
+		// from this item and nothing while it is absent.
+		if webhook := deployment.BugReports.WebhookURL; webhook != "" {
+			gameWorldItems[bugReportWebhookItem] = webhook
 		}
 		jobID := gameWorldJobPrefix + game.Definition.ID
 		desired = append(desired, desiredVariable{

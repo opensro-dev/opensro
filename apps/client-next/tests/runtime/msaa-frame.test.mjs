@@ -7,7 +7,8 @@ A recording encoder stands in for the GPU, so these tests read the passes
 the frame asks for. The 4x depth resolves into the scene's single-sampled
 depth even when the render-scale stage owns a separate frame depth, and the
 deferred tail leaves the world labels to the one pass that draws them after
-the depth resolve.
+the depth resolve: the HUD pass, which draws the labels and the UI together
+(#2952).
 
 ===========================================================================
 */
@@ -41,7 +42,13 @@ function recordingCommands() {
 	});
 	const encoder = {
 		beginRenderPass( descriptor ) {
-			const row = { label: descriptor.label, depth: descriptor.depthStencilAttachment?.view, bundles: 0 };
+			const row = {
+				label: descriptor.label,
+				depth: descriptor.depthStencilAttachment?.view,
+				depthLoad: descriptor.depthStencilAttachment?.depthLoadOp,
+				depthStore: descriptor.depthStencilAttachment?.depthStoreOp,
+				bundles: 0
+			};
 			passes.push( row );
 			return {
 				setBlendConstant() {},
@@ -89,15 +96,15 @@ drawFrame
 One frame with the world labels, no scene content and the given inputs.
 ================
 */
-/** @param {any} commands @param {{ deferred?: any, bloom?: any, experimental: any }} input */
-function drawFrame( commands, { deferred, experimental, bloom } ) {
+/** @param {any} commands @param {{ deferred?: any, bloom?: any, experimental: any, labels?: any[] }} input */
+function drawFrame( commands, { deferred, experimental, bloom, labels = [ WORLD_LABELS ] } ) {
 	return createFrame( commands ).draw(
 		/** @type {any} */ ("view"),
 		undefined,
 		undefined,
 		/** @type {any} */ ("scene-depth"),
 		[],
-		[ WORLD_LABELS ],
+		labels,
 		[],
 		undefined,
 		undefined,
@@ -130,7 +137,7 @@ test("the 4x depth resolves into the scene depth under the render-scale stage", 
 	const resolve = passes.find( pass => pass.label === "msaa-resolve" ) ?? assert.fail( "no depth resolve" );
 	assert.equal( resolve.depth, "scene-depth", "the upscale reads the scene depth, so that is what must hold it" );
 	assert.deepEqual( upscales, [ "msaa-resolve" ], "the upscale runs after the resolve" );
-	assert.equal( passes.find( pass => pass.label === "hdr-world-ui" ).depth, "frame-depth" );
+	assert.equal( passes.find( pass => pass.label === "hud-after-flares" ).depth, "frame-depth" );
 });
 
 test("bloom leaves the labels to the pass after the depth resolve", () => {
@@ -140,7 +147,7 @@ test("bloom leaves the labels to the pass after the depth resolve", () => {
 		experimental: msaaExperimental( passes )
 	} );
 	const labels = passes.filter( pass => pass.bundles > 0 ).map( pass => pass.label );
-	assert.deepEqual( labels, [ "hdr-world-ui" ], "the world labels draw exactly once" );
+	assert.deepEqual( labels, [ "hud-after-flares" ], "the world labels draw exactly once" );
 });
 
 test("the deferred tail leaves the labels to the pass after it", () => {
@@ -150,6 +157,36 @@ test("the deferred tail leaves the labels to the pass after it", () => {
 		experimental: msaaExperimental( passes )
 	} );
 	const labels = passes.filter( pass => pass.bundles > 0 ).map( pass => pass.label );
-	assert.deepEqual( labels, [ "hdr-world-ui" ], "the world labels draw exactly once" );
+	assert.deepEqual( labels, [ "hud-after-flares" ], "the world labels draw exactly once" );
 	assert.equal( passes.find( pass => pass.label === "deferred-particles" ).depth, "scene-depth" );
+});
+
+test("with no pass reading the scene depth the 4x depth is neither stored nor resolved", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: msaaExperimental( passes ), labels: [] } );
+	assert.equal( passes.find( pass => pass.label === "msaa-resolve" ), undefined );
+	assert.equal( passes.find( pass => pass.label === "main-pass" )?.depthStore, "discard" );
+});
+
+test("labels drawn after the scene keep the 4x depth stored and resolved", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: msaaExperimental( passes ) } );
+	assert.ok( passes.some( pass => pass.label === "msaa-resolve" ) );
+	assert.equal( passes.find( pass => pass.label === "main-pass" )?.depthStore, "store" );
+});
+
+test("MSAA alone draws the labels and the HUD in one pass after the resolve", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: msaaExperimental( passes ) } );
+	assert.deepEqual( passes.map( pass => pass.label ), [ "main-pass", "msaa-resolve", "hud-after-flares" ] );
+	const hud = passes.at( -1 );
+	assert.equal( hud.depthLoad, "load", "the labels depth-test against the resolved scene depth" );
+	assert.equal( hud.bundles, 1, "the world labels draw in the HUD pass" );
+});
+
+test("MSAA off keeps the labels in the main pass with no extra pass", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, { experimental: undefined } );
+	assert.deepEqual( passes.map( pass => pass.label ), [ "main-pass" ] );
+	assert.equal( passes[0].bundles, 1 );
 });

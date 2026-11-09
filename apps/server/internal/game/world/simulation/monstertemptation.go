@@ -45,7 +45,7 @@ would. A monster whose target is a tempted monster sees that monster in
 addition to the players. Any other monster keeps the players unchanged.
 ================
 */
-func (ops *MonsterMoverOps) temptationView(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, tactics monster.Tactics, nowMs int64) ([]playerPose, monster.Tactics) {
+func (ops *MonsterMoverOps) temptationView(divisionID string, instance *monster.Instance, mover monster.MoverState, players []playerPose, tactics monster.Tactics, nowMs int64) ([]playerPose, monster.Tactics) {
 	if instance.Tempted() {
 		// Inferred: the temptation makes every regular monster seek a
 		// foe, passive ones included, as the description reads.
@@ -82,7 +82,7 @@ still holding a player was sent home by the confusion start event
 (applyTacticsEvents) and acquires from HOMING here.
 ================
 */
-func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames, bool) {
+func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames, bool) {
 	if !instance.Tempted() || mover.TargetGID() != 0 || len(foes) == 0 {
 		return nil, nil, false
 	}

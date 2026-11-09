@@ -328,6 +328,48 @@ func TestPenguinShatterOwnerGateAndFrozenKillBurst(t *testing.T) {
 
 /*
 ================
+TestPenguinShatterControlEffectsAndHalfKillingDamage
+================
+*/
+func TestPenguinShatterControlEffectsAndHalfKillingDamage(t *testing.T) {
+	for _, status := range []abnormal.Status{abnormal.Freeze, abnormal.Frostbite, abnormal.Stun, abnormal.Root, abnormal.Poison} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			rt, clock, c, mob := penguinFixture(t)
+			learnPetBook(t, c, 39)
+			mob.Abnormal = &abnormal.Block{}
+			mob.Abnormal.Slots[status].Active = true
+			want := uint32(110)
+			if status == abnormal.Poison {
+				want = 100
+			}
+			hits := []combat.Result{{Damage: 100}}
+			rt.petTrainedDamage(&petTrainedStrike{shatter: 10}, mob, hits)
+			if hits[0].Damage != want {
+				t.Fatal("pet Shatter control bonus", hits)
+			}
+			hits[0].Damage = 100
+			rt.penguinOwnerShatter(testDivision, c, mob, hits, clock.NowMs())
+			if hits[0].Damage != want {
+				t.Fatal("owner Shatter control bonus", hits)
+			}
+			step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
+			at := simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X + 10, Y: mob.Spawn.Y, Z: mob.Spawn.Z}
+			near := wolfSpawnAt(t, rt, c, at, clock.NowMs())
+			rt.penguinShards(step, mob, 1000)
+			after, _ := rt.Monsters.Get(testDivision, near.Gid)
+			want = 500
+			if status == abnormal.Poison || status == abnormal.Frostbite {
+				want = 0
+			}
+			if near.CurrentHP-after.CurrentHP != want {
+				t.Fatalf("burst damage=%d want=%d", near.CurrentHP-after.CurrentHP, want)
+			}
+		})
+	}
+}
+
+/*
+================
 TestPenguinEchoAddsActualDamage
 ================
 */

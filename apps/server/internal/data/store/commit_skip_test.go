@@ -302,7 +302,7 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 		if err := s.CreateCharacter(testDivision, "mall-account", c); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "mall-account", 100, 20, 10); err != nil {
+		if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "mall-account", 100, 20, 10); err != nil {
 			t.Fatal(err)
 		}
 		runOfflineDoorRevert(t, offlineDoorFixture{dir: dir, s: s, c: c,

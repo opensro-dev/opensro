@@ -254,7 +254,8 @@ export function createPresentationEvents() {
 						{ ...target, ...anchor },
 						{ type: 0, flags: 1, damage: event.damage, fatal: false, secondaryAmount: 0 },
 						at,
-						true
+						true,
+						event.linked
 					),
 					seconds
 				);

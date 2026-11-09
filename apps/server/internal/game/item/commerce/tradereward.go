@@ -25,9 +25,13 @@ TradeRewardInput
 ================
 */
 type TradeRewardInput struct {
-	Credit, Profit            int64
-	Job                       uint8
-	OneStar, Party            bool
+	Credit, Profit int64
+	Job            uint8
+	OneStar, Party bool
+	// FiveStar is the port-only 5-star caravan mark (SRO_TRADE_TIERS,
+	// game/action): the seller's cargo rates five stars, so the thief and
+	// hunter stakes in tradetiers.go apply. Never set natively.
+	FiveStar                  bool
 	Traders, Thieves, Hunters int
 }
 

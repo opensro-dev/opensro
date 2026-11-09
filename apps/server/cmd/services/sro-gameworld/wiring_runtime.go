@@ -123,6 +123,18 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.betaSilkTick(ticker, nowMs)
 		}})
 	}
+	// Port-only (#2958): the division's clients learn which transports
+	// carry a 5-star caravan, for the nameplate star; the runtime paces
+	// and gates the push itself.
+	if game.items.TradeTiers {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-stars", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			frames := game.items.CaravanStarFrames(game.divisionID, sessionViews(ticker.Source), nowMs)
+			if len(frames) != 0 {
+				ticker.Push.PushToDivision(game.divisionID, frames, "")
+			}
+			return nil
+		}})
+	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	// Port-only (killstats.go): online time accrues to the entered
 	// characters only - the session views at each accrual instant,
