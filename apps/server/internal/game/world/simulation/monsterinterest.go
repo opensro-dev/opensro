@@ -10,7 +10,7 @@ package simulation
 
 import (
 	"opensro.online/server/internal/domain"
-	"sort"
+	"slices"
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -129,24 +129,27 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 		ops.scopeMemo = make(map[string]scopeViewerMemo)
 	}
 
+	samples := ops.Monsters.scopeInterestStamps(sessions, viewers, nowMs)
 	inScopeGids := make(map[uint32]bool)
-	for _, session := range sessions {
-		viewer := viewers[session.SessionID]
-		shown, seeded := ops.shownMonsters[session.SessionID]
-		stamp, stampOK := ops.Monsters.scopeInterestStamp(session.DivisionID, session.Population, viewer, nowMs)
+	for i, session := range sessions {
+		stamp, stampOK := samples[i].stamp, samples[i].ok
 		memo, memoOK := ops.scopeMemo[session.SessionID]
 		sameScope := memoOK && memo.division == session.DivisionID && memo.lease == session.Population &&
-			worldgeom.InterestBlockAt(viewer) == memo.block
+			samples[i].block == memo.block
 
 		// The unchanged-leg skip (#2134): a seeded viewer whose block
 		// and interest stamp match its last pass faces the in-scope
 		// set its shown set already equals, so the delta below would
 		// publish nothing. The budget-breach size is the one already
 		// logged for this division occupancy, so it is not re-read
-		// either.
-		if seeded && stampOK && sameScope && stamp == memo.stamp {
+		// either. A memo exists only for a seeded viewer - it is
+		// written after the seeding assignment below and the purge
+		// deletes it with the shown set - so the skip needs no shown
+		// read (#2988).
+		if stampOK && sameScope && stamp == memo.stamp {
 			continue
 		}
+		shown, seeded := ops.shownMonsters[session.SessionID]
 
 		// enterOne publishes one scope-enter: one 0x30D7 single at the
 		// monster's LIVE pose (a wanderer spawns where it is, not at
@@ -197,10 +200,12 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 					Payload:  despawn.Encode(),
 				}})
 			} else if len(exits) > 1 {
-				sort.Slice(exits, func(i, j int) bool { return exits[i] < exits[j] })
+				slices.Sort(exits)
 				push.PushToSession(session.SessionID, MonsterDespawnBracketFrames(exits))
 			}
 		}
+
+		viewer := viewers[session.SessionID]
 
 		// The block-delta fast path (#2134): the stamp moved, but only
 		// in blocks some other neighbourhood reads - or this block's
@@ -210,7 +215,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 		// bridge falls through to the full pass, which is always
 		// correct.
 		if seeded && stampOK && sameScope {
-			if entered, enteredSnapshots, left, total, ok := ops.Monsters.populationInterestBlockDelta(session.DivisionID, session.Population, viewer, nowMs, memo.stamp, shown); ok {
+			if entered, enteredSnapshots, left, total, ok := ops.Monsters.populationInterestBlockDelta(session.DivisionID, session.Population, viewer, samples[i], memo.stamp, shown); ok {
 				// Detection only: never truncate the server-owned existence set.
 				if total > monsterScopeSoftLimit {
 					ops.logScopeBudgetBreach(session.DivisionID, total)
@@ -224,13 +229,13 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 				emitExits(left)
 				ops.scopeMemo[session.SessionID] = scopeViewerMemo{
 					division: session.DivisionID, lease: session.Population,
-					block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+					block: samples[i].block, stamp: stamp,
 				}
 				continue
 			}
 		}
 
-		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewer, nowMs, shown)
+		inScope, snapshots := ops.Monsters.populationInterestDeltaSampled(session.DivisionID, session.Population, viewer, samples[i], shown)
 		// Detection only: never truncate the server-owned existence set.
 		if len(inScope) > monsterScopeSoftLimit {
 			ops.logScopeBudgetBreach(session.DivisionID, len(inScope))
@@ -317,7 +322,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 		if stampOK {
 			ops.scopeMemo[session.SessionID] = scopeViewerMemo{
 				division: session.DivisionID, lease: session.Population,
-				block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+				block: samples[i].block, stamp: stamp,
 			}
 		} else {
 			delete(ops.scopeMemo, session.SessionID)

@@ -759,7 +759,7 @@ func (s *moverStorage) remove(gid uint32) {
 	if !exists {
 		return
 	}
-	s.blocks.leaveSlot(slot, gid)
+	s.blocks.leaveSlot(slot, gid, s.slotOf)
 	s.blocks.rosterGeneration++
 	s.spatial.remove(gid, s.slots[slot].rec.interestBounds())
 	last := uint32(len(s.slots) - 1)
