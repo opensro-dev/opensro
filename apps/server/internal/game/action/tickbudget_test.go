@@ -90,10 +90,14 @@ const (
 // 263 allocs; with the bond lane's revival walk judging its
 // refusal on door-read facts before bondSource's answer comes
 // home, instead of paying for the escaped SkillDef on every pet
-// owner's tick (#2030), measured 25,150 B / 258 allocs.
+// owner's tick (#2030), measured 25,150 B / 258 allocs; with the
+// judged pet tick refilling the session's retained owner-world
+// slot instead of cloning the world per tick, and its stuck answer
+// and movement constraint built once per session (#2033), measured
+// 23,897 B / 249 allocs.
 const (
-	tickBudgetBytesPerTick  = 27700
-	tickBudgetAllocsPerTick = 284
+	tickBudgetBytesPerTick  = 26300
+	tickBudgetAllocsPerTick = 274
 )
 
 /*
