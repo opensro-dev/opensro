@@ -25,6 +25,17 @@ snapshot's catalogue rows are pointed at by its skill and quick-slot
 fields, and charging the rows per reference charged 33 MB for one snapshot
 (the cave-entry failure of 2026-10-19, F11-DC1).
 
+Given the journal's `flat` map, a flat value - an array or object holding
+only strings, numbers, booleans and nulls - keeps its size once measured
+(the map is the journal's: a shared module holds no state). Journal values are immutable once
+published (readonly in the contracts, never written in place), and a
+gameplay snapshot or an entity row is mostly made of the previous one's
+values: chat lines, inventory rows, walking path points, effect rows.
+Every gameplay publication (about 8 a second) walked them all again: half
+of a hunting session's active time went into sizing. A flat value holds no
+reference, so its size does not depend on `shared`; whether it is itself a
+repeat is still asked first, so the shared count is unchanged.
+
 ===========================================================================
 */
 
@@ -41,11 +52,12 @@ journalCost
 UTF-16 bytes of the JSON a value would serialise to, as estimated above.
 With `shared`, an array or object already in it costs a reference, and
 every array or object counted is added to it. Without a set, every
-occurrence counts in full.
+occurrence counts in full. With `flat`, a flat value's JSON characters are
+read from it when measured before, and written to it when first measured.
 ================
 */
-export function journalCost( value: unknown, shared?: WeakSet<object> ): number {
-	return jsonChars( value, 0, shared ) * 2;
+export function journalCost( value: unknown, shared?: WeakSet<object>, flat?: WeakMap<object, number> ): number {
+	return jsonChars( value, 0, shared, flat ) * 2;
 }
 
 /*
@@ -53,7 +65,7 @@ export function journalCost( value: unknown, shared?: WeakSet<object> ): number 
 jsonChars
 ================
 */
-function jsonChars( value: unknown, depth: number, shared?: WeakSet<object> ): number {
+function jsonChars( value: unknown, depth: number, shared?: WeakSet<object>, flat?: WeakMap<object, number> ): number {
 	switch ( typeof value ) {
 		case "string":
 			return value.length + 2;
@@ -81,28 +93,37 @@ function jsonChars( value: unknown, depth: number, shared?: WeakSet<object> ): n
 		if ( shared.has( value as object ) ) return SHARED_REFERENCE_CHARS;
 		shared.add( value as object );
 	}
+	const known = flat?.get( value as object );
+	if ( known !== undefined ) return known;
+	let isFlat = true;
 	if ( Array.isArray( value ) ) {
 		let chars = 2 + Math.max( 0, value.length - 1 );
 		for ( let i = 0; i < value.length; i++ ) {
 			const item = value[i];
 			// JSON writes null for array holes and unserialisable items.
-			chars += item === undefined || typeof item === "function" || typeof item === "symbol" ?
-				4 :
-				jsonChars( item, depth + 1, shared );
+			if ( item === undefined || typeof item === "function" || typeof item === "symbol" ) chars += 4;
+			else {
+				if ( item !== null && typeof item === "object" ) isFlat = false;
+				chars += jsonChars( item, depth + 1, shared, flat );
+			}
 		}
+		if ( isFlat ) flat?.set( value, chars );
 		return chars;
 	}
 	const toJSON = (value as { toJSON?: unknown; }).toJSON;
-	if ( typeof toJSON === "function" ) return jsonChars( toJSON.call( value ), depth + 1, shared );
+	if ( typeof toJSON === "function" ) return jsonChars( toJSON.call( value ), depth + 1, shared, flat );
 	let chars = 2, members = 0;
 	for ( const key in value as object ) {
 		if ( !Object.prototype.hasOwnProperty.call( value, key ) ) continue;
 		const item = (value as Record<string, unknown>)[key];
 		if ( item === undefined || typeof item === "function" || typeof item === "symbol" ) continue;
-		chars += key.length + 3 + jsonChars( item, depth + 1, shared );
+		if ( item !== null && typeof item === "object" ) isFlat = false;
+		chars += key.length + 3 + jsonChars( item, depth + 1, shared, flat );
 		members++;
 	}
-	return chars + Math.max( 0, members - 1 );
+	chars += Math.max( 0, members - 1 );
+	if ( isFlat ) flat?.set( value as object, chars );
+	return chars;
 }
 
 /*

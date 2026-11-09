@@ -156,6 +156,22 @@ export function createEntities(
 	// costed against their own graph instead, so replacing one never uncounts
 	// a shared value.
 	let sharedArrays = new WeakSet<object>();
+	// The sizes of flat values the journal measured (journal-cost.ts): the
+	// gameplay snapshot and the entity rows republish the same chat lines,
+	// inventory rows and path points, so each is walked once. Weakly held, it
+	// lives with the journal and needs no reset.
+	//
+	// A kept size is right only while the value is not written in place
+	// after it is published. That is the journal's contract already, not a
+	// new one: every WorldEvent field is readonly (contracts/world.ts,
+	// contracts/gameplay.ts); a published value is costed once, at publish,
+	// and cloned later at take, so a write in between was never charged;
+	// and publication treats an unchanged reference as unchanged content
+	// (core.ts gameplayEvent omits an unchanged shop or social, inventory.ts
+	// yields a new bag array on every change), so a write in place would
+	// not reach presentation either. A producer that needs to change a
+	// published value publishes a new one.
+	const flatSizes = new WeakMap<object, number>();
 	let stagedMode = 1, removalTail = new Uint8Array( 0 );
 	let synchronized = false, localName = "", localActiveJob = 4;
 	let localSkills: readonly import("@/engine/foundation/gameplay/spawn-skills").SpawnSkill[] = [];
@@ -167,7 +183,7 @@ export function createEntities(
 	================
 	*/
 	function cost( event: WorldEvent ) {
-		return event.kind === "native" ? event.payload.byteLength : journalCost( event );
+		return event.kind === "native" ? event.payload.byteLength : journalCost( event, undefined, flatSizes );
 	}
 	/*
 	================
@@ -185,7 +201,7 @@ export function createEntities(
 	*/
 	function snapshotCost( event: Extract<WorldEvent, { kind: "gameplay"; }> ) {
 		const { skillCatalog: _skills, gmCatalog: _gm, ...dynamic } = event.state;
-		return journalCost( { kind: "gameplay", state: dynamic }, new WeakSet<object>() );
+		return journalCost( { kind: "gameplay", state: dynamic }, new WeakSet<object>(), flatSizes );
 	}
 	/*
 	================
@@ -196,7 +212,7 @@ export function createEntities(
 	================
 	*/
 	function batchCost( event: WorldEvent ) {
-		return event.kind === "native" ? event.payload.byteLength : journalCost( event, sharedArrays );
+		return event.kind === "native" ? event.payload.byteLength : journalCost( event, sharedArrays, flatSizes );
 	}
 	/*
 	================
