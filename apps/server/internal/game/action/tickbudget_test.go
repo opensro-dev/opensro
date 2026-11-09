@@ -107,10 +107,12 @@ const (
 // intent snapshot, the live-chain owner set and the tick-start
 // action-owner snapshot refilled into runtime scratch instead of
 // rebuilt from empty every tick (#2033), measured 21,755 B /
-// 184 allocs.
+// 184 allocs; with the compound-job advance refilling its key
+// scratch under the job lock instead of rebuilding the list every
+// tick (#2033), measured 21,732 B / 183 allocs.
 const (
 	tickBudgetBytesPerTick  = 24000
-	tickBudgetAllocsPerTick = 203
+	tickBudgetAllocsPerTick = 202
 )
 
 /*
