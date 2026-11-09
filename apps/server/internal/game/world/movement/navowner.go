@@ -458,7 +458,8 @@ ownership along the chord, from an already-owned start.
 */
 func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	owner := fromOwner
-	if !owner.Resolved() {
+	retained := owner.Resolved()
+	if !retained {
 		var ok bool
 		if owner, _, ok = v.ResolveNavOwner(from, simulation.NavOwner{}); !ok {
 			return nil
@@ -510,6 +511,21 @@ func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simul
 			t = path.spans[len(path.spans)-1].to
 			stand = nil
 			continue
+		}
+		// A mover that already stands inside a placed object's cell is
+		// resident on it: the object's own walk owns the chord from the
+		// stand (client-next dungeonOwnerPath's resident seat), and no
+		// outline entry is crossed on the way in. Only a retained owner
+		// seats this way - a fresh point still takes the teleport rule's
+		// nearest-|deltaY| arbitration in ResolveNavOwner. Without the
+		// seat, a terrain-owned stand on the Hotan terrace (0x5E87) could
+		// never board the stair ramp under it: every town-ward chord
+		// clipped at the first blocked terrain tile (#3006).
+		if t == 0 && retained {
+			if seated := v.residentObjectStand(a.X, a.Z, from.Y); seated != nil {
+				stand = seated
+				continue
+			}
 		}
 		entered, at, visit := v.terrainOutlineEntry(a.X, a.Z, b.X, b.Z, t)
 		if entered == nil {
@@ -633,6 +649,68 @@ func (v *WaterValidator) sectorObjectNavProbes(sectorX, sectorZ int) []sectorObj
 		return probes
 	}
 	return table[regionID].Load().probes
+}
+
+/*
+================
+residentObjectStand
+
+The stand of a mover already inside a placed object's cell at world-grid
+point (gx, gz): the containing cell nearest the mover's own height y, over
+the point sector's placement sets (the same probes terrainOutlineEntry
+scans, reach first). The height window is the native resident window the
+client port carries (contains, initial): a cell more than 2 above or below
+the mover does not seat it. This is not the banned chord-height guess -
+the mover's own retained position is inside the cell; ownership follows
+the surface it stands in, and fresh points still arbitrate by
+nearest-|deltaY| before any walk runs.
+================
+*/
+func (v *WaterValidator) residentObjectStand(gx, gz float64, y float64) *objectDeckStand {
+	sectorX := int(math.Floor(gx / simulation.NativeRegionSize))
+	sectorZ := int(math.Floor(gz / simulation.NativeRegionSize))
+	if sectorX < 0 || sectorZ < 0 || sectorX > 0xff || sectorZ > 0xff {
+		return nil
+	}
+	var best *objectDeckStand
+	bestDelta := 2.0
+	probes := v.sectorObjectNavProbes(sectorX, sectorZ)
+	for pIdx := range probes {
+		p := &probes[pIdx]
+		baseX, baseZ := p.baseX, p.baseZ
+		if p.reach.missedBy(gx-baseX, gz-baseZ, gx-baseX, gz-baseZ) {
+			continue
+		}
+		for i := range p.set {
+			if p.set[i].reach.missedBy(gx-baseX, gz-baseZ, gx-baseX, gz-baseZ) {
+				continue
+			}
+			pl := p.set[i].placement
+			c, sn := p.set[i].cosYaw, p.set[i].sinYaw
+			dx, dz := gx-(baseX+pl.x), gz-(baseZ+pl.z)
+			lx, lz := c*dx+sn*dz, -sn*dx+c*dz
+			for meshIndex, mesh := range p.set[i].meshes {
+				if lx < mesh.minX || lx > mesh.maxX || lz < mesh.minZ || lz > mesh.maxZ {
+					continue
+				}
+				for cell := 0; cell < mesh.cellCount(); cell++ {
+					planeY, inside := objectCellPlaneYAt(mesh, cell, lx, lz)
+					if !inside {
+						continue
+					}
+					if delta := math.Abs(planeY + pl.y - y); delta < bestDelta {
+						bestDelta = delta
+						best = &objectDeckStand{
+							set: p.set, objectIndex: i, mesh: mesh, cellIndex: cell,
+							placement: pl, anchorX: baseX, anchorZ: baseZ,
+							surface: p.surface, setDX: p.dx, setDZ: p.dz, meshIndex: meshIndex,
+						}
+					}
+				}
+			}
+		}
+	}
+	return best
 }
 
 // terrainOutlineEntry finds the first object the terrain walker enters on
