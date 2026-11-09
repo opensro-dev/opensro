@@ -84,6 +84,25 @@ test("Alt+click a bag item with the input focused links it and the send carries 
 	}
 });
 
+test("Alt+click a pet-bag item links it in the open pet's name", () => {
+	const { f, sent, event } = linkFixture( 1 );
+	try {
+		event( { kind: "activate", id: "open-window:Inventory" } );
+		event( { kind: "activate", id: "cos-bag" } );
+		event( { kind: "focus", id: "chat-text" } );
+		event( { kind: "edit", id: "chat-text", value: "wts ", start: 4, end: 4, composing: false } );
+		const shown = event( { kind: "activate", id: "cos-slot:0", alt: true } );
+		assert.equal( chatValue( shown ), "wts " + CHAT_LINK_MARKER );
+		event( { kind: "activate", id: "chat-send" } );
+		const line = defined( sent.filter( c => c.kind === "chat" ).at( -1 ) );
+		// The link names the pet whose bag is open (the fixture's gid 7),
+		// so the server reads that pet's bag and not another pet's (#3022).
+		assert.deepEqual( line.links, [ { source: 2, slot: 0, pet: 7 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("Alt+click with the input not focused still moves the item to the pet", () => {
 	const { f, sent, event } = linkFixture( 1 );
 	try {

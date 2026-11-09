@@ -48,8 +48,15 @@ func (rt *Runtime) LinkedItem(divisionID string, character *enterworld.Character
 			rows = character.AvatarInventory.Rows
 		}
 	case chat.LinkSourcePet:
-		if character.ActiveCOS != nil && character.ActiveCOS.Container != nil {
-			rows = character.ActiveCOS.Container.Rows
+		// A pet link names which pet it means (ref.Pet). A grab pet is a
+		// persistent companion living on its summon item's row, not
+		// ActiveCOS (the transport), so the old ActiveCOS-only read
+		// linked the transport's same-slot item or nothing. The bag is
+		// read the ownedCOSContainer way: an owned, summoned, alive
+		// companion with a bag (CompanionByGID already requires owned
+		// and summoned; a gid of 0 names no pet and reads nothing).
+		if pet := character.CompanionByGID(ref.Pet); pet != nil && !character.DeletePending && pet.CurrentHP != 0 && pet.Container != nil {
+			rows = pet.Container.Rows
 		}
 	default:
 		// The warehouse is read by StorageLinks, outside any door.
