@@ -179,6 +179,7 @@ func (rt *Runtime) bindPetSession(division string, c *enterworld.Character, sess
 	}
 	state := &petSession{session: session, character: c, ready: ready, mercenaryPenalty: mercenaryPenaltyClock{lastMs: rt.Now().UnixMilli()}}
 	rt.petSessions[key] = state
+	rt.petSessionKeys = nil
 	rt.petMu.Unlock()
 	var companions []*enterworld.CharacterCOS
 	rt.deps.Read(division, func() { companions = c.Companions() })
@@ -218,6 +219,9 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 			delete(rt.petSessions, key)
 		}
 	}
+	if len(retired) != 0 {
+		rt.petSessionKeys = nil
+	}
 	rt.petMu.Unlock()
 	// The owner's pets leave the world with the owner: the gid index
 	// forgets them here (cosownerindex.go).
@@ -254,19 +258,31 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 
 /*
 ================
-advancePets
+orderedPetSessionKeys
+
+The tick's session walk list: every gid-bearing session key in
+(division, name, gid) order. Membership turns only on petSessions
+writes - the binds and the forgets, all under petMu - so the sorted
+list is cached on the runtime (petSessionKeys) and rebuilt only
+after a writer drops it; a rebuild always allocates a fresh slice,
+so a walk already ranging the old list is never disturbed (#2033).
+Readiness is not membership: a session readies without a map write
+(bindPetSession readies the children in place), so advancePets
+still judges state.ready live at each visit.
 ================
 */
-func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
-	shieldFrames := rt.advancePetShields(nowMs)
+func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	if rt.petSessionKeys != nil {
+		return rt.petSessionKeys
+	}
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
-	for key, state := range rt.petSessions {
-		if key.gid != 0 && state.ready {
+	for key := range rt.petSessions {
+		if key.gid != 0 {
 			keys = append(keys, key)
 		}
 	}
-	rt.petMu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].division != keys[j].division {
 			return keys[i].division < keys[j].division
@@ -276,9 +292,26 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		}
 		return keys[i].gid < keys[j].gid
 	})
+	rt.petSessionKeys = keys
+	return keys
+}
+
+/*
+================
+advancePets
+================
+*/
+func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
+	shieldFrames := rt.advancePetShields(nowMs)
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
-	for _, key := range keys {
+	for _, key := range rt.orderedPetSessionKeys() {
+		rt.petMu.Lock()
+		state := rt.petSessions[key]
+		rt.petMu.Unlock()
+		if state == nil || !state.ready {
+			continue
+		}
 		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
 		if tether != nil {
 			if tethers == nil {
@@ -830,6 +863,7 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 		state.generation = old.generation + 1
 	}
 	rt.petSessions[key] = state
+	rt.petSessionKeys = nil
 	rt.petMu.Unlock()
 	pose := rt.liveSpawn(simulation.WorldKey(division, owner.character.Name), owner.character, rt.Now().UnixMilli())
 	pose = rt.companionAdmissionSpawn(pet, pose)
