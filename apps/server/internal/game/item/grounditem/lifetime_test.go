@@ -189,3 +189,115 @@ func TestRegistryHasExpiredOwner(t *testing.T) {
 		t.Fatal("the peek still reports an expired owner after the release")
 	}
 }
+
+/*
+================
+TestRegistryHasExpiredOwnerTracksTheEarliestStamp
+
+The cached earliest owned stamp follows the mutations that move it:
+a later add leaves the peek quiet, an earlier add lowers it in place,
+and removing the earliest owned drop refreshes from the next one, so
+the answer flips at that drop's own boundary - never early, never
+late. With the stamp warm, the idle peek allocates nothing.
+================
+*/
+func TestRegistryHasExpiredOwnerTracksTheEarliestStamp(t *testing.T) {
+	registry := NewRegistry()
+	now := time.Unix(20_000, 0)
+
+	registry.Add("1", Item{RefObjID: 2, OwnerJID: 7, DroppedAt: now.Add(-10 * time.Second)})
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a reserved entry ten seconds old reported expired")
+	}
+	earliest := registry.Add("2", Item{RefObjID: 1, OwnerJID: 9, DroppedAt: now.Add(-OwnerLifetime)})
+	if !registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("an earlier owned add did not lower the cached stamp")
+	}
+	if _, ok := registry.Remove("2", earliest.Gid); !ok {
+		t.Fatal("the earliest owned drop was not stored")
+	}
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("the peek kept the removed drop's stamp")
+	}
+	if !registry.HasExpiredOwner(now.Add(OwnerLifetime-10*time.Second), OwnerLifetime) {
+		t.Fatal("the remaining reserved entry did not report at its own boundary")
+	}
+	if allocs := testing.AllocsPerRun(10, func() {
+		registry.HasExpiredOwner(now, OwnerLifetime)
+	}); allocs != 0 {
+		t.Fatalf("idle owner peek allocated %v times per run, want 0", allocs)
+	}
+}
+
+/*
+================
+TestRegistryHasExpiredOwnerReplacedOnlyOwnedDrop
+
+With exactly one owned drop stored, every way that drop can leave -
+pickup removal, fixture expiry, population retirement, a division
+clear and a wholesale restore - must retire its stamp with it, and a
+replacement owned drop answers at its own boundary, not the old one.
+================
+*/
+func TestRegistryHasExpiredOwnerReplacedOnlyOwnedDrop(t *testing.T) {
+	now := time.Unix(30_000, 0)
+
+	registry := NewRegistry()
+	only := registry.Add("1", Item{RefObjID: 1, OwnerJID: 7, DroppedAt: now.Add(-OwnerLifetime)})
+	if !registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("the only owned drop did not report expired")
+	}
+	if _, ok := registry.Remove("1", only.Gid); !ok {
+		t.Fatal("the only owned drop was not stored")
+	}
+	if registry.HasExpiredOwner(now.Add(time.Hour), OwnerLifetime) {
+		t.Fatal("the removed drop's stamp survived it")
+	}
+	registry.Add("1", Item{RefObjID: 1, OwnerJID: 8, DroppedAt: now})
+	if registry.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a fresh replacement reported at the removed drop's boundary")
+	}
+	if !registry.HasExpiredOwner(now.Add(OwnerLifetime), OwnerLifetime) {
+		t.Fatal("the replacement did not report at its own boundary")
+	}
+
+	aged := NewRegistry()
+	aged.Add("1", Item{RefObjID: 1, OwnerJID: 7, DroppedAt: now.Add(-FixtureLifetime)})
+	if !aged.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("an aged owned drop did not report expired")
+	}
+	aged.ExpireItems("1", now, FixtureLifetime)
+	if aged.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("an expired owned drop's stamp survived the sweep")
+	}
+
+	population := Population{World: 0x00020001, Generation: 1}
+	instanced := NewRegistry()
+	instanced.Add("1", Item{RefObjID: 1, OwnerJID: 7, DroppedAt: now.Add(-OwnerLifetime), Population: population})
+	if !instanced.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a population owned drop did not report expired")
+	}
+	instanced.RemovePopulation("1", population)
+	if instanced.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a retired population's stamp survived it")
+	}
+
+	cleared := NewRegistry()
+	cleared.Add("9", Item{RefObjID: 1, OwnerJID: 7, DroppedAt: now.Add(-OwnerLifetime)})
+	cleared.Clear("9")
+	if cleared.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a cleared division's stamp survived it")
+	}
+
+	restored := NewRegistry()
+	source := NewRegistry()
+	source.Add("1", Item{RefObjID: 1, OwnerJID: 7, DroppedAt: now.Add(-OwnerLifetime)})
+	restored.Restore(source.Snapshot())
+	if !restored.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("a restored owned drop did not report expired")
+	}
+	restored.Restore(NewRegistry().Snapshot())
+	if restored.HasExpiredOwner(now, OwnerLifetime) {
+		t.Fatal("an empty restore kept the old plane's stamp")
+	}
+}

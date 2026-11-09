@@ -20,7 +20,7 @@ out (the CloneWorldState discipline).
 ==================
 */
 func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
-	return ops.advanceInstanceSnapshot(divisionID, &instance, monster.MoverState{}, false, divisionPlayers, nowMs)
+	return ops.advanceInstanceSnapshot(divisionID, &instance, nil, divisionPlayers, nowMs)
 }
 
 /*
@@ -29,23 +29,25 @@ advanceInstanceSnapshot
 
 advanceInstance with the actor's mover already resolved by the leg
 dispatch (behaviorActorMover, #2029): the step starts from that value
-instead of re-reading it under a second lock. hasSnapshot is false for
+instead of re-reading it under a second lock. A nil snapshot marks
 direct callers outside a leg, which keep the step's own read. The
 snapshot is taken at dispatch, the same moment the instance snapshot
 beside it is read, so it is never staler than the value the step used
-to start from.
+to start from. It arrives by pointer and the step copies it exactly
+once: at 632 bytes, the by-value hand-offs on the way in were a
+measurable slice of the leg (#2150).
 ==================
 */
-func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance *monster.Instance, snapshot *monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	if instance.Ref.TrainingDummy {
 		return nil, nil
 	}
-	frames, targeted := ops.advanceInstanceStep(divisionID, instance, snapshot, hasSnapshot, divisionPlayers, nowMs)
+	frames, targeted := ops.advanceInstanceStep(divisionID, instance, snapshot, divisionPlayers, nowMs)
 	frames = ops.resolveStuck(divisionID, instance.Gid, divisionPlayers, nowMs, frames)
 	return frames, targeted
 }
 
-func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot *monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
@@ -54,15 +56,17 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 	if instance.Motion.StateAt(nowMs) != 0 || (instance.Ref.MaxHP > 0 && instance.CurrentHP == 0) {
 		return nil, nil
 	}
-	mover := snapshot
-	ok := hasSnapshot
-	if !ok {
-		mover, ok = ops.Monsters.Mover(divisionID, instance.Gid)
-		if !ok {
+	var mover monster.MoverState
+	if snapshot != nil {
+		mover = *snapshot
+	} else {
+		stored, known := ops.Monsters.Mover(divisionID, instance.Gid)
+		if !known {
 			return nil, nil
 		}
+		mover = stored
 	}
-	if ops.detachCrossPlaneNest(divisionID, instance, mover, nowMs) {
+	if ops.detachCrossPlaneNest(divisionID, instance, &mover, nowMs) {
 		return nil, nil
 	}
 	if frames, handled := ops.applyTacticsEvents(divisionID, instance, mover, nowMs); handled {
@@ -77,6 +81,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 		// planning step reads its plan's shadow instead (the commit
 		// is recorded, not yet applied) - stepMoverGeneration.
 		var freshGen uint64
+		var ok bool
 		mover, freshGen, ok = ops.stepMoverGeneration(divisionID, instance.Gid)
 		if ok {
 			ops.rebaseStepBase(freshGen)

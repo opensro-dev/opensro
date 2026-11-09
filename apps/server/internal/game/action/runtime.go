@@ -310,11 +310,17 @@ type Runtime struct {
 	GachaCatalog *gacha.Catalog
 	// GachaPoolV2 says the catalog carries the port-only prize pool
 	// (EnvGachaPoolV2); rolls are logged so the pool's supply is visible.
-	GachaPoolV2   bool
-	Alchemy       *alchemy.Catalog
-	AlchemyRoll   alchemy.Roll
-	compoundMu    sync.Mutex
-	compoundJobs  map[compoundKey]compoundJob
+	GachaPoolV2  bool
+	Alchemy      *alchemy.Catalog
+	AlchemyRoll  alchemy.Roll
+	compoundMu   sync.Mutex
+	compoundJobs map[compoundKey]compoundJob
+	// compoundKeys is the advance pass's key scratch
+	// (alchemybatch.go): refilled under compoundMu on every tick step
+	// and consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is the only caller and nothing
+	// retains it (#2033).
+	compoundKeys  []compoundKey
 	Commerce      *commerce.Catalog
 	mallCatalog   *commerce.MallCatalog
 	mallAuthority domain.MallAuthority
