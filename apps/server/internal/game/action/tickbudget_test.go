@@ -128,10 +128,12 @@ const (
 // the population doors' sorted key list cached on the monster
 // state and rebuilt only when a population registers or releases,
 // instead of rebuilt and re-sorted on every door (#2033), measured
-// 16,413 B / 66 allocs on the combined tree.
+// 16,413 B / 66 allocs on the combined tree; with the satiety tick
+// judging off the shared catalog row instead of a MaxHP-adjusted
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 18100
-	tickBudgetAllocsPerTick = 73
+	tickBudgetBytesPerTick  = 16600
+	tickBudgetAllocsPerTick = 70
 )
 
 /*

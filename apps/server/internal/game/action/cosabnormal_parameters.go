@@ -38,12 +38,16 @@ func (rt *Runtime) cosCharacterRef(character *enterworld.Character) (*enterworld
 
 /*
 ================
-cosReference
+cosReferenceVerdict
 
-Resolve the selected canonical companion without assuming it is the rider.
+The catalog verdict alone: the shared row and whether the pet's stored
+identity still names it. The satiety tick (cossatiety.go) judges on
+validity, the row's band and its minutes per point; the MaxHP-adjusted
+copies cosReference builds for the stats readers move none of those, so
+this read takes the row without paying for a copy per tick (#2033).
 ================
 */
-func (rt *Runtime) cosReference(pet *enterworld.CharacterCOS) (*enterworld.CharacterRef, bool) {
+func (rt *Runtime) cosReferenceVerdict(pet *enterworld.CharacterCOS) (*enterworld.CharacterRef, bool) {
 	if pet == nil {
 		return nil, false
 	}
@@ -52,25 +56,39 @@ func (rt *Runtime) cosReference(pet *enterworld.CharacterCOS) (*enterworld.Chara
 		return nil, false
 	}
 	ref, exists := source.CharacterRefByCodename(pet.Codename)
-	valid := exists && ref != nil && ref.RefObjID == pet.RefObjID
-	if valid && rt.AttackPetExpansion && pet.BroodStage == 0 && companion.PetKind(pet.Codename) != "" {
+	return ref, exists && ref != nil && ref.RefObjID == pet.RefObjID
+}
+
+/*
+================
+cosReference
+
+Resolve the selected canonical companion without assuming it is the rider.
+================
+*/
+func (rt *Runtime) cosReference(pet *enterworld.CharacterCOS) (*enterworld.CharacterRef, bool) {
+	ref, valid := rt.cosReferenceVerdict(pet)
+	if !valid {
+		return ref, false
+	}
+	if rt.AttackPetExpansion && pet.BroodStage == 0 && companion.PetKind(pet.Codename) != "" {
 		copy := *ref
 		bonus := min(2250.0, max(0.0, companion.ModifiersFor(pet).GearStats.MaxHPPercent))
 		copy.MaxHP = uint32(float64(ref.MaxHP) * (1 + bonus/100))
 		copy.Parameters.MaxHP = copy.MaxHP
 		ref = &copy
 	}
-	if valid && pet.BroodStage > 0 {
+	if pet.BroodStage > 0 {
 		copy := *ref
 		copy.MaxHP = pet.BroodMaxHP
 		ref = &copy
 	}
-	if valid && rt.AttackPetExpansion && pet.ResolveStacks > 0 {
+	if rt.AttackPetExpansion && pet.ResolveStacks > 0 {
 		copy := *ref
 		copy.MaxHP = uint32(float64(ref.MaxHP) * (1 + companion.SpiritHPPercent(pet)/100))
 		ref = &copy
 	}
-	return ref, valid
+	return ref, true
 }
 
 /*
