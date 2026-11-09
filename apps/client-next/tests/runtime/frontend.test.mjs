@@ -726,6 +726,94 @@ test("entry admission retains the dock through connecting and rejection, and lea
 });
 /*
 ================
+creationGateEmitters
+
+BR-261108-1908-A644 (#3011): the creation world's bar filled and never
+ended. The renderer's actor list carries the lone preview character and
+every visible world emitter (the create worlds hold EFP particle
+objects), so the gate's old "renderer draws exactly one actor" test
+held the load shut whenever an emitter was ready in view. The preview's
+own readiness (one preview actor, every wardrobe path resident) is the
+creation fact; the world's emitters never hold it back, and an
+unready preview still does.
+================
+*/
+test("world emitters beside the creation preview never hold the creation load", () => {
+	let serial = 0, sceneId = "";
+	const jobs = new Map();
+	const key = {
+		timeSeconds: 0,
+		sectorX: 81,
+		sectorY: 105,
+		position: { x: 0, y: 0, z: 0 },
+		rotation: { x: 0, y: 0, z: 0 },
+		mode: 30
+	};
+	const manifest = {
+		camera: [ key ],
+		cameraControllerTargetTimeSeconds: 0,
+		createCamera: [ key ],
+		createCameraControllerTargetTimeSeconds: 0,
+		regionBundlePublicPath: "/assets/fixture-world.json"
+	};
+	const assets = {
+		available: () => 8,
+		request: ( url, size, kind ) => {
+			const id = ++serial;
+			jobs.set(
+				id,
+				kind === "frontend-world" ?
+					{ kind: "world", world: { sceneId: "fixture" } } :
+					{ kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer }
+			);
+			return id;
+		},
+		take: id => {
+			const result = jobs.get( id );
+			jobs.delete( id );
+			return result;
+		},
+		cancel: id => jobs.delete( id )
+	};
+	// The preview character plus two of the create world's EFP emitters.
+	const renderer = {
+		cancelWorldUpdate() {},
+		settleWorld: () => false,
+		adoptWorld( world ) {
+			sceneId = world.sceneId;
+		},
+		setWorldTexture() {},
+		neededWorldTextures: () => [],
+		worldStats: () => ({ sceneId, pendingGroups: 0, pendingTextures: 0 }),
+		setWorldCamera() {},
+		pickFrontendRace: () => null,
+		frontendRaceCenters: () => [],
+		characterStats: () => ({ actors: 3 })
+	};
+	const frontend = createFrontend( assets, renderer, "http://fixture.invalid", () => {} );
+	let now = 0, creationReady = false, session = { phase: "signed-out", revision: 1, characters: [] };
+	const step = () => frontend.step( session, now += 100, true, creationReady );
+	for ( let i = 0; i < 20 && frontend.snapshot().phase !== "intro"; i++ ) step();
+	frontend.reveal();
+	for ( let i = 0; i < 6; i++ ) step();
+	session = { phase: "character-select", revision: 2, characters: [] };
+	for ( let i = 0; i < 30 && frontend.snapshot().phase !== "dock"; i++ ) step();
+	assert.equal( frontend.snapshot().phase, "dock" );
+	frontend.create();
+	for ( let i = 0; i < 30 && frontend.snapshot().phase !== "create"; i++ ) step();
+	assert.equal( frontend.snapshot().phase, "create" );
+	frontend.race( 0, 0 );
+	for ( let i = 0; i < 30 && frontend.snapshot().phase !== "loading-create"; i++ ) step();
+	assert.equal( frontend.snapshot().phase, "loading-create" );
+	for ( let i = 0; i < 30; i++ ) step();
+	assert.equal( frontend.snapshot().phase, "loading-create", "an unready preview still holds the load" );
+	creationReady = true;
+	for ( let i = 0; i < 5 && frontend.snapshot().phase !== "customize"; i++ ) step();
+	assert.equal( frontend.snapshot().phase, "customize" );
+	frontend.dispose();
+});
+/*
+================
 loadingGateStall
 
 BR-261108-1908-A644: after character creation the loading bar filled
