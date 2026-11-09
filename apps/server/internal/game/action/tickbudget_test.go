@@ -124,10 +124,14 @@ const (
 // folded once per session binding, instead of a string rebuilt on
 // every read (#2033), measured 17,790 B / 93 allocs; with the
 // elemental arm's capture reading on the stack read guard instead
-// of the callback door (#2033), measured 17,214 B / 75 allocs.
+// of the callback door (#2033), measured 17,214 B / 75 allocs; with
+// the timed-window sweeps' owner lists cached on their index and
+// rebuilt only when an owner tracks or is forgotten, instead of
+// rebuilt and re-sorted on every sweep (#2033), measured 17,125 B /
+// 71 allocs.
 const (
-	tickBudgetBytesPerTick  = 19000
-	tickBudgetAllocsPerTick = 83
+	tickBudgetBytesPerTick  = 18900
+	tickBudgetAllocsPerTick = 79
 )
 
 /*
