@@ -3515,7 +3515,8 @@ export function createUi( ports: UiPorts ) {
 			inventory: game.inventory,
 			avatarInventory: game.avatarInventory,
 			storage: game.storage?.items,
-			pet: game.cosRecords?.find( record => record.gid === cosGid )?.inventory
+			pet: game.cosRecords?.find( record => record.gid === cosGid )?.inventory,
+			petGid: cosGid || undefined
 		} );
 		if ( !link ) return false;
 		const text = editor === "chat-text" ? chatText : wholeChat!.text;
@@ -22367,7 +22368,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								"Unknown speaker";
 							label(
 								`${line.outgoing && line.channel === 2 ? "To " : ""}${sender}: ${
-									chatLinkSpans( line.text, line.links, false ).text
+									chatLinkSpans( line.text, line.links, chatLinksOn() ).text
 								}`,
 								px + 22,
 								py + 78 + i * 22,
@@ -22832,7 +22833,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
 				bugReport?.chat( game?.chat?.lines ?? [] );
-				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now ) ) {
+				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now, chatLinksOn() ) ) {
 					const lines = textBoardLines( row.text, 200, value => text.run( value ).width ),
 						lineHeight = text.boardHeight(),
 						height = lines.length * lineHeight,
