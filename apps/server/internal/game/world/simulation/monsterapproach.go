@@ -114,8 +114,7 @@ Caller holds MonsterState.mu; only admitted state edges change membership.
 */
 func (state *divisionMonsterState) syncApproachActor(gid uint32, mover monster.MoverState) {
 	target := mover.TargetGID()
-	actor := state.instances.get(gid)
-	if !ordinarySquadApproach(&actor) ||
+	if !state.instances.squadApproach(gid) ||
 		(mover.Mode() != monster.MoverChasing && mover.Mode() != monster.MoverAttacking) {
 		target = 0
 	}

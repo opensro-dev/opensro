@@ -202,6 +202,99 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 
 /*
 ================
+TestCommitMoverGenAtMatchesGenDoor
+
+The slot-carried mover commit lands, refuses and re-bases exactly
+where the gid door does: a consumed base generation never commits
+twice, another actor's slots still find their own actor by gid,
+and the opponents bookkeeping (cleared on a target-free commit,
+stamped on a local acquisition) lands the same values through
+the resident-row guards.
+================
+*/
+func TestCommitMoverGenAtMatchesGenDoor(t *testing.T) {
+	ops, actor, _ := activityFixture(t)
+	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
+	storedOpponents := func() [2]monster.Opponent {
+		t.Helper()
+		ops.Monsters.mu.Lock()
+		defer ops.Monsters.mu.Unlock()
+		state := ops.Monsters.populationForObject(monsterTestDivision, actor.Gid)
+		instance, _ := state.instances.lookup(actor.Gid)
+		return instance.Opponents
+	}
+
+	before, gen, ok := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	if !ok {
+		t.Fatal("fixture actor has no mover row")
+	}
+	moved := before
+	moved.Pose.X += 25
+	genAfter, committed := ops.Monsters.CommitMoverGenAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, moved, gen)
+	if !committed || genAfter == gen {
+		t.Fatal("guarded commit through carried slots refused or did not re-base")
+	}
+	if _, committed := ops.Monsters.CommitMoverGenAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, moved, gen); committed {
+		t.Fatal("stale-generation commit accepted through carried slots")
+	}
+	got, gotGen, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	if got != moved || gotGen != genAfter {
+		t.Fatal("the gid door disagrees with the row the At door wrote")
+	}
+
+	// Another actor's slots: the commit still finds its own actor
+	// (by gid) and leaves the slot owner's row alone.
+	mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+	mateMoverSlot, mateMonsterSlot := carriedSlots(t, ops, mate.Gid)
+	mateBefore, _ := ops.Monsters.Mover(monsterTestDivision, mate.Gid)
+	moved.Pose.X += 25
+	if _, committed := ops.Monsters.CommitMoverGenAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, moved, gotGen); !committed {
+		t.Fatal("commit with foreign slots did not fall back to its actor")
+	}
+	if mateGot, _ := ops.Monsters.Mover(monsterTestDivision, mate.Gid); mateGot != mateBefore {
+		t.Fatal("foreign-slot commit rewrote the slot owner's row")
+	}
+
+	// A target-free commit clears a seeded opponent record. The
+	// fixture mover wanders, a mode the clear branch excludes, so
+	// the release is driven through retaliation like the gid
+	// door's own test: arm, release the target, commit the return.
+	ops.Monsters.mu.Lock()
+	state := ops.Monsters.populationForObject(monsterTestDivision, actor.Gid)
+	seeded, _ := state.instances.lookup(actor.Gid)
+	seeded.Opponents[0] = monster.Opponent{GID: 4242, LastHitMs: 1}
+	state.instances.set(actor.Gid, seeded)
+	ops.Monsters.mu.Unlock()
+	const attackerGID = uint32(100003)
+	if !ops.Monsters.ArmRetaliation(monsterTestDivision, actor.Gid, attackerGID) {
+		t.Fatal("live monster rejected retaliation")
+	}
+	released, releasedGen, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	if err := released.Transition(monster.MoverEventTargetLost, 0); err != nil {
+		t.Fatalf("release retaliation target: %v", err)
+	}
+	if _, committed := ops.Monsters.CommitMoverGenAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, released, releasedGen); !committed {
+		t.Fatal("target-free commit through carried slots refused")
+	}
+	if opponents := storedOpponents(); opponents != ([2]monster.Opponent{}) {
+		t.Fatalf("target-free commit left opponents %+v", opponents)
+	}
+
+	// A local acquisition stamps the primary opponent.
+	if !ops.Monsters.ArmRetaliation(monsterTestDivision, actor.Gid, attackerGID) {
+		t.Fatal("live monster rejected retaliation")
+	}
+	armed, armedGen, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	if _, committed := ops.Monsters.CommitMoverGenAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, armed, armedGen); !committed {
+		t.Fatal("acquisition commit through carried slots refused")
+	}
+	if opponents := storedOpponents(); opponents[0].GID != attackerGID {
+		t.Fatalf("acquisition commit stamped opponents %+v", opponents)
+	}
+}
+
+/*
+================
 TestCommitActivityAtArmsTheGidDoorsDue
 
 The commit's reschedule resolves the mover and resident rows

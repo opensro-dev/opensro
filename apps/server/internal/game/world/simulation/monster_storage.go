@@ -650,6 +650,28 @@ func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
 
 /*
 ================
+squadApproach
+
+ordinarySquadApproach (monsterapproach.go) read off the resident
+row, without reconstructing the full Instance snapshot: the mover
+commit's approach sync classifies its actor on every commit, and
+expanding the shared catalogue rows dominates a lookup. The
+predicate reads only the nest, the summoner and the detached
+bit, so a hot row answers from those fields alone; a cold row
+hydrates through get, and the answer is the classification's
+either way.
+================
+*/
+func (s *monsterStorage) squadApproach(gid uint32) bool {
+	if r, ok := s.hotRow(gid); ok {
+		return ordinarySquadApproach(&monster.Instance{Nest: r.nest.Value(), SummonerGID: r.summonerGID, NestDetached: r.nestDetached})
+	}
+	actor := s.get(gid)
+	return ordinarySquadApproach(&actor)
+}
+
+/*
+================
 timerFacts
 
 The AI timer check's facts — current HP and the nest tactics flags
