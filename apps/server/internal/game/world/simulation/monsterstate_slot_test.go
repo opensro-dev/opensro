@@ -311,6 +311,7 @@ func TestBehaviorBuildAfterRowSwap(t *testing.T) {
 	if len(first) != 1 || len(first[0].actors) != 5 {
 		t.Fatalf("first build batched %v, want 5 actors", first)
 	}
+	s.armBehaviorRemainders(first, 0)
 	s.releaseBehaviorBatches(first)
 	d.instances.remove(2)
 	d.movers.remove(2)
@@ -337,6 +338,7 @@ func TestBehaviorBuildAfterRowSwap(t *testing.T) {
 				ref.gid, snapshot.slot, snapshot.monsterSlot, moverSlot, monsterSlot)
 		}
 	}
+	s.armBehaviorRemainders(second, 1)
 	s.releaseBehaviorBatches(second)
 	if third := s.behaviorBatches(2); len(third) != 1 || len(third[0].actors) != 4 {
 		t.Fatalf("third build batched %v, want the 4 survivors again", third)
@@ -357,6 +359,10 @@ func TestBehaviorActorSnapshotCarriesSlots(t *testing.T) {
 	ops, actor := monsterLegFixture(t, passiveTactics())
 	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
 	batches := ops.Monsters.behaviorBatches(10000)
+	// The build leaves the mover slot the drain's notes hold; the
+	// leg's remainder arm resolves it before the snapshot ships,
+	// so arm as the leg does.
+	ops.Monsters.armBehaviorRemainders(batches, 10000)
 	for _, batch := range batches {
 		for _, ref := range batch.actors {
 			if ref.gid != actor.Gid {
