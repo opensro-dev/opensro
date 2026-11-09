@@ -128,13 +128,17 @@ const (
 // the population doors' sorted key list cached on the monster
 // state and rebuilt only when a population registers or releases,
 // instead of rebuilt and re-sorted on every door (#2033), measured
-// 16,413 B / 66 allocs on the combined tree; with the pets tick's
-// session walk list cached on the runtime and rebuilt only on
-// session membership writes, instead of rebuilt and re-sorted
-// every tick (#2033), measured 14,886 B / 62 allocs.
+// 16,413 B / 66 allocs on the combined tree; with the satiety tick
+// judging off the shared catalog row instead of a MaxHP-adjusted
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
+// with the pets tick's session walk list cached on the runtime and
+// rebuilt only on session membership writes, instead of rebuilt
+// and re-sorted every tick (#2033), measured 13,542 B / 59 allocs
+// on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 16400
-	tickBudgetAllocsPerTick = 69
+	tickBudgetBytesPerTick  = 14900
+	tickBudgetAllocsPerTick = 65
+
 )
 
 /*

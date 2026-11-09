@@ -328,3 +328,56 @@ func TestGetInWorldFinishesExpiredSummonActionOnce(t *testing.T) {
 		t.Fatalf("foreign world read the clock or answered: ok %v reads %d", ok, reads)
 	}
 }
+
+/*
+================
+TestHotProbeReadsVerdictsWhereTheySit
+
+The batch build's probe answers the row's hit points, its cached
+reference max and its summon deadline without copying the row or
+the interned reference out: a re-set under a different reference
+moves the cached max, removeHot's swap keeps the moved row's
+probe with its row, and a removed, frozen or slot-stale gid
+misses (#3027).
+================
+*/
+func TestHotProbeReadsVerdictsWhereTheySit(t *testing.T) {
+	s := newMonsterStorage(nil)
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 30, SummonActionUntilMs: 500, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	s.set(2, monster.Instance{Gid: 2, CurrentHP: 0, Ref: monster.MonsterRef{MaxHP: 0, RefObjID: 2}})
+	s.set(3, monster.Instance{Gid: 3, CurrentHP: 7, Ref: monster.MonsterRef{MaxHP: 300, RefObjID: 3}})
+
+	hp, maxHP, summonUntil, ok := s.hotProbeAt(0, 1)
+	if !ok || hp != 30 || maxHP != 100 || summonUntil != 500 {
+		t.Fatalf("slot probe = %d/%d/%d (ok %v)", hp, maxHP, summonUntil, ok)
+	}
+	if _, _, _, ok := s.hotProbeAt(0, 2); ok {
+		t.Fatal("slot probe answered for the wrong gid")
+	}
+	slot, hp, maxHP, _, ok := s.hotProbe(3)
+	if !ok || slot != 2 || hp != 7 || maxHP != 300 {
+		t.Fatalf("gid probe = slot %d %d/%d (ok %v)", slot, hp, maxHP, ok)
+	}
+
+	// A re-set under a different reference moves the cached max.
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 31, Ref: monster.MonsterRef{MaxHP: 450, RefObjID: 9}})
+	if _, maxHP, _, ok := s.hotProbeAt(0, 1); !ok || maxHP != 450 {
+		t.Fatalf("re-set probe max = %d (ok %v)", maxHP, ok)
+	}
+
+	// removeHot swaps the last row into the hole; its probe
+	// answers at the new slot with its own max.
+	s.remove(1)
+	slot, _, maxHP, _, ok = s.hotProbe(3)
+	if !ok || slot != 0 || maxHP != 300 {
+		t.Fatalf("swapped probe = slot %d max %d (ok %v)", slot, maxHP, ok)
+	}
+	if _, _, _, _, ok := s.hotProbe(1); ok {
+		t.Fatal("removed gid still probes hot")
+	}
+	s.archive = &monsterArchive{}
+	s.freeze(3)
+	if _, _, _, _, ok := s.hotProbe(3); ok {
+		t.Fatal("frozen gid still probes hot")
+	}
+}
