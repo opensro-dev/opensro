@@ -8,14 +8,18 @@ whole system: worldmap_mapinfo.txt's Dungeonmap section (one row per floor),
 interface/worldmap/dungeon's tiles, and worldmap_localinfo.txt's room names
 and gate signs with their destinations. This tool stitches each floor's tiles
 into one page image, so the M window shows a floor at once rather than tile by
-tile, and writes one catalogue, later-dungeon-map.json. Run
-`pnpm assets repack` afterwards: the client loads published assets only. No
+tile, and writes one catalogue, later-dungeon-map.json. The asset build runs
+this step when SRO_VSRO_ROOT names the pinned archive (#2956), so a build on
+a machine with the archive publishes the pages on its own; run this by hand
+only to refresh a built tree without one, and follow it with
+`pnpm assets repack`: the client loads published assets only. No
 retail art or table is committed to Git.
 
 ===========================================================================
 """
 import argparse
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -166,8 +170,13 @@ def stitch_page(row, read_tile, target):
 
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--vsro-root", required=True, help="the pinned VSRO client folder")
+	parser.add_argument(
+		"--vsro-root", default=os.environ.get("SRO_VSRO_ROOT"),
+		help="the pinned VSRO client folder (else SRO_VSRO_ROOT)"
+	)
 	args = parser.parse_args()
+	if not args.vsro_root:
+		raise SystemExit("Pass --vsro-root or set SRO_VSRO_ROOT to the pinned VSRO client folder.")
 	verify_vsro_archive(args.vsro_root, "Media")
 	data = (Path(args.vsro_root) / "Media.pk2").read_bytes()
 	directory = sro_pk2.read_directory(data)
@@ -218,8 +227,9 @@ def main():
 		"maps": rows
 	}
 	path = PUBLIC_ROOT / "assets" / "data" / CATALOG_NAME
+	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text(json.dumps(catalog, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
-	print(f"{len(rows)} floor page(s); run pnpm assets repack")
+	print(f"{len(rows)} floor page(s) imported")
 
 
 if __name__ == "__main__":

@@ -192,15 +192,78 @@ func (w *commitWriter) drain() {
 commitWriter::waitApplied
 
 Waits until the batch with sequence number seq is applied: the wait a
-durable door takes after releasing the store lock.
+durable door takes after releasing the store lock. Like drain it ends
+when the head batch fails once more after the wait began: the door then
+answers fail-open, as the synchronous door does on a dead disk
+(recordWriteFailureLocked), and Health reports the outage.
 ================
 */
 func (w *commitWriter) waitApplied(seq uint64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for w.applied < seq && (len(w.queue) > 0 || w.applying) {
+	began := w.failedTotal
+	for w.applied < seq && (len(w.queue) > 0 || w.applying) && w.failedTotal == began {
 		w.changed.Wait()
 	}
+}
+
+/*
+================
+durableTicket
+
+What a durable door waits on once it has released Store.mu: the writer
+and the sequence number of the last batch queued while the door held the
+lock, which is the door's own commit or one queued after it. Doors whose
+answer reaches outside the store take one (#2802 design rule 4,
+PostgreSQL's per-transaction synchronous_commit): character creation,
+which claims a name, and the deletion reservation. The doors that already
+open their own transaction (silk grants, Beta Silk, mall purchases,
+renames, the reap) commit synchronously through beginTxLocked's drain and
+need none. With the flag off the ticket stays empty and wait returns at
+once: the commit applied under the lock.
+
+The pattern, so the wait runs after the unlock (defers run last first):
+
+	var durable durableTicket
+	defer durable.wait()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer durable.captureLocked(s)
+
+================
+*/
+type durableTicket struct {
+	writer *commitWriter
+	seq    uint64
+}
+
+/*
+================
+durableTicket::captureLocked
+
+Records the writer and the last queued sequence. Runs under Store.mu.
+================
+*/
+func (t *durableTicket) captureLocked(s *Store) {
+	if s.writer == nil {
+		return
+	}
+	t.writer, t.seq = s.writer, s.queuedSeq
+}
+
+/*
+================
+durableTicket::wait
+
+Waits until the captured batch is on disk. Never under Store.mu: the
+writer must stay free to apply the queue.
+================
+*/
+func (t *durableTicket) wait() {
+	if t.writer == nil || t.seq == 0 {
+		return
+	}
+	t.writer.waitApplied(t.seq)
 }
 
 /*

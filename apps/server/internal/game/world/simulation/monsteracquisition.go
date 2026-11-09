@@ -29,7 +29,7 @@ import (
 ordinaryPlayerAcquisition
 ================
 */
-func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, players []playerPose, sightRange float64) (playerPose, bool) {
+func ordinaryPlayerAcquisition(actor *monster.Instance, from monster.Pose, players []playerPose, sightRange float64) (playerPose, bool) {
 	if len(players) == 0 {
 		return playerPose{}, false
 	}
@@ -159,7 +159,7 @@ stands for itself and each companion it owns that the monster may strike
 wins, a tie keeping the earlier (the player first, then container order).
 ================
 */
-func nearestOwnerOrCompanion(actor monster.Instance, from monster.Pose, owner playerPose, players []playerPose) (playerPose, float32) {
+func nearestOwnerOrCompanion(actor *monster.Instance, from monster.Pose, owner playerPose, players []playerPose) (playerPose, float32) {
 	best, bestDistance := owner, acquisitionDistance(from, owner.Pose)
 	for _, companion := range players {
 		if companion.OwnerGid != owner.Gid ||
@@ -184,7 +184,7 @@ the fellow band (5) is never hostile, and the first-attack
 protection is its owner's.
 ================
 */
-func ordinaryCompanionHostility(actor monster.Instance, companion playerPose) bool {
+func ordinaryCompanionHostility(actor *monster.Instance, companion playerPose) bool {
 	// The native judge refuses a grab pet first; remembered targets are
 	// refused the same way.
 	if companion.Band == domain.PickupPetBand {
@@ -216,7 +216,7 @@ judge's last branch decides the protection. The type word used to be
 the client TID alone, which never matched that branch's test value.
 ================
 */
-func ordinaryPlayerHostility(actor monster.Instance, player playerPose) bool {
+func ordinaryPlayerHostility(actor *monster.Instance, player playerPose) bool {
 	observer := actor.Observer()
 	if actor.Abnormal != nil {
 		fear := actor.Abnormal.Slots[abnormal.Fear]
@@ -328,7 +328,8 @@ nearestPlayerWithin
 ================
 */
 func nearestPlayerWithin(from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
-	return nearestEligiblePlayer(monster.Instance{}, from, divisionPlayers, sightRange)
+	var nobody monster.Instance
+	return nearestEligiblePlayer(&nobody, from, divisionPlayers, sightRange)
 }
 
 /*
@@ -336,7 +337,7 @@ func nearestPlayerWithin(from monster.Pose, divisionPlayers []playerPose, sightR
 nearestEligiblePlayer
 ================
 */
-func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
+func nearestEligiblePlayer(actor *monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
 	flags := actor.Nest.NativeTacticsFlags
 	// The native acquire routines pick the selector by flags in both
 	// outdoor and dungeon regions: 4 first, then 0x80, then 0x100.
@@ -388,7 +389,7 @@ func playerByGid(divisionPlayers []playerPose, gid uint32) (playerPose, bool) {
 eligiblePlayerByGid
 ================
 */
-func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint32) (playerPose, bool) {
+func eligiblePlayerByGid(actor *monster.Instance, players []playerPose, gid uint32) (playerPose, bool) {
 	player, exists := playerByGid(players, gid)
 	return player, exists &&
 		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)

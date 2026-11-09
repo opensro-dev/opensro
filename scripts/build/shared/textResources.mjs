@@ -47,6 +47,9 @@ export async function buildTextResources() {
 		messageTipTextEntries
 	);
 	const mallNotifyData = await buildMallNotifyData( path.join( eventDataDir, "mall_notify.txt" ) );
+	const eventInterfaceData = await buildEventInterfaceData(
+		path.join( eventDataDir, "event_interface.txt" )
+	);
 	await writeJson( path.join( publicRoot, "assets", "text", "textuisystem.en.json" ), textCatalog );
 	await writeJson( path.join( publicRoot, "assets", "text", "textzonename.en.json" ), zoneNameCatalog );
 	await writeJson( path.join( publicRoot, "assets", "text", "textdataname.en.json" ), dataNameCatalog );
@@ -63,6 +66,7 @@ export async function buildTextResources() {
 	await writeJson( path.join( publicRoot, "assets", "text", "messagetips.en.json" ), messageTipCatalog );
 	await writeJson( path.join( publicRoot, "assets", "data", "event-guide-catalog.json" ), eventGuideCatalog );
 	await writeJson( path.join( publicRoot, "assets", "data", "mall-notify.json" ), mallNotifyData );
+	await writeJson( path.join( publicRoot, "assets", "data", "event-interface.json" ), eventInterfaceData );
 	return {
 		textCatalog,
 		zoneNameCatalog,
@@ -73,7 +77,8 @@ export async function buildTextResources() {
 		helpTextCatalog,
 		messageTipCatalog,
 		eventGuideCatalog,
-		mallNotifyData
+		mallNotifyData,
+		eventInterfaceData
 	};
 }
 async function buildTextCatalog( sourcePath ) {
@@ -538,6 +543,80 @@ async function buildMallNotifyData( sourcePath ) {
 		mallSellingTime: fields.Mall_SellingTime ?? "",
 		rawFields: fields
 	};
+}
+
+// CIFEventInterface_LoadLayout (546B50) reads the event gate layout file
+// (type 0 in OnCreate, 547750) as Key = "value" lines; an Open of 0 or a
+// missing file kills the window before it is seen. The published shape is
+// the one the client decodeEventInterfaceLayout accepts; the PC-room and
+// winter files ride import_vsro_event_interface.py in the same shape.
+export function buildEventInterfaceLayout( fields ) {
+	return {
+		open: parseBooleanFlag( fields.Open, true ),
+		titleFont: parseInteger( fields.TitleFont, 0 ),
+		titleColor: parseEventColor( fields.TitleColor ),
+		titlePosition: parseEventInts( fields.TitlePosition, 2, [ 0, 0 ] ),
+		title: decodeRetailEscapes( fields.TitleString ?? "" ),
+		titleCode: fields.TitleStringCode ?? "",
+		textFont: parseInteger( fields.TextFont, 0 ),
+		textColor: parseEventColor( fields.TextColor ),
+		textPosition: parseEventInts( fields.TextPosition, 2, [ 0, 0 ] ),
+		textMargin: parseInteger( fields.TextMargin, 5 ),
+		text: decodeRetailEscapes( fields.TextString ?? "" ),
+		textCode: fields.TextStringCode ?? "",
+		picBg: fields.PicBG ? imagePublicPath( fields.PicBG ) : undefined,
+		picButton: fields.PicButton ? imagePublicPath( fields.PicButton ) : undefined,
+		buttonRect: fields.ButtonPosition ?
+			parseEventInts( fields.ButtonPosition, 4, undefined ) :
+			undefined
+	};
+}
+
+async function buildEventInterfaceData( sourcePath ) {
+	const raw = await readText( sourcePath );
+	const fields = {};
+
+	for ( const rawLine of raw.split( /\r?\n/ ) ) {
+		const parsed = parseQuotedKeyValue( rawLine );
+		if ( !parsed ) {
+			continue;
+		}
+		fields[parsed.key] = parsed.value;
+	}
+
+	return {
+		sourcePath: toGameRelative( sourcePath ),
+		format: "sro-event-interface",
+		version: 1,
+		layout: buildEventInterfaceLayout( fields )
+	};
+}
+
+// Colors are authored "a,r,g,b" in 0..255; the client takes [r,g,b,a] 0..1.
+function parseEventColor( value ) {
+	if ( !value ) {
+		return [ 1, 1, 1, 1 ];
+	}
+
+	const parts = value.split( "," ).map( v => parseInteger( v.trim(), 255 ) );
+	if ( parts.length !== 4 ) {
+		return [ 1, 1, 1, 1 ];
+	}
+
+	return [ parts[1] / 255, parts[2] / 255, parts[3] / 255, parts[0] / 255 ];
+}
+
+function parseEventInts( value, count, fallback ) {
+	if ( !value ) {
+		return fallback;
+	}
+
+	const parts = value.split( "," ).map( v => Number.parseInt( v.trim(), 10 ) );
+	if ( parts.length !== count || parts.some( n => !Number.isFinite( n ) ) ) {
+		return fallback;
+	}
+
+	return parts;
 }
 
 function parseQuotedKeyValue( rawLine ) {

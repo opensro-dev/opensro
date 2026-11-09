@@ -871,12 +871,19 @@ export function createRenderer(
 				// the native surface and pass order. UI keeps its full resolution.
 				const renderScale = sceneRenderScale( experimental, viewport, phone ),
 					scaled = renderScale < 100,
+					// Port-only, not native: Experimental > FXAA renders the scene
+					// apart and resolves it through the edge walk before the UI.
+					separate = scaled || experimental.sceneFxaa,
 					sceneWidth = Math.max( 1, Math.round( viewport.width * renderScale / 100 ) ),
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
 						viewport,
-						experimental.postProcessing || !!deferredPlan?.query,
-						renderScale
+						// The refraction stage samples the frame: the canvas
+						// texture cannot be bound, the retained frame can.
+						experimental.postProcessing || !!deferredPlan?.query ||
+							(experimental.waterRefraction && !preview),
+						renderScale,
+						experimental.sceneFxaa
 					);
 				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
@@ -941,23 +948,35 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
-				const pending = frame!.draw(
-					scaled ? targetSurface.frameView() : color,
-					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
-					staleDraws.single( "mesh", meshDraw ?? undefined ),
-					surface.depth(),
-					[
+				const opaqueWorld = [
 						...terrainDraws,
 						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
 						...staleDraws.live( "sun-markers", scene.sunMarkerDraws ?? [] ),
 						...liveShadows,
 						...opaqueDraws,
-						...(preview ? [] : liveCharacters.filter( draw => !draw.blended )),
+						...(preview ? [] : liveCharacters.filter( draw => !draw.blended ))
+					],
+					transparentWorld = [
 						...transparentDraws,
 						...staleDraws.live( "decals", scene.decalDraws ?? [] ),
 						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
 						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
-					],
+					];
+				// Experimental > Effects > Water refraction (port-only, not
+				// native): armed like the occlusion stage, never for preview
+				// frames, and only with a scene depth to copy.
+				const refraction = device.waterRefraction(
+					sceneWidth,
+					sceneHeight,
+					experimental.waterRefraction && !preview && !!surface.depth(),
+					scene.camera
+				);
+				const pending = frame!.draw(
+					separate ? targetSurface.frameView() : color,
+					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
+					staleDraws.single( "mesh", meshDraw ?? undefined ),
+					surface.depth(),
+					[ ...opaqueWorld, ...transparentWorld ],
 					device.ui( projectedUi, viewport.width ),
 					preview ? device.geometry()!.hdrPreview( liveCharacters ) : [],
 					scene.flares && video.records[video.active][10] === 1 ?
@@ -990,19 +1009,23 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
+						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
 						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
-						sceneScale: scaled ?
+						sceneScale: separate ?
 							{
 								view: color,
 								frameDepth: targetSurface.frameDepth(),
 								resolve: ( encoder, target ) =>
-									device.upscale().encodeUpscale( encoder, color, target ),
-								resolveDepth: encoder =>
+									device.upscale().encodeUpscale( encoder, color, target, experimental.sceneFxaa ),
+								// At full size the scene's depth is the frame's: nothing to upscale.
+								resolveDepth: encoder => {
+									if ( !scaled ) return;
 									device.upscale().encodeDepthUpscale(
 										encoder,
 										targetSurface.depth(),
 										targetSurface.frameDepth()
-									)
+									);
+								}
 							} :
 							undefined,
 						sunShadow,

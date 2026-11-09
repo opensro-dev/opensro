@@ -34,7 +34,7 @@ func (s *MonsterState) DeliverMonsterHelp(division string, receiver uint32, payl
 // skips ordinary OnTick whenever its event consumer consumed an event. Navigation
 // executes outside the population lock; inbox generation and mover admission
 // prevent a replacement event or fresh hit from being overwritten afterward.
-func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instance, mover monster.MoverState, players []playerPose, now int64) ([]Frame, bool) {
+func (ops *MonsterMoverOps) handleHelp(division string, expected *monster.Instance, mover monster.MoverState, players []playerPose, now int64) ([]Frame, bool) {
 	event, pending := expected.Help.Pending()
 	if !pending {
 		return nil, false
@@ -51,14 +51,14 @@ func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instanc
 	s.mu.Unlock()
 	validSource := sourceExists && source.CurrentHP != 0 && monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, 0)
 	if !sourceExists {
-		_, validSource = eligiblePlayerByGid(instance, players, event.SenderGID)
+		_, validSource = eligiblePlayerByGid(&instance, players, event.SenderGID)
 	}
-	target, validTarget := eligiblePlayerByGid(instance, players, event.TargetGID)
-	accepted := instance.Nest.HasControls && instance.Nest.Controls.HelpReceiverHeader(event, mover.InNativeBattle(), instance.CurrentHP, instance.EffectiveMaxHP()) && validSource && validTarget && ordinaryPlayerHostility(instance, target)
+	target, validTarget := eligiblePlayerByGid(&instance, players, event.TargetGID)
+	accepted := instance.Nest.HasControls && instance.Nest.Controls.HelpReceiverHeader(event, mover.InNativeBattle(), instance.CurrentHP, instance.EffectiveMaxHP()) && validSource && validTarget && ordinaryPlayerHostility(&instance, target)
 	live := mover.LivePoseAt(now, ops.GroundHeight)
 	if accepted {
 		distance := tacticsDistance3D(live, monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
-		accepted = monsterWithinHomeTrace(instance, live, distance)
+		accepted = monsterWithinHomeTrace(&instance, live, distance)
 	}
 	if accepted && FeaturesAt(live.RegionID).HelpCallSight {
 		// The receiver tests bit 0 only. Do not turn the distinct native bit

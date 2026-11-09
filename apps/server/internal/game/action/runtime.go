@@ -59,11 +59,13 @@ barrier.
 ==================
 */
 type Runtime struct {
-	berserkActors    sync.Map // derived expiry index; character store owns state
-	battleActors     sync.Map // battle-state expiry index (battlestate.go)
-	cosRefusalLog    sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
-	cosRefusalTotals sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
-	aggressionActors sync.Map // scheduled counters; character owns aggression entries
+	berserkActors     sync.Map // derived expiry index; character store owns state
+	battleActors      sync.Map // battle-state expiry index (battlestate.go)
+	cosRefusalLog     sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
+	cosRefusalTotals  sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
+	aggressionActors  sync.Map // scheduled counters; character owns aggression entries
+	caravanThiefMarks sync.Map // tradetiers.go (#2958): thief character id -> caravanThiefMark, session only
+	caravanStarDueMs  int64    // tradetiers.go (#2958): next 5-star caravan roster push
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld

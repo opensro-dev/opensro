@@ -87,8 +87,13 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	if n := utf8.RuneCountInString(c.Name); n < domain.CharacterNameMinBytes || n > domain.CharacterNameMaxBytes {
 		return fmt.Errorf("%w: %q length %d out of the native 2..12 range", ErrCharacterNameInvalid, c.Name, n)
 	}
+	// Durable door (#2802): the created name is only answered once its
+	// batch is on disk; the wait runs after the unlock.
+	var durable durableTicket
+	defer durable.wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer durable.captureLocked(s)
 	for _, existing := range s.characters[divisionID] {
 		if strings.EqualFold(existing.Name, c.Name) {
 			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
@@ -253,8 +258,12 @@ func (s *Store) ReserveCharacterDeletion(c *domain.Character, reservedAt string)
 		return false
 	}
 
+	// Durable door (#2802), as CreateCharacter.
+	var durable durableTicket
+	defer durable.wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer durable.captureLocked(s)
 	divisionID, known := s.charDivision[c]
 	if !known || s.characterHasGroupMembershipLocked(divisionID, c.ID) {
 		return false

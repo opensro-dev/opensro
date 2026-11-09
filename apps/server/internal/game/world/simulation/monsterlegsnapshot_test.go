@@ -218,3 +218,43 @@ func TestLegSnapshotViewReturnsToTheState(t *testing.T) {
 		t.Fatal("the reused view lost its backing array")
 	}
 }
+
+/*
+================
+TestLegSnapshotReusedSlotOfAGoneActor
+
+The view is built in place (#2982): each actor is expanded straight
+into its retained slot, so a slot whose actor has since gone must
+read as gone and hold nothing of the actor it held in the last
+batch. The test builds, releases, removes the first actor and
+rebuilds the same refs into the same backing.
+================
+*/
+func TestLegSnapshotReusedSlotOfAGoneActor(t *testing.T) {
+	ops, _, now := seededLegWorld(t, 24)
+	batches := ops.Monsters.behaviorBatches(*now)
+	if len(batches) == 0 || len(batches[0].actors) < 2 {
+		t.Fatal("seeded leg produced no batch of two actors")
+	}
+	batch := batches[0]
+	view := ops.Monsters.legSnapshot(batch.key, batch.actors)
+	if first, ok := view.actorAt(0); !ok || first.instance.Gid != batch.actors[0].gid {
+		t.Fatalf("first build did not read actor %d", batch.actors[0].gid)
+	}
+	ops.Monsters.releaseLegSnapshot(view)
+	ops.Monsters.mu.Lock()
+	ops.Monsters.populationForLease(batch.key.division, batch.key.lease).instances.remove(batch.actors[0].gid)
+	ops.Monsters.mu.Unlock()
+	next := ops.Monsters.legSnapshot(batch.key, batch.actors)
+	defer ops.Monsters.releaseLegSnapshot(next)
+	if next != view {
+		t.Fatal("the rebuild did not reuse the released view")
+	}
+	gone, ok := next.actorAt(0)
+	if ok || *gone != (behaviorActorSnapshot{}) {
+		t.Fatalf("a gone actor's reused slot reads ok=%v gid %d, want the zero snapshot", ok, gone.instance.Gid)
+	}
+	if kept, ok := next.actorAt(1); !ok || kept.instance.Gid != batch.actors[1].gid {
+		t.Fatalf("the surviving actor %d did not read through its slot", batch.actors[1].gid)
+	}
+}

@@ -340,6 +340,7 @@ import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
+import { createCaravanStars } from "./caravan-stars/caravan-stars";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -585,6 +586,7 @@ export function createGameplay(
 		targeting = createTargeting( send, readEntity ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
+		caravanStars = createCaravanStars(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
@@ -1580,6 +1582,7 @@ selected entities, cooldowns or world-entry state.
 		walkHeld = false;
 		moveReservation.clear();
 		betaMap.clear();
+		caravanStars.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -4094,6 +4097,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( caravanStars.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
 					dirty = true;
 					return true;
@@ -6113,6 +6120,7 @@ The published plane when something changed since the last take, else null.
 				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
+				caravanStars: caravanStars.gids(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),

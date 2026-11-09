@@ -29,10 +29,10 @@ func TestFearPreservesDetectionBranch(t *testing.T) {
 	a.Abnormal.Slots[abnormal.Fear].SourceGID = 7
 	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Z: 1000}
 	p := playerPose{Gid: 7, NativeBodyStatus: 6, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Z: 1000}}
-	if !ordinaryPlayerHostility(a, p) {
+	if !ordinaryPlayerHostility(&a, p) {
 		t.Fatal("fixture did not admit native detection")
 	}
-	if got, ok := ordinaryPlayerAcquisition(a, from, []playerPose{p}, 100); !ok || got.Gid != 7 {
+	if got, ok := ordinaryPlayerAcquisition(&a, from, []playerPose{p}, 100); !ok || got.Gid != 7 {
 		t.Fatalf("Fear bypassed native detection branch: gid=%d found=%v", got.Gid, ok)
 	}
 }
@@ -52,16 +52,16 @@ func TestFearAcquisitionAndRememberedOpponent(t *testing.T) {
 		{Gid: 7, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Z: 1000}},
 		{Gid: 8, Pose: Spawn{RegionID: monsterTestRegion, X: 1010, Z: 1000}},
 	}
-	if got, ok := ordinaryPlayerAcquisition(actor, from, players, 100); !ok || got.Gid != 8 {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, players, 100); !ok || got.Gid != 8 {
 		t.Fatalf("acquired feared source: %+v, %v", got, ok)
 	}
 	// Fear's AI event abandons an opponent; the remembered lookup itself
 	// must not acquire a hostility check that the idle wander never calls.
-	if _, ok := eligiblePlayerByGid(actor, players, 7); !ok {
+	if _, ok := eligiblePlayerByGid(&actor, players, 7); !ok {
 		t.Fatal("remembered lookup acquired the acquisition-only Fear gate")
 	}
 	actor.Abnormal.Slots[abnormal.Fear].Active = false
-	if got, ok := ordinaryPlayerAcquisition(actor, from, players, 100); !ok || got.Gid != 7 {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, players, 100); !ok || got.Gid != 7 {
 		t.Fatalf("expired Fear still excludes source: %+v, %v", got, ok)
 	}
 }

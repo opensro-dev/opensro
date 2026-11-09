@@ -239,7 +239,7 @@ func TestLegPlanFollowCommitsAtCommitTime(t *testing.T) {
 		plan := &legPlan{actor: behaviorActorSnapshot{instance: child, mover: mover, moverGen: gen, ok: true}}
 		planOps := *ops
 		planOps.plan = plan
-		planOps.followSummoner("summon", child, mover, now)
+		planOps.followSummoner("summon", &child, mover, now)
 		live, _ := ops.Monsters.Mover("summon", child.Gid)
 		if live.Mode() == monster.MoverFollowing {
 			t.Fatalf("stale=%v: the follow applied at plan time", stale)
@@ -394,10 +394,18 @@ order the hits execute in, the final mover values - so the pool
 changes nothing a player or a replay could see. The 1-worker hash
 is pinned: a behaviour change in the pooled path moves it, exactly
 as the serial golden pins the serial path.
+
+Re-pinned for #2136 (idle monsters step at their real dues): the
+run's 722 frames are the same multiset and the final movers are
+identical to the pre-change run; frames land on different legs
+because an idle actor's first timer check - which draws its
+acquisition interval from the state stream - now happens at its
+first due instead of the next tick, re-phasing later scans. The
+serial golden did not move.
 ================
 */
 func TestSeededLegWorkerMatrix(t *testing.T) {
-	const pooledGolden = "8544160f0d9e3fc360f5caeb1812c2ff6eec93dce2f73c9720419a5920c27577"
+	const pooledGolden = "cb7b180ce7ea94aad07d2c8a3c58f3671d197d2cdde07657cc2bf6297962f668"
 	counts := []int{1, 2, 4, runtime.GOMAXPROCS(0)}
 	hashes := make([]string, 0, len(counts))
 	totalAttacks := 0

@@ -81,6 +81,9 @@ const (
 	TradeJobHunterPercentCap        = "trade_job_hunter_percent_cap"
 	ThiefPartyPercentEach           = "thief_party_percent_each"
 	ThiefPartyPercentCap            = "thief_party_percent_cap"
+	TradeFiveStarThiefPercent       = "trade_five_star_thief_percent"
+	TradeFiveStarHunterPercent      = "trade_five_star_hunter_percent"
+	TradeFiveStarBountyPercent      = "trade_five_star_bounty_percent"
 	TradeRouteDonwhangPercent       = "trade_route_donwhang_percent"
 	TradeRouteHotanPercent          = "trade_route_hotan_percent"
 	TradeRouteSamarkandPercent      = "trade_route_samarkand_percent"
@@ -177,6 +180,18 @@ var Registry = []Setting{
 	{Key: ThiefPartyPercentCap, Env: "SRO_THIEF_PARTY_PERCENT_CAP", Kind: Int, Default: 50, Min: 0, Max: 200,
 		Step: 5, Class: Live, Group: "Trade", Label: "Thief party bonus cap", Unit: "percent",
 		Help: "The most a party's monster EXP and gold rise under SRO_THIEF_PARTY_BONUS."},
+	// The 5-star caravan stakes (#2958): half again is the shipped value -
+	// the same order as the shortest Jangan route bonus, large enough to
+	// move one run's payout by eye, small enough not to mint a new economy.
+	{Key: TradeFiveStarThiefPercent, Env: "SRO_TRADE_FIVE_STAR_THIEF_PERCENT", Kind: Int, Default: 50, Min: 0,
+		Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star thief cut bonus", Unit: "percent",
+		Help: "Extra gold share a thief's party splits for selling a 5-star caravan's worth of goods under SRO_TRADE_TIERS."},
+	{Key: TradeFiveStarHunterPercent, Env: "SRO_TRADE_FIVE_STAR_HUNTER_PERCENT", Kind: Int, Default: 50, Min: 0,
+		Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star hunter escort bonus", Unit: "percent",
+		Help: "Extra gold share each hunter earns on a trader's 5-star sale under SRO_TRADE_TIERS."},
+	{Key: TradeFiveStarBountyPercent, Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", Kind: Int, Default: 50, Min: 0,
+		Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star caravan bounty bonus", Unit: "percent",
+		Help: "Extra job EXP a hunter earns for killing a thief who attacked a 5-star caravan under SRO_TRADE_TIERS."},
 	{Key: TradeRouteDonwhangPercent, Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", Kind: Int, Default: 50, Min: 0,
 		Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Donwhang profit bonus", Unit: "percent",
 		Help: "Extra profit on goods sold between Jangan and Donwhang, both ways, under SRO_TRADE_TIERS."},

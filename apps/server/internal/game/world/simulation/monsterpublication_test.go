@@ -13,7 +13,7 @@ func TestRejectedSegmentCannotPublishGoalOrChannel(t *testing.T) {
 	mustMoverTransition(&stale, monster.MoverEventStartWander, 0)
 	ops.Monsters.checkAITimer(monsterTestDivision, instance.Gid, 1, 100000)
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(2))
-	frames := ops.commitSegment(monsterTestDivision, instance, stale,
+	frames := ops.commitSegment(monsterTestDivision, &instance, stale,
 		monster.Pose{RegionID: monsterTestRegion, X: 1100, Y: 20, Z: 1000}, 22, wire.MoveStateRun, 100001)
 	if len(frames) != 0 {
 		t.Fatalf("rejected plan published %d movement/channel frames", len(frames))
@@ -101,7 +101,7 @@ func TestRejectedFollowEntryCannotRearmFollowTimer(t *testing.T) {
 	s.checkAITimer("summon", child.Gid, 0, *now)
 	before := s.division("summon").aiTimers[child.Gid].GetTimer(0)
 	mover, _ := s.Mover("summon", child.Gid)
-	plan, ok := s.prepareFollow("summon", child, mover, *now+1)
+	plan, ok := s.prepareFollow("summon", &child, mover, *now+1)
 	if !ok {
 		t.Fatal("snapshot refused")
 	}
@@ -128,7 +128,7 @@ func TestDeathDuringMovementPlanCannotPublishGoal(t *testing.T) {
 	}
 	destination := mover.Pose
 	destination.X += 30
-	if frames := ops.commitSegment(monsterTestDivision, instance, mover, destination, 15, wire.MoveStateWalk, 100000); len(frames) != 0 {
+	if frames := ops.commitSegment(monsterTestDivision, &instance, mover, destination, 15, wire.MoveStateWalk, 100000); len(frames) != 0 {
 		t.Fatal("dead monster published a new movement goal")
 	}
 }

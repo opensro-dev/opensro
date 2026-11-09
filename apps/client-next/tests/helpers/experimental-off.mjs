@@ -34,10 +34,14 @@ export const OFF = Object.freeze( {
 	perPixelLighting: false,
 	// Off by default: the multisampled scene is a port-only deviation.
 	msaa: false,
+	// Off by default: scene FXAA is a port-only deviation.
+	sceneFxaa: false,
 	// Off by default: ambient occlusion is a port-only stage (#2094).
 	ambientOcclusion: false,
 	// Off by default: sky detail is a port-only deviation.
 	skyDetail: false,
+	// Off by default: water refraction is a port-only deviation.
+	waterRefraction: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,

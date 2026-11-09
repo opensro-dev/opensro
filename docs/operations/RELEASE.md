@@ -14,6 +14,9 @@ Before tagging a release:
    keep the bytes and URLs players have cached (assetPackLayout.mjs):
    `curl -o live-manifest.json https://opensro.online/assets/packs/manifest.json`,
    then `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
+   Build with `SRO_VSRO_ROOT` naming the pinned later-client archive, or the
+   build skips the later client's dungeon floor pages in one line and the
+   release ships the plain world map (#2956).
    Then `pnpm assets ledger` must report no unclaimed assets and no missing
    owner (run `pnpm assets build full` if it does); the beta packager
    refuses otherwise. [docs/architecture/ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md)

@@ -77,7 +77,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
-import { budgetOffenders, overBudgetPackages, packageTestTimes, soloVerdicts } from "./goTestBudget.mjs";
+import {
+	budgetOffenders,
+	isLintRunnerRefusal,
+	overBudgetPackages,
+	packageTestTimes,
+	soloVerdicts
+} from "./goTestBudget.mjs";
 import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
@@ -107,6 +113,11 @@ const STEP_ENVIRONMENT = [
 ];
 // TEST_BUDGET_SECONDS is the most one package's everyday tests may take.
 const TEST_BUDGET_SECONDS = 30;
+// A golangci-lint parallel-runner refusal (another session holds the
+// tool's cache lock) is waited out and retried this many times before
+// the step may fail: peer lint runs are minutes, not seconds (#2971).
+const LINT_REFUSAL_RETRIES = 12;
+const LINT_REFUSAL_WAIT_SECONDS = 10;
 const VULNERABILITY_DATABASE_INDEX = "https://vuln.go.dev/index/db.json";
 // A database update is noticed within this long; govulncheck itself always
 // scans against the live database. The key is kept under .state.
@@ -198,7 +209,13 @@ const steps = selectSteps(
 		{
 			label: "golangci-lint",
 			command: "go",
-			args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "./..." ],
+			// Serialized like the changed scope: another session's lint run
+			// holds the tool's cache lock, and the default refusal
+			// ("parallel golangci-lint is running", exit 3) is shared-box
+			// contention, not a finding (#2971). Serial runners wait on
+			// that lock instead of failing; runStep also retries a refusal
+			// that still slips through (a runner started without the flag).
+			args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "--allow-serial-runners", "./..." ],
 			select: ( file ) => isModuleGo( file ) || isLintTool( file ) || file === "apps/server/.golangci.yml",
 			keys: [ toolchain, stepEnvironment ]
 		},
@@ -332,15 +349,29 @@ async function remeasureOffenders( offenders ) {
 		`test budget: re-measuring ${packages.length} package(s) alone (-p=1, -count=1); ` +
 			"a busy box inflates the full run's wall times together"
 	);
-	const rerun = await runStep(
-		"tests (budget re-measure)",
-		"go",
-		[ "test", "-p=1", ...tierArgs, "-count=1", ...packages ],
-		undefined
-	);
-	if ( !rerun.ok ) {
+	// One retry: the solo run itself can die to the same loaded box (or
+	// to a peer's cache lock), and falling back to the full run's
+	// inflated times would reject a package the solo pass exists to
+	// clear (#2971). Only a second failure gives up and judges the
+	// full run, as before.
+	let rerun = null;
+	for ( let attempt = 1; attempt <= 2; attempt++ ) {
+		rerun = await runStep(
+			"tests (budget re-measure)",
+			"go",
+			[ "test", "-p=1", ...tierArgs, "-count=1", ...packages ],
+			undefined
+		);
+		if ( rerun.ok ) {
+			break;
+		}
+		if ( attempt === 1 ) {
+			console.log( "test budget: the re-measure run failed; measuring once more" );
+		}
+	}
+	if ( !rerun?.ok ) {
 		console.log( "test budget: the re-measure run failed; judging the full run's times" );
-		console.log( rerun.output.split( "\n" ).slice( -40 ).join( "\n" ) );
+		console.log( (rerun?.output ?? "").split( "\n" ).slice( -40 ).join( "\n" ) );
 		return null;
 	}
 	const verdicts = soloVerdicts( offenders, packageTestTimes( rerun.output ), TEST_BUDGET_SECONDS );
@@ -636,7 +667,59 @@ runStep
  * @param {((output: string) => boolean | Promise<boolean>) | undefined} accept
  * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
  */
-function runStep( label, command, args, accept ) {
+async function runStep( label, command, args, accept ) {
+	const stepStarted = performance.now();
+	let result = await runStepOnce( label, command, args, accept );
+	// A golangci-lint parallel-runner refusal is another session holding
+	// the tool's cache lock (#2971): contention, not a finding. The step
+	// now runs --allow-serial-runners, which waits on that lock, but a
+	// refusal can still arrive (a peer binary predating the flag, a lock
+	// released and retaken between attempts). Wait briefly and retry a
+	// bounded number of times; a refusal that outlives the retries is
+	// reported as the failure it then is.
+	for (
+		let attempt = 1;
+		!result.ok && isLintRunnerRefusal( result.output ) && attempt <= LINT_REFUSAL_RETRIES;
+		attempt++
+	) {
+		console.log(
+			`${label}: another golangci-lint instance is running; waiting ` +
+				`${LINT_REFUSAL_WAIT_SECONDS}s and retrying (${attempt}/${LINT_REFUSAL_RETRIES})`
+		);
+		await sleep( LINT_REFUSAL_WAIT_SECONDS * 1000 );
+		result = await runStepOnce( label, command, args, accept );
+	}
+	return { ...result, seconds: formatSeconds( performance.now() - stepStarted ) };
+}
+
+/*
+================
+sleep
+
+The lint-refusal wait, as a promise.
+================
+*/
+/** @param {number} ms */
+function sleep( ms ) {
+	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+}
+
+/*
+================
+runStepOnce
+
+One spawn of a step's command, its output captured whole. ok is a zero
+exit that the step's accept() predicate (when it has one) also accepts.
+================
+*/
+/**
+ * @param {string} label
+ * @param {string} command
+ * @param {string[]} args
+ * @param {((output: string) => boolean | Promise<boolean>) | undefined} accept
+ * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
+ */
+function runStepOnce( label, command, args, accept ) {
 	const stepStarted = performance.now();
 	return new Promise( ( resolve ) => {
 		const child = spawn( command, args, { windowsHide: true, cwd: serverRoot, env: goEnvironment() } );

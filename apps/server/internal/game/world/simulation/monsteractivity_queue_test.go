@@ -20,6 +20,8 @@ import (
 	"container/heap"
 	"math/rand"
 	"testing"
+
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -415,5 +417,127 @@ func BenchmarkBehaviorQueueRescheduleUnchanged(b *testing.B) {
 		for gid := uint32(1); gid <= rows; gid++ {
 			q.set(gid, 5000)
 		}
+	}
+}
+
+/*
+================
+idleScheduleFixture
+
+A division holding one idle monster per gid in gids: alive, at rest
+in its nest, gate cadence armed at now with the given interval and
+idle deadline. scheduleDue reads the live due the queue holds.
+================
+*/
+func idleScheduleFixture(t *testing.T) (*MonsterState, *divisionMonsterState) {
+	t.Helper()
+	s := NewMonsterState(monster.Template{})
+	s.StartDivision("sleep")
+	d := s.divs["sleep"]
+	d.movers = newMoverStorage(nil)
+	return s, d
+}
+
+func idleScheduleActor(t *testing.T, s *MonsterState, d *divisionMonsterState, gid uint32, nest monster.NestRow, gateInterval uint16, deadlineMs, now int64) monster.Instance {
+	t.Helper()
+	actor := monster.Instance{Gid: gid, Ref: monster.MonsterRef{MaxHP: 100}, Nest: nest, CurrentHP: 100}
+	mover := monster.PendingMover{Spawning: true, Pose: monster.Pose{RegionID: 0x6060}}.Expand()
+	if err := mover.Transition(monster.MoverEventSpawnHoldElapsed, 0); err != nil {
+		t.Fatal(err)
+	}
+	// The entry the spawn transition armed is the first step's to
+	// commit; the fixture models the resting monster after it.
+	mover.TakeIdleEntry()
+	mover.Activity = monster.ActivityCadence{Interval: gateInterval, LastCheck: uint32(now)}
+	mover.BehaviorDeadlineMs = deadlineMs
+	d.instances.set(gid, actor)
+	d.movers.set(gid, mover)
+	return actor
+}
+
+func scheduleDue(t *testing.T, d *divisionMonsterState, gid uint32) int64 {
+	t.Helper()
+	slot, ok := d.behavior.byGID[gid]
+	if !ok {
+		t.Fatalf("gid %d holds no queue row", gid)
+	}
+	return d.behavior.slots[slot].at
+}
+
+/*
+================
+TestIdleMonsterSchedulesAtItsRealDue
+
+#2136: an idle monster with nothing due re-armed for the next tick,
+so every leg snapshotted and stepped it to no effect. Its next due
+is the earliest of its idle deadline, its activity-gate cadence and,
+when its nest is aggressive, its acquisition timer; a mover that is
+not simply at rest (here: wandering) keeps the next tick. Event
+lanes still wake a sleeping actor at once (the impact, help and
+hostility doors set its due to 0).
+================
+*/
+func TestIdleMonsterSchedulesAtItsRealDue(t *testing.T) {
+	const now int64 = 100000
+	s, d := idleScheduleFixture(t)
+	resting := monster.NestRow{Respawn: true}
+
+	// Passive, gate cadence nearest: due at the gate, not next tick.
+	idleScheduleActor(t, s, d, 1, resting, 2000, now+5000, now)
+	s.scheduleBehavior(d, 1, now)
+	if got, want := scheduleDue(t, d, 1), now+2001; got != want {
+		t.Fatalf("passive idle due = %d, want the gate due %d", got, want)
+	}
+
+	// Passive, idle deadline nearest: due at the deadline.
+	idleScheduleActor(t, s, d, 2, resting, 9000, now+3000, now)
+	s.scheduleBehavior(d, 2, now)
+	if got, want := scheduleDue(t, d, 2), now+3001; got != want {
+		t.Fatalf("passive idle due = %d, want the idle deadline %d", got, want)
+	}
+
+	// Aggressive: the acquisition timer is nearest of the three.
+	aggressive := monster.NestRow{Respawn: true, Aggressive: true, PolicyPinned: true}
+	actor := idleScheduleActor(t, s, d, 3, aggressive, 2000, now+5000, now)
+	timers := s.aiTimersLocked(d, actor, now)
+	timers.SetTimer(monster.TimerIDAcquisition, 800, 0, uint32(now), false, func() uint32 { return 0 })
+	timers.CheckTimer(monster.TimerIDAcquisition, uint32(now))
+	s.scheduleBehavior(d, 3, now)
+	if got, want := scheduleDue(t, d, 3), now+800; got != want {
+		t.Fatalf("aggressive idle due = %d, want the acquisition due %d", got, want)
+	}
+
+	// Wandering is not at rest: the next tick, as before.
+	wanderer := idleScheduleActor(t, s, d, 4, resting, 2000, now+5000, now)
+	mover, _ := d.movers.lookup(wanderer.Gid)
+	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
+		t.Fatal(err)
+	}
+	d.movers.set(wanderer.Gid, mover)
+	s.scheduleBehavior(d, 4, now)
+	if got, want := scheduleDue(t, d, 4), now+1; got != want {
+		t.Fatalf("wandering due = %d, want the next tick %d", got, want)
+	}
+}
+
+/*
+================
+TestQueuedTacticsEventWakesTheActor
+
+A fear or confusion outcome queues a tactics event for the step to
+consume; until its step the event just sits there. Queuing one is a
+wake like the other event doors (impact, help, hostility): an actor
+asleep until a far due fires at once, not at that due (#2136).
+================
+*/
+func TestQueuedTacticsEventWakesTheActor(t *testing.T) {
+	const now int64 = 100000
+	s, d := idleScheduleFixture(t)
+	idleScheduleActor(t, s, d, 1, monster.NestRow{Respawn: true}, 2000, now+5000, now)
+	s.scheduleBehavior(d, 1, now)
+	d.behavior.set(1, now+60000)
+	d.queueAIEvents(1, []monsterAIEvent{{Event: aiEventStart, Kind: 9, Source: 7}})
+	if got := scheduleDue(t, d, 1); got > now {
+		t.Fatalf("queued tactics event left the actor due at %d, want a wake by %d", got, now)
 	}
 }

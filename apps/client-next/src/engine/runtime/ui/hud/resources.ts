@@ -18,6 +18,7 @@ import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { tradeGoldBases } from "@/engine/foundation/gameplay/specialty-deal";
 import { decodeMallNotify, type MallNotify } from "@/engine/foundation/ui/mall-notify";
+import { decodeEventInterface } from "@/engine/foundation/ui/event-interface";
 import { type JobExpThresholds, jobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
@@ -226,7 +227,8 @@ export function createHudResources(
 		"ifwholechat",
 		"ifspecialtydeal",
 		"ifjobalias",
-		"iftimerwnd"
+		"iftimerwnd",
+		"ifeventgate"
 	];
 	const layouts = [
 		"ginterface",
@@ -261,7 +263,9 @@ export function createHudResources(
 			"/assets/config/command.txt",
 			"/assets/data/worldmap-mapinfo.json",
 			"/assets/data/fortressMap.json",
-			"/assets/config/cameradata.json"
+			"/assets/config/cameradata.json",
+			"/assets/data/event-interface.json",
+			"/assets/data/event-interface-later.json"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -317,7 +321,9 @@ export function createHudResources(
 						changed = true;
 						try {
 							if (
-								(i === layouts.length + 17 || i === layouts.length + 18) && r.kind === "error" &&
+								(i === layouts.length + 17 || i === layouts.length + 18 ||
+									i === layouts.length + 21) &&
+								r.kind === "error" &&
 								r.absent
 							) {
 								states[i] = { kind: "ready", value: null };
@@ -360,7 +366,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 19 ) value = decodeCameraDataRows( raw );
+							} else if ( i === layouts.length + 20 || i === layouts.length + 21 ) value = raw;
+							else if ( i === layouts.length + 19 ) value = decodeCameraDataRows( raw );
 							else if ( i === layouts.length + 18 ) value = decodeFortressMap( raw );
 							else if ( i === layouts.length + 17 ) value = raw;
 							else if ( i === layouts.length + 16 ) value = decodeCommandTable( r.buffer );
@@ -482,6 +489,10 @@ export function createHudResources(
 					),
 					tips: values[layouts.length + 2] as readonly MessageTip[],
 					mallNotify: values[layouts.length + 15] as MallNotify,
+					eventInterface: decodeEventInterface(
+						values[layouts.length + 20],
+						values[layouts.length + 21]
+					),
 					commandTable: values[layouts.length + 16] as ReadonlyMap<string, number>,
 					cameraDataRows: values[layouts.length + 19] as HudData["cameraDataRows"],
 					targets: Object.fromEntries(

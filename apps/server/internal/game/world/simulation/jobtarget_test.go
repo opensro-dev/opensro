@@ -33,25 +33,25 @@ func TestThiefMonsterAcquiresTheTraderNotTheNearerThief(t *testing.T) {
 	thief := playerPose{Gid: 7, JobState: jobStateThief, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Z: 1000}}
 	thiefPet := playerPose{Gid: 70, OwnerGid: 7, Pose: Spawn{RegionID: monsterTestRegion, X: 1002, Z: 1000}}
 	trader := playerPose{Gid: 8, JobState: jobStateTrader, Pose: Spawn{RegionID: monsterTestRegion, X: 1020, Z: 1000}}
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{thief, thiefPet, trader}, 100); !ok || got.Gid != 8 {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{thief, thiefPet, trader}, 100); !ok || got.Gid != 8 {
 		t.Fatalf("thief monster acquired %d (found %v), want the trader 8", got.Gid, ok)
 	}
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{thief, thiefPet}, 100); ok {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{thief, thiefPet}, 100); ok {
 		t.Fatalf("thief monster acquired %d from its own side", got.Gid)
 	}
 	ordinary := playerPose{Gid: 9, JobState: jobStateSpecial, Pose: Spawn{RegionID: monsterTestRegion, X: 1003, Z: 1000}}
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{ordinary}, 100); ok {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{ordinary}, 100); ok {
 		t.Fatalf("thief monster acquired ordinary player %d", got.Gid)
 	}
 	actor.Ref.TypeID4 = 3
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{thief, thiefPet, trader}, 100); !ok || got.Gid == 8 {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{thief, thiefPet, trader}, 100); !ok || got.Gid == 8 {
 		t.Fatalf("hunter monster acquired %d (found %v), want the thief or its pet", got.Gid, ok)
 	}
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{ordinary, trader}, 100); ok {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{ordinary, trader}, 100); ok {
 		t.Fatalf("hunter monster acquired %d from ordinary players and traders", got.Gid)
 	}
 	actor.Ref.TypeID4 = 1
-	if got, ok := ordinaryPlayerAcquisition(actor, from, []playerPose{ordinary}, 100); !ok || got.Gid != 9 {
+	if got, ok := ordinaryPlayerAcquisition(&actor, from, []playerPose{ordinary}, 100); !ok || got.Gid != 9 {
 		t.Fatalf("an ordinary monster skipped the ordinary player: %d %v", got.Gid, ok)
 	}
 }

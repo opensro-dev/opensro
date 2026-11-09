@@ -26,7 +26,7 @@ import (
 startReturnLeg
 ================
 */
-func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
+func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	mover, frames := ops.planReturnLeg(instance, mover, event, nowMs)
 	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
@@ -41,7 +41,7 @@ const homingArrivalDistance = 5
 planReturnLeg
 ================
 */
-func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monster.MoverState, event monster.MoverEvent, nowMs int64) (monster.MoverState, []Frame) {
+func (ops *MonsterMoverOps) planReturnLeg(instance *monster.Instance, mover monster.MoverState, event monster.MoverEvent, nowMs int64) (monster.MoverState, []Frame) {
 	speed := instance.WalkSpeed()
 	channel := wire.MoveStateWalk
 	if instance.Nest.HasControls && monster.HomingRuns(instance.Ref.RunSpeed) {

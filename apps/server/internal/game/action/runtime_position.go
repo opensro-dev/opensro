@@ -179,7 +179,8 @@ func (rt *Runtime) characterSnapshotCombat(
 characterSnapshotCast
 
 characterSnapshot for the skill press, the prepared-cast release
-(#1943) and the entry action-speed read (#2140): the combat rows plus
+(#1943), the entry action-speed read (#2140) and the abnormal killer
+capture (abnormal_sources.go, #1943): the combat rows plus
 every companion-carrying bag row and the whole avatar inventory. The
 press flows resolve the caster's companions through this copy (the
 crow lane walks the bag-row Summon records, at the strike both routes

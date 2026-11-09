@@ -95,7 +95,7 @@ its spawn, so admitting it after the release is the closer of the two
 approximations, and the flip is deliberate rather than a fallthrough.
 ================
 */
-func ordinarySquadApproach(actor monster.Instance) bool {
+func ordinarySquadApproach(actor *monster.Instance) bool {
 	if actor.Nest.HasControls {
 		return actor.Nest.Controls.FleeType == 0 && actor.Nest.Controls.BattleStyle == 0
 	}
@@ -114,7 +114,8 @@ Caller holds MonsterState.mu; only admitted state edges change membership.
 */
 func (state *divisionMonsterState) syncApproachActor(gid uint32, mover monster.MoverState) {
 	target := mover.TargetGID()
-	if !ordinarySquadApproach(state.instances.get(gid)) ||
+	actor := state.instances.get(gid)
+	if !ordinarySquadApproach(&actor) ||
 		(mover.Mode() != monster.MoverChasing && mover.Mode() != monster.MoverAttacking) {
 		target = 0
 	}
@@ -165,12 +166,12 @@ sampling run on immutable copies outside it: failed or stale navigation must
 not steal a peer's reservation. commitNavigation checks the entire read set.
 ================
 */
-func (s *MonsterState) prepareApproachNavigation(division string, actor monster.Instance, next monster.MoverState, target playerPose, now int64) navigationAdmission {
+func (s *MonsterState) prepareApproachNavigation(division string, actor *monster.Instance, next monster.MoverState, target playerPose, now int64) navigationAdmission {
 	s.mu.Lock()
 	state := s.populationForObject(division, actor.Gid)
 	current, exists := state.instances.lookup(actor.Gid)
 	before := navigationAdmission{instance: current, mover: state.movers.get(actor.Gid), exists: exists}
-	if !exists || !ordinarySquadApproach(current) || next.TargetGID() != target.Gid || !monster.FollowLocationCompatible(next.Pose.RegionID, target.Pose.RegionID) {
+	if !exists || !ordinarySquadApproach(&current) || next.TargetGID() != target.Gid || !monster.FollowLocationCompatible(next.Pose.RegionID, target.Pose.RegionID) {
 		s.mu.Unlock()
 		return before
 	}
