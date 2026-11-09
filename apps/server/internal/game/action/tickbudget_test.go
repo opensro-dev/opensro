@@ -130,10 +130,13 @@ const (
 // instead of rebuilt and re-sorted on every door (#2033), measured
 // 16,413 B / 66 allocs on the combined tree; with the satiety tick
 // judging off the shared catalog row instead of a MaxHP-adjusted
-// copy (#2033), measured 15,065 B / 63 allocs on the combined tree.
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
+// with the periodic pulse's COS recipient judged on the live record
+// instead of detached into its owner's pet-owner view (#2033),
+// measured 13,310 B / 53 allocs.
 const (
-	tickBudgetBytesPerTick  = 16600
-	tickBudgetAllocsPerTick = 70
+	tickBudgetBytesPerTick  = 14700
+	tickBudgetAllocsPerTick = 58
 )
 
 /*
