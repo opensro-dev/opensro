@@ -120,6 +120,49 @@ func TestSparseMaskMatchesUnmaskedJoin(t *testing.T) {
 
 /*
 ================
+TestHotFillClearsSparseFieldsOnAReusedSlot
+
+The leg snapshot fills straight into retained view slots (#2150), so
+the destination of a fill cannot be trusted to arrive zero: a slot
+that held an actor with every sparse projection, refilled after those
+projections are gone, must not keep the old ones standing. This pins
+hotFill's clearing assignments; the masked-join test above reads onto
+a fresh value each time and cannot see a stale field survive.
+================
+*/
+func TestHotFillClearsSparseFieldsOnAReusedSlot(t *testing.T) {
+	s := newMonsterStorage(nil)
+	withSparse := monster.Instance{Gid: 7, CurrentHP: 3, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1},
+		LinkedEffects: &monster.EffectSnapshot{}, Abnormal: &abnormal.Block{}}
+	withSparse.SelfEffects[0].Token = 5
+	withSparse.TargetEffects[0].Token = 6
+	s.set(7, withSparse)
+	r, ok := s.hotRow(7)
+	if !ok {
+		t.Fatal("the sparse actor is not hot")
+	}
+	var dst monster.Instance
+	s.hotFill(&dst, 7, r)
+	if dst.LinkedEffects == nil || dst.Abnormal == nil || dst.SelfEffects[0].Token != 5 || dst.TargetEffects[0].Token != 6 {
+		t.Fatalf("the first fill did not carry the sparse fields: %+v", dst)
+	}
+	s.set(7, monster.Instance{Gid: 7, CurrentHP: 2, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	r, ok = s.hotRow(7)
+	if !ok {
+		t.Fatal("the cleared actor is not hot")
+	}
+	s.hotFill(&dst, 7, r)
+	if dst.LinkedEffects != nil || dst.Abnormal != nil ||
+		dst.SelfEffects != (monster.SelfEffects{}) || dst.TargetEffects != (monster.TargetEffects{}) {
+		t.Fatalf("the reused slot kept the previous sparse fields: %+v", dst)
+	}
+	if dst.CurrentHP != 2 {
+		t.Fatalf("the reused slot kept the previous scalar state: %+v", dst)
+	}
+}
+
+/*
+================
 TestLocateObjectMatchesTwoStepSearch
 
 Get, GetInWorld and locateObject answer exactly what populationForObject

@@ -39,6 +39,8 @@ batch's backing from being pinned forever.
 
 package simulation
 
+import "opensro.online/server/internal/game/world/monster"
+
 /*
 ================
 legSnapshot
@@ -151,17 +153,24 @@ func (view *legSnapshot) actorAt(i int) (*behaviorActorSnapshot, bool) {
 ================
 MonsterState.releaseLegSnapshot
 
-Takes the view back once its batch has been dispatched. The stored
-copies are cleared, so a retained view holds no actor (or anything
-its pointers reach) alive between batches; a view past the retained
-bounds is left to the collector instead.
+Takes the view back once its batch has been dispatched. Only the heap
+fields are dropped - the instance's two snapshot/block pointers and the
+whole mover, which carries the navigation path - so a retained view
+holds no actor (or anything its pointers reach) alive between batches;
+the scalar bulk pins nothing and the next build overwrites every field
+of it (residentMonster.fill and hotFill assign unconditionally). A view
+past the retained bounds is left to the collector instead.
 ================
 */
 func (s *MonsterState) releaseLegSnapshot(view *legSnapshot) {
 	if view == nil || cap(view.actors) > maxRetainedLegSnapshotActors {
 		return
 	}
-	clear(view.actors)
+	for i := range view.actors {
+		view.actors[i].instance.LinkedEffects = nil
+		view.actors[i].instance.Abnormal = nil
+		view.actors[i].mover = monster.MoverState{}
+	}
 	view.actors = view.actors[:0]
 	view.key = populationKey{}
 	s.legViewMu.Lock()
