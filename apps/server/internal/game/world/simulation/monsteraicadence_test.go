@@ -86,7 +86,7 @@ func TestTargetStatusChangesInvalidateOwnedTargetPerObserver(t *testing.T) {
 		if mover.TargetGID() != 0 {
 			t.Fatal("detection incorrectly bypassed status 3")
 		}
-		if !ops.shownMonsters[player.SessionID][instance.Gid] {
+		if !ops.scopeShown(player.SessionID)[instance.Gid] {
 			t.Fatal("target eligibility removed viewer scope")
 		}
 	}

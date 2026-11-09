@@ -42,7 +42,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, actor.mover, true, players, nowMs)
 	ops.stepGenArmed = false
 	for _, session := range ops.divisionSessions(divisionID, sessions) {
-		if len(frames) > 0 && ops.shownMonsters[session.SessionID][instance.Gid] {
+		if len(frames) > 0 && ops.scopeShown(session.SessionID)[instance.Gid] {
 			push.PushToSession(session.SessionID, frames)
 		}
 	}

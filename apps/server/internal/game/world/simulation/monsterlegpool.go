@@ -635,7 +635,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 	}
 	frames := armed.resolveStuck(work.division, gid, work.players, work.nowMs, plan.frames)
 	for _, session := range ops.divisionSessions(work.division, work.sessions) {
-		if len(frames) > 0 && ops.shownMonsters[session.SessionID][gid] {
+		if len(frames) > 0 && ops.scopeShown(session.SessionID)[gid] {
 			work.push.PushToSession(session.SessionID, frames)
 		}
 	}
