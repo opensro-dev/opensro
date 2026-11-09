@@ -42,6 +42,59 @@ func TestResidentPendingPreservesIndependentActorState(t *testing.T) {
 
 /*
 ================
+TestResidentPendingFillTracksRowChanges
+
+The fill expands from the shared row cached at first read: a
+per-actor cadence stamp between fills is read live, and a set
+with a new row drops the cache so the next fill expands the new
+row - never the stale one (#3027). The interned row's signed-zero
+navigation speed survives the cache.
+================
+*/
+func TestResidentPendingFillTracksRowChanges(t *testing.T) {
+	row := monster.PendingMover{BehaviorDeadlineMs: 42, Pose: monster.Pose{RegionID: monsterTestRegion, X: 3, Z: 4},
+		Activity: monster.ActivityCadence{Interval: 1000, LastCheck: 7}, TransitionSerial: 1,
+		NavigationSpeed: math.Copysign(0, -1), Stuck: true}
+	var p residentPendingMover
+	p.set(row)
+	snapshot := func() monster.PendingMover {
+		t.Helper()
+		var m monster.MoverState
+		p.fill(&m)
+		got, ok := m.PendingSnapshot()
+		if !ok {
+			t.Fatal("pending fill did not round-trip")
+		}
+		return got
+	}
+	if got := snapshot(); got != row || math.Float64bits(got.NavigationSpeed) != math.Float64bits(row.NavigationSpeed) {
+		t.Fatalf("first fill = %+v, want the set row %+v", got, row)
+	}
+	if got := snapshot(); got != row {
+		t.Fatalf("cached fill = %+v, want the set row %+v", got, row)
+	}
+
+	// A per-actor cadence stamp (stampActivity's write) is not in
+	// the cached row: the next fill reads it live.
+	p.activity = monster.ActivityCadence{Interval: 5, LastCheck: 6}
+	stamped := row
+	stamped.Activity = p.activity
+	if got := snapshot(); got != stamped {
+		t.Fatalf("fill after the cadence stamp = %+v, want %+v", got, stamped)
+	}
+
+	// A new row drops the cache.
+	next := stamped
+	next.TransitionSerial = 2
+	next.Pose.X = 9
+	p.set(next)
+	if got := snapshot(); got != next {
+		t.Fatalf("fill after re-set = %+v, want the new row %+v", got, next)
+	}
+}
+
+/*
+================
 TestPendingScheduleModeReadsTheCachedBit
 
 scheduleRow derives a pending row's mode from the record's cached

@@ -54,6 +54,14 @@ type residentPendingMover struct {
 	activity monster.ActivityCadence
 	spawning bool
 	shared   unique.Handle[pendingMoverShared]
+	// cachedRow is the shared row copied out of its handle once
+	// per set (sharedRow), with the navigation speed restored:
+	// the snapshot fill expands every due pending actor every
+	// leg, and copying the interned row out per fill was the
+	// pending expansion's flat cost (#3027). Nil after each set
+	// until the first read rebuilds it; pose and activity are
+	// not in it, they are read live from the fields above.
+	cachedRow *monster.PendingMover
 }
 
 /*
@@ -64,6 +72,7 @@ set
 func (p *residentPendingMover) set(row monster.PendingMover) {
 	p.pose, p.activity = row.Pose, row.Activity
 	p.spawning = row.Spawning
+	p.cachedRow = nil
 	shared := pendingMoverShared{row: row, speedBits: math.Float64bits(row.NavigationSpeed)}
 	shared.row.Pose = monster.Pose{}
 	shared.row.Activity = monster.ActivityCadence{}
@@ -86,17 +95,39 @@ func (p *residentPendingMover) value() monster.MoverState {
 
 /*
 ================
+residentPendingMover.sharedRow
+
+The interned shared row as a PendingMover, copied out of its
+handle once per set and then read in place: the handle's value
+cannot change while the row stands (set is its only writer and
+drops this copy), so the per-leg reads - the snapshot fill, the
+stuck probe, the retaliation guard - take the copy instead of
+paying the handle's whole-row copy on every read (#3027). The
+row's pose and activity stay zero in it (the interned form
+excludes them); its navigation speed is restored from the
+shared bits, signed zero included.
+================
+*/
+func (p *residentPendingMover) sharedRow() *monster.PendingMover {
+	if p.cachedRow == nil {
+		shared := p.shared.Value()
+		shared.row.NavigationSpeed = math.Float64frombits(shared.speedBits)
+		p.cachedRow = &shared.row
+	}
+	return p.cachedRow
+}
+
+/*
+================
 residentPendingMover.fill
 
-value written in place (#2985): the interned shared row is read out of
-its handle once and expanded straight into dst.
+value written in place (#2985): the cached shared row expands
+straight into dst, with the per-actor pose and cadence read live
+off the record.
 ================
 */
 func (p *residentPendingMover) fill(dst *monster.MoverState) {
-	shared := p.shared.Value()
-	shared.row.Pose, shared.row.Activity = p.pose, p.activity
-	shared.row.NavigationSpeed = math.Float64frombits(shared.speedBits)
-	shared.row.ExpandInto(dst)
+	p.sharedRow().ExpandIntoWith(dst, p.pose, p.activity)
 }
 
 /*
@@ -489,7 +520,7 @@ func (s *moverStorage) stuckAt(slot uint32, gid uint32) (stuck, found bool) {
 	case rec.live != nil:
 		return rec.live.Stuck(), true
 	case rec.pending != nil:
-		return rec.pending.shared.Value().row.Stuck, true
+		return rec.pending.sharedRow().Stuck, true
 	}
 	return false, true
 }
@@ -523,7 +554,7 @@ func (s *moverStorage) retaliationAt(slot uint32, gid uint32) (uint64, monster.M
 	case rec.live != nil:
 		return rec.live.RetaliationRevision(), rec.live.Mode(), true
 	case rec.pending != nil:
-		row := rec.pending.shared.Value().row
+		row := rec.pending.sharedRow()
 		if row.Spawning {
 			return row.RetaliationRevision, monster.MoverSpawning, true
 		}
