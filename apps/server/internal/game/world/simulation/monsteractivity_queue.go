@@ -786,20 +786,21 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			// The row reads through the monster slot the drain
 			// carried (#2133); a slot that no longer names the
 			// actor resolves by gid, as before the carry.
-			i, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
+			hp, maxHP, summonUntil, hot := state.instances.hotProbeAt(ref.monsterSlot, gid)
 			if !hot {
 				var exists bool
-				i, ref.monsterSlot, exists = state.instances.hotRowSlot(gid)
+				ref.monsterSlot, hp, maxHP, summonUntil, exists = state.instances.hotProbe(gid)
 				if !exists {
 					state.behavior.removeAt(ref.queueSlot, gid)
 					continue
 				}
 			}
-			if i.currentHP == 0 && i.ref.Value().MaxHP > 0 {
+			if hp == 0 && maxHP > 0 {
 				state.behavior.removeAt(ref.queueSlot, gid)
 				continue
 			}
-			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
+			if summonUntil != 0 && now >= summonUntil {
+				i, _ := state.instances.hotRowAt(ref.monsterSlot, gid)
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
 			actors = append(actors, ref)

@@ -78,6 +78,12 @@ need an order sort or count, they never inherit one.
 type monsterHotSlot struct {
 	gid uint32
 	row residentMonster
+	// maxHP is the row's reference max, cached where the row
+	// lands (set): the behaviour batch build probes it per due
+	// ref, and copying the interned reference out for that one
+	// scalar was the probe's whole cost (#3027). removeHot swaps
+	// whole slots, so the cache travels with its row.
+	maxHP uint32
 }
 
 /*
@@ -197,10 +203,11 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		row.SummonSightRange, row.SummonerFollowRange}
 	if exists {
 		s.hot[slot].row = resident
+		s.hot[slot].maxHP = row.Ref.MaxHP
 		return
 	}
 	s.byGID[gid] = uint32(len(s.hot))
-	s.hot = append(s.hot, monsterHotSlot{gid: gid, row: resident})
+	s.hot = append(s.hot, monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP})
 }
 
 /*
@@ -425,6 +432,44 @@ func (s *monsterStorage) hotRowSlot(gid uint32) (residentMonster, uint32, bool) 
 		return residentMonster{}, 0, false
 	}
 	return s.hot[slot].row, slot, true
+}
+
+/*
+================
+hotProbeAt
+
+The behaviour batch build's per-ref verdicts - the row's hit
+points, its reference's max and its summon deadline - read where
+they sit. hotRowAt copies the resident row (216 bytes) out for
+them and the filter then copies the interned reference (320
+bytes) on top for the max alone; the slot caches that max where
+the row lands, so a probe reads the three scalars in place
+(#3027). A miss is the signal, exactly hotRowAt's contract.
+================
+*/
+func (s *monsterStorage) hotProbeAt(slot uint32, gid uint32) (currentHP uint32, maxHP uint32, summonActionUntilMs int64, ok bool) {
+	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
+		return 0, 0, 0, false
+	}
+	held := &s.hot[slot]
+	return held.row.currentHP, held.maxHP, held.row.summonActionUntilMs, true
+}
+
+/*
+================
+hotProbe
+
+hotProbeAt resolved by gid, with the dense slot the row sits in
+for the caller to carry (#2133).
+================
+*/
+func (s *monsterStorage) hotProbe(gid uint32) (slot uint32, currentHP uint32, maxHP uint32, summonActionUntilMs int64, ok bool) {
+	slot, ok = s.hotSlotOf(gid)
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
+	currentHP, maxHP, summonActionUntilMs, ok = s.hotProbeAt(slot, gid)
+	return slot, currentHP, maxHP, summonActionUntilMs, ok
 }
 
 /*
