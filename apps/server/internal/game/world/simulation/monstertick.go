@@ -518,9 +518,9 @@ resolveTactics
 */
 func (ops *MonsterMoverOps) resolveTactics(instance *monster.Instance) monster.Tactics {
 	if ops.TacticsFor != nil {
-		return ops.TacticsFor(*instance)
+		return ops.TacticsFor(instance)
 	}
-	return monster.ResolveTactics(*instance)
+	return monster.ResolveTactics(instance)
 }
 
 // startWanderLeg probes the facing-relative direction, then requests the

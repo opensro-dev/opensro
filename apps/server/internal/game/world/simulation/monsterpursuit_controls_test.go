@@ -147,7 +147,7 @@ func TestAuthoredHomingPublishesRunAndMatchesDuration(t *testing.T) {
 	ops, instance, mover, _ := pursuitControlsFixture(t)
 	mover.Pose.X += 110
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-	frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+	frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(&instance), mover, monster.MoverEventTargetLost, 10000)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	// radius 20, CRT sample 16384: 20/3 + (16384 % 7) = 10.6667,
 	// wire goal rounds to 1011. Native homing does not choose the center.

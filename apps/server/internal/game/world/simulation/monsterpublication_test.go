@@ -59,7 +59,7 @@ func TestRejectedArrivalCannotPublishCorrection(t *testing.T) {
 	mover.DepartMs = 100000
 	mover.ArriveMs = 100100
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-	ops.TacticsFor = func(monster.Instance) monster.Tactics {
+	ops.TacticsFor = func(*monster.Instance) monster.Tactics {
 		ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(2))
 		return passiveTactics()
 	}
