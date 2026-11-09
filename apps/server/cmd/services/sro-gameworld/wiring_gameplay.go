@@ -813,9 +813,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return game.items.RecoverLevelVitals(game.divisionID, character)
 	}
 	quests, err := quest.NewRuntime(game.deps, definitions, stats.ExperienceUpdater())
-	if err == nil {
-		err = applyHwanKnobs(quests)
-	}
 	if err != nil {
 		return fmt.Errorf("quest runtime: %w", err)
 	}
@@ -836,7 +833,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.EntryEventFrames = game.items.EntryEventFrames
 	game.deps.EntryEventGroups = game.items.EntryEventGroups
 	game.deps.SceneWeatherFrames = game.items.SceneWeatherFrames
-	game.wireHwanLevel(quests)
+	if err := game.wireHwanLevel(quests); err != nil {
+		return err
+	}
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
