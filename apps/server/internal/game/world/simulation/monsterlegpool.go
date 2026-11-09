@@ -553,7 +553,7 @@ func planLegActor(owned *MonsterMoverOps, plan *legPlan, work legBatchWork) {
 		return
 	}
 	plan.frames, plan.targeted = owned.advanceInstanceStep(
-		work.division, &actor.instance, actor.mover, true, work.players, work.nowMs)
+		work.division, &actor.instance, &actor.mover, work.players, work.nowMs)
 }
 
 /*

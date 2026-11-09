@@ -39,7 +39,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	// since the snapshot drops them instead of being overwritten.
 	ops.stepBaseGen, ops.stepGenArmed = actor.moverGen, true
 	ops.stepSlot, ops.stepMonsterSlot = actor.slot, actor.monsterSlot
-	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, actor.mover, true, players, nowMs)
+	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, &actor.mover, players, nowMs)
 	ops.stepGenArmed = false
 	for _, session := range ops.divisionSessions(divisionID, sessions) {
 		if len(frames) > 0 && ops.scopeShown(session.SessionID)[instance.Gid] {
