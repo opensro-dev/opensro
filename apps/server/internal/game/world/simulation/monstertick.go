@@ -547,7 +547,7 @@ startWanderLeg
 ================
 */
 func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
+	before := ops.stepNavigationAdmission(divisionID, instance.Gid)
 	if !monster.CanEnterWander(instance.Ref.TidWord, instance.Ref.RunSpeed) || instance.Ref.WalkSpeed <= 0 || tactics.WanderProbeDistance <= 0 {
 		// Zero-speed types never wander.
 		mustMoverTransition(&mover, monster.MoverEventEntryRefused, 0)
@@ -599,8 +599,30 @@ lifecycle.
 ==================
 */
 func (ops *MonsterMoverOps) commitSegment(divisionID string, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
+	before := ops.stepNavigationAdmission(divisionID, instance.Gid)
 	return ops.commitPreparedSegment(divisionID, before, instance, mover, dest, speed, channel, nowMs)
+}
+
+/*
+================
+stepNavigationAdmission
+
+The admission the step's navigation commits (commitSegment,
+startReturnLeg, startWanderLeg, commitIdleEntry) prepare against
+the stored row. A planning step (#2205) prepares none: its commit
+funnel records the navigation and the serial replay re-prepares
+against the row at commit (commitSteppedNavigation), so a
+plan-time admission is never read - and the read is not free:
+every worker would take the population lock and copy the instance
+and mover rows to build a value it throws away. The serial step
+prepares exactly as before.
+================
+*/
+func (ops *MonsterMoverOps) stepNavigationAdmission(divisionID string, gid uint32) navigationAdmission {
+	if ops.plan != nil {
+		return navigationAdmission{}
+	}
+	return ops.Monsters.prepareNavigation(divisionID, gid)
 }
 
 /*
