@@ -66,6 +66,8 @@ const PARTY_CHAT_GAP = 4;
 const BERSERK_RESUME_WINDOW_MS = 30000;
 const BERSERK_RESUME_ELAPSED_MS = 59000;
 const HWAN_TITLE_GAP = 4;
+// The quest detail page's default body color (the native quest texts' own 255,44,15,1 as ARGB).
+const QUEST_DETAIL_TEXT: UiQuad["color"] = [ 44 / 255, 15 / 255, 1 / 255, 1 ];
 const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 const JOB_MARK_GAP = 5.5;
 const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
@@ -16431,11 +16433,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
 					if ( q ) {
 						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
+						// The default color of a body without its own font tag. Every v1.150 quest text sets
+						// 255,44,15,1 itself; the later client's strings (the cap-110 chains) leave the
+						// section bodies to the default, which must read on the parchment.
 						const result = text.guide(
 							guideTokens( meta?.rewardBody ?? "" ),
 							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
 							r,
-							gold,
+							QUEST_DETAIL_TEXT,
 							resources.size
 						);
 						questDetailMax = Math.max( 0, result.height - r[3] );
