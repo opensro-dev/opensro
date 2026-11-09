@@ -18,6 +18,7 @@ and may of course appear; machine code may not.)
   revtool.py seed verify .state/revtool/seed/revtool-seed-client.xz
   revtool.py --binary SRO_Client.exe seed apply \
       .state/revtool/seed/revtool-seed-client.xz --rzdb SRO_Client.rzdb
+  revtool.py seed publish [--dry-run]   (the pinned seeds as a release)
 
 `apply` needs rzpipe (the pinned venv from
 docs/native/REVERSE_ENGINEERING.md): it hand-defines every seed
@@ -34,12 +35,15 @@ assets, never git history.
 ===========================================================================
 """
 
+import datetime
 import hashlib
 import json
 import lzma
 import os
 import sqlite3
+import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -475,4 +479,151 @@ def cmd_seed_apply(args, con):
 	print(f"  sampled labelled names {sampled_ok} of {sampled} match")
 	if sampled and sampled_ok != sampled:
 		raise SystemExit("error: sampled names do not match the seed")
+	return 0
+
+
+# =====================================================================
+# publish: the pinned seeds as a GitHub release (#2830)
+#
+# seed-manifest.json is the attestation: the bytes it pins passed the
+# .text run scan at build and verify time. Publish re-checks every
+# asset against its pin (hash, size, target, counts) before any gh
+# call, so a rebuilt or swapped file cannot ride along; a refresh is a
+# new dated release, never an overwrite of an existing asset.
+# =====================================================================
+
+def _default_manifest():
+	beside = os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_NAME)
+	return beside if os.path.exists(beside) else None
+
+
+def _run_gh(argv):
+	done = subprocess.run(argv, capture_output=True, text=True)
+	return done.returncode, done.stdout, done.stderr
+
+
+def check_asset_against_pin(path, pin):
+	"""One seed file against its manifest pin; returns (payload, sha256)."""
+	payload = load_seed(path)
+	with open(path, "rb") as fh:
+		blob = fh.read()
+	if len(blob) > SEED_SIZE_LIMIT:
+		raise SeedError(f"{path} is over the {SEED_SIZE_LIMIT} byte cap")
+	digest = hashlib.sha256(blob).hexdigest()
+	if payload["target"] != pin["target"]:
+		raise SeedError(
+			f"{path}: seed target {payload['target']!r} != pin target {pin['target']!r}")
+	if digest != pin["sha256"] or len(blob) != pin["bytes"]:
+		raise SeedError(
+			f"{path}: bytes do not match the manifest pin; rebuild the seed "
+			"and update seed-manifest.json in review, then publish")
+	if len(payload["functions"]) != pin["functions"] or \
+			len(payload["ledger"]) != pin["ledger_lines"]:
+		raise SeedError(f"{path}: function/ledger counts do not match the manifest pin")
+	return payload, digest
+
+
+def release_notes(pins):
+	"""The release body: what the seeds are and how a contributor uses them."""
+	lines = [
+		"revtool seeds: Binary Ninja's function index (address + current name) and",
+		"revtool's JSONL evidence ledger for each target binary. Conclusions only -",
+		"no executable bytes and no decompiled text (`revtool.py seed verify` proves",
+		"no 16-byte run of the binary's `.text` appears in a seed). A seed is keyed",
+		"by its binary's SHA-256 and is useless without your own retail copy.",
+		"",
+		"| asset | target | functions | ledger lines | bytes | sha256 |",
+		"| --- | --- | --- | --- | --- | --- |",
+	]
+	for pin in pins:
+		lines.append(
+			f"| {pin['file']} | {pin['target']} | {pin['functions']} | "
+			f"{pin['ledger_lines']} | {pin['bytes']} | `{pin['sha256']}` |")
+	lines += [
+		"",
+		"Use (with the repo checked out):",
+		"",
+		"    py -3 tools/re/revtool/revtool.py seed verify revtool-seed-client.xz",
+		"    py -3 tools/re/revtool/revtool.py --binary SRO_Client.exe seed apply \\",
+		"        revtool-seed-client.xz --rzdb SRO_Client.rzdb",
+		"",
+		"The repo pins these exact hashes in `tools/re/revtool/seed-manifest.json`;",
+		"a download that differs is refused. The tutorial (#2823) walks the flow.",
+	]
+	return "\n".join(lines) + "\n"
+
+
+def publish_assets(manifest_path, seed_dir, tag, repo, run=_run_gh, dry_run=False):
+	"""Verify the pinned seeds, then create (once) and fill the release.
+
+	Returns the release URL. `run(argv)` -> (rc, stdout, stderr) is
+	injected by the tests; nothing here calls gh before every asset
+	matches its pin, and an asset already on the release is a refusal,
+	never an overwrite.
+	"""
+	with open(manifest_path, encoding="utf-8") as fh:
+		pins = json.load(fh)["assets"]
+	if not pins:
+		raise SeedError(f"{manifest_path}: no assets pinned")
+	files = []
+	for pin in pins:
+		path = os.path.join(seed_dir, pin["file"])
+		if not os.path.exists(path):
+			raise SeedError(f"seed not found: {path} (build it first: seed build)")
+		_, digest = check_asset_against_pin(path, pin)
+		print(f"verified {pin['file']}  sha256 {digest}")
+		files.append(path)
+	base = ["gh", "release"]
+	if dry_run:
+		print(f"[dry-run] {' '.join(base + ['view', tag, '--repo', repo])}")
+		print(f"[dry-run] {' '.join(base + ['create', tag, '--repo', repo, '--title', tag])}")
+		print(f"[dry-run] {' '.join(base + ['upload', tag, '--repo', repo] + files)}")
+		return f"https://github.com/{repo}/releases/tag/{tag}"
+	rc, out, _ = run(base + ["view", tag, "--repo", repo, "--json", "assets"])
+	if rc != 0:
+		with tempfile.NamedTemporaryFile(
+				"w", suffix=".md", delete=False, encoding="utf-8") as notes:
+			notes.write(release_notes(pins))
+			notes_path = notes.name
+		try:
+			rc, out, err = run(base + [
+				"create", tag, "--repo", repo, "--title",
+				f"revtool seed {tag.removeprefix('revtool-seed-')}",
+				"--notes-file", notes_path])
+		finally:
+			os.remove(notes_path)
+		if rc != 0:
+			raise SeedError(f"gh release create {tag} failed: {err.strip()}")
+	else:
+		present = {a["name"] for a in json.loads(out)["assets"]}
+		clash = present & {pin["file"] for pin in pins}
+		if clash:
+			raise SeedError(
+				f"release {tag} already holds {sorted(clash)}; a refresh is a "
+				"new dated tag, never an overwrite")
+	rc, out, err = run(base + ["upload", tag, "--repo", repo] + files)
+	if rc != 0:
+		raise SeedError(f"gh release upload {tag} failed: {err.strip()}")
+	url = f"https://github.com/{repo}/releases/tag/{tag}"
+	print(f"published {url}")
+	return url
+
+
+def default_seed_tag(now=None):
+	"""The release tag for a publish run today: revtool-seed-<UTC date>."""
+	day = (now or datetime.datetime.now(datetime.timezone.utc)).date()
+	return f"revtool-seed-{day.isoformat()}"
+
+
+def cmd_seed_publish(args, con):
+	manifest = args.manifest or _default_manifest()
+	if manifest is None:
+		raise SystemExit(
+			f"error: no manifest: pass --manifest (no {MANIFEST_NAME} beside revtool)")
+	seed_dir = args.seed_dir or os.path.join(DATA_DIR, "seed")
+	tag = args.tag or default_seed_tag()
+	try:
+		publish_assets(manifest, seed_dir, tag, args.repo, dry_run=args.dry_run)
+	except SeedError as exc:
+		raise SystemExit(f"error: {exc}") from exc
 	return 0
