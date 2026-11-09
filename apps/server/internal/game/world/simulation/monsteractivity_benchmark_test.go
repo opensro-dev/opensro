@@ -109,7 +109,7 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 			now++
 			after := dues[i].before
 			after.Activity.LastCheck = uint32(now)
-			if !s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].before, after, now) {
+			if committed, _ := s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].before, after, now); !committed {
 				b.Fatal("gate commit refused")
 			}
 			dues[i].before = after

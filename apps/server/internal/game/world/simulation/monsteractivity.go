@@ -144,10 +144,11 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 			m.BehaviorDeadlineMs = 0
 			pending = true
 		}
-		if !ops.commitSteppedActivity(division, actor.Gid, before, m, now) {
+		committed, cadenceOnly := ops.commitSteppedActivity(division, actor.Gid, before, m, now)
+		if !committed {
 			return nil, m, true, false
 		}
-		generationAdvanced = !cadenceOnlyWrite(before, m)
+		generationAdvanced = !cadenceOnly
 	}
 	if !pending {
 		return nil, m, false, generationAdvanced
@@ -173,7 +174,8 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
-	return s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+	return committed
 }
 
 /*
@@ -189,9 +191,15 @@ per due actor per tick, which is where the profile charged the
 storages' gid-to-slot maps. Validation rides only the full write:
 a cadence-only commit differs from the validated stored row in
 the stamp alone (#2029).
+
+The second answer is the write's cadence verdict: whether the pair
+differed only in the cadence stamp. The gate's chain-base rule
+(generationAdvanced) reads it from here, where the pair was just
+compared against the stored row, instead of re-comparing the two
+whole rows at the gate (#2029).
 ================
 */
-func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) (bool, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObjectAt(division, gid, monsterSlot)
@@ -200,9 +208,10 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		current, exists = state.movers.lookup(gid)
 	}
 	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
-		return false
+		return false, false
 	}
-	if cadenceOnlyWrite(current, after) {
+	cadenceOnly := cadenceOnlyWrite(current, after)
+	if cadenceOnly {
 		// No Validate here: the pair differs only in the cadence
 		// stamp, and the stored row passed validation when its own
 		// commit wrote it, so the check would re-prove the row the
@@ -220,7 +229,7 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		state.syncApproachActor(gid, after)
 	}
 	s.scheduleBehavior(state, gid, now)
-	return true
+	return true, cadenceOnly
 }
 
 /*

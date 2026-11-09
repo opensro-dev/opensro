@@ -150,21 +150,21 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	if !after.Activity.Due(uint32(now + 1001)) {
 		t.Fatal("fixture cadence did not fire")
 	}
-	if !ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001) {
-		t.Fatal("cadence-only commitActivityAt rejected")
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); !committed || !cadenceOnly {
+		t.Fatal("cadence-only commitActivityAt rejected or misread")
 	}
 	got, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 	if got != after {
 		t.Fatalf("stored mover differs from cadence-only commitActivityAt:\n got %+v\nwant %+v", got, after)
 	}
 	// The consumed before can never commit twice, hint or not.
-	if ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001) {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); committed {
 		t.Fatal("stale cadence commit accepted through carried slots")
 	}
 	moved := after
 	moved.Pose.X += 25
-	if !ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, after, moved, now+1001) {
-		t.Fatal("pose-carrying commitActivityAt rejected")
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, after, moved, now+1001); !committed || cadenceOnly {
+		t.Fatal("pose-carrying commitActivityAt rejected or misread as cadence-only")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 	if got != moved {
@@ -176,7 +176,7 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	mateBefore, _ := ops.Monsters.Mover(monsterTestDivision, mate.Gid)
 	mateMoverSlot, mateMonsterSlot := carriedSlots(t, ops, mate.Gid)
 	moved.Pose.X += 25
-	if !ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, got, moved, now+1001) {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, got, moved, now+1001); !committed {
 		t.Fatal("commitActivityAt with foreign slots did not fall back to its actor")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
