@@ -706,10 +706,7 @@ in the seeded profile (#3027).
 func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	r := s.slots[slot].rec
 	if r.live != nil {
-		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
-			regionID: r.live.Pose.RegionID, deadlineMs: r.live.BehaviorDeadlineMs,
-			idleEntryPending: r.live.IdleEntryPending(), controlMode: r.live.ControlMode(),
-			targetGID: r.live.TargetGID(), stuck: r.live.Stuck()}
+		return scheduleOf(*r.live)
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending
@@ -719,6 +716,51 @@ func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}
 	}
 	return moverSchedule{}
+}
+
+/*
+================
+scheduleOf
+
+scheduleRow for a mover value in hand: the activity commit has
+just written its row under the state lock it still holds, so its
+reschedule reads the schedule off the written value instead of
+re-reading the stored row (#3027). scheduleRow's live branch is
+this same projection, so the two can never drift.
+================
+*/
+func scheduleOf(row monster.MoverState) moverSchedule {
+	return moverSchedule{mode: row.Mode(), activity: row.Activity, arriveMs: row.ArriveMs,
+		regionID: row.Pose.RegionID, deadlineMs: row.BehaviorDeadlineMs,
+		idleEntryPending: row.IdleEntryPending(), controlMode: row.ControlMode(),
+		targetGID: row.TargetGID(), stuck: row.Stuck()}
+}
+
+/*
+================
+moverStorage.activityGuardAt
+
+The activity commit's guard read through a carried slot: the
+row's commit generation and activity cadence, and whether the
+row exists, without expanding the row into a MoverState. The
+commit compares the pair against the generation and cadence its
+plan was read from: a whole-value write since then has bumped
+the generation (setRow), and the only writes that leave it
+alone stamp the cadence (stampActivity), so an unchanged pair
+proves the stored row is still the planned one (#3027). The
+slot is verified against the gid before use and delegates to
+the gid resolve on a miss, as every carried read does (#2133).
+================
+*/
+func (s *moverStorage) activityGuardAt(slot uint32, gid uint32) (uint64, monster.ActivityCadence, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		resolved, ok := s.slotOf(gid)
+		if !ok {
+			return 0, monster.ActivityCadence{}, false
+		}
+		slot = resolved
+	}
+	return s.slots[slot].gen, s.scheduleRow(slot).activity, true
 }
 
 /*

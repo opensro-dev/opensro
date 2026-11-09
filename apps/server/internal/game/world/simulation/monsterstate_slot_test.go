@@ -149,12 +149,19 @@ and leaves the slot owner's row untouched.
 func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	ops, actor, now := activityFixture(t)
 	moverSlot, monsterSlot := carriedSlots(t, ops, actor.Gid)
+	// The generation the fixture's row currently carries: each
+	// commit below hands the one its before was read at, as the
+	// step's snapshot does.
+	genOf := func() uint64 {
+		_, gen, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+		return gen
+	}
 	before, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 	after := before
 	if !after.Activity.Due(uint32(now + 1001)) {
 		t.Fatal("fixture cadence did not fire")
 	}
-	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); !committed || !cadenceOnly {
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), before, after, now+1001); !committed || !cadenceOnly {
 		t.Fatal("cadence-only commitActivityAt rejected or misread")
 	}
 	got, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -162,12 +169,12 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 		t.Fatalf("stored mover differs from cadence-only commitActivityAt:\n got %+v\nwant %+v", got, after)
 	}
 	// The consumed before can never commit twice, hint or not.
-	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, before, after, now+1001); committed {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), before, after, now+1001); committed {
 		t.Fatal("stale cadence commit accepted through carried slots")
 	}
 	moved := after
 	moved.Pose.X += 25
-	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, after, moved, now+1001); !committed || cadenceOnly {
+	if committed, cadenceOnly := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, moverSlot, monsterSlot, genOf(), after, moved, now+1001); !committed || cadenceOnly {
 		t.Fatal("pose-carrying commitActivityAt rejected or misread as cadence-only")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -180,7 +187,7 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 	mateBefore, _ := ops.Monsters.Mover(monsterTestDivision, mate.Gid)
 	mateMoverSlot, mateMonsterSlot := carriedSlots(t, ops, mate.Gid)
 	moved.Pose.X += 25
-	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, got, moved, now+1001); !committed {
+	if committed, _ := ops.Monsters.commitActivityAt(monsterTestDivision, actor.Gid, mateMoverSlot, mateMonsterSlot, genOf(), got, moved, now+1001); !committed {
 		t.Fatal("commitActivityAt with foreign slots did not fall back to its actor")
 	}
 	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
@@ -223,7 +230,8 @@ func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
 	commit := func(slot, monsterSlot uint32) {
 		t.Helper()
 		before, _ := s.Mover("sleep", actor.Gid)
-		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, before, before, now); !committed || !cadenceOnly {
+		_, gen, _ := s.MoverGeneration("sleep", actor.Gid)
+		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
 			t.Fatal("cadence-only commitActivityAt rejected or misread")
 		}
 		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
@@ -232,6 +240,59 @@ func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
 	}
 	commit(moverSlot, monsterSlot)
 	commit(mateMoverSlot, mateMonsterSlot)
+}
+
+/*
+================
+TestCommitActivityAtFastGuardMatchesValueGuard
+
+The generation guard lands and refuses exactly what the whole-row
+value guard did. A lane's rewrite of the row with the value it
+already holds moves the generation, so the commit pays the whole
+compare, finds the row equal and lands. A foreign cadence stamp
+is the one write that leaves the generation alone, and it still
+refuses: the stamp is the consumed marker, so the stored cadence
+is no longer the plan's. An untouched row commits from the two
+scalars alone.
+================
+*/
+func TestCommitActivityAtFastGuardMatchesValueGuard(t *testing.T) {
+	const now int64 = 100000
+	s, d := idleScheduleFixture(t)
+	resting := monster.NestRow{Respawn: true}
+	actor := idleScheduleActor(t, s, d, 7, resting, 2000, now+5000, now)
+	moverSlot, _ := d.movers.slotOf(actor.Gid)
+	_, monsterSlot, _ := d.instances.hotRowSlot(actor.Gid)
+
+	before, _ := s.Mover("sleep", actor.Gid)
+	_, gen, _ := s.MoverGeneration("sleep", actor.Gid)
+	if !s.CommitMover("sleep", actor.Gid, before) {
+		t.Fatal("same-value lane rewrite refused")
+	}
+	if _, moved, _ := s.MoverGeneration("sleep", actor.Gid); moved == gen {
+		t.Fatal("whole-value rewrite did not move the generation")
+	}
+	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
+		t.Fatal("commit after a same-value rewrite refused or misread")
+	}
+
+	before, _ = s.Mover("sleep", actor.Gid)
+	_, gen, _ = s.MoverGeneration("sleep", actor.Gid)
+	stamped := before.Activity
+	stamped.LastCheck += 999
+	d.movers.setActivityAt(moverSlot, actor.Gid, stamped)
+	if _, unmoved, _ := s.MoverGeneration("sleep", actor.Gid); unmoved != gen {
+		t.Fatal("cadence stamp moved the generation")
+	}
+	if committed, _ := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); committed {
+		t.Fatal("commit accepted over a foreign cadence stamp")
+	}
+
+	before, _ = s.Mover("sleep", actor.Gid)
+	_, gen, _ = s.MoverGeneration("sleep", actor.Gid)
+	if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, gen, before, before, now); !committed || !cadenceOnly {
+		t.Fatal("commit against the stamped row refused or misread")
+	}
 }
 
 /*

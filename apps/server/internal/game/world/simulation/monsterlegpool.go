@@ -592,7 +592,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 			_, landed = armed.commitSteppedNavigation(work.division,
 				ops.Monsters.prepareNavigation(work.division, gid), op.mover, op.frames)
 		case legPlanOpActivity:
-			landed, _ = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
+			landed, _ = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, actor.moverGen, op.before, op.after, work.nowMs)
 		case legPlanOpFollow:
 			// commitFollow hands back the frames it was given; the
 			// step's frames already ride the plan's output.
