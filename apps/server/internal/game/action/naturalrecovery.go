@@ -53,10 +53,12 @@ type recoverySession struct {
 	session   uint64
 	character *enterworld.Character
 	// abnormalKey and effectsKey are the resident's folded lookup
-	// keys (playerAbnormalKey, statuseffect.OwnerKey), folded once at
-	// bind: while someone in the world holds a block or a buff, the
-	// stores are populated, and a pulse reads its resident's entries
-	// by the held keys instead of folding fresh ones (#2033).
+	// keys (playerAbnormalKey, statuseffect.OwnerKey), folded once
+	// when the session is created (resident binding, or the potion
+	// admission that can precede it): while someone in the world
+	// holds a block or a buff, the stores are populated, and a pulse
+	// reads its resident's entries by the held keys instead of
+	// folding fresh ones (#2033).
 	abnormalKey, effectsKey    string
 	nextMs                     int64
 	questNextMs                int64

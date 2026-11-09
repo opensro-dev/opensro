@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/recovery"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -30,8 +31,10 @@ const potionRecoveryIntervalMs int64 = 1000
 admitPotionRecovery
 
 The division and character doors are held. A direct server operation can
-precede resident binding; its provisional session owns only potion pulses.
-Authenticated binding replaces that lifetime with the ordinary resident.
+precede resident binding; its provisional session owns only potion pulses
+but holds the resident's folded lookup keys, so the pulse reads the same
+abnormal and effect entries the binding would. Authenticated binding
+replaces that lifetime with the ordinary resident.
 ================
 */
 func (rt *Runtime) admitPotionRecovery(division string, c *enterworld.Character, in recovery.Admission, now int64) recovery.Amount {
@@ -40,7 +43,12 @@ func (rt *Runtime) admitPotionRecovery(division string, c *enterworld.Character,
 	key := recoveryKey{division, strings.ToLower(c.Name)}
 	state := rt.recoverySessions[key]
 	if state == nil || state.character != c {
-		state = &recoverySession{character: c, nextMs: math.MaxInt64, questNextMs: math.MaxInt64,
+		// The provisional session holds the same folded keys a resident
+		// binding would: the pulse reads its abnormal and effect entries
+		// by them, and an empty key would answer a different store row.
+		state = &recoverySession{character: c, abnormalKey: playerAbnormalKey(division, c.Name),
+			effectsKey: statuseffect.OwnerKey(division, c.Name),
+			nextMs:     math.MaxInt64, questNextMs: math.MaxInt64,
 			questItemNextMs: math.MaxInt64, potionNextMs: now + potionRecoveryIntervalMs}
 		if rt.recoverySessions == nil {
 			rt.recoverySessions = make(map[recoveryKey]*recoverySession)

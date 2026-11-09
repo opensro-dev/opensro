@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/paramkeeper"
@@ -267,6 +268,44 @@ func TestRecoverySessionHeldKeysFindPopulatedEntries(t *testing.T) {
 	}
 	if got := rt.effects.ModifierWritesKeyed(session.effectsKey); len(got) != 0 {
 		t.Fatalf("forgotten writes read %+v", got)
+	}
+}
+
+/*
+================
+TestPotionAdmissionSessionHoldsFoldedKeys
+
+A potion admission that precedes resident binding creates the session
+itself; it holds the same folded keys a binding would, so the pulse
+reads the resident's own abnormal and effect entries through it.
+================
+*/
+func TestPotionAdmissionSessionHoldsFoldedKeys(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	rt.admitPotionRecovery(testDivision, c, recovery.Admission{}, rt.Now().UnixMilli())
+	rt.recoveryMu.Lock()
+	session := rt.recoverySessions[recoveryKey{testDivision, "asd2"}]
+	rt.recoveryMu.Unlock()
+	if session == nil || session.abnormalKey != playerAbnormalKey(testDivision, c.Name) ||
+		session.effectsKey != statuseffect.OwnerKey(testDivision, c.Name) {
+		t.Fatalf("potion session keys %+v", session)
+	}
+	ownBlock := &abnormal.Block{Mask: 1}
+	rt.storePlayerAbnormal(testDivision, "ASD2", ownBlock)
+	modifiers, err := statuseffect.NewModifiers([]paramkeeper.Write{{Parameter: 5, Value: 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: "ASD2",
+		SkillID: 902, SkillGroup: 902, InstanceToken: 902, State: statuseffect.StateActive, Modifiers: modifiers}) {
+		t.Fatal("install own")
+	}
+	if got := rt.playerAbnormalKeyed(session.abnormalKey); got != ownBlock {
+		t.Fatalf("keyed abnormal read %+v", got)
+	}
+	if got := rt.effects.ModifierWritesKeyed(session.effectsKey); len(got) != 1 || got[0].Value != 20 {
+		t.Fatalf("keyed modifier read %+v", got)
 	}
 }
 
