@@ -194,7 +194,7 @@ test("a pet link reads the pet it names, with a transport out too", () => {
 	gameplay.receive( cos( 7, 0, 30 ), 1 );
 	gameplay.receive( cos( 9, 1, 40 ), 2 );
 	const say = ( links, now ) => {
-		gameplay.command( { kind: "chat", channel: 1, text: "x" + M, target: "", links }, now );
+		gameplay.command( { kind: "chat", channel: 1, text: "x" + M, target: "", links }, now, undefined );
 		gameplay.receive( { opcode: 0xb367, payload: Uint8Array.of( 1, 1, 255 ) }, now );
 		return sent.at( -1 ).payload;
 	};
