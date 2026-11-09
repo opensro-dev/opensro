@@ -25,9 +25,16 @@ overrides: { level, blocks: [ [ block index in that level, block hex ] ] }.
 
 The blocks are this project's own DXT1 encode of a small hand edit to
 the listed level (a few texels); no bytes are copied from the client
-data. Only blocks the edit touched are listed, so a block it missed
-keeps its encoded bytes (3948 in the third row). The other levels are
-left alone.
+data. The level was decoded, the texels edited by hand, and the
+touched blocks encoded again as DXT1; the table is that frozen result,
+and the test pins the whole patched level by its sha256. Only blocks
+whose texels the edit changed are listed: the edit leaves 3948, in the
+third row, as it was, so that block keeps its encoded bytes. The other
+levels are left alone.
+
+This is an intended change to one texture's second level, approved by
+the owner; it ports no native behaviour and changes nothing the
+original client reads.
 ================
 */
 /** @type {Readonly<Record<string, { level: number, blocks: [ number, string ][] }[]>>} */
@@ -88,11 +95,29 @@ function levelsFor( source ) {
 
 /*
 ================
+blockBytes
+
+One table row as the DXT1 block it names. Buffer.from drops an odd or
+malformed hex tail without throwing, so a bad row would copy short;
+it fails the build instead.
+================
+*/
+export function blockBytes( source, index, hex ) {
+	const block = Buffer.from( hex, "hex" );
+	if ( block.length !== DXT1_BLOCK_BYTES || block.toString( "hex" ) !== hex ) {
+		throw Error( `${source}: block ${index} is not ${DXT1_BLOCK_BYTES} bytes of hex` );
+	}
+	return block;
+}
+
+/*
+================
 applyObjectTextureLevels
 
 Returns the container with the source's listed blocks replaced, or the
 same buffer when nothing is listed. DXT1 containers only; a listed block
-outside its level fails the build rather than writing past it.
+outside its level, or a row that does not decode to one whole block,
+fails the build rather than writing past it or short of it.
 ================
 */
 export function applyObjectTextureLevels( bytes, source ) {
@@ -111,7 +136,7 @@ export function applyObjectTextureLevels( bytes, source ) {
 		const count = Math.ceil( levelWidth / BLOCK_SIDE ) * Math.ceil( levelHeight / BLOCK_SIDE );
 		for ( const [index, hex] of blocks ) {
 			if ( index < 0 || index >= count ) throw Error( `${source}: block ${index} is outside level ${level}` );
-			Buffer.from( hex, "hex" ).copy( out, offset + index * DXT1_BLOCK_BYTES );
+			blockBytes( source, index, hex ).copy( out, offset + index * DXT1_BLOCK_BYTES );
 		}
 	}
 	return out;

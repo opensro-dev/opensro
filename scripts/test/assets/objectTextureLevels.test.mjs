@@ -8,7 +8,7 @@ objectTextureLevels.test.mjs - level overrides touch only their own blocks
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { applyObjectTextureLevels } from "../../build/world/assets/objectTextureLevels.mjs";
+import { applyObjectTextureLevels, blockBytes } from "../../build/world/assets/objectTextureLevels.mjs";
 
 const NTX_MAGIC = 0x3158544e;
 const DXT1_FOURCC = 0x31545844;
@@ -64,6 +64,14 @@ test("a listed texture changes only blocks inside its listed level", () => {
 test("an unlisted texture is returned as is", () => {
 	const source = container();
 	assert.equal( applyObjectTextureLevels( source, "prim/mtrl/bldg/china/jangan_enter/cj_wall01.ddj" ), source );
+});
+
+test("a table row that is not one whole DXT1 block fails the build", () => {
+	assert.equal( blockBytes( LISTED, 1, "0a638431fb8b5037" ).toString( "hex" ), "0a638431fb8b5037" );
+	// Short, odd-length and non-hex rows would otherwise copy short.
+	for ( const hex of [ "0a638431fb8b50", "0a638431fb8b503", "0a638431fb8b50zz", "0a638431fb8b503700" ] ) {
+		assert.throws( () => blockBytes( LISTED, 1, hex ), /not 8 bytes of hex/, hex );
+	}
 });
 
 test("a listed texture in another block format fails the build", () => {
