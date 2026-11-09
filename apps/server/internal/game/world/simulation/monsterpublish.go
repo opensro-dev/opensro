@@ -48,7 +48,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
-	ops.vanishInSafeZone(divisionID, instance.Gid, actor.slot, actor.monsterSlot, nowMs)
+	ops.vanishInSafeZone(divisionID, actor, nowMs)
 }
 
 /*

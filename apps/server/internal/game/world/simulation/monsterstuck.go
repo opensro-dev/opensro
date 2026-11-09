@@ -321,12 +321,27 @@ its nest respawns it. This is why monsters never walk into a
 town.
 ================
 */
-func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, slot, monsterSlot uint32, nowMs int64) {
-	// Only the region is weighed, so read the pose, not the whole
-	// validated mover value the planner steps already paid for. The
-	// step's carried slots ride along (#2133); the door verifies
-	// them, so the pose is the gid read's either way.
-	pose, ok := ops.Monsters.livePoseAt(divisionID, gid, slot, monsterSlot, nowMs)
+func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, actor *behaviorActorSnapshot, nowMs int64) {
+	// Only the region is weighed. The snapshot mover answers it
+	// whenever the step left the actor on that mover: the row's
+	// commit generation still equals the generation the snapshot
+	// was read at, and every write that can move the actor - the
+	// step's own commits, a knockback, the stuck resolver - lands
+	// through a door that advances it (#2137), while a pure
+	// cadence stamp advances nothing and moves nothing. So under
+	// a matching generation the stored mover's pose fields are
+	// the snapshot's, and its live region is the stored pose's.
+	// A moved or gone actor falls back to the stored pose read
+	// through the same carried slots as before (#2133); the door
+	// verifies them, so the pose is the gid read's either way.
+	gid := actor.instance.Gid
+	if gen, ok := ops.Monsters.moverGenerationAt(divisionID, gid, actor.slot, actor.monsterSlot); ok && gen == actor.moverGen {
+		if SafeZoneRegion(actor.mover.LiveRegionAt(nowMs)) {
+			ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
+		}
+		return
+	}
+	pose, ok := ops.Monsters.livePoseAt(divisionID, gid, actor.slot, actor.monsterSlot, nowMs)
 	if ok && SafeZoneRegion(pose.RegionID) {
 		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
 	}

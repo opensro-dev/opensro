@@ -90,8 +90,9 @@ func (s *MonsterState) MoverAt(divisionID string, gid uint32, slot, monsterSlot 
 livePose
 
 livePose reads one actor's live pose without expanding or validating a
-whole mover value - the read vanishInSafeZone weighs once per advanced
-actor. A gid the mover storage cannot place reads through the same
+whole mover value - the storage read vanishInSafeZone falls back to
+when the step moved the actor off its snapshot mover. A gid the mover
+storage cannot place reads through the same
 synthesized spawn mover Mover would build, so the pose is Mover's.
 ================
 */
@@ -320,6 +321,30 @@ func (s *MonsterState) MoverGenerationAt(divisionID string, gid uint32, slot, mo
 		panic(err)
 	}
 	return mover, state.movers.generationAt(slot, gid), true
+}
+
+/*
+================
+moverGenerationAt
+
+The mover row's commit generation alone, through the slots the
+behaviour batch carried for the actor (#2133): the witness
+vanishInSafeZone weighs to tell whether the step moved the actor
+off the mover it was snapshot at. A hint that no longer names the
+gid falls back to the gid's generation, and an actor the
+population no longer holds answers not-ok, so either doubt sends
+the caller to the stored pose.
+================
+*/
+func (s *MonsterState) moverGenerationAt(divisionID string, gid uint32, slot, monsterSlot uint32) (uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
+	if !state.instances.containsAt(monsterSlot, gid) {
+		return 0, false
+	}
+	return state.movers.generationAt(slot, gid), true
 }
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.
