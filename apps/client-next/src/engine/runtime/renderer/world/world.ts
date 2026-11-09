@@ -1161,6 +1161,18 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		dungeonLights
+
+		The resident scene's authored per-block dungeon lights, published
+		to the character renderer so actors standing in a block are lit by
+		its nearest entry (dungeon-lights.ts).
+		================
+		*/
+		dungeonLights() {
+			return current?.dungeonLights;
+		},
+		/*
+		================
 		night
 		================
 		*/

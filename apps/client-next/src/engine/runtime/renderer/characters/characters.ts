@@ -78,6 +78,8 @@ import {
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
 import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
+import type { DungeonBlockLight } from "@/engine/contracts/scene";
+import { dungeonPointLight } from "@/engine/foundation/rendering/dungeon-lights";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 
@@ -149,15 +151,20 @@ export function fillRowOpacities(
 ================
 fillRowPointLights
 
-The group's shared hit-point-light stream (position, attenuation, ambient,
-diffuse - twelve floats a row), written once per group instead of once per
-primitive. Same renderer-owned reuse contract as the opacity scratch.
+The group's shared point-light stream (position, ambient, diffuse -
+twelve floats a row, the attenuation constant/linear/quadratic terms in
+the three w components), written once per group instead of once per
+primitive. A row's own effect light wins; in its absence a dungeon actor
+takes the authored light of its block nearest its pose
+(dungeon-lights.ts), as the native dungeon pass binds Light1 per entity.
+Same renderer-owned reuse contract as the opacity scratch.
 ================
 */
 export function fillRowPointLights(
 	streams: RowStreams,
 	rows: readonly CharacterActor[],
-	origin: number
+	origin: number,
+	blocks?: readonly (readonly DungeonBlockLight[])[]
 ): Float32Array {
 	if ( rows.length > CHARACTER_ACTORS ) throw Error( "Character row scratch exceeds actor limit" );
 	const needed = rows.length * POINT_LIGHT_FLOATS;
@@ -167,7 +174,16 @@ export function fillRowPointLights(
 	const lights = streams.lightScratch;
 	lights.fill( 0, 0, needed );
 	for ( let i = 0; i < rows.length; i++ ) {
-		const light = rows[i]!.pointLight;
+		const row = rows[i]!,
+			light = row.pointLight ??
+				dungeonPointLight(
+					blocks,
+					row.dungeonBlock,
+					row.pose.regionId,
+					row.pose.x,
+					row.pose.y,
+					row.pose.z
+				);
 		if ( !light ) continue;
 		const pos = placement(
 			light.pose.regionId,
@@ -175,16 +191,17 @@ export function fillRowPointLights(
 			light.pose.x,
 			light.pose.y,
 			light.pose.z,
-			rows[i]!.pose.yaw
+			row.pose.yaw
 		);
 		const at = i * POINT_LIGHT_FLOATS;
 		lights[at] = pos[12]!;
 		lights[at + 1] = pos[13]!;
 		lights[at + 2] = pos[14]!;
-		lights[at + 3] = light.attenuation;
+		lights[at + 3] = light.attenuationConstant ?? 0;
 		lights[at + 4] = light.ambient[0]!;
 		lights[at + 5] = light.ambient[1]!;
 		lights[at + 6] = light.ambient[2]!;
+		lights[at + 7] = light.attenuation;
 		lights[at + 8] = light.diffuse[0]!;
 		lights[at + 9] = light.diffuse[1]!;
 		lights[at + 10] = light.diffuse[2]!;
@@ -235,6 +252,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		return random.range( 0, 32768 );
 	}
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
+	// The current scene's authored per-block dungeon lights
+	// (dungeonLights()); rows index it by their own dungeonBlock.
+	let blockLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
 	const models = new Map<string, {
@@ -1008,6 +1028,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		readonly continuation: boolean;
 		readonly dynamicAnimation: boolean;
 		readonly frameActors: readonly CharacterActor[];
+		readonly dungeonLights: readonly (readonly DungeonBlockLight[])[] | undefined;
 		// The emission cycle of each clocked actor (sampleFrameActors).
 		readonly cycles: ReadonlyMap<number, number>;
 		readonly byGid: ReadonlyMap<number, CharacterActor>;
@@ -2388,8 +2409,11 @@ the next full prepare pass, so this may run between frames.
 		// one containing only particles/ribbons needs no scratch writes.
 		if ( !group.streamsPrepared ) {
 			group.opacities = group.fading ? fillRowOpacities( rowStreams, group.rows, frame.opacity ) : undefined;
-			group.pointLights = !frame.preview && group.rows.some( row => row.pointLight ) ?
-				fillRowPointLights( rowStreams, group.rows, frame.origin ) :
+			group.pointLights = !frame.preview && group.rows.some( row =>
+					row.pointLight ||
+					row.dungeonBlock !== undefined && !!frame.dungeonLights?.[row.dungeonBlock]?.length
+				) ?
+				fillRowPointLights( rowStreams, group.rows, frame.origin, frame.dungeonLights ) :
 				undefined;
 			group.streamsPrepared = true;
 		}
@@ -3200,6 +3224,17 @@ the next full prepare pass, so this may run between frames.
 		},
 		/*
 		================
+		dungeonLights
+
+		Publish the current scene's authored per-block dungeon lights;
+		rows standing in a block take its nearest light at row build.
+		================
+		*/
+		dungeonLights( value: readonly (readonly DungeonBlockLight[])[] | undefined ) {
+			blockLights = value;
+		},
+		/*
+		================
 		deferredPlan
 
 		Build deferred effect queries from the current actor and particle state.
@@ -3315,6 +3350,7 @@ the next full prepare pass, so this may run between frames.
 				continuation,
 				dynamicAnimation,
 				frameActors,
+				dungeonLights: blockLights,
 				cycles,
 				byGid,
 				chains,

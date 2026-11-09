@@ -176,6 +176,29 @@ export interface WorldEnvironment {
 }
 /*
 ================
+DungeonBlockLight
+
+One authored Light1 point light of a dungeon block (DunBlockLightEntry,
+CRTDunBlock_ReadFromArchive 0x00AD8090), in the region's own coordinate
+frame: the position CRTDunBlock_FindNearestPointLight (0x00AD3C30)
+measures against, the authored diffuse/ambient/specular triplets, the
+range the character channel does not consume, and the attenuation pair
+[constant, linear]. The ambient triplet is authored; the 1/1.67 divisor
+RenderLight_ApplyLight1 (0x00A5A7F0) applies is taken when a light is
+bound to an actor, not here.
+================
+*/
+export interface DungeonBlockLight {
+	readonly name: string;
+	readonly position: readonly [number, number, number];
+	readonly diffuse: readonly [number, number, number];
+	readonly ambient: readonly [number, number, number];
+	readonly specular: readonly [number, number, number];
+	readonly range: number;
+	readonly attenuation: readonly [number, number];
+}
+/*
+================
 WorldScene
 ================
 */
@@ -184,6 +207,7 @@ export interface WorldScene {
 	readonly soundTerrain?: readonly import("@/engine/foundation/audio/terrain-sounds").SoundTerrain[];
 	readonly dungeonVisibility?: readonly (readonly number[])[];
 	readonly dungeonAmbient?: readonly number[];
+	readonly dungeonLights?: readonly (readonly DungeonBlockLight[])[];
 	readonly waterBump?: string;
 	readonly flareTextures?: readonly string[];
 	readonly starRandomState?: number;

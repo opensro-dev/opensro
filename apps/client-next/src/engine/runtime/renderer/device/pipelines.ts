@@ -503,10 +503,17 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  let ambientFactor=select(material.ambient.rgb,o.materialTint,material.policy.w>0.5);
 	var illumination=diffuseFactor*env.diffuse.rgb*max(0.0,dot(lightingNormal,lightDirection()))+env.ambient.rgb*ambientFactor*material.lighting.x;
  let light=instances[i];
- if(nativeCharacterLighting&&(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0)))){
+ // The row's point light is a native per-actor input, not a mode: a
+ // bound descriptor lights (RenderLight_ApplyLight1 0xA5A7F0), a zero
+ // row disables, exactly as the dungeon pass binds each block's nearest
+ // authored light per entity. The falloff is the descriptor's quadratic
+ // 1/(c + l*d + q*d*d) over the three packed w terms; effect lights pack
+ // c = q = 0 and keep their authored 1/(k*d).
+ if(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0))){
   let localLight=transpose(cofactors)*(light.pointPosition.xyz-instance[3].xyz)/select(1.0,determinant,determinant!=0.0);
   let delta=localLight-p.xyz;let distance=length(delta);let normalObject=select(n.xyz,normalize(n.xyz),material.skin.x!=0);
-  let lambert=select(0.0,max(0.0,dot(normalObject,delta/max(distance,0.000001)))/max(light.pointPosition.w*distance,0.000001),distance>0.0);
+  let falloff=1.0/max(light.pointPosition.w+light.pointAmbient.w*distance+light.pointDiffuse.w*distance*distance,0.000001);
+  let lambert=select(0.0,max(0.0,dot(normalObject,delta/max(distance,0.000001)))*falloff,distance>0.0);
   illumination+=light.pointAmbient.rgb+diffuseFactor*light.pointDiffuse.rgb*lambert;
  }
  o.objectLighting=clamp(illumination,vec3f(0),vec3f(1));
@@ -572,8 +579,8 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same
  // terms per pixel from the interpolated, skinned world normal. The vertex
- // point-light path (NATIVE_CHARACTER_LIGHTING) stays per-vertex: it is a
- // compatibility mode of its own and is off.
+ // point-light term above stays per-vertex: the row carries the bound
+ // descriptor and per-vertex is how the native pass consumes it.
  if(env.stages2.z>0.5&&material.lighting.y>0.5){
   surfaceLight=illumination;
  }
