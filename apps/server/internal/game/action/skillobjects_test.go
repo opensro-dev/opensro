@@ -70,9 +70,19 @@ func TestQuestTrapConsumesOnlyAfterAdmissionAndCapturesOnce(t *testing.T) {
 	if len(objects) != 1 || c.MissionInventory[0].StackCount != 1 || result.Frames[0].Payload[0] != 1 {
 		t.Fatal("placement did not atomically admit and consume", result, objects)
 	}
-	rt.HandleItemUse(testDivision, c, request)
+	overlap := rt.HandleItemUse(testDivision, c, request)
 	if c.MissionInventory[0].StackCount != 1 || len(rt.SkillObjects.Snapshot()) != 1 {
 		t.Fatal("overlapping placement bypassed the native qest gate")
+	}
+	// The refusal is told to the player: 0x3037 (CANNOT_MAKE_TRAP), then the item-use failure.
+	told := false
+	for _, frame := range overlap.Frames {
+		if frame.Opcode == wire.OpSkillCastResult && len(frame.Payload) == 2 && frame.Payload[0] == 2 && frame.Payload[1] == 0x37 {
+			told = true
+		}
+	}
+	if !told {
+		t.Fatalf("an overlapping placement said nothing: %+v", overlap.Frames)
 	}
 	object := objects[0]
 	rt.Monsters.SetRandomSource(func() float64 { return 0 })
