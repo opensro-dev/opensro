@@ -28,11 +28,6 @@ const (
 	defaultWorldDefinition instance.DefinitionID = 1
 )
 
-type populationKey struct {
-	division string
-	lease    instance.Lease
-}
-
 /*
 ================
 CurrentTimeMillis
@@ -68,6 +63,7 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 		s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 	}
 	s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+	s.popKeysMemo = nil
 	return lease, status
 }
 
@@ -103,6 +99,7 @@ func (s *MonsterState) OpenInstanceLayer(division string, defID instance.Definit
 			s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 		}
 		s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+		s.popKeysMemo = nil
 		return lease, true
 	}
 	return instance.Lease{}, false
@@ -160,6 +157,7 @@ func (s *MonsterState) ReleasePopulation(division string, lease instance.Lease) 
 	}
 	delete(s.worldPopulations, key)
 	delete(s.retirementRequests, key)
+	s.popKeysMemo = nil
 	return true
 }
 
@@ -975,26 +973,4 @@ func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gi
 		state.instances.set(gid, actor)
 	}
 	return actor, true
-}
-
-/*
-================
-populationKeys
-================
-*/
-func (s *MonsterState) populationKeys() []populationKey {
-	keys := make([]populationKey, 0, len(s.divs)+len(s.worldPopulations))
-	for division, state := range s.divs {
-		keys = append(keys, populationKey{division, state.lease})
-	}
-	for key := range s.worldPopulations {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].division != keys[j].division {
-			return keys[i].division < keys[j].division
-		}
-		return keys[i].lease.Generation < keys[j].lease.Generation
-	})
-	return keys
 }

@@ -124,10 +124,14 @@ const (
 // folded once per session binding, instead of a string rebuilt on
 // every read (#2033), measured 17,790 B / 93 allocs; with the
 // elemental arm's capture reading on the stack read guard instead
-// of the callback door (#2033), measured 17,214 B / 75 allocs.
+// of the callback door (#2033), measured 17,214 B / 75 allocs; with
+// the population doors' sorted key list cached on the monster
+// state and rebuilt only when a population registers or releases,
+// instead of rebuilt and re-sorted on every door (#2033), measured
+// 16,413 B / 66 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 19000
-	tickBudgetAllocsPerTick = 83
+	tickBudgetBytesPerTick  = 18100
+	tickBudgetAllocsPerTick = 73
 )
 
 /*

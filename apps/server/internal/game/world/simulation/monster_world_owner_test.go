@@ -63,6 +63,79 @@ func TestDivisionStateMemoMatchesMap(t *testing.T) {
 
 /*
 ================
+TestPopulationKeysMemoTracksMembership
+
+populationKeys answers the sorted (division, lease) list from its
+cache: a repeated read returns the same backing, a registration or
+release rebuilds it (the earlier list is left untouched for the
+readers still ranging it), and a released lease is never listed
+again (#2033).
+================
+*/
+func TestPopulationKeysMemoTracksMembership(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(nil, nil))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	if got := s.populationKeys(); len(got) != 0 {
+		t.Fatalf("keys before any division: %+v", got)
+	}
+	s.StartDivision("b")
+	s.StartDivision("a")
+	keys := s.populationKeys()
+	if len(keys) == 0 {
+		t.Fatal("no keys for two open divisions")
+	}
+	for i := 1; i < len(keys); i++ {
+		prev, cur := keys[i-1], keys[i]
+		if prev.division > cur.division || prev.division == cur.division && prev.lease.Generation > cur.lease.Generation {
+			t.Fatalf("keys out of order at %d: %+v before %+v", i, prev, cur)
+		}
+	}
+	for _, name := range []string{"a", "b"} {
+		found := false
+		for _, key := range keys {
+			found = found || key.division == name && key.lease == s.divs[name].lease
+		}
+		if !found {
+			t.Fatalf("division %q default lease missing from %+v", name, keys)
+		}
+	}
+	if again := s.populationKeys(); &again[0] != &keys[0] {
+		t.Fatal("second read rebuilt the cached list")
+	}
+
+	lease, status := s.AllocatePopulation("a", instance.Pack(10, 1))
+	if status != instance.Success {
+		t.Fatal(status)
+	}
+	opened := s.populationKeys()
+	found := false
+	for _, key := range opened {
+		found = found || key.division == "a" && key.lease == lease
+	}
+	if !found {
+		t.Fatalf("allocated lease missing from %+v", opened)
+	}
+	if len(keys) >= len(opened) {
+		t.Fatal("the pre-allocation list changed under its readers")
+	}
+	for _, key := range keys {
+		if key.division == "a" && key.lease == lease {
+			t.Fatal("the pre-allocation list gained the new lease")
+		}
+	}
+
+	if !s.ReleasePopulation("a", lease) {
+		t.Fatal("release refused a live lease")
+	}
+	for _, key := range s.populationKeys() {
+		if key.division == "a" && key.lease == lease {
+			t.Fatalf("released lease still listed in %+v", s.populationKeys())
+		}
+	}
+}
+
+/*
+================
 TestDivisionOpensEveryPermanentWorld
 
 The retail shard manager opens layer 1 of every type-0 RefGameWorld at boot,
