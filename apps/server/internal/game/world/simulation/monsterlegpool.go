@@ -637,7 +637,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 		}
 	}
 	deliverMonsterTargetFrames(work.division, plan.targeted, work.sessions, work.push)
-	ops.vanishInSafeZone(work.division, gid, armed.stepSlot, armed.stepMonsterSlot, work.nowMs)
+	ops.vanishInSafeZone(work.division, &actor, work.nowMs)
 }
 
 /*
