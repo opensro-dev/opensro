@@ -227,6 +227,10 @@ func TestTrialCommanderDeathPassesAtOnceAndAnEmptyArenaFails(t *testing.T) {
 	if countOf(w.spawnedCodes(), "MOB_QT_CH_SOLDIER_01_2") != archers {
 		t.Fatal("archers kept coming after the commander fell")
 	}
+	// The pass sends the resident home ten seconds later, and the arena closes with it.
+	if len(w.returned) != 1 || len(w.closed) != 1 {
+		t.Fatalf("after the pass: returned %v, closed %v, want one return and one close", w.returned, w.closed)
+	}
 
 	// A second player is dead before the commander appears: the test fails and ends after 15 s.
 	w2 := newHwanWorld(t)
@@ -351,5 +355,48 @@ func TestHwanTrialRegionsAreTheTwoIsolatedArenas(t *testing.T) {
 	got := HwanTrialRegions()
 	if len(got) != 2 || got[0] != 22966 || got[1] != 22454 {
 		t.Fatalf("trial regions %v, want [22966 22454]", got)
+	}
+}
+
+/*
+================
+TestTrialRetriesARefusedReturnHomeBeforeClosing
+
+A return that the world refuses is tried again every few seconds while the arena stays
+open; once it works the arena closes. After the last try the arena closes anyway.
+================
+*/
+func TestTrialRetriesARefusedReturnHomeBeforeClosing(t *testing.T) {
+	for _, refusals := range []int{2, 99} {
+		w := newHwanWorld(t)
+		c := w.player(t, "Killer", 95, "QNO_CH_HWAN_1_1")
+		w.enter(t, c, "QNO_CH_HWAN_1_1", "NPC_CH_GENARAL")
+		w.advance(10_000)
+		w.advance(0)
+		tries := 0
+		w.rt.InstanceReturn = func(c *enterworld.Character) bool {
+			tries++
+			if tries <= refusals {
+				return false
+			}
+			w.returned = append(w.returned, c.Name)
+			return true
+		}
+		c.World = insideLayer(w)
+		w.rt.KillUpdater()(c, "MOB_QT_CH_SOLDIER_01_1", 0)
+		w.advance(1_000)
+		w.advance(10_000)
+		if len(w.closed) != 0 {
+			t.Fatalf("refusals=%d: the arena closed on the first refusal", refusals)
+		}
+		for step := 0; step < 8; step++ {
+			w.advance(hwanReturnRetryMs)
+		}
+		if refusals == 2 && (len(w.returned) != 1 || len(w.closed) != 1) {
+			t.Fatalf("returned %v, closed %v: want one return and one close once the world accepts it", w.returned, w.closed)
+		}
+		if refusals == 99 && (tries != hwanReturnTries || len(w.closed) != 1) {
+			t.Fatalf("tries %d, closed %v: want %d tries and then a close", tries, w.closed, hwanReturnTries)
+		}
 	}
 }

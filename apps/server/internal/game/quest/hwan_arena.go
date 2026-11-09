@@ -43,6 +43,8 @@ import (
 	"strings"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -68,6 +70,9 @@ const (
 	hwanRingMin       = 90
 	hwanRingSpan      = 10
 	hwanMonsterLifeMs = hwanLayerLifeMs
+	// A return home that was refused is tried again after this long, up to hwanReturnTries times.
+	hwanReturnRetryMs = 3_000
+	hwanReturnTries   = 5
 )
 
 type hwanArenaKind uint8
@@ -171,6 +176,7 @@ type hwanLayer struct {
 	killedBerserk bool
 	failed        bool
 	ended         bool
+	returnTries   int
 }
 
 type hwanProgramme struct {
@@ -346,19 +352,31 @@ func (rt *Runtime) hwanUpdate(event InstanceEvent) {
 	}
 }
 
-// hwanEnd sends the resident home; the leave event closes the layer.
-func (rt *Runtime) hwanEnd(event InstanceEvent, layer *hwanLayer) {
+// hwanEnd sends the resident home; the leave event closes the layer. It reports false
+// while a refused return is still being retried: the layer then stays open, so the
+// player is never left standing in a closed arena.
+func (rt *Runtime) hwanEnd(event InstanceEvent, layer *hwanLayer) bool {
 	rt.hwan.mu.Lock()
 	if layer.ended {
 		rt.hwan.mu.Unlock()
-		return
+		return true
 	}
 	lease := layer.lease
 	rt.hwan.mu.Unlock()
-	if character := rt.hwanCharacter(event.Division, layer.name); character != nil && rt.InstanceReturn != nil {
-		rt.InstanceReturn(character)
+	if character := rt.hwanCharacter(event.Division, layer.name); character == nil {
+		log.WithFields(log.Fields{"character": layer.name, "quest": layer.arena.quest()}).Warn("hwan arena: the resident is not in the world; closing the arena")
+	} else if rt.InstanceReturn != nil {
+		if rt.InstanceReturn(character) {
+			log.WithFields(log.Fields{"character": layer.name, "quest": layer.arena.quest()}).Info("hwan arena: the resident is back home")
+		} else {
+			layer.returnTries++
+			log.WithFields(log.Fields{"character": layer.name, "quest": layer.arena.quest(), "try": layer.returnTries}).Warn("hwan arena: the return home was refused")
+			if layer.returnTries < hwanReturnTries {
+				return false
+			}
+		}
 	}
-	// A resident who could not be returned (gone) still closes the layer.
+	// A resident who could not be returned (gone, or out of tries) still closes the layer.
 	rt.hwan.mu.Lock()
 	done := layer.ended
 	layer.ended = true
@@ -369,6 +387,7 @@ func (rt *Runtime) hwanEnd(event InstanceEvent, layer *hwanLayer) {
 			rt.InstanceClose(lease)
 		}
 	}
+	return true
 }
 
 // hwanSpawn places one arena monster on the ring around a centre of the layer.
@@ -436,8 +455,8 @@ func (rt *Runtime) hwanTrialUpdate(event InstanceEvent, layer *hwanLayer, age in
 			layer.eventMs, layer.step = age+hwanPassReturnMs, 4
 		}
 	case 4:
-		if age >= layer.eventMs {
-			rt.hwanEnd(event, layer)
+		if age >= layer.eventMs && !rt.hwanEnd(event, layer) {
+			layer.eventMs = age + hwanReturnRetryMs
 		}
 	}
 }
@@ -503,8 +522,8 @@ func (rt *Runtime) hwanRitualUpdate(event InstanceEvent, layer *hwanLayer, age i
 			layer.eventMs, layer.step = age, 4
 		}
 	case 4:
-		if age >= layer.eventMs {
-			rt.hwanEnd(event, layer)
+		if age >= layer.eventMs && !rt.hwanEnd(event, layer) {
+			layer.eventMs = age + hwanReturnRetryMs
 		}
 	}
 }
