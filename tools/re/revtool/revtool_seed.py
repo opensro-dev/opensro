@@ -553,6 +553,12 @@ def release_notes(pins):
 	return "\n".join(lines) + "\n"
 
 
+# A seed release is a download shelf, never the repository's release:
+# gh marks a new release Latest by default, which is how
+# revtool-seed-2026-11-09 became the repo's Latest (#2993 follow-up).
+SEED_CREATE_FLAGS = ["--latest=false"]
+
+
 def publish_assets(manifest_path, seed_dir, tag, repo, run=_run_gh, dry_run=False):
 	"""Verify the pinned seeds, then create (once) and fill the release.
 
@@ -576,7 +582,7 @@ def publish_assets(manifest_path, seed_dir, tag, repo, run=_run_gh, dry_run=Fals
 	base = ["gh", "release"]
 	if dry_run:
 		print(f"[dry-run] {' '.join(base + ['view', tag, '--repo', repo])}")
-		print(f"[dry-run] {' '.join(base + ['create', tag, '--repo', repo, '--title', tag])}")
+		print(f"[dry-run] {' '.join(base + ['create', tag, '--repo', repo, '--title', tag] + SEED_CREATE_FLAGS)}")
 		print(f"[dry-run] {' '.join(base + ['upload', tag, '--repo', repo] + files)}")
 		return f"https://github.com/{repo}/releases/tag/{tag}"
 	rc, out, _ = run(base + ["view", tag, "--repo", repo, "--json", "assets"])
@@ -589,7 +595,7 @@ def publish_assets(manifest_path, seed_dir, tag, repo, run=_run_gh, dry_run=Fals
 			rc, out, err = run(base + [
 				"create", tag, "--repo", repo, "--title",
 				f"revtool seed {tag.removeprefix('revtool-seed-')}",
-				"--notes-file", notes_path])
+				"--notes-file", notes_path] + SEED_CREATE_FLAGS)
 		finally:
 			os.remove(notes_path)
 		if rc != 0:
