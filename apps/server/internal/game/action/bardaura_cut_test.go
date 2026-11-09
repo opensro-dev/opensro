@@ -139,3 +139,34 @@ func TestBardAuraIgnoresHitsOnMembers(t *testing.T) {
 		t.Fatal("a hit on a member cut its copy of the aura")
 	}
 }
+
+/*
+================
+TestBardDanceIgnoresLinkedShares
+
+A Pain Quota (or fence) share lands on the dancing Bard as a deferred
+damage tick, not as a hit: with a masked attack and a roll that always
+cuts, the Bard takes the HP yet keeps dancing.
+================
+*/
+func TestBardDanceIgnoresLinkedShares(t *testing.T) {
+	rt, clock, c, _ := marchFixture(t, guardTambourID)
+	b := rivalBard(t, rt, c, danceOfValorID)
+	mustCast(t, rt, clock, c, guardTambourID)
+	bardTick(rt, clock, time.Millisecond)
+	mustCast(t, rt, clock, b, danceOfValorID)
+	hp := *b.CurrentHP
+
+	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	skill := enterworld.SkillRow{ID: 1, Attack: enterworld.SkillAttack{Flags: bardHitFlags}}
+	moves := []linkedMove{{gid: enterworld.ObjectIDForCharacter(b), amount: 5}}
+	rt.strikeLinkedShares(testDivision, 9001, deathKiller{}, skill, moves, clock.NowMs(), rt.tickDoors())
+	bardTick(rt, clock, time.Millisecond)
+	bardTick(rt, clock, time.Millisecond)
+	if *b.CurrentHP != hp-5 {
+		t.Fatalf("bard HP %d, want %d", *b.CurrentHP, hp-5)
+	}
+	if !hasSkillEffect(rt, b.Name, danceOfValorID) {
+		t.Fatal("a linked share cut the Bard's dance")
+	}
+}
