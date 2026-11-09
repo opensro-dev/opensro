@@ -114,9 +114,12 @@ const (
 // bondSource's escaping answer - an admitted bear whose cooldown
 // runs, or with nobody dead in band to revive, and any owner whose
 // pet is not even out, never pays for the call or its companion
-// copy (#2033), measured 19,651 B / 170 allocs.
+// copy (#2033), measured 19,651 B / 170 allocs; with the
+// natural-recovery pass refilling its due-key scratch under the
+// recovery lock instead of rebuilding the list every tick (#2033),
+// measured 19,516 B / 170 allocs.
 const (
-	tickBudgetBytesPerTick  = 21700
+	tickBudgetBytesPerTick  = 21500
 	tickBudgetAllocsPerTick = 187
 )
 

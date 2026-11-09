@@ -141,6 +141,40 @@ func TestNaturalRecoveryMovementPostureCombatAndDeath(t *testing.T) {
 TestNaturalRecoveryClampReplacementAndOverrun
 ================
 */
+/*
+================
+TestAdvanceNaturalRecoveryScratchDropsStaleKeys
+
+The recovery pass refills its due-key scratch every tick (#2033):
+a forgotten session leaves no key behind for the next pass, and a
+session bound again afterwards is found again.
+================
+*/
+func TestAdvanceNaturalRecoveryScratchDropsStaleKeys(t *testing.T) {
+	c := testCharacter()
+	hp, mp := enterworld.DerivedMaxHP(c)-1, enterworld.DerivedMaxMP(c)-1
+	c.CurrentHP = &hp
+	c.CurrentMP = &mp
+	rt, clock := newTestRuntime(c, testItems())
+	rt.BindRecoverySession(testDivision, c, 1)
+	now := clock.NowMs() + 4000
+	rt.advanceNaturalRecovery(now)
+	want := recoveryKey{testDivision, "asd2"}
+	if len(rt.recoveryKeys) != 1 || rt.recoveryKeys[0] != want {
+		t.Fatalf("scratch holds %v due keys, want [%v]", rt.recoveryKeys, want)
+	}
+	rt.forgetRecoverySession(testDivision, c.Name)
+	rt.advanceNaturalRecovery(now + 60_000)
+	if got := len(rt.recoveryKeys); got != 0 {
+		t.Fatalf("scratch holds %d keys after the session was forgotten, want 0", got)
+	}
+	rt.BindRecoverySession(testDivision, c, 2)
+	rt.advanceNaturalRecovery(now + 64_000)
+	if len(rt.recoveryKeys) != 1 || rt.recoveryKeys[0] != want {
+		t.Fatalf("scratch holds %v due keys after rebind, want [%v]", rt.recoveryKeys, want)
+	}
+}
+
 func TestNaturalRecoveryClampReplacementAndOverrun(t *testing.T) {
 	c := testCharacter()
 	hp, mp := enterworld.DerivedMaxHP(c)-1, enterworld.DerivedMaxMP(c)-1
