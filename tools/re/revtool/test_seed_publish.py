@@ -97,12 +97,16 @@ class PublishTest(unittest.TestCase):
 		self.assertEqual(gh.calls, [])
 		self.assertIn("verified revtool-seed-client.xz", text)
 		self.assertIn("[dry-run] gh release create", text)
+		create = next(line for line in text.splitlines() if line.startswith("[dry-run] gh release create"))
+		self.assertIn("--latest=false", create.split())
 		self.assertEqual(url, "https://github.com/opensro-dev/opensro/releases/tag/revtool-seed-2026-11-09")
 
 	def test_creates_then_uploads_when_the_release_is_missing(self):
 		gh = FakeGh(exists=False)
 		self.publish(gh)
 		self.assertEqual([c[2] for c in gh.calls], ["view", "create", "upload"])
+		# A seed release never becomes the repository's Latest.
+		self.assertIn("--latest=false", gh.calls[1])
 		upload = gh.calls[-1]
 		self.assertIn("revtool-seed-2026-11-09", upload)
 		self.assertEqual([Path(p).name for p in upload if p.endswith(".xz")],
