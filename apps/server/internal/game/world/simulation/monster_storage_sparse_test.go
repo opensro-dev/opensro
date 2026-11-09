@@ -328,3 +328,41 @@ func TestGetInWorldFinishesExpiredSummonActionOnce(t *testing.T) {
 		t.Fatalf("foreign world read the clock or answered: ok %v reads %d", ok, reads)
 	}
 }
+
+/*
+================
+TestHotRowPtrReadsInPlace
+
+The scheduler's pointer read answers the row where it sits: the
+fields are the stored row's, a re-set is visible to the next read,
+a slot that no longer names the gid misses, and removeHot's swap
+leaves the moved row readable at its new slot while the removed
+gid misses (#3027).
+================
+*/
+func TestHotRowPtrReadsInPlace(t *testing.T) {
+	s := newMonsterStorage(nil)
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 30, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	s.set(3, monster.Instance{Gid: 3, CurrentHP: 7, Ref: monster.MonsterRef{MaxHP: 300, RefObjID: 3}})
+
+	row, ok := s.hotRowPtrAt(0, 1)
+	if !ok || row == nil || row.currentHP != 30 {
+		t.Fatalf("slot read = %+v (ok %v)", row, ok)
+	}
+	if _, ok := s.hotRowPtrAt(0, 3); ok {
+		t.Fatal("slot read answered for the wrong gid")
+	}
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 31, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	row, ok = s.hotRowPtr(1)
+	if !ok || row.currentHP != 31 {
+		t.Fatalf("re-set read = %+v (ok %v)", row, ok)
+	}
+	s.remove(1)
+	row, ok = s.hotRowPtr(3)
+	if !ok || row == nil || row.currentHP != 7 {
+		t.Fatalf("swapped read = %+v (ok %v)", row, ok)
+	}
+	if _, ok := s.hotRowPtr(1); ok {
+		t.Fatal("removed gid still reads hot")
+	}
+}

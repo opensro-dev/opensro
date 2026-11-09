@@ -377,6 +377,42 @@ func (s *monsterStorage) hotRowAt(slot uint32, gid uint32) (residentMonster, boo
 
 /*
 ================
+hotRowPtrAt
+
+The scheduler's read of the hot row in place. hotRowAt copies the
+216-byte row out, and the due computation reads five scalars and,
+rarely, the nest off it; the detach guard reads the step's mover
+the same way. The pointer is a working read only: the caller
+holds the state lock, reads, and never retains it - a set landing
+a new row or removeHot's swap can move what it names (#3027). A
+miss answers nil, and the scheduler reads a nil row as the zero
+row hotRowAt's miss used to hand it.
+================
+*/
+func (s *monsterStorage) hotRowPtrAt(slot uint32, gid uint32) (*residentMonster, bool) {
+	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
+		return nil, false
+	}
+	return &s.hot[slot].row, true
+}
+
+/*
+================
+hotRowPtr
+
+hotRowPtrAt resolved by gid.
+================
+*/
+func (s *monsterStorage) hotRowPtr(gid uint32) (*residentMonster, bool) {
+	slot, ok := s.hotSlotOf(gid)
+	if !ok {
+		return nil, false
+	}
+	return &s.hot[slot].row, true
+}
+
+/*
+================
 hotRowSlot
 
 hotRow with the dense slot the row sits in: the behaviour batch
