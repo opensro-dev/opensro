@@ -498,6 +498,9 @@ def cmd_seed_verify(args, con):
 	if len(blob) > SEED_SIZE_LIMIT:
 		raise SystemExit("error: seed is over the size cap")
 	manifest = args.manifest
+	if manifest == "none":
+		manifest = False
+		print("  manifest: not checked (--manifest none; an unreleased build)")
 	if manifest is None and os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_NAME)):
 		manifest = os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_NAME)
 	if manifest:
@@ -507,7 +510,10 @@ def cmd_seed_verify(args, con):
 		if pin is None:
 			print(f"  manifest: no pin for {os.path.basename(args.seed)} (unreleased seed)")
 		elif pin["sha256"] != hashlib.sha256(blob).hexdigest() or pin["bytes"] != len(blob):
-			raise SystemExit("error: seed bytes do not match the manifest pin")
+			raise SystemExit(
+				f"error: seed bytes do not match the released pin ({pin['sha256'][:12]}, "
+				f"{pin['bytes']} bytes). A downloaded seed must match it; a freshly built one "
+				f"is not the released seed - verify it with --manifest none")
 		else:
 			print("  manifest: pin matches")
 	binary = args.seed_binary or args.binary

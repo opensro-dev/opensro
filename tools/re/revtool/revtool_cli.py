@@ -440,7 +440,7 @@ def build_parser():
 	sv.add_argument("--binary", dest="seed_binary", default=None,
 					help="retail binary to hash + scan (default: the top-level --binary)")
 	sv.add_argument("--manifest", default=None,
-					help="pin manifest (default: seed-manifest.json beside revtool)")
+					help="pin manifest (default: seed-manifest.json beside revtool; 'none' for an unreleased build)")
 	sv.set_defaults(handler=cmd_seed_verify)
 	sa = ssub.add_parser("apply", help="define + name the seed's functions in rizin, save an .rzdb")
 	sa.add_argument("seed", help="seed file")

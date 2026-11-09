@@ -139,6 +139,26 @@ class NameMergeTests(unittest.TestCase):
 			[0x403000, "CIFMainFrame_Draw"], [0x405000, "CIFGuild_OnCreate"]])
 		self.assertEqual(counts, {"overlay": 1, "bn": 1, "dump": 0, "anonymous": 1, "bn_only": 1})
 
+	def test_verify_of_a_rebuilt_seed_points_at_manifest_none(self):
+		out = os.path.join(self.dir.name, "revtool-seed-client.xz")
+		build = SimpleNamespace(db=self.db, ledger=None, binary=None, seed_binary=None,
+			target="client", out=out, names=None)
+		with redirect_stdout(io.StringIO()):
+			revtool_seed.cmd_seed_build(build, self.con)
+		pins = os.path.join(self.dir.name, "pins.json")
+		Path(pins).write_text(json.dumps({"assets": [
+			{"file": "revtool-seed-client.xz", "sha256": "00" * 32, "bytes": 1}]}), encoding="utf-8")
+		verify = SimpleNamespace(seed=out, seed_binary=None, binary=None, manifest=pins)
+		with redirect_stdout(io.StringIO()):
+			with self.assertRaises(SystemExit) as caught:
+				revtool_seed.cmd_seed_verify(verify, self.con)
+		self.assertIn("--manifest none", str(caught.exception))
+		verify.manifest = "none"
+		buf = io.StringIO()
+		with redirect_stdout(buf):
+			self.assertEqual(revtool_seed.cmd_seed_verify(verify, self.con), 0)
+		self.assertIn("not checked", buf.getvalue())
+
 	def test_name_export_for_another_target_is_refused(self):
 		with self.assertRaises(revtool_seed.SeedError):
 			revtool_seed.load_bn_names(self._names([], target="server"), "client")
