@@ -3994,8 +3994,14 @@ state here before a command can claim a native wire conversation.
 				const admission = command.kind === "premium-command" ?
 					{ ...countJobs.admit( command.command, facts ), command: command.command } :
 					countJobs.admitRow( command.packageRefObjId, command.itemRefObjId, facts );
-				if ( !admission ) return null;
+				if ( !admission ) {
+					console.warn( `[SRO count-job] ${command.kind} sent nothing: no usable row for this item` );
+					return null;
+				}
 				if ( "code" in admission ) {
+					console.warn(
+						`[SRO count-job] ${command.kind} refused by the client's own check, code ${admission.code}`
+					);
 					const notice = constantNativeNotice( 1, admission.code );
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					return null;
