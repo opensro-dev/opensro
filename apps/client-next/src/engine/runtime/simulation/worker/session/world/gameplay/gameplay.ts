@@ -3991,6 +3991,7 @@ state here before a command can claim a native wire conversation.
 					transportOut: [ ...cosRecords.values() ].some( c => c.band === 2 && !c.dead ),
 					pvpState: local?.pvpState ?? 0
 				};
+				console.info( `[SRO count-job] ${command.kind} reached gameplay` );
 				const admission = command.kind === "premium-command" ?
 					{ ...countJobs.admit( command.command, facts ), command: command.command } :
 					countJobs.admitRow( command.packageRefObjId, command.itemRefObjId, facts );
