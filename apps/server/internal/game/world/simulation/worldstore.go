@@ -180,6 +180,32 @@ func (st *WorldStore) SnapshotExisting(key string) (WorldState, bool) {
 
 /*
 ================
+SnapshotExistingInto
+
+SnapshotExisting written into a retained slot: the same lock, the same
+ground advance and the same no-seed refusal, with the slot's Ground and
+MoveSegment buffers refilled instead of replaced (CloneWorldStateInto).
+A per-tick reader that consumes the world before the next fill - the
+judged pet tick (petjudged.go) - keeps one slot per pet and pays no
+clone per tick. The slot's pointees stay private to the current fill,
+exactly as CloneWorldStateInto contracts: never retain them.
+================
+*/
+func (st *WorldStore) SnapshotExistingInto(key string, dst *WorldState) bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state, ok := st.states[key]
+	if !ok {
+		return false
+	}
+	st.advanceGroundWalk(key, state)
+	CloneWorldStateInto(*state, dst)
+	return true
+}
+
+/*
+================
 MovementCurrent
 
 MovementCurrent validates a queued movement at delivery, without seeding a

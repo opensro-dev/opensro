@@ -180,7 +180,8 @@ type petCombatStep struct {
 	state    *petSession
 	snapshot *enterworld.Character
 	// ownerWorld is the owner world a judged tick already read without
-	// seeding (WorldStore.SnapshotExisting, #2139); the formation lane
+	// seeding, refilled in the session's retained slot
+	// (WorldStore.SnapshotExistingInto, #2139); the formation lane
 	// uses it instead of seeding from snapshot. Nil on the copy path,
 	// which seeds exactly as before.
 	ownerWorld *simulation.WorldState

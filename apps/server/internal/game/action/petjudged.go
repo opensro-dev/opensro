@@ -6,9 +6,10 @@ petjudged.go - the pet follow tick on door-read facts
 advancePet's fast path for an admitted follow tick (#2139): the follower
 is already bound and nothing must commit through the owner record, so
 the tick finishes on facts read inside the character door
-(readPetTickFacts) and the owner world WorldStore.SnapshotExisting holds,
-never a copy of the owner. Every other tick abstains to advancePet's
-copy path, which owns the bind, battles, roars, pickups and refusals.
+(readPetTickFacts) and the owner world WorldStore.SnapshotExistingInto
+refills in the session's retained slot, never a copy of the owner.
+Every other tick abstains to advancePet's copy path, which owns the
+bind, battles, roars, pickups and refusals.
 
 ===========================================================================
 */
@@ -30,14 +31,16 @@ advancePet on door-read facts (readPetTickFacts), for the admitted
 ticks that finish without the owner record (#2139): the follower is
 already bound, no battle, roar or pickup is live, and the tick is the
 follow - its early stops included - in advancePet's own order. The
-owner's world comes from WorldStore.SnapshotExisting: seeding it
-would read the live record outside the character door, so a tick
-whose owner has no world entry yet abstains with everything else
+owner's world comes from WorldStore.SnapshotExistingInto, refilled
+into the session's retained slot and consumed inside this tick -
+seeding it would read the live record outside the character door,
+so a tick whose owner has no world entry yet abstains with everything else
 that must commit through the record - the bind, a battle, a roar, a
 pickup, a mercenary, a relocation, the refusals - and advancePet
 judges it on the companion copy exactly as before. The stuck answer stays lazy the
 same way: a stuck event raised by the judged step takes the copy
-only to answer it.
+only to answer it. The answer itself is built once per session and
+reads the tick's cells, so installing it allocates nothing.
 ================
 */
 func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
@@ -72,8 +75,8 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	if state.follower == nil || state.follower.GID() != key.gid || state.refObjID != pet.RefObjID {
 		return nil, false
 	}
-	ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(key.division, state.character.Name))
-	if !ok {
+	ownerWorld := &state.judgedOwnerWorld
+	if !rt.Worlds.SnapshotExistingInto(simulation.WorldKey(key.division, state.character.Name), ownerWorld) {
 		return nil, false
 	}
 	// Relocation and summons build new followers; every tick installs the one
@@ -89,20 +92,27 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 		state.tether = &simulation.Tether{Anchor: state.follower.Position(nowMs),
 			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
 	}
-	*answerStuck = func() []simulation.Frame {
-		if state.follower == nil || !state.follower.StuckPending() {
-			return nil
+	// The stuck answer is the session's own, built once: refresh the
+	// cells it reads, then install it. advancePet's deferred call runs
+	// it after this tick returns, exactly as the per-tick closure ran.
+	state.judgedStuckNowMs, state.judgedStuckTidWord = nowMs, ref.TidWord
+	if state.judgedStuckAnswer == nil {
+		state.judgedStuckAnswer = func() []simulation.Frame {
+			if state.follower == nil || !state.follower.StuckPending() {
+				return nil
+			}
+			snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, nil)
+			if snapshot == nil {
+				return nil
+			}
+			cos := snapshot.CompanionByGID(key.gid)
+			if cos == nil {
+				return nil
+			}
+			return rt.answerPetStuck(key, state, snapshot, cos, state.judgedStuckTidWord, state.judgedStuckNowMs)
 		}
-		snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, nil)
-		if snapshot == nil {
-			return nil
-		}
-		cos := snapshot.CompanionByGID(key.gid)
-		if cos == nil {
-			return nil
-		}
-		return rt.answerPetStuck(key, state, snapshot, cos, ref.TidWord, nowMs)
 	}
+	*answerStuck = state.judgedStuckAnswer
 	if state.displacement != nil {
 		state.roar = nil
 		if nowMs < state.displacement.untilMs {
@@ -122,9 +132,12 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	state.follower.SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
 	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	if rt.ConstrainMovement != nil {
-		constraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
-			return rt.ConstrainMovement(state.character.Name, from, to)
+		if state.judgedConstraint == nil {
+			state.judgedConstraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+				return rt.ConstrainMovement(state.character.Name, from, to)
+			}
 		}
+		constraint = state.judgedConstraint
 	}
 	if nowMs < state.wolf.howlHoldUntil {
 		return state.follower.Stop(nowMs), true
@@ -140,7 +153,7 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
 		*following = true
-		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: state.character, ownerWorld: &ownerWorld, pet: pet, ref: ref, run: run, constraint: constraint, nowMs: nowMs}), true
+		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: state.character, ownerWorld: ownerWorld, pet: pet, ref: ref, run: run, constraint: constraint, nowMs: nowMs}), true
 	}
 	return state.follower.Advance(ownerWorld.LiveSpawnAt(nowMs), float64(rt.cosPacedRun(ref, run)), nowMs, constraint), true
 }
