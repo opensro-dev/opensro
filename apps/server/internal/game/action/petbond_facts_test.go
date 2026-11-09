@@ -18,7 +18,10 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 )
 
 /*
@@ -149,5 +152,74 @@ func BenchmarkAdvancePetBondRefusedOwner(b *testing.B) {
 		if frames := rt.advancePetBond(key, state, 1_000_000); frames != nil {
 			b.Fatal("a refused owner produced bond frames")
 		}
+	}
+}
+
+/*
+================
+TestAdvancePetBondIdleSkipsTheCopy
+
+An admitted bond bear whose tick provably cannot fire - the
+saved cooldown still running, or the stamp spent but nobody
+dead in band to revive - answers from the door-read facts and
+never takes bondSource's companion copy (#2033): the copy was
+the tick's top flat allocator, and one of the two holds on
+nearly every tick of a bond bear's life. A dead in-band owner
+proves the tick live, and the revival fires through the copy
+exactly as before - the allocation count is the verdict the
+facts moved.
+================
+*/
+func TestAdvancePetBondIdleSkipsTheCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	skill := learnPetBook(t, c, 25)
+	c.ActiveCOS.Training.Levels[skill.Index()] = 10
+	key := petOwnerKey{testDivision, c.Name, c.ActiveCOS.GID}
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	bond, _, slotted := companion.Passive(c.ActiveCOS, "Guardian's Bond", companion.ModifiersFor(c.ActiveCOS))
+	if !slotted {
+		t.Fatal("Guardian's Bond passive not slotted")
+	}
+	now := clock.NowMs()
+	index := bond.Row - companion.ActiveRowCount
+	c.ActiveCOS.Training.PassiveReadyAtMs[index] = now + 600000
+	for range 10 {
+		if frames := rt.advancePetBond(key, state, now); frames != nil {
+			t.Fatal("a cooling bond bear produced bond frames")
+		}
+	}
+	if got := testing.AllocsPerRun(10, func() { rt.advancePetBond(key, state, now) }); got != 0 {
+		t.Fatalf("a cooling bond bear's tick allocated %.0f times per run, want 0", got)
+	}
+
+	// The stamp spent but the owner alive: still nobody to
+	// revive, so the tick stays off the copy.
+	c.ActiveCOS.Training.PassiveReadyAtMs[index] = now
+	for range 10 {
+		if frames := rt.advancePetBond(key, state, now); frames != nil {
+			t.Fatal("a ready bond bear with a living owner produced bond frames")
+		}
+	}
+	if got := testing.AllocsPerRun(10, func() { rt.advancePetBond(key, state, now) }); got != 0 {
+		t.Fatalf("a ready bond bear with nobody to revive allocated %.0f times per run, want 0", got)
+	}
+
+	// The owner dead by a monster, in band: the facts prove the
+	// tick live, the copy judges, and the revival fires as before.
+	c.DeathKind = uint8(pk.DeathMonster)
+	c.CurrentHP = testInt64(0)
+	c.LastExpLoss = 1003
+	var refunded int64
+	rt.RefundExperience = func(_ *enterworld.Character, exp int64) ([]wire.Frame, bool) { refunded += exp; return nil, true }
+	frames := rt.advancePetBond(key, state, now)
+	if len(frames) == 0 || *c.CurrentHP == 0 || refunded != 1003 {
+		t.Fatalf("dead owner's revival: hp=%d refund=%d frames=%d", *c.CurrentHP, refunded, len(frames))
+	}
+	if stamp := c.ActiveCOS.Training.PassiveReadyAtMs[index]; stamp != now+300000 {
+		t.Fatalf("saved cooldown stamp = %d, want %d", stamp, now+300000)
 	}
 }

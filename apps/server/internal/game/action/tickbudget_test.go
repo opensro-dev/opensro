@@ -107,10 +107,15 @@ const (
 // intent snapshot, the live-chain owner set and the tick-start
 // action-owner snapshot refilled into runtime scratch instead of
 // rebuilt from empty every tick (#2033), measured 21,755 B /
-// 184 allocs.
+// 184 allocs; with the bond tick judging its expansion, refusal
+// and idle verdicts ahead of bondSource's escaping answer - an
+// admitted bear whose cooldown runs, or with nobody dead in band
+// to revive, and any owner whose pet is not even out, never pays
+// for the call or its companion copy (#2033), measured 19,674 B /
+// 171 allocs.
 const (
-	tickBudgetBytesPerTick  = 24000
-	tickBudgetAllocsPerTick = 203
+	tickBudgetBytesPerTick  = 21700
+	tickBudgetAllocsPerTick = 189
 )
 
 /*
