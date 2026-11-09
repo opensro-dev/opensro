@@ -5388,7 +5388,6 @@ export function createUi( ports: UiPorts ) {
 		} else if ( id.startsWith( "composite-item:" ) ) {
 			// 6AFB40: the button runs its row, then the window closes.
 			const packageRefObjId = compositeItemHud.packageId();
-			console.info( `[SRO count-job] window button ${id}, package ${packageRefObjId}` );
 			compositeItemHud.close();
 			dirty = true;
 			if ( packageRefObjId !== null ) {
