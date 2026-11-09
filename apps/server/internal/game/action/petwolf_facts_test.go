@@ -220,6 +220,44 @@ func TestArmedElementalWalkFactsAgree(t *testing.T) {
 
 /*
 ================
+TestArmElementalFactsReadsOnTheGuard
+
+The capture reads on the stack read guard now, not the callback
+door (#2033): a viable owner arms the folded pets as before, and a
+deletion-pending owner still takes the capture's early exit - the
+arm lands with nothing folded - exactly as the closure's return
+out of the door answered.
+================
+*/
+func TestArmElementalFactsReadsOnTheGuard(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	now := clock.NowMs()
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
+
+	armed := rt.armElementalFacts(key, now)
+	if armed.division == "" {
+		t.Fatal("viable owner did not arm")
+	}
+	facts, ok := rt.armedElementalFacts(testDivision, c, now)
+	if !ok || !facts.ownerViable || len(facts.pets) != 1 {
+		t.Fatalf("armed facts = %+v (ok %v), want one viable folded pet", facts, ok)
+	}
+	rt.clearElementalFacts(armed)
+
+	c.DeletePending = true
+	armed = rt.armElementalFacts(key, now)
+	defer rt.clearElementalFacts(armed)
+	facts, ok = rt.armedElementalFacts(testDivision, c, now)
+	if !ok || facts.ownerViable || len(facts.pets) != 0 {
+		t.Fatalf("deletion-pending arm = %+v (ok %v), want armed with nothing folded", facts, ok)
+	}
+}
+
+/*
+================
 TestArmedElementalWalkServesTheGearProcShape
 
 strikePetTargets fires the gear element and proc walks (petarea.go)
