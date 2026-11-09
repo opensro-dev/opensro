@@ -129,6 +129,7 @@ import {
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { hwanSkin, hwanTitleKey } from "@/engine/foundation/gameplay/hwan-skin";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
@@ -13661,6 +13662,17 @@ export function createUi( ports: UiPorts ) {
 							const target = minimapResources.positions()?.get( id );
 							if ( !target || !minimapSameFloor( pose, target, game ?? null ) ) continue;
 							const offset = minimapOffset( pose, target, minimapZoom );
+							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
+						}
+						// Port-only: the spot a quest tool is used at (quest-locations.ts).
+						for (
+							const spot of questLocationTargets(
+								game?.quests,
+								experimental.state().saved.questTrackerMarkers
+							)
+						) {
+							if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+							const offset = minimapOffset( pose, spot, minimapZoom );
 							if ( offset ) markers.push( minimapEdge( offset, "quest" ) );
 						}
 						markers.push( ...minimapHunting( pose, game, next.entities, minimapZoom ) );

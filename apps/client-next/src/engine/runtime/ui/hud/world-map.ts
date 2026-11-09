@@ -31,6 +31,7 @@ import {
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
+import { questLocationTargets } from "@/engine/foundation/ui/quest-locations";
 import {
 	worldMapDemand,
 	expandedWorldMapOn,
@@ -580,6 +581,19 @@ export function createWorldMapHud( options: MapHudOptions ) {
 							path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
 						} );
 					}
+				}
+				// Port-only: the spot a quest tool is used at (quest-locations.ts).
+				for (
+					const spot of questLocationTargets( game?.quests, experimental.state().saved.questTrackerMarkers )
+				) {
+					if ( !minimapSameFloor( pose, spot, game ?? null ) ) continue;
+					mapMarkers.push( {
+						regionId: spot.regionId,
+						x: spot.x,
+						z: spot.z,
+						rotation: 0,
+						path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
+					} );
 				}
 				for ( const point of game?.huntingPoints ?? [] ) {
 					const live = next.entities.find( e => e.gid === point.gid ) ?? point;
