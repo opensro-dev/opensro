@@ -216,6 +216,37 @@ func TestNaturalRecoveryScratchWritesDoNotLeakAcrossPulses(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRecoveryPulseAppendsToCallerFrameSet
+
+The division lane assembles the tick's frame set in the caller's
+slice (#2033): a seeded prefix survives untouched, the committed
+pulse's wrapper lands behind it, and a pulse that does not commit
+returns the set unmoved.
+================
+*/
+func TestRecoveryPulseAppendsToCallerFrameSet(t *testing.T) {
+	c := testCharacter()
+	hp, mp := enterworld.DerivedMaxHP(c)-1, enterworld.DerivedMaxMP(c)-1
+	c.CurrentHP = &hp
+	c.CurrentMP = &mp
+	rt, clock := newTestRuntime(c, testItems())
+	start := clock.NowMs()
+	rt.BindRecoverySession(testDivision, c, 1)
+	out := []simulation.DivisionFrames{{DivisionID: testDivision, OnlyCharacterID: -1}}
+	out = rt.advanceNaturalRecoveryInDivision(recoveryKey{testDivision, "asd2"}, start+5000, out)
+	if len(out) != 2 || out[0].OnlyCharacterID != -1 || len(out[0].Frames) != 0 ||
+		out[1].DivisionID != testDivision || out[1].OnlyCharacterID != c.ID ||
+		len(out[1].Frames) != 1 || out[1].Frames[0].Opcode != simulation.OpVitalsUpdate {
+		t.Fatalf("pulse set %+v", out)
+	}
+	out = rt.advanceNaturalRecoveryInDivision(recoveryKey{testDivision, "asd2"}, start+9000, out)
+	if len(out) != 2 {
+		t.Fatalf("uncommitted pulse moved the set %+v", out)
+	}
+}
+
 func TestNaturalRecoveryClampReplacementAndOverrun(t *testing.T) {
 	c := testCharacter()
 	hp, mp := enterworld.DerivedMaxHP(c)-1, enterworld.DerivedMaxMP(c)-1

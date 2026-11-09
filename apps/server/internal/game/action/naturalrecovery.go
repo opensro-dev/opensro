@@ -152,7 +152,7 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	})
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
-		out = append(out, rt.advanceNaturalRecoveryInDivision(key, nowMs)...)
+		out = rt.advanceNaturalRecoveryInDivision(key, nowMs, out)
 	}
 	return out
 }
@@ -162,16 +162,13 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 advanceNaturalRecoveryInDivision
 ================
 */
-func (rt *Runtime) advanceNaturalRecoveryInDivision(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+func (rt *Runtime) advanceNaturalRecoveryInDivision(key recoveryKey, nowMs int64, out []simulation.DivisionFrames) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	var out []simulation.DivisionFrames
 	out = append(out, rt.recoverPotionResident(key, nowMs)...)
 	out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
 	out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
-	frames := rt.recoverResident(key, nowMs)
-	out = append(out, frames...)
-	return out
+	return rt.recoverResident(key, nowMs, out)
 }
 
 /*
@@ -241,15 +238,17 @@ recoverResident
 
 An overrun consumes one period per update, including blocked pulses. A failed
 stat projection leaves stored gauges untouched rather than healing at a
-guessed rate that ignores equipped options or active effects.
+guessed rate that ignores equipped options or active effects. The committed
+pulse appends its wrapper to the caller's frame set (out) and returns the
+grown set.
 ================
 */
-func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64, out []simulation.DivisionFrames) []simulation.DivisionFrames {
 	rt.recoveryMu.Lock()
 	state := rt.recoverySessions[key]
 	if state == nil || nowMs < state.nextMs {
 		rt.recoveryMu.Unlock()
-		return nil
+		return out
 	}
 	// The native timer advance subtracts one period and invokes once per owner update.
 	// Keep the residual phase, including pulses skipped while moving/dead.
@@ -257,7 +256,12 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 	rt.recoveryMu.Unlock()
 	c := state.character
 	casting := rt.hasOpenSkillCast(key.division, c.Name)
-	var frames []simulation.DivisionFrames
+	// The committed pulse appends its one wrapper to the caller's
+	// growing frame set (out): a per-pulse wrapper slice was
+	// allocated only for the caller to copy its single element
+	// out of (#2033). The frame slice and payload inside stay
+	// freshly owned per pulse; the tick retains them.
+	var pulse simulation.DivisionFrames
 	var drain *drainPulse
 	committed := rt.deps.UpdateDeferred(c, "natural-recovery", func() bool {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
@@ -312,14 +316,14 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 			return false
 		}
 		c.CurrentHP, c.CurrentMP = &nextHP, &nextMP
-		frames = []simulation.DivisionFrames{{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: []simulation.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(enterworld.ObjectIDForCharacter(c), simulation.VitalsSourceNaturalRecovery, simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(nextMP)})}}}}
+		pulse = simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: []simulation.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(enterworld.ObjectIDForCharacter(c), simulation.VitalsSourceNaturalRecovery, simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(nextMP)})}}}
 		return true
 	})
 	if !committed {
-		return nil
+		return out
 	}
 	if drain != nil {
-		return rt.publishDrainPulse(key, c, nowMs, drain)
+		return append(out, rt.publishDrainPulse(key, c, nowMs, drain)...)
 	}
-	return frames
+	return append(out, pulse)
 }
