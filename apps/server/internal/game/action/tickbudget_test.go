@@ -103,10 +103,24 @@ const (
 // owner-expiry probe reading the registry's stamps under its lock
 // instead of a division list and the cached copies, and the
 // pending-pickup due probe building nothing while nothing matured
-// (#2033), measured 21,875 B / 187 allocs.
+// (#2033), measured 21,875 B / 187 allocs; with the basic-attack
+// intent snapshot, the live-chain owner set and the tick-start
+// action-owner snapshot refilled into runtime scratch instead of
+// rebuilt from empty every tick (#2033), measured 21,755 B /
+// 184 allocs; with the compound-job advance refilling its key
+// scratch under the job lock instead of rebuilding the list every
+// tick (#2033), measured 21,732 B / 183 allocs; with the bond tick
+// judging its expansion, refusal and idle verdicts ahead of
+// bondSource's escaping answer - an admitted bear whose cooldown
+// runs, or with nobody dead in band to revive, and any owner whose
+// pet is not even out, never pays for the call or its companion
+// copy (#2033), measured 19,651 B / 170 allocs; with the
+// natural-recovery pass refilling its due-key scratch under the
+// recovery lock instead of rebuilding the list every tick (#2033),
+// measured 19,516 B / 170 allocs.
 const (
-	tickBudgetBytesPerTick  = 24100
-	tickBudgetAllocsPerTick = 206
+	tickBudgetBytesPerTick  = 21500
+	tickBudgetAllocsPerTick = 187
 )
 
 /*

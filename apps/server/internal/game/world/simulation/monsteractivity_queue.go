@@ -53,6 +53,12 @@ const (
 	// dispatch read resolves it by gid.
 	behaviorNoMonsterSlot = ^uint32(0)
 
+	// behaviorNoBaseGen marks a commitActivityAt caller with no
+	// snapshot generation in hand (a lane door whose before was
+	// read fresh): the commit guards on the whole row value, as
+	// every commit did before the generation guard (#3027).
+	behaviorNoBaseGen = ^uint64(0)
+
 	// behaviorNoQueueSlot marks an actor ref built without the
 	// drain (a hand-built ref): its queue doors resolve by gid.
 	behaviorNoQueueSlot = ^uint32(0)
@@ -524,6 +530,7 @@ with no pointers, so the backing needs no clearing before reuse.
 */
 type behaviorRefScratch struct {
 	refs []behaviorActorRef
+	sort []behaviorActorRef
 }
 
 // behaviorRefScratchPool holds built refs backings, ready for the
@@ -764,13 +771,76 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
-		// slices.SortFunc, not sort.Slice: no reflection swapper per
-		// batch (#2985). Gids are unique within a batch, so the order
-		// is the same total order either sort produces.
-		slices.SortFunc(batch.actors, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		sortBehaviorRefs(batch.actors, scratch)
 		out = append(out, batch)
 	}
 	return out
+}
+
+// behaviorRefSortThreshold is the batch size where ordering the
+// refs by counting the gid's bytes passes the comparison sort:
+// below it the counting passes' fixed cost (four 256-wide tallies)
+// is the larger bill.
+const behaviorRefSortThreshold = 128
+
+/*
+================
+sortBehaviorRefs
+
+Order a batch's refs by gid, the total order the dispatch walks.
+Gids are unique within a batch (the queue's byGID), so four stable
+counting passes over the gid's bytes produce exactly the sequence
+a comparison sort does, in linear time, ping-ponging between the
+refs and the scratch's sort backing (kept pooled with the refs, so
+a warmed build allocates neither). The comparison sort this
+replaces was half the batch build in the seeded profile (#3027);
+small batches keep it, under the threshold above.
+
+The drain often hands the batch its refs in gid order already -
+a population armed in spawn order (server start, a region load) -
+so the counting path first walks one pass of adjacent compares:
+an ordered drain costs that pass, and an unordered one pays only
+the compares up to its first descent (two in expectation) before
+the counting passes run.
+================
+*/
+func sortBehaviorRefs(refs []behaviorActorRef, scratch *behaviorRefScratch) {
+	if len(refs) < behaviorRefSortThreshold {
+		// slices.SortFunc, not sort.Slice: no reflection swapper
+		// per batch (#2985).
+		slices.SortFunc(refs, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		return
+	}
+	ordered := true
+	for i := 1; i < len(refs); i++ {
+		if refs[i-1].gid > refs[i].gid {
+			ordered = false
+			break
+		}
+	}
+	if ordered {
+		return
+	}
+	if cap(scratch.sort) < len(refs) {
+		scratch.sort = make([]behaviorActorRef, len(refs))
+	}
+	src, dst := refs, scratch.sort[:len(refs)]
+	for shift := uint(0); shift < 32; shift += 8 {
+		var count [256]int
+		for _, ref := range src {
+			count[byte(ref.gid>>shift)]++
+		}
+		sum := 0
+		for i, c := range count {
+			count[i], sum = sum, sum+c
+		}
+		for _, ref := range src {
+			d := byte(ref.gid >> shift)
+			dst[count[d]] = ref
+			count[d]++
+		}
+		src, dst = dst, src
+	}
 }
 
 /*
@@ -837,6 +907,7 @@ func (s *MonsterState) releaseBehaviorBatches(batches []behaviorBatch) {
 			continue
 		}
 		scratch.refs = batches[i].actors[:0]
+		scratch.sort = scratch.sort[:0]
 		batches[i].scratch = nil
 		behaviorRefScratchPool.Put(scratch)
 	}

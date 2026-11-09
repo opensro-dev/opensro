@@ -54,3 +54,44 @@ func BenchmarkCheckAITimerDoor(b *testing.B) {
 		}
 	})
 }
+
+/*
+================
+BenchmarkSelectedAITimerDoor
+
+The selected-timer twin of BenchmarkCheckAITimerDoor (#2150): the
+attack step asks whether the selected action timer fired, of the
+same seeded actors, through the gid door - which expands the
+actor's full Instance for two facts - and through the carried
+slot, which reads those facts off the resident row.
+================
+*/
+func BenchmarkSelectedAITimerDoor(b *testing.B) {
+	ops, _, now := seededLegWorld(b, 1200)
+	batches := ops.Monsters.behaviorBatchesForDivision(*now+100_000, monsterTestDivision)
+	var refs []behaviorActorRef
+	for _, batch := range batches {
+		refs = append(refs, batch.actors...)
+	}
+	if len(refs) < 1000 {
+		b.Fatalf("seeded division too small: %d actors", len(refs))
+	}
+	// Build every actor's timer bank before timing, so neither arm
+	// pays the first-bank setup inside the loop.
+	for _, ref := range refs {
+		ops.Monsters.checkAITimerAt(monsterTestDivision, ref.gid, ref.monsterSlot, monster.TimerIDAcquisition, *now)
+	}
+	b.ReportAllocs()
+	b.Run("gid", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			ref := refs[i%len(refs)]
+			ops.Monsters.selectedAITimerReady(monsterTestDivision, ref.gid, *now+int64(i%997))
+		}
+	})
+	b.Run("carried", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			ref := refs[i%len(refs)]
+			ops.Monsters.selectedAITimerReadyAt(monsterTestDivision, ref.gid, ref.monsterSlot, *now+int64(i%997))
+		}
+	})
+}

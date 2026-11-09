@@ -169,7 +169,7 @@ populationForLease
 ================
 */
 func (s *MonsterState) populationForLease(division string, lease instance.Lease) *divisionMonsterState {
-	if state := s.divs[division]; state != nil && state.lease == lease {
+	if state := s.divisionState(division); state != nil && state.lease == lease {
 		return state
 	}
 	return s.worldPopulations[populationKey{division, lease}]
@@ -209,7 +209,7 @@ gid probes were the store map walk this removes.
 ================
 */
 func (s *MonsterState) populationForObjectAt(division string, gid uint32, monsterSlot uint32) *divisionMonsterState {
-	if state := s.divs[division]; state != nil {
+	if state := s.divisionState(division); state != nil {
 		if state.instances.containsAt(monsterSlot, gid) {
 			return state
 		}
@@ -244,7 +244,7 @@ nothing.
 ================
 */
 func (s *MonsterState) locateObject(division string, gid uint32) (*divisionMonsterState, monsterSlot) {
-	if state := s.divs[division]; state != nil {
+	if state := s.divisionState(division); state != nil {
 		if slot := state.instances.locate(gid); slot.residency != slotMissing {
 			return state, slot
 		}

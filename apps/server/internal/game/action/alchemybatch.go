@@ -100,14 +100,22 @@ func compoundClock(job compoundJob, nowMs int64) (compoundJob, bool) {
 /*
 ================
 advanceCompoundJobs
+
+One tick step over every running compound (alchemy batch) job, in
+(division, name) order. The key list refills the runtime's scratch
+under the job lock instead of rebuilding per tick (#2033): the tick
+step list is the only caller, the pass consumes the keys in line,
+and nothing - frames included - retains the slice past the pass, so
+the next tick may refill it.
 ================
 */
 func (rt *Runtime) advanceCompoundJobs(nowMs int64) {
 	rt.compoundMu.Lock()
-	keys := make([]compoundKey, 0, len(rt.compoundJobs))
+	keys := rt.compoundKeys[:0]
 	for key := range rt.compoundJobs {
 		keys = append(keys, key)
 	}
+	rt.compoundKeys = keys
 	rt.compoundMu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].division != keys[j].division {

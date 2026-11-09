@@ -33,6 +33,36 @@ func TestDefaultPopulationDoesNotOwnForeignWorldNests(t *testing.T) {
 
 /*
 ================
+TestDivisionStateMemoMatchesMap
+
+divisionState answers with the map's population for a name:
+alternating divisions (the memo swinging between two legs'
+doors) answers each name's own state, an unknown name answers
+nil, and a division registered after a missed read resolves on
+the next one. The memo repeats the map; it never guesses (#3027).
+================
+*/
+func TestDivisionStateMemoMatchesMap(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(nil, nil))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	s.StartDivision("a")
+	s.StartDivision("b")
+	for _, name := range []string{"a", "b", "a", "a", "b"} {
+		if got := s.divisionState(name); got != s.divs[name] {
+			t.Fatalf("divisionState(%q) answered a different population than the map", name)
+		}
+	}
+	if got := s.divisionState("missing"); got != nil {
+		t.Fatal("divisionState answered for an unregistered division")
+	}
+	s.StartDivision("c")
+	if got := s.divisionState("c"); got != s.divs["c"] {
+		t.Fatal("a division registered after a missed read did not resolve")
+	}
+}
+
+/*
+================
 TestDivisionOpensEveryPermanentWorld
 
 The retail shard manager opens layer 1 of every type-0 RefGameWorld at boot,

@@ -276,6 +276,26 @@ func TestOpenSkillCastOwnerSnapshotMatchesRecomputedKeys(t *testing.T) {
 
 /*
 ================
+TestOpenSkillCastOwnerSnapshotDropsSettledOwners
+
+The scratch snapshot is rebuilt whole at every tick start: an owner
+whose finalize settled between ticks must not gate the next tick.
+================
+*/
+func TestOpenSkillCastOwnerSnapshotDropsSettledOwners(t *testing.T) {
+	rt := NewRuntime(&enterworld.Deps{}, nil)
+	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, newPendingSkillFinalize(testDivision, "Alice"))
+	if got := rt.openSkillCastOwnerSnapshot(); len(got) != 1 {
+		t.Fatalf("snapshot = %v, want the one pending owner", got)
+	}
+	rt.pendingSkillFinalizes = nil
+	if got := rt.openSkillCastOwnerSnapshot(); len(got) != 0 {
+		t.Fatalf("a settled owner still gates the next tick: %v", got)
+	}
+}
+
+/*
+================
 TestRetireGroundApproachesDrainsEveryDivision
 
 Lane cached or not, every queued stop is consumed exactly once: a

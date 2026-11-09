@@ -174,7 +174,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
-	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoBaseGen, before, after, now)
 	return committed
 }
 
@@ -196,20 +196,37 @@ The second answer is the write's cadence verdict: whether the pair
 differed only in the cadence stamp. The gate's chain-base rule
 (generationAdvanced) reads it from here, where the pair was just
 compared against the stored row, instead of re-comparing the two
-whole rows at the gate (#2029). The reschedule resolves no gid
-map either: it reads the rows back through the same carried
-slots (scheduleBehaviorCommitted).
+whole rows at the gate (#2029). The reschedule reads no row back
+either: the commit hands it the written row's schedule
+(scheduleBehaviorCommitted).
+
+baseGen is the commit generation of the row before was read
+from - the step snapshot's, or behaviorNoBaseGen when the
+caller holds none. The value guard is paid only when it can
+fail: while the stored row's generation is baseGen and its
+cadence is before's, the row is still before (a whole-value
+write bumps the generation, the only other writes stamp the
+cadence), so the expansion and whole-row compare are skipped;
+anything else expands the row and compares it whole, exactly
+as every commit did before (#3027).
 ================
 */
-func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) (bool, bool) {
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, baseGen uint64, before, after monster.MoverState, now int64) (bool, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObjectAt(division, gid, monsterSlot)
-	current, exists := state.movers.lookupAt(slot, gid)
-	if !exists {
-		current, exists = state.movers.lookup(gid)
+	current := before
+	if gen, activity, exists := state.movers.activityGuardAt(slot, gid); !exists || gen != baseGen || activity != before.Activity {
+		row, exists := state.movers.lookupAt(slot, gid)
+		if !exists {
+			row, exists = state.movers.lookup(gid)
+		}
+		if !exists || row != before {
+			return false, false
+		}
+		current = row
 	}
-	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
+	if state.instances.isDeadAt(monsterSlot, gid) {
 		return false, false
 	}
 	cadenceOnly := cadenceOnlyWrite(current, after)
@@ -230,7 +247,7 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		// rides only this full write and the mover commits (#2136).
 		state.syncApproachActor(gid, after)
 	}
-	s.scheduleBehaviorCommitted(state, gid, slot, monsterSlot, now)
+	s.scheduleBehaviorCommitted(state, gid, scheduleOf(after), monsterSlot, now)
 	return true, cadenceOnly
 }
 

@@ -83,23 +83,24 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 MonsterState.scheduleBehaviorCommitted
 
 scheduleBehaviorSlot for the activity commit's own reschedule
-(monsteractivity.go's commitActivityAt): the commit has just read
-and written the mover row through the slot it carries, and holds
-the actor's monster slot too, so the re-arm resolves both rows
-through the verified hints instead of the storages' gid maps -
-scheduleSlotAt and hotRowAt delegate to the gid resolve when a
-hint no longer names the actor, so the armed due is
-scheduleBehaviorSlot's either way. The commit holds no queue
-slot, so the re-arm itself still lands through behavior.set.
+(monsteractivity.go's commitActivityAt): the commit has just
+written the mover row under the state lock it still holds, so
+the caller hands over the written row's schedule (scheduleOf)
+and no mover read remains - post-write, the stored row is the
+handed value on both write paths (the cadence path's stored row
+differs from it only in the stamp the commit just set, which is
+the stamp the schedule carries). The old scheduleSlotAt miss
+branch (retire an actor whose row is gone) cannot fire here:
+the row exists because the commit wrote it. The resident row
+still resolves through the verified monster-slot hint the
+commit carried, delegating to the gid resolve on a miss, so
+the armed due is scheduleBehaviorSlot's either way. The commit
+holds no queue slot, so the re-arm itself still lands through
+behavior.set.
 ================
 */
-func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gid uint32, slot, monsterSlot uint32, now int64) {
+func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gid uint32, m moverSchedule, monsterSlot uint32, now int64) {
 	state.forgetDormant(gid)
-	m, _, ok := state.movers.scheduleSlotAt(slot, gid)
-	if !ok {
-		state.behavior.remove(gid)
-		return
-	}
 	if s.tryDormant(state, gid, m, now) {
 		return
 	}
