@@ -793,6 +793,12 @@ func (s *MonsterState) resolveScopeDeltas(sessions []SessionSnapshot, slots []sc
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var populations scopePopulations
+	// Consecutive viewers usually stand in the same block of the
+	// same population, where the stamp - and so the memo entry -
+	// is the same one the last viewer resolved.
+	var lastState *divisionMonsterState
+	var lastBlock worldgeom.InterestBlock
+	var lastEntry *interestMemoEntry
 	for i := range slots {
 		slot := &slots[i]
 		// An unchanged viewer (stamp == memo stamp) can never
@@ -806,8 +812,14 @@ func (s *MonsterState) resolveScopeDeltas(sessions []SessionSnapshot, slots []sc
 		if state == nil || state.movers == nil {
 			continue
 		}
-		gids := populationInterestGIDsFolded(state, slot.viewer, slot.block, slot.stamp)
-		entry := state.interestMemo[slot.block]
+		var entry *interestMemoEntry
+		if state == lastState && slot.block == lastBlock && lastEntry != nil {
+			entry = lastEntry
+		} else {
+			populationInterestGIDsFolded(state, slot.viewer, slot.block, slot.stamp)
+			entry = state.interestMemo[slot.block]
+			lastState, lastBlock, lastEntry = state, slot.block, entry
+		}
 		if entry == nil || entry.fromStamp != slot.state.memo.stamp {
 			continue
 		}
@@ -826,7 +838,7 @@ func (s *MonsterState) resolveScopeDeltas(sessions []SessionSnapshot, slots []sc
 				slot.left = append(slot.left, gid)
 			}
 		}
-		slot.total = len(gids)
+		slot.total = len(entry.gids)
 		slot.bridged = true
 	}
 }
