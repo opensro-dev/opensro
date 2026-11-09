@@ -294,20 +294,20 @@ func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64)
 crowBroodRecharge
 
 The crow's recharge, judged and committed on the live pet: the row
-is pure on the live record, so a tick reads it under the read door
-and opens the update door only on a tick whose row actually moves
-(#2139); the door re-derives the same row. Returns its frames.
+is pure on the live record, so a tick reads its verdict under the
+stack read guard (Deps.AcquireRead - the callback door boxed a
+closure and its captures on every crow tick, #2033) and opens the
+update door only on a tick whose row actually moves (#2139); the
+door re-derives the same row. Returns its frames.
 ================
 */
 func (rt *Runtime) crowBroodRecharge(key petOwnerKey, state *petSession, now int64) []wire.Frame {
+	guard := rt.deps.AcquireRead(key.division)
 	recharges := false
-	rt.deps.Read(key.division, func() {
-		live := state.character.CompanionByGID(key.gid)
-		if live == nil {
-			return
-		}
+	if live := state.character.CompanionByGID(key.gid); live != nil {
 		_, recharges = crowRechargeRow(live, now)
-	})
+	}
+	guard.Release()
 	if !recharges {
 		return nil
 	}

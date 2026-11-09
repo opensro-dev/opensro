@@ -97,10 +97,12 @@ const (
 // 23,897 B / 249 allocs; with the identity key's composition
 // memoized (namekey.Key), so the world store's lanes stop building
 // the same key strings every tick (#2033), measured 23,227 B / 221
-// allocs.
+// allocs; with the crow-brood recharge verdict read under the stack
+// read guard instead of the callback door's boxed closure per crow
+// tick (#2033), measured 22,584 B / 217 allocs.
 const (
-	tickBudgetBytesPerTick  = 25500
-	tickBudgetAllocsPerTick = 243
+	tickBudgetBytesPerTick  = 24800
+	tickBudgetAllocsPerTick = 238
 )
 
 /*
