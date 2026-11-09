@@ -74,11 +74,6 @@ func petCopyTrace(t *testing.T, full bool) string {
 
 /*
 ================
-TestPetPassReadsNothingOutsideTheCompanionCopy
-================
-*/
-/*
-================
 TestCharacterSnapshotCompanionAdmittedReadsOnTheGuard
 
 The companion-admitted snapshot answers as it did through the
@@ -112,6 +107,11 @@ func TestCharacterSnapshotCompanionAdmittedReadsOnTheGuard(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPetPassReadsNothingOutsideTheCompanionCopy
+================
+*/
 func TestPetPassReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 	narrow, full := petCopyTrace(t, false), petCopyTrace(t, true)
 	a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")

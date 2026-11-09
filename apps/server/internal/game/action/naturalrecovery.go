@@ -127,18 +127,22 @@ func naturalRecoveryAmount(maximum int64, rate float32) int64 {
 advanceNaturalRecovery
 
 Snapshot due keys before entering division doors so collection readers never
-hold the recovery lock while waiting for a gameplay operation.
+hold the recovery lock while waiting for a gameplay operation. The snapshot
+refills the runtime's key scratch instead of rebuilding per tick (#2033):
+the tick step list is the only caller, the pass consumes the keys in line,
+and nothing retains the slice past the pass.
 ================
 */
 func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFrames {
 	rt.recoveryMu.Lock()
-	var keys []recoveryKey
+	keys := rt.recoveryKeys[:0]
 	for key, state := range rt.recoverySessions {
 		if nowMs >= state.potionNextMs || nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs ||
 			rt.AdvanceQuestItem != nil && nowMs >= state.questItemNextMs {
 			keys = append(keys, key)
 		}
 	}
+	rt.recoveryKeys = keys
 	rt.recoveryMu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].division != keys[j].division {

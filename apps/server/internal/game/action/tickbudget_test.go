@@ -115,11 +115,13 @@ const (
 // runs, or with nobody dead in band to revive, and any owner whose
 // pet is not even out, never pays for the call or its companion
 // copy (#2033), measured 19,651 B / 170 allocs; with the
-// companion-admitted snapshot reading on the stack read guard
-// instead of the callback door (#2033), measured 18,202 B /
-// 115 allocs.
+// natural-recovery pass refilling its due-key scratch under the
+// recovery lock instead of rebuilding the list every tick (#2033),
+// measured 19,516 B / 170 allocs; with the companion-admitted
+// snapshot reading on the stack read guard instead of the callback
+// door (#2033), measured 18,127 B / 115 allocs.
 const (
-	tickBudgetBytesPerTick  = 20100
+	tickBudgetBytesPerTick  = 20000
 	tickBudgetAllocsPerTick = 127
 )
 
