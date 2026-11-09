@@ -122,10 +122,12 @@ const (
 // door (#2033), measured 18,127 B / 115 allocs; with the judged
 // pet's COS abnormal identity weighed as a folded struct key,
 // folded once per session binding, instead of a string rebuilt on
-// every read (#2033), measured 17,790 B / 93 allocs.
+// every read (#2033), measured 17,790 B / 93 allocs; with the
+// elemental arm's capture reading on the stack read guard instead
+// of the callback door (#2033), measured 17,214 B / 75 allocs.
 const (
-	tickBudgetBytesPerTick  = 19700
-	tickBudgetAllocsPerTick = 103
+	tickBudgetBytesPerTick  = 19000
+	tickBudgetAllocsPerTick = 83
 )
 
 /*
