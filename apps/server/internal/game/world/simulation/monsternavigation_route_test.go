@@ -177,7 +177,7 @@ func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
 				corner.Z += 32
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
 			}
-			ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+			ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(&instance), mover, monster.MoverEventTargetLost, 10000)
 			mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 			if blocked {
 				if !mover.NavigationWaiting(10001) || mover.Mode() != monster.MoverReturning {

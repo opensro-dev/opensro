@@ -91,7 +91,7 @@ func newNoiseField(t *testing.T) noiseField {
 	viewer := simulation.SessionSnapshot{SessionID: "noise", DivisionID: testDivision, CharacterID: c.ID,
 		Population: lease, WorldInstance: uint32(lease.ID), BodyRadius: 4, CombatEligible: true,
 		World: simulation.SeedWorldState(c)}
-	aggressive := func(monster.Instance) monster.Tactics {
+	aggressive := func(*monster.Instance) monster.Tactics {
 		return monster.Tactics{Aggressive: true, SightRange: noiseSight}
 	}
 	ops := &simulation.MonsterMoverOps{Monsters: state, Rand: func() float64 { return 0 }, AttackPlan: rt.MonsterAttackPlan,
