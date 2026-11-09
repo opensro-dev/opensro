@@ -43,6 +43,26 @@ only to answer it. The answer itself is built once per session and
 reads the tick's cells, so installing it allocates nothing.
 ================
 */
+/*
+================
+petSession.judgedCosAbnormalKey
+
+The session's folded COS abnormal map key for one (division, name,
+gid) binding, folded on first use and again only when the binding
+changes: the judged tick weighs this identity twice a tick and it is
+fixed for the summoned pet's life (#2033).
+================
+*/
+func (state *petSession) judgedCosAbnormalKey(division, name string, gid uint32) cosAbnormalKey {
+	binding := petOwnerKey{division: division, name: name, gid: gid}
+	if !state.judgedCosKeySet || state.judgedCosKeyFrom != binding {
+		state.judgedCosKey = cosAbnormalKeyFor(division, name, gid)
+		state.judgedCosKeyFrom = binding
+		state.judgedCosKeySet = true
+	}
+	return state.judgedCosKey
+}
+
 func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
 	// The forced-copy seam and any live battle state judge on the copy.
 	if rt.companionCopy != nil || state.combat != nil || state.roar != nil || state.pickup != nil {
@@ -120,12 +140,12 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 		}
 		state.displacement = nil
 	}
-	if rt.cosMovementBlockedFor(key.division, state.character.Name, key.gid) {
+	if rt.cosMovementBlockedKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, key.gid)) {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
 		return state.follower.Stop(nowMs), true
 	}
-	block := rt.cosAbnormal(key.division, state.character.Name, pet.GID)
+	block := rt.cosAbnormalKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, pet.GID))
 	// The step keeps the native run: natively it is compared with the authored
 	// speed. Only the follower moves at the paced one.
 	walk, run := cosParameter(ref, pet, block, movementWalkParameter), cosParameter(ref, pet, block, movementRunParameter)

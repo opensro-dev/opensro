@@ -109,10 +109,13 @@ const (
 // rebuilt from empty every tick (#2033), measured 21,755 B /
 // 184 allocs; with the compound-job advance refilling its key
 // scratch under the job lock instead of rebuilding the list every
-// tick (#2033), measured 21,732 B / 183 allocs.
+// tick (#2033), measured 21,732 B / 183 allocs; with the judged
+// pet's COS abnormal identity weighed as a folded struct key,
+// folded once per session binding, instead of a string rebuilt on
+// every read (#2033), measured 21,399 B / 160 allocs.
 const (
-	tickBudgetBytesPerTick  = 24000
-	tickBudgetAllocsPerTick = 202
+	tickBudgetBytesPerTick  = 23700
+	tickBudgetAllocsPerTick = 177
 )
 
 /*
