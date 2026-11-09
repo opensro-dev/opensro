@@ -40,6 +40,7 @@ import hashlib
 import json
 import lzma
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -61,6 +62,9 @@ TEXT_RUN_BYTES = 16
 APPLY_CHUNK_COMMANDS = 200
 APPLY_CHUNK_BYTES = 4096
 MANIFEST_NAME = "seed-manifest.json"
+BN_NAMES_FORMAT = "sro-bn-function-names"
+BN_NAMES_VERSION = 1
+ANONYMOUS_NAME_RE = re.compile(r"^(?:j_)*(?:sub|nullsub)_[0-9a-fA-F]+(?:_\d+)?$")
 
 
 class SeedError(Exception):
@@ -71,18 +75,70 @@ class SeedError(Exception):
 # payload build
 # =====================================================================
 
-def _effective_functions(con):
-	"""(va, name) per function, overlay renames applied, by address."""
+def is_anonymous(name):
+	"""True for a placeholder spelling (sub_/j_sub_/nullsub_), not a label."""
+	return not name or bool(ANONYMOUS_NAME_RE.match(name))
+
+
+def load_bn_names(path, target):
+	"""{va: name} from a Binary Ninja name export (see module banner).
+
+	The export is the maintainers' labels, the bulk of the RE: the
+	dump-derived index alone named 1,373 of the client's 95,290
+	functions while the BN database held 13,814 (2026-11-09).
+	"""
+	try:
+		with open(path, encoding="utf-8") as fh:
+			doc = json.load(fh)
+	except (OSError, json.JSONDecodeError) as exc:
+		raise SeedError(f"{path}: not a readable name export: {exc}") from exc
+	if doc.get("format") != BN_NAMES_FORMAT or doc.get("version") != BN_NAMES_VERSION:
+		raise SeedError(
+			f"{path}: format {doc.get('format')!r} v{doc.get('version')!r}, "
+			f"want {BN_NAMES_FORMAT!r} v{BN_NAMES_VERSION}")
+	if doc.get("target") != target:
+		raise SeedError(f"{path}: names for target {doc.get('target')!r}, seed is {target!r}")
+	names = {}
+	for row in doc.get("functions") or []:
+		if not (isinstance(row, list) and len(row) == 2 and isinstance(row[0], int)
+		        and isinstance(row[1], str)):
+			raise SeedError(f"{path}: bad function row {row!r}")
+		names[row[0]] = row[1]
+	return names
+
+
+def _effective_functions(con, bn_names=None):
+	"""(va, name) per function by address, and where each name came from.
+
+	Precedence: an overlay rename (a revtool claim) over a BN name over
+	the dump's name; an anonymous spelling never replaces a real one.
+	BN functions the dump index lacks are added. Returns (rows, counts).
+	"""
 	renames = {}
 	for orig, new in con.execute(
 			"SELECT orig_name, new_name FROM globals "
 			"WHERE kind = 'func' OR kind IS NULL"):
 		renames[orig] = new
-	rows = []
-	for addr, name in con.execute(
-			"SELECT addr, name FROM functions ORDER BY addr"):
-		rows.append([int(addr, 16), renames.get(name, name)])
-	return rows
+	bn_names = bn_names or {}
+	counts = {"overlay": 0, "bn": 0, "dump": 0, "anonymous": 0, "bn_only": 0}
+	by_va = {}
+	for addr, name in con.execute("SELECT addr, name FROM functions"):
+		va = int(addr, 16)
+		bn = bn_names.get(va)
+		if name in renames:
+			by_va[va], source = renames[name], "overlay"
+		elif bn and not is_anonymous(bn):
+			by_va[va], source = bn, "bn"
+		elif not is_anonymous(name):
+			by_va[va], source = name, "dump"
+		else:
+			by_va[va], source = name, "anonymous"
+		counts[source] += 1
+	for va, bn in bn_names.items():
+		if va not in by_va:
+			by_va[va] = bn
+			counts["bn_only"] += 1
+	return [[va, by_va[va]] for va in sorted(by_va)], counts
 
 
 def _ledger_lines(path):
@@ -139,9 +195,11 @@ wrong binary is worse than no seed.
 	return next(iter(sources.values())), "+".join(sorted(sources))
 
 
-def build_payload(con, ledger_path, binary_path, target):
+def build_payload(con, ledger_path, binary_path, target, bn_names=None, counts_out=None):
 	"""The seed payload dict for one target (see module banner)."""
-	functions = _effective_functions(con)
+	functions, counts = _effective_functions(con, bn_names)
+	if counts_out is not None:
+		counts_out.update(counts)
 	if not functions:
 		raise SeedError("the overlay DB holds no function index to seed")
 	lines = _ledger_lines(ledger_path) if ledger_path else []
@@ -278,8 +336,12 @@ def _batched(pipe, commands):
 		pipe.cmd("\n".join(batch))
 
 
-def _seed_commands(functions):
+def _seed_commands(functions, existing=()):
 	"""af+/afb+ pairs for the seed rows, in address order.
+
+A function rizin defined on load (`existing`: entry0 and the like)
+is renamed with `afn` instead: `af+` there only prints "Cannot add
+function (duplicated)", once per row, which buried the output.
 
 Each function gets one block reaching to the next function's
 start (the last reuses the previous extent, 16 at the limit):
@@ -289,6 +351,7 @@ bound those facts imply. A name rizin's command line cannot take
 placeholder and is counted by the caller's name check.
 	"""
 	rows = sorted(functions)
+	existing = set(existing)
 	commands = []
 	previous_gap = 16
 	for at, (va, name) in enumerate(rows):
@@ -296,12 +359,15 @@ placeholder and is counted by the caller's name check.
 			previous_gap = rows[at + 1][0] - va
 		if not name or name[0].isdigit() or any(c.isspace() for c in name):
 			name = f"sub_{va:x}"
+		if va in existing:
+			commands.append(f"afn {name} @ {va:#x}")
+			continue
 		commands.append(f"af+ {name} @ {va:#x}")
 		commands.append(f"afb+ {va:#x} {va:#x} {previous_gap:#x}")
 	return commands
 
 
-def apply_seed(payload, binary_path, rzdb_path, limit=0, opener=open_session):
+def apply_seed(payload, binary_path, rzdb_path, limit=0, opener=open_session, stats=None):
 	"""Define the seed's functions in rizin; save the project.
 
 Returns (defined, named, sampled_ok, sampled) counts, read back
@@ -315,6 +381,8 @@ address inside a neighbour's block) is reported, never assumed.
 	functions = payload["functions"]
 	if limit:
 		functions = functions[:limit]
+	if stats is None:
+		stats = {}
 	lock_path = rzdb_path + ".lock"
 	try:
 		lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -329,10 +397,12 @@ address inside a neighbour's block) is reported, never assumed.
 		pipe = opener(binary_path)
 		try:
 			pipe.cmd("e scr.color=false")
-			_batched(pipe, _seed_commands(functions))
+			preexisting = {row["offset"] for row in (pipe.cmdj("aflj") or [])}
+			_batched(pipe, _seed_commands(functions, preexisting))
 			rows = pipe.cmdj("aflj") or []
 			present = {row["offset"]: row.get("name", "") for row in rows}
 			defined = [va for va, _ in functions if va in present]
+			stats["preexisting"] = sum(1 for va, _ in functions if va in preexisting)
 			named = sum(1 for va, name in functions if present.get(va) == name)
 			labelled = [(va, name) for va, name in functions
 						if va in present and not name.startswith("sub_")]
@@ -377,10 +447,16 @@ def cmd_seed_build(args, con):
 	if not os.path.exists(ledger):
 		raise SystemExit(f"error: ledger not found: {ledger}")
 	binary = args.seed_binary or args.binary
+	counts = {}
+	names_path = getattr(args, "names", None)
 	try:
-		payload = build_payload(con, ledger, binary, args.target)
+		bn_names = load_bn_names(names_path, args.target) if names_path else None
+		payload = build_payload(con, ledger, binary, args.target, bn_names, counts)
 	except SeedError as exc:
 		raise SystemExit(f"error: {exc}") from exc
+	if not names_path:
+		print("warning: no --names export: the seed carries only the dump index's "
+		      "names and revtool claims, not the BN labels", file=sys.stderr)
 	blob = encode_seed(payload)
 	if len(blob) > SEED_SIZE_LIMIT:
 		raise SystemExit(
@@ -400,6 +476,8 @@ def cmd_seed_build(args, con):
 	print(f"  target {payload['target']}  binary {payload['binary_sha256']} "
 		  f"({payload['binary_sha_source']})")
 	print(f"  functions {len(payload['functions'])}  ledger lines {len(payload['ledger'])}")
+	print(f"  names: claims {counts['overlay']}  bn {counts['bn']}  dump {counts['dump']}  "
+	      f"anonymous {counts['anonymous']}  bn-only functions {counts['bn_only']}")
 	print(f"  bytes {len(blob)} of {SEED_SIZE_LIMIT} cap  sha256 {hashlib.sha256(blob).hexdigest()}")
 	print(f"  {scanned}")
 	return 0
@@ -465,9 +543,10 @@ def cmd_seed_apply(args, con):
 	if os.path.exists(rzdb) and not args.force:
 		raise SystemExit(f"error: {rzdb} exists; pass --force to replace it")
 	started = time.monotonic()
+	stats = {}
 	try:
 		defined, named, sampled_ok, sampled = apply_seed(
-			payload, binary, rzdb, limit=args.limit)
+			payload, binary, rzdb, limit=args.limit, stats=stats)
 	except SeedError as exc:
 		raise SystemExit(f"error: {exc}") from exc
 	elapsed = time.monotonic() - started
@@ -475,6 +554,9 @@ def cmd_seed_apply(args, con):
 	print(f"applied {os.path.basename(args.seed)} -> {rzdb} in {elapsed:.1f}s")
 	merged = f" (rizin refused {total - defined} inside neighbours)" if defined < total else ""
 	print(f"  functions defined {defined} of {total} seed rows{merged}")
+	if stats.get("preexisting"):
+		print(f"  of those, {stats['preexisting']} rizin defined on load and were renamed in place")
+	print("  next: `revtool_rizin.py index` runs the reference pass (aar) that xref/strings need")
 	print(f"  seed names in place {named}")
 	print(f"  sampled labelled names {sampled_ok} of {sampled} match")
 	if sampled and sampled_ok != sampled:

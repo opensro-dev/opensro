@@ -78,6 +78,8 @@ py .state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py \
     --backend rizin --db revtool.db --binary SRO_Client.exe index
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db view sub_402a70
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db xref data_f0c90c
+py tools/re/revtool/revtool.py --backend rizin --db revtool.db xref CIFGuildSummonReq_OnCreate
+py tools/re/revtool/revtool.py --backend rizin --db revtool.db strings GUILD_RECALL
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db coverage sub_402a70
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db find CIFMain
 py tools/re/revtool/revtool.py --backend rizin --db revtool.db audit some_writeup.md
@@ -90,6 +92,18 @@ SRO_Client.exe) and saves a `.rzdb` beside the DB; later commands
 reload it instead of re-analyzing. `--analyze` chooses `aac` (default),
 `aap`, `aaa` or `none`.
 
+On a loaded project (a seed-applied `.rzdb`) `index` first runs the
+reference pass `--refs aar` (default; about 7 s on the seeded client),
+because a seeded project defines functions but holds no references
+until rizin reads the code once; without it every `xref` and
+`strings` answers 0. `--refs none` skips it, and `xref` then warns
+before you trust a 0.
+
+`strings PATTERN` (case-insensitive; `--regex` for a regex) lists the
+binary's data strings that match and every function referencing each,
+tagged `[labeled]` or `[NEEDS RE]`: the usual first step from a
+feature's UI or log text to its code.
+
 ### Where each command gets its facts
 
 | command  | source                     | notes |
@@ -97,7 +111,8 @@ reload it instead of re-analyzing. `--analyze` chooses `aac` (default),
 | index    | `aflj` + `afsj`            | names normalized `fcn.00402a70` -> `sub_402a70`; signatures are rizin's |
 | find     | overlay DB (delegated)     | identical to the dump backend |
 | view     | `pdfj`                     | disassembly at true addresses, overlay applied by revtool; rizin 0.8.2 has no `pdc`/`pdg` |
-| xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run) |
+| xref     | `axtj`                     | analysis-derived; un-analyzed code is invisible (printed on every run); takes a `sub_`/`data_` token or an indexed function name |
+| strings  | `izj` + `axtj`             | refs checked at every character boundary up to the match (izj can start a string early) |
 | coverage | `aflj` call/data refs      | exact refs; field depth from disassembly (see below) |
 | audit    | overlay DB (delegated)     | identical to the dump backend |
 | rename   | overlay DB (delegated)     | the strict depth gate measures the function's disassembly (below) |
@@ -150,7 +165,7 @@ either way.
 
 ```
 rem maintainer: build (hashes must agree across DB, ledger, binary)
-py revtool.py --db <overlay.db> --binary SRO_Client.exe seed build --target client
+py revtool.py --db <overlay.db> --binary SRO_Client.exe seed build --target client --names bn-names-client.json
 py revtool.py seed verify revtool-seed-client.xz --binary SRO_Client.exe
 
 rem contributor: rizin + the pinned venv, next to their retail binary
@@ -163,8 +178,26 @@ saves the project via a temp file + `os.replace` under an exclusive
 lock, so two applies at one `.rzdb` refuse rather than race: client
 94,865 of 95,290 rows defined in 66 s on the maintainer's box with
 the locked save (the rest are import thunks rizin already owns),
-sampled labelled names 20/20. Run rizin's own analysis on top for
-blocks and xrefs.
+sampled labelled names 20/20. Functions rizin defines on load (entry0
+and the like) are renamed in place rather than re-added. Then run
+`revtool_rizin.py index` for the reference pass.
+
+`--names` merges the Binary Ninja labels, which are the bulk of the
+RE: without it the seed carries only the dump index's names and
+revtool claims (1,373 of the client's 95,290 functions named, against
+13,814 in the BN database, 2026-11-09). Precedence: a revtool claim,
+then the BN name, then the dump's; an anonymous `sub_` never replaces
+a real name, and BN functions the dump lacks are added. The export
+is one JSON file per target, written from the Binary Ninja executor
+(MCP) against the open database:
+
+```
+import json
+rows = [[f.start, f.name] for f in bv.functions]
+json.dump({"format": "sro-bn-function-names", "version": 1,
+           "target": "client", "source": bv.file.filename.split("/")[-1],
+           "functions": rows}, open("bn-names-client.json", "w"))
+```
 
 ## Tests
 

@@ -71,6 +71,7 @@ class FakeRizin:
 
 	def __init__(self):
 		self.saved = False
+		self.analyzed = []
 
 	def functions(self):
 		return list(AFLJ)
@@ -78,12 +79,26 @@ class FakeRizin:
 	def signature_parts(self, va):
 		return AFSJ.get(va, {})
 
+	def signature_parts_many(self, vas):
+		return {va: self.signature_parts(va) for va in vas}
+
+	def analyze_project(self, step):
+		self.analyzed.append(step)
+		return 0.0
+
+	def strings(self):
+		# izj starts this string one character early, as rizin did live.
+		return [{"vaddr": 0x500000, "type": "ascii", "string": "oUIIT_MSG_GUILD_RECALL"},
+		        {"vaddr": 0x500100, "type": "ascii", "string": "unused text"}]
+
 	def func_ops(self, va):
 		return list(OPS_402A70) if va == 0x402A70 else []
 
 	def xrefs_to(self, va):
 		if va == 0x401100:
 			return [{"from": 0x402A74, "to": 0x401100, "type": "CALL"}]
+		if va == 0x500001:
+			return [{"from": 0x402A78, "to": 0x500001, "type": "DATA"}]
 		return []
 
 	def cmdj(self, text):
@@ -310,6 +325,52 @@ class TestCommands(unittest.TestCase):
 		rc, out = capture(rz.cmd_index, args, con, fake)
 		self.assertEqual(rc, 0)
 		self.assertIn("seed-applied", out)
+		# A seeded project has no references until the pass runs.
+		self.assertEqual(fake.analyzed, ["aar"])
+
+	def test_index_refs_none_skips_the_pass_and_xref_warns(self):
+		con, binary, tmp = self.open_seeded()
+		args = make_args(db=os.path.join(tmp, "revtool.db"), binary=binary, refs="none")
+		fake = FakeRizin()
+		fake.from_project = True
+		capture(rz.cmd_index, args, con, fake)
+		self.assertEqual(fake.analyzed, [])
+		args = make_args(symbol="sub_402a70", binary=binary)
+		err = io.StringIO()
+		with contextlib.redirect_stderr(err):
+			rc, _out = capture(rz.cmd_xref, args, con, fake)
+		self.assertEqual(rc, 0)
+		self.assertIn("--refs none", err.getvalue())
+
+	def test_xref_takes_an_indexed_function_name(self):
+		con, binary, _tmp = self.open_seeded()
+		con.execute("UPDATE functions SET name = 'Helper_Named' WHERE addr = '00401100'")
+		args = make_args(symbol="Helper_Named", binary=binary)
+		rc, out = capture(rz.cmd_xref, args, con, FakeRizin())
+		self.assertEqual(rc, 0)
+		self.assertIn("1 reference(s)", out)
+		self.assertNotIn("not a known symbol", out)
+		self.assertIn("callers: 1", out)
+
+	def test_strings_finds_the_user_past_an_early_start(self):
+		con, binary, _tmp = self.open_seeded()
+		args = make_args(pattern="guild_recall", binary=binary, regex=False)
+		rc, out = capture(rz.cmd_strings, args, con, FakeRizin())
+		self.assertEqual(rc, 0)
+		self.assertIn("1 match(es)", out)
+		self.assertIn("sub_402a70  [NEEDS RE]  @ 00402a78", out)
+
+	def test_strings_labels_a_named_user(self):
+		con, binary, _tmp = self.open_seeded()
+		con.execute("UPDATE functions SET name = 'CIFGuild_OnCreate' WHERE addr = '00402a70'")
+		args = make_args(pattern="GUILD_RECALL", binary=binary, regex=False)
+		_rc, out = capture(rz.cmd_strings, args, con, FakeRizin())
+		self.assertIn("CIFGuild_OnCreate  [labeled]", out)
+
+	def test_string_ref_offsets_follow_char_width(self):
+		self.assertEqual(rz.string_ref_offsets({"type": "utf16le"}, 2), [0, 2, 4])
+		self.assertEqual(rz.string_ref_offsets({"type": "ascii"}, 0), [0])
+		self.assertEqual(len(rz.string_ref_offsets({"type": "ascii"}, 999)), rz.STRING_REF_SCAN_MAX)
 
 	def test_rename_global_stores_claim_and_view_applies_it(self):
 		con, binary, _tmp = self.open_seeded()

@@ -431,6 +431,9 @@ def build_parser():
 					help="retail binary to hash + scan (default: the top-level --binary)")
 	sb.add_argument("--out", default=None,
 					help="seed file (default: <data dir>/seed/revtool-seed-<target>.xz)")
+	sb.add_argument("--names", default=None,
+					help="Binary Ninja name export (sro-bn-function-names JSON) to merge; "
+						 "without it the seed misses the BN labels")
 	sb.set_defaults(handler=cmd_seed_build)
 	sv = ssub.add_parser("verify", help="check a seed: format, pin, hash, text-run scan")
 	sv.add_argument("seed", help="seed file")

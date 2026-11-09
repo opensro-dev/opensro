@@ -109,6 +109,55 @@ class BuildTests(unittest.TestCase):
 					revtool_seed.cmd_seed_build(args, self.con)
 
 
+class NameMergeTests(unittest.TestCase):
+	def setUp(self):
+		self.dir = tempfile.TemporaryDirectory()
+		self.addCleanup(self.dir.cleanup)
+		self.db = os.path.join(self.dir.name, "revtool.db")
+		self.ledger = os.path.join(self.dir.name, "revtool_symbols.jsonl")
+		self.con = _fixture_db(self.db)
+		self.addCleanup(self.con.close)
+		_fixture_ledger(self.ledger)
+
+	def _names(self, rows, target="client", fmt=revtool_seed.BN_NAMES_FORMAT):
+		path = os.path.join(self.dir.name, "names.json")
+		Path(path).write_text(json.dumps({"format": fmt, "version": 1, "target": target,
+			"source": "x.bndb", "functions": rows}), encoding="utf-8")
+		return path
+
+	def test_bn_names_fill_anonymous_rows_and_add_bn_only_functions(self):
+		names = revtool_seed.load_bn_names(self._names([
+			[0x401000, "CNetClient_Send"],      # fills a sub_ row
+			[0x401020, "sub_401020"],           # anonymous: no change
+			[0x403000, "BN_LosesToTheClaim"],   # the overlay claim wins
+			[0x405000, "CIFGuild_OnCreate"],    # BN-only function
+		]), "client")
+		counts = {}
+		payload = revtool_seed.build_payload(self.con, self.ledger, None, "client", names, counts)
+		self.assertEqual(payload["functions"], [
+			[0x401000, "CNetClient_Send"], [0x401020, "sub_401020"],
+			[0x403000, "CIFMainFrame_Draw"], [0x405000, "CIFGuild_OnCreate"]])
+		self.assertEqual(counts, {"overlay": 1, "bn": 1, "dump": 0, "anonymous": 1, "bn_only": 1})
+
+	def test_name_export_for_another_target_is_refused(self):
+		with self.assertRaises(revtool_seed.SeedError):
+			revtool_seed.load_bn_names(self._names([], target="server"), "client")
+
+	def test_name_export_with_a_bad_format_is_refused(self):
+		with self.assertRaises(revtool_seed.SeedError):
+			revtool_seed.load_bn_names(self._names([], fmt="other"), "client")
+
+	def test_build_command_reads_names(self):
+		out = os.path.join(self.dir.name, "out.xz")
+		args = SimpleNamespace(db=self.db, ledger=None, binary=None, seed_binary=None,
+			target="client", out=out, names=self._names([[0x401000, "CNetClient_Send"]]))
+		buf = io.StringIO()
+		with redirect_stdout(buf):
+			self.assertEqual(revtool_seed.cmd_seed_build(args, self.con), 0)
+		self.assertIn("bn 1", buf.getvalue())
+		self.assertIn([0x401000, "CNetClient_Send"], revtool_seed.load_seed(out)["functions"])
+
+
 class ScanTests(unittest.TestCase):
 	def test_planted_binary_run_is_caught(self):
 		run = b"CIFMainFrame::DrawText"  # 22 printable bytes
@@ -128,10 +177,11 @@ class ScanTests(unittest.TestCase):
 class FakePipe:
 	"""rzpipe stand-in: af/afn mutate a fake aflj, Ps is recorded."""
 
-	def __init__(self, drop=()):
-		self.funcs = {}
+	def __init__(self, drop=(), preloaded=None):
+		self.funcs = dict(preloaded or {})
 		self.drop = set(drop)
 		self.saved = None
+		self.duplicated = 0
 
 	def cmd(self, text):
 		for line in text.split("\n"):
@@ -140,7 +190,13 @@ class FakePipe:
 				continue
 			if parts[0] == "af+" and parts[2] == "@":
 				va = int(parts[3], 16)
-				if va not in self.drop:
+				if va in self.funcs:
+					self.duplicated += 1
+				elif va not in self.drop:
+					self.funcs[va] = parts[1]
+			elif parts[0] == "afn" and parts[2] == "@":
+				va = int(parts[3], 16)
+				if va in self.funcs:
 					self.funcs[va] = parts[1]
 			elif parts[0] == "Ps":
 				self.saved = parts[1].strip('"')
@@ -181,6 +237,17 @@ class ApplyTests(unittest.TestCase):
 		self.assertEqual((defined, named), (3, 3))
 		self.assertEqual((ok, sampled), (1, 1))
 		self.assertEqual(pipe.funcs[0x401020], "CIFDraw")
+
+	def test_apply_renames_functions_rizin_defined_on_load(self):
+		# entry0-style rows rizin defines itself: rename, never af+ again.
+		pipe = FakePipe(preloaded={0x401020: "entry0"})
+		stats = {}
+		with tempfile.TemporaryDirectory() as td:
+			revtool_seed.apply_seed(self._payload(), "binary.exe", os.path.join(td, "o.rzdb"),
+				opener=lambda binary: pipe, stats=stats)
+		self.assertEqual(pipe.duplicated, 0)
+		self.assertEqual(pipe.funcs[0x401020], "CIFDraw")
+		self.assertEqual(stats["preexisting"], 1)
 
 	def test_apply_refuses_a_held_lock(self):
 		pipe = FakePipe()
