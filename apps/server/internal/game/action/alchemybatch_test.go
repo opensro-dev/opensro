@@ -123,6 +123,42 @@ func TestCompoundBatchCancellationRemovalAndInputReplacement(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAdvanceCompoundJobsScratchDropsRetiredKeys
+
+The advance pass refills its key scratch every tick (#2033): a job
+retired since the last pass leaves no key behind for the next one,
+and a job started afterwards is found again by the reused scratch.
+================
+*/
+func TestAdvanceCompoundJobsScratchDropsRetiredKeys(t *testing.T) {
+	rt, c, delivered := compoundBatchRuntime()
+	startCompoundBatch(rt, c)
+	rt.advanceCompoundJobs(100001)
+	if got := len(rt.compoundKeys); got != 1 {
+		t.Fatalf("scratch holds %d keys after one job advanced, want 1", got)
+	}
+	key := compoundKey{testDivision, c.Name}
+	job, stored := rt.compoundJob(key)
+	if !stored {
+		t.Fatal("the started batch stored no job")
+	}
+	rt.clearCompoundJob(key)
+	rt.advanceCompoundJobs(101000)
+	if got := len(rt.compoundKeys); got != 0 {
+		t.Fatalf("scratch holds %d keys after the only job retired, want 0", got)
+	}
+	if len(*delivered) != 0 {
+		t.Fatal("a retired job delivered frames")
+	}
+	rt.storeCompoundJob(key, job)
+	rt.advanceCompoundJobs(102000)
+	if got := len(rt.compoundKeys); got != 1 {
+		t.Fatalf("scratch holds %d keys for the restarted job, want 1", got)
+	}
+}
+
 func TestCompoundClockRetainsNativeElapsedDebtWithoutBurstingOneUpdate(t *testing.T) {
 	job := compoundJob{lastMs: 100000}
 	var due bool
