@@ -62,11 +62,14 @@ func TestLowerAllocationCounts(t *testing.T) {
 	if got := testing.AllocsPerRun(100, func() { sink = Lower("SteadyStateMixed") }); got > 0.05 {
 		t.Errorf("Lower of a repeated mixed-case name: %v allocations per run, want a memo hit (<= 0.05)", got)
 	}
-	if got := testing.AllocsPerRun(100, func() { sink = Key("division", "already-lower") }); got != 1 {
-		t.Errorf("Key of a folded name: %v allocations per run, want 1 (the concatenation)", got)
+	// Key memoizes the composition itself (#2033): a repeated key pays
+	// neither the fold nor the concatenation. Before this, both pins
+	// below read 1 (the concatenation).
+	if got := testing.AllocsPerRun(100, func() { sink = Key("division", "already-lower") }); got > 0.05 {
+		t.Errorf("Key of a folded name: %v allocations per run, want a memo hit (<= 0.05)", got)
 	}
-	if got := testing.AllocsPerRun(100, func() { sink = Key("division", "SteadyStateMixed") }); got != 1 {
-		t.Errorf("Key of a repeated mixed-case name: %v allocations per run, want 1 (the concatenation)", got)
+	if got := testing.AllocsPerRun(100, func() { sink = Key("division", "SteadyStateMixed") }); got > 0.05 {
+		t.Errorf("Key of a repeated mixed-case name: %v allocations per run, want a memo hit (<= 0.05)", got)
 	}
 	if got := testing.AllocsPerRun(100, func() { sink = baselineKey("division", "SteadyStateMixed") }); got != 2 {
 		t.Errorf("baseline Key of a mixed-case name: %v allocations per run, want 2 (the before picture)", got)

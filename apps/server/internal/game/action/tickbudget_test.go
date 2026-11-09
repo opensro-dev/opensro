@@ -94,10 +94,13 @@ const (
 // judged pet tick refilling the session's retained owner-world
 // slot instead of cloning the world per tick, and its stuck answer
 // and movement constraint built once per session (#2033), measured
-// 23,897 B / 249 allocs.
+// 23,897 B / 249 allocs; with the identity key's composition
+// memoized (namekey.Key), so the world store's lanes stop building
+// the same key strings every tick (#2033), measured 23,227 B / 221
+// allocs.
 const (
-	tickBudgetBytesPerTick  = 26300
-	tickBudgetAllocsPerTick = 274
+	tickBudgetBytesPerTick  = 25500
+	tickBudgetAllocsPerTick = 243
 )
 
 /*
