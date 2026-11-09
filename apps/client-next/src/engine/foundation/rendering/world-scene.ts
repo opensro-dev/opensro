@@ -70,6 +70,22 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 		(!scene.dungeonVisibility || scene.dungeonAmbient.length !== scene.dungeonVisibility.length ||
 			scene.dungeonAmbient.some( c => !Number.isInteger( c ) || c < 0 || c > 0xffffffff ))
 	) throw Error( "Invalid dungeon ambient" );
+	if (
+		scene.dungeonLights &&
+		(!scene.dungeonVisibility || scene.dungeonLights.length !== scene.dungeonVisibility.length ||
+			scene.dungeonLights.some( row =>
+				!Array.isArray( row ) || row.length > 1024 ||
+				row.some( light =>
+					typeof light?.name !== "string" ||
+					![ light.position, light.diffuse, light.ambient, light.specular ].every(
+						v => Array.isArray( v ) && v.length === 3 && v.every( Number.isFinite )
+					) ||
+					!Number.isFinite( light.range ) ||
+					!Array.isArray( light.attenuation ) || light.attenuation.length !== 2 ||
+					!Number.isFinite( light.attenuation[0] ) || !Number.isFinite( light.attenuation[1] )
+				)
+			))
+	) throw Error( "Invalid dungeon lights" );
 	if ( scene.scenery ) {
 		if ( !Array.isArray( scene.scenery ) || scene.scenery.length > 8192 ) {
 			throw Error( "Scenery emitter budget exceeded" );
@@ -96,6 +112,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 	) + (scene.flareTextures ?? []).reduce( ( sum, p ) => sum + p.length * 2, 0 );
 	bytes += (scene.dungeonVisibility ?? []).reduce( ( n, row ) => n + row.length * 8 + 32, 0 );
 	bytes += (scene.dungeonAmbient?.length ?? 0) * 8;
+	bytes += (scene.dungeonLights ?? []).reduce( ( n, row ) => n + row.length * 128 + 32, 0 );
 	if ( Object.keys( scene.models ?? {} ).length > 64 ) throw new Error( "World animated model budget exceeded" );
 	for ( const model of Object.values( scene.models ?? {} ) ) {
 		bytes += characterBytes( model, [] ) + characterPoseBytes( model );
@@ -349,6 +366,7 @@ export function copyWorldScene( scene: WorldScene ): WorldScene {
 		scenery: scene.scenery ? structuredClone( scene.scenery ) : undefined,
 		soundTerrain: scene.soundTerrain?.map( row => ({ ...row, types: row.types.slice() }) ),
 		dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ),
+		dungeonLights: scene.dungeonLights?.map( row => row.slice() ),
 		flareTextures: scene.flareTextures?.slice(),
 		models: scene.models ? structuredClone( scene.models ) : undefined,
 		environment: scene.environment ? structuredClone( scene.environment ) : undefined,
@@ -494,6 +512,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			...scene,
 			dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ),
 			dungeonAmbient: scene.dungeonAmbient?.slice(),
+			dungeonLights: scene.dungeonLights?.map( row => row.slice() ),
 			groups: packGroupStreams( groups )
 		},
 		bytes: bytes - dropped,

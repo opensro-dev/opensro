@@ -146,6 +146,19 @@ test( "all twelve well-formed retail DOFs retain exact water ownership, transfor
 								flags: o.flag
 							} ]
 					),
+					// The publisher renames the oracle's channels: color0/1/2
+					// are diffuse/ambient/specular, the first scalar is the
+					// exported range, and (float2, float1) the (constant,
+					// linear) attenuation pair (buildDungeonResources.mjs).
+					lights: block.lights.map( ( light ) => ({
+						name: light.name,
+						position: light.position,
+						diffuse: light.color0,
+						ambient: light.color1,
+						specular: light.color2,
+						range: light.attenuation,
+						attenuation: [ light.float2, light.float1 ]
+					}) ),
 					connectedBlocks: block.connectedBlocks,
 					visibleBlocks: block.visibleBlocks
 				} );
@@ -340,6 +353,12 @@ for ( const regionId of [ 32769, 32770, 32771, 32772, 32773, 32774, 32775, 32777
 			assert.deepEqual(
 				decoded.dungeonAmbient,
 				bundle.dungeonBlocks.map( block => block.ambientColor )
+			);
+			// The authored block lights ride the scene beside the ambient:
+			// every block's Light1 entries survive decoding unchanged.
+			assert.deepEqual(
+				decoded.dungeonLights,
+				bundle.dungeonBlocks.map( block => block.lights ?? [] )
 			);
 
 			// Verify 0x8000-bit world streaming requests only the single dungeon bundle per floor

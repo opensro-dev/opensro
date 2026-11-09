@@ -142,7 +142,8 @@ type Inventory struct {
 }
 
 // New returns a player Inventory holding a copy of items, its bag ending
-// at bagEnd (the character's capacity byte, BagEnd).
+// at bagEnd (the character's capacity byte, BagEnd). Rows that share one
+// slot are healed first (healDuplicateSlots).
 /*
 ================
 New
@@ -153,7 +154,7 @@ func New(items []Item, bagEnd uint8) *Inventory {
 	for n := range items {
 		owned[n] = cloneInventoryRow(items[n])
 	}
-	return &Inventory{items: owned, bagStart: EquipmentSlotEnd, slotEnd: bagEnd}
+	return &Inventory{items: healDuplicateSlots(owned, bagEnd), bagStart: EquipmentSlotEnd, slotEnd: bagEnd}
 }
 
 // NewContainer shares transfer arithmetic with player bags while declaring

@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -97,6 +98,8 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpStallNetworkBuy, rt.hubHandler(hub, rt.HandleStallNetworkBuy))
 	hub.Handle(wire.OpTargetInteract, rt.hubHandler(hub, rt.HandleTargetInteract))
 	hub.Handle(wire.OpItemUseRequest, rt.hubHandler(hub, rt.HandleItemUse))
+	// 0x7178 answers a Guild Recall Scroll's summon (guildrecall.go).
+	hub.Handle(guild.OpGuildRecallAnswer, rt.hubHandler(hub, rt.HandleGuildRecallAnswer))
 	hub.Handle(wire.OpCosCommandRequest, rt.cosCommandHubHandler(hub))
 	hub.Handle(wire.OpCosRideRequest, rt.hubHandler(hub, rt.HandleCosRide))
 	hub.Handle(opCosCancelRequest, rt.hubHandler(hub, rt.HandleCosCancel))

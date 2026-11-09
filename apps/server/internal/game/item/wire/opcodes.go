@@ -188,6 +188,20 @@ const (
 	// ErrCodeCrestNoUnion is UIIT_MSG_UNION_NOT_ERROR (01:BD, banner):
 	// the union crest delete item used by a guild standing in no union.
 	ErrCodeCrestNoUnion uint8 = 0xBD
+	// ErrCodeGuildRecallRefused is UIIT_MSG_GUILD_RECALL_ERROR (01:C1):
+	// the recall scroll's shared refusal. The later server returns it as
+	// the u16 0x18C1 both for a use from a world the recall cannot start
+	// in and for an answer from a member in a forbidden state; the reply
+	// lanes here carry the low byte, as everywhere in this table.
+	ErrCodeGuildRecallRefused uint8 = 0xC1
+	// ErrCodeGuildRecallBusy is the same recall-error notice (01:C2):
+	// the later server's 0x18C2, a master whose state byte is busy.
+	ErrCodeGuildRecallBusy uint8 = 0xC2
+	// ErrCodeGuildRecallNotMaster is UIIT_MSG_GUILD_ITEM_RIGHT_LIMIT
+	// (01:BC), the byte ErrCodeCrestNotMaster also carries: the later
+	// server's 0x18BC, a recall used by a non-master or by a guild
+	// below the item's level floor.
+	ErrCodeGuildRecallNotMaster uint8 = 0xBC
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
 	// honor-priced package the character's honor points cannot pay.

@@ -10,6 +10,7 @@ This module only places rects; the caller owns text and input.
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
+import { guideTokens, hasSml2Markup } from "./guide-content";
 import { messageBox } from "./message-box";
 import { textLines } from "./text-lines";
 
@@ -42,6 +43,36 @@ chat block's breaks (chat-layout's textLines).
 */
 export function messageBoxLines( lines: readonly string[], measure: ( value: string ) => number ): string[] {
 	return lines.flatMap( line => textLines( line, WRAP_WIDTH, measure ) );
+}
+
+/*
+================
+markupLines
+
+The authored lines of one message box body. 52DB20 appends SML2 text
+(Text_HasSml2Markup, 843100) through the text board, which applies its
+scopes and starts a new line at each <br>, so a body such as
+UIIT_MSG_MSGBOX_ASK_REBIRTH_MUTATION never shows its tags (opensro#3002).
+The bodies this box carries are left-aligned and uncoloured, so the lines
+are the text between breaks, an empty line for each doubled <br>. Plain
+text is one line, and markup the text board cannot read falls back to the
+raw text as the other SML2 boxes do.
+================
+*/
+export function markupLines( source: string ): string[] {
+	if ( !hasSml2Markup( source ) ) return [ source ];
+	let tokens;
+	try {
+		tokens = guideTokens( source );
+	} catch {
+		return [ source ];
+	}
+	const lines = [ "" ];
+	for ( const token of tokens ) {
+		if ( token.kind === "break" ) lines.push( "" );
+		else if ( token.kind === "text" ) lines[lines.length - 1] += token.value;
+	}
+	return lines;
 }
 
 /*

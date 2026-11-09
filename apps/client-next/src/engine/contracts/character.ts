@@ -170,7 +170,12 @@ export interface CharacterPointLight {
 	readonly pose: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; };
 	readonly ambient: readonly [number, number, number];
 	readonly diffuse: readonly [number, number, number];
+	/** The falloff's linear term: the diffuse contribution is divided by
+	 * (attenuationConstant + attenuation * distance). Effect lights leave
+	 * the constant at 0, the authored 1 / (k * d) glow; dungeon block
+	 * lights carry their authored constant term (DunBlockLightEntry). */
 	readonly attenuation: number;
+	readonly attenuationConstant?: number;
 	readonly range: number;
 }
 /*

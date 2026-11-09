@@ -217,7 +217,8 @@ readDofPresentation
 
 JMXVDOF 0101 block projection. Navigation retains resident block BSRs;
 room ambient D3DCOLOR (CRTDunBlock_ReadFromArchive 0x00AD8181 -> +0x6c),
-water placement and tint belong to the block presentation, not navigation.
+the block's authored Light1 point lights, water placement and tint belong
+to the block presentation, not navigation.
 ================
 */
 export function readDofPresentation( bytes, sourcePath ) {
@@ -322,6 +323,42 @@ export function readDofPresentation( bytes, sourcePath ) {
 			}
 		}
 
+		const lightCount = cursor.count( `block ${blockIndex} light count`, 1 << 20 );
+		const lights = [];
+		for ( let lightIndex = 0; lightIndex < lightCount; lightIndex += 1 ) {
+			const lightName = cursor.str( `block ${blockIndex} light ${lightIndex} name` );
+			const fields = Array.from(
+				{ length: 15 },
+				( _, field ) => cursor.f32( `block ${blockIndex} light ${lightIndex} field ${field}` )
+			);
+			if ( !fields.every( Number.isFinite ) ) {
+				throw Error( `${sourcePath}: non-finite block ${blockIndex} light ${lightIndex}` );
+			}
+			// DunBlockLightEntry, read by CRTDunBlock_ReadFromArchive
+			// (0x00AD8090): a counted name, the position, three colour
+			// triplets and three scalars (15 floats at entry +0x1C). The
+			// runtime entry->D3DLIGHT9 builder was not located in the
+			// client binary, so the triplet semantics are an inference:
+			// authored order diffuse, ambient, specular. Two independent
+			// sources agree: in every shipped DOF the second triplet is
+			// the darkest and the third the brightest (the D3D
+			// fill/highlight order), and the frozen legacy oracle
+			// (tests/oracles .../dungeon/parseDof.ts) annotates the same
+			// order "per wiki". The scalars are range, linear attenuation,
+			// constant attenuation (the constant is 1.5 across the Qin-Shi
+			// floors and 0 in Donwhang, the linear term 0.005-0.02
+			// throughout); exported below as the (constant, linear) pair.
+			lights.push( {
+				name: lightName,
+				position: fields.slice( 0, 3 ),
+				diffuse: fields.slice( 3, 6 ),
+				ambient: fields.slice( 6, 9 ),
+				specular: fields.slice( 9, 12 ),
+				range: fields[12],
+				attenuation: [ fields[14], fields[13] ]
+			} );
+		}
+
 		blocks.push( {
 			index: blockIndex,
 			path: blockPath,
@@ -333,13 +370,9 @@ export function readDofPresentation( bytes, sourcePath ) {
 			waterObjects,
 			blockObjects,
 			connectedBlocks,
-			visibleBlocks
+			visibleBlocks,
+			lights
 		} );
-		const lightCount = cursor.count( `block ${blockIndex} light count`, 1 << 20 );
-		for ( let lightIndex = 0; lightIndex < lightCount; lightIndex += 1 ) {
-			cursor.str( `block ${blockIndex} light ${lightIndex} name` );
-			cursor.skip( 15 * 4, `block ${blockIndex} light ${lightIndex} fields` );
-		}
 	}
 	if ( cursor.offset !== offsets[2] ) {
 		throw new Error(
