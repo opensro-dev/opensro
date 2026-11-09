@@ -9,7 +9,8 @@ first row, so the shadow occupies the slot for every grant while the
 client, which keeps one row per slot, shows it empty - pickups then
 refuse as "inventory full" against visibly free slots. New heals the
 shape: the first row keeps the slot, a shadowed bag row moves to the
-lowest free bag slot, and only a shadow with nowhere to go is dropped.
+lowest free bag slot, and a shadow with nowhere to go is kept as it
+lies until a slot frees. No row is ever deleted.
 
 ===========================================================================
 */
@@ -108,14 +109,15 @@ func TestNewHealsDuplicateEquipmentRowsIntoTheBag(t *testing.T) {
 
 /*
 ================
-TestNewDropsAShadowWithNowhereToGo
+TestNewKeepsAShadowWithNowhereToGo
 
-A genuinely full bag has no hole to surface a shadow into: the shadow
-is dropped, every slot keeps exactly one row, and the full refusal
-that follows is honest because the client sees the same full bag.
+A genuinely full bag has no hole to surface a shadow into: the row is
+kept as it lies (never deleted, so the write-back cannot burn a real
+item), the full refusal that follows stays honest, and on a later arm
+- once a slot has freed - the kept shadow surfaces into the hole.
 ================
 */
-func TestNewDropsAShadowWithNowhereToGo(t *testing.T) {
+func TestNewKeepsAShadowWithNowhereToGo(t *testing.T) {
 	rows := make([]Item, 0, 33)
 	for slot := uint8(13); slot < 45; slot++ {
 		rows = append(rows, sword(slot))
@@ -123,20 +125,31 @@ func TestNewDropsAShadowWithNowhereToGo(t *testing.T) {
 	rows = append(rows, potion(20))
 
 	inv := New(rows, domain.DefaultInventorySize)
-	if inv.Len() != 32 {
-		t.Fatalf("row count = %d, want 32: the unsurfaceable shadow stays dropped", inv.Len())
+	if inv.Len() != 33 {
+		t.Fatalf("row count = %d, want 33: a shadow with nowhere to go is kept, not deleted", inv.Len())
+	}
+	if _, fault := inv.GrantStack(sword(0), 1); fault == nil || fault.Code != wire.ErrCodeStorageFull {
+		t.Fatalf("grant into the full bag = %v, want ErrCodeStorageFull", fault)
+	}
+
+	// A slot frees (slot 44's row leaves) and the bag arms again: the
+	// kept shadow surfaces into the hole.
+	armed := make([]Item, 0, 32)
+	for _, row := range inv.Items() {
+		if row.Slot != 44 {
+			armed = append(armed, row)
+		}
+	}
+	inv = New(armed, domain.DefaultInventorySize)
+	surfaced, ok := inv.At(44)
+	if !ok || surfaced.RefObjID != 3630 {
+		t.Fatalf("slot 44 = %+v, want the kept potion surfaced once a slot freed", surfaced)
 	}
 	seen := map[uint8]bool{}
 	for _, row := range inv.Items() {
 		if seen[row.Slot] {
-			t.Fatalf("two rows still share slot %d after healing", row.Slot)
+			t.Fatalf("two rows still share slot %d after the second arm", row.Slot)
 		}
 		seen[row.Slot] = true
-	}
-	if _, ok := inv.At(20); !ok {
-		t.Fatal("slot 20 is empty after healing a full bag")
-	}
-	if _, fault := inv.GrantStack(sword(0), 1); fault == nil || fault.Code != wire.ErrCodeStorageFull {
-		t.Fatalf("grant into the healed full bag = %v, want ErrCodeStorageFull", fault)
 	}
 }
