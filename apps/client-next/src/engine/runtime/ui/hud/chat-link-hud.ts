@@ -69,6 +69,9 @@ export interface ChatLinkSources {
 	readonly avatarInventory?: readonly ChatLinkItem[];
 	readonly storage?: readonly ChatLinkItem[];
 	readonly pet?: readonly ChatLinkItem[];
+	// The GID of the pet whose bag `pet` shows: a pet link names it, so
+	// the server reads that pet's bag and not another companion's.
+	readonly petGid?: number;
 }
 
 /*
@@ -97,7 +100,13 @@ export function chatLinkFromActivate( id: string, sources: ChatLinkSources ): Ch
 		source = CHAT_LINK_SOURCE.avatar;
 		item = sources.avatarInventory?.find( row => (row.typeFlags ?? 0) >>> AVATAR_TYPE_SHIFT === value );
 	} else return null;
-	return item ? { ref: { source, slot: item.slot }, label: chatLinkLabel( item ) } : null;
+	if ( !item ) return null;
+	// A pet link names the pet whose bag is open (sources.petGid); a pet
+	// ref without one names no pet and the server reads nothing.
+	const ref: ChatLinkRef = source === CHAT_LINK_SOURCE.pet && sources.petGid !== undefined ?
+		{ source, slot: item.slot, pet: sources.petGid } :
+		{ source, slot: item.slot };
+	return { ref, label: chatLinkLabel( item ) };
 }
 
 /*

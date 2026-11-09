@@ -1100,9 +1100,12 @@ there, so the line goes out without that link.
 			case CHAT_LINK_SOURCE.storage:
 				return presentedStorage()?.items.find( item => item.slot === ref.slot );
 			case CHAT_LINK_SOURCE.pet:
-				return [ ...cosRecords.values() ].find( record => record.inventory )?.inventory?.find( item =>
-					item.slot === ref.slot
-				);
+				// The link names its pet (ref.pet): read that COS
+				// record's bag, the server's CompanionByGID read. A
+				// pet ref naming no pet reads nothing, as there.
+				return ref.pet === undefined ?
+					undefined :
+					cosRecords.get( ref.pet )?.inventory?.find( item => item.slot === ref.slot );
 		}
 		return undefined;
 	}

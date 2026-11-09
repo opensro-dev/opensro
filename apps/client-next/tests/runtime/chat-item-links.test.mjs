@@ -20,6 +20,7 @@ const {
 	encodeChatLinkRefs,
 	decodeChatLinkTail,
 	chatLinkLabel,
+	chatLinkSpans,
 	markerCount,
 	stripChatMarkers,
 	replaceChatMarkers
@@ -30,6 +31,30 @@ const bytes = hex => Uint8Array.from( hex.split( " " ).map( b => parseInt( b, 16
 test("the link refs encode as the server decodes them", () => {
 	assert.deepEqual( encodeChatLinkRefs( [ { source: 1, slot: 0x0102 } ] ), bytes( "01 01 02 01" ) );
 	assert.equal( encodeChatLinkRefs( [] ).length, 0 );
+});
+
+test("a pet link names its pet after the slot", () => {
+	// Pinned against the server's vector (chat/itemlinks_test.go): a pet
+	// ref is [u8 source][u16 slot][u32 gid]; the others stay 3 bytes.
+	assert.deepEqual(
+		encodeChatLinkRefs( [ { source: 1, slot: 0x0102 }, { source: 2, slot: 0x0041, pet: 0x12345678 } ] ),
+		bytes( "02 01 02 01 02 41 00 78 56 34 12" )
+	);
+	assert.deepEqual(
+		encodeChatLinkRefs( [ { source: 2, slot: 0x0041, pet: 0x12345678 } ] ),
+		bytes( "01 02 41 00 78 56 34 12" )
+	);
+});
+
+test("with links off a received line draws unchanged", () => {
+	// A pasted marker is plain text then: no label, no "<?>" (the owner
+	// report behind #3022). Links on, the same line labels and spans.
+	const text = "look " + CHAT_LINK_MARKER + " ok";
+	assert.deepEqual( chatLinkSpans( text, undefined, false ), { text, spans: [] } );
+	assert.deepEqual( chatLinkSpans( text, [], false ), { text, spans: [] } );
+	const on = chatLinkSpans( text, [ { name: "Blade", plus: 7 } ], true );
+	assert.equal( on.text, "look <Blade +7> ok" );
+	assert.deepEqual( on.spans, [ { kind: "chat-item:0", start: 5, end: 15 } ] );
 });
 
 test("the broadcast tail decodes the server's vector", () => {

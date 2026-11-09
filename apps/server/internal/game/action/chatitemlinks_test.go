@@ -92,14 +92,43 @@ TestLinkedItemPetAndAvatar
 */
 func TestLinkedItemPetAndAvatar(t *testing.T) {
 	rt, c, _ := storageFixture(t)
-	ref := chat.LinkRef{Source: chat.LinkSourcePet, Slot: 0}
+	ref := chat.LinkRef{Source: chat.LinkSourcePet, Slot: 0, Pet: 7001}
 	if _, ok := rt.LinkedItem(testDivision, c, ref); ok {
 		t.Fatal("a pet item linked without a pet")
 	}
-	carried := enterworld.InventoryRow{Slot: 0, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
+	// A grab pet is a persistent companion on its summon item's row,
+	// summoned beside the transport (ActiveCOS, another GID): both hold
+	// an item at slot 0, and a link reads the pet it names (#3022).
+	grabBag := enterworld.InventoryRow{Slot: 0, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
 		TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 3, VarianceBits: "0"}
-	c.ActiveCOS = &domain.CharacterCOS{Container: &domain.COSContainer{Capacity: 28, Rows: []domain.InventoryRow{carried}}}
-	wantLinked(t, rt, c, ref, carried, "<ITEM_ETC_HP_POTION_01>")
+	grabPet := &domain.CharacterCOS{GID: 7001, Codename: "COS_P_WOLF_001", Summoned: true, CurrentHP: 10,
+		Container: &domain.COSContainer{Capacity: 28, Rows: []domain.InventoryRow{grabBag}}}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 20, RefObjID: 4903,
+		Codename: "ITEM_COS_P_WOLF_SCROLL", Summon: grabPet})
+	transportBag := enterworld.InventoryRow{Slot: 0, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1, VarianceBits: "0"}
+	c.ActiveCOS = &domain.CharacterCOS{GID: 7002, Codename: "COS_T_HORSE", Summoned: true, CurrentHP: 10,
+		Container: &domain.COSContainer{Capacity: 28, Rows: []domain.InventoryRow{transportBag}}}
+	wantLinked(t, rt, c, ref, grabBag, "<ITEM_ETC_HP_POTION_01>")
+	wantLinked(t, rt, c, chat.LinkRef{Source: chat.LinkSourcePet, Slot: 0, Pet: 7002}, transportBag, "<ITEM_CH_SWORD_01_A_RARE>")
+	// A link naming no pet, an unknown pet, a dead pet or a pet put away
+	// reads nothing.
+	for _, bad := range []chat.LinkRef{
+		{Source: chat.LinkSourcePet, Slot: 0},
+		{Source: chat.LinkSourcePet, Slot: 0, Pet: 7999},
+	} {
+		if _, ok := rt.LinkedItem(testDivision, c, bad); ok {
+			t.Fatalf("ref %+v linked", bad)
+		}
+	}
+	grabPet.CurrentHP = 0
+	if _, ok := rt.LinkedItem(testDivision, c, ref); ok {
+		t.Fatal("a dead pet's item linked")
+	}
+	grabPet.CurrentHP, grabPet.Summoned = 10, false
+	if _, ok := rt.LinkedItem(testDivision, c, ref); ok {
+		t.Fatal("a pet put away linked")
+	}
 	costume := enterworld.InventoryRow{Slot: 1, RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE",
 		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1, VarianceBits: "0"}
 	c.AvatarInventory = &domain.AvatarInventory{Rows: []domain.InventoryRow{costume}}

@@ -37,6 +37,13 @@ func TestLinkRefsRoundTrip(t *testing.T) {
 	if want := []byte{0x01, 0x01, 0x02, 0x01}; !bytes.Equal(encoded, want) {
 		t.Fatalf("EncodeLinkRefs = % X, want % X", encoded, want)
 	}
+	// A pet ref carries its pet's GID after the slot (pinned with the
+	// client's chat-item-links tests): [02 41 00] then 0x12345678 LE.
+	refs = []LinkRef{{Source: LinkSourceStorage, Slot: 0x0102}, {Source: LinkSourcePet, Slot: 0x0041, Pet: 0x12345678}}
+	encoded = EncodeLinkRefs(refs)
+	if want := []byte{0x02, 0x01, 0x02, 0x01, 0x02, 0x41, 0x00, 0x78, 0x56, 0x34, 0x12}; !bytes.Equal(encoded, want) {
+		t.Fatalf("EncodeLinkRefs = % X, want % X", encoded, want)
+	}
 	reader := wire.NewReader(encoded)
 	decoded, err := DecodeLinkRefs(reader)
 	if err != nil {
@@ -47,6 +54,10 @@ func TestLinkRefsRoundTrip(t *testing.T) {
 	}
 	if reader.Done() != nil {
 		t.Fatal("the reader is not done after the block")
+	}
+	// A pet ref without its GID bytes is a truncated entry.
+	if _, err := DecodeLinkRefs(wire.NewReader([]byte{0x01, LinkSourcePet, 0x41, 0x00, 0x78})); err == nil {
+		t.Fatal("a pet ref without its full GID decoded")
 	}
 }
 

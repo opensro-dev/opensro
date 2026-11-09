@@ -595,7 +595,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 			stored, _, ok := ops.Monsters.MoverGenerationAt(work.division, gid, actor.slot, actor.monsterSlot)
 			landed = ok && stored == op.mover
 		case legPlanOpActivity:
-			landed = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
+			landed, _ = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
 		case legPlanOpFollow:
 			// commitFollow hands back the frames it was given; the
 			// step's frames already ride the plan's output.

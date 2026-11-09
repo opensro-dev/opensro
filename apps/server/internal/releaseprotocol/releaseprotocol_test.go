@@ -61,10 +61,14 @@ func TestExpandedPetFramesDoNotReuseReleasedProtocols(t *testing.T) {
 	if !ok || releasedChat.Chat != 1 || releasedChat.Companions != 2 {
 		t.Fatalf("released protocol 14 changed: %+v", releasedChat)
 	}
-	if Current <= 14 || WantedContract != 2 || ChatContract != 1 || CompanionsContract != 3 {
-		t.Fatal("expanded pet frames need a new protocol while retaining main's wanted contract")
+	releasedPet, ok := ContractsOf(15)
+	if !ok || releasedPet.Chat != 1 || releasedPet.Companions != 3 {
+		t.Fatalf("released protocol 15 changed: %+v", releasedPet)
 	}
-	for _, declared := range []string{"13", "14"} {
+	if Current <= 15 || WantedContract != 2 || ChatContract != 2 || CompanionsContract != 3 {
+		t.Fatal("named pet links need a new protocol while retaining main's wanted contract")
+	}
+	for _, declared := range []string{"13", "14", "15"} {
 		if reached, recorder := serve(t, http.MethodPost, declared); reached || recorder.Code != http.StatusUpgradeRequired {
 			t.Fatalf("a protocol-%s browser would receive incompatible pet frames", declared)
 		}
