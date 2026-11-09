@@ -99,10 +99,14 @@ const (
 // the same key strings every tick (#2033), measured 23,227 B / 221
 // allocs; with the crow-brood recharge verdict read under the stack
 // read guard instead of the callback door's boxed closure per crow
-// tick (#2033), measured 22,584 B / 217 allocs.
+// tick (#2033), measured 22,584 B / 217 allocs; with the basic-attack
+// intent snapshot, the live-chain owner set and the tick-start
+// action-owner snapshot refilled into runtime scratch instead of
+// rebuilt from empty every tick (#2033), measured 21,796 B /
+// 186 allocs.
 const (
-	tickBudgetBytesPerTick  = 24800
-	tickBudgetAllocsPerTick = 238
+	tickBudgetBytesPerTick  = 24000
+	tickBudgetAllocsPerTick = 205
 )
 
 /*

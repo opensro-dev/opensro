@@ -238,7 +238,19 @@ func (rt *Runtime) openSkillCastOwnerSnapshot() map[string]bool {
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()
 
-	owners := make(map[string]bool, len(rt.pendingSkillFinalizes)+len(rt.currentSkillCommands)+len(rt.pendingProjectileCasts))
+	// The snapshot is read by this tick's basic-attack pass and by
+	// nobody past it (its one production caller is the TickHook step),
+	// so the runtime's scratch map serves every tick instead of a
+	// fresh one (#2033). It is still rebuilt whole at tick start:
+	// admission later in the tick never observes this tick's mutations
+	// through it.
+	owners := rt.openActionScratch
+	if owners == nil {
+		owners = make(map[string]bool, len(rt.pendingSkillFinalizes)+len(rt.currentSkillCommands)+len(rt.pendingProjectileCasts))
+	} else {
+		clear(owners)
+	}
+	rt.openActionScratch = owners
 	for _, pending := range rt.pendingSkillFinalizes {
 		if !pending.presentationOnly {
 			owners[pending.ownerKey] = false

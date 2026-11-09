@@ -252,11 +252,28 @@ func (rt *Runtime) combatIntentIsCurrent(intent basicAttackIntent) bool {
 combatIntentSnapshot
 
 Release the intent mutex before callers enter character or world authority.
+The result is the caller's own; readers that outlive a tick (the tests)
+take this form.
 ================
 */
 func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
+	return rt.fillCombatIntents(nil)
+}
+
+/*
+================
+fillCombatIntents
+
+The tick's snapshot of the intent map, refilled into dst and sorted in
+the order the advance pass serves: division, then the case-folded name.
+The tick passes its runtime scratch (basicAttackSnapshot) and consumes
+the result in line, so a steady tick grows nothing (#2033); the intent
+mutex is released before the caller enters character or world authority.
+================
+*/
+func (rt *Runtime) fillCombatIntents(dst []basicAttackIntent) []basicAttackIntent {
 	rt.basicAttackIntentsMu.Lock()
-	out := make([]basicAttackIntent, 0, len(rt.basicAttackIntents))
+	out := dst[:0]
 	for _, intent := range rt.basicAttackIntents {
 		out = append(out, intent)
 	}
@@ -265,9 +282,39 @@ func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
 		if out[i].DivisionID != out[j].DivisionID {
 			return out[i].DivisionID < out[j].DivisionID
 		}
-		return strings.ToLower(out[i].CharacterName) < strings.ToLower(out[j].CharacterName)
+		return foldedNameLess(out[i].CharacterName, out[j].CharacterName)
 	})
 	return out
+}
+
+/*
+================
+foldedNameLess
+
+Whether a sorts before b in the order strings.ToLower imposes, without
+building the lowered copies the sort used to allocate per comparison.
+ASCII folds byte-wise, which is exactly ToLower there; a name carrying
+non-ASCII bytes takes the ToLower comparison itself, so the order never
+moves.
+================
+*/
+func foldedNameLess(a, b string) bool {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 0x80 || cb >= 0x80 {
+			return strings.ToLower(a) < strings.ToLower(b)
+		}
+		if 'A' <= ca && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if 'A' <= cb && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			return ca < cb
+		}
+	}
+	return len(a) < len(b)
 }
 
 /*
@@ -280,12 +327,21 @@ Keep the root bracket open while another server-owned chain stage remains.
 func (rt *Runtime) liveChainOwners() map[string]struct{} {
 	rt.basicAttackIntentsMu.Lock()
 	defer rt.basicAttackIntentsMu.Unlock()
-	owners := make(map[string]struct{})
+	// The drain consumes the set in line and keeps nothing, so the
+	// runtime's scratch map serves every tick instead of a fresh one
+	// (#2033). It is only ever read by the drain that refilled it.
+	owners := rt.liveChainScratch
+	if owners == nil {
+		owners = make(map[string]struct{})
+	} else {
+		clear(owners)
+	}
 	for key, intent := range rt.basicAttackIntents {
 		if intent.ComboRootID != 0 && !intent.ResumeBasic {
 			owners[key] = struct{}{}
 		}
 	}
+	rt.liveChainScratch = owners
 	return owners
 }
 
@@ -827,7 +883,8 @@ then routes their results after releasing authority locks.
 */
 func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
-	intents := rt.combatIntentSnapshot()
+	rt.basicAttackSnapshot = rt.fillCombatIntents(rt.basicAttackSnapshot)
+	intents := rt.basicAttackSnapshot
 	if len(intents) == 0 {
 		return nil
 	}

@@ -902,6 +902,21 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// basicAttackSnapshot is the intent snapshot scratch
+	// (basicattack.go): refilled under basicAttackIntentsMu on every
+	// advance pass and consumed in line by the same pass, so a steady
+	// tick grows nothing. The tick step list is serial and nothing
+	// retains it (#2033).
+	basicAttackSnapshot []basicAttackIntent
+	// liveChainScratch is the live-chain owner set scratch
+	// (basicattack.go): cleared and refilled by every finalize drain
+	// and read only inside that drain. Tick goroutine only (#2033).
+	liveChainScratch map[string]struct{}
+	// openActionScratch is the tick-start action-owner snapshot
+	// scratch (skillfinalize.go): cleared and refilled by the
+	// openSkillCastOwnerSnapshot step and read by the same tick's
+	// basic-attack pass. Nothing retains it past the tick (#2033).
+	openActionScratch map[string]bool
 	// tickGateCuts counts the TickHooks cut running by a held publication
 	// gate (acquireTickGate). Tick goroutine only.
 	tickGateCuts int
