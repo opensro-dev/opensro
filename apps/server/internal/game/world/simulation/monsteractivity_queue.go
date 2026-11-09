@@ -236,6 +236,33 @@ func (q *behaviorQueue) setAt(ref behaviorActorRef, at int64) {
 
 /*
 ================
+behaviorQueue.setAtSlot
+
+set through a carried queue slot alone, verified against the gid
+before use (#2133): the activity commit's re-arm holds the slot
+its snapshot carried but no storage-slot answer fresher than the
+row's own note, so the row keeps the mover and monster slots it
+noted - the gid set's preservation, without its byGID probe
+(#3027). A slot recycled onto another actor, or the
+no-queue-slot sentinel, delegates to set, so the asked actor is
+scheduled either way.
+================
+*/
+func (q *behaviorQueue) setAtSlot(queueSlot uint32, gid uint32, at int64) {
+	if queueSlot >= uint32(len(q.slots)) || q.slots[queueSlot].gid != gid {
+		q.set(gid, at)
+		return
+	}
+	held := q.slots[queueSlot]
+	if held.live && held.at == at {
+		return
+	}
+	q.slots[queueSlot] = behaviorSlot{gid: gid, at: at, live: true, moverSlot: held.moverSlot, monsterSlot: held.monsterSlot}
+	q.place(queueSlot, at)
+}
+
+/*
+================
 behaviorQueue.removeAt
 
 remove through a carried queue slot, verified against the gid
@@ -585,7 +612,14 @@ type behaviorActorSnapshot struct {
 	// batch carried none.
 	slot        uint32
 	monsterSlot uint32
-	ok          bool
+	// queueSlot is the behaviour queue slot the same ref carried:
+	// the step arms it with the storage slots so the activity
+	// commit's re-arm lands on the queue row through it
+	// (setAtSlot) instead of resolving the gid through byGID again
+	// (#3027). Meaningful only while ok: a snapshot the fill found
+	// gone is zeroed whole.
+	queueSlot uint32
+	ok        bool
 }
 
 /*
@@ -706,7 +740,7 @@ func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state 
 		panic(err)
 	}
 	dst.moverGen = state.movers.generationAt(slot, ref.gid)
-	dst.slot, dst.monsterSlot, dst.ok = slot, monsterSlot, true
+	dst.slot, dst.monsterSlot, dst.queueSlot, dst.ok = slot, monsterSlot, ref.queueSlot, true
 }
 
 /*

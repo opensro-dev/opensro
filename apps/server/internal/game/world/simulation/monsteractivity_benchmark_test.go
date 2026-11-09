@@ -79,6 +79,7 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 	type due struct {
 		gid               uint32
 		slot, monsterSlot uint32
+		queueSlot         uint32
 		gen               uint64
 		before            monster.MoverState
 	}
@@ -100,7 +101,8 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 			d.behavior.set(gid, 0)
 			slot, _ := d.movers.slotOf(gid)
 			monsterSlot, _ := d.instances.hotSlotOf(gid)
-			dues = append(dues, due{gid, slot, monsterSlot, d.movers.generation(gid), row})
+			queueSlot, _ := d.behavior.byGID[gid]
+			dues = append(dues, due{gid, slot, monsterSlot, queueSlot, d.movers.generation(gid), row})
 		}
 	}
 	b.ReportAllocs()
@@ -111,7 +113,7 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 			now++
 			after := dues[i].before
 			after.Activity.LastCheck = uint32(now)
-			committed, cadenceOnly := s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].gen, dues[i].before, after, now)
+			committed, cadenceOnly := s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].queueSlot, dues[i].gen, dues[i].before, after, now)
 			if !committed {
 				b.Fatal("gate commit refused")
 			}
