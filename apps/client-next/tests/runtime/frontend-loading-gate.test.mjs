@@ -27,6 +27,32 @@ async function load( file ) {
 	return import( sourceFileUrl( path.resolve( root, file ) ).href );
 }
 const { createFrontend } = await load( "src/engine/runtime/frontend/frontend.ts" );
+// One complete roster row: the dock only needs a name to load.
+const FIXTURE_CHARACTER = {
+	id: 1,
+	name: "fixture",
+	level: 1,
+	raceIndex: 0,
+	gender: 0,
+	figureIndex: 0,
+	heightIndex: 0,
+	volumeIndex: 0,
+	weaponIndex: 0,
+	protectorIndex: 0,
+	armorSelected: true,
+	weaponSelected: true,
+	deletePending: false,
+	maxHp: 100,
+	maxMp: 100,
+	visualLoadout: {
+		modelCodename: "CHAR_TEST",
+		items: [],
+		avatars: [],
+		animationSetName: "",
+		heightScale: 1,
+		volumeScale: 1
+	}
+};
 /*
 ================
 creationGateEmitters
@@ -184,7 +210,12 @@ test("a loading gate that stops changing fails with a report instead of loading 
 	};
 	const sent = [];
 	const frontend = createFrontend( assets, renderer, "http://fixture.invalid", command => sent.push( command ) );
-	let now = 0, session = { phase: "signed-out", revision: 1, characters: [] };
+	let now = 0,
+		session = {
+			phase: "signed-out",
+			revision: 1,
+			characters: /** @type {import("../../src/engine/contracts/session").SessionState["characters"]} */ ([])
+		};
 	const step = () => frontend.step( session, now += 100 );
 	for ( let i = 0; i < 20 && frontend.snapshot().phase !== "intro"; i++ ) step();
 	frontend.reveal();
@@ -195,7 +226,7 @@ test("a loading gate that stops changing fails with a report instead of loading 
 	session = {
 		phase: "character-select",
 		revision: 2,
-		characters: [ { id: 1, name: "fixture", deletePending: false, visualLoadout: { heightScale: 1 } } ]
+		characters: [ FIXTURE_CHARACTER ]
 	};
 	let state = step();
 	for ( let i = 0; i < 30 && state.phase !== "loading-dock"; i++ ) state = step();
