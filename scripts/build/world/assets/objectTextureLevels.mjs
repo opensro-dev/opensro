@@ -22,6 +22,12 @@ LEVELS
 
 Source path suffix (lower case, forward slashes) -> the levels it
 overrides: { level, blocks: [ [ block index in that level, block hex ] ] }.
+
+The blocks are this project's own DXT1 encode of a small hand edit to
+the listed level (a few texels); no bytes are copied from the client
+data. Only blocks the edit touched are listed, so a block it missed
+keeps its encoded bytes (3948 in the third row). The other levels are
+left alone.
 ================
 */
 /** @type {Readonly<Record<string, { level: number, blocks: [ number, string ][] }[]>>} */

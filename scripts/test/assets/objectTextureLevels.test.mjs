@@ -6,6 +6,7 @@ objectTextureLevels.test.mjs - level overrides touch only their own blocks
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { applyObjectTextureLevels } from "../../build/world/assets/objectTextureLevels.mjs";
 
@@ -13,6 +14,8 @@ const NTX_MAGIC = 0x3158544e;
 const DXT1_FOURCC = 0x31545844;
 const DXT5_FOURCC = 0x35545844;
 const LISTED = "prim/mtrl/bldg/china/jangan_enter/cj_east_door.ddj";
+// sha256 of the listed level of container() after the table is applied.
+const LISTED_LEVEL_SHA256 = "89d387ef6f46dc0e5259081070916ba86243a31ffc4b0ec6286de817bba01ca7";
 
 /*
 ================
@@ -50,6 +53,12 @@ test("a listed texture changes only blocks inside its listed level", () => {
 	assert.equal( out.subarray( at( 3818 ), at( 3818 ) + 8 ).toString( "hex" ), "0a638431fb8b5037" );
 	assert.equal( out[at( 3948 )], 0xaa );
 	assert.equal( out.subarray( at( 3956 ), at( 3956 ) + 8 ).toString( "hex" ), "6b738531a1820800" );
+	// Every listed block at once: the patched level's digest moves on
+	// any index or hex change anywhere in the table.
+	assert.equal(
+		createHash( "sha256" ).update( out.subarray( levelZero, levelOne ) ).digest( "hex" ),
+		LISTED_LEVEL_SHA256
+	);
 });
 
 test("an unlisted texture is returned as is", () => {
