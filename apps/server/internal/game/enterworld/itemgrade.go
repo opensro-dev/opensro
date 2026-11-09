@@ -6,7 +6,7 @@ itemgrade.go - an item's degree and an equipment item's seal tier
 One owner for the itemClass rule every reader shares: the catalogue's item
 pages, the beta seal rates and the website's gear points. Equipment
 itemClass counts three classes per degree (a degree-8 sword is class 22,
-23 or 24), so degree = (class - 1) / 3 + 1; on a sealed piece (rarity 2)
+23 or 24), so degree = (class - 1) / 3 + 1; on a sealed piece (rarity 2, or 6 on an expansion shard)
 the class within its degree is the seal, Star, Moon, Sun - the client's
 CSOItem_CalculateTierGroup (ItemClass - 1) % 3, named by
 the client's ItemTooltip_AppendRareGrade (558FF0).
@@ -14,6 +14,11 @@ the client's ItemTooltip_AppendRareGrade (558FF0).
 ===========================================================================
 */
 package enterworld
+
+import (
+	"os"
+	"strings"
+)
 
 // Seal tiers: (ItemClass - 1) % SealTiers on a sealed piece.
 const (
@@ -25,12 +30,48 @@ const (
 // SealTiers is the itemClass span of one degree.
 const SealTiers = 3
 
-// Item type ids of equipment (TypeIDs 3, 1, ...) and the sealed rarity.
+// Item type ids of equipment (TypeIDs 3, 1, ...) and the sealed rarities.
 const (
 	equipmentTypeID1 = 3
 	equipmentTypeID2 = 1
 	sealedRarity     = 2
+	// sealedSetRarity is a sealed set piece (_SET_A_RARE / _SET_B_RARE), an item of the later
+	// client: port-only, it counts as sealed only on an expansion shard (RaritySealed).
+	sealedSetRarity = 6
 )
+
+// EnvLevelCap and ExpansionLevelCapValue mirror progression.EnvLevelCap and
+// progression.ExpansionLevelCap; progression imports this package, so it cannot be
+// imported here. progression's tests keep the two in step.
+const (
+	EnvLevelCap            = "SRO_LEVEL_CAP"
+	ExpansionLevelCapValue = "110"
+)
+
+/*
+================
+ExpansionRuntime
+
+Whether this shard runs the cap-110 expansion (SRO_LEVEL_CAP=110), the runtime
+flag every later-client rule rides next to its build flag.
+================
+*/
+func ExpansionRuntime() bool {
+	return strings.TrimSpace(os.Getenv(EnvLevelCap)) == ExpansionLevelCapValue
+}
+
+/*
+================
+RaritySealed
+
+Whether an itemdata rarity marks a sealed item. Rarity 2 is native. Rarity 6, the
+later client's sealed set piece, counts only on an expansion shard; on a native shard
+no item has it, so the answer there is unchanged.
+================
+*/
+func RaritySealed(rarity int) bool {
+	return rarity == sealedRarity || rarity == sealedSetRarity && ExpansionRuntime()
+}
 
 /*
 ================
@@ -105,7 +146,7 @@ func EquipmentSeal(ref *ItemRef) (tier int, sealed bool) {
 	if !IsEquipment(ref) || class <= 0 {
 		return 0, false
 	}
-	if rarity, ok := ref.NativeFields.Lookup("rarity"); !ok || int(rarity) != sealedRarity {
+	if rarity, ok := ref.NativeFields.Lookup("rarity"); !ok || !RaritySealed(int(rarity)) {
 		return 0, false
 	}
 	return (class - 1) % SealTiers, true

@@ -2,6 +2,7 @@ package alchemy
 
 import (
 	"errors"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"reflect"
@@ -264,5 +265,36 @@ func TestMagicStoneGatesRunAfterTheRoll(t *testing.T) {
 				)
 			}
 		}
+	}
+}
+
+/*
+================
+TestSealedSetPieceDrawsTheExtraVarianceRollOnlyOnAnExpansionShard
+
+Sealed equipment takes the minimum of five six-way rolls, plain equipment of four. A rarity 6
+set piece counts as sealed only while SRO_LEVEL_CAP=110.
+================
+*/
+func TestSealedSetPieceDrawsTheExtraVarianceRollOnlyOnAnExpansionShard(t *testing.T) {
+	c, items := fixture()
+	r := c.Items["weapon"]
+	r.MaxMagic = 9
+	r.Rarity = 6
+	c.Items["weapon"] = r
+	draws := func() int {
+		count := 0
+		if _, err := c.varianceValue(items[0], func() (uint32, error) { count++; return 5, nil }); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	t.Setenv(enterworld.EnvLevelCap, "")
+	if got := draws(); got != 4 {
+		t.Fatalf("native shard: %d variance draws for a set piece, want 4", got)
+	}
+	t.Setenv(enterworld.EnvLevelCap, enterworld.ExpansionLevelCapValue)
+	if got := draws(); got != 5 {
+		t.Fatalf("expansion shard: %d variance draws for a sealed set piece, want 5", got)
 	}
 }

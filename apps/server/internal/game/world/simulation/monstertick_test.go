@@ -99,7 +99,7 @@ func TestChaseEqualWalkAndRunSpeedsPreservesRunChannel(t *testing.T) {
 }
 
 func fixedTactics(tactics monster.Tactics) monster.TacticsResolver {
-	return func(monster.Instance) monster.Tactics {
+	return func(*monster.Instance) monster.Tactics {
 		return tactics
 	}
 }

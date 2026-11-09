@@ -556,7 +556,7 @@ import {
 	PARTY_TITLE_MAX_LENGTH,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
-import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { EXPANSION_LEVEL_CAP, NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { createSkillGauge, createGaugePresentation } from "./hud/progression-bars";
 import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui/progression-bars";
 import { shieldGauge, shieldGaugeFill } from "@/engine/foundation/ui/shield-gauge";
@@ -577,6 +577,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -726,7 +727,7 @@ import {
 	minimapRotation,
 	skillPointReadouts
 } from "@/engine/foundation/ui/hud-readouts";
-import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
+import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
@@ -1802,7 +1803,11 @@ export function createUi( ports: UiPorts ) {
 		country: number | undefined;
 		sex: number | undefined;
 		sealUnderHeading: boolean;
+		expansion: boolean;
+		setGroups: unknown;
+		setEquipment: unknown;
 		rows: readonly TooltipRow[];
+		side: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
@@ -9107,7 +9112,10 @@ export function createUi( ports: UiPorts ) {
 						if ( item ) {
 							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
 							// items refuse a quick sell.
-							if ( itemIsMallItem( item ) || itemIsRare( item ) || item.summon?.state === 2 ) {
+							if (
+								itemIsMallItem( item ) || itemIsRare( item, game.levelCap === EXPANSION_LEVEL_CAP ) ||
+								item.summon?.state === 2
+							) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;
@@ -11886,7 +11894,8 @@ export function createUi( ports: UiPorts ) {
 					r,
 					slotSeed( id + ":" + owned.refObjId ),
 					next.simulationTimeMs ?? 0,
-					flashes
+					flashes,
+					game?.levelCap === EXPANSION_LEVEL_CAP
 				);
 				for ( const overlay of overlays ) {
 					image( overlay.rect, overlay.path, white, overlay.uv );
@@ -28042,6 +28051,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				// Port-only set panel: the rows of the second box beside an item's own (Experimental set tooltip).
+				let sideTooltip: readonly TooltipRow[] = [];
 				const petBinding = control?.id.startsWith( "hotbar:" ) ?
 					game?.quickSlots?.find( entry =>
 						entry.slot === Number( control.id.slice( 7 ) ) && entry.kind === 0x4a &&
@@ -28147,20 +28158,33 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
 							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
-							sealUnderHeading = experimental.state().saved.sealUnderHeading;
+							sealUnderHeading = experimental.state().saved.sealUnderHeading,
+							expansion = game.levelCap === EXPANSION_LEVEL_CAP,
+							// Port-only set block: the published groups with the bag they are counted in.
+							sets = tooltipSetViewer(
+								experimental.state().saved.setBonusTooltip,
+								game.equipmentSets,
+								game.inventory
+							),
+							setGroups = sets?.groups,
+							setEquipment = sets?.equipment;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
-						) tooltip = tooltipMemo.rows;
-						else {
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading &&
+							tooltipMemo.expansion === expansion &&
+							tooltipMemo.setGroups === setGroups && tooltipMemo.setEquipment === setEquipment
+						) {
+							tooltip = tooltipMemo.rows;
+							sideTooltip = tooltipMemo.side;
+						} else {
 							tooltip = item ?
 								itemTooltip(
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								) :
 								skillTooltip(
 									{
@@ -28172,6 +28196,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									lookup,
 									id => lookup( hudData.skillUi.masteries.find( m => m.id === id )?.name ?? "" )
 								);
+							sideTooltip = item && sets ?
+								itemTooltipSet( item, sets.groups, sets.equipment, lookup ) :
+								[];
 							tooltipMemo = {
 								item,
 								skill,
@@ -28181,16 +28208,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								country,
 								sex,
 								sealUnderHeading,
-								rows: tooltip
+								expansion,
+								setGroups,
+								setEquipment,
+								rows: tooltip,
+								side: sideTooltip
 							};
 						}
 						if ( items.length > 1 ) {
+							sideTooltip = [];
 							tooltip = items.flatMap( item =>
 								itemTooltip(
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								)
 							);
 						}
@@ -28231,6 +28263,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									fontStyle: row.strong ? 2 : 0
 								} )
 							);
+						}
+					}
+					// The set panel stands beside the item's own box, as in the later client.
+					if ( sideTooltip.length ) {
+						const side = sideBubble(
+							sideTooltip,
+							bubble.quads[0]!.rect,
+							full,
+							( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
+							experimental.state().saved.fitWindowLabels
+						);
+						paths.push( ...side.paths );
+						if ( side.paths.every( resources.has ) ) {
+							quads.push( ...side.quads );
+							for ( const row of side.lines ) {
+								quads.push(
+									...text.quads( row.value, row.rect, full, tooltipColor( row.color ), {
+										fontStyle: row.strong ? 2 : 0
+									} )
+								);
+							}
 						}
 					}
 				}

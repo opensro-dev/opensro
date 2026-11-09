@@ -128,6 +128,8 @@ export const OFF = Object.freeze( {
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
 	sealUnderHeading: false,
+	// Off by default: the set tiers on an item tooltip are port-only.
+	setBonusTooltip: false,
 	// Off by default (#2269): the Item Mall's Buying list; the native
 	// window is inert and its mall button is born disabled.
 	silkHistory: false
