@@ -62,6 +62,9 @@ const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 // Gap between a Blue Berserk title and the name, and its bold gold.
+// A Berserk body that returns within this long of vanishing, with the minute not yet spent, is the same Berserk.
+const BERSERK_RESUME_WINDOW_MS = 30000;
+const BERSERK_RESUME_ELAPSED_MS = 59000;
 const HWAN_TITLE_GAP = 4;
 const HWAN_TITLE_COLOR: UiQuad["color"] = [ 1, 0.84, 0.2, 1 ];
 const JOB_MARK_GAP = 5.5;
@@ -1420,7 +1423,7 @@ export function createUi( ports: UiPorts ) {
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
-	let berserkActor = 0, berserkStarted = 0, berserkFrame = -1, berserkDisplayed = 0;
+	let berserkActor = 0, berserkStarted = 0, berserkLostAt = -1, berserkFrame = -1, berserkDisplayed = 0;
 	let equipmentWarningPhase = 0, equipmentWarningDue = 0, equipmentWarningVisible = false;
 	// Low HP/MP caution atlas (100 ms cells) animates on retained world frames too.
 	let cautionVisible = false, cautionFrame = -1;
@@ -10125,8 +10128,14 @@ export function createUi( ports: UiPorts ) {
 				next.entities.find( e => e.gid === next.gameplay?.localGid && e.appearanceState?.[2] === 1 )?.gid ?? 0 :
 				0;
 			if ( berserkGid !== berserkActor ) {
+				// A region change drops the local entity for a moment while the server's
+				// Berserk runs on: when it returns before the minute could have ended, the
+				// gauge resumes where it was instead of restarting full (port presentation).
+				const resumed = berserkGid && berserkLostAt >= 0 && now - berserkLostAt < BERSERK_RESUME_WINDOW_MS &&
+					berserkLostAt - berserkStarted < BERSERK_RESUME_ELAPSED_MS;
+				if ( !berserkGid ) berserkLostAt = now;
+				else if ( !resumed ) berserkStarted = now;
 				berserkActor = berserkGid;
-				berserkStarted = now;
 				dirty = true;
 			}
 			const nextBerserkFrame = berserkActor ? Math.floor( Math.min( 63000, now - berserkStarted ) / 50 ) : -1;
