@@ -6,7 +6,10 @@ dungeon-ownership.ts - which navmesh cell owns a mover along a chord
 Terrain movers enter an object only through its outline (404510 -> 403FB0
 -> 428300); a mover already on an object follows its cells and explicit
 placement links. An unretained start takes native FindNavCell's surface:
-the nearest by |deltaY|, terrain winning ties.
+the nearest by |deltaY|, terrain winning ties. A mover retained on the
+terrain (it walked to its stand, the server's TerrainOwner) is resident
+on a placed object's cell it already stands in: that cell seats it for
+the walk, with no fresh arbitration (#3006, server navowner.go).
 
 ===========================================================================
 */
@@ -45,13 +48,16 @@ export function terrainOwnerPath(
 	to: readonly number[],
 	preferred?: NavOwner,
 	index?: NavigationIndex,
-	terrainY?: number
+	terrainY?: number,
+	retainedTerrain?: boolean
 ): NavOwnerPath {
 	let resident = dungeonOwnerPath( objects, from, to, preferred, index );
 	// An unretained mover stands where native FindNavCell puts it (the server's
 	// ResolveNavOwner): the nearest surface by |deltaY|, terrain winning ties. A
 	// deck level with the ground does not capture a mover walking on terrain.
-	if ( resident.owner && !preferred && terrainY !== undefined && resident.spans[0] ) {
+	// A retained terrain mover skips that arbitration: the cell it stands in
+	// seats it (the server's residentObjectStand, #3006).
+	if ( resident.owner && !preferred && !retainedTerrain && terrainY !== undefined && resident.spans[0] ) {
 		const s0 = resident.spans[0],
 			p = objects[s0.placement]!,
 			q = navLocal( p, from[0]!, from[1]!, from[2]! ),

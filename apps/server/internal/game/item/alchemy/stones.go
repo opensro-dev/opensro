@@ -13,6 +13,7 @@ import (
 	"math"
 	"strings"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -72,7 +73,7 @@ varianceValue
 func (c *Catalog) varianceValue(item inventory.Item, roll Roll) (uint64, error) {
 	n := uint32(c.magicLimit(item))
 	count := 4
-	if c.Items[item.Codename].Rarity == 2 {
+	if enterworld.RaritySealed(c.Items[item.Codename].Rarity) {
 		count = 5
 	}
 	for i := 0; i < count; i++ {

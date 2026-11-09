@@ -68,6 +68,9 @@ The navigation clip's query and answer (navigation.ts clip).
 export interface WalkStepQuery {
 	slide: boolean;
 	sourceOwner?: NavOwner;
+	// The mover stands on terrain it walked to (retained), not at a fresh
+	// point: a placed object's cell it stands in seats it (#3006).
+	sourceTerrainRetained?: boolean;
 	owner?: NavOwner;
 	status: number;
 }
@@ -84,6 +87,9 @@ export interface WalkStepInput<S extends WalkStepSegment> {
 	readonly poseAtMs: number;
 	readonly segment: S;
 	readonly owner: NavOwner | undefined;
+	// Terrain retention beside owner (see WalkStepQuery); ignored when
+	// owner names an object cell.
+	readonly terrainRetained?: boolean;
 	readonly cursor: SurfaceCursor;
 	readonly now: number;
 	// The navigation view: the clip of one move and the surface of a sampled
@@ -211,7 +217,12 @@ export function stepWalk<S extends WalkStepSegment>( input: WalkStepInput<S> ): 
 		z: Math.fround( Math.fround( pose.z ) + step[1] ),
 		angle: segment.to.angle
 	}, 1 );
-	const query: WalkStepQuery = { slide: false, sourceOwner: input.owner, status: 0 };
+	const query: WalkStepQuery = {
+		slide: false,
+		sourceOwner: input.owner,
+		sourceTerrainRetained: input.terrainRetained,
+		status: 0
+	};
 	const resolved = input.clip( pose, desired, query );
 	if ( query.status & WALK_NAVIGATION_REJECT ) return { kind: "rejected" };
 	if ( !resolved ) {

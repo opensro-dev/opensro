@@ -11,6 +11,7 @@ appends the seal after the requirement rows; the under-heading place
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
+import { itemRarityIsSealed, sealTextSymbol } from "../gameplay/item-seal";
 import { isPetGearRef } from "../gameplay/inventory-item";
 import { petGear as petGearDefinition } from "./pet-gear";
 import { itemTooltipMagic } from "./item-tooltip-magic";
@@ -18,6 +19,8 @@ import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
 import { itemTooltipRecovery } from "./item-tooltip-recovery";
 import { itemTooltipStone } from "./item-tooltip-stone";
+import { itemTooltipSetName } from "./item-tooltip-set";
+import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
 // 568500 requirements. This takes an item instance, never just a ref id.
@@ -30,14 +33,24 @@ export function itemTooltip(
 	item: InventoryItem,
 	progression: Progression,
 	text: ( symbol: string ) => string,
-	viewer?: { readonly country?: number; readonly sex?: number; readonly sealUnderHeading?: boolean; }
+	viewer?: {
+		readonly country?: number;
+		readonly sex?: number;
+		readonly sealUnderHeading?: boolean;
+		// The shard publishes the cap-110 expansion: sealed set pieces and Seal of Nova apply (item-seal.ts).
+		readonly expansion?: boolean;
+		// Port-only (Experimental "Set bonus on item tooltips"): the shard's published sets and the
+		// character's equipment, which together decide the set block.
+		readonly sets?: { readonly groups: readonly EquipmentSet[]; readonly equipment: readonly InventoryItem[]; };
+	}
 ): readonly TooltipRow[] {
 	if ( item.name === undefined ) return [];
 	const f = item.tooltip?.fields,
 		t = (item.typeFlags >>> 7) & 15,
 		k = (item.typeFlags >>> 11) & 31,
 		equipment = (item.typeFlags & 0x7e) === 0x2c;
-	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ), rare = f?.rarity === 2;
+	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ),
+		rare = itemRarityIsSealed( f?.rarity, viewer?.expansion );
 	const nameColor = rare ? (repaired ? 0xff6ce675 : 0xffffd953) : item.magic.length ? 0xff72bfff : 0xffffffff;
 	const petGear = item.refObjId !== undefined && isPetGearRef( item.refObjId );
 	const petDefinition = petGear ? petGearDefinition( item.refObjId ) : undefined;
@@ -76,12 +89,16 @@ export function itemTooltip(
 	// under-heading place is the Experimental sealUnderHeading row (#2496).
 	const seal = rare && f.itemClass ?
 		{
-			value: text( [ "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][(f.itemClass - 1) % 3]! ),
+			value: text( sealTextSymbol( f.rarity, f.itemClass, viewer?.expansion )! ),
 			color: nameColor,
 			strong: true
 		} :
 		undefined;
 	if ( seal && viewer?.sealUnderHeading ) rows.push( seal );
+	// Port-only (Experimental set tooltip): the set's name sits under the title, as in the later client;
+	// its pieces and tiers are a second box (item-tooltip-set.ts, drawn by the UI).
+	const setNameRow = viewer?.sets && equipment ? itemTooltipSetName( item, viewer.sets.groups, text ) : undefined;
+	if ( setNameRow ) rows.push( setNameRow );
 
 	if ( petItem && petDegree ) {
 		add( `${text( "UIIT_STT_ARMOR_POSITION" ) || "Mounting part"}: ${petItem.slot}` );
