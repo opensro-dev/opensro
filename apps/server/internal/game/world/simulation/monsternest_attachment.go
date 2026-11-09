@@ -25,10 +25,13 @@ func (s *MonsterState) detachNestLocked(state *divisionMonsterState, gid uint32,
 // The retail server's detach test compares only the indoor bit, detaches, and returns before
 // activity, queued commands, and OnTick. Preserve that ordering even if the
 // planned detachment loses admission to a concurrent actor update.
-func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor *monster.Instance, mover monster.MoverState, now int64) bool {
+func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor *monster.Instance, mover *monster.MoverState, now int64) bool {
 	// Only the indoor bit of the live region is weighed, so read the
 	// region alone: the ground-resolved pose paid a surface walk per
 	// stepped actor for a value Y resolution cannot change (#2033).
+	// The mover arrives by pointer - it is the step's 632-byte
+	// working copy and this guard runs for every stepped actor; the
+	// stored-row comparison below dereferences it once (#2150).
 	if actor.NestDetached || (actor.Nest.RegionID^mover.LiveRegionAt(now))&0x8000 == 0 {
 		return false
 	}
@@ -39,7 +42,7 @@ func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor *monster
 	if _, attached := state.gidNests[actor.Gid]; !attached {
 		return false
 	}
-	if state.instances.get(actor.Gid) == *actor && state.movers.get(actor.Gid) == mover {
+	if state.instances.get(actor.Gid) == *actor && state.movers.get(actor.Gid) == *mover {
 		s.detachNestLocked(state, actor.Gid, now)
 	}
 	return true
