@@ -74,6 +74,7 @@ import json
 import os
 import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -90,6 +91,25 @@ except ImportError:  # repo layout not merged yet: allow an explicit home
 
 RIZIN_VERSION = "0.8.2"
 ANALYSIS_CHOICES = ("aac", "aap", "aaa", "none")
+# What `index` runs on a loaded project before it reads the function
+# set: `aar` finds references without redrawing the seed's functions.
+PROJECT_REFS_CHOICES = ("aar", "aac", "none")
+# rizin 0.8 has no `?e` and parses `@@` as an iterator: a batch
+# using either failed to parse whole and every signature came back
+# empty (blind dogfood, 2026-11-09). `echo` of a plain word is safe.
+SIGNATURE_SEPARATOR = "REVTOOL-AFSJ-SEP"
+SIGNATURE_BATCH_BYTES = 4096
+
+
+def signature_command(va):
+	"""One batch entry: the function's afsj, then the echoed separator."""
+	return f"afsj @ {va:#x}\necho {SIGNATURE_SEPARATOR}"
+
+
+# Character widths of izj string types, for walking a string's
+# character boundaries when its first one carries no reference.
+STRING_REF_SCAN_MAX = 16
+STRING_CHAR_BYTES = {"utf16le": 2, "utf16be": 2, "utf32le": 4, "utf32be": 4}
 
 
 # =====================================================================
@@ -110,6 +130,7 @@ class RizinSession:
 		self.rzdb = rzdb
 		self.from_project = bool(rzdb and os.path.exists(rzdb))
 		self._functions = None
+		self._strings = None
 		# No CLI flags: rzpipe adds its own; an unknown flag makes rizin
 		# print usage, exit, and rzpipe spin forever on a dead pipe.
 		self._pipe = rzpipe.open(binary)
@@ -138,6 +159,62 @@ class RizinSession:
 	def signature_parts(self, va):
 		"""afsj for one function: {ret, cc, args:[{name, type}]}."""
 		return self.cmdj(f"afsj @ {va:#x}") or {}
+
+	def signature_parts_many(self, vas):
+		"""afsj for many functions, {va: parts}, in few round trips.
+
+		One afsj per rzpipe call cost 3.4 minutes on the seeded client
+		(94,874 round trips, measured 2026-11-09). Each call here sends
+		a batch with an echoed separator after every function, so an
+		empty answer can never shift the next function's parts onto
+		this one. Batches stay under the byte cap one rzpipe cmd()
+		honours (the same cap revtool_seed's apply batches keep).
+		"""
+		parts = {}
+		batch = []
+		size = 0
+		for va in vas:
+			command = signature_command(va)
+			if batch and size + len(command) + 1 > SIGNATURE_BATCH_BYTES:
+				parts.update(self._signature_batch(batch))
+				batch, size = [], 0
+			batch.append(va)
+			size += len(command) + 1
+		if batch:
+			parts.update(self._signature_batch(batch))
+		return parts
+
+	def _signature_batch(self, vas):
+		text = "\n".join(signature_command(va) for va in vas)
+		answers = self.cmd(text).split(SIGNATURE_SEPARATOR)
+		parts = {}
+		for va, answer in zip(vas, answers):
+			answer = answer.strip()
+			try:
+				parts[va] = json.loads(answer) if answer else {}
+			except json.JSONDecodeError:
+				parts[va] = {}
+		return parts
+
+	def analyze_project(self, step):
+		"""Run one analysis step on a loaded project; seconds taken.
+
+		A seed-applied .rzdb holds hand-defined functions and nothing
+		else: no references, so every xref answers 0 until rizin reads
+		the code once. `aar` (references only) takes about 7 s on the
+		seeded client (measured 2026-11-09) and keeps the seed's
+		function set.
+		"""
+		started = time.monotonic()
+		self.cmd(step)
+		self._functions = None
+		return time.monotonic() - started
+
+	def strings(self):
+		"""izj rows for the binary's data strings (cached)."""
+		if self._strings is None:
+			self._strings = self.cmdj("izj") or []
+		return self._strings
 
 	def func_ops(self, va):
 		"""pdfj instruction dicts for one function, address order."""
@@ -290,6 +367,22 @@ def function_lines(rz, va, signature, data_by_va, raw=False):
 	return lines
 
 
+_ANONYMOUS_FUNC_RE = re.compile(r"^(?:j_)*(?:sub|nullsub)_[0-9a-fA-F]+(?:_\d+)?$")
+
+
+def is_labeled(con, name):
+	"""True if a function token reads as RE'd: a real name or a claim.
+
+	A seed-applied project carries BN's function names in the index
+	itself, so a name that is not an anonymous spelling is a label
+	already; only sub_/j_sub_/nullsub_ tokens need the overlay's
+	vouching (revtool.symbol_is_annotated).
+	"""
+	if name and not _ANONYMOUS_FUNC_RE.match(name):
+		return True
+	return revtool.symbol_is_annotated(con, name)
+
+
 def owner_of(func_rows, va):
 	"""Owning function for an address: greatest function start <= va."""
 	starts = [r[0] for r in func_rows]
@@ -309,13 +402,22 @@ def cmd_index(args, con, rz):
 		print(f"error: binary not found: {binary}", file=sys.stderr)
 		return 1
 
+	from_project = getattr(rz, "from_project", False)
+	refs_step = getattr(args, "refs", "aar") or "none"
+	refs_seconds = None
+	if from_project and refs_step != "none":
+		# A seed-applied project has functions but no references
+		# until rizin reads the code (README, the contributor seed).
+		refs_seconds = rz.analyze_project(refs_step)
+
 	entries = [e for e in rz.functions() if e.get("offset") is not None]
 	entries.sort(key=lambda e: e["offset"])
+	signatures = rz.signature_parts_many([e["offset"] for e in entries])
 	rows = []
 	for ordinal, entry in enumerate(entries):
 		va = entry["offset"]
 		token = bn_token(entry.get("name"), va)
-		sig = bn_signature(entry, rz.signature_parts(va), token)
+		sig = bn_signature(entry, signatures.get(va, {}), token)
 		# start_byte is a stable ordinal; line geometry is the dump
 		# backend's and stays zero here (module docstring).
 		rows.append((f"{va:08x}", token, sig, ordinal, ordinal + 1, 0, 0))
@@ -325,23 +427,37 @@ def cmd_index(args, con, rz):
 		"INSERT OR REPLACE INTO functions "
 		"(addr,name,signature,start_byte,end_byte,start_line,end_line) "
 		"VALUES (?,?,?,?,?,?,?)", rows)
+	# What actually produced the facts: a loaded project plus the
+	# reference step run on it, or a fresh session's analysis.
+	analysis = (f"project+{refs_step}" if from_project
+	            else getattr(args, "analyze", "aac"))
 	revtool.meta_set(con, "backend", "rizin")
 	revtool.meta_set(con, "target_sha256", revtool.sha256_file(binary))
+	revtool.meta_set(con, "rizin_analysis", analysis)
 	revtool.record_artifact(
 		con, "target", binary, record_count=len(rows), producer="PE file")
 	revtool.record_artifact(
 		con, "rizin-analysis", rz.rzdb if rz.rzdb and os.path.exists(rz.rzdb) else binary,
 		record_count=len(rows), producer="rizin aflj analysis",
-		version=RIZIN_VERSION, settings={"analysis": getattr(args, "analyze", "aac")})
+		version=RIZIN_VERSION, settings={"analysis": analysis})
 	rz.save()
 	con.commit()
-	print(f"indexed {len(rows)} functions from rizin "
-	      f"({getattr(args, 'analyze', 'aac')} analysis of {binary}).")
-	if getattr(rz, "from_project", False):
-		print("note: the function set came from the loaded rizin project "
-		      "(a seed-applied .rzdb carries BN-grade boundaries and "
-		      "names), not from fresh rizin analysis.")
+	named = sum(1 for row in rows if not row[1].startswith("sub_"))
+	if from_project:
+		print(f"indexed {len(rows)} functions ({named} named) from the loaded "
+		      f"project {rz.rzdb}.")
+		if refs_seconds is None:
+			print("note: --refs none: no reference analysis ran, so xref and "
+			      "strings answer from whatever references the project holds "
+			      "(none, for a fresh seed apply).")
+		else:
+			print(f"note: ran rizin `{refs_step}` on the project for references "
+			      f"({refs_seconds:.1f}s) and saved it; the function set is the "
+			      f"project's (a seed-applied .rzdb carries BN-grade boundaries "
+			      f"and names), not fresh rizin analysis.")
 	else:
+		print(f"indexed {len(rows)} functions ({named} named) from rizin "
+		      f"({getattr(args, 'analyze', 'aac')} analysis of {binary}).")
 		print("note: rizin sees analysis-reachable code only; the BN dump "
 		      "index holds roughly 4x this many functions. The two "
 		      "backends are not interchangeable views of one set.")
@@ -526,16 +642,23 @@ def cmd_xref(args, con, rz):
 	gmap = revtool.load_globals(con)
 	scan_sym = revtool.resolve_scan_symbol(con, args.symbol)
 	m = re.fullmatch(r"(?:sub|data)_([0-9a-fA-F]+)", scan_sym or "")
-	if not m:
-		print(f"error: rizin xref needs a sub_/data_ symbol (got "
-		      f"{args.symbol!r} -> {scan_sym!r}); analysis xrefs are "
-		      f"address-keyed. Use `find` for text queries.",
-		      file=sys.stderr)
-		return 1
+	if m:
+		va = int(m.group(1), 16)
+	else:
+		# A function's own name (a seed-applied project carries BN's)
+		# is as address-keyed as its sub_ token: the index holds both.
+		row = con.execute(
+			"SELECT addr FROM functions WHERE name = ?", (scan_sym,)).fetchone()
+		if not row:
+			print(f"error: rizin xref needs a sub_/data_ symbol or an indexed "
+			      f"function name (got {args.symbol!r} -> {scan_sym!r}); "
+			      f"analysis xrefs are address-keyed. Use `find` for text "
+			      f"queries, `strings` for string data.", file=sys.stderr)
+			return 1
+		va = int(row[0], 16)
 	gate = revtool.investigation_gate(con, args, scan_sym)
 	if gate is not None:
 		return gate
-	va = int(m.group(1), 16)
 	func_rows = sorted(
 		(int(a, 16), n) for a, n in
 		con.execute("SELECT addr,name FROM functions"))
@@ -561,9 +684,15 @@ def cmd_xref(args, con, rz):
 	print(f"xref {label}: {len(hits)} reference(s)")
 	print("note: rizin xrefs are analysis-derived (axtj); code rizin "
 	      "has not analyzed is invisible here.", file=sys.stderr)
+	if not hits and revtool.meta_get(con, "rizin_analysis") == "project+none":
+		print("warning: this project was indexed with --refs none, so it holds "
+		      "no references; rerun `index` (it runs `aar`) before trusting 0.",
+		      file=sys.stderr)
 	identified = revtool.symbol_is_identifiable(
 		con, scan_sym, None, found_in_dump=bool(hits), consult_dump=False)
-	if not identified:
+	# A name resolved through the index is a real function: never "unknown".
+	named_func = not m
+	if not identified and not named_func:
 		if hits:
 			print(f"note: {scan_sym} has references but is not a labelable "
 			      f"anonymous symbol; treating it as a research query, not "
@@ -581,8 +710,7 @@ def cmd_xref(args, con, rz):
 		if fname != last_fn:
 			tag = ""
 			if fname not in ("?", scan_sym):
-				tag = "  [labeled]" if revtool.symbol_is_annotated(con, fname) \
-					else "  [NEEDS RE]"
+				tag = "  [labeled]" if is_labeled(con, fname) else "  [NEEDS RE]"
 			print(f"\n  in {fn_disp}:{tag}")
 			last_fn = fname
 		print(f"    {laddr}  {text}")
@@ -590,26 +718,90 @@ def cmd_xref(args, con, rz):
 		print(f"\n... {len(hits) - args.limit} more (use --limit)")
 
 	author = revtool.get_author(args)
-	if not identified:
-		print(f"\nno investigation debt charged: {scan_sym} is a search "
-		      f"probe, not an anonymous program symbol; there is nothing "
-		      f"to label.", file=sys.stderr)
-		return 0
-	revtool.record_access(con, scan_sym, "xref", author)
 	callers = []
 	for _laddr, fname, _text, _rtype in hits:
 		if fname in ("?", scan_sym) or fname in callers:
 			continue
 		callers.append(fname)
-	n_unlabeled = 0
-	for fname in callers:
-		if not revtool.symbol_is_annotated(con, fname):
-			n_unlabeled += 1
-			revtool.record_access(con, fname, "caller", author)
-	con.commit()
+	unlabeled = [f for f in callers if not is_labeled(con, f)]
 	if callers:
-		print(f"\ncallers: {len(callers)}  |  unlabeled (need RE): {n_unlabeled}")
+		print(f"\ncallers: {len(callers)}  |  unlabeled (need RE): {len(unlabeled)}")
+	if not identified:
+		print(f"\nno investigation debt charged: {scan_sym} is a search "
+		      f"probe or an already-named function, not an anonymous "
+		      f"program symbol; there is nothing to label.", file=sys.stderr)
+		return 0
+	revtool.record_access(con, scan_sym, "xref", author)
+	for fname in unlabeled:
+		revtool.record_access(con, fname, "caller", author)
+	con.commit()
 	revtool.print_debt_footer(con, scan_sym, author=author)
+	return 0
+
+
+# =====================================================================
+# strings
+# =====================================================================
+
+def string_ref_offsets(row, match_start):
+	"""Byte offsets from a string's vaddr where a reference may land.
+
+	rizin's izj sometimes starts a string a character or two early: it
+	reported `oUIIT_MSG_GUILD_RECALL_ANSWER` at 0xbd4a8e while the code
+	points at 0xbd4a90 (seen 2026-11-09). So every character boundary
+	up to the match is a candidate, not only vaddr, capped so a long
+	prefix cannot cost hundreds of round trips.
+	"""
+	width = STRING_CHAR_BYTES.get(row.get("type"), 1)
+	chars = min(match_start, STRING_REF_SCAN_MAX - 1)
+	return [i * width for i in range(chars + 1)]
+
+
+def cmd_strings(args, con, rz):
+	"""Strings matching PATTERN, and the functions that reference them.
+
+	A contributor's first move on a feature is usually its UI or log
+	text: this goes straight from that text to the code using it.
+	"""
+	try:
+		rx = re.compile(args.pattern if args.regex else re.escape(args.pattern), re.I)
+	except re.error as exc:
+		print(f"error: bad --regex pattern: {exc}", file=sys.stderr)
+		return 1
+	func_rows = sorted(
+		(int(a, 16), n) for a, n in con.execute("SELECT addr,name FROM functions"))
+	if not func_rows:
+		print("warning: no function index; run `index` first or callers show as ?",
+		      file=sys.stderr)
+	matches = []
+	for row in rz.strings():
+		m = rx.search(row.get("string") or "")
+		if m and row.get("vaddr") is not None:
+			matches.append((row, m.start()))
+	print(f"strings /{args.pattern}/: {len(matches)} match(es)")
+	n_unref = 0
+	for row, start in matches[: args.limit]:
+		vaddr = row["vaddr"]
+		users = {}
+		for off in string_ref_offsets(row, start):
+			for ref in rz.xrefs_to(vaddr + off):
+				src = ref.get("from")
+				if src is not None:
+					users.setdefault(owner_of(func_rows, src), []).append(src)
+		print(f"\n  {vaddr:08x}  {row.get('type', '?'):7s} {row['string']!r}")
+		if not users:
+			n_unref += 1
+			print("    (no analysis references)")
+		for fname, srcs in sorted(users.items()):
+			tag = "" if fname == "?" else (
+				"  [labeled]" if is_labeled(con, fname) else "  [NEEDS RE]")
+			at = ", ".join(f"{s:08x}" for s in sorted(srcs))
+			print(f"    {fname}{tag}  @ {at}")
+	if len(matches) > args.limit:
+		print(f"\n... {len(matches) - args.limit} more (use --limit)")
+	if n_unref and revtool.meta_get(con, "rizin_analysis") == "project+none":
+		print("warning: indexed with --refs none; rerun `index` before trusting "
+		      "'no analysis references'.", file=sys.stderr)
 	return 0
 
 
@@ -754,7 +946,16 @@ def main(argv=None) -> int:
 	sub = parser.add_subparsers(dest="cmd", required=True)
 
 	sp = sub.add_parser("index", help="build the function index from rizin (aflj)")
+	sp.add_argument("--refs", choices=PROJECT_REFS_CHOICES, default="aar",
+	                help="reference pass on a loaded project before indexing (default aar: "
+	                     "a seeded project has no references until it runs)")
 	sp.set_defaults(handler=cmd_index, need_rizin=True)
+
+	sp = sub.add_parser("strings", help="strings matching a pattern, and the functions that use them")
+	sp.add_argument("pattern", help="case-insensitive substring (a Python regex with --regex)")
+	sp.add_argument("--regex", action="store_true", help="treat PATTERN as a Python regex")
+	sp.add_argument("--limit", type=int, default=40)
+	sp.set_defaults(handler=cmd_strings, need_rizin=True)
 
 	sp = sub.add_parser("find", help="find functions by name/signature substring")
 	sp.add_argument("pattern")

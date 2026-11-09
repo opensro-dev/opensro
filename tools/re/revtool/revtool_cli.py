@@ -431,13 +431,16 @@ def build_parser():
 					help="retail binary to hash + scan (default: the top-level --binary)")
 	sb.add_argument("--out", default=None,
 					help="seed file (default: <data dir>/seed/revtool-seed-<target>.xz)")
+	sb.add_argument("--names", default=None,
+					help="Binary Ninja name export (sro-bn-function-names JSON) to merge; "
+						 "without it the seed misses the BN labels")
 	sb.set_defaults(handler=cmd_seed_build)
 	sv = ssub.add_parser("verify", help="check a seed: format, pin, hash, text-run scan")
 	sv.add_argument("seed", help="seed file")
 	sv.add_argument("--binary", dest="seed_binary", default=None,
 					help="retail binary to hash + scan (default: the top-level --binary)")
 	sv.add_argument("--manifest", default=None,
-					help="pin manifest (default: seed-manifest.json beside revtool)")
+					help="pin manifest (default: seed-manifest.json beside revtool; 'none' for an unreleased build)")
 	sv.set_defaults(handler=cmd_seed_verify)
 	sa = ssub.add_parser("apply", help="define + name the seed's functions in rizin, save an .rzdb")
 	sa.add_argument("seed", help="seed file")
