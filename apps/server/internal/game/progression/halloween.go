@@ -205,9 +205,9 @@ func HalloweenGifts() []HalloweenGift {
 // The tuning set, read together and retuned together. Set from the live
 // KillStats read of 2026-10-31 (seven full UTC days, economy rollup):
 // band 81-90 settles 36-43 kills per registered-character hour and about
-// 175-185 ordinary kills land per population online-hour, so the cap
-// binds after roughly two online hours and the helmet price is three
-// days at the cap. The owner may retune all three in this one place:
+// 175-185 ordinary kills land per population online-hour, so the ordinary
+// cap binds after roughly two online hours. The owner may retune all
+// three in this one place:
 //
 //   - HalloweenBoxDropChancePercent: an ordinary kill's chance to drop
 //     one box while the event runs (a Gourd kill always pays its box).
@@ -216,16 +216,20 @@ func HalloweenGifts() []HalloweenGift {
 //   - HalloweenGourdBoxDailyCap: boxes one account may mint per day
 //     from Gourd kills, its own allowance (#2950): ordinary grinding
 //     fills the ordinary cap hours before a wave lands, so a shared
-//     cap paid the wave's Gourds nothing.
-//   - HalloweenHelmetPrice: boxes one helmet costs, about three days at
-//     the cap, so a regular can finish all four colours inside the run.
+//     cap paid the wave's Gourds nothing. 40 because the owner's day
+//     maximum is one helmet (#2957, #3000): 20 ordinary plus 40 Gourd
+//     boxes is the 60 a helmet costs, so a player who hunts all day
+//     earns a helmet in a day.
+//   - HalloweenHelmetPrice: boxes one helmet costs, one full day at
+//     both caps together (20 + 40), so a regular can finish all four
+//     colours inside the run.
 //   - HalloweenElixirPrice: boxes one Elixir costs, half a day at the
 //     cap (owner, 2026-11-04, #2548): the prize a capped main buys
 //     first, priced so a regular can take one home the same day.
 const (
 	HalloweenBoxDropChancePercent = 5
 	HalloweenBoxDailyCap          = 20
-	HalloweenGourdBoxDailyCap     = 20
+	HalloweenGourdBoxDailyCap     = 40
 	HalloweenHelmetPrice          = 60
 	HalloweenElixirPrice          = 10
 )
