@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/recovery"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -49,8 +50,16 @@ Replacement sessions start fresh clocks; repeat admission preserves phase.
 ================
 */
 type recoverySession struct {
-	session                    uint64
-	character                  *enterworld.Character
+	session   uint64
+	character *enterworld.Character
+	// abnormalKey and effectsKey are the resident's folded lookup
+	// keys (playerAbnormalKey, statuseffect.OwnerKey), folded once
+	// when the session is created (resident binding, or the potion
+	// admission that can precede it): while someone in the world
+	// holds a block or a buff, the stores are populated, and a pulse
+	// reads its resident's entries by the held keys instead of
+	// folding fresh ones (#2033).
+	abnormalKey, effectsKey    string
 	nextMs                     int64
 	questNextMs                int64
 	questItemNextMs            int64
@@ -81,7 +90,9 @@ func (rt *Runtime) BindRecoverySession(division string, c *enterworld.Character,
 		rt.recoverySessions = make(map[recoveryKey]*recoverySession)
 	}
 	now := rt.Now().UnixMilli()
-	rt.recoverySessions[key] = &recoverySession{session: session, character: c, nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
+	rt.recoverySessions[key] = &recoverySession{session: session, character: c,
+		abnormalKey: playerAbnormalKey(division, c.Name), effectsKey: statuseffect.OwnerKey(division, c.Name),
+		nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
 	rt.recoverySessions[key].questItemNextMs = now + questItemIntervalMs
 	rt.recoverySessions[key].potionNextMs = now + potionRecoveryIntervalMs
 }
@@ -288,14 +299,17 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64, out []simulatio
 		// the common graph also admits equipment recovery magic options.
 		// The lane's scratch carries the pulse's writes: the memo
 		// compares them in place and clones what it keeps, so the
-		// buffer is free again when the update returns (#2033).
-		writes := append(rt.recoveryWrites[:0], rt.statModifierWrites(key.division, c)...)
+		// buffer is free again when the update returns (#2033). The
+		// session's held keys seed the reads, so a populated abnormal
+		// or effect store folds nothing for this pulse either.
+		writes := append(rt.recoveryWrites[:0], rt.effects.ModifierWritesKeyed(state.effectsKey)...)
+		writes = rt.statModifierWritesFrom(key.division, writes, c)
 		writes = append(writes,
 			paramkeeper.Write{Parameter: itemParamHPRecovery, Source: recoveryPostureSource, Value: rate},
 			paramkeeper.Write{Parameter: itemParamMPRecovery, Source: recoveryPostureSource, Value: rate},
 		)
 		rt.recoveryWrites = writes
-		stats, _, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, rt.playerAbnormal(key.division, c.Name))
+		stats, _, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, rt.playerAbnormalKeyed(state.abnormalKey))
 		if err != nil {
 			return false
 		}
