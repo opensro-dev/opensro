@@ -130,9 +130,13 @@ const (
 // instead of rebuilt and re-sorted on every door (#2033), measured
 // 16,413 B / 66 allocs on the combined tree; with the satiety tick
 // judging off the shared catalog row instead of a MaxHP-adjusted
-// copy (#2033), measured 15,065 B / 63 allocs on the combined tree.
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
+// with the pet natural-recovery pulse weighing its zombie bit,
+// maxima and recovery reductions off the committed abnormal block
+// in place instead of building the committing owner and its block
+// copy per pulse (#2033), measured 14,717 B / 63 allocs.
 const (
-	tickBudgetBytesPerTick  = 16600
+	tickBudgetBytesPerTick  = 16200
 	tickBudgetAllocsPerTick = 70
 )
 
