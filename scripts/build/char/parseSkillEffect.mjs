@@ -76,6 +76,7 @@ const SKILLDATA_COL_ANIMSET_BASE = 5;
 // motion-metadata remap GlobalEffectManager_FindSkillMotionMetadata
 // (917240) follows.
 const SKILLDATA_COL_ORIGINAL = 6;
+const HWAN2_MODE_EFFECT = "SYSTEM_CH_HWAN2MODE";
 
 /**
  * Native data_ccdca8: the built-in effect-name/id pairs registered into the
@@ -273,7 +274,12 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// Port-only, not native: retail v1.150 ships the Qin-Shi Emperor Tomb
 			// skillaniset2 rows with Service == 0 while their skilleffectset rows
 			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
-			if ( !qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ) ) {
+			// Port-only, not native: the 2nd Hwan body record (hit_4_hwan2mode.efp) also has
+			// Service == 0. Only a Blue Berserk owner (level frame 0x3FC0, cap-110 server)
+			// selects it, so shipping the record changes nothing for a native shard.
+			if (
+				baseName !== HWAN2_MODE_EFFECT && (!qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ))
+			) {
 				continue;
 			}
 		}

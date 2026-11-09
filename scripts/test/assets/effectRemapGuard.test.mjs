@@ -52,3 +52,14 @@ test("the shipped table aliases a pet's levelled attack to its original, one ste
 	assert.deepEqual( table[wolf.id], { remapOf: wolf.originalId } );
 	assert.equal( table[wolf.originalId]?.remapOf, undefined, "the original is a record, not an alias" );
 });
+
+test("the 2nd Hwan body record ships although its Service column is 0", () => {
+	const { namedTable } = buildEffectRecordTable(
+		retailTextdataRoot,
+		path.join( retailTextdataRoot, "skilleffect.txt" ),
+		path.join( extractedRoot, "Data_extracted", "prim", "snd" ),
+		path.join( clientV150ResinfoRoot, "skilleffect.txt" )
+	);
+	assert.equal( namedTable.SYSTEM_CH_HWAN2MODE?.damageEffectPath, "hiteffect/hit_4_hwan2mode.efp" );
+	assert.ok( namedTable.SYSTEM_CH_HWANMODE, "the first Hwan record is unchanged" );
+});
