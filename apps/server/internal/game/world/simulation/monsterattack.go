@@ -194,7 +194,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	// Every native timer query services the selected action timer first.
 	// Selection must gate both pursuit and fresh skill selection, including
 	// a cast whose duration exceeds the ordinary selector interval.
-	if !ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs) {
+	if !ops.selectedTimerReady(divisionID, instance, nowMs) {
 		return nil, nil, true
 	}
 	if ops.switchToSecondaryOpponent(divisionID, instance, mover, target, players, live, nowMs) ||
