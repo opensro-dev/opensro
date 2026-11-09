@@ -68,6 +68,7 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 		s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 	}
 	s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+	s.popKeysMemo = nil
 	return lease, status
 }
 
@@ -103,6 +104,7 @@ func (s *MonsterState) OpenInstanceLayer(division string, defID instance.Definit
 			s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 		}
 		s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+		s.popKeysMemo = nil
 		return lease, true
 	}
 	return instance.Lease{}, false
@@ -160,6 +162,7 @@ func (s *MonsterState) ReleasePopulation(division string, lease instance.Lease) 
 	}
 	delete(s.worldPopulations, key)
 	delete(s.retirementRequests, key)
+	s.popKeysMemo = nil
 	return true
 }
 
@@ -980,9 +983,23 @@ func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gi
 /*
 ================
 populationKeys
+
+The sorted (division, lease) list every population door walks.
+The membership turns only when a population registers or
+releases, so the sorted list is cached (popKeysMemo) and rebuilt
+only after a membership writer - division, AllocatePopulation,
+OpenInstanceLayer, ReleasePopulation - drops the cache; between
+writes the per-tick doors re-sorted the same list and paid the
+sort's swaps for it (#2033). A rebuild always allocates a fresh
+slice: AdvancePopulation ranges the list after unlocking, so the
+cached backing is never mutated in place. Callers hold s.mu, as
+they already did.
 ================
 */
 func (s *MonsterState) populationKeys() []populationKey {
+	if s.popKeysMemo != nil {
+		return s.popKeysMemo
+	}
 	keys := make([]populationKey, 0, len(s.divs)+len(s.worldPopulations))
 	for division, state := range s.divs {
 		keys = append(keys, populationKey{division, state.lease})
@@ -996,5 +1013,6 @@ func (s *MonsterState) populationKeys() []populationKey {
 		}
 		return keys[i].lease.Generation < keys[j].lease.Generation
 	})
+	s.popKeysMemo = keys
 	return keys
 }

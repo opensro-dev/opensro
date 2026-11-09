@@ -122,10 +122,14 @@ const (
 // door (#2033), measured 18,127 B / 115 allocs; with the judged
 // pet's COS abnormal identity weighed as a folded struct key,
 // folded once per session binding, instead of a string rebuilt on
-// every read (#2033), measured 17,790 B / 93 allocs.
+// every read (#2033), measured 17,790 B / 93 allocs; with the
+// population doors' sorted key list cached on the monster state
+// and rebuilt only when a population registers or releases,
+// instead of rebuilt and re-sorted on every door (#2033),
+// measured 17,012 B / 85 allocs.
 const (
-	tickBudgetBytesPerTick  = 19700
-	tickBudgetAllocsPerTick = 103
+	tickBudgetBytesPerTick  = 18800
+	tickBudgetAllocsPerTick = 94
 )
 
 /*
