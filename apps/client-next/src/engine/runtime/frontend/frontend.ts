@@ -578,9 +578,13 @@ export function createFrontend(
 			}
 			const stageReady = stage.ready();
 			if ( stage.error() ) flow.fail( stage.error()! );
+			// creationReady is the dock preview's own fact: exactly one preview
+			// actor and every wardrobe path resident. The renderer's actor count
+			// is not: the create worlds' EFP emitters and item glows share that
+			// list, so "renderer draws one actor" held the load shut whenever an
+			// emitter was ready in view (BR-261108-1908-A644, #3011).
 			if (
-				stageReady && (stageName !== "dock" || dockReady) &&
-				(stageName !== "creation" || creationReady && renderer.characterStats().actors === 1)
+				stageReady && (stageName !== "dock" || dockReady) && (stageName !== "creation" || creationReady)
 			) flow.ready( state.generation );
 			if ( state.phase === "intro" && frame?.complete ) flow.reveal();
 			flow.advance( delta, frame?.complete );
