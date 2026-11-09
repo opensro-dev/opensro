@@ -878,6 +878,7 @@ export function startRuntime(
 				inputSeq: game?.movementInputSeq ?? 0,
 				navigationRequestId: game?.navigationRequestId,
 				navigationOwner: game?.navigationOwner,
+				navigationTerrainRetained: game?.navigationTerrainRetained,
 				originMs: simulationOriginMs,
 				view: navigation.view()
 			};

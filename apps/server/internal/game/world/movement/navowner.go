@@ -469,6 +469,7 @@ func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simul
 	b := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z})
 	walk := &navWalk{}
 	t := 0.0
+	seatTried := false
 	var stand *objectDeckStand
 	if owner.Kind == simulation.NavOwnerObject {
 		if stand = v.standForOwner(owner); stand == nil {
@@ -521,7 +522,12 @@ func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simul
 		// seat, a terrain-owned stand on the Hotan terrace (0x5E87) could
 		// never board the stair ramp under it: every town-ward chord
 		// clipped at the first blocked terrain tile (#3006).
-		if t == 0 && retained {
+		if t == 0 && retained && !seatTried {
+			// Tried once only: a seated stand whose cell trace yields no
+			// span (the cell test and the trace disagree on a boundary
+			// point) must fall through to the terrain walk below, not
+			// re-seat until the leg budget runs out.
+			seatTried = true
 			if seated := v.residentObjectStand(a.X, a.Z, from.Y); seated != nil {
 				stand = seated
 				continue
