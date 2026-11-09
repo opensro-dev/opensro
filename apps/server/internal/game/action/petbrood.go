@@ -10,6 +10,7 @@ package action
 
 import (
 	"encoding/binary"
+	"math"
 	"strings"
 
 	"opensro.online/server/internal/domain"
@@ -194,6 +195,113 @@ func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCoo
 
 /*
 ================
+petBroodRechargeMemo
+
+One crow session's last recharge verdict and the exact record
+fields it was derived from (#2033): crowRechargeRow is a pure
+function of the stored row, the record fields the modifiers
+graph reads (the learned levels, the slotted passives, the worn
+gear, the pet's own level and stage) and the clock, so an idle
+crow tick whose fields still stand answers the memoised verdict
+instead of walking the skill table and the modifiers graph
+again. The verdict can only turn when a charge boundary crosses
+- the row's own recharge deadline, kept as untilMs - or when a
+compared field moves; either re-derives the full row. Only a
+still verdict is memoised: a moving one is re-derived under the
+update door, and its write is what the next tick compares.
+================
+*/
+type petBroodRechargeMemo struct {
+	set         bool
+	row         domain.PetRowCooldown
+	untilMs     int64
+	codename    string
+	level       uint8
+	broodStage  uint8
+	treeVersion uint8
+	levels      [15]uint8
+	slotted     [3]uint8
+	gear        [3]domain.PetGear
+}
+
+/*
+================
+petBroodRechargeMemo.capture
+
+Record a still verdict and the fields it was derived from.
+================
+*/
+func (memo *petBroodRechargeMemo) capture(live *enterworld.CharacterCOS, row domain.PetRowCooldown, untilMs int64) {
+	*memo = petBroodRechargeMemo{
+		set: true, row: row, untilMs: untilMs,
+		codename: live.Codename, level: live.Level, broodStage: live.BroodStage,
+		treeVersion: live.Training.TreeVersion, levels: live.Training.Levels,
+		slotted: live.Training.Slotted, gear: live.Training.Gear,
+	}
+}
+
+/*
+================
+petBroodRechargeMemo.matches
+
+Whether the memoised still verdict still answers for this
+record at now: the stored row, every field the verdict was
+derived from, and the recharge deadline still ahead.
+================
+*/
+func (memo *petBroodRechargeMemo) matches(live *enterworld.CharacterCOS, row domain.PetRowCooldown, now int64) bool {
+	return memo.set && memo.row == row && now < memo.untilMs &&
+		memo.codename == live.Codename && memo.level == live.Level &&
+		memo.broodStage == live.BroodStage && memo.treeVersion == live.Training.TreeVersion &&
+		memo.levels == live.Training.Levels && memo.slotted == live.Training.Slotted &&
+		memo.gear == live.Training.Gear
+}
+
+/*
+================
+broodRechargeStillUntil
+
+The earliest tick a still recharge verdict could turn: with the
+row and its inputs standing, AdvanceCharges is the verdict's
+only clock, and it is still before the armed recharge deadline
+- or forever, when no charge is counting down. A verdict judged
+at the deadline itself already moved, so a still verdict's
+deadline is always ahead of the tick that judged it.
+================
+*/
+func broodRechargeStillUntil(row domain.PetRowCooldown) int64 {
+	if row.Capacity == 0 || row.Charges >= row.Capacity || row.ReadyAtMs <= 0 {
+		return math.MaxInt64
+	}
+	return row.ReadyAtMs
+}
+
+/*
+================
+petSession.broodRechargeVerdict
+
+The crow's recharge verdict for one tick (crowBroodRecharge's
+question): the session memo's standing answer while the row and
+every field it was derived from still stand and the recharge
+deadline is ahead; the full crowRechargeRow otherwise.
+================
+*/
+func (state *petSession) broodRechargeVerdict(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
+	stored := live.Training.Rows[1]
+	if state.broodRecharge.matches(live, stored, now) {
+		return stored, false
+	}
+	row, moved := crowRechargeRow(live, now)
+	if moved {
+		state.broodRecharge.set = false
+		return row, true
+	}
+	state.broodRecharge.capture(live, stored, broodRechargeStillUntil(stored))
+	return row, false
+}
+
+/*
+================
 crowBroodPetFacts
 
 One brood pet's judge inputs, read off the live record under the
@@ -323,7 +431,7 @@ func (rt *Runtime) crowBroodRecharge(key petOwnerKey, state *petSession, now int
 	guard := rt.deps.AcquireRead(key.division)
 	recharges := false
 	if live := state.character.CompanionByGID(key.gid); live != nil {
-		_, recharges = crowRechargeRow(live, now)
+		_, recharges = state.broodRechargeVerdict(live, now)
 	}
 	guard.Release()
 	if !recharges {
