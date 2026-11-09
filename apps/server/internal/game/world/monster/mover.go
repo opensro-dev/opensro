@@ -437,6 +437,40 @@ func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 
 /*
 ================
+MoverState.LiveRegionAt
+
+LivePoseAt's region, without the pose: the region tests (the safe-zone
+vanish, the cross-plane nest detach) weigh only which region the actor
+stands in, and neither Y resolver in LivePoseAt - the navigation height
+nor the ground - can move it. A settled or idle mover answers from the
+pose it rests at; a segment whose ends share a region never leaves it
+(a dungeon keeps its region by Interpolate's same-dungeon rule, and an
+outdoor sector is convex, so the chord stays inside); only a segment
+crossing into another region pays the interpolation, exactly
+LivePoseAt's (#2033: the detach test paid a ground-resolved LivePoseAt
+for every stepped actor to read this one value).
+================
+*/
+func (m MoverState) LiveRegionAt(nowMs int64) uint16 {
+	if !m.InFlight(nowMs) {
+		if m.ArriveMs > m.DepartMs {
+			return m.To.RegionID
+		}
+		return m.Pose.RegionID
+	}
+	if m.From.RegionID == m.To.RegionID {
+		return m.From.RegionID
+	}
+	t := float64(nowMs-m.DepartMs) / float64(m.ArriveMs-m.DepartMs)
+	return worldgeom.Interpolate(
+		worldgeom.RegionXZ{RegionID: m.From.RegionID, X: m.From.X, Z: m.From.Z},
+		worldgeom.RegionXZ{RegionID: m.To.RegionID, X: m.To.X, Z: m.To.Z},
+		t,
+	).RegionID
+}
+
+/*
+================
 NewSpawnMover
 
 NewSpawnMover constructs the policy-valid initial movement value for a live

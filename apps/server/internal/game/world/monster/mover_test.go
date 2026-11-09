@@ -211,3 +211,50 @@ func TestLivePoseAtAdoptedPathOwnsTheHeight(t *testing.T) {
 		t.Errorf("live Y = %v, want the adopted path's 42", pose.Y)
 	}
 }
+
+/*
+================
+TestLiveRegionAtMatchesLivePoseAt
+
+#2033: LiveRegionAt answers the region tests (safe-zone vanish,
+cross-plane detach) without the pose. It must be LivePoseAt's region
+in every branch - idle, settled, mid-segment inside one region (an
+outdoor sector and a dungeon alike), and mid-segment across a sector
+seam - and a ground resolver, which can only move Y, must not move
+the answer.
+================
+*/
+func TestLiveRegionAtMatchesLivePoseAt(t *testing.T) {
+	ground := func(pose Pose) (float64, bool) { return pose.Y + 1000, true }
+	cases := []struct {
+		name  string
+		mover MoverState
+		nows  []int64
+	}{
+		{"idle", MoverState{Pose: Pose{RegionID: 25000, X: 5, Z: 5}}, []int64{0, 5000}},
+		{"settled", MoverState{
+			From: Pose{RegionID: 25000, X: 100, Z: 100}, To: Pose{RegionID: 25001, X: 100, Z: 100},
+			DepartMs: 1000, ArriveMs: 2000,
+		}, []int64{2000, 2500}},
+		{"same outdoor sector", inFlightMover(), []int64{0, 2500, 5000, 9999}},
+		{"same dungeon", MoverState{
+			From: Pose{RegionID: 0x8005, X: -100, Z: 40}, To: Pose{RegionID: 0x8005, X: 300, Z: -80},
+			DepartMs: 0, ArriveMs: 10000,
+		}, []int64{1, 5000, 9999}},
+		{"across the seam", MoverState{
+			From: Pose{RegionID: 25000, X: 1900, Z: 100}, To: Pose{RegionID: 25001, X: 100, Z: 100},
+			DepartMs: 0, ArriveMs: 10000,
+		}, []int64{1, 2500, 5000, 7500, 9999}},
+	}
+	for _, tc := range cases {
+		for _, now := range tc.nows {
+			want := tc.mover.LivePoseAt(now, nil).RegionID
+			if got := tc.mover.LiveRegionAt(now); got != want {
+				t.Errorf("%s at %d: LiveRegionAt = %#x, want LivePoseAt's %#x", tc.name, now, got, want)
+			}
+			if grounded := tc.mover.LivePoseAt(now, ground).RegionID; grounded != want {
+				t.Errorf("%s at %d: grounded LivePoseAt region = %#x, want %#x (ground moved a region)", tc.name, now, grounded, want)
+			}
+		}
+	}
+}
