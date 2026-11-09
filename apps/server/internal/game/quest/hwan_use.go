@@ -3,7 +3,7 @@
 
 hwan_use.go - the quest tools and the trap of the Blue Berserk chains
 
-Port-only, not native; the rules are the 1.188-era quest handlers':
+Port-only, not native; the rules are the port's reading of the 1.188-era game data, with its inferences marked:
 
 	Soul-ringing Bell   used within 100 of the cemetery southeast of Jangan it
 	                    summons the Old Tombstone Ghost 90 to 100 from the
@@ -133,7 +133,7 @@ func (rt *Runtime) useHwanEssence(c *enterworld.Character, at simulation.Spawn) 
 	if target != hwanYeoha[0] && target != hwanYeoha[1] {
 		return []wire.Frame{questNotification(hwanTalk(def.Codename) + "09")}, false
 	}
-	// The quest handler only logs a full bag; the essence is kept then.
+	// Inference: a full bag only skips the grant (nothing is lost); the essence is kept then.
 	rows, updates, err := rt.PlanInventory(c, nil, []inventory.ItemAmount{{Codename: hwanBranchOfLife, Count: 1}})
 	if err != nil {
 		return nil, false

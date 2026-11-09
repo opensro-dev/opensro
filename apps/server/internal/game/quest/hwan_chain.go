@@ -69,7 +69,9 @@ const (
 	hwanUnderworldFragment = "ITEM_QNO_CH_HWAN_2_5_02"
 )
 
-// hwanFlutterGold is the pay step's gold per Flutter Spirit and its cap.
+// hwanFlutterGold is the gold paid per Flutter Spirit held at the turn-in, and its cap. The quest
+// tables carry no rate (the quest's reward text says "None" and its dialog only promises payment),
+// so 10 each is an inference, not data.
 const (
 	hwanFlutterGold    = 10
 	hwanFlutterGoldCap = 10000000

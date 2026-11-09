@@ -4,7 +4,7 @@
 held_items.go - acceptance grants, end-of-quest clearing and per-item gold
 
 Port-only helpers shared by the Blue Berserk chains (hwan_chain.go): items a
-quest hands out when it is accepted, items its reset handler takes when it ends,
+quest hands out when it is accepted, items taken from the bag when the quest ends or is reset,
 and the gold paid for items still held at the turn-in.
 
 ===========================================================================
