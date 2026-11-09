@@ -25,26 +25,6 @@ import (
 
 /*
 ================
-advancePetJudged
-
-advancePet on door-read facts (readPetTickFacts), for the admitted
-ticks that finish without the owner record (#2139): the follower is
-already bound, no battle, roar or pickup is live, and the tick is the
-follow - its early stops included - in advancePet's own order. The
-owner's world comes from WorldStore.SnapshotExistingInto, refilled
-into the session's retained slot and consumed inside this tick -
-seeding it would read the live record outside the character door,
-so a tick whose owner has no world entry yet abstains with everything else
-that must commit through the record - the bind, a battle, a roar, a
-pickup, a mercenary, a relocation, the refusals - and advancePet
-judges it on the companion copy exactly as before. The stuck answer stays lazy the
-same way: a stuck event raised by the judged step takes the copy
-only to answer it. The answer itself is built once per session and
-reads the tick's cells, so installing it allocates nothing.
-================
-*/
-/*
-================
 petSession.judgedCosAbnormalKey
 
 The session's folded COS abnormal map key for one (division, name,
@@ -63,6 +43,26 @@ func (state *petSession) judgedCosAbnormalKey(division, name string, gid uint32)
 	return state.judgedCosKey
 }
 
+/*
+================
+advancePetJudged
+
+advancePet on door-read facts (readPetTickFacts), for the admitted
+ticks that finish without the owner record (#2139): the follower is
+already bound, no battle, roar or pickup is live, and the tick is the
+follow - its early stops included - in advancePet's own order. The
+owner's world comes from WorldStore.SnapshotExistingInto, refilled
+into the session's retained slot and consumed inside this tick -
+seeding it would read the live record outside the character door,
+so a tick whose owner has no world entry yet abstains with everything else
+that must commit through the record - the bind, a battle, a roar, a
+pickup, a mercenary, a relocation, the refusals - and advancePet
+judges it on the companion copy exactly as before. The stuck answer stays lazy the
+same way: a stuck event raised by the judged step takes the copy
+only to answer it. The answer itself is built once per session and
+reads the tick's cells, so installing it allocates nothing.
+================
+*/
 func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
 	// The forced-copy seam and any live battle state judge on the copy.
 	if rt.companionCopy != nil || state.combat != nil || state.roar != nil || state.pickup != nil {
