@@ -182,7 +182,11 @@ func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCoo
 	row := companion.AdvanceCharges(live.Training.Rows[1], now)
 	for _, def := range companion.SkillsForPet(live) {
 		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
+			// One modifiers read answers both the level and the row:
+			// ModifiersFor is pure on the live record, so the second
+			// walk the two call sites used to pay bought nothing.
+			mods := companion.ModifiersFor(live)
+			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, mods), now, mods)
 		}
 	}
 	return row, row != live.Training.Rows[1]
@@ -243,6 +247,14 @@ func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64)
 	if rt.companionCopy != nil {
 		return crowBroodFacts{}, false
 	}
+	// A brood-space gid (an egg, a clone) never runs the lifecycle
+	// under its own key - the crow verdict's first operand refuses
+	// it, and the copy path refuses it the same way - so the key's
+	// own arithmetic answers before any door read is taken. The
+	// brood answers to the crow's key, never to its own.
+	if key.gid >= broodGIDBase {
+		return crowBroodFacts{}, true
+	}
 	var facts crowBroodFacts
 	// The brood facts ride a stack array, not a grown slice: the
 	// record's Brood never exceeds BroodLimit rows (castCrowBrood
@@ -258,14 +270,20 @@ func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64)
 	source := crowBroodSource(live, key.gid)
 	facts.crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
 	if facts.crow {
-		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 &&
-			enterworld.CharacterAlive(live) && !rt.inTown(key.division, live)
 		for _, pet := range live.Brood {
 			if pet.BroodSource != key.gid {
 				continue
 			}
 			pets[petCount] = crowBroodPetFacts{gid: pet.GID, stage: pet.BroodStage, until: pet.BroodUntil, hp: pet.CurrentHP}
 			petCount++
+		}
+		// The validity verdict (life, town) only feeds the removal
+		// half of the pet loop below; a crow with no brood out has
+		// nothing to remove, so the town read is only paid by a
+		// tick that could actually retire a brood pet.
+		if petCount > 0 {
+			valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 &&
+				enterworld.CharacterAlive(live) && !rt.inTown(key.division, live)
 		}
 	}
 	guard.Release()
