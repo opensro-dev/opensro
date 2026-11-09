@@ -202,9 +202,6 @@ const (
 	// server's 0x18BC, a recall used by a non-master or by a guild
 	// below the item's level floor.
 	ErrCodeGuildRecallNotMaster uint8 = 0xBC
-	// ErrCodeGuildRecallLimit is UIIT_MSG_GUILD_RECALL_LIMIT (01:C7):
-	// the later server's 0x18C7 for a state the scroll cannot start from.
-	ErrCodeGuildRecallLimit uint8 = 0xC7
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
 	// honor-priced package the character's honor points cannot pay.
