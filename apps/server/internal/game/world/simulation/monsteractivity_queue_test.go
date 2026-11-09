@@ -284,11 +284,12 @@ func TestSortBehaviorRefsMatchesComparisonSort(t *testing.T) {
 		}
 	}
 
-	// The two drain shapes the counting path special-cases: an
-	// already ordered batch (a population armed in spawn order)
-	// and a reversed one (a descent on the first pair) must both
-	// come out in the comparison sort's order.
-	for _, n := range []int{128, 600} {
+	// The two drain shapes the ordered pass special-cases, at
+	// sizes on both sides of the threshold: an already ordered
+	// batch (a population armed in spawn order) and a reversed
+	// one (a descent on the first pair) must both come out in
+	// the comparison sort's order.
+	for _, n := range []int{2, 63, 127, 128, 600} {
 		refs := make([]behaviorActorRef, n)
 		for i := range refs {
 			refs[i] = behaviorActorRef{gid: uint32(100000 + i*7), queueSlot: uint32(i)}

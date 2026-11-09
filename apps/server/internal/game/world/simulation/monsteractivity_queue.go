@@ -832,19 +832,18 @@ small batches keep it, under the threshold above.
 
 The drain often hands the batch its refs in gid order already -
 a population armed in spawn order (server start, a region load) -
-so the counting path first walks one pass of adjacent compares:
-an ordered drain costs that pass, and an unordered one pays only
+so every size first walks one pass of adjacent compares: an
+ordered drain costs that pass (an ordered batch is a fixed point
+of the sort, gids being unique), and an unordered one pays only
 the compares up to its first descent (two in expectation) before
-the counting passes run.
+the sort it would have paid anyway. The pass used to guard only
+the counting path; the seeded steady state hands the small
+batches ordered too (2800 of 2800 over 350 legs, #3027), and
+they paid the closure comparison sort for a sequence they
+already held.
 ================
 */
 func sortBehaviorRefs(refs []behaviorActorRef, scratch *behaviorRefScratch) {
-	if len(refs) < behaviorRefSortThreshold {
-		// slices.SortFunc, not sort.Slice: no reflection swapper
-		// per batch (#2985).
-		slices.SortFunc(refs, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
-		return
-	}
 	ordered := true
 	for i := 1; i < len(refs); i++ {
 		if refs[i-1].gid > refs[i].gid {
@@ -853,6 +852,12 @@ func sortBehaviorRefs(refs []behaviorActorRef, scratch *behaviorRefScratch) {
 		}
 	}
 	if ordered {
+		return
+	}
+	if len(refs) < behaviorRefSortThreshold {
+		// slices.SortFunc, not sort.Slice: no reflection swapper
+		// per batch (#2985).
+		slices.SortFunc(refs, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
 		return
 	}
 	if cap(scratch.sort) < len(refs) {
