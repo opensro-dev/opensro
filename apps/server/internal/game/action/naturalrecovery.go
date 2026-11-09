@@ -282,11 +282,15 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		}
 		// The native motion state writes source 2 to the flat channel. Keeping the base in
 		// the common graph also admits equipment recovery magic options.
-		writes := rt.statModifierWrites(key.division, c)
+		// The lane's scratch carries the pulse's writes: the memo
+		// compares them in place and clones what it keeps, so the
+		// buffer is free again when the update returns (#2033).
+		writes := append(rt.recoveryWrites[:0], rt.statModifierWrites(key.division, c)...)
 		writes = append(writes,
 			paramkeeper.Write{Parameter: itemParamHPRecovery, Source: recoveryPostureSource, Value: rate},
 			paramkeeper.Write{Parameter: itemParamMPRecovery, Source: recoveryPostureSource, Value: rate},
 		)
+		rt.recoveryWrites = writes
 		stats, _, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, rt.playerAbnormal(key.division, c.Name))
 		if err != nil {
 			return false

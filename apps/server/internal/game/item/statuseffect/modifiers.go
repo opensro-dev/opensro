@@ -65,6 +65,11 @@ func (r *Registry) ModifierWrites(division, name string) []paramkeeper.Write {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// A registry holding no owner answers without folding a fresh key
+	// (#2033); an owner with rows takes the keyed path below.
+	if len(r.byOwner) == 0 {
+		return nil
+	}
 	var out []paramkeeper.Write
 	for _, e := range r.byOwner[ownerKey(division, name)] {
 		if e.Modifiers.data == nil {

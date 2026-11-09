@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -172,6 +174,45 @@ func TestAdvanceNaturalRecoveryScratchDropsStaleKeys(t *testing.T) {
 	rt.advanceNaturalRecovery(now + 64_000)
 	if len(rt.recoveryKeys) != 1 || rt.recoveryKeys[0] != want {
 		t.Fatalf("scratch holds %v due keys after rebind, want [%v]", rt.recoveryKeys, want)
+	}
+}
+
+/*
+================
+TestNaturalRecoveryScratchWritesDoNotLeakAcrossPulses
+
+The pulse assembles its modifier writes in the lane scratch (#2033):
+a boost installed for one pulse must not ride the next pulse after the
+installation is forgotten.
+================
+*/
+func TestNaturalRecoveryScratchWritesDoNotLeakAcrossPulses(t *testing.T) {
+	c := testCharacter()
+	hp, mp := enterworld.DerivedMaxHP(c), enterworld.DerivedMaxMP(c)
+	c.CurrentHP = &hp
+	c.CurrentMP = &mp
+	rt, clock := newTestRuntime(c, testItems())
+	rt.BindRecoverySession(testDivision, c, 1)
+	now := clock.NowMs()
+	if got := rt.advanceNaturalRecovery(now + 4000); len(got) != 0 {
+		t.Fatalf("full resident pulsed: %+v", got)
+	}
+	modifiers, err := statuseffect.NewModifiers([]paramkeeper.Write{{Parameter: itemParamMaxHP, Value: 10000}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name,
+		SkillID: 900, SkillGroup: 900, InstanceToken: 900, State: statuseffect.StateActive, Modifiers: modifiers}) {
+		t.Fatal("install")
+	}
+	got := rt.advanceNaturalRecovery(now + 8000)
+	if len(got) != 1 || enterworld.CurrentHP(c) <= hp {
+		t.Fatalf("boosted pulse: frames %+v hp %d", got, enterworld.CurrentHP(c))
+	}
+	healed := enterworld.CurrentHP(c)
+	rt.effects.Forget(testDivision, c.Name)
+	if got := rt.advanceNaturalRecovery(now + 12000); len(got) != 0 || enterworld.CurrentHP(c) != healed {
+		t.Fatalf("forgotten boost still rode the pulse: frames %+v hp %d", got, enterworld.CurrentHP(c))
 	}
 }
 
