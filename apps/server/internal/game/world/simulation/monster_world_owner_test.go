@@ -136,6 +136,56 @@ func TestPopulationKeysMemoTracksMembership(t *testing.T) {
 
 /*
 ================
+TestFillScopeStampsRetainedCachesAnswerFresh
+
+fillScopeStamps keeps its phase caches on the state between
+phases (#3027): a second fill over an unchanged population
+answers the first fill's stamp, and a population released
+between phases stops answering even though its state pointer
+was the previous phase's fold key — the retained caches carry
+no answer across the clear at each fill's entry.
+================
+*/
+func TestFillScopeStampsRetainedCachesAnswerFresh(t *testing.T) {
+	nests := []monster.NestRow{
+		{WorldCode: "INS_DEFAULT", SpawnPoint: monster.SpawnPoint{RegionID: 1}},
+	}
+	s := NewMonsterState(monster.TemplateFromParts(nil, nests))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	s.StartDivision("a")
+	lease, status := s.AllocatePopulation("a", instance.Pack(10, 1))
+	if status != instance.Success {
+		t.Fatal(status)
+	}
+	sessions := []SessionSnapshot{{SessionID: "v", DivisionID: "a", Population: lease}}
+	block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: 1})
+
+	slots := []scopeViewerSlot{{block: block}}
+	s.fillScopeStamps(slots, sessions, 1)
+	if !slots[0].stampOK {
+		t.Fatal("first fill did not stamp a live population")
+	}
+	first := slots[0].stamp
+
+	// The dense slots are rebuilt per leg; the caches are not.
+	slots[0] = scopeViewerSlot{block: block}
+	s.fillScopeStamps(slots, sessions, 1)
+	if !slots[0].stampOK || slots[0].stamp != first {
+		t.Fatalf("second fill answered %+v (ok=%v), want the first fill's stamp", slots[0].stamp, slots[0].stampOK)
+	}
+
+	if !s.ReleasePopulation("a", lease) {
+		t.Fatal("release refused a live lease")
+	}
+	slots[0] = scopeViewerSlot{block: block}
+	s.fillScopeStamps(slots, sessions, 1)
+	if slots[0].stampOK {
+		t.Fatal("a fill after the release answered through the released population's retained state")
+	}
+}
+
+/*
+================
 TestDivisionOpensEveryPermanentWorld
 
 The retail shard manager opens layer 1 of every type-0 RefGameWorld at boot,
