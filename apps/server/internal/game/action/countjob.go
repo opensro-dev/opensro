@@ -33,6 +33,8 @@ item rules it shares publish theirs from the bag use only.
 package action
 
 import (
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -115,6 +117,22 @@ no bag row; the work spends a use only when it succeeds.
 ================
 */
 func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, payload []byte) OpResult {
+	result := rt.handleCountJobUse(division, c, payload)
+	// A refused use is otherwise silent on the server: name it, as item-use does.
+	if c != nil && len(result.Frames) > 0 && result.Frames[0].Opcode == wire.OpCountJobAnswer {
+		log.WithFields(log.Fields{"character": c.Name, "answer": result.Frames[0].Payload, "payload": payload}).Info("count-job: use answered")
+	}
+	return result
+}
+
+/*
+================
+handleCountJobUse
+
+HandleCountJobUse without the log line.
+================
+*/
+func (rt *Runtime) handleCountJobUse(division string, c *enterworld.Character, payload []byte) OpResult {
 	refuse := func(code uint8) OpResult {
 		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpCountJobAnswer, Payload: wire.EncodeCountJobRefusal(code)}}}
 	}
