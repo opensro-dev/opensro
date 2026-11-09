@@ -4658,17 +4658,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
-					// 755960: the owner's sale line, [buyer] bought item
-					// [name]; a network sale's commission line follows.
-					for ( const message of stallOutcome.messages ?? [] ) {
-						notices = [ ...notices.slice( -99 ), {
-							key: message.key,
-							value: 0,
-							arguments: message.args,
-							nativeType: 0,
-							sequence: ++noticeSequence
-						} ];
-					}
+					// The stall's state, sale, registration and commission lines
+					// (751A60, 755960) ride in the stall state's log and print in
+					// the stall window's chat module, not the HUD system messages.
 					if ( frame.opcode !== 0x33d1 ) return true;
 				}
 				// The exchange window (inventory owner) folds its frames first; its

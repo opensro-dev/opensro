@@ -47,6 +47,7 @@ MotionClip
 export type MotionClip = ( from: Pose, to: Pose, query: {
 	slide: boolean;
 	sourceOwner?: NavOwner;
+	sourceTerrainRetained?: boolean;
 	owner?: NavOwner;
 	status?: number;
 } ) => Pose | null;
@@ -129,6 +130,10 @@ createEntityMotion
 */
 export function createEntityMotion( surface: SurfaceResolver = pose => pose, clip: MotionClip = () => null ) {
 	const cursors = new Map<number, SurfaceCursor>();
+	// Terrain retention beside each cursor's owner (#3006): true once a
+	// mover's accepted step stands it on terrain it walked to, cleared
+	// wherever its cursor is (a fresh reference, death, removal).
+	const retainedTerrain = new Map<number, boolean>();
 	/*
 ================
 resolve
@@ -201,6 +206,7 @@ advance
 		const query = {
 			slide: false,
 			sourceOwner: cursors.get( gid )?.owner,
+			sourceTerrainRetained: retainedTerrain.get( gid ) ?? false,
 			owner: undefined as NavOwner | undefined,
 			status: 0
 		};
@@ -216,6 +222,7 @@ advance
 			from: previous,
 			to: accepted,
 			sourceOwner: query.sourceOwner,
+			sourceTerrainRetained: query.sourceTerrainRetained,
 			clip
 		} );
 		const afterDx = segment.to.x - accepted.x +
@@ -230,6 +237,8 @@ advance
 		const cursor = cursors.get( gid ) ?? {};
 		cursor.owner = query.owner;
 		cursors.set( gid, cursor );
+		// An accepted step stands the mover where it now stands: retained.
+		retainedTerrain.set( gid, !query.owner );
 		return accepted;
 	}
 	/*
@@ -273,7 +282,12 @@ does not move the actor or replace its actual-time collision result.
 			};
 		}
 		const desired = candidate( segment, pose, PRESENTATION_LOOKAHEAD_MS ).pose;
-		const query = { slide: false, sourceOwner: cursors.get( gid )?.owner, status: 0 };
+		const query = {
+			slide: false,
+			sourceOwner: cursors.get( gid )?.owner,
+			sourceTerrainRetained: retainedTerrain.get( gid ) ?? false,
+			status: 0
+		};
 		const checked = segment.blocked || segment.arrived ?
 			null :
 			clip( pose, desired, query );
@@ -294,6 +308,7 @@ does not move the actor or replace its actual-time collision result.
 					from: pose,
 					to,
 					sourceOwner: query.sourceOwner,
+					sourceTerrainRetained: query.sourceTerrainRetained,
 					clip
 				} );
 				segment.presentationHistory = { from: pose, to, points: segment.walkingPath, result: walkingPath };
@@ -329,6 +344,7 @@ authored displacements and disconnected navigation never inherit it.
 				from: reference,
 				to: resolved,
 				sourceOwner,
+				sourceTerrainRetained: retainedTerrain.get( entity.gid ) ?? false,
 				clip
 			} );
 		return { segment, resolved, walkingPath };
@@ -489,6 +505,7 @@ surfaceReference
 				segment.presentationHistory = undefined;
 			}
 			cursors.delete( entity.gid );
+			retainedTerrain.delete( entity.gid );
 		},
 		/*
 ================
@@ -543,6 +560,7 @@ receive
 					from: current,
 					to: from,
 					sourceOwner,
+					sourceTerrainRetained: retainedTerrain.get( entity.gid ) ?? false,
 					clip
 				} );
 			if ( decoded.kind === "direction" ) {
@@ -646,6 +664,7 @@ stopForDeath
 			if ( !displaced ) {
 				active.delete( entity.gid );
 				cursors.delete( entity.gid );
+				retainedTerrain.delete( entity.gid );
 			}
 			return update( entity.gid, pose, displaced && now < segment!.start + segment!.duration );
 		},
@@ -731,6 +750,7 @@ remove
 		remove( gid: number ) {
 			active.delete( gid );
 			cursors.delete( gid );
+			retainedTerrain.delete( gid );
 		},
 		/*
 ================
@@ -740,6 +760,7 @@ clear
 		clear() {
 			active.clear();
 			cursors.clear();
+			retainedTerrain.clear();
 		}
 	};
 }

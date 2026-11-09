@@ -28,6 +28,7 @@ WalkingHistoryQuery
 export interface WalkingHistoryQuery {
 	slide: boolean;
 	sourceOwner?: NavOwner;
+	sourceTerrainRetained?: boolean;
 	owner?: NavOwner;
 	status?: number;
 }
@@ -42,6 +43,7 @@ interface WalkingHistoryInput {
 	from: Pose;
 	to: Pose;
 	sourceOwner?: NavOwner;
+	sourceTerrainRetained?: boolean;
 	clip: ( from: Pose, to: Pose, query: WalkingHistoryQuery ) => Pose | null;
 }
 
@@ -117,7 +119,12 @@ export function correctWalkingHistory( input: WalkingHistoryInput ): readonly Po
 	if ( !sameSpace( input.from, input.to ) ) return undefined;
 	const points = rewindWalkingHistory( input.points, input.from );
 	if ( !points ) return undefined;
-	const query: WalkingHistoryQuery = { slide: false, sourceOwner: input.sourceOwner, status: 0 };
+	const query: WalkingHistoryQuery = {
+		slide: false,
+		sourceOwner: input.sourceOwner,
+		sourceTerrainRetained: input.sourceTerrainRetained,
+		status: 0
+	};
 	const checked = input.clip( input.from, input.to, query );
 	if (
 		!checked || (query.status! & NAVIGATION_REJECT) || !sameSpace( checked, input.to ) ||
@@ -152,12 +159,17 @@ export function extendWalkingHistory( input: WalkingHistoryInput ): readonly Pos
 	const points = last && sameSpace( last, from ) && surfaceDistance( last, from ) <= ENDPOINT_EPSILON ?
 		[ ...input.points! ] :
 		[ historyPose( from ) ];
-	let accepted = from, owner = input.sourceOwner;
+	let accepted = from, owner = input.sourceOwner, terrainRetained = input.sourceTerrainRetained;
 	for ( let sample = 1; sample <= count; sample++ ) {
 		let resolved = to;
 		if ( count > 1 ) {
 			const candidate = interpolateMovement( from, to, sample / count );
-			const query: WalkingHistoryQuery = { slide: false, sourceOwner: owner, status: 0 };
+			const query: WalkingHistoryQuery = {
+				slide: false,
+				sourceOwner: owner,
+				sourceTerrainRetained: terrainRetained,
+				status: 0
+			};
 			const checked = input.clip( accepted, candidate, query );
 			if (
 				!checked || (query.status! & NAVIGATION_REJECT) ||
@@ -169,6 +181,9 @@ export function extendWalkingHistory( input: WalkingHistoryInput ): readonly Pos
 			}
 			resolved = checked;
 			owner = query.owner;
+			// A certified sample the clip walked to is retained where it
+			// stands: on an object cell, or on the terrain beside it.
+			terrainRetained = !owner;
 		}
 		points.push( historyPose( sample === count ? to : resolved ) );
 		accepted = resolved;

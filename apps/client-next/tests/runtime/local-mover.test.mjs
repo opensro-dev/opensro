@@ -429,6 +429,44 @@ test("a fixed segment hands its destination back when it ends", () => {
 	assert.equal( mover.frame( now + 16.7, w ).kind, "idle" );
 });
 
+test("a dash published while a walk is predicted is drawn at the dash's rate, not walking speed", () => {
+	// Ghost Walk cast while walking: the mover already predicts the walk
+	// (speed 50) when the worker publishes the cast's travel, 200 units at
+	// 500 units a second. The rebuild adopts the segment; the drawn body
+	// must keep to the segment's clock and land with it, or it trails the
+	// dash and glides the rest of the way after the skill's motion ended.
+	const mover = createLocalMover();
+	assert.equal( mover.click( { seq: 1, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() ), true );
+	let now = 0;
+	while ( now < 100 ) {
+		now += 16.7;
+		assert.equal( mover.frame( now, world() ).kind, "walking" );
+	}
+	const from = { ...START, x: 1005 };
+	const dash = { from, to: { ...from, x: 1205 }, start: now, duration: 400, fixedTiming: true };
+	const dashWorld = at =>
+		world( {
+			moving: true,
+			aim: { kind: "fixed", segment: dash },
+			pose: { ...from, x: from.x + 500 * (at - dash.start) / 1000 },
+			poseAtMs: at,
+			revision: 1,
+			relocation: 1,
+			inputSeq: 1
+		} );
+	const published = now;
+	for ( const dt of FRAMES ) {
+		now += dt;
+		const frame = mover.frame( now, dashWorld( published ) );
+		assert.equal( frame.kind, "walking" );
+		const expected = Math.min( dash.to.x, from.x + 500 * (now - dash.start) / 1000 );
+		assert.ok(
+			Math.abs( frame.pose.x - expected ) < 2,
+			`at ${frame.pose.x}, the dash is at ${expected} (${now} ms)`
+		);
+	}
+});
+
 test("a rebuild mid-dash replays the same absolute segment, and a knockback ends it", () => {
 	const mover = createLocalMover();
 	mover.predict( { seq: 0, aim: { kind: "fixed", segment: DASH }, speed: DASH_RATE, drawn: START, now: 0 }, world() );

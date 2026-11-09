@@ -94,7 +94,7 @@ func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) e
 	// beside the (unchanged) copy, exactly as a write would.
 	key := committedCharacterKey{division: division, id: c.ID}
 	if digest, digested := w.store.committedDigests[key]; digested {
-		if committed, copied := w.store.committedRows[key]; copied && len(characterSectionsChanged(c, committed)) == 0 {
+		if committed, copied := w.store.committedRows[key]; copied && !characterChanged(c, committed) {
 			w.written[key] = digest
 			delete(w.deleted, key)
 			return nil

@@ -10,6 +10,11 @@ becomes the localized rows the original prints, in the original's order.
 ===========================================================================
 */
 import type { SkillTooltipRowView } from "./skill-tooltip-data";
+
+// odar's lane bits (see absorptionRows).
+const ODAR_PHYSICAL = 4;
+const ODAR_MAGICAL = 8;
+
 /*
 ================
 skillParameterFormatters
@@ -408,6 +413,33 @@ damagePairRows
 
 	/*
 ================
+absorptionRows
+
+odar {kind, percent} is a lane mask and one percent, not a physical /
+magical pair: Guard Tambour is odar 4 n, Mana Tambour odar 8 n. Read as a
+pair it printed Guard Tambour Lv 2 as "Physical 4% / Magical 23%".
+
+Kind bits are physical 4 and magical 8, crossed with basic 1 and skill 2
+(the server's 0xAE..0xB1 writes, combat.IncomingReductionWrites). A kind
+naming only basic/skill (1..3) covers both lanes, as the server's odar
+parser fixes it up. Inferred like saps (0x7ff48f), the sibling bit-masked
+block: one line per lane bit, the percent at values[1].
+================
+	*/
+	function absorptionRows( values: number[] ): string[] {
+		let kind = values[0] ?? 0;
+		const value = values[1] ?? 0;
+		if ( value <= 0 ) return [];
+		if ( (kind & (ODAR_PHYSICAL | ODAR_MAGICAL)) === 0 ) kind |= ODAR_PHYSICAL | ODAR_MAGICAL;
+		const suffix = text( "PARAM_ABSORB" );
+		const rows: string[] = [];
+		if ( kind & ODAR_PHYSICAL ) rows.push( `${text( "UIIT_STT_PHY_DAMAGE" )} ${value}% ${suffix}` );
+		if ( kind & ODAR_MAGICAL ) rows.push( `${text( "UIIT_STT_MAG_DAMAGE" )} ${value}% ${suffix}` );
+		return rows;
+	}
+
+	/*
+================
 projectedPowerStatusRow
 ================
 	*/
@@ -591,7 +623,7 @@ projectedNativeRowsForBlock
 			case 0x040:
 				return damagePairRows( v, "PARAM_DECREASE_RATIO", false );
 			case 0x044:
-				return damagePairRows( v, "PARAM_ABSORB", true );
+				return absorptionRows( v );
 			case 0x1a4:
 				return damagePairRows( v, "PARAM_INCREASE", true );
 			case 0x04c:

@@ -169,6 +169,52 @@ test("the stall open/close lines print ahead of the registration line (751A60)",
 	}
 });
 
+test("the stall's own lines print in its chat module, in order, once", () => {
+	const visit = frame( 0xb61f, [
+		1,
+		...u32( OWNER ),
+		...wstr( "Welcome" ),
+		1,
+		0,
+		...offer( 2, 20, 5, 300 ),
+		0xff,
+		0
+	] );
+	const seen = defined( stall.stallFrame( stall.emptyStall(), visit, ctx ) ).state;
+	/** @type {import("../../src/engine/foundation/gameplay/stall.ts").StallState} */
+	let owner = { ...stall.emptyStall(), phase: "owner", owner: LOCAL, offers: seen.offers };
+	const box = hud.createStallHud();
+	box.observeChat( owner, [] );
+	owner = defined( stall.stallFrame( owner, frame( 0xb1a8, [ 1, 5, 1, 0 ] ), ctx ) ).state;
+	box.observeChat( owner, [] );
+	const said = { sequence: 1, channel: 9, name: "Bob", text: "hi", outgoing: false };
+	box.observeChat( owner, [ said ] );
+	// The wire offer carries no display name; the sale line takes it from
+	// the reference names the bag uses.
+	const named = { ...ctx, names: new Map( [ [ POTION, "HP Recovery Herb" ] ] ) };
+	owner = defined( stall.stallFrame( owner, frame( 0x3260, [ 3, 2, ...u16( 3 ), 66, 111, 98, 0xff ] ), named ) )
+		.state;
+	box.observeChat( owner, [ said ] );
+	// A later snapshot of the same state appends nothing again.
+	assert.deepEqual( box.observeChat( structuredClone( owner ), [ said ] ), { cleared: false, appended: false } );
+	assert.deepEqual(
+		box.messages().map( entry => entry.kind === "chat" ? entry.line.text : entry.line.key ),
+		[ "UIIT_STT_STALL_CONDITION_START", "hi", "UIIT_MSG_STREET_STORE_SELL_COMMODITY" ]
+	);
+	const sale = box.messages()[2];
+	assert.deepEqual( sale?.kind === "system" ? sale.line.args : null, [ "Bob", "HP Recovery Herb" ] );
+	// A fresh stall starts an empty log whose sequence keeps growing, so a
+	// window that never saw the empty phase still prints its first line.
+	const reopened = defined( stall.stallFrame( owner, frame( 0xb049, [ 1 ] ), ctx ) ).state;
+	assert.deepEqual( reopened.log, [] );
+	const opened = defined( stall.stallFrame( reopened, frame( 0xb1a8, [ 1, 5, 1, 0 ] ), ctx ) ).state;
+	assert.deepEqual( opened.log.map( line => line.sequence ), [ owner.logSequence + 1 ] );
+	// Only the owner reads the sale line; a visitor's log stays empty.
+	const visitor = defined( stall.stallFrame( seen, frame( 0x3260, [ 3, 2, ...u16( 3 ), 66, 111, 98, 0xff ] ), ctx ) )
+		.state;
+	assert.deepEqual( visitor.log, [] );
+});
+
 test("a network sale prints the commission under the sale line", () => {
 	const soldAt = ( /** @type {number} */ price ) => {
 		const visit = frame( 0xb61f, [
