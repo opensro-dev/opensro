@@ -117,10 +117,12 @@ const (
 // copy (#2033), measured 19,651 B / 170 allocs; with the
 // natural-recovery pass refilling its due-key scratch under the
 // recovery lock instead of rebuilding the list every tick (#2033),
-// measured 19,516 B / 170 allocs.
+// measured 19,516 B / 170 allocs; with the companion-admitted
+// snapshot reading on the stack read guard instead of the callback
+// door (#2033), measured 18,127 B / 115 allocs.
 const (
-	tickBudgetBytesPerTick  = 21500
-	tickBudgetAllocsPerTick = 187
+	tickBudgetBytesPerTick  = 20000
+	tickBudgetAllocsPerTick = 127
 )
 
 /*
