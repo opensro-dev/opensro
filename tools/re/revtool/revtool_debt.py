@@ -281,16 +281,23 @@ def depth_satisfied(con, name, func_addr):
 	return False
 
 
-def depth_gate(con, args, dump, orig_name, tier):
+def depth_gate(con, args, dump, orig_name, tier, lines=None):
 	"""A confident (mechanism+) function claim must capture some of what was understood.
 
-    The failure this fixes: a bare function name discharges all debt, so the rich,
-    compounding knowledge (the `this`/main object, struct fields) is never written down
-    and a `mechanism` name even discourages the next engineer from digging. So a
-    confident claim on a STRUCTURED function (>= STRUCTURE_MIN_OFFSETS field accesses)
-    must leave >=1 breadcrumb: a local rename, a binding, a named field, or `--shallow`.
-    `guess`/`unknown` stay frictionless. Returns exit code 2 to abort, else None.
-    """
+	The failure this fixes: a bare function name discharges all debt, so the rich,
+	compounding knowledge (the `this`/main object, struct fields) is never written down
+	and a `mechanism` name even discourages the next engineer from digging. So a
+	confident claim on a STRUCTURED function (>= STRUCTURE_MIN_OFFSETS field accesses)
+	must leave >=1 breadcrumb: a local rename, a binding, a named field, or `--shallow`.
+	`guess`/`unknown` stay frictionless. Returns exit code 2 to abort, else None.
+
+	`lines` is the function text to measure when the caller already has it
+	(the rizin backend passes the function's disassembly lines; its index
+	rows carry no dump geometry). With neither lines nor a dump on disk
+	there is no text to measure: unknown is not "structured", so the gate
+	passes rather than refusing on a guess - the same rule
+	`rename_key_can_fire` applies to an unavailable dump.
+	"""
 	if not strict_enabled(args, con):
 		return None
 	if tier not in DEEP_TIERS:
@@ -308,7 +315,11 @@ def depth_gate(con, args, dump, orig_name, tier):
 		return None
 	if depth_satisfied(con, orig, func_addr):
 		return None
-	offs = function_field_offsets(read_func_lines(dump, row[3], row[4]))
+	if lines is None:
+		if not dump or not os.path.exists(dump):
+			return None  # no function text to measure (rizin backend)
+		lines = read_func_lines(dump, row[3], row[4])
+	offs = function_field_offsets(lines)
 	if len(offs) < STRUCTURE_MIN_OFFSETS:
 		return None  # trivial function: nothing structural to capture
 	print(f"REFUSED (strict): '{orig}' -> {tier} asserts you understand it, but it "

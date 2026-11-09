@@ -144,6 +144,7 @@ class FakePipe:
 					self.funcs[va] = parts[1]
 			elif parts[0] == "Ps":
 				self.saved = parts[1].strip('"')
+				Path(self.saved).write_bytes(b"rzdb")
 		return ""
 
 	def cmdj(self, text):
@@ -166,14 +167,33 @@ class ApplyTests(unittest.TestCase):
 
 	def test_apply_defines_names_and_saves(self):
 		pipe = FakePipe(drop={0x401060})
-		defined, named, ok, sampled = revtool_seed.apply_seed(
-			self._payload(), "binary.exe", "out.rzdb",
-			opener=lambda binary: pipe)
+		with tempfile.TemporaryDirectory() as td:
+			rzdb = os.path.join(td, "out.rzdb")
+			defined, named, ok, sampled = revtool_seed.apply_seed(
+				self._payload(), "binary.exe", rzdb,
+				opener=lambda binary: pipe)
+			# The project landed via the tmp save; the lock is gone.
+			self.assertTrue(os.path.exists(rzdb))
+			self.assertTrue(pipe.saved.startswith(rzdb + ".tmp-"))
+			self.assertFalse(os.path.exists(pipe.saved))
+			self.assertFalse(os.path.exists(rzdb + ".lock"))
 		# 0x401060 was merged away by rizin: not defined, never renamed.
 		self.assertEqual((defined, named), (3, 3))
 		self.assertEqual((ok, sampled), (1, 1))
-		self.assertEqual(pipe.saved, "out.rzdb")
 		self.assertEqual(pipe.funcs[0x401020], "CIFDraw")
+
+	def test_apply_refuses_a_held_lock(self):
+		pipe = FakePipe()
+		with tempfile.TemporaryDirectory() as td:
+			rzdb = os.path.join(td, "out.rzdb")
+			Path(rzdb + ".lock").write_text("held\n", encoding="utf-8")
+			with self.assertRaises(revtool_seed.SeedError):
+				revtool_seed.apply_seed(
+					self._payload(), "binary.exe", rzdb,
+					opener=lambda binary: pipe)
+			# The other writer's lock is left alone.
+			self.assertTrue(os.path.exists(rzdb + ".lock"))
+			self.assertIsNone(pipe.saved)
 
 	def test_apply_refuses_a_mismatched_binary(self):
 		with tempfile.TemporaryDirectory() as td:

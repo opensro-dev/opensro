@@ -57,7 +57,11 @@ def cmd_rename(args, con):
 				  f"stored for address-based dossiers/planners, but this key cannot "
 				  f"rewrite dump text and will not appear in `view` output.{hint}",
 				  file=sys.stderr)
-		gate = depth_gate(con, args, get_dump(con, args), orig, tier)
+		# A backend that already holds the function's text (rizin passes
+		# disassembly lines as args.gate_lines) feeds the depth gate with
+		# it; the dump backend leaves it unset and the gate reads the dump.
+		gate = depth_gate(con, args, get_dump(con, args), orig, tier,
+						  lines=getattr(args, "gate_lines", None))
 		if gate is not None:
 			return gate
 		kind = "func" if orig.startswith("sub_") else ("data" if orig.startswith("data_") else None)

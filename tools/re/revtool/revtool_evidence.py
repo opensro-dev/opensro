@@ -25,7 +25,8 @@ from revtool_asserts import _ARR_ENTRY_RE, _ARR_SINGLE_RE, _ARR_START_RE
 from revtool_asserts import _COL_RE, _VFTABLE_RE
 from revtool_debt import compute_debt, debt_limit, strict_enabled
 from revtool_dump import evidence_artifact_paths, get_binary, get_dump
-from revtool_ingest import default_sync_path, sync_diff, validate_ledger_meta
+from revtool_ingest import db_claims, default_sync_path, sync_diff
+from revtool_ingest import validate_ledger_meta
 from revtool_paths import DEFAULT_EVIDENCE_LOCK, EVIDENCE_LOCK_SCHEMA
 from revtool_paths import HERE, PROOF_TOOLS, REBUILD_ROOT, RECONSTRUCT_DIR
 from revtool_paths import REVTOOL_SCHEMA_VERSION, TARGET_SHA256
@@ -216,7 +217,100 @@ def build_evidence_lock(con, args):
 	}
 
 
+def _doctor_report(checks, args):
+	"""The doctor verdict both backends print (and --json emits)."""
+	result = {"schema": "sro-revtool-doctor-v1", "ok": all(c["ok"] for c in checks),
+			  "checks": checks}
+	if args.json:
+		print(json.dumps(result, indent=2))
+	else:
+		for row in checks:
+			print(f"{'PASS' if row['ok'] else 'FAIL'}  {row['name']}: {row['detail']}")
+		print(f"doctor: {'PASS' if result['ok'] else 'FAIL'}")
+	return 0 if result["ok"] else 2
+
+
+def cmd_doctor_rizin(args, con):
+	"""The fail-closed audit for a rizin-backed overlay (`--backend rizin`).
+
+	The dump doctor audits the BN evidence lock, the structured BN exports
+	and the dump binding - artifacts a contributor machine never has. A
+	rizin DB's provenance is instead its recorded artifact rows (the
+	target binary, the rizin analysis that built the index) plus the
+	project file those facts came from. The checks below audit exactly
+	that chain, then the same ledger and conflict checks the dump doctor
+	runs. Anything missing FAILs: a doctor that guesses is worse than none.
+	"""
+	checks = []
+
+	def check(name, ok, detail):
+		checks.append({"name": name, "ok": bool(ok), "detail": detail})
+
+	check("schema", meta_get(con, "schema_version") == str(REVTOOL_SCHEMA_VERSION),
+		  f"db={meta_get(con, 'schema_version')} expected={REVTOOL_SCHEMA_VERSION}")
+	artifact = con.execute(
+		"SELECT path,record_count,version FROM artifact_provenance "
+		"WHERE name='rizin-analysis'").fetchone()
+	version = artifact[2] if artifact and artifact[2] else "unrecorded"
+	check("backend", True,
+		  f"rizin {version} (facts from the retail binary via rzpipe; no BN dump)")
+	if getattr(args, "refresh_lock", False):
+		check("evidence-lock", False,
+			  "--refresh-lock builds the BN evidence lock; a rizin overlay "
+			  "has none - its provenance is the artifact rows above")
+	binary = get_binary(con, args)
+	if os.path.isfile(binary):
+		actual_target = sha256_file(binary)
+		check("db-target-binding", meta_get(con, "target_sha256") == actual_target,
+			  f"db={meta_get(con, 'target_sha256')} actual={actual_target}")
+	else:
+		check("target", False, f"missing: {binary}")
+	rzdb = getattr(args, "rzdb", None)
+	if not rzdb and artifact and artifact[0].endswith(".rzdb"):
+		rzdb = artifact[0]
+	if not rzdb:
+		rzdb = os.path.splitext(os.path.abspath(args.db))[0] + ".rzdb"
+	if os.path.isfile(rzdb):
+		check("rizin-project", True, f"present: {rzdb}")
+	else:
+		check("rizin-project", False,
+			  f"missing: {rzdb}; rerun `index` (it saves the project) or pass --rzdb")
+	actual_functions = con.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
+	if artifact:
+		check("db-function-index", artifact[1] == actual_functions,
+			  f"db={actual_functions} indexed={artifact[1]}")
+	else:
+		check("db-function-index", False,
+			  "no rizin-analysis artifact recorded; run `index`")
+	ledger_path = os.path.abspath(getattr(args, "ledger", None) or default_sync_path(args.db))
+	if os.path.isfile(ledger_path):
+		try:
+			diff = sync_diff(con, ledger_path)
+			validate_ledger_meta(con, diff["meta"], ledger_path)
+			check("ledger-claims", not diff["local_only"] and not diff["remote_only"]
+				  and not diff["differing"],
+				  f"local-only={len(diff['local_only'])} "
+				  f"remote-only={len(diff['remote_only'])} differing={len(diff['differing'])}")
+			check("ledger-events", not diff["local_event_only"] and not diff["remote_event_only"],
+				  f"local-only={len(diff['local_event_only'])} "
+				  f"remote-only={len(diff['remote_event_only'])}")
+		except (OSError, ValueError) as exc:
+			check("ledger", False, str(exc))
+	elif db_claims(con):
+		check("ledger", False,
+			  f"missing: {ledger_path}; claims not exported - run `sync export`")
+	else:
+		check("ledger", True,
+			  "no ledger yet and no claims to audit; `sync export` creates it")
+	conflicts = con.execute(
+		"SELECT COUNT(*) FROM sync_conflicts WHERE resolved=0").fetchone()[0]
+	check("sync-conflicts", conflicts == 0, f"unresolved={conflicts}")
+	return _doctor_report(checks, args)
+
+
 def cmd_doctor(args, con):
+	if meta_get(con, "backend") == "rizin":
+		return cmd_doctor_rizin(args, con)
 	lock_path = os.path.abspath(args.lock or DEFAULT_EVIDENCE_LOCK)
 	if args.refresh_lock:
 		lock = build_evidence_lock(con, args)
@@ -364,15 +458,7 @@ def cmd_doctor(args, con):
 		"SELECT COUNT(*) FROM sync_conflicts WHERE resolved=0").fetchone()[0]
 	check("sync-conflicts", conflicts == 0, f"unresolved={conflicts}")
 
-	result = {"schema": "sro-revtool-doctor-v1", "ok": all(c["ok"] for c in checks),
-			  "checks": checks}
-	if args.json:
-		print(json.dumps(result, indent=2))
-	else:
-		for row in checks:
-			print(f"{'PASS' if row['ok'] else 'FAIL'}  {row['name']}: {row['detail']}")
-		print(f"doctor: {'PASS' if result['ok'] else 'FAIL'}")
-	return 0 if result["ok"] else 2
+	return _doctor_report(checks, args)
 
 
 def cmd_dossier(args, con):

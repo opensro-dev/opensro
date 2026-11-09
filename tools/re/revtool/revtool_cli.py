@@ -53,7 +53,8 @@ def build_parser():
 	p.add_argument("--backend", default="dump", choices=("dump", "rizin"),
 				   help="where index/view/xref/coverage/find/audit get their facts: "
 						"the Binary Ninja dump (default) or rizin on the retail "
-						"binary (dispatched by revtool.py; see revtool_rizin.py)")
+						"binary (dispatched by revtool.py; see revtool_rizin.py); "
+						"rename/doctor/sync act on the overlay store either way")
 	sub = p.add_subparsers(dest="cmd", required=True)
 
 	sp = sub.add_parser("index", help="scan the dump and build the function index")

@@ -4,22 +4,24 @@ revtool_rizin.py - revtool's rizin backend
 
 The dump backend reads a whole-program Binary Ninja HLIL export
 (~110 MB of text that can never be committed). This backend reads the
-same six commands' data from the contributor's own retail binary via
-rizin (rzpipe) instead: the function index from `aflj`, signatures
-from `afsj`, a function's text from `pdfj` disassembly, cross
-references from `axtj`. `find` and `audit` never touched the dump
-(they read the overlay DB), so they delegate to revtool unchanged.
+same facts from the contributor's own retail binary via rizin
+(rzpipe) instead: the function index from `aflj`, signatures from
+`afsj`, a function's text from `pdfj` disassembly, cross references
+from `axtj`. Commands that never touched the dump (they read the
+overlay DB) delegate to revtool unchanged: `find`, `audit`, `rename`,
+`doctor`, `sync`. `revtool.py --backend rizin` dispatches here; this
+module is also runnable on its own, with the same argument shapes.
 
     py revtool_rizin.py --binary SRO_Client.exe index
     py revtool_rizin.py --binary SRO_Client.exe view sub_402a70
     py revtool_rizin.py --binary SRO_Client.exe xref data_f0c90c
     py revtool_rizin.py --binary SRO_Client.exe coverage sub_679b90
+    py revtool_rizin.py --binary SRO_Client.exe rename global sub_402a70 WidgetDraw
+    py revtool_rizin.py --binary SRO_Client.exe doctor
 
-revtool.py gains a `--backend rizin` selector in a later change; until
-then this module is the selector, with the same argument shapes as
-revtool's own. Everything revtool does with the data - the overlay,
-rename application, notes, debt gates - is revtool's code, imported
-and applied unmodified; only the source of the facts differs.
+Everything revtool does with the data - the overlay, rename
+application, notes, debt gates - is revtool's code, imported and
+applied unmodified; only the source of the facts differs.
 
 Semantics that differ from the dump backend, by construction:
 
@@ -44,6 +46,16 @@ Semantics that differ from the dump backend, by construction:
   * `xref` is analysis-derived (`axtj`): call and data references
     rizin resolved. Un-analyzed code is invisible to it, and each
     answer says so.
+  * `rename` stores the same overlay claims as the dump backend. Its
+    can-fire test consults this backend's function index (a `data_`
+    key is absent from a function index by construction, so the test
+    stays silent for one, exactly as it does when the dump is
+    unavailable), and the strict depth gate measures the function's
+    disassembly lines - which rarely carry the `var + 0xNN` field
+    shape, so the gate normally passes unmeasured instead of refusing
+    on a guess. `doctor` on a rizin DB audits this backend's
+    provenance (target/index binding, the saved project, the ledger),
+    not the BN evidence graph. `sync` is revtool's own, unchanged.
   * `start_byte`/`start_line` in the functions table are dump-backend
     geometry; rizin rows carry a stable ordinal in `start_byte` and
     zeros elsewhere. Database files are per-backend: run one
@@ -96,6 +108,7 @@ class RizinSession:
 				"(docs/native/REVERSE_ENGINEERING.md).") from exc
 		self.binary = binary
 		self.rzdb = rzdb
+		self.from_project = bool(rzdb and os.path.exists(rzdb))
 		self._functions = None
 		# No CLI flags: rzpipe adds its own; an unknown flag makes rizin
 		# print usage, exit, and rzpipe spin forever on a dead pipe.
@@ -137,8 +150,40 @@ class RizinSession:
 		return self.cmdj("axtj") or []
 
 	def save(self):
-		if self.rzdb:
-			self.cmd(f'Ps "{self.rzdb}"')
+		"""Save the project beside-then-replace, under an exclusive lock.
+
+		`Ps` writes the .rzdb in place: two sessions saving at once (or
+		a crash mid-write) leave a torn project behind. Write a sibling
+		temp file and os.replace it into place instead, holding an
+		O_EXCL lock so a second saver refuses rather than interleaving
+		- the same rule the seed apply uses (revtool_seed.apply_seed).
+		"""
+		if not self.rzdb:
+			return
+		lock_path = self.rzdb + ".lock"
+		try:
+			lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+		except FileExistsError as exc:
+			raise SystemExit(
+				f"error: {lock_path} exists - another revtool session is "
+				f"saving {self.rzdb}; remove the lock only if it is gone") from exc
+		tmp_path = f"{self.rzdb}.tmp-{os.getpid()}"
+		try:
+			os.write(lock_fd, f"{os.getpid()}\n".encode())
+			os.close(lock_fd)
+			lock_fd = None
+			self.cmd(f'Ps "{tmp_path}"')
+			if not os.path.exists(tmp_path):
+				raise SystemExit(
+					f"error: rizin did not write {tmp_path}; project not saved")
+			os.replace(tmp_path, self.rzdb)
+		finally:
+			if lock_fd is not None:
+				os.close(lock_fd)
+			if os.path.exists(tmp_path):
+				os.remove(tmp_path)
+			if os.path.exists(lock_path):
+				os.remove(lock_path)
 
 	def close(self):
 		try:
@@ -292,9 +337,14 @@ def cmd_index(args, con, rz):
 	con.commit()
 	print(f"indexed {len(rows)} functions from rizin "
 	      f"({getattr(args, 'analyze', 'aac')} analysis of {binary}).")
-	print("note: rizin sees analysis-reachable code only; the BN dump "
-	      "index holds roughly 4x this many functions. The two "
-	      "backends are not interchangeable views of one set.")
+	if getattr(rz, "from_project", False):
+		print("note: the function set came from the loaded rizin project "
+		      "(a seed-applied .rzdb carries BN-grade boundaries and "
+		      "names), not from fresh rizin analysis.")
+	else:
+		print("note: rizin sees analysis-reachable code only; the BN dump "
+		      "index holds roughly 4x this many functions. The two "
+		      "backends are not interchangeable views of one set.")
 	return 0
 
 
@@ -437,6 +487,35 @@ def cmd_view(args, con, rz):
 		con.commit()
 		revtool.print_debt_footer(con, name, author=revtool.get_author(args))
 	return 0
+
+
+# =====================================================================
+# rename
+# =====================================================================
+
+def cmd_rename(args, con, rz):
+	"""`rename` over the rizin provider: revtool stores the claim.
+
+	Only the depth gate's text source differs from the dump backend:
+	for a global rename at a confident tier under strict enforcement,
+	the function's disassembly lines (the same lines `view` renders)
+	are measured for struct-field offsets. Everything else - the
+	can-fire warning, the claim itself, its history - is
+	revtool.cmd_rename unmodified. The session opens lazily, so
+	guess-tier and local renames never pay for rizin.
+	"""
+	if args.scope == "global" and args.tier in revtool.DEEP_TIERS \
+			and revtool.strict_enabled(args, con):
+		row = revtool.resolve_func(con, args.a)
+		if row:
+			session = open_session(args, con, True)
+			try:
+				_func_by_va, data_by_va = token_maps(con)
+				args.gate_lines = function_lines(
+					session, int(row[0], 16), row[2], data_by_va)
+			finally:
+				session.close()
+	return revtool.cmd_rename(args, con)
 
 
 # =====================================================================
@@ -707,6 +786,41 @@ def main(argv=None) -> int:
 	sp = sub.add_parser("coverage", help="how thoroughly one function is RE'd (rizin refs)")
 	sp.add_argument("target", help="function name / applied name / address")
 	sp.set_defaults(handler=cmd_coverage, need_rizin=True)
+
+	sp = sub.add_parser("rename", help="rename a symbol (global or local scope)")
+	rsub = sp.add_subparsers(dest="scope", required=True)
+	rg = rsub.add_parser("global", help="rename sub_/data_ everywhere")
+	rg.add_argument("a", metavar="orig")
+	rg.add_argument("b", metavar="new")
+	rg.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
+	rg.add_argument("--evidence", default=None, help="why you believe this (RVA, rizin, etc.)")
+	rg.add_argument("--basis", default=None, help=f"evidence basis: {'|'.join(revtool.BASES)}")
+	rg.add_argument("--method", default=None, help="how derived (e.g. 'rizin /x absolute-addr')")
+	rg.add_argument("--blindspots", default=None, help="what `method` cannot see")
+	rg.add_argument("--shallow", action="store_true",
+	                help="ack a confident claim has no locals/fields worth naming (bypasses depth gate, audited)")
+	rl = rsub.add_parser("local", help="rename a local within ONE function")
+	rl.add_argument("func")
+	rl.add_argument("a", metavar="orig")
+	rl.add_argument("b", metavar="new")
+	rl.add_argument("--tier", default="guess", help=f"confidence: {'|'.join(revtool.TIERS)}")
+	rl.add_argument("--evidence", default=None)
+	sp.set_defaults(handler=cmd_rename, need_rizin=False)
+
+	sp = sub.add_parser("doctor",
+	                    help="fail-closed provenance, DB, and ledger audit (rizin checks)")
+	sp.add_argument("--ledger", default=None,
+	                help="claim/event ledger path (default: selected DB's ledger)")
+	sp.add_argument("--json", action="store_true", help="emit machine-readable result")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_doctor(a, c), need_rizin=False)
+
+	sp = sub.add_parser("sync", help="git-mergeable JSONL export/import for collaboration")
+	sp.add_argument("action", choices=["export", "import", "status", "conflicts", "resolve"])
+	sp.add_argument("path", nargs="?",
+	                help="default: <selected --db stem>_symbols.jsonl beside the database")
+	sp.add_argument("--take", choices=["local", "remote"], default=None,
+	                help="with resolve: explicit side to preserve")
+	sp.set_defaults(handler=lambda a, c, _rz: revtool.cmd_sync(a, c), need_rizin=False)
 
 	args = parser.parse_args(argv)
 	con = revtool.open_db(args.db)
