@@ -440,6 +440,39 @@ function sizedNameFrame( subcommand: number, text: string ): WireFrame {
 	return { opcode: OP_GM_COMMAND, payload };
 }
 
+// The port's /HWANARENA <ch|eu> (GM test tooling, not native): the same warp /warp sends (retail 50B303,
+// subcommand 16) to where the Army / Military Test trial's player lands, so a GM can check that the new
+// arena is reachable and walkable. The points mirror the server's arena table (quest/hwan_arena.go, the
+// trials' entry); the server still validates the destination against the terrain and the GM privilege.
+const HWAN_ARENA_WARPS: Readonly<Record<string, readonly [number, number, number, number]>> = {
+	ch: [ 22966, 1043, 52, 1087 ],
+	eu: [ 22454, 1195, 91, 653 ]
+};
+
+/*
+================
+warpFrame
+
+The coordinate warp (retail 50B303): u8 16, u16 region, float32 XYZ, u16 heading; null for a
+value the wire cannot carry.
+================
+*/
+function warpFrame( region: number, x: number, y: number, z: number, heading: number ): WireFrame | null {
+	if (
+		!Number.isInteger( region ) || region <= 0 || region > 65535 ||
+		![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v ) ) ) ||
+		!Number.isInteger( heading ) || heading < 0 || heading > 65535
+	) return null;
+	const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
+	payload[0] = 16;
+	v.setUint16( 1, region, true );
+	v.setFloat32( 3, x, true );
+	v.setFloat32( 7, y, true );
+	v.setFloat32( 11, z, true );
+	v.setUint16( 15, heading, true );
+	return { opcode: OP_GM_COMMAND, payload };
+}
+
 /*
 ================
 gmRequest
@@ -461,19 +494,12 @@ export function gmRequest(
 	if ( name === "/warp" ) {
 		if ( tokens.length !== 5 ) return null;
 		const [region, x, y, z] = tokens.slice( 1 ).map( Number );
-		if (
-			!Number.isInteger( region ) || region! <= 0 || region! > 65535 ||
-			![ x, y, z ].every( v => Number.isFinite( v ) && Number.isFinite( Math.fround( v! ) ) ) ||
-			!Number.isInteger( heading ) || heading < 0 || heading > 65535
-		) return null;
-		const payload = new Uint8Array( 17 ), v = new DataView( payload.buffer );
-		payload[0] = 16;
-		v.setUint16( 1, region!, true );
-		v.setFloat32( 3, x!, true );
-		v.setFloat32( 7, y!, true );
-		v.setFloat32( 11, z!, true );
-		v.setUint16( 15, heading, true );
-		return { opcode: OP_GM_COMMAND, payload };
+		return warpFrame( region!, x!, y!, z!, heading );
+	}
+	// Any case: the command is port-only. /HWANARENA ch (Army Test) or eu (Military Test).
+	if ( name?.toUpperCase() === "/HWANARENA" ) {
+		const point = tokens.length === 2 ? HWAN_ARENA_WARPS[tokens[1]!.toLowerCase()] : undefined;
+		return point ? warpFrame( point[0], point[1], point[2], point[3], heading ) : null;
 	}
 	// Port-only: dedicated dummy references exist only with SRO_GM_TRAINING_DUMMY on.
 	if ( name?.toUpperCase() === "/TRAININGDUMMY" && tokens.length <= 2 ) {

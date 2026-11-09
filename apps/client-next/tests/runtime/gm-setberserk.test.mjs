@@ -45,3 +45,23 @@ test("the /SETBERSERK reply prints the level in force or the refusal", () => {
 	} );
 	assert.throws( () => gmReply( Uint8Array.of( 1, 0xf3 ) ), /Invalid GM berserk reply/ );
 });
+
+test("/HWANARENA ch|eu sends the coordinate warp to the trial arena's entry, in any case", () => {
+	const decode = frame => {
+		const v = new DataView( Uint8Array.from( frame.payload ).buffer );
+		return [
+			frame.payload[0],
+			v.getUint16( 1, true ),
+			v.getFloat32( 3, true ),
+			v.getFloat32( 7, true ),
+			v.getFloat32( 11, true )
+		];
+	};
+	assert.deepEqual( decode( gmRequest( "/HWANARENA ch" ) ), [ 16, 22966, 1043, 52, 1087 ] );
+	assert.deepEqual( decode( gmRequest( "/hwanarena EU" ) ), [ 16, 22454, 1195, 91, 653 ] );
+	// The same frame /warp sends for the same point.
+	assert.deepEqual( gmRequest( "/HWANARENA ch" ), gmRequest( "/warp 22966 1043 52 1087" ) );
+	for ( const line of [ "/HWANARENA", "/HWANARENA xx", "/HWANARENA ch eu" ] ) {
+		assert.equal( gmRequest( line ), null, line );
+	}
+});
