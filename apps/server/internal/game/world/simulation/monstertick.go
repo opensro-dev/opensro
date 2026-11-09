@@ -383,6 +383,18 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// The batches die with this leg: their refs backings return to
 	// the scratch pool once every batch below is dispatched (#2030).
 	defer ops.Monsters.releaseBehaviorBatches(batches)
+	// The build consumed the actors' dues without re-arming them
+	// (behaviorBatchesForDivision): the sweep after the dispatch
+	// arms the remainder, and this backstop runs the same sweep on
+	// the way out when a step panics mid-leg, so a popped actor is
+	// never left unscheduled. An actor a door re-armed meanwhile is
+	// skipped by the sweep either way.
+	remaindersArmed := false
+	defer func() {
+		if !remaindersArmed {
+			ops.Monsters.armBehaviorRemainders(batches, nowMs)
+		}
+	}()
 	stats.queue = time.Since(queueStarted)
 	for _, batch := range batches {
 		divisionID := batch.key.division
@@ -447,6 +459,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		}
 		ops.Monsters.releaseLegSnapshot(view)
 	}
+	queueArmStarted := time.Now()
+	ops.Monsters.armBehaviorRemainders(batches, nowMs)
+	stats.queue += time.Since(queueArmStarted)
+	remaindersArmed = true
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped
 	for divisionID := range divisionSet {
