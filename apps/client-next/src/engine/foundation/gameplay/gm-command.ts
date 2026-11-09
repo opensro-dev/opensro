@@ -33,6 +33,9 @@ const GM_SET_SPEED = 0xf1;
 // subcommand 0xF3, a u16-sized ANSI name and a u8 Blue Berserk level 0 to 6 (one digit). The
 // server sets the level for the life of the shard process and tells that character.
 const GM_SET_BERSERK = 0xf3;
+// The port's /SETGAUGE <character> <balls 0-5> (GM test tooling, not native; action/hwan.go):
+// subcommand 0xF4, a u16-sized ANSI name and a u8 count of Berserk gauge balls.
+const GM_SET_GAUGE = 0xf4;
 // The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
 // (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
 // shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
@@ -354,6 +357,15 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const balance = viewOf( p ).getUint32( 2, true );
 		return { console: true, text: "-> silk granted, balance " + balance };
 	}
+	if ( code === GM_SET_GAUGE ) {
+		// The port's /SETGAUGE answer: the balls now in the gauge, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM gauge refusal bytes" );
+			return { console: true, text: "Failed. -> gauge change refused" };
+		}
+		if ( p.length !== 3 ) throw Error( "Invalid GM gauge reply" );
+		return { console: true, text: "-> berserk gauge set to " + p[2] };
+	}
 	if ( code === GM_SET_BERSERK ) {
 		// The port's /SETBERSERK answer: the level now in force, or a refusal.
 		if ( result === 2 ) {
@@ -535,6 +547,18 @@ export function gmRequest(
 		if ( percent < GM_SPEED_MIN_PERCENT || percent > GM_SPEED_MAX_PERCENT ) return null;
 		const payload = Uint8Array.of( GM_SET_SPEED, 0, 0 );
 		new DataView( payload.buffer ).setUint16( 1, percent, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only. /SETGAUGE <character> <balls 0-5>.
+	if ( name?.toUpperCase() === "/SETGAUGE" ) {
+		if ( tokens.length !== 3 || !/^[0-5]$/.test( tokens[2]! ) ) return null;
+		const bytes = new TextEncoder().encode( tokens[1]! );
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES ) throw Error( "Invalid GM name" );
+		const payload = new Uint8Array( 3 + bytes.length + 1 );
+		payload[0] = GM_SET_GAUGE;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		payload[3 + bytes.length] = Number( tokens[2] );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	// Any case: the command is port-only. /SETBERSERK <character> <level 0-6>.

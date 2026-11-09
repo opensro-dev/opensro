@@ -230,3 +230,33 @@ func TestGMSetBerserkChangesTheLevelAndTellsTheTarget(t *testing.T) {
 		t.Fatal("a non-GM set a level")
 	}
 }
+
+func TestGMSetGaugeSetsTheBallsAndTellsTheTarget(t *testing.T) {
+	gm, target := testCharacter(), testCharacter()
+	gm.ID, gm.Name, gm.GMPrivilege = 1, "Gm", true
+	target.ID, target.Name = 2, "Ayla"
+	rt, _ := newTestRuntime(gm, nil)
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {gm, target}}
+	pushed := map[string][]wire.Frame{}
+	rt.PushCharacterFrames = func(_, name string, frames []wire.Frame) { pushed[name] = append(pushed[name], frames...) }
+
+	if !rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 5) || target.BerserkPoints != 5 || len(pushed["Ayla"]) != 1 {
+		t.Fatalf("balls %d pushed %v", target.BerserkPoints, pushed)
+	}
+	if !rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 2) || target.BerserkPoints != 2 {
+		t.Fatalf("lowering to 2 left %d", target.BerserkPoints)
+	}
+	if rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 6) || rt.SetGMBerserkGauge(testDivision, "Gm", "Nobody", 1) {
+		t.Fatal("an invalid count or an unknown character was accepted")
+	}
+	// A gauge cannot be raised while Berserk is active, as native.
+	target.NativeBodyStatus = 1
+	if rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 5) || target.BerserkPoints != 2 {
+		t.Fatal("the gauge was raised during Berserk")
+	}
+	target.NativeBodyStatus = 0
+	gm.GMPrivilege = false
+	if rt.SetGMBerserkGauge(testDivision, "Gm", "Ayla", 0) || target.BerserkPoints != 2 {
+		t.Fatal("a non-GM set the gauge")
+	}
+}

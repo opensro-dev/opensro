@@ -225,6 +225,16 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: []byte{AckResultFail, SubSetBerserk}, Refusal: "set-berserk-refused"}
+	case SubSetGauge:
+		// The port's /SETGAUGE (action/hwan.go): the ack echoes the balls now in the gauge.
+		if len(status) > 0 && status[0] != nil && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				SetGMBerserkGauge(string, string, string, uint8) bool
+			}); ok && owner.SetGMBerserkGauge(divisionID, sender.Name, request.Name, request.GaugeBalls) {
+				return Outcome{Ack: wire.NewWriter(3).U8(AckResultOK).U8(SubSetGauge).U8(request.GaugeBalls).Payload()}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubSetGauge}, Refusal: "set-gauge-refused"}
 	case SubSetSpeed:
 		// The port's /SETSPEED (action/gmspeed.go): the ack echoes the percent.
 		if len(status) > 0 && status[0] != nil {

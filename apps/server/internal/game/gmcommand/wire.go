@@ -127,6 +127,9 @@ const (
 	// SubSetBerserk is the port's /SETBERSERK name level (GM test tooling, not
 	// native, action/hwan.go): subcmd, u16 len + ANSI name, u8 Blue Berserk level.
 	SubSetBerserk uint8 = 0xF3
+	// SubSetGauge is the port's /SETGAUGE name balls (GM test tooling, not native,
+	// action/hwan.go): subcmd, u16 len + ANSI name, u8 Berserk gauge balls 0 to 5.
+	SubSetGauge uint8 = 0xF4
 
 	// ForgeTextMaxBytes bounds one /FORGE command text (the typed tail the
 	// client composer rejoins): generous for key=value lists, small
@@ -190,6 +193,8 @@ type Request struct {
 	Silk uint32
 	// BerserkLevel is /SETBERSERK's Blue Berserk level.
 	BerserkLevel uint8
+	// GaugeBalls is /SETGAUGE's Berserk gauge balls.
+	GaugeBalls uint8
 	// SpeedPercent is /SETSPEED's percent of the effective speed.
 	SpeedPercent uint16
 	// Forge is /FORGE's command text (the rejoined typed tail).
@@ -226,6 +231,8 @@ var nameSubcommands = map[uint8]bool{
 	SubGrantSilk: true,
 	// SubSetBerserk's name is followed by the u8 level.
 	SubSetBerserk: true,
+	// SubSetGauge's name is followed by the u8 ball count.
+	SubSetGauge: true,
 }
 
 // DecodeGmCommand reads the subcommand byte and, for the name-payload
@@ -443,6 +450,14 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 		}
 		if len(payload) != 3+int(nameLen)+1 {
 			return Request{}, fmt.Errorf("gmcommand: trailing /SETBERSERK bytes")
+		}
+	}
+	if subcmd == SubSetGauge {
+		if request.GaugeBalls, err = reader.U8(); err != nil {
+			return Request{}, err
+		}
+		if len(payload) != 3+int(nameLen)+1 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /SETGAUGE bytes")
 		}
 	}
 	return request, nil

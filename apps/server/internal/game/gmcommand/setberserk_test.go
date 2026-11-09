@@ -76,3 +76,51 @@ func TestSetBerserkNeedsPrivilege(t *testing.T) {
 		t.Fatalf("a non-GM reached the owner: calls=%d ack=% X", owner.calls, out.Ack)
 	}
 }
+
+// gaugeOwner records /SETGAUGE calls and answers with ok.
+type gaugeOwner struct {
+	ok    bool
+	calls int
+	name  string
+	balls uint8
+}
+
+func (o *gaugeOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
+
+func (o *gaugeOwner) SetGMBerserkGauge(_, _, name string, balls uint8) bool {
+	o.calls++
+	o.name, o.balls = name, balls
+	return o.ok
+}
+
+func gaugeFrame(name string, balls uint8) []byte {
+	frame := berserkFrame(name, balls)
+	frame[0] = SubSetGauge
+	return frame
+}
+
+func TestSetGaugeDecodesForwardsAndEchoes(t *testing.T) {
+	request, err := DecodeGmCommand(gaugeFrame("Ayla", 5))
+	if err != nil || request.Name != "Ayla" || request.GaugeBalls != 5 {
+		t.Fatalf("decode = %+v, %v", request, err)
+	}
+	if _, err := DecodeGmCommand(append(gaugeFrame("Ayla", 5), 1)); err == nil {
+		t.Fatal("decode accepted trailing bytes")
+	}
+	gm := gmChar("Gm", true, 0x1000)
+	owner := &gaugeOwner{ok: true}
+	out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, gaugeFrame("Ayla", 4), owner)
+	if owner.calls != 1 || owner.name != "Ayla" || owner.balls != 4 || !bytes.Equal(out.Ack, []byte{AckResultOK, SubSetGauge, 4}) {
+		t.Fatalf("owner %+v ack % X", owner, out.Ack)
+	}
+	owner.ok = false
+	out = HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, gaugeFrame("Ayla", 9), owner)
+	if !bytes.Equal(out.Ack, []byte{AckResultFail, SubSetGauge}) || out.Refusal == "" {
+		t.Fatalf("refused ack % X (%q)", out.Ack, out.Refusal)
+	}
+	player := gmChar("Player", false, 0x1000)
+	owner = &gaugeOwner{ok: true}
+	if out := HandleGmCommand(testDeps(player), &stubPresence{}, testDivision, player, gaugeFrame("Player", 5), owner); owner.calls != 0 || out.Ack != nil {
+		t.Fatal("a non-GM reached the owner")
+	}
+}
