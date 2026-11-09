@@ -217,23 +217,27 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 		if mover.Mode() == monster.MoverIdle {
 			return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 		}
-		if mover.Mode() == monster.MoverWandering && tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
+		if mover.Mode() == monster.MoverWandering {
+			// One live pose serves the sight scan and the homing
+			// test below: the mover is unchanged between them.
 			live := mover.LivePoseAt(nowMs, ops.GroundHeight)
-			if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
-				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
-				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
-					ops.adoptMonsterAttack(&mover, plan)
-					if frames, targeted, handled := ops.tryMonsterAttack(
-						divisionID, instance, tactics, mover, divisionPlayers, nowMs,
-					); handled {
-						return frames, targeted
+			if tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
+				if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
+					mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
+					if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
+						ops.adoptMonsterAttack(&mover, plan)
+						if frames, targeted, handled := ops.tryMonsterAttack(
+							divisionID, instance, tactics, mover, divisionPlayers, nowMs,
+						); handled {
+							return frames, targeted
+						}
 					}
+					return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 				}
-				return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 			}
-		}
-		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.GroundHeight)) {
-			return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
+			if needsHoming(instance, live) {
+				return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
+			}
 		}
 		return ops.chaseRetarget(divisionID, instance, tactics, mover, divisionPlayers, nowMs), nil
 	}

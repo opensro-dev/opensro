@@ -537,7 +537,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.
 		mustMoverTransition(&mover, monster.MoverEventEntryRefused, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		mover, frames := ops.planIdleEntry(instance, mover, nowMs)
-		return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+		committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+		return committed
 	}
 	// Nest containment, probe origin and movement goal are separate inputs.
 	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
@@ -554,7 +555,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.
 			// Missing geometry cannot be interpreted as a successful probe.
 			mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 			mover, frames := ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+			committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+			return committed
 		}
 		motion = motion.AfterProbe(path.Result())
 	}
@@ -562,7 +564,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
-	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	return committed
 }
 
 /*
@@ -594,28 +597,27 @@ transaction itself value-guards its commit exactly as before, and
 an accepted one re-bases the running step's commit generation on
 the row's new generation, so the step's later generation-guarded
 commits chain off it instead of dropping against their own leg
-(#2137 slice 1). The stored value equalling next is the acceptance
-witness - commitNavigation's frame return cannot tell a landed
-commit with no frames from a dropped one. Unarmed callers pay
-nothing.
+(#2137 slice 1). The rebase spends no read: the transaction hands
+back the generation it just wrote. The second answer is the
+landing itself - a landed commit with no frames is otherwise
+indistinguishable from a dropped one - for the pooled replay.
+Unarmed callers pay nothing.
 ================
 */
-func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) ([]Frame, bool) {
 	if ops.plan != nil {
 		// Planning (#2205): record the transaction's result; the
 		// commit re-prepares the admission against the row then, the
 		// moment the serial call reads it, so the plan-time admission
 		// is deliberately not carried over.
 		ops.plan.recordNavigation(next, frames)
-		return frames
+		return frames, true
 	}
-	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
-	if ops.stepGenArmed {
-		if mover, gen, ok := ops.Monsters.MoverGenerationAt(divisionID, before.instance.Gid, ops.stepSlot, ops.stepMonsterSlot); ok && mover == next {
-			ops.stepBaseGen = gen
-		}
+	committed, gen, landed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
+	if landed && ops.stepGenArmed {
+		ops.stepBaseGen = gen
 	}
-	return committed
+	return committed, landed
 }
 
 // Approach allocation and geometry must publish in the same navigation transaction.
@@ -626,7 +628,8 @@ commitPreparedSegment
 */
 func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
-	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	return committed
 }
 
 // Plan only: terrain sampling may run concurrently with damage/lifecycle work.
