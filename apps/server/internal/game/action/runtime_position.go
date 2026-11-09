@@ -272,7 +272,11 @@ resolution and the relation rules see exactly what the full copy
 shows. The companionCopy seam replaces the copy in tests
 exactly as combatCopy does for the combat roots; admission still
 judges the live record first, in its own door pass, so a refused
-record pays for no copy under the seam either.
+record pays for no copy under the seam either. Both door passes
+take the stack read guard instead of the callback door: the
+callback boxed the admission closure and the captured snapshot
+slot on every pet tick, and the guard holds the same store read
+lock the callback runs between (#2033).
 ==================
 */
 func (rt *Runtime) characterSnapshotCompanionAdmitted(
@@ -286,9 +290,9 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 	if rt.companionCopy != nil {
 		admitted := admit == nil
 		if !admitted {
-			rt.deps.Read(divisionID, func() {
-				admitted = admit(character)
-			})
+			guard := rt.deps.AcquireRead(divisionID)
+			admitted = admit(character)
+			guard.Release()
 		}
 		if !admitted {
 			return nil
@@ -296,15 +300,13 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 		return rt.companionCopy(divisionID, character)
 	}
 
-	var snapshot *enterworld.Character
-
-	rt.deps.Read(divisionID, func() {
-		if admit != nil && !admit(character) {
-			return
-		}
-		snapshot = character.SnapshotCompanion()
-	})
-
+	guard := rt.deps.AcquireRead(divisionID)
+	if admit != nil && !admit(character) {
+		guard.Release()
+		return nil
+	}
+	snapshot := character.SnapshotCompanion()
+	guard.Release()
 	return snapshot
 }
 
