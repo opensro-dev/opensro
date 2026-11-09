@@ -887,7 +887,7 @@ import {
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
-import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
+import { markupLines, messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import {
 	bagTabRow,
@@ -2187,10 +2187,26 @@ export function createUi( ports: UiPorts ) {
 	}
 	/*
 	================
+	resurrectionLines
+
+	The question's drawn lines, top to bottom. Type 4's three lines are one
+	system text each; type 8's SML2 body is split at its breaks and wrapped
+	as 52DB20 lays it out (markupLines), so its tags never show (#3002).
+	================
+	*/
+	function resurrectionLines( mutation: boolean ): string[] {
+		if ( !mutation ) return resurrectionQuestion( false ).map( hudCopy );
+		return messageBoxLines(
+			resurrectionQuestion( true ).flatMap( key => markupLines( hudCopy( key ) ) ),
+			value => text.run( value ).width
+		);
+	}
+	/*
+	================
 	resurrectionLayout
 
 	Type 4 is confirm box kind 4 at its native geometry; type 8 (an rmut
-	revival) is a simple message box sized by its measured line.
+	revival) is a simple message box sized by its measured lines.
 	================
 	*/
 	function resurrectionLayout(
@@ -2203,7 +2219,7 @@ export function createUi( ports: UiPorts ) {
 		return textMessageBoxLayout(
 			width,
 			height,
-			resurrectionQuestion( true ).map( key => text.run( hudCopy( key ) ).width ),
+			resurrectionLines( true ).map( line => text.run( line ).width ),
 			position
 		);
 	}
@@ -26431,10 +26447,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					} )
 				);
 				// Kind 4's third line is the note in 0xFFFFF1D3 (52F460 case 3).
-				resurrectionQuestion( mutation ).forEach( ( key, i ) =>
+				resurrectionLines( mutation ).forEach( ( line, i ) =>
 					quads.push(
 						...text.quads(
-							hudCopy( key ),
+							line,
 							layout.lines[i]!,
 							full,
 							!mutation && i === 2 ?
