@@ -196,7 +196,9 @@ The second answer is the write's cadence verdict: whether the pair
 differed only in the cadence stamp. The gate's chain-base rule
 (generationAdvanced) reads it from here, where the pair was just
 compared against the stored row, instead of re-comparing the two
-whole rows at the gate (#2029).
+whole rows at the gate (#2029). The reschedule resolves no gid
+map either: it reads the rows back through the same carried
+slots (scheduleBehaviorCommitted).
 ================
 */
 func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) (bool, bool) {
@@ -228,7 +230,7 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		// rides only this full write and the mover commits (#2136).
 		state.syncApproachActor(gid, after)
 	}
-	s.scheduleBehavior(state, gid, now)
+	s.scheduleBehaviorCommitted(state, gid, slot, monsterSlot, now)
 	return true, cadenceOnly
 }
 
