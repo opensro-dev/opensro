@@ -346,8 +346,13 @@ type Runtime struct {
 	walkInZones      sync.Map // simulation.WorldKey -> zone codename
 	recoveryMu       sync.Mutex
 	recoverySessions map[recoveryKey]*recoverySession
-	petSkillWindows  petSkillWindowIndex
-	paramJobOwners   petSkillWindowIndex
+	// recoveryKeys is the natural-recovery pass's due-key scratch
+	// (naturalrecovery.go): refilled under recoveryMu on every tick
+	// step and consumed in line by the same pass, so a steady tick
+	// grows nothing. Tick goroutine only (#2033).
+	recoveryKeys    []recoveryKey
+	petSkillWindows petSkillWindowIndex
+	paramJobOwners  petSkillWindowIndex
 	// premiumSpend is the online premium clocks' uncommitted spend
 	// (premiumclock.go).
 	premiumSpend premiumSpendLedger
