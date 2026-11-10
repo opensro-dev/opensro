@@ -269,9 +269,14 @@ sparse fields (LinkedEffects, SelfEffects, TargetEffects, Abnormal)
 this function never writes - hotFill owns them and assigns every one
 right after fill runs, so the literal's zero pass over them was pure
 waste on top of the copies the fields themselves need.
+
+The row is read where it sits: the leg's fill used to copy the
+216-byte resident row out of its hot slot first (lookupAtInto passed
+it by value), one copy per due actor per leg before the expansion
+itself (#3027).
 ================
 */
-func (r residentMonster) fill(dst *monster.Instance, gid uint32) {
+func (r *residentMonster) fill(dst *monster.Instance, gid uint32) {
 	dst.ConditionalUsed = r.conditionalUsed
 	dst.Gid = gid
 	dst.Ref = r.ref.Value()
@@ -305,7 +310,7 @@ r.value already carries.
 */
 func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instance {
 	var row monster.Instance
-	s.hotFill(&row, gid, r)
+	s.hotFill(&row, gid, &r)
 	return row
 }
 
@@ -321,7 +326,7 @@ not: the view slots this fills are no longer zeroed between batches
 to arrive zero here.
 ================
 */
-func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r residentMonster) {
+func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r *residentMonster) {
 	r.fill(dst, gid)
 	if r.sparse&sparseLinked != 0 {
 		dst.LinkedEffects = s.linkedEffects[gid]
@@ -422,7 +427,7 @@ func (s *monsterStorage) lookupAtInto(dst *monster.Instance, slot uint32, gid ui
 	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
 		return false
 	}
-	s.hotFill(dst, gid, s.hot[slot].row)
+	s.hotFill(dst, gid, &s.hot[slot].row)
 	return true
 }
 

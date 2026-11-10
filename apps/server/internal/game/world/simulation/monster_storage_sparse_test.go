@@ -142,7 +142,7 @@ func TestHotFillClearsSparseFieldsOnAReusedSlot(t *testing.T) {
 		t.Fatal("the sparse actor is not hot")
 	}
 	var dst monster.Instance
-	s.hotFill(&dst, 7, r)
+	s.hotFill(&dst, 7, &r)
 	if dst.LinkedEffects == nil || dst.Abnormal == nil || dst.SelfEffects[0].Token != 5 || dst.TargetEffects[0].Token != 6 {
 		t.Fatalf("the first fill did not carry the sparse fields: %+v", dst)
 	}
@@ -151,7 +151,7 @@ func TestHotFillClearsSparseFieldsOnAReusedSlot(t *testing.T) {
 	if !ok {
 		t.Fatal("the cleared actor is not hot")
 	}
-	s.hotFill(&dst, 7, r)
+	s.hotFill(&dst, 7, &r)
 	if dst.LinkedEffects != nil || dst.Abnormal != nil ||
 		dst.SelfEffects != (monster.SelfEffects{}) || dst.TargetEffects != (monster.TargetEffects{}) {
 		t.Fatalf("the reused slot kept the previous sparse fields: %+v", dst)

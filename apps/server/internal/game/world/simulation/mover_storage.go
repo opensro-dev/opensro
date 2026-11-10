@@ -178,6 +178,9 @@ The dense slot of gid, when the storage holds one.
 ================
 */
 func (s *moverStorage) slotOf(gid uint32) (uint32, bool) {
+	if s == nil {
+		return 0, false
+	}
 	slot, ok := s.byGID[gid]
 	return slot, ok
 }
