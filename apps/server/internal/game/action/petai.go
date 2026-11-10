@@ -1047,19 +1047,34 @@ func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int6
 	if owner == nil {
 		return nil
 	}
+	// One character door for the whole gather (#3027): the walk and
+	// every pet's record read share one hold, instead of a fresh door
+	// per pet as before. The reads are the same ones - the presented
+	// pets, then CompanionByGID per pet with its duplicate refusal -
+	// so the answer is unchanged, taken at one hold instead of many.
+	// The guild name companionPresentations resolves for spawn rows
+	// is not read here and is not paid for.
+	var pets []*simulation.PeerCOS
+	var records []enterworld.CharacterCOS
+	rt.deps.Read(division, func() {
+		pets, _ = rt.companionPresentationsInDoor(division, owner.Name)
+		if len(pets) == 0 {
+			return
+		}
+		records = make([]enterworld.CharacterCOS, len(pets))
+		for i, pet := range pets {
+			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
+				records[i] = *live
+			}
+		}
+	})
 	var out []simulation.CompanionTarget
-	for _, pet := range rt.companionPresentations(division, owner.Name) {
+	for i, pet := range pets {
 		// Natively a grab pet (slot 0x43C) is never a hostile target.
 		if pet.Mounted || pet.LifeState == wire.LifeStateDead || pet.Row.Band == domain.PickupPetBand {
 			continue
 		}
-		var record enterworld.CharacterCOS
-		rt.deps.Read(division, func() {
-			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
-				record = *live
-			}
-		})
-		ref, found := rt.cosReference(&record)
+		ref, found := rt.cosReference(&records[i])
 		if !found {
 			continue
 		}
