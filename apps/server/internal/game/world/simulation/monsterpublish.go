@@ -121,16 +121,25 @@ instead of comparing the rows again (#2029).
 func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) (bool, bool) {
 	if ops.plan != nil {
 		ops.plan.recordActivity(before, after)
-		return true, cadenceOnlyWrite(before, after)
+		// A plan records the pair's own verdict; the ordered commit
+		// replays through commitActivityAt directly, so counting
+		// here - and only here - counts each arm once (#3027).
+		cadenceOnly := cadenceOnlyWrite(before, after)
+		ops.leg.noteCadenceArm(cadenceOnly)
+		return true, cadenceOnly
 	}
 	// The step's own actor is armed: commit through its carried
 	// slots (#2133) and the base generation its snapshot read
 	// (#3027). The doors verify each hint against the gid, so
 	// this is the gid commit with the map resolves left out.
 	if ops.stepGenArmed {
-		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot, ops.stepBaseGen, before, after, now)
+		committed, cadenceOnly := ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot, ops.stepBaseGen, before, after, now)
+		ops.leg.noteCadenceArm(committed && cadenceOnly)
+		return committed, cadenceOnly
 	}
-	return ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
+	committed, cadenceOnly := ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
+	ops.leg.noteCadenceArm(committed && cadenceOnly)
+	return committed, cadenceOnly
 }
 
 /*
