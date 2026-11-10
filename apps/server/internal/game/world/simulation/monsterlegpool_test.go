@@ -402,10 +402,16 @@ because an idle actor's first timer check - which draws its
 acquisition interval from the state stream - now happens at its
 first due instead of the next tick, re-phasing later scans. The
 serial golden did not move.
+
+Re-pinned for #3027 with the serial golden (an idle monster still
+gliding is due at its arrival): on a two-worker dump of the same
+world, 23 of 722 frames changed leg, all 0xB2F5 arrival settles
+landing one to nine legs earlier; same multiset of frames, final
+movers identical.
 ================
 */
 func TestSeededLegWorkerMatrix(t *testing.T) {
-	const pooledGolden = "cb7b180ce7ea94aad07d2c8a3c58f3671d197d2cdde07657cc2bf6297962f668"
+	const pooledGolden = "8544160f0d9e3fc360f5caeb1812c2ff6eec93dce2f73c9720419a5920c27577"
 	counts := []int{1, 2, 4, runtime.GOMAXPROCS(0)}
 	hashes := make([]string, 0, len(counts))
 	totalAttacks := 0

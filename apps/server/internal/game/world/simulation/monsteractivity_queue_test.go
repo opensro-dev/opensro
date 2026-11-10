@@ -708,11 +708,15 @@ TestIdleMonsterSchedulesAtItsRealDue
 
 #2136: an idle monster with nothing due re-armed for the next tick,
 so every leg snapshotted and stepped it to no effect. Its next due
-is the earliest of its idle deadline, its activity-gate cadence and,
-when its nest is aggressive, its acquisition timer; a mover that is
-not simply at rest (here: wandering) keeps the next tick. Event
-lanes still wake a sleeping actor at once (the impact, help and
-hostility doors set its due to 0).
+is the earliest of its idle deadline, the arrival of a segment it
+still glides on and, when its nest is aggressive, its acquisition
+timer; a mover that is not simply at rest (here: wandering, or
+holding a navigation goal) keeps the next tick. The activity-gate
+cadence is not a due for an idle monster: the gate reads it only
+for a wandering or pending one, so it wakes an idle monster only
+while a replacement tactics resolver hides the step's aggression
+from the scheduler. Event lanes still wake a sleeping actor at
+once (the impact, help and hostility doors set its due to 0).
 ================
 */
 func TestIdleMonsterSchedulesAtItsRealDue(t *testing.T) {
@@ -720,11 +724,63 @@ func TestIdleMonsterSchedulesAtItsRealDue(t *testing.T) {
 	s, d := idleScheduleFixture(t)
 	resting := monster.NestRow{Respawn: true}
 
-	// Passive, gate cadence nearest: due at the gate, not next tick.
+	// Passive, gate cadence nearer than the deadline: the gate does
+	// not read an idle monster's cadence, so the due is the deadline.
 	idleScheduleActor(t, s, d, 1, resting, 2000, now+5000, now)
 	s.scheduleBehavior(d, 1, now)
+	if got, want := scheduleDue(t, d, 1), now+5001; got != want {
+		t.Fatalf("passive idle due = %d, want the idle deadline %d", got, want)
+	}
+	// The same row with its cadence long lapsed: still the deadline,
+	// never the next tick.
+	lapsed, _ := d.movers.lookup(1)
+	lapsed.Activity.LastCheck = uint32(now) - 30000
+	d.movers.set(1, lapsed)
+	s.scheduleBehavior(d, 1, now)
+	if got, want := scheduleDue(t, d, 1), now+5001; got != want {
+		t.Fatalf("lapsed-cadence idle due = %d, want the idle deadline %d", got, want)
+	}
+	// Under a replacement tactics resolver the cadence wake stands:
+	// lapsed is the next tick, armed is the gate due.
+	s.noteTacticsReplaced(true)
+	s.scheduleBehavior(d, 1, now)
+	if got, want := scheduleDue(t, d, 1), now+1; got != want {
+		t.Fatalf("replaced-resolver lapsed due = %d, want the next tick %d", got, want)
+	}
+	lapsed.Activity.LastCheck = uint32(now)
+	d.movers.set(1, lapsed)
+	s.scheduleBehavior(d, 1, now)
 	if got, want := scheduleDue(t, d, 1), now+2001; got != want {
-		t.Fatalf("passive idle due = %d, want the gate due %d", got, want)
+		t.Fatalf("replaced-resolver idle due = %d, want the gate due %d", got, want)
+	}
+	s.noteTacticsReplaced(false)
+
+	// Idle but still gliding (a wander that expired mid-flight): due
+	// at the arrival, where the step settles it; matured and not yet
+	// settled, due at once.
+	idleScheduleActor(t, s, d, 5, resting, 2000, now+5000, now)
+	gliding, _ := d.movers.lookup(5)
+	gliding.From, gliding.To = gliding.Pose, gliding.Pose
+	gliding.To.X += 40
+	gliding.DepartMs, gliding.ArriveMs = now-500, now+1200
+	d.movers.set(5, gliding)
+	s.scheduleBehavior(d, 5, now)
+	if got, want := scheduleDue(t, d, 5), now+1200; got != want {
+		t.Fatalf("gliding idle due = %d, want the arrival %d", got, want)
+	}
+	s.scheduleBehavior(d, 5, now+1300)
+	if got, want := scheduleDue(t, d, 5), now+1301; got != want {
+		t.Fatalf("matured idle due = %d, want the next tick %d", got, want)
+	}
+
+	// A held navigation goal: the step commits its next segment.
+	idleScheduleActor(t, s, d, 6, resting, 2000, now+5000, now)
+	routed, _ := d.movers.lookup(6)
+	routed.WaitNavigation(routed.Pose, now+1000)
+	d.movers.set(6, routed)
+	s.scheduleBehavior(d, 6, now)
+	if got, want := scheduleDue(t, d, 6), now+1; got != want {
+		t.Fatalf("held-goal idle due = %d, want the next tick %d", got, want)
 	}
 
 	// Passive, idle deadline nearest: due at the deadline.
@@ -734,7 +790,7 @@ func TestIdleMonsterSchedulesAtItsRealDue(t *testing.T) {
 		t.Fatalf("passive idle due = %d, want the idle deadline %d", got, want)
 	}
 
-	// Aggressive: the acquisition timer is nearest of the three.
+	// Aggressive: the acquisition timer is nearest.
 	aggressive := monster.NestRow{Respawn: true, Aggressive: true, PolicyPinned: true}
 	actor := idleScheduleActor(t, s, d, 3, aggressive, 2000, now+5000, now)
 	timers := s.aiTimersLocked(d, actor, now)
