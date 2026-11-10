@@ -156,7 +156,10 @@ test("resume replaces, end removes, and other items are not param jobs", () => {
 test("arena powers use native timed HUD cells, tooltips, refresh and removal", () => {
 	const jobs = createParamJobs();
 	for ( const kind of [ 1, 3, 5, 6, 7, 8 ] ) {
-		jobs.receive( frame( 0x3602, 100006, kind === 1 || kind === 8 ? 30 : 60, 0x7f530000 | kind ), 1000 );
+		jobs.receive(
+			frame( 0x3602, 100006, kind === 1 || kind === 5 || kind === 8 ? 30 : 60, 0x7f530000 | kind ),
+			1000
+		);
 	}
 	const cells = buffBoard( { localGid: 100006, vitals: [], paramJobs: jobs.state() }, 11000 );
 	assert.equal( cells.length, 6 );
@@ -192,4 +195,26 @@ test("arena HUD timers preserve all eight native parameter-job slots", () => {
 	for ( const k of [ 1, 3, 5, 6 ] ) jobs.receive( frame( 0x3602, 1, 60, 0x7f530000 | k ), 0 );
 	assert.equal( jobs.state().length, 12 );
 	assert.throws( () => jobs.receive( frame( 0x3602, 1, 60, 9 ), 0 ), /capacity/ );
+});
+
+test("Chain Reaction and Unkillable have matching thirty-second HUD timers", () => {
+	const jobs = createParamJobs();
+	for ( const kind of [ 5, 11 ] ) jobs.receive( frame( 0x3602, 100006, 30, 0x7f530000 | kind ), 1000 );
+	const cells = buffBoard( { localGid: 100006, vitals: [], paramJobs: jobs.state() }, 11000 );
+	assert.deepEqual( cells.map( c => c.label ), [ "Unkillable", "Chain Reaction" ] );
+	for ( const cell of cells ) {
+		assert.match( cell.helpText ?? "", /20s remaining/ );
+		assert.notEqual( cell.fraction, null );
+		assert.ok( Math.abs( (cell.fraction ?? 0) - 2 / 3 ) < 0.001 );
+	}
+	assert.match( cells[1].helpText ?? "", /10 other enemies within 10m/ );
+});
+
+test("new arena buffs have distinct icons and correct help", () => {
+	const jobs = createParamJobs();
+	for ( const kind of [ 1, 8, 11, 12 ] ) jobs.receive( frame( 0x3602, 100006, 30, 0x7f530000 | kind ), 0 );
+	const cells = buffBoard( { localGid: 100006, vitals: [], paramJobs: jobs.state() }, 1000 );
+	assert.equal( new Set( cells.map( c => c.path ) ).size, 4 );
+	assert.match( cells.find( c => c.label === "Mirror Shell" )?.helpText ?? "", /500%/ );
+	assert.match( cells.find( c => c.label === "Fleetfoot" )?.helpText ?? "", /200%/ );
 });

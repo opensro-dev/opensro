@@ -54,8 +54,8 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 15 adds expanded pet frames to protocol 14's chat-link contract.
-	Current = 15
+	// Protocol 16 adds five-stage arena checkpoint rewards after protocol 15 pet frames.
+	Current = 16
 	// The chat contract: 1 carries the port-only item links
 	// (SRO_CHAT_ITEM_LINKS): a link block after the text of a 0x7367 request
 	// and of a 0x75BD Global Chatting use, and the linked item bodies after

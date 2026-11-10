@@ -530,7 +530,7 @@ export function createCharacterPresentation(
 			}
 		}
 		probe?.detailEnd( "presentation-selection" );
-		return { sampleActorDetails, local, selected };
+		return { sampleActorDetails, local, selected, survival };
 	}
 	/*
 	================
@@ -867,7 +867,18 @@ export function createCharacterPresentation(
 		// The stage budget ranks effect actors by distance to the player: budget
 		// logic (#1442), so the anchor is the logical pose, not the drawn one.
 		auxiliary.presentStages(
-			{ orbActors, effectActors, next, seconds, animationHolders, player: gameplay?.pose ?? undefined },
+			{
+				orbActors,
+				effectActors,
+				next,
+				seconds,
+				animationHolders,
+				particleHolders,
+				player: gameplay?.pose ?? undefined,
+				arenaLoot: presented.survival ?
+					entities.filter( entity => entity.groundItem && entity.refObjId !== 9272 ) :
+					undefined
+			},
 			{ renderer, resources, effects, probe }
 		);
 		auxiliary.step(

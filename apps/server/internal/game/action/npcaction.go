@@ -21,7 +21,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -171,13 +170,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 				frames := []wire.Frame{{
 					Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(prompt, symbols),
 				}}
-				if rt.sookArena != nil && npc.Codename == sookarena.NPC {
-					used := character.SookArenaEntries
-					if character.SookArenaDay != sookarena.Day(rt.Now()) {
-						used = 0
-					}
-					frames = append(frames, sookBanner(fmt.Sprintf("Solo arena: 20 min, x10 loot. Ultra mode at 15 min. Kill rewards up to 5M gold. Entries %d/3.", used)))
-				}
+
 				return frames, ""
 			}
 		}

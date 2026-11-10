@@ -18,6 +18,7 @@ def build_icons():
     palettes = {
         "damage-surge": "#ff704a", "unstoppable": "#ffd86b",
         "unkillable": "#80edae", "arcane-spring": "#66caff", "fire-pit": "#ffa13b", "mirror-shell": "#d7b2ff",
+        "chain-reaction": "#6ee7ec", "fleetfoot": "#ace57a",
     }
     for name, color in palettes.items():
         image = Image.new("RGBA", (256, 256), "#10151f")
@@ -36,6 +37,15 @@ def build_icons():
         elif name == "arcane-spring":
             draw.polygon([(128, 34), (70, 121), (58, 155), (66, 188), (94, 215), (128, 224), (162, 215), (190, 188), (198, 155), (186, 121)], fill=color)
             draw.arc((82, 119, 173, 204), 25, 155, fill="#d3f3ff", width=10)
+        elif name == "chain-reaction":
+            draw.line([(70, 155), (128, 84), (190, 155)], fill=color, width=17)
+            for x, y in [(70, 155), (128, 84), (190, 155)]:
+                draw.ellipse((x-26, y-26, x+26, y+26), fill=color)
+                draw.ellipse((x-11, y-11, x+11, y+11), fill="#10151f")
+        elif name == "fleetfoot":
+            draw.polygon([(128, 72), (157, 92), (144, 145), (194, 176), (199, 200), (98, 200), (87, 179), (108, 141)], fill=color)
+            for y in [77, 112, 147]:
+                draw.line([(45, y), (87, y)], fill=color, width=12)
         elif name == "mirror-shell":
             draw.polygon([(128, 37), (201, 63), (191, 151), (166, 187), (128, 218), (90, 187), (65, 151), (55, 63)], fill=color)
             draw.line([(87, 133), (164, 133)], fill="#20162e", width=14)
@@ -46,7 +56,7 @@ def build_icons():
             draw.polygon([(130, 129), (159, 181), (149, 211), (117, 214), (99, 193), (109, 164)], fill="#fff0a3")
         image.resize((64, 64), Image.Resampling.LANCZOS).save(root / f"{name}.png")
         assert image.getbbox() == (0, 0, 256, 256)
-    print("Built 6 survival HUD icons (64x64).")
+    print("Built 8 survival HUD icons (64x64).")
 
 
 if __name__ == "__main__":

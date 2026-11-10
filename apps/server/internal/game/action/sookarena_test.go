@@ -71,10 +71,10 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 	rt.advanceSookArena(clock.Now().UnixMilli())
 	clock.now = clock.now.Add(1200 * time.Millisecond)
 	rt.advanceSookArena(clock.Now().UnixMilli())
-	if len(rt.Monsters.PopulationInstances(testDivision, ra.lease, []uint16{ra.center.RegionID})) != 3 {
+	if len(rt.Monsters.PopulationInstances(testDivision, ra.lease, []uint16{ra.center.RegionID})) != 2 {
 		t.Fatal("initial wave missing")
 	}
-	if len(rt.Monsters.PopulationInstances(testDivision, rb.lease, []uint16{rb.center.RegionID})) != 3 {
+	if len(rt.Monsters.PopulationInstances(testDivision, rb.lease, []uint16{rb.center.RegionID})) != 2 {
 		t.Fatal("second player's independent wave missing")
 	}
 	aggressive := 0
@@ -94,7 +94,10 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 	}
 	before := goldOf(a)
 	ra.program.Kills = 31
-	clock.now = time.UnixMilli(ra.program.Started + sookarena.DurationMs)
+	ra.program.PausedAt = clock.Now().UnixMilli()
+	ra.program.Completed = 5
+	ra.program.DecisionUntil = clock.Now().UnixMilli() + sookarena.DecisionMs
+	clock.now = time.UnixMilli(ra.program.DecisionUntil)
 	rt.advanceSookArena(clock.Now().UnixMilli())
 	if domain.CharacterWorldInstance(a) != domain.DefaultWorldInstance || a.SookArenaActive || goldOf(a) != before+60000 {
 		t.Fatal("victory did not commit and return")
@@ -158,7 +161,7 @@ func TestSookFreeMovementAndNormalWaves(t *testing.T) {
 	}) {
 		t.Fatal("test movement")
 	}
-	for _, elapsed := range []int64{sookarena.OpeningDelayMs - sookarena.PandoraWindupMs, sookarena.OpeningDelayMs, sookarena.UltraAtMs + 10000, sookarena.UltraAtMs + 11200} {
+	for _, elapsed := range []int64{sookarena.OpeningDelayMs - sookarena.PandoraWindupMs, sookarena.OpeningDelayMs, 300000 + 10000, 300000 + 11200} {
 		clock.now = time.UnixMilli(run.program.Started + elapsed)
 		rt.advanceSookArena(clock.Now().UnixMilli())
 		pose := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, clock.Now().UnixMilli())
@@ -397,8 +400,8 @@ func TestSookEntryCountdownAndBombNotice(t *testing.T) {
 	c := instanceWorldTestCharacter(11, "Notices")
 	rt, clock := sookFixture(t, c)
 	frames := rt.enterSookArena(testDivision, c)
-	want := sookBanner("Monsters will spawn in 20s. Entry 1/3. 20 min survival; kill rewards up to 5M gold.")
-	if len(frames) != 1 || frames[0].Opcode != want.Opcode || string(frames[0].Payload) != string(want.Payload) {
+	want := sookBanner("Survival: five stages, EXP/SP x5, chest rewards, no floor loot. Entry 1/3. First wave in 20s.")
+	if len(frames) != 2 || frames[0].Opcode != want.Opcode || string(frames[0].Payload) != string(want.Payload) || frames[1].Opcode != opArenaChest {
 		t.Fatal("entry countdown notification missing")
 	}
 	item := rt.addCharacterGround(testDivision, c, grounditem.Item{ArenaPowerup: sookBomb, RefObjID: 9272, Codename: sookEgg, DroppedAt: clock.Now()})
@@ -464,13 +467,13 @@ func TestSookFirePitRadiusTicksExpiryAndIsolation(t *testing.T) {
 		rt.tickSookFirePit(ra, a, start+elapsed)
 		want := uint32(100000)
 		if elapsed >= 1000 {
-			want -= 5000
+			want -= 3000
 		}
 		if elapsed >= 2000 {
-			want -= 5000
+			want -= 3000
 		}
 		if elapsed >= 60000 {
-			want -= 5000
+			want -= 3000
 		}
 		for _, gid := range []uint32{normal, edge} {
 			actor, _ := rt.Monsters.Get(testDivision, gid)
@@ -645,10 +648,10 @@ func TestSookBombSettlesKillsAndLeavesUniquesAndForeignWorldAlone(t *testing.T) 
 
 /*
 ================
-TestSookSettlementPaysTenfoldAndUniqueNeverReachesLeaderboard
+TestSookSettlementPaysFivefoldAndUniqueNeverReachesLeaderboard
 ================
 */
-func TestSookSettlementPaysTenfoldAndUniqueNeverReachesLeaderboard(t *testing.T) {
+func TestSookSettlementPaysFivefoldAndUniqueNeverReachesLeaderboard(t *testing.T) {
 	var nativeExp, nativeSP int64
 	for _, arena := range []bool{false, true} {
 		rt, clock, c, target := newCombatTestRuntimeMonsterTuned(t, 100, 1, 0, func(ref *monster.MonsterRef) { ref.MonsterType = 3; ref.RunSpeed = 60 })
@@ -690,7 +693,7 @@ func TestSookSettlementPaysTenfoldAndUniqueNeverReachesLeaderboard(t *testing.T)
 				t.Fatal("native control not rewarded")
 			}
 		} else {
-			if exp != nativeExp*10 || sp != nativeSP*10 || records != 0 {
+			if exp != nativeExp*5 || sp != nativeSP*5 || records != 0 {
 				t.Fatalf("rewards %d/%d native %d/%d leaderboard %d", exp, sp, nativeExp, nativeSP, records)
 			}
 			rt.Monsters.Defeat(testDivision, target.Gid, clock.Now())
@@ -730,7 +733,7 @@ func TestSookPropExpiryAndNoticeBounds(t *testing.T) {
 			t.Fatal("prop did not expire")
 		}
 	}
-	frame := sookBanner(strings.Repeat("a", 95) + "🙂tail")
+	frame := sookBanner(strings.Repeat("a", 95) + "\U0001f642tail")
 	if frame.Opcode != 0x3667 || frame.Payload[0] != 7 || binary.LittleEndian.Uint16(frame.Payload[1:]) != 95 {
 		t.Fatalf("notice UTF-16 limit %x", frame.Payload[:3])
 	}
@@ -738,10 +741,10 @@ func TestSookPropExpiryAndNoticeBounds(t *testing.T) {
 
 /*
 ================
-TestSookPetExperienceAndLootMultipliers
+TestSookPetExperienceAndNativeLootPlanner
 ================
 */
-func TestSookPetExperienceAndLootMultipliers(t *testing.T) {
+func TestSookPetExperienceAndNativeLootPlanner(t *testing.T) {
 	var nativePet uint32
 	var nativeGold uint32
 	for _, arena := range []bool{false, true} {
@@ -754,7 +757,7 @@ func TestSookPetExperienceAndLootMultipliers(t *testing.T) {
 		delta := binary.LittleEndian.Uint32(frames[0].Payload[5:])
 		if !arena {
 			nativePet = delta
-		} else if delta != nativePet*10 || pet.Experience != uint64(delta) {
+		} else if delta != nativePet*5 || pet.Experience != uint64(delta) {
 			t.Fatalf("pet award %d native %d", delta, nativePet)
 		}
 		rt, _, c, target = newCombatTestRuntime(t, 1)
@@ -769,7 +772,7 @@ func TestSookPetExperienceAndLootMultipliers(t *testing.T) {
 				goldCount++
 				if !arena {
 					nativeGold = drop.GoldAmount
-				} else if drop.GoldAmount != nativeGold*10 {
+				} else if drop.GoldAmount != nativeGold {
 					t.Fatal("gold multiplier")
 				}
 			} else if drop.Codename == "ITEM_CH_SWORD_01_A" {
@@ -777,17 +780,8 @@ func TestSookPetExperienceAndLootMultipliers(t *testing.T) {
 			}
 		}
 		want := 1
-		if arena {
-			want = 10
-		}
 		if swords != want || goldCount != 1 {
 			t.Fatalf("swords=%d gold=%d arena=%t", swords, goldCount, arena)
-		}
-		if arena {
-			rt.DropPassRate = 100
-			if got := len(rt.planMonsterKillLoot(c, target, monster.Pose{}, rt.Now().UnixMilli())); got > 32 {
-				t.Fatalf("loot cap %d", got)
-			}
 		}
 	}
 }
@@ -833,7 +827,7 @@ TestSookAmbushEggSpawnsTenAndRespectsPrivatePopulationCap
 ================
 */
 func TestSookAmbushEggSpawnsTenAndRespectsPrivatePopulationCap(t *testing.T) {
-	for _, existing := range []int{0, 95, 100} {
+	for _, existing := range []int{0, 195, 200} {
 		a, b := instanceWorldTestCharacter(11, "AmbushOwner"), instanceWorldTestCharacter(12, "AmbushNeighbour")
 		rt, clock := sookFixture(t, a, b)
 		rt.enterSookArena(testDivision, a)

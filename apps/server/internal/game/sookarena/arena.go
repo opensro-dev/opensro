@@ -21,15 +21,15 @@ const (
 	Env                      = "SRO_SOOK_SURVIVAL_ARENA"
 	Service                  = "port:sook-survival-arena"
 	NPC                      = "NPC_CH_EVENT_KISAENG1"
-	DurationMs         int64 = 20 * 60 * 1000
-	UltraAtMs          int64 = 15 * 60 * 1000
+	DurationMs         int64 = 25 * 60 * 1000
 	OpeningDelayMs     int64 = 20000
 	DeathReturnDelayMs int64 = 5000
 	PandoraWindupMs    int64 = 1200
-	PreUltraWaveMs     int64 = 12000
-	// Include the unchanged Pandora windup when multiplying the actual spawn rate.
-	UltraWaveMs int64 = (PreUltraWaveMs+PandoraWindupMs)/5 - PandoraWindupMs
-	MaxAlive          = 100
+	WaveIntervalMs     int64 = 15000
+	MaxAlive                 = 200
+	StageCount               = 5
+	DecisionMs         int64 = 300000
+	ReadyMs            int64 = 15000
 )
 
 /*
@@ -91,15 +91,18 @@ Run - a single allocated world's monotonic schedule, never reused.
 ================
 */
 type Run struct {
-	ReflectUntil                                              int64
+	CheckpointInterval, PausedAt, DecisionUntil, ResumeAt     int64
+	StageStarted, ClearingAt, LastCountdown                   int64
+	LastHunt                                                  int64
+	Waves                                                     int
+	Completed, CheckpointKills                                int
+	ReflectUntil, TransferUntil, SpeedUntil                   int64
 	Started, NextWave, NextPowerup, PendingWave, DeadAt       int64
 	Kills                                                     int
 	Unique                                                    int
 	DamageUntil, UnstoppableUntil, InvincibleUntil, ManaUntil int64
 	DamageMultiplier                                          uint32
-	milestone                                                 int
 	dead                                                      bool
-	ultra                                                     bool
 }
 
 /*
@@ -108,9 +111,11 @@ Step - bounded work for one host update; missed waves never pile up.
 ================
 */
 type Step struct {
-	Box, Wave, Powerup, Unique, Win, Return, Ultra bool
-	Count, Phase, Reinforcements                   int
-	RemainingSeconds                               int64
+	Checkpoint, Resume                      bool
+	StageEnd, Hunt, HuntNotice              bool
+	Countdown                               int64
+	Box, Wave, Powerup, Unique, Win, Return bool
+	Count, Phase                            int
 }
 
 /*
@@ -119,7 +124,7 @@ New
 ================
 */
 func New(now int64) Run {
-	return Run{Started: now, NextWave: now + OpeningDelayMs - PandoraWindupMs, NextPowerup: now + 15000}
+	return Run{Started: now, StageStarted: now + OpeningDelayMs, CheckpointInterval: 300000, NextWave: now + OpeningDelayMs - PandoraWindupMs, NextPowerup: now + 15000}
 }
 
 /*
@@ -127,7 +132,7 @@ func New(now int64) Run {
 Phase
 ================
 */
-func (r *Run) Phase(now int64) int { return int(max(0, min(3, (now-r.Started)/300000))) }
+func (r *Run) Phase(_ int64) int { return min(StageCount-1, r.Completed) }
 
 /*
 ================
@@ -154,46 +159,77 @@ func (r *Run) Advance(now int64, alive int, dead bool) Step {
 	if r.dead {
 		return Step{Return: true}
 	}
-	if now >= r.Started+DurationMs {
-		return Step{Win: true, Return: true}
-	}
-	p := r.Phase(now)
-	// Timed waves may reinforce survivors; retain only the hard population limit.
-	limit := MaxAlive
-	step := Step{Phase: p}
-	if !r.ultra && now >= r.Started+UltraAtMs {
-		r.ultra, step.Ultra = true, true
-		r.NextWave = min(r.NextWave, now)
-		step.Reinforcements = min(40, max(0, limit-alive))
-		alive += step.Reinforcements
-	}
-	threshold := [...]int64{300000, 600000, 900000}
-	for r.milestone < len(threshold) {
-		if now-r.Started < threshold[r.milestone] {
-			break
+	if r.PausedAt != 0 {
+		if r.ResumeAt != 0 {
+			left := max(int64(0), (r.ResumeAt-now+999)/1000)
+			if now >= r.ResumeAt {
+				r.Shift(now - r.PausedAt)
+				r.PausedAt, r.DecisionUntil, r.ResumeAt = 0, 0, 0
+				r.StageStarted = now
+				r.ClearingAt = 0
+				r.LastHunt = 0
+				r.Waves = 1
+				r.NextWave = now + WaveIntervalMs
+				return Step{Resume: true, Wave: true, Count: WaveSize(r.Completed, 0), Phase: r.Completed, Powerup: true}
+			}
+			step := Step{}
+			if left != r.LastCountdown {
+				r.LastCountdown = left
+				step.Countdown = left
+			}
+			return step
 		}
-		step.RemainingSeconds = (DurationMs - (now - r.Started)) / 1000
-		r.milestone++
+		return Step{Return: now >= r.DecisionUntil, Win: true}
+	}
+	step := Step{Phase: r.Completed}
+	if now < r.Started+OpeningDelayMs && r.Completed == 0 {
+		left := (r.Started + OpeningDelayMs - now + 999) / 1000
+		if left != r.LastCountdown {
+			r.LastCountdown = left
+			step.Countdown = left
+		}
 	}
 	if now >= r.NextPowerup {
 		step.Powerup = true
-		r.NextPowerup = now + 15000
+		r.NextPowerup = now + 8000
 	}
-	uniqueTimes := [...]int64{270000, 570000, 870000, 1170000}
-	if r.Unique < len(uniqueTimes) && now-r.Started >= uniqueTimes[r.Unique] && alive < limit {
+	if now >= r.StageStarted+r.CheckpointInterval || r.Waves >= r.WaveLimit() && r.Unique > r.Completed {
+		r.PendingWave = 0
+		if r.ClearingAt == 0 {
+			r.ClearingAt = now
+			step.StageEnd = true
+		}
+		if alive == 0 {
+			r.Completed++
+			r.CheckpointKills = r.Kills
+			r.PausedAt = now
+			r.DecisionUntil = now + DecisionMs
+			step.Checkpoint = true
+			return step
+		}
+		if now >= r.ClearingAt+60000 && (r.LastHunt == 0 || now >= r.LastHunt+10000) {
+			step.HuntNotice = r.LastHunt == 0
+			r.LastHunt = now
+			step.Hunt = true
+		}
+		return step
+	}
+	if r.Unique <= r.Completed && (now >= r.StageStarted+r.CheckpointInterval-30000 || r.Waves >= r.WaveLimit()-1) && alive < MaxAlive {
 		step.Unique = true
 		r.Unique++
 		alive++
 	}
 	if r.PendingWave != 0 {
 		if now >= r.PendingWave {
-			step.Wave = true
-			step.Count = max(0, min(limit-alive, 3+min(3, r.Kills/30)))
+			step.Count = max(0, min(MaxAlive-alive, WaveSize(r.Completed, r.Waves)))
+			step.Wave = step.Count > 0
+			if step.Wave {
+				r.Waves++
+			}
 			r.PendingWave = 0
-			interval := [...]int64{15000, 13500, PreUltraWaveMs, UltraWaveMs}
-			r.NextWave = now + interval[p]
+			r.NextWave = now + WaveIntervalMs
 		}
-	} else if alive < limit && (now >= r.NextWave || alive == 0 && r.Kills > 0) {
+	} else if r.Waves < r.WaveLimit() && alive < MaxAlive && (now >= r.NextWave || alive == 0 && r.Kills > r.CheckpointKills) {
 		step.Box = true
 		r.PendingWave = now + PandoraWindupMs
 	}
@@ -202,11 +238,16 @@ func (r *Run) Advance(now int64, alive int, dead bool) Step {
 
 /*
 ================
-EncounterLevel - port-only timed progression, reaching player +6 with ultra mode.
+Shift - exclude checkpoint/ready-screen time from the arena's deadlines.
 ================
 */
-func EncounterLevel(playerLevel int, elapsedMs int64) int {
-	return max(1, playerLevel-6+int(min(UltraAtMs, max(0, elapsedMs))*12/UltraAtMs))
+func (r *Run) Shift(delta int64) {
+	r.Started += delta
+	for _, at := range []*int64{&r.NextWave, &r.NextPowerup, &r.PendingWave, &r.DamageUntil, &r.UnstoppableUntil, &r.InvincibleUntil, &r.ManaUntil, &r.ReflectUntil, &r.TransferUntil, &r.SpeedUntil} {
+		if *at != 0 {
+			*at += delta
+		}
+	}
 }
 
 /*
@@ -226,15 +267,34 @@ func WaveRarity(sequence int) uint8 {
 
 /*
 ================
-Tenfold - saturate before reward arithmetic can wrap.
+Fivefold - saturate before reward arithmetic can wrap.
 ================
 */
-func Tenfold(value int64) int64 {
+func Fivefold(value int64) int64 {
 	if value <= 0 {
 		return value
 	}
-	if value > math.MaxInt64/10 {
+	if value > math.MaxInt64/5 {
 		return math.MaxInt64
 	}
-	return value * 10
+	return value * 5
+}
+
+/*
+================
+WaveSize - retain three fifths of each stage's original wave budget.
+================
+*/
+func WaveSize(stage, wave int) int {
+	base := 3 << stage
+	return ((wave+1)*base*3+4)/5 - (wave*base*3+4)/5
+}
+
+/*
+================
+WaveLimit - retain the timed stage's wave budget when clears accelerate it.
+================
+*/
+func (r *Run) WaveLimit() int {
+	return 1 + int(max(int64(0), r.CheckpointInterval-1)/(WaveIntervalMs+PandoraWindupMs))
 }

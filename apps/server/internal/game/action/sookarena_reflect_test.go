@@ -74,8 +74,8 @@ func TestSookReflectionPaidDamageAndIsolation(t *testing.T) {
 				paid = 0
 			}
 			after, _ := rt.Monsters.Get(testDivision, target.Gid)
-			if after.CurrentHP != target.CurrentHP-paid {
-				t.Fatalf("reflected %d, want %d", target.CurrentHP-after.CurrentHP, paid)
+			if after.CurrentHP != target.CurrentHP-paid*5 {
+				t.Fatalf("reflected %d, want %d", target.CurrentHP-after.CurrentHP, paid*5)
 			}
 			// A repeated publication cannot reflect the same paid debit twice.
 			rt.playerAbnormalPublication(testDivision, a, owner)

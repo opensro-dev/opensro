@@ -609,18 +609,11 @@ func (rt *Runtime) planMonsterKillLoot(
 	// already drops 5-8 items (a Roc 50-80), and twenty rounds of that would
 	// put over a thousand items on the ground in one burst.
 	rate := max(1, rt.DropPassRate)
-	arena := monster.Arena
-	if arena {
-		rate = min(rate, math.MaxInt/10) * 10
-	}
 	// Port-only, not native: the beta drop mix (progression/dropmix.go)
 	// gives named families their own rate; every family runs its native
 	// passes times its rate, so a family at rate 1 drops as often as native.
 	// Nil mix: every family at the uniform rate, the same draws as before.
 	familyRate := func(family string) int {
-		if arena {
-			return min(math.MaxInt/10, rt.DropMix.Rate(family, max(1, rt.DropPassRate))) * 10
-		}
 		return rt.DropMix.Rate(family, rate)
 	}
 	widest := rate
@@ -636,9 +629,6 @@ func (rt *Runtime) planMonsterKillLoot(
 	nativePasses := passes
 	passes *= widest
 	capacity *= rate
-	if arena {
-		capacity = min(32, capacity)
-	}
 	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
 	uniqueRound := len(prepared)
 	unique := RollsUniqueDrops(monster.Rarity())
@@ -765,14 +755,6 @@ func (rt *Runtime) planMonsterKillLoot(
 	if box, ok := rt.halloweenBoxDrop(snapshot, monster, at, snapshot.Name, now); ok {
 		box.OwnerJID = ownerJID
 		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
-	}
-	if arena {
-		admitted = admitted[:min(len(admitted), 32)]
-		for i := range admitted {
-			if admitted[i].IsGold() {
-				admitted[i].GoldAmount = uint32(min(uint64(math.MaxInt32), uint64(admitted[i].GoldAmount)*10))
-			}
-		}
 	}
 	return admitted
 }

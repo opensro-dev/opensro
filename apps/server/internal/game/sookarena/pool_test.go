@@ -70,14 +70,14 @@ func TestInstalledPoolHasEncountersAcrossNativeLevels(t *testing.T) {
 		}
 	}
 	for _, playerLevel := range []int{20, 40, 60, 80, 90} {
-		for _, elapsed := range []int64{0, 300000, 600000, 1200000} {
-			target := EncounterLevel(playerLevel, elapsed)
-			refs := pool.Normals(target)
+		for stage := 0; stage < 5; stage++ {
+			low, target := StageBounds(playerLevel, stage)
+			refs := pool.StageNormals(playerLevel, stage)
 			if len(refs) == 0 {
-				t.Fatalf("player level=%d elapsed=%d no encounters", playerLevel, elapsed)
+				t.Fatalf("player level=%d stage=%d no encounters", playerLevel, stage)
 			}
 			for _, ref := range refs {
-				if int(ref.Level) > target {
+				if int(ref.Level) > target || int(ref.Level) < low {
 					t.Fatalf("level %d exceeds encounter target %d", ref.Level, target)
 				}
 			}

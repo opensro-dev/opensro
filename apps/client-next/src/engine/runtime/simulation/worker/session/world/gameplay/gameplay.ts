@@ -30,6 +30,7 @@ import {
 	createCosSelection,
 	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
+import { ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
@@ -2198,6 +2199,19 @@ state here before a command can claim a native wire conversation.
 			}
 			dirty = true;
 			soundClock = now;
+			if ( command.kind === "arena-decision" ) {
+				if ( command.operation === 0 && !inventory.requestArenaState() ) return null;
+				if ( !localGid || ![ 0, 1, 2 ].includes( command.operation ) || command.id.length > 128 ) {
+					throw Error( "Invalid arena decision" );
+				}
+				const id = new TextEncoder().encode( command.id );
+				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
+				return sendFrame( { opcode: 0x7fca, payload: Uint8Array.of( command.operation, ...id ) } );
+			}
+			if ( command.kind === "arena-dismiss" ) {
+				inventory.dismissArena();
+				return null;
+			}
 			if ( command.kind === "local-notice" ) {
 				// A refusal the UI found before sending (guild-names.ts) joins the
 				// notices the server's refusals use, so both show alike.
@@ -5345,6 +5359,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
+					const chest = inventory.state().arenaChest;
+					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
+				}
 				if ( item ) {
 					cosPickup.spaceChanged();
 					// A settled move can change the suit the server stamps
@@ -5600,6 +5618,10 @@ Packet handling must not depend on which HUD panel is currently open.
 						!selection.targetPending && ((selection.targetCapabilities ?? 0) & 0xc3)
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
+				}
+				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
+					const chest = inventory.state().arenaChest;
+					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
 				}
 				if ( item ) {
 					guide = queueGuide(

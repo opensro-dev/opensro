@@ -197,6 +197,9 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 			debit = min(debit, max(int64(0), remaining-1))
 			formula.Damage, formula.Slain = uint32(debit), false
 		}
+		if run := rt.sookRun(s.division, c); run != nil && run.program.PausedAt != 0 {
+			debit, formula.Damage, formula.Slain = 0, 0, false
+		}
 		remaining -= debit
 		if s.owner != nil {
 			s.owner.noteSookReflection(out.attacker, uint32(debit))

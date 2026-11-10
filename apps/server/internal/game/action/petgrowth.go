@@ -186,7 +186,7 @@ func (rt *Runtime) awardAttackPetExperience(c *enterworld.Character, target mons
 		}
 		exp += max(bonus, 0)
 		if target.Arena {
-			exp = sookarena.Tenfold(exp)
+			exp = sookarena.Fivefold(exp)
 		}
 		private, public := rt.applyAttackPetExperience(c, pet, ref, exp, target.Gid)
 		owner = append(owner, private...)

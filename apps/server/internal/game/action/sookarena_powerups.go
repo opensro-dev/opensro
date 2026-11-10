@@ -41,6 +41,8 @@ const (
 	sookReflect      = uint8(8)
 	sookAlarm        = uint8(9)
 	sookAmbush       = uint8(10)
+	sookTransfer     = uint8(11)
+	sookSpeed        = uint8(12)
 	// Port-only arena positions on the existing cosmetic cue lane.
 	sookBlastVisual   = uint8(9)
 	sookFirePitVisual = uint8(10)
@@ -142,7 +144,7 @@ spawnSookPowerup
 ================
 */
 func (rt *Runtime) spawnSookPowerup(run *sookArenaRun, c *enterworld.Character, now int64) {
-	kinds := [...]uint8{sookDamage, sookBomb, sookUnstoppable, sookInvincible, sookMana, sookFirePit, sookReflect, sookAlarm, sookAmbush}
+	kinds := [...]uint8{sookDamage, sookBomb, sookUnstoppable, sookInvincible, sookMana, sookFirePit, sookReflect, sookAlarm, sookAmbush, sookTransfer, sookSpeed}
 	roll, err := rt.CombatRoll()
 	if err != nil {
 		return
@@ -163,12 +165,10 @@ func (rt *Runtime) expireSookProps(run *sookArenaRun, now int64) {
 		}
 		delete(run.props, gid)
 		item, exists := rt.Ground.GetInPopulation(run.division, population, gid)
-		if !exists {
-			continue
+		if exists {
+			rt.Ground.Remove(run.division, item.Gid)
 		}
-		if _, ok := rt.Ground.Remove(run.division, item.Gid); ok {
-			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: run.division, OnlyCharacterID: run.ownerID, Frames: simFrames([]wire.Frame{groundDespawn(item.Gid)})}})
-		}
+		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: run.division, OnlyCharacterID: run.ownerID, Frames: simFrames([]wire.Frame{groundDespawn(gid)})}})
 	}
 }
 
@@ -188,7 +188,7 @@ pickupSookPowerup - caller already owns the division pickup operation.
 */
 func (rt *Runtime) pickupSookPowerup(division, key string, c *enterworld.Character, item grounditem.Item) OpResult {
 	run := rt.sookRun(division, c)
-	if run == nil || item.ArenaPowerup == 0 || item.ArenaPowerup == sookBoxKind || item.ArenaPowerup > sookAmbush || item.Population != (grounditem.Population{World: uint32(run.lease.ID), Generation: run.lease.Generation}) || !enterworld.CharacterAlive(c) {
+	if run == nil || run.program.PausedAt != 0 || item.ArenaPowerup == 0 || item.ArenaPowerup == sookBoxKind || item.ArenaPowerup > sookSpeed || item.Population != (grounditem.Population{World: uint32(run.lease.ID), Generation: run.lease.Generation}) || !enterworld.CharacterAlive(c) {
 		return pickupRefusal(wire.ErrCodeInvalidRequest)
 	}
 	live, ok := rt.characterGround(division, c, item.Gid)
@@ -223,7 +223,7 @@ func (rt *Runtime) pickupSookPowerup(division, key string, c *enterworld.Charact
 	case sookFirePit:
 		run.firePitAt = simulation.Spawn{RegionID: item.Position.RegionID, X: float64(item.Position.X), Y: float64(item.Y), Z: float64(item.Position.Z)}
 		run.firePitUntil, run.firePitNext = now+60000, now+1000
-		result.Frames = append(result.Frames, crowVisualFrame(crowVisual{gid: enterworld.ObjectIDForCharacter(c), kind: sookFirePitVisual, book: 1, at: run.firePitAt}), sookBanner("Fire Pit: 30m burns for 60s. Non-uniques lose 5% maximum HP each second."))
+		result.Frames = append(result.Frames, crowVisualFrame(crowVisual{gid: enterworld.ObjectIDForCharacter(c), kind: sookFirePitVisual, book: 1, at: run.firePitAt}), sookBanner("Fire Pit: 30m burns for 60s. Non-uniques lose 3% maximum HP each second."))
 	case sookAmbush:
 		alive := 0
 		for _, actor := range rt.Monsters.PopulationInstances(division, run.lease, []uint16{run.center.RegionID}) {
@@ -232,7 +232,7 @@ func (rt *Runtime) pickupSookPowerup(division, key string, c *enterworld.Charact
 			}
 		}
 		spawned := 0
-		refs := rt.sookArena.pool.Normals(sookarena.EncounterLevel(int(rewardLevel(c)), now-run.program.Started))
+		refs := rt.sookArena.pool.StageNormals(int(rewardLevel(c)), run.program.Completed)
 		if len(refs) > 0 {
 			for i := 0; i < min(10, max(0, sookarena.MaxAlive-alive)); i++ {
 				if rt.spawnSookMonster(run, refs[run.sequence%len(refs)], sookarena.WaveRarity(run.sequence), now) {
@@ -249,9 +249,18 @@ func (rt *Runtime) pickupSookPowerup(division, key string, c *enterworld.Charact
 			}
 		}
 		result.Frames = append(result.Frames, sookBanner("Bad Egg: every living monster in your arena is hunting you!"))
+	case sookSpeed:
+		run.program.SpeedUntil = now + 30000
+		speed := rt.refreshMovementEffects(division, c, now)
+		result.Frames = append(result.Frames, speed...)
+		result.Broadcast = append(result.Broadcast, speed...)
+		result.Frames = append(result.Frames, sookBanner("Fleetfoot: +200% movement speed for 30 seconds."))
+	case sookTransfer:
+		run.program.TransferUntil = now + 30000
+		result.Frames = append(result.Frames, sookBanner("Chain Reaction: attacks and skills copy damage to up to 10 enemies within 10m for 30s."))
 	case sookReflect:
 		run.program.ReflectUntil = now + 30000
-		result.Frames = append(result.Frames, sookBanner("Mirror Shell: return 100% of HP damage taken to the attacker for 30s. You still take damage."))
+		result.Frames = append(result.Frames, sookBanner("Mirror Shell: return 500% of HP damage taken to the attacker for 30s. You still take damage."))
 	case sookUnstoppable:
 		run.program.UnstoppableUntil = now + 60000
 		rt.playerDisplacements.Delete(key)
@@ -267,8 +276,8 @@ func (rt *Runtime) pickupSookPowerup(division, key string, c *enterworld.Charact
 		}
 		result.Frames = append(result.Frames, sookBanner("Unstoppable: abnormal-state and knockback immunity for 60 seconds."))
 	case sookInvincible:
-		run.program.InvincibleUntil = now + 60000
-		result.Frames = append(result.Frames, sookBanner("Unkillable: incoming damage cannot take your last HP for 60 seconds."))
+		run.program.InvincibleUntil = now + 30000
+		result.Frames = append(result.Frames, sookBanner("Unkillable: incoming damage cannot take your last HP for 30 seconds."))
 	case sookMana:
 		run.program.ManaUntil = now + 60000
 		_, maxMP, _, _ := rt.playerKeeperVitals(division, c)
@@ -289,9 +298,9 @@ sookPowerDuration - native param-job messages carry arena-only HUD timers.
 */
 func sookPowerDuration(kind uint8) uint32 {
 	switch kind {
-	case sookDamage, sookReflect:
+	case sookDamage, sookReflect, sookInvincible, sookTransfer, sookSpeed:
 		return 30
-	case sookUnstoppable, sookInvincible, sookMana, sookFirePit:
+	case sookUnstoppable, sookMana, sookFirePit:
 		return 60
 	}
 	return 0
@@ -311,7 +320,7 @@ func sookPowerEnds(run *sookArenaRun, now int64, all bool) []wire.Frame {
 		{sookDamage, &run.program.DamageUntil}, {sookUnstoppable, &run.program.UnstoppableUntil},
 		{sookInvincible, &run.program.InvincibleUntil}, {sookMana, &run.program.ManaUntil},
 		{sookFirePit, &run.firePitUntil},
-		{sookReflect, &run.program.ReflectUntil},
+		{sookReflect, &run.program.ReflectUntil}, {sookTransfer, &run.program.TransferUntil}, {sookSpeed, &run.program.SpeedUntil},
 	} {
 		if *row.until != 0 && (all || now >= *row.until) {
 			*row.until = 0
@@ -332,6 +341,10 @@ func (rt *Runtime) sookPowerActive(division string, c *enterworld.Character, kin
 		return false
 	}
 	switch kind {
+	case sookSpeed:
+		return now < run.program.SpeedUntil
+	case sookTransfer:
+		return run.program.PausedAt == 0 && now < run.program.TransferUntil
 	case sookReflect:
 		return now < run.program.ReflectUntil
 	case sookUnstoppable:
@@ -408,7 +421,7 @@ func (rt *Runtime) tickSookFirePit(run *sookArenaRun, c *enterworld.Character, n
 		if target.CurrentHP == 0 || target.Ref.MonsterType == 3 {
 			continue
 		}
-		damage := max(uint32(1), target.EffectiveMaxHP()/20)
+		damage := max(uint32(1), uint32(uint64(target.EffectiveMaxHP())*3/100))
 		hit, ok := rt.commitCreditedMonsterHit(run.division, c, snapshot, enterworld.SkillRow{}, target, combat.Result{Damage: damage, ResultFlags: 1}, "sook-fire-pit", now)
 		if !ok {
 			continue
@@ -449,7 +462,29 @@ sookReward - the caller has already checked the fatal impact's exact lease.
 */
 func sookReward(value int64, run *sookArenaRun) int64 {
 	if run != nil {
-		return sookarena.Tenfold(value)
+		return sookarena.Fivefold(value)
 	}
 	return value
+}
+
+/*
+================
+sookPowerResume - resynchronize the native HUD with paused arena deadlines.
+================
+*/
+func sookPowerResume(run *sookArenaRun, now int64) []wire.Frame {
+	var frames []wire.Frame
+	for _, row := range []struct {
+		kind  uint8
+		until int64
+	}{
+		{sookDamage, run.program.DamageUntil}, {sookUnstoppable, run.program.UnstoppableUntil},
+		{sookInvincible, run.program.InvincibleUntil}, {sookMana, run.program.ManaUntil},
+		{sookFirePit, run.firePitUntil}, {sookReflect, run.program.ReflectUntil}, {sookTransfer, run.program.TransferUntil}, {sookSpeed, run.program.SpeedUntil},
+	} {
+		if row.until > now {
+			frames = append(frames, wire.Frame{Opcode: wire.OpParamJobStart, Payload: wire.EncodeParamJobRow(simulation.PlayerObjectID(run.ownerID), uint32((row.until-now+999)/1000), sookPowerRefBase|uint32(row.kind))})
+		}
+	}
+	return frames
 }

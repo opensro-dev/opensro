@@ -393,11 +393,12 @@ type Character struct {
 	// are the legacy per-character seed the account record is derived
 	// from at first load, kept so schema 34/35 records still load.
 	// Port-only, not native: UTC admission count for Event So-ok survival.
-	SookArenaActive   bool  `json:"sookArenaActive,omitempty"`
-	SookArenaDay      int32 `json:"sookArenaDay,omitempty"`
-	SookArenaEntries  uint8 `json:"sookArenaEntries,omitempty"`
-	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
-	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
+	SookArenaActive   bool        `json:"sookArenaActive,omitempty"`
+	SookArenaDay      int32       `json:"sookArenaDay,omitempty"`
+	SookArenaEntries  uint8       `json:"sookArenaEntries,omitempty"`
+	SookChest         *ArenaChest `json:"sookChest,omitempty"`
+	HalloweenBoxDay   int64       `json:"halloweenBoxDay,omitempty"`
+	HalloweenBoxCount int64       `json:"halloweenBoxCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).

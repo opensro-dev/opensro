@@ -90,3 +90,40 @@ func (p Pool) Boss(level int) (monster.MonsterRef, bool) {
 	}
 	return best, best.RefObjID != 0
 }
+
+/*
+================
+StageNormals - five closed level bands, always within player -6 .. +6.
+================
+*/
+func (p Pool) StageNormals(level, stage int) []monster.MonsterRef {
+	low, high := StageBounds(level, stage)
+	var refs []monster.MonsterRef
+	for _, ref := range p.Normal {
+		if int(ref.Level) >= low && int(ref.Level) <= high {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+/*
+================
+StageBounds
+================
+*/
+func StageBounds(level, stage int) (int, int) {
+	i := max(0, min(4, stage))
+	return max(1, level+[]int{-6, -4, -1, 1, 3}[i]), max(1, level+[]int{-3, -1, 2, 4, 6}[i])
+}
+
+/*
+================
+StageBoss - never substitute an under-level unique for an unavailable band.
+================
+*/
+func (p Pool) StageBoss(level, stage int) (monster.MonsterRef, bool) {
+	low, high := StageBounds(level, stage)
+	boss, ok := p.Boss(high)
+	return boss, ok && int(boss.Level) >= low
+}

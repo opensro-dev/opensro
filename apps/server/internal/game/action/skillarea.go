@@ -785,6 +785,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		if !damaged {
 			continue
 		}
+		rt.transferSookDamage(sookTransferHit{division: division, character: character, at: simulation.Spawn{RegionID: victim.pose.RegionID, X: victim.pose.X, Y: victim.pose.Y, Z: victim.pose.Z}, impacts: commit.committed[victim.sequence], now: nowMs})
 		frames := rt.tailwindDamage(division, character, victim.target.gid, nowMs)
 		out.Frames = append(out.Frames, frames...)
 		out.Broadcast = append(out.Broadcast, frames...)

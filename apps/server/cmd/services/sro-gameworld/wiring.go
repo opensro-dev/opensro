@@ -89,18 +89,19 @@ type gameWorldApplication struct {
 	certificateWatch *transport.CertificateWatch
 	// killStatsFlush writes the final kill-stat rollup at shutdown
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
-	killStatsFlush  func() error
-	settings        *settingsapi.SQLiteStore
-	skillCache      io.Closer
-	itemCache       io.Closer
-	populationCache io.Closer
-	transport       *transport.Server
-	authority       *store.Store
-	controlAPI      *agentapi.API
-	publicAPI       *publicAPI
-	controlErrors   <-chan error
-	reporter        *shard.Reporter
-	ticker          *simulation.Ticker
+	killStatsFlush       func() error
+	preserveArenaRewards func()
+	settings             *settingsapi.SQLiteStore
+	skillCache           io.Closer
+	itemCache            io.Closer
+	populationCache      io.Closer
+	transport            *transport.Server
+	authority            *store.Store
+	controlAPI           *agentapi.API
+	publicAPI            *publicAPI
+	controlErrors        <-chan error
+	reporter             *shard.Reporter
+	ticker               *simulation.Ticker
 	// returnArrivals is the action runtime's return lane
 	// (RunReturnArrivals): it completes the return-scroll arrivals
 	// the tick hands off, beside the ticker in Run.
@@ -327,6 +328,7 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("gameplay construction: %w", err)
 	}
 	installCertificateWatch(application, ts, ownedShard.ID)
+	application.preserveArenaRewards = gameplay.items.PrepareSookShutdown
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -723,6 +725,9 @@ drainNetwork
 ================
 */
 func (application *gameWorldApplication) drainNetwork() error {
+	if application.preserveArenaRewards != nil {
+		application.preserveArenaRewards()
+	}
 	application.readiness.Close()
 	log.Info("shutdown: draining the game transport and control API")
 

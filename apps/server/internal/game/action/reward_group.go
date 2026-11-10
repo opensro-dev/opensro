@@ -381,6 +381,9 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	arena := rt.sookPopulation(division, impact.Population)
 	if arena != nil {
 		arena.program.Kill(now)
+		if owner := rt.findCharacter(division, arena.name); owner != nil && owner.SookChest != nil {
+			owner.SookChest.Kills, owner.SookChest.ElapsedMs = arena.program.Kills, now-arena.program.Started
+		}
 		if arena.program.Kills%5 == 0 {
 			arena.powerupsOwed++
 		}
@@ -500,7 +503,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			}
 		}
 	}
-	if a, ok := roster.actors[winner]; ok {
+	if a, ok := roster.actors[winner]; ok && arena == nil {
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
@@ -553,7 +556,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			rt.RecordUniqueKill(division, domain.UniqueKill{AtMs: now, RefObjID: ref, KillerCharID: a.character.ID, KillerName: a.character.Name})
 		}
 	}
-	if !roster.companionKill && actor != nil {
+	if !roster.companionKill && actor != nil && arena == nil {
 		frames, drops := rt.creditQuestKillInsideDoor(division, actor, impact.Instance, pose, now)
 		out.actorFrames = append(out.actorFrames, frames...)
 		out.drops = append(out.drops, drops...)

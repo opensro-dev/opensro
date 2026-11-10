@@ -9,6 +9,7 @@ package sookarena
 
 import (
 	"math"
+	"opensro.online/server/internal/game/world/monster"
 	"testing"
 	"time"
 )
@@ -56,7 +57,7 @@ func TestScheduleCapsAndLeaseLocalState(t *testing.T) {
 	if !a.Advance(19800, 0, false).Box || a.Advance(20999, 0, false).Wave {
 		t.Fatal("box windup")
 	}
-	if step := a.Advance(21000, 99, false); !step.Wave || step.Count != 1 {
+	if step := a.Advance(21000, MaxAlive-1, false); !step.Wave || step.Count != 1 {
 		t.Fatalf("cap %+v", step)
 	}
 	for range 15 {
@@ -65,7 +66,7 @@ func TestScheduleCapsAndLeaseLocalState(t *testing.T) {
 	if a.Kills != 15 || b.Kills != 0 {
 		t.Fatal("run isolation")
 	}
-	if a.Advance(23500, 100, false).Box {
+	if a.Advance(23500, MaxAlive, false).Box {
 		t.Fatal("live cap")
 	}
 	if a.Advance(23500, 1, false).Box || a.NextWave != 36000 {
@@ -83,7 +84,7 @@ func TestScheduleCapsAndLeaseLocalState(t *testing.T) {
 	if !a.Advance(1000+DurationMs+DeathReturnDelayMs, 0, true).Return {
 		t.Fatal("death return")
 	}
-	if !b.Advance(1000+DurationMs, 0, false).Win {
+	if b.Advance(1000+DurationMs, 1, false).Win {
 		t.Fatal("victory")
 	}
 }
@@ -99,7 +100,7 @@ func TestClearingArenaStartsOnePandoraWithoutWaiting(t *testing.T) {
 		t.Fatal("empty initial arena skipped its opening delay")
 	}
 	r.Advance(19800, 0, false)
-	if wave := r.Advance(21000, 0, false); wave.Count != 3 {
+	if wave := r.Advance(21000, 0, false); wave.Count != 2 {
 		t.Fatal("opening wave missing")
 	}
 	for range 3 {
@@ -111,7 +112,7 @@ func TestClearingArenaStartsOnePandoraWithoutWaiting(t *testing.T) {
 	if step := r.Advance(21101, 0, false); step.Box || step.Wave {
 		t.Fatal("clear queued duplicate Pandoras or skipped the windup")
 	}
-	if step := r.Advance(22300, 0, false); !step.Wave || step.Count != 3 {
+	if step := r.Advance(22300, 0, false); !step.Wave || step.Count != 2 {
 		t.Fatal("next wave did not follow the Pandora windup")
 	}
 	if r.Advance(22301, 3, false).Box {
@@ -125,23 +126,15 @@ TestRewardAndKillProgression
 ================
 */
 func TestRewardAndKillProgression(t *testing.T) {
-	if Tenfold(math.MaxInt64) != math.MaxInt64 || Tenfold(12) != 120 {
+	if Fivefold(math.MaxInt64) != math.MaxInt64 || Fivefold(12) != 60 {
 		t.Fatal("reward overflow")
 	}
-	for _, tc := range []struct {
-		level   int
-		elapsed int64
-		want    int
-	}{{90, 0, 84}, {90, -1, 84}, {90, 300000, 88}, {90, 600000, 92}, {90, 899999, 95}, {90, 900000, 96}, {90, 1199999, 96}, {90, DurationMs, 96}, {1, 0, 1}} {
-		if got := EncounterLevel(tc.level, tc.elapsed); got != tc.want {
-			t.Fatalf("level=%d elapsed=%d: got %d want %d", tc.level, tc.elapsed, got, tc.want)
-		}
-	}
+
 	for _, kills := range []int{0, 10, 30, 90, 1000} {
 		r := New(1000)
 		r.Kills = kills
 		r.Advance(19800, 0, false)
-		if step := r.Advance(21000, 0, false); step.Count != 3+min(3, kills/30) {
+		if step := r.Advance(21000, 0, false); step.Count != 2 {
 			t.Fatalf("kills=%d wave=%+v", kills, step)
 		}
 	}
@@ -154,28 +147,27 @@ TestUltraBoundaryCadenceAndTwentyMinuteFinish
 */
 func TestUltraBoundaryCadenceAndTwentyMinuteFinish(t *testing.T) {
 	r := New(1000)
-	r.NextWave = r.Started + UltraAtMs + 10000
-	if step := r.Advance(r.Started+UltraAtMs-1, 10, false); step.Ultra || step.Box {
-		t.Fatal("ultra mode began early")
+	for stage := 0; stage < 5; stage++ {
+		now := r.StageStarted + r.CheckpointInterval
+		if step := r.Advance(now, 1, false); !step.StageEnd || step.Checkpoint || step.Wave {
+			t.Fatal("stage must clear before rewards")
+		}
+		if step := r.Advance(now+60000, 1, false); !step.Hunt {
+			t.Fatal("survivors did not hunt after one minute")
+		}
+		if step := r.Advance(now+60001, 0, false); !step.Checkpoint || r.Completed != stage+1 {
+			t.Fatal("cleared stage missing")
+		}
+		if stage < 4 {
+			r.ResumeAt = now + 60001 + ReadyMs
+			step := r.Advance(r.ResumeAt, 0, false)
+			if !step.Resume || !step.Wave || step.Count != WaveSize(stage+1, 0) {
+				t.Fatal("next stage did not double wave count")
+			}
+		}
 	}
-	if step := r.Advance(r.Started+UltraAtMs, 10, false); !step.Ultra || !step.Box {
-		t.Fatal("ultra mode did not announce and begin immediately")
-	}
-	if step := r.Advance(r.Started+UltraAtMs+1, 10, false); step.Ultra || step.Box {
-		t.Fatal("ultra announcement or Pandora duplicated")
-	}
-	at := r.Started + UltraAtMs + PandoraWindupMs
-	if step := r.Advance(at, 10, false); !step.Wave || step.Count == 0 {
-		t.Fatal("ultra wave missing")
-	}
-	if (r.NextWave-at+PandoraWindupMs)*5 != PreUltraWaveMs+PandoraWindupMs {
-		t.Fatal("ultra spawn cycle is not five times faster")
-	}
-	if r.Advance(r.Started+DurationMs-1, 100, false).Return {
-		t.Fatal("match ended early")
-	}
-	if step := r.Advance(r.Started+DurationMs, 100, false); !step.Return || !step.Win || step.Box || step.Wave {
-		t.Fatal("match did not end at exactly twenty minutes")
+	if step := r.Advance(r.DecisionUntil, 0, false); !step.Return || !step.Win {
+		t.Fatal("final extraction")
 	}
 }
 
@@ -201,6 +193,7 @@ TestTimedWavesContinueWithSurvivorsAndRespectHardCap
 */
 func TestTimedWavesContinueWithSurvivorsAndRespectHardCap(t *testing.T) {
 	r := New(1000)
+	r.Completed = 4
 	alive := 0
 	for now := int64(1000); now < 1000+DurationMs; now += 100 {
 		step := r.Advance(now, alive, false)
@@ -248,19 +241,21 @@ TestDoomsDayAndFiveMinuteReports
 ================
 */
 func TestDoomsDayAndFiveMinuteReports(t *testing.T) {
-	for _, alive := range []int{0, 90, MaxAlive} {
-		r := New(1000)
-		for _, minutes := range []int64{5, 10, 15} {
-			step := r.Advance(r.Started+minutes*60000, alive, false)
-			if step.RemainingSeconds != (20-minutes)*60 {
-				t.Fatalf("minute %d: report %+v", minutes, step)
-			}
-			if minutes == 15 && (!step.Ultra || step.Reinforcements != min(40, MaxAlive-alive)) {
-				t.Fatalf("dooms day: %+v", step)
-			}
-			if again := r.Advance(r.Started+minutes*60000+1, alive, false); again.RemainingSeconds != 0 || again.Reinforcements != 0 {
-				t.Fatal("duplicate milestone")
+	pool := Pool{}
+	for level := 84; level <= 96; level++ {
+		pool.Normal = append(pool.Normal, monster.MonsterRef{Level: uint8(level)})
+	}
+	for stage := 0; stage < 5; stage++ {
+		for _, ref := range pool.StageNormals(90, stage) {
+			if ref.Level < 84 || ref.Level > 96 {
+				t.Fatal("outside player band")
 			}
 		}
+	}
+	if refs := pool.StageNormals(90, 0); refs[0].Level != 84 || refs[len(refs)-1].Level != 87 {
+		t.Fatal("stage one band")
+	}
+	if refs := pool.StageNormals(90, 4); refs[0].Level != 93 || refs[len(refs)-1].Level != 96 {
+		t.Fatal("stage five band")
 	}
 }

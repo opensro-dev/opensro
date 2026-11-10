@@ -517,6 +517,9 @@ Vfunc 4FC commits the debit and a possible lethal transition in the same write.
 ================
 */
 func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, _ abnormal.Status) {
+	if run := o.rt.sookRun(o.division, o.c); run != nil && run.program.PausedAt != 0 {
+		return
+	}
 	if !o.Alive() || damage == 0 || credited && source == enterworld.ObjectIDForCharacter(o.c) {
 		return
 	}

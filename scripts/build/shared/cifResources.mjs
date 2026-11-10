@@ -129,7 +129,18 @@ buildSurvivalBuffIcons - owned art for the port-only arena's virtual timed jobs.
 */
 export async function buildSurvivalBuffIcons() {
 	const files = [];
-	for ( const name of [ "damage-surge", "unstoppable", "unkillable", "arcane-spring", "fire-pit", "mirror-shell" ] ) {
+	for (
+		const name of [
+			"damage-surge",
+			"unstoppable",
+			"unkillable",
+			"arcane-spring",
+			"fire-pit",
+			"mirror-shell",
+			"chain-reaction",
+			"fleetfoot"
+		]
+	) {
 		const publicPath = `/assets/images/Media_extracted/icon/port/survival/${name}.png`;
 		await copyIntoPublicTree(
 			fileURLToPath( new URL( `../../../docs/features/assets/survival/${name}.png`, import.meta.url ) ),

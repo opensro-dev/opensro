@@ -534,6 +534,7 @@ func clonePopulatedCharacter() *Character {
 			TargetIds: []uint32{1},
 		}},
 		TrackedQuests:      []TrackedQuestRecord{{RefID: 1, Tail6: []uint8{1}}},
+		SookChest:          &ArenaChest{ID: "run", Items: []InventoryRow{{RefObjID: 1, MagicOptions: []uint64{2}}}},
 		EnterEventGroupIds: []uint32{1},
 		BlockedWhisperers:  []string{"a"},
 		Friends:            []FriendRecord{{ID: 1}},

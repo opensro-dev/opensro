@@ -98,6 +98,10 @@ func (rt *Runtime) refreshMovementEffects(division string, c *enterworld.Charact
 	// Port-only: the crow's strongest eligible travel grant preserves roots and slows.
 	tailwind := rt.tailwindSpeedFactor(division, c, now)
 	walk, run = walk*tailwind, run*tailwind
+	// Port-only arena haste preserves roots and slows.
+	if rt.sookPowerActive(division, c, sookSpeed, now) {
+		walk, run = walk*3, run*3
+	}
 	changed := false
 	rt.Worlds.Update(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) { changed = world.UpdateMovementSpeeds(walk, run, now) })
 	if !changed {

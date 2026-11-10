@@ -54,7 +54,7 @@ func (rt *Runtime) reflectSookDamage(division string, c *enterworld.Character, s
 		if target.Gid != source || target.CurrentHP == 0 {
 			continue
 		}
-		hit, ok := rt.commitCreditedMonsterHit(division, c, snapshot, enterworld.SkillRow{}, target, combat.Result{Damage: damage, ResultFlags: 1}, "sook-reflection", now)
+		hit, ok := rt.commitCreditedMonsterHit(division, c, snapshot, enterworld.SkillRow{}, target, combat.Result{Damage: uint32(min(uint64(wire.MaxSkillActionDamage), uint64(damage)*5)), ResultFlags: 1}, "sook-reflection", now)
 		if !ok {
 			return
 		}

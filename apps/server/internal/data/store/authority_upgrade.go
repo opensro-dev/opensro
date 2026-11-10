@@ -66,8 +66,8 @@ const preOnlineRecordVersion = 36
 const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
 const preWantedDecayVersion = 39
-const preSookArenaVersion = 40
 const preGourdCountVersion = 40
+const preArenaChestVersion = 41
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -264,13 +264,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
-	case preSookArenaVersion:
-		// Schema 40 lacks only optional arena entry/recovery fields.
-		// Keep every saved character, inventory and companion record unchanged.
-		if layout < preSilkHistoryLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
+
 	case preWantedDecayVersion:
 		// Schema 39 ran at layout 12 and stamped the wanted level's
 		// seven-day lapse; under the decay that stamp is unread and a
@@ -282,7 +276,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
-	case preGourdCountVersion:
+	case preGourdCountVersion, preArenaChestVersion:
 		// Schema 40 ran at layout 12 and counted every Halloween box
 		// against the one account cap; its account rows carry no
 		// Gourd count and start the Gourd allowance at zero (#2950).

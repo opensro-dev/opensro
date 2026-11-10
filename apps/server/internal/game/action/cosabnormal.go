@@ -615,6 +615,9 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 	unlock := rt.lockDivision(entry.division)
 	defer unlock()
 	c := rt.findCharacter(entry.division, entry.name)
+	if run := rt.sookRun(entry.division, c); run != nil && run.program.PausedAt != 0 {
+		return nil
+	}
 	if c == nil || c.CompanionByGID(entry.gid) == nil {
 		// The pet is gone (dismissed or never summoned under this GID):
 		// its hostile words leave with it, silently - no view holds it.

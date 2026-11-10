@@ -72,7 +72,7 @@ const SURVIVAL_POWERS: Readonly<Record<number, ParamJobReference>> = {
 		description: "Immune to abnormal states and knockback."
 	},
 	0x7f530005: {
-		durationSec: 60,
+		durationSec: 30,
 		icon: "port/survival/unkillable.ddj",
 		name: "Unkillable",
 		description: "Combat damage cannot take your last HP."
@@ -87,13 +87,25 @@ const SURVIVAL_POWERS: Readonly<Record<number, ParamJobReference>> = {
 		durationSec: 60,
 		icon: "port/survival/fire-pit.ddj",
 		name: "Fire Pit",
-		description: "30m burning ground: non-uniques lose 5% maximum HP each second."
+		description: "30m burning ground: non-uniques lose 3% maximum HP each second."
+	},
+	0x7f53000b: {
+		durationSec: 30,
+		icon: "port/survival/chain-reaction.ddj",
+		name: "Chain Reaction",
+		description: "Attacks and skills copy damage to up to 10 other enemies within 10m of the target."
+	},
+	0x7f53000c: {
+		durationSec: 30,
+		icon: "port/survival/fleetfoot.ddj",
+		name: "Fleetfoot",
+		description: "+200% movement speed."
 	},
 	0x7f530008: {
 		durationSec: 30,
 		icon: "port/survival/mirror-shell.ddj",
 		name: "Mirror Shell",
-		description: "Return 100% of HP damage taken to the attacker. You still take the hit."
+		description: "Return 500% of HP damage taken to the attacker. You still take the hit."
 	}
 } as const;
 
