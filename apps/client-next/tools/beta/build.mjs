@@ -226,6 +226,7 @@ export function requireNativeAssets( applicationFiles, native, members ) {
 buildBeta
 ================
 */
+/** @param {{ destination?: string, assetRoot?: string, makeArchive?: boolean, sourceSnapshot?: string }} [options] */
 export async function buildBeta(
 	{
 		destination = path.join( root, "temp/artifacts", "beta", new Date().toISOString().replace( /[:.]/g, "-" ) ),
