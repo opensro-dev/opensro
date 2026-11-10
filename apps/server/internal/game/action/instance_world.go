@@ -230,7 +230,7 @@ return never queues behind a layer's player limit.
 func (rt *Runtime) ReturnCharacterFromInstance(division string, c *enterworld.Character) instance.Status {
 	unlock := rt.lockDivision(division)
 	defer unlock()
-	return rt.returnCharacterFromInstance(division, c)
+	return rt.returnCharacterFromInstance(division, c, rt.handlerDoors())
 }
 
 /*
@@ -240,7 +240,7 @@ returnCharacterFromInstance
 The caller holds the division lock.
 ================
 */
-func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Character) instance.Status {
+func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Character, doors characterDoors) instance.Status {
 	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
 		return instance.NotMember
 	}
@@ -256,7 +256,7 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 		Z:        float64(anchor.Z),
 		Angle:    anchor.Angle,
 	}
-	return rt.returnCharacterFromInstanceTo(division, c, travelPoint{spawn: entry, world: world}, "instance-return")
+	return rt.returnCharacterFromInstanceTo(division, c, travelPoint{spawn: entry, world: world}, "instance-return", doors)
 }
 
 /*
@@ -268,7 +268,7 @@ Brings one transferred character out of its instance to a chosen point
 reports the leave. The caller holds the division lock.
 ================
 */
-func (rt *Runtime) returnCharacterFromInstanceTo(division string, c *enterworld.Character, point travelPoint, label string) instance.Status {
+func (rt *Runtime) returnCharacterFromInstanceTo(division string, c *enterworld.Character, point travelPoint, label string, doors characterDoors) instance.Status {
 	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
 		return instance.NotMember
 	}
@@ -278,7 +278,12 @@ func (rt *Runtime) returnCharacterFromInstanceTo(division string, c *enterworld.
 	}) {
 		return instance.NotMember
 	}
-	rt.deps.Update(c, "instance-return-anchor-clear", func() bool {
+	// The relocation's own commit already carried the move; clearing
+	// the anchor is bookkeeping nothing after this reads, so the lane
+	// chooses its timing: a request answers through the immediate
+	// door, an instance close on the tick defers it into the batch
+	// (#3099).
+	doors.update(c, "instance-return-anchor-clear", func() bool {
 		if c.World != nil {
 			c.World.InstanceReturn = nil
 		}
@@ -370,7 +375,7 @@ func (rt *Runtime) closeInstanceWorld(division string, lease instance.Lease) {
 	}
 	for _, name := range rt.instanceResidentNames(division, lease) {
 		if c := rt.findCharacter(division, name); c != nil {
-			rt.returnCharacterFromInstance(division, c)
+			rt.returnCharacterFromInstance(division, c, rt.tickDoors())
 		}
 	}
 	rt.releaseInstanceWorldIfEmpty(division, lease)

@@ -53,6 +53,20 @@ func (rt *Runtime) tickDoors() characterDoors {
 	return characterDoors{update: rt.deps.UpdateDeferred, updateMany: rt.deps.UpdateManyDeferred}
 }
 
+// The tick lane's remaining immediate character commits, each listed
+// with its reason (#3099; every other tick-path write takes tickDoors
+// or a deferred door, converted under #3106 and this issue):
+//
+//   - relocateCharacter, its rollback and its return-scroll
+//     retirement (relocation.go): one call interleaves the record
+//     commit with the world-membership move, the population-session
+//     and companion restores on failure, and the reentry publication
+//     that renders them, so the record commits as the call answers.
+//     The tick reaches it only through fortress-war expulsions and
+//     instance-close returns - events, never per-player-per-tick
+//     work - and splitting its commit timing by lane is a change of
+//     its own when someone profiles it hot.
+
 // Dependencies is the character and itemdata surface consumed by action.
 /*
 ================
