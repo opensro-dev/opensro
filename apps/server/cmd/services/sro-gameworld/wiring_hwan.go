@@ -54,12 +54,12 @@ func applyHwanKnobs(quests *quest.Runtime) error {
 
 // hwanReverseMapPoints are the reverse return scroll's extra map destinations of the Blue Berserk quest line
 // (owner, 2026-11-10): the homes of the two ritual NPCs, whom the chains send the player to again and again. Their
-// native spawn rows are npcpos.txt 2017 and 7505. The Exorcist stands inside her house, where the arrival rescue
-// would move a player anyway, so her point is the open ground just outside it. They join the table only with
+// native spawn rows are npcpos.txt 2017 and 7505; the points are the owner's choice of nearby open ground (the
+// Exorcist's own spot is inside her house and a tree stands close by), given as map coordinates. They join the table only with
 // SRO_REVERSE_RETURN_MAP on and the quest rows built in (SRO_CAP110_QUESTS).
 var hwanReverseMapPoints = []enterworld.ReverseMapPoint{
-	{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 229.05, Z: 830},      // near NPC_CH_SHAMAN, Exorcist Miaoryeong, by Jangan
-	{Name: "Sunset Witch", RegionID: 27728, X: 1835.89, Y: 743.89, Z: 1588.89}, // NPC_EU_WITCH, by Constantinople
+	{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 225.27, Z: 730}, // map X 5775 Y 1225, by NPC_CH_SHAMAN near Jangan
+	{Name: "Sunset Witch", RegionID: 27728, X: 1800, Y: 715.26, Z: 1630},  // map X -10380 Y 3235, by NPC_EU_WITCH near Constantinople
 }
 
 /*
