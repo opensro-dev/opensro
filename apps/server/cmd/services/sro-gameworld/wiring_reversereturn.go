@@ -41,9 +41,7 @@ func configureReverseReturnMap(items *action.Runtime, textdataDir string) error 
 		return fmt.Errorf("reverse return map: %w", err)
 	}
 	items.ConfigureReverseReturnMap(true, imported)
-	if hwanQuestsBuilt(textdataDir) {
-		items.AddReverseReturnMapPoints(hwanReverseMapPoints)
-	}
+	items.AddReverseReturnMapPoints(hwanReverseMapExtras(textdataDir))
 	source := "inferred"
 	if len(imported) > 0 {
 		source = "imported " + optionalteleport.File

@@ -41,3 +41,38 @@ func TestHwanQuestsBuiltReadsTheQuestRows(t *testing.T) {
 		t.Fatal("the UTF-16 row was not found")
 	}
 }
+
+/*
+================
+TestHwanReverseMapExtrasFollowTheQuestRowsAndTheTomb
+
+The NPC homes need the quest rows; the tomb entrance needs only SRO_QINSHI_TOMB.
+================
+*/
+func TestHwanReverseMapExtrasFollowTheQuestRowsAndTheTomb(t *testing.T) {
+	names := func(dir string) string {
+		out := ""
+		for _, point := range hwanReverseMapExtras(dir) {
+			out += point.Name + ";"
+		}
+		return out
+	}
+	bare, built := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(built, "questdata.txt"), []byte("1\t349\tQNO_CH_HWAN_1_1\t95\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SRO_QINSHI_TOMB", "off")
+	if got := names(bare); got != "" {
+		t.Fatalf("no quests and no tomb: %q", got)
+	}
+	if got := names(built); got != "Exorcist's Home;Sunset Witch;" {
+		t.Fatalf("quest rows only: %q", got)
+	}
+	t.Setenv("SRO_QINSHI_TOMB", "on")
+	if got := names(bare); got != "Qin-Shi Tomb Entrance;" {
+		t.Fatalf("tomb only: %q", got)
+	}
+	if got := names(built); got != "Exorcist's Home;Sunset Witch;Qin-Shi Tomb Entrance;" {
+		t.Fatalf("both: %q", got)
+	}
+}

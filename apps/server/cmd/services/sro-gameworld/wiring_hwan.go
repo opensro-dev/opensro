@@ -52,14 +52,38 @@ func applyHwanKnobs(quests *quest.Runtime) error {
 	return nil
 }
 
-// hwanReverseMapPoints are the reverse return scroll's extra map destinations of the Blue Berserk quest line
-// (owner, 2026-11-10): the homes of the two ritual NPCs, whom the chains send the player to again and again. Their
-// native spawn rows are npcpos.txt 2017 and 7505; the points are the owner's choice of nearby open ground (the
-// Exorcist's own spot is inside her house and a tree stands close by), given as map coordinates. They join the table only with
-// SRO_REVERSE_RETURN_MAP on and the quest rows built in (SRO_CAP110_QUESTS).
-var hwanReverseMapPoints = []enterworld.ReverseMapPoint{
-	{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 225.27, Z: 730}, // map X 5775 Y 1225, by NPC_CH_SHAMAN near Jangan
-	{Name: "Sunset Witch", RegionID: 27728, X: 1800, Y: 715.26, Z: 1630},  // map X -10380 Y 3235, by NPC_EU_WITCH near Constantinople
+// The reverse return scroll's extra map destinations of the Blue Berserk quest line (owner, 2026-11-10). The two
+// ritual NPCs' homes, whom the chains send the player to again and again, join with the quest rows built in
+// (SRO_CAP110_QUESTS); their native spawn rows are npcpos.txt 2017 and 7505, and the points are the owner's choice
+// of nearby open ground (the Exorcist's own spot is inside her house and a tree stands close by), given as map
+// coordinates. The Qin-Shi Tomb entrance joins whenever the tomb is on (SRO_QINSHI_TOMB), quest rows or not: the
+// 95 chain's bell comes from its stone ghosts, and shards at the 100 cap use the tomb too. All need
+// SRO_REVERSE_RETURN_MAP on.
+var (
+	hwanNpcReverseMapPoints = []enterworld.ReverseMapPoint{
+		{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 225.27, Z: 730}, // map X 5775 Y 1225, by NPC_CH_SHAMAN near Jangan
+		{Name: "Sunset Witch", RegionID: 27728, X: 1800, Y: 715.26, Z: 1630},  // map X -10380 Y 3235, by NPC_EU_WITCH near Constantinople
+	}
+	// Just in front of the tomb's entrance: map X 7200 Y 2100.
+	qinShiReverseMapPoint = enterworld.ReverseMapPoint{Name: "Qin-Shi Tomb Entrance", RegionID: 26284, X: 960, Y: 117.04, Z: 1800}
+)
+
+/*
+================
+hwanReverseMapExtras
+
+The extra reverse return destinations this shard's data and settings call for.
+================
+*/
+func hwanReverseMapExtras(textdataDir string) []enterworld.ReverseMapPoint {
+	var points []enterworld.ReverseMapPoint
+	if hwanQuestsBuilt(textdataDir) {
+		points = append(points, hwanNpcReverseMapPoints...)
+	}
+	if monster.QinShiTombFromEnv() {
+		points = append(points, qinShiReverseMapPoint)
+	}
+	return points
 }
 
 /*
