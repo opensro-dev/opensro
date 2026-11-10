@@ -137,15 +137,17 @@ const (
 // on the combined tree; with the timed-window sweeps' owner lists
 // cached on their index and rebuilt only when an owner tracks or
 // is forgotten, instead of rebuilt and re-sorted on every sweep
-// (#2033), measured 13,499 B / 56 allocs on the combined tree;
-// with the pet natural-recovery pulse weighing its zombie bit,
-// maxima and recovery reductions off the committed abnormal block
-// in place instead of building the committing owner and its block
-// copy per pulse (#2033), measured 13,119 B / 56 allocs on the
-// combined tree.
+// (#2033), measured 13,499 B / 56 allocs on the combined tree; with
+// the periodic pulse's COS recipient judged on the live record
+// instead of detached into its owner's pet-owner view (#2033),
+// measured 11,738 B / 46 allocs on the combined tree; with the pet
+// natural-recovery pulse weighing its zombie bit, maxima and
+// recovery reductions off the committed abnormal block in place
+// instead of building the committing owner and its block copy per
+// pulse (#2033), measured 11,358 B / 46 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 14500
-	tickBudgetAllocsPerTick = 62
+	tickBudgetBytesPerTick  = 12500
+	tickBudgetAllocsPerTick = 51
 )
 
 /*

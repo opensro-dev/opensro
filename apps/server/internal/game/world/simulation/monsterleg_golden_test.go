@@ -210,7 +210,7 @@ func TestActivityGateResolvesSettledBlockOnce(t *testing.T) {
 	// active and the actor stays settled in place between gates. The leg
 	// normally stamps the batch's world into the snapshot; do it here.
 	ops.activity = ops.captureActivity([]SessionSnapshot{playerSessionAt(1, 1000, 1000)}, now)
-	ops.activity.world = activityWorld{division: monsterTestDivision, world: 65537, generation: 1}
+	ops.activity.askWorld(activityWorld{division: monsterTestDivision, world: 65537, generation: 1})
 	settled := calls
 	for k := int64(1); k <= 5; k++ {
 		current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)

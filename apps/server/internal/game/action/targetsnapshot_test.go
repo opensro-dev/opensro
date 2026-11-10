@@ -116,6 +116,64 @@ func TestResolveCOSTargetSnapshotEqualsCharacterSnapshot(t *testing.T) {
 
 /*
 ================
+TestResolvePulseTargetJudgesTheCOSTarget
+
+The pulse lane's COS resolution lands where resolveCOSTarget
+lands - same verdict, pet identity, catalog ref and pose - while
+detaching no owner view; a dead or hidden COS and the caster's own
+COS refuse on the pulse lane as they do on the copy lane.
+================
+*/
+func TestResolvePulseTargetJudgesTheCOSTarget(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	now := clock.NowMs()
+
+	full, ok := rt.resolveCombatTarget(testDivision, attacker, cos.GID, now)
+	if !ok {
+		t.Fatal("the summoned COS does not resolve")
+	}
+	judged, ok := rt.resolvePulseTarget(testDivision, attacker, cos.GID, now)
+	if !ok {
+		t.Fatal("the summoned COS does not resolve on the pulse lane")
+	}
+	if judged.snapshot != nil {
+		t.Fatal("the pulse resolution detached the owner's view")
+	}
+	if judged.player != full.player || judged.gid != full.gid {
+		t.Fatal("the pulse resolution names another target")
+	}
+	if judged.cos == nil || full.cos == nil ||
+		judged.cos.RefObjID != full.cos.RefObjID || judged.cos.SummonGeneration != full.cos.SummonGeneration {
+		t.Fatal("the pulse resolution carries another companion")
+	}
+	if judged.cosRef == nil || full.cosRef == nil ||
+		judged.cosRef.RefObjID != full.cosRef.RefObjID || judged.cosRef.TidWord != full.cosRef.TidWord ||
+		judged.cosRef.MaxHP != full.cosRef.MaxHP {
+		t.Fatal("the pulse resolution carries another catalog ref")
+	}
+	if judged.at != full.at {
+		t.Fatalf("the pulse pose %v differs from the copy's %v", judged.at, full.at)
+	}
+
+	cos.CurrentHP = 0
+	if _, ok := rt.resolvePulseTarget(testDivision, attacker, cos.GID, now); ok {
+		t.Fatal("the dead COS resolves on the pulse lane")
+	}
+	cos.CurrentHP = 1
+	cos.NativeBodyStatus = mercenaryBodyHiddenFirst
+	if _, ok := rt.resolvePulseTarget(testDivision, attacker, cos.GID, now); ok {
+		t.Fatal("the hidden COS resolves on the pulse lane")
+	}
+	cos.NativeBodyStatus = 0
+	if _, ok := rt.resolvePulseTarget(testDivision, owner, cos.GID, now); ok {
+		t.Fatal("the caster's own COS resolves on the pulse lane")
+	}
+}
+
+/*
+================
 TestAreaCandidatesRejectedPlayersStayOut
 
 Dead and deletion-pending players were dropped after their copy was
