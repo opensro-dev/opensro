@@ -1,12 +1,19 @@
 /*
 ===========================================================================
 
-navigation_metrics.go - monster route plans and path clips, counted
+navigation_metrics.go - monster route plans, path clips and the leg's
+own census, counted
 
 Read-only instrument for the server-lag work (P4a): how often monsters
 plan a route, what each plan cost in path queries and how it ended, and how
 many path clips each caller makes. Counts are since boot; compare windows
 by diffing two reads. Atomics only: the tick never waits on a reader.
+
+The leg census rides the same block (leg.*): how many actors a leg
+dispatched, stepped and settled without a step, and which rest guard
+refused each resting step. Until 2026-11-10 those counts existed only
+on the slow-leg log line, so a live capture could not say what the
+monster leg's actors were doing, only that there were many.
 
 ===========================================================================
 */
@@ -65,6 +72,10 @@ type NavigationMetrics struct {
 	byCost   [len(navProbeBounds) + 1]atomic.Uint64
 	clips    [navCallerCount]atomic.Uint64
 	memoHits [navCallerCount]atomic.Uint64
+
+	legs, legActors, legSteps, legRechecked atomic.Uint64
+	legCadenceArms, legSuspended            atomic.Uint64
+	legRest                                 [restGuardCount]atomic.Uint64
 }
 
 /*
@@ -164,11 +175,36 @@ func (m *NavigationMetrics) memo(caller navCaller) {
 
 /*
 ================
+NavigationMetrics.leg
+
+One finished leg's census, folded into the since-boot counters.
+================
+*/
+func (m *NavigationMetrics) leg(stats *legStats) {
+	if m == nil || stats == nil {
+		return
+	}
+	m.legs.Add(1)
+	m.legActors.Add(uint64(stats.actors))
+	m.legSteps.Add(uint64(stats.steps))
+	m.legRechecked.Add(uint64(stats.rechecked))
+	m.legCadenceArms.Add(uint64(stats.cadenceArms))
+	m.legSuspended.Add(uint64(stats.gateSuspended))
+	for guard := range stats.restGuards {
+		if count := stats.restGuards[guard]; count != 0 {
+			m.legRest[guard].Add(uint64(count))
+		}
+	}
+}
+
+/*
+================
 NavigationMetrics.Snapshot
 
 Flat counters for /transport/metrics: plan.<caller>.<outcome>,
-route_probes, plan_probes.<bucket> and clip.<caller>. Zero counters are
-left out.
+route_probes, plan_probes.<bucket>, clip.<caller>, and the leg census
+(leg.count, leg.actors, leg.steps, leg.rechecked, leg.cadence_arms,
+leg.suspended, leg.rest.<guard>). Zero counters are left out.
 ================
 */
 func (m *NavigationMetrics) Snapshot() map[string]uint64 {
@@ -191,6 +227,15 @@ func (m *NavigationMetrics) Snapshot() map[string]uint64 {
 	put("route_probes", m.probes.Load())
 	for i := range m.byCost {
 		put("plan_probes."+navProbeNames[i], m.byCost[i].Load())
+	}
+	put("leg.count", m.legs.Load())
+	put("leg.actors", m.legActors.Load())
+	put("leg.steps", m.legSteps.Load())
+	put("leg.rechecked", m.legRechecked.Load())
+	put("leg.cadence_arms", m.legCadenceArms.Load())
+	put("leg.suspended", m.legSuspended.Load())
+	for guard := range m.legRest {
+		put("leg.rest."+restGuardNames[guard], m.legRest[guard].Load())
 	}
 	return out
 }
