@@ -113,6 +113,11 @@ type MonsterState struct {
 	abnormalContext MonsterAbnormalContext
 	archive         *monsterArchive
 	regionDormancy  bool
+	// tacticsReplaced is set by a leg whose ops resolves tactics
+	// through a replacement (MonsterMoverOps.TacticsFor, fixtures
+	// only): the idle due then keeps its conservative cadence wake
+	// (idleBehaviorDue). Guarded by mu.
+	tacticsReplaced bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
 	players          func(string, int64) []PopulationPlayer

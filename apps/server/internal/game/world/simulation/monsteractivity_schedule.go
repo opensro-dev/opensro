@@ -152,28 +152,44 @@ MonsterState.idleBehaviorDue
 
 When an idle monster next needs its step, and whether that time is
 knowable from the rows the scheduler already reads. The step of an
-idle monster at rest can only act at three times: its idle deadline
-(advanceIdle's decideIdle), its activity-gate cadence (the gate's
-Due test, in the pending branch's own phase arithmetic) and, for an
-aggressive nest, its acquisition timer (the sight scan; deferring
-to the timer's fire time defers nothing, the check consumes the
-timer when read). Everything else that can move it - damage, help,
-hostility, a queued tactics event - arrives through an event door
-that reschedules it at once, so sleeping until the earliest of the
-three changes no outcome. Any fact this read cannot prove keeps
-the next tick: a pending idle entry or stuck latch, a summoned
-control or a held target (the step's own branches), a corpse or a
-detached nest, an active abnormal or motion hold, a zero gate
+idle monster can only act at three times: its idle deadline
+(advanceIdle's decideIdle); the arrival of a segment it is still
+gliding on (a wander that expired mid-flight enters IDLE without
+stopping, and the step settles the arrival with its 0xB2F5); and,
+for an aggressive nest, its acquisition timer (the sight scan;
+deferring to the timer's fire time defers nothing, the check
+consumes the timer when read). Everything else that can move it -
+damage, help, hostility, a queued tactics event - arrives through
+an event door that reschedules it at once, so sleeping until the
+earliest of the three changes no outcome. Any fact this read cannot
+prove keeps the next tick: a pending idle entry or stuck latch, a
+summoned control or a held target (the step's own branches), a
+held navigation goal (the step commits its next segment), a corpse
+or a detached nest, an active abnormal or motion hold, a zero gate
 interval, or an acquisition bank not yet created (its first check
 arms the timer; the step that runs next tick creates it).
 
-The aggressive read mirrors monster.ResolveTactics' nest branch;
-the ops' TacticsFor override is a test seam the scheduler sits
-below, so a nest the tables call passive keeps the gate cadence.
+The activity cadence is not one of those times. The gate that
+reads it acts only on a wandering or a pending monster
+(runActivityGate, monster.MaySuspendWander): for an idle one it
+returns before the cadence is looked at, and nothing stamps the
+cadence while the monster idles. This read used to wake on it all
+the same, and because an idle row's cadence is never stamped, a
+monster whose one-to-two-second cadence had lapsed was stepped
+every tick for the rest of its two-to-six-second idle, to return
+nil each time.
+
+The aggressive read mirrors monster.ResolveTactics' nest branch,
+which is what the step resolves in production. An ops whose
+TacticsFor replaces that resolver (fixtures only) can make the step
+aggressive where the tables say passive; the scheduler sits below
+the ops and cannot see it, so while a replacement is installed
+(tacticsReplaced) the cadence wake is kept as the conservative
+bound it always was for those fixtures.
 ================
 */
 func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident *residentMonster, now int64) (int64, bool) {
-	if m.idleEntryPending || m.stuck || m.controlMode == monster.ControlSummoned || m.targetGID != 0 {
+	if m.idleEntryPending || m.stuck || m.controlMode == monster.ControlSummoned || m.targetGID != 0 || m.goalHeld {
 		return 0, false
 	}
 	if resident == nil || resident.currentHP == 0 || resident.nestDetached || resident.sparse&sparseAbnormal != 0 {
@@ -186,12 +202,25 @@ func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, 
 	if at < now+1 {
 		at = now + 1
 	}
-	if elapsed := uint32(now) - m.activity.LastCheck; elapsed <= uint32(m.activity.Interval) {
-		if due := now + int64(uint32(m.activity.Interval)-elapsed) + 1; due < at {
+	if m.segmentHeld {
+		// The settle falls on the first step at or past the arrival;
+		// a matured segment not yet settled is due at once.
+		due := m.arriveMs
+		if due < now+1 {
+			due = now + 1
+		}
+		if due < at {
 			at = due
 		}
-	} else {
-		at = now + 1
+	}
+	if s.tacticsReplaced {
+		if elapsed := uint32(now) - m.activity.LastCheck; elapsed <= uint32(m.activity.Interval) {
+			if due := now + int64(uint32(m.activity.Interval)-elapsed) + 1; due < at {
+				at = due
+			}
+		} else {
+			at = now + 1
+		}
 	}
 	nest := resident.nest.Value()
 	if (nest.PolicyPinned || nest.RetailEvidence || nest.HasControls) && nest.Aggressive {
@@ -204,6 +233,21 @@ func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, 
 		}
 	}
 	return at, true
+}
+
+/*
+================
+MonsterState.noteTacticsReplaced
+
+Whether the running leg's ops resolves tactics through a replacement
+of monster.ResolveTactics (fixtures only). Written by the leg before
+it schedules anything; idleBehaviorDue reads it under the same lock.
+================
+*/
+func (s *MonsterState) noteTacticsReplaced(replaced bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tacticsReplaced = replaced
 }
 
 /*

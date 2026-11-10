@@ -175,7 +175,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		ticker.Monsters = &simulation.MonsterMoverOps{
 			Navigation: navigation,
 			Monsters:   game.deps.MonsterState,
-			TacticsFor: monster.ResolveTactics,
+			// TacticsFor stays unset: the step then resolves through
+			// monster.ResolveTactics, the resolver the scheduler's idle
+			// due mirrors (idleBehaviorDue). A replacement here would
+			// put every idle monster back on the conservative wake.
 			// #1695: live heights come from the plane that owns the
 			// region (the deck/cave-floor surface nearest the caller),
 			// not the bare terrain sampler.

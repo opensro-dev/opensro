@@ -335,6 +335,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	if ops == nil || ops.Monsters == nil {
 		return
 	}
+	// The scheduler mirrors the production tactics resolver; tell it
+	// when this ops resolves through a replacement instead, so its
+	// idle due stays conservative (idleBehaviorDue).
+	ops.Monsters.noteTacticsReplaced(ops.TacticsFor != nil)
 
 	// The activity gate's memo lives on the ops, but the dispatch below
 	// binds each actor to a value copy (owned := *ops): a memo map first
