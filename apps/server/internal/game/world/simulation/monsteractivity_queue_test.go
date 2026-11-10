@@ -408,6 +408,52 @@ func TestBehaviorQueueUnchangedDeadlineStaysSingleCopy(t *testing.T) {
 
 /*
 ================
+TestBehaviorQueueDrainReadsTheRowItFires
+
+The drain answers every copy from the one queue row it reads: a
+duplicate copy of a firing slot fires no second time, a copy left
+stale by a later re-arm does not fire at its old time (through the
+buckets or the far list), a not-yet-due row survives, and a fired
+ref carries its row's slots with the row left dead (#3027).
+================
+*/
+func TestBehaviorQueueDrainReadsTheRowItFires(t *testing.T) {
+	var q behaviorQueue
+	q.set(1, 100)
+	q.set(2, 5000)
+	slot1 := q.byGID[1]
+	slot2 := q.byGID[2]
+	// A second copy of the firing slot, and a stale copy of the
+	// re-armed one, injected the way the wheel leaves them behind.
+	q.due = append(q.due, behaviorCopy{slot: slot1, at: 100}, behaviorCopy{slot: slot2, at: 100})
+	due := q.takeDue(100, nil)
+	if len(due) != 1 || due[0].gid != 1 || due[0].queueSlot != slot1 {
+		t.Fatalf("drain fired %v, want gid 1 once through its slot", due)
+	}
+	if q.slots[slot1].live {
+		t.Fatal("fired row stayed live")
+	}
+	if !q.slots[slot2].live || q.slots[slot2].at != 5000 {
+		t.Fatal("not-yet-due row changed under the drain")
+	}
+	// The far list answers from the same one read per copy.
+	var far behaviorQueue
+	far.set(9, 100000)
+	farSlot := far.byGID[9]
+	far.far = append(far.far, behaviorCopy{slot: farSlot, at: 100})
+	if due := far.takeDue(100, nil); len(due) != 0 {
+		t.Fatalf("stale far copy fired: %v", due)
+	}
+	if due := far.takeDue(100000, nil); len(due) != 1 || due[0].gid != 9 || due[0].queueSlot != farSlot {
+		t.Fatalf("far drain fired %v, want gid 9 once through its slot", due)
+	}
+	if far.slots[farSlot].live {
+		t.Fatal("far fired row stayed live")
+	}
+}
+
+/*
+================
 TestBehaviorQueueSetAtCarriesAndRecycles
 
 The drain hands each fired actor's queue slot back in its ref, and
