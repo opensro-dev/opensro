@@ -709,26 +709,41 @@ func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state 
 	// second one.
 	monsterSlot := ref.monsterSlot
 	if !state.instances.lookupAtInto(&dst.instance, monsterSlot, ref.gid) {
-		actor, ok := state.instances.lookup(ref.gid)
-		if !ok {
+		// A stale hint resolves by gid, but a hot row still fills
+		// straight into the view slot: the by-value lookup copied the
+		// 2 KB expansion out and the caller copied it in again (#3027).
+		// Only the cold tier (an archived actor) reads by value.
+		if slot, hot := state.instances.hotSlotOf(ref.gid); hot &&
+			state.instances.lookupAtInto(&dst.instance, slot, ref.gid) {
+			monsterSlot = slot
+		} else if actor, ok := state.instances.lookup(ref.gid); ok {
+			dst.instance = actor
+			_, monsterSlot, _ = state.instances.hotRowSlot(ref.gid)
+		} else {
 			*dst = behaviorActorSnapshot{}
 			return
 		}
-		dst.instance = actor
-		_, monsterSlot, _ = state.instances.hotRowSlot(ref.gid)
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
 	slot := ref.slot
 	if !state.movers.lookupAtInto(&dst.mover, slot, ref.gid) {
-		mover, ok := state.movers.lookup(ref.gid)
-		if !ok {
-			mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
-			slot = behaviorNoMoverSlot
-		} else if resolved, found := state.movers.slotOf(ref.gid); found {
+		if resolved, found := state.movers.slotOf(ref.gid); found &&
+			state.movers.lookupAtInto(&dst.mover, resolved, ref.gid) {
 			slot = resolved
+		} else if _, ok := state.movers.lookup(ref.gid); ok {
+			// slotOf and lookup read the same map under the same
+			// lock, so this is unreachable; the by-value read stays
+			// as the belt to the fill's braces.
+			mover, _ := state.movers.lookup(ref.gid)
+			dst.mover = mover
+			if resolved, found := state.movers.slotOf(ref.gid); found {
+				slot = resolved
+			}
+		} else {
+			dst.mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
+			slot = behaviorNoMoverSlot
 		}
-		dst.mover = mover
 	}
 	if err := dst.mover.Validate(); err != nil {
 		panic(err)
