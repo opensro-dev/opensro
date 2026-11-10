@@ -30,6 +30,21 @@ export const factories = {
 	"bug-report": "createBugReport",
 	"build-info": "createBuildInfo"
 };
+/*
+================
+plainExports
+
+Plain functions the composition imports beside an owner's factory
+(bug-report's diagnosticActors shapes a report's actor rows from the
+presented entities). The boundary stands each one in returning its
+empty-world value: the fakes present no entities, so a report composed
+here carries no actor rows. A suite that needs real rows drives the
+real function instead (bug-report-actors.test.mjs).
+================
+*/
+const plainExports = {
+	"bug-report": [ "diagnosticActors" ]
+};
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
 	bundle: true,
@@ -63,7 +78,10 @@ setup
 				args => ({
 					contents: `export function ${factories[args.path]}( ...args ) {
 ( globalThis.__runtimeCalls ??= [] ).push( { owner: ${JSON.stringify( args.path )}, args } );
-return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}`
+return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}` +
+						(plainExports[args.path] ?? []).map(
+							name => `\nexport function ${name}() { return []; }`
+						).join( "" )
 				})
 			);
 		}
