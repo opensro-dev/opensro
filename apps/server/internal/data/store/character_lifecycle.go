@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+character_lifecycle.go - a character's creation and deletion reservation
+
+Character creation and deletion-reservation policy, the roster's lookup
+by id, and the store's published health. Persistence remains behind the
+mutation doors; callers never edit authority state directly.
+
+===========================================================================
+*/
+
 package store
 
 import (
@@ -11,8 +23,6 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
-// Character creation and deletion-reservation policy. Persistence remains
-// behind the mutation doors; callers never edit authority state directly.
 var nativeCharacterNameShapePattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 var (
@@ -26,12 +36,18 @@ var (
 	ErrCharacterNameConflict = errors.New("character name already exists")
 )
 
-// CharacterNameShapeValid reports whether name matches the native
-// character-name allowance AND the native 2..12 length bound - the same
-// verdict CreateCharacter's name validation reaches. Exported for the agent
-// API's pre-checks; a pre-check answering on charset alone used to say
-// "name is OK" for 1- and 13-char names the create then refused.
-// CreateCharacter enforces the same rules regardless.
+/*
+================
+CharacterNameShapeValid
+
+CharacterNameShapeValid reports whether name matches the native
+character-name allowance AND the native 2..12 length bound - the same
+verdict CreateCharacter's name validation reaches. Exported for the agent
+API's pre-checks; a pre-check answering on charset alone used to say
+"name is OK" for 1- and 13-char names the create then refused.
+CreateCharacter enforces the same rules regardless.
+================
+*/
 func CharacterNameShapeValid(name string) bool {
 	if strings.TrimSpace(name) == "" || !nativeCharacterNameShapePattern.MatchString(name) {
 		return false
@@ -43,10 +59,16 @@ func CharacterNameShapeValid(name string) bool {
 	return n >= domain.CharacterNameMinBytes && n <= domain.CharacterNameMaxBytes
 }
 
-// CreateCharacter allocates the division's next id (watermark, never
-// reused), installs the record and commits. The error is for
-// VALIDATION only (name conflicts refuse before any mutation); write
-// failures follow the door's fail-open rule like every other commit.
+/*
+================
+CreateCharacter
+
+CreateCharacter allocates the division's next id (watermark, never
+reused), installs the record and commits. The error is for
+VALIDATION only (name conflicts refuse before any mutation); write
+failures follow the door's fail-open rule like every other commit.
+================
+*/
 func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Character) error {
 	if c == nil {
 		return fmt.Errorf("nil character")
@@ -219,9 +241,15 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	return nil
 }
 
-// ValidateCharacterOwners proves that every live record belongs to an
-// account accepted by the current title-login configuration. It is a boot
-// gate, not a migration: unknown owners refuse and no record is rewritten.
+/*
+================
+ValidateCharacterOwners
+
+ValidateCharacterOwners proves that every live record belongs to an
+account accepted by the current title-login configuration. It is a boot
+gate, not a migration: unknown owners refuse and no record is rewritten.
+================
+*/
 func (s *Store) ValidateCharacterOwners(accountIDs []string) error {
 	valid := make(map[string]struct{}, len(accountIDs))
 	for _, accountID := range accountIDs {
@@ -245,11 +273,17 @@ func (s *Store) ValidateCharacterOwners(accountIDs []string) error {
 	return nil
 }
 
-// ReserveCharacterDeletion installs the seven-day deletion reservation only
-// when the character is live and belongs to no guild or training camp. An
-// already-pending retry succeeds idempotently without extending its timestamp.
-// The membership check and character mutation share one store lock, so a
-// social-plane join cannot race the reservation.
+/*
+================
+ReserveCharacterDeletion
+
+ReserveCharacterDeletion installs the seven-day deletion reservation only
+when the character is live and belongs to no guild or training camp. An
+already-pending retry succeeds idempotently without extending its timestamp.
+The membership check and character mutation share one store lock, so a
+social-plane join cannot race the reservation.
+================
+*/
 func (s *Store) ReserveCharacterDeletion(c *domain.Character, reservedAt string) bool {
 	if c == nil {
 		return false
@@ -280,15 +314,31 @@ func (s *Store) ReserveCharacterDeletion(c *domain.Character, reservedAt string)
 	return true
 }
 
+/*
+================
+characterByIDLocked
+
+The division's character with this id, or nil, through the published
+index (character_lookup.go). It used to walk the whole roster: every
+guild view asks once per member and every session's appearance asks for
+its guild each tick, so that walk was members times characters, 2.1 ms
+of a 61 ms tick at 105 players (live profile 2026-11-10), growing with
+every account created. The index is rebuilt under the write lock by
+every roster change, first row winning as the walk did.
+================
+*/
 func (s *Store) characterByIDLocked(divisionID string, characterID int64) *domain.Character {
-	for _, c := range s.characters[divisionID] {
-		if c != nil && c.ID == characterID {
-			return c
-		}
-	}
-	return nil
+	return s.characterLookup(divisionID).ids[characterID]
 }
 
+/*
+================
+characterHasGroupMembershipLocked
+
+Whether the character sits in any guild or training camp of the
+division: the deletion reservation refuses while it does.
+================
+*/
 func (s *Store) characterHasGroupMembershipLocked(divisionID string, characterID int64) bool {
 	for _, members := range s.guildMembers[divisionID] {
 		for _, member := range members {
@@ -307,9 +357,15 @@ func (s *Store) characterHasGroupMembershipLocked(divisionID string, characterID
 	return false
 }
 
-// maxCharIDLocked is the safety net for an unseeded division (fresh
-// environments without a migration): live records only - the migration
-// tool seeds the watermark for anything with history.
+/*
+================
+maxCharIDLocked
+
+maxCharIDLocked is the safety net for an unseeded division (fresh
+environments without a migration): live records only - the migration
+tool seeds the watermark for anything with history.
+================
+*/
 func (s *Store) maxCharIDLocked(divisionID string) int64 {
 	max := int64(0)
 	for _, c := range s.characters[divisionID] {
@@ -350,8 +406,14 @@ func (s *Store) publishHealthLocked() {
 	s.healthView.Store(&view)
 }
 
-// MetaView copies the counters for boot logs and tests. Never call from
-// inside a Mutate closure.
+/*
+================
+MetaView
+
+MetaView copies the counters for boot logs and tests. Never call from
+inside a Mutate closure.
+================
+*/
 func (s *Store) MetaView() MetaView {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

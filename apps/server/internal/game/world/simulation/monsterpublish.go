@@ -41,9 +41,19 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot = actor.slot, actor.monsterSlot, actor.queueSlot
 	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, &actor.mover, players, nowMs)
 	ops.stepGenArmed = false
-	for _, session := range ops.divisionSessions(divisionID, sessions) {
-		if len(frames) > 0 && ops.scopeShown(session.SessionID)[instance.Gid] {
-			push.PushToSession(session.SessionID, frames)
+	// A step that emitted nothing has no viewer to find. Most steps emit
+	// nothing, and the walk below is one pass over the division's
+	// sessions per stepped actor: with it unguarded the leg paid actors
+	// times sessions every tick (2.8 ms of a 61 ms tick at 105 players,
+	// live profile 2026-11-10). By index, because a SessionSnapshot is a
+	// large value and the range copy was most of that cost.
+	if len(frames) > 0 {
+		viewers := ops.divisionSessions(divisionID, sessions)
+		for i := range viewers {
+			sessionID := viewers[i].SessionID
+			if ops.scopeShown(sessionID)[instance.Gid] {
+				push.PushToSession(sessionID, frames)
+			}
 		}
 	}
 	// Private consequences follow the public result in the same operation.
