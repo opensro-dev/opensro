@@ -299,3 +299,46 @@ func TestFortressEndKeepsOnlyRegisteredAlliesOfTheCurrentHolder(t *testing.T) {
 		t.Fatalf("war-end side %+v", kept)
 	}
 }
+
+/*
+================
+TestFortressRankPromotionCommitsOnTheTickLane
+
+Death credit settles only on tick lanes, so a rank promotion's record
+write joins the tick batch (#3099): the label must arrive through the
+deferred door and never through the immediate one, whose per-kill
+transaction was the cost this lane existed to remove.
+================
+*/
+func TestFortressRankPromotionCommitsOnTheTickLane(t *testing.T) {
+	rt, clock, c, _, _ := fortressBattlePair(t)
+	deps := rt.deps.(*enterworld.Deps)
+	deps.Skills = enterworld.NewTextdataSkills(gamedatatest.TextdataDir(t))
+	var immediate, deferred int
+	count := func(dst *int) func(*enterworld.Character, string, func() bool) bool {
+		return func(_ *enterworld.Character, label string, update func() bool) bool {
+			if label == "fortress-battle-rank" {
+				*dst++
+			}
+			return update()
+		}
+	}
+	deps.UpdateCharacter, deps.UpdateCharacterDeferred = count(&immediate), count(&deferred)
+	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
+		t.Fatal(err)
+	}
+	id, ok := rt.activeBattleFortress(testDivision, c)
+	if !ok {
+		t.Fatal("not in fortress")
+	}
+	guild := int64(77)
+	c.GuildID = &guild
+	rt.Fortresses.Occupy(testDivision, id, guild)
+	// Rank 1 stands at 15 kills (fortress.BattleRank).
+	for kills := 0; kills < 15; kills++ {
+		rt.creditFortressBattle(testDivision, id, c, true, clock.NowMs())
+	}
+	if deferred != 1 || immediate != 0 {
+		t.Fatalf("rank promotion doors: deferred %d, immediate %d, want 1 and 0", deferred, immediate)
+	}
+}

@@ -363,3 +363,57 @@ func TestInstanceWorldDeadlineClosesTheLayer(t *testing.T) {
 		t.Fatal("the deadline left the population open")
 	}
 }
+
+/*
+================
+TestInstanceReturnAnchorClearFollowsTheLane
+
+The anchor clear after a return is bookkeeping nothing reads (#3099):
+a layer close, the tick's evacuation, defers it into the tick batch,
+while a character's own return request keeps the immediate door. The
+relocation's commit carries the move on both lanes.
+================
+*/
+func TestInstanceReturnAnchorClearFollowsTheLane(t *testing.T) {
+	c := instanceWorldTestCharacter(11, "First")
+	rt, _ := newInstanceWorldRuntime(t, c)
+	deps := rt.deps.(*enterworld.Deps)
+	var immediate, deferred int
+	count := func(dst *int) func(*enterworld.Character, string, func() bool) bool {
+		return func(_ *enterworld.Character, label string, update func() bool) bool {
+			if label == "instance-return-anchor-clear" {
+				*dst++
+			}
+			return update()
+		}
+	}
+	deps.UpdateCharacter, deps.UpdateCharacterDeferred = count(&immediate), count(&deferred)
+	admitInstanceWorldCharacter(t, rt, c, 1, instanceWorldTestStart)
+
+	lease := openInstanceWorldOrFail(t, rt, instanceWorldTestSingleDefinition, 0)
+	if status := rt.TransferCharacterToInstance(testDivision, c, lease, instanceWorldTestEntry); status != instance.Success {
+		t.Fatalf("transfer: status %d", status)
+	}
+	rt.CloseInstanceWorld(testDivision, lease)
+	if deferred != 1 || immediate != 0 {
+		t.Fatalf("close doors: deferred %d, immediate %d, want 1 and 0", deferred, immediate)
+	}
+	if c.World.InstanceReturn != nil {
+		t.Fatal("the close kept the anchor")
+	}
+
+	immediate, deferred = 0, 0
+	lease = openInstanceWorldOrFail(t, rt, instanceWorldTestSingleDefinition, 0)
+	if status := rt.TransferCharacterToInstance(testDivision, c, lease, instanceWorldTestEntry); status != instance.Success {
+		t.Fatalf("second transfer: status %d", status)
+	}
+	if status := rt.ReturnCharacterFromInstance(testDivision, c); status != instance.Success {
+		t.Fatalf("return: status %d", status)
+	}
+	if immediate != 1 || deferred != 0 {
+		t.Fatalf("return doors: deferred %d, immediate %d, want 0 and 1", deferred, immediate)
+	}
+	if c.World.InstanceReturn != nil {
+		t.Fatal("the return kept the anchor")
+	}
+}
