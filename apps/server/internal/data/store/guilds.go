@@ -33,6 +33,57 @@ func (s *Store) Guilds() domain.GuildStore {
 
 type storeGuildDoor struct{ s *Store }
 
+/*
+================
+markGuildLocked
+
+Record one committed write to a guild: the dirty mark the commit
+carries, plus the revision bump the tick's kept guild appearance keys
+on. Every guild door that writes the row or its member set goes
+through here. s.mu held.
+================
+*/
+func (s *Store) markGuildLocked(key guildKey) {
+	s.bumpGuildRevisionLocked(key)
+	s.changes.guilds[key] = true
+}
+
+/*
+================
+bumpGuildRevisionLocked
+
+Move only the guild's commit count, without the dirty mark, for a
+door that persisted the guild rows itself (the applied rename's own
+transaction); see bumpCharacterRevisionLocked. s.mu held.
+================
+*/
+func (s *Store) bumpGuildRevisionLocked(key guildKey) {
+	if s.guildRevisions == nil {
+		s.guildRevisions = map[guildKey]uint64{}
+	}
+	s.guildRevisions[key]++
+}
+
+/*
+================
+GuildRevision
+
+The guild's committed-write count, for presentation caches that keep
+a resolved guild half between ticks: the count moves exactly when a
+guild door commits a write to the row or its member set, so a kept
+half is re-resolved on the first snapshot after any guild change.
+ok=false when no such guild is stored (never created, or dissolved).
+================
+*/
+func (door storeGuildDoor) GuildRevision(divisionID string, guildID int64) (uint64, bool) {
+	door.s.mu.RLock()
+	defer door.s.mu.RUnlock()
+	if _, ok := door.s.guilds[divisionID][guildID]; !ok {
+		return 0, false
+	}
+	return door.s.guildRevisions[guildKey{division: divisionID, guildID: guildID}], true
+}
+
 // Guild returns copies of the guild row and its member list in wire order;
 // ok=false when no such guild is stored.
 /*
@@ -126,7 +177,7 @@ func (door storeGuildDoor) UpdateGuildAs(
 	storedMembers := guildMembersForStorage(nextMembers)
 	s.guilds[divisionID][guildID] = nextGuild
 	s.guildMembers[divisionID][guildID] = storedMembers
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 	s.commitLocked(label)
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
@@ -233,9 +284,9 @@ func (door storeGuildDoor) CreateGuild(divisionID string, guild domain.GuildReco
 	)
 	leaderCharacter.GuildID = &id
 	s.meta.NextGuildID[divisionID] = id + 1
-	s.changes.guilds[guildKey{division: divisionID, guildID: id}] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: id})
 	s.changes.nextGuildID[divisionID] = true
-	s.changes.characters[leaderCharacter] = true
+	s.markCharacterLocked(leaderCharacter)
 	s.commitLocked("guild-create " + guild.Name)
 	return id, nil
 }
@@ -394,8 +445,8 @@ func (door storeGuildDoor) AddGuildMemberAs(
 	s.guildMembers[divisionID][guildID] = storedMembers
 	id := guildID
 	joiner.GuildID = &id
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	s.changes.characters[joiner] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	s.markCharacterLocked(joiner)
 	s.commitLocked(fmt.Sprintf("guild-add-member %s/%d", divisionID, guildID))
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
@@ -460,10 +511,11 @@ func (door storeGuildDoor) DissolveGuildAs(
 	// subsumes it (deleting the rows persists strictly more than
 	// re-writing their last pre-dissolve state would have).
 	delete(s.changes.guilds, key)
+	delete(s.guildRevisions, key)
 	s.changes.dissolvedGuild[key] = true
 	for _, character := range memberCharacters {
 		character.GuildID = nil
-		s.changes.characters[character] = true
+		s.markCharacterLocked(character)
 	}
 	s.commitLocked(fmt.Sprintf("guild-dissolve %s/%d", divisionID, guildID))
 
@@ -536,8 +588,8 @@ func (door storeGuildDoor) DonateGuildPoints(
 	s.guilds[divisionID][guildID] = guild
 	storedMembers := guildMembersForStorage(next)
 	s.guildMembers[divisionID][guildID] = storedMembers
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	s.changes.characters[donor] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	s.markCharacterLocked(donor)
 	s.commitLocked(fmt.Sprintf("guild-gp-donate %s/%d", divisionID, guildID))
 
 	committedMembers, coherent := door.guildMemberViewsLocked(divisionID, storedMembers)
@@ -589,8 +641,8 @@ func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (dom
 	guild.GP -= cost.GP
 	guild.Level++
 	s.guilds[divisionID][guildID] = guild
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	s.changes.characters[leader] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	s.markCharacterLocked(leader)
 	s.commitLocked(fmt.Sprintf("guild-level-up %s/%d", divisionID, guildID))
 	return domain.GuildSnapshot{Guild: guild, Members: members}, domain.GuildRefusalNone
 }
@@ -629,8 +681,8 @@ func (door storeGuildDoor) ClaimWarCompensationAs(divisionID string, actorID int
 	leader.Gold = &gold
 	guild.WarCompensation = 0
 	s.guilds[divisionID][guildID] = guild
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	s.changes.characters[leader] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	s.markCharacterLocked(leader)
 	s.commitLocked(fmt.Sprintf("guild-war-compensation %s/%d", divisionID, guildID))
 	return amount, domain.GuildRefusalNone
 }
@@ -800,8 +852,8 @@ func (door storeGuildDoor) removeGuildMemberLocked(
 	kept = append(kept, members[targetIndex+1:]...)
 	door.s.guildMembers[divisionID][guildID] = guildMembersForStorage(kept)
 	character.GuildID = nil
-	door.s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	door.s.changes.characters[character] = true
+	door.s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	door.s.markCharacterLocked(character)
 	door.s.commitLocked(fmt.Sprintf("%s %s/%d", label, divisionID, guildID))
 	return domain.GuildRemovalResult{
 		Guild:         guild,
