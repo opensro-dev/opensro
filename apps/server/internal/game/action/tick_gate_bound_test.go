@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -185,8 +186,16 @@ func TestTickGateWaitEndsWithTheHold(t *testing.T) {
 	release := rt.LockPublication(testDivision, "test")
 	done := make(chan bool, 1)
 	go func() { done <- rt.tryLockTickPublication(10 * time.Second) }()
-	// Let the waiter park on the gate before the hold ends.
-	time.Sleep(100 * time.Millisecond)
+	// The waiter parks on the gate: while the hold lasts the tick
+	// cannot return, so the release below is what ends its wait.
+	wait.Consistently(t, 100*time.Millisecond, "the tick returned while the gate was held", func() bool {
+		select {
+		case <-done:
+			return false
+		default:
+			return true
+		}
+	})
 	heldAt := time.Now()
 	release()
 	select {
@@ -233,15 +242,35 @@ func TestTickGateQueuesAheadOfALaterHandler(t *testing.T) {
 	release := rt.LockPublication(testDivision, "test")
 	done := make(chan bool, 1)
 	go func() { done <- rt.tryLockTickPublication(10 * time.Second) }()
-	// Let the tick's waiter park on the gate.
-	time.Sleep(100 * time.Millisecond)
+	// The tick's waiter parks on the gate ahead of any later arrival.
+	wait.Consistently(t, 100*time.Millisecond, "the tick returned while the gate was held", func() bool {
+		select {
+		case <-done:
+			return false
+		default:
+			return true
+		}
+	})
 	handlerServed := make(chan struct{})
 	go func() {
 		rt.LockPublication(testDivision, "test")()
 		close(handlerServed)
 	}()
-	// Let the handler queue behind the tick.
-	time.Sleep(100 * time.Millisecond)
+	// The handler queues behind the parked tick: while the hold
+	// lasts neither waiter is served.
+	wait.Consistently(t, 100*time.Millisecond, "a waiter was served while the gate was held", func() bool {
+		select {
+		case <-done:
+			return false
+		default:
+		}
+		select {
+		case <-handlerServed:
+			return false
+		default:
+			return true
+		}
+	})
 	release()
 	select {
 	case ok := <-done:
