@@ -385,3 +385,40 @@ func TestPendingResumePreservesIndependentOpponentLedger(t *testing.T) {
 		t.Fatal("WANDER resume cleared opponent memory without a release event")
 	}
 }
+
+/*
+================
+TestActivityBlockForMemoizesByPose
+
+The gate's block memo answers a standing pose from the memo, a
+moved actor resolves fresh and refreshes its one memo in place,
+and returning to the first pose re-resolves it - the pointer
+behind the map changes none of the pose guard's answers (#3027).
+================
+*/
+func TestActivityBlockForMemoizesByPose(t *testing.T) {
+	ops := &MonsterMoverOps{}
+	at := Spawn{RegionID: 1, X: 1000, Z: 1000}
+	block, ok := ops.activityBlockFor(7, at)
+	if !ok {
+		t.Fatal("outdoor pose did not resolve a block")
+	}
+	if again, _ := ops.activityBlockFor(7, at); again != block {
+		t.Fatal("standing pose resolved a different block")
+	}
+	moved := at
+	moved.X += 5000
+	fresh, _ := ops.activityBlockFor(7, moved)
+	if fresh == block {
+		t.Fatal("moved actor kept its old block")
+	}
+	if back, _ := ops.activityBlockFor(7, at); back != block {
+		t.Fatal("returned actor did not re-resolve its first block")
+	}
+	if len(ops.activityBlocks) != 1 {
+		t.Fatalf("memo holds %d actors, want the one refreshed memo", len(ops.activityBlocks))
+	}
+	if _, ok := ops.activityBlockFor(8, at); !ok || len(ops.activityBlocks) != 2 {
+		t.Fatal("a second actor did not get its own memo")
+	}
+}

@@ -92,17 +92,26 @@ activityBlockFor
 activityBlockFor is the gate's block resolution: memoized on the ops, so
 a settled actor pays the cave surface walk once instead of once per
 cadence. Shard-owned like resumePending; each ticker clone owns its map.
+The memos sit behind pointers: the gate probes the map per due actor,
+and a value memo made every probe copy the pose and block out of the
+bucket and spread the buckets wide; a moved actor's miss refreshes its
+memo in place instead (#3027).
 ================
 */
 func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.MessageBlock, bool) {
-	if memo, hit := ops.activityBlocks[gid]; hit && memo.pose == at {
+	memo, hit := ops.activityBlocks[gid]
+	if hit && memo.pose == at {
 		return memo.block, memo.ok
 	}
 	block, ok := ops.activityBlock(at)
-	if ops.activityBlocks == nil {
-		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+	if !hit {
+		if ops.activityBlocks == nil {
+			ops.activityBlocks = make(map[uint32]*activityBlockMemo)
+		}
+		ops.activityBlocks[gid] = &activityBlockMemo{pose: at, block: block, ok: ok}
+		return block, ok
 	}
-	ops.activityBlocks[gid] = activityBlockMemo{pose: at, block: block, ok: ok}
+	memo.pose, memo.block, memo.ok = at, block, ok
 	return block, ok
 }
 

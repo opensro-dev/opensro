@@ -337,7 +337,7 @@ accumulates its own and hands them over at the join.
 */
 type legPlanBin struct {
 	positions []int
-	memo      map[uint32]activityBlockMemo
+	memo      map[uint32]*activityBlockMemo
 	stats     legStats
 }
 
@@ -476,7 +476,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 	bins := partitionLegPlans(actors, ops.LegWorkers)
 	var wg sync.WaitGroup
 	for bin := range bins {
-		bins[bin].memo = make(map[uint32]activityBlockMemo, len(bins[bin].positions))
+		bins[bin].memo = make(map[uint32]*activityBlockMemo, len(bins[bin].positions))
 		wg.Add(1)
 		go func(bin *legPlanBin) {
 			defer wg.Done()

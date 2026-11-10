@@ -70,7 +70,7 @@ type MonsterMoverOps struct {
 	resumePending map[populationKey]map[uint32]struct{}
 	// activityBlocks memoizes the activity gate's per-actor block
 	// resolution (monsteractivity.go); shard-owned like resumePending.
-	activityBlocks map[uint32]activityBlockMemo
+	activityBlocks map[uint32]*activityBlockMemo
 	// legSessions groups the running leg's sessions by division, built
 	// at the top of RunMonsterLeg and cleared when it returns, so the
 	// per-actor publish path iterates one division's viewers instead of
@@ -308,7 +308,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// the one map header, as the memo's shard-owned design intends. The
 	// gate keeps its lazy make for direct callers outside a leg.
 	if ops.activityBlocks == nil {
-		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+		ops.activityBlocks = make(map[uint32]*activityBlockMemo)
 	}
 
 	// Slow-leg attribution (#1820 part C): one record per leg, filled
