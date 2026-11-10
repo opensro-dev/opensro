@@ -59,6 +59,9 @@ export type AssetWorkerMessage =
 	// Port-only (#2800): the published build carries the HD set's index
 	// (the main pack index says so), learned once that index is read.
 	| { kind: "hd-availability"; available: boolean; }
+	// A pack this page's manifest names answered 404: the release moved
+	// under the page (#3104). The release watch checks at once.
+	| { kind: "release-stale"; }
 	| Exclude<AssetResult, { kind: "world"; }>
 	| {
 		kind: "world";
@@ -139,8 +142,9 @@ export type AssetResult =
 		image: ImageBitmap;
 		alpha?: import("@/engine/foundation/rendering/picking").PickAlpha;
 	}
-	// The entry bundle the live page names, or null when it names none.
-	| { kind: "release"; id: number; entry: string | null; }
+	// The entry bundle the live page names, or null when it names none;
+	// packsChanged marks a live packs manifest unlike this page's (#3104).
+	| { kind: "release"; id: number; entry: string | null; packsChanged?: boolean; }
 	| {
 		kind: "bytes";
 		id: number;

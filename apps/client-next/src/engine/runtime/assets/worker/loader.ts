@@ -471,7 +471,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	function hdAvailability( available: boolean ) {
 		send( { kind: "hd-availability", available }, [] );
 	}
-	const packs = createPacks( download, activity, hdAvailability );
+	/*
+	================
+	packGone
+
+	A pack this page's manifest names answered 404: the release moved
+	under the page (#3104). Posted at once, not attached to the job the
+	loose recovery may still satisfy.
+	================
+	*/
+	function packGone() {
+		send( { kind: "release-stale" }, [] );
+	}
+	const packs = createPacks( download, activity, hdAvailability, packGone );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
 	// wait for the answer.
@@ -901,10 +913,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						alpha ? [ image, alpha.pixels.buffer ] : [ image ]
 					);
 				} else if ( request.decode === "release" ) {
-					// The live page (fetched no-cache): report the entry bundle it names.
+					// The live page (fetched no-cache): report the entry bundle it names,
+					// and whether the live packs manifest moved (a data publish keeps
+					// the entry, so the bundle alone cannot see it, #3104).
 					const html = new TextDecoder( "utf-8" ).decode( bytes );
+					const packsChanged = await packs.liveManifestChanged( url.origin ).catch( () => false );
 					pending.delete( request.id );
-					send( { kind: "release", id: request.id, entry: pageEntryBundle( html, url.origin ) }, [] );
+					send( {
+						kind: "release",
+						id: request.id,
+						entry: pageEntryBundle( html, url.origin ),
+						...(packsChanged ? { packsChanged: true } : {})
+					}, [] );
 				} else {
 					pending.delete( request.id );
 					send( { kind: "bytes", id: request.id, buffer: bytes.buffer }, [ bytes.buffer ] );

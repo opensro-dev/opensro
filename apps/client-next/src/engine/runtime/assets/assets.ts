@@ -302,6 +302,12 @@ export function createAssets(): AssetOwner {
 			}
 			return;
 		}
+		if ( event.data.kind === "release-stale" ) {
+			// A pack this page's manifest names is gone (#3104): the same
+			// news a listed file's 404 brings, checked by the release watch.
+			if ( !disposed && !failure ) releaseStale = true;
+			return;
+		}
 		if ( event.data.kind === "released" ) {
 			const job = jobs.get( event.data.id );
 			if ( job?.cancelled ) jobs.delete( event.data.id );
