@@ -304,3 +304,121 @@ test("a family run inside the build records its own owner and the build's claims
 		"/assets/data/build.json"
 	] );
 });
+
+test("a claimed file that is not on disk refuses the pack tail", async () => {
+	await publicFile( "/assets/images/live.png" );
+	// The outdoor owner's record still claims the texture under its proper
+	// name, but the file never reached this tree (2026-11-10).
+	const claimedMissing = "/assets/world/outdoor/object-textures/rock mt/중심벽.texture";
+	for ( const owner of ledger.expectedOwners() ) {
+		await ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) await ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
+		if ( owner === "outdoor-world" ) await ledger.claimPublicPaths( [ claimedMissing ] );
+		await ledger.commitPublication();
+	}
+	const message = await ledger
+		.auditClaims(
+			[ { name: "game-images", files: [ "/assets/images/live.png" ] } ],
+			{ archiveRoot: path.join( root, "archive" ) }
+		)
+		.then( () => "", error => error.message );
+	assert.match( message, /claimed by a build owner but are not on disk/ );
+	assert.ok( message.includes( claimedMissing ), "the refusal names the missing claimed path" );
+});
+
+test("an unclaimed non-ASCII name is a damaged copy, never archived", async () => {
+	await publicFile( "/assets/images/live.png" );
+	// The same texture as the copy damage of 2026-11-10 spelled it: the
+	// Hangul name read through the wrong code page.
+	const damagedFile = await publicFile( "/assets/world/outdoor/object-textures/rock mt/\u221E\u00F1\u00E6.texture" );
+	for ( const owner of ledger.expectedOwners() ) {
+		await ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) await ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
+		await ledger.commitPublication();
+	}
+	const message = await ledger
+		.auditClaims(
+			[ { name: "game-images", files: [ "/assets/images/live.png" ] } ],
+			{ archiveRoot: path.join( root, "archive" ) }
+		)
+		.then( () => "", error => error.message );
+	assert.match( message, /non-ASCII names no build owner claims/ );
+	await stat( damagedFile );
+});
+
+test("a named baseline refuses a still-claimed path the new index drops", async () => {
+	const { buildAssetPacks } = await import( "../../build/assetPacks.mjs" );
+	const publicRoot = path.join( root, "client-public" );
+	const model = name => `/assets/models/${name}.glb`;
+	for ( const name of [ "a", "b", "c" ] ) await publicFile( model( name ) );
+	const claim = async claimed => {
+		for ( const owner of ledger.expectedOwners() ) {
+			await ledger.beginPublication( owner );
+			if ( owner === "resource-build" ) await ledger.claimPublicPaths( claimed );
+			await ledger.commitPublication();
+		}
+	};
+	await claim( [ model( "a" ), model( "b" ), model( "c" ) ] );
+	const baselinePath = path.join( root, "baseline-index.json" );
+	await writeFile(
+		baselinePath,
+		JSON.stringify( {
+			format: "sro-asset-pack-index",
+			version: 1,
+			assetSchema: 1,
+			generatedAt: "now",
+			targetPackBytes: 1500,
+			groups: [],
+			assets: [ model( "a" ), model( "b" ), model( "c" ) ].map( publicPath => ({ path: publicPath }) )
+		} )
+	);
+	const build = files =>
+		buildAssetPacks( {
+			publicRoot,
+			outputRoot: path.join( publicRoot, "assets", "packs" ),
+			hashCachePath: path.join( root, "hash-cache.json" ),
+			targetBytes: 1500,
+			baselineIndexPath: baselinePath,
+			groups: [ { name: "game-models", load: "lazy", files } ]
+		} );
+	const message = await build( [ model( "a" ), model( "b" ) ] ).then( () => "", error => error.message );
+	assert.match( message, /no build owner retired/ );
+	assert.ok( message.includes( model( "c" ) ), "the refusal names the lost path" );
+	await claim( [ model( "a" ), model( "b" ) ] );
+	const built = await build( [ model( "a" ), model( "b" ) ] );
+	assert.equal( built.assetCount, 2, "once the owner retires the path the same build passes" );
+});
+
+test("an index that lost a claimed asset is refused, loose families aside", async () => {
+	for ( const owner of ledger.expectedOwners() ) {
+		await ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) {
+			await ledger.claimPublicPaths( [
+				"/assets/models/a.glb",
+				"/assets/models/b.glb",
+				"/assets/fonts/sro-default.ttf",
+				"/assets/fonts/native-ui-font-atlas.png",
+				"/assets/packs/game-data-001-abcdef.bin"
+			] );
+		}
+		await ledger.commitPublication();
+	}
+	const problems = await ledger.verifyIndexClaims( { assets: [ { path: "/assets/models/a.glb" } ] } );
+	assert.match( problems.join( "; " ), /2 asset\(s\) claimed by a build owner but missing from the pack index/ );
+	assert.ok( problems.join( "; " ).includes( "/assets/models/b.glb" ), "the refusal names the lost asset" );
+	assert.ok(
+		problems.join( "; " ).includes( "/assets/fonts/native-ui-font-atlas.png" ),
+		"a font atlas is a pack member, not loose: its loss is named too"
+	);
+	assert.deepEqual(
+		await ledger.verifyIndexClaims( {
+			assets: [
+				{ path: "/assets/models/a.glb" },
+				{ path: "/assets/models/b.glb" },
+				{ path: "/assets/fonts/native-ui-font-atlas.png" }
+			]
+		} ),
+		[],
+		"the loose .ttf files and the pack tail's own files are not pack members and never count as missing"
+	);
+});
