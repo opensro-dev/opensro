@@ -23,5 +23,9 @@ export type PackDownload = (
 	url: string,
 	limit: number,
 	signal: AbortSignal,
-	range?: PackRange
+	range?: PackRange,
+	// The response's HTTP validator (its ETag), reported on a whole-object
+	// read so the packs manifest's admitted copy can later be compared
+	// against the live one without downloading it again (#3104).
+	observeValidator?: ( validator: string | null ) => void
 ) => Promise<Uint8Array<ArrayBuffer>>;

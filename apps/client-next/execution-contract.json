@@ -567,7 +567,8 @@
 				"download",
 				"activity",
 				"hdAvailability",
-				"packGone"
+				"packGone",
+				"liveManifestValidator"
 			]
 		},
 		{

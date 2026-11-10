@@ -98,7 +98,8 @@ export function createPacks(
 	download: PackDownload,
 	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {},
 	hdAvailability: ( available: boolean ) => void = () => {},
-	packGone: ( packPath: string ) => void = () => {}
+	packGone: ( packPath: string ) => void = () => {},
+	liveManifestValidator: ( url: string ) => Promise<string | null> = () => Promise.resolve( null )
 ) {
 	const persistent = createPersistentAssets(), parser = createPackIndex(), lifetime = new AbortController();
 	const blocks = createPackBlocks( download, lifetime.signal );
@@ -123,6 +124,10 @@ export function createPacks(
 	// The digest of the admitted packs manifest: this page's client-data
 	// generation, compared against the live one by liveManifestChanged.
 	let manifestDigest: string | null = null;
+	// The admitted manifest's HTTP validator (its ETag), observed on the
+	// admission download: the cheap live compare (a HEAD, never the 15 MB
+	// body again). Null when the server sent none; the digest then serves.
+	let manifestValidator: string | null = null;
 	// Packs the server answered 404 for, reported once each: the manifest
 	// this page holds names files a newer release replaced (#3104). Loose
 	// recovery may still serve the member; the release news stands.
@@ -250,7 +255,15 @@ export function createPacks(
 		// download here, the first moment it can.
 		kickHdInstall();
 		if ( !index ) {
-			const operation = download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal ).then(
+			const operation = download(
+				base + "/assets/packs/manifest.json",
+				16 << 20,
+				lifetime.signal,
+				undefined,
+				validator => {
+					manifestValidator = validator;
+				}
+			).then(
 				bytes => {
 					// The generation digest trails admission; a release check
 					// that beats it simply sees no change yet.
@@ -667,12 +680,22 @@ export function createPacks(
 		Whether the live packs manifest differs from the one this page
 		admitted: the client-data generation moved (a data publish keeps
 		the same entry bundle, so the page check alone cannot see it).
-		False while no manifest has been admitted.
+		The admitted copy's HTTP validator answers first - one HEAD
+		against the live manifest, never the 15 MB body per check - and
+		only a server that sent no validator falls back to downloading
+		and hashing it. False while no manifest has been admitted. A
+		failed compare throws: the caller must hear that the check did
+		not run, never read silence as "unchanged".
 		================
 		*/
 		async liveManifestChanged( base: string ): Promise<boolean> {
+			const url = base + "/assets/packs/manifest.json";
+			if ( manifestValidator !== null ) {
+				const live = await liveManifestValidator( url );
+				if ( live !== null ) return live !== manifestValidator;
+			}
 			if ( manifestDigest === null ) return false;
-			const bytes = await download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal );
+			const bytes = await download( url, 16 << 20, lifetime.signal );
 			return await digest( bytes ) !== manifestDigest;
 		},
 		/*

@@ -143,8 +143,11 @@ export type AssetResult =
 		alpha?: import("@/engine/foundation/rendering/picking").PickAlpha;
 	}
 	// The entry bundle the live page names, or null when it names none;
-	// packsChanged marks a live packs manifest unlike this page's (#3104).
-	| { kind: "release"; id: number; entry: string | null; packsChanged?: boolean; }
+	// packsChanged marks a live packs manifest unlike this page's (#3104);
+	// packsCheckFailed marks a manifest compare that could not run, which
+	// the asset owner reports as a degradation instead of reading the
+	// silence as "unchanged".
+	| { kind: "release"; id: number; entry: string | null; packsChanged?: boolean; packsCheckFailed?: boolean; }
 	| {
 		kind: "bytes";
 		id: number;

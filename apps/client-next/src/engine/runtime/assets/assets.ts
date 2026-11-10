@@ -47,6 +47,7 @@ const REQUEST_ABSOLUTE_MS = 600000;
 const CANCEL_ACK_MS = REQUEST_DECODE_STALL_MS;
 // The degraded code an unacknowledged cancellation reports (client AGENTS.md).
 const CANCEL_UNACKNOWLEDGED = "asset-cancel-unacknowledged";
+const PACKS_CHECK_FAILED = "asset-packs-check-failed";
 /*
 ================
 createAssets
@@ -326,6 +327,15 @@ export function createAssets(): AssetOwner {
 		}
 		const result = event.data, job = jobs.get( result.id );
 		if ( result.kind === "error" && result.stale ) releaseStale = true;
+		if ( result.kind === "release" && result.packsCheckFailed ) {
+			// The manifest compare never ran (#3104): say so once per
+			// failure through the degradation channel instead of letting
+			// the release check read as "nothing changed".
+			degradations.push( {
+				code: PACKS_CHECK_FAILED,
+				message: "The live packs manifest could not be compared; the update check will retry"
+			} );
+		}
 		if ( job?.cancelled ) {
 			close( result );
 			jobs.delete( result.id );
