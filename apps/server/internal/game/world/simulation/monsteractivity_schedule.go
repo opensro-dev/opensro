@@ -73,7 +73,7 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 	if s.tryDormant(state, gid, m, now) {
 		return slot
 	}
-	resident, _ := state.instances.hotRow(gid)
+	resident, _ := state.instances.hotRowPtr(gid)
 	state.behavior.set(gid, s.nextBehaviorDue(state, gid, m, resident, now))
 	return slot
 }
@@ -106,9 +106,9 @@ func (s *MonsterState) scheduleBehaviorCommitted(state *divisionMonsterState, gi
 	if s.tryDormant(state, gid, m, now) {
 		return
 	}
-	resident, hot := state.instances.hotRowAt(monsterSlot, gid)
+	resident, hot := state.instances.hotRowPtrAt(monsterSlot, gid)
 	if !hot {
-		resident, _ = state.instances.hotRow(gid)
+		resident, _ = state.instances.hotRowPtr(gid)
 	}
 	state.behavior.setAtSlot(queueSlot, gid, s.nextBehaviorDue(state, gid, m, resident, now))
 }
@@ -126,9 +126,9 @@ gid door and the batch build's carried door share it, so both arm
 the same due for the same rows.
 ================
 */
-func (s *MonsterState) nextBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) int64 {
+func (s *MonsterState) nextBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident *residentMonster, now int64) int64 {
 	at := now + 1
-	commandPending := resident.help.HasPending()
+	commandPending := resident != nil && resident.help.HasPending()
 	if m.mode == monster.MoverPending && m.activity.Interval != 0 && !commandPending {
 		elapsed := uint32(now) - m.activity.LastCheck
 		if elapsed <= uint32(m.activity.Interval) {
@@ -172,11 +172,11 @@ the ops' TacticsFor override is a test seam the scheduler sits
 below, so a nest the tables call passive keeps the gate cadence.
 ================
 */
-func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) (int64, bool) {
+func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident *residentMonster, now int64) (int64, bool) {
 	if m.idleEntryPending || m.stuck || m.controlMode == monster.ControlSummoned || m.targetGID != 0 {
 		return 0, false
 	}
-	if resident.currentHP == 0 || resident.nestDetached || resident.sparse&sparseAbnormal != 0 {
+	if resident == nil || resident.currentHP == 0 || resident.nestDetached || resident.sparse&sparseAbnormal != 0 {
 		return 0, false
 	}
 	if resident.motion.StateAt(now) != 0 || m.activity.Interval == 0 {
@@ -262,9 +262,9 @@ func (s *MonsterState) scheduleBehaviorCarried(state *divisionMonsterState, ref 
 	if s.tryDormant(state, gid, m, now) {
 		return
 	}
-	resident, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
+	resident, hot := state.instances.hotRowPtrAt(ref.monsterSlot, gid)
 	if !hot {
-		resident, _ = state.instances.hotRow(gid)
+		resident, _ = state.instances.hotRowPtr(gid)
 	}
 	state.behavior.setAt(*ref, s.nextBehaviorDue(state, gid, m, resident, now))
 }

@@ -334,6 +334,10 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// petSessionKeys is advancePets' sorted gid-bearing session
+	// list, cached under petMu and rebuilt only when a membership
+	// writer drops it (orderedPetSessionKeys, petai.go) (#2033).
+	petSessionKeys []petOwnerKey
 	// mercenaryKeys is the cooldown pass's owner-key scratch
 	// (mercenary_clock.go): refilled under petMu on every pass and
 	// consumed in line by the same pass, so a steady tick grows
