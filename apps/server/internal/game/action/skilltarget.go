@@ -261,6 +261,6 @@ func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, int
 	if skill.Threat.Decrease {
 		return prependOpResult(transition, rt.acceptDiscordWave(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs))
 	}
-	result, _ := rt.acceptSupportSkillPhase(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs, nil)
+	result, _ := rt.acceptSupportSkillPhase(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs, nil, rt.handlerDoors())
 	return prependOpResult(transition, result)
 }

@@ -133,7 +133,7 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 				return petTrainingReceipt("Select a monster for Savage Rend.")
 			}
 		}
-		order := rt.orderPetAttack(division, owner, snapshot, gid, target, now)
+		order := rt.orderPetAttack(division, owner, snapshot, gid, target, now, rt.handlerDoors())
 		if order.DiagnosticRefusal != "" {
 			return petTrainingReceipt("That enemy cannot be attacked by your pet.")
 		}

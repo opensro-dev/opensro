@@ -38,7 +38,7 @@ around the caster (the taunt's caster-centred selection); each is a
 successful zero-damage record of the release.
 ================
 */
-func (rt *Runtime) acceptMirage(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptMirage(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if !skill.Threat.Decrease || skill.TargetRequired || rt.Monsters == nil {
 		return OpResult{DiagnosticRefusal: "mirage-admission-refused"}, skillCastRefused
 	}
@@ -52,7 +52,7 @@ func (rt *Runtime) acceptMirage(division string, c, snapshot *enterworld.Charact
 	}
 	victims := rt.tauntVictims(tauntCast{division: division, character: c, snapshot: snapshot, skill: skill, now: now})
 	var refusal uint16
-	if !rt.deps.Update(c, "release-mirage", func() bool {
+	if !doors.update(c, "release-mirage", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
 		}

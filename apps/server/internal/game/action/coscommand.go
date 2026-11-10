@@ -66,7 +66,7 @@ func (rt *Runtime) handleCosCommand(divisionID string, character *enterworld.Cha
 		// vehicle with the +0x210 capability carries its rider into battle
 		// (below), an attack pet fights on its own AI (petcombat.go).
 		if pet, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid); pet != nil && ref.TidWord>>11 == attackPetBand {
-			return rt.orderPetAttack(divisionID, character, pet, command.CosGid, command.TargetGid, rt.Now().UnixMilli())
+			return rt.orderPetAttack(divisionID, character, pet, command.CosGid, command.TargetGid, rt.Now().UnixMilli(), rt.handlerDoors())
 		}
 	}
 

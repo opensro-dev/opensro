@@ -101,7 +101,7 @@ func TestScreamMaskStunsAPlayerAttacker(t *testing.T) {
 	if code := rt.effects.ApplyLink(l); code != 0 {
 		t.Fatal(code)
 	}
-	rt.screamMaskPlayer(testDivision, c, attacker, clock.NowMs())
+	rt.screamMaskPlayer(testDivision, c, attacker, clock.NowMs(), rt.handlerDoors())
 	block := rt.playerAbnormal(testDivision, attacker.Name)
 	if block == nil || !block.Slots[abnormal.Stun].Active {
 		t.Fatal("the attacking player was not stunned")

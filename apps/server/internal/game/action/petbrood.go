@@ -488,7 +488,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 				if state.combat == nil {
 					rt.cancelPetCombat(childKey, child, now)
 				} else if child.combat == nil || child.combat.target != state.combat.target {
-					rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), gid, state.combat.target, now)
+					rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), gid, state.combat.target, now, rt.tickDoors())
 				}
 			}
 			state.public = append(state.public, output...)
@@ -580,7 +580,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 			if state.combat == nil {
 				rt.cancelPetCombat(childKey, child, now)
 			} else if child.combat == nil || child.combat.target != state.combat.target {
-				rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), pet.GID, state.combat.target, now)
+				rt.orderPetAttack(key.division, state.character, rt.characterSnapshot(key.division, state.character), pet.GID, state.combat.target, now, rt.tickDoors())
 			}
 		}
 	}
