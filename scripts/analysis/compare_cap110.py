@@ -222,8 +222,9 @@ def main():
 	build = REPO_ROOT / ".state" / "cap110-audit"
 	build.mkdir(parents=True, exist_ok=True)
 	executable = build / ("skill-program-audit.exe" if sys.platform == "win32" else "skill-program-audit")
+	# -trimpath: one build cache for every checkout (scripts/lib/goEnvironment.mjs).
 	subprocess.run(
-		["go", "build", "-o", str(executable), "./cmd/tools/skill-program-audit"],
+		["go", "build", "-trimpath", "-o", str(executable), "./cmd/tools/skill-program-audit"],
 		cwd=REPO_ROOT / "apps" / "server", check=True
 	)
 	report = compare_archives(args.native_root, args.vsro_root, executable)

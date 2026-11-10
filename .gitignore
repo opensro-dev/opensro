@@ -31,6 +31,10 @@ coverage/
 .nyc_output/
 playwright-report/
 test-results/
+# Go test binaries (`go test -c`): rebuilt in seconds, never an edit to keep.
+# Left untracked they made a worktree look unsaved and held it on disk.
+*.test.exe
+*.test
 
 # Legacy scratch locations, superseded by temp/. Kept ignored so an old tool or
 # habit cannot publish them again.

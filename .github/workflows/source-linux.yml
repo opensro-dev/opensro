@@ -135,6 +135,10 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Every Go command of the job compiles with -trimpath, as the gate's
+      # own steps do (scripts/lib/goEnvironment.mjs): one build-cache key.
+      GOFLAGS: -trimpath
     # The Go gate spread over four runners: on one 4-core runner its steps
     # fought for the CPU (race 271 s). Each shard gets the whole machine.
     strategy:
