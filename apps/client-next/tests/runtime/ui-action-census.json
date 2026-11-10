@@ -15173,20 +15173,19 @@
 				"experimental-tab:0": null,
 				"experimental-tab:1": {
 					"added": [
-						"experimental-chat-timestamps",
 						"experimental-confirm-guild-ban",
 						"experimental-drop-on-bag-tab",
-						"experimental-event-chat-tab",
 						"experimental-exchange-click-shortcuts",
 						"experimental-fit-window-labels",
 						"experimental-grey-disabled-tabs",
 						"experimental-seal-under-heading",
+						"experimental-set-bonus-tooltip",
 						"experimental-silk-history",
 						"experimental-touch-inspect"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "b1b43db7da279eef",
+					"hash": "569c1a45cb0804b1",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
