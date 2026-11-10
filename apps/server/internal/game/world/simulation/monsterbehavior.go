@@ -437,6 +437,131 @@ func idleRestQuiescent(ops *MonsterMoverOps, instance *monster.Instance, mover m
 	return restGuardFailure(ops, instance, mover, tactics, nowMs) == restGuardPass
 }
 
+/*
+================
+restFacts
+
+Every input the settled verdict reads, projected off the stored
+rows by the rest-facts door (MonsterState.restFactsAt) instead of
+the 2.7 KB snapshot expansion: the mover facts the guards read, the
+resident facts behind them (motion, help, hit points, the nest the
+detach test and the tactics projection read, the abnormal block's
+confusion face behind Tempted), whether tactics events are queued,
+and the row identity (slots, mover generation) a later commit
+guards on. Plain values only; the door is the only writer.
+================
+*/
+type restFacts struct {
+	slot        uint32
+	monsterSlot uint32
+	moverGen    uint64
+
+	mode               monster.MoverMode
+	idleEntryPending   bool
+	activity           monster.ActivityCadence
+	controlMode        monster.ControlMode
+	targetGID          uint32
+	behaviorDeadlineMs int64
+	navGoal            bool
+	segFrom            monster.Pose
+	segTo              monster.Pose
+	segDepartMs        int64
+	segArriveMs        int64
+	liveRegion         uint16
+
+	motion       monster.MotionHold
+	help         monster.HelpInbox
+	currentHP    uint32
+	refMaxHP     uint32
+	nestDetached bool
+	nestRegionID uint16
+	aggressive   bool
+	tempted      bool
+
+	eventsPending bool
+}
+
+/*
+================
+restGuardFailureFromFacts
+
+restGuardFailure over the door's facts: the same guards in the same
+order, each reading the projection of the fact the expanded read
+reads - mode and entry from the mover row, cadence from its stamp,
+help from the resident inbox, the target guard from the held target
+or the abnormal block's confusion (Tempted, the one hotFill-joined
+fact a guard touches), the aggressive guard from the nest
+projection ResolveTactics derives it from. The equivalence test
+(monsteridle_rest_door_test.go) pins this verdict against the
+expanded read's over seeded states, per input.
+================
+*/
+func restGuardFailureFromFacts(facts restFacts, activityWired bool, nowMs int64) restGuard {
+	if facts.mode != monster.MoverIdle || facts.idleEntryPending {
+		return restGuardMode
+	}
+	// The activity gate's Due test, read without committing the cadence.
+	if activityWired && uint32(nowMs)-facts.activity.LastCheck > uint32(facts.activity.Interval) {
+		return restGuardCadence
+	}
+	if facts.help.HasPending() {
+		return restGuardHelp
+	}
+	if facts.controlMode == monster.ControlSummoned {
+		return restGuardSummoned
+	}
+	if facts.tempted || facts.targetGID != 0 {
+		return restGuardTarget
+	}
+	if nowMs > facts.behaviorDeadlineMs {
+		return restGuardDeadline
+	}
+	if facts.aggressive {
+		return restGuardAggressive
+	}
+	if facts.navGoal {
+		return restGuardGoal
+	}
+	if facts.segFrom != (monster.Pose{}) || facts.segTo != (monster.Pose{}) || facts.segArriveMs > facts.segDepartMs ||
+		facts.segArriveMs > facts.segDepartMs && nowMs < facts.segArriveMs {
+		return restGuardSegment
+	}
+	return restGuardPass
+}
+
+/*
+================
+restSettledFromFacts
+
+The settled verdict at snapshot-build time (#3027, design A): the
+actor is a rest candidate (every guard but the cadence passes, the
+cadence due) and the step stages before and beside the verdict
+cannot act either - the corpse/motion guard stands down, the
+cross-plane detach is a no-op on its face, and no tactics event is
+queued for the step to drain. Such an actor's whole step returns
+nil and commits nothing, so a lane may skip its snapshot fill and
+its step and let the leg-end remainder arm re-arm the untouched
+row. Any doubt answers false: the full step runs exactly as today.
+================
+*/
+func restSettledFromFacts(facts restFacts, activityWired bool, nowMs int64) bool {
+	if restGuardFailureFromFacts(facts, activityWired, nowMs) != restGuardCadence {
+		return false
+	}
+	// The step's head guard: a corpse or a held motion returns there.
+	if facts.motion.StateAt(nowMs) != 0 || (facts.refMaxHP > 0 && facts.currentHP == 0) {
+		return false
+	}
+	// detachCrossPlaneNest on its face: already detached, or the
+	// indoor bits agree, so its locked branch can never fire.
+	if !facts.nestDetached && (facts.nestRegionID^facts.liveRegion)&0x8000 != 0 {
+		return false
+	}
+	// The step drains the tactics queue before the verdict; a queued
+	// event must reach that drain, never be skipped over.
+	return !facts.eventsPending
+}
+
 func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// The native idle tick checks state expiry before the acquisition
 	// callback.

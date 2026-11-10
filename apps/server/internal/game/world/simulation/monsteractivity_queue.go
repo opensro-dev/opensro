@@ -692,6 +692,57 @@ func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref
 
 /*
 ================
+MonsterState.restFactsAt
+
+The settled verdict's inputs for one actor, read off the stored
+rows (restGuardFailureFromFacts, restSettledFromFacts): the narrow
+door design A reads at snapshot-build time so a settled actor's
+2.7 KB fill never happens (#3027 stage 2). ok is false when the
+actor is gone, the same answer the snapshot fill gives. Nothing
+here expands an instance or a mover: each fact is projected where
+it sits (monster_storage_hot.go, mover_storage.go), and the
+equivalence test pins every projection against the expanded read.
+================
+*/
+func (s *MonsterState) restFactsAt(key populationKey, ref behaviorActorRef, nowMs int64) (restFacts, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(key.division, key.lease)
+	if state == nil {
+		return restFacts{}, false
+	}
+	return s.restFactsLocked(state, ref, nowMs)
+}
+
+/*
+================
+MonsterState.restFactsLocked
+
+restFactsAt with the population resolved and s.mu held: the leg
+snapshot's build reads a whole batch through this one helper under
+its single locked pass (stage 3), so a build-time verdict and a
+step-time verdict read the same rows the same way.
+================
+*/
+func (s *MonsterState) restFactsLocked(state *divisionMonsterState, ref behaviorActorRef, nowMs int64) (restFacts, bool) {
+	var facts restFacts
+	if !state.instances.restFactsAt(ref.monsterSlot, ref.gid, &facts) {
+		return restFacts{}, false
+	}
+	if !state.movers.restFactsAt(ref.slot, ref.gid, nowMs, &facts) {
+		// No mover row yet: the fill synthesizes the spawn mover
+		// (behaviorActorMoverInto), whose mode alone decides every
+		// guard, so the facts carry just it and its generation.
+		facts.mode = monster.MoverSpawning
+		facts.slot = behaviorNoMoverSlot
+		facts.moverGen = state.movers.generationAt(behaviorNoMoverSlot, ref.gid)
+	}
+	facts.eventsPending = len(state.aiEvents[ref.gid]) > 0
+	return facts, true
+}
+
+/*
+================
 MonsterState.behaviorActorMoverInto
 
 behaviorActorMoverLocked written in place (#2982): the leg snapshot

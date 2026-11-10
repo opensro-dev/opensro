@@ -16,6 +16,11 @@ read.
 
 package simulation
 
+import (
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/world/monster"
+)
+
 /*
 ================
 hotRow
@@ -120,6 +125,88 @@ func (s *monsterStorage) hotProbeAt(slot uint32, gid uint32) (currentHP uint32, 
 	}
 	held := &s.hot[slot]
 	return held.row.currentHP, held.maxHP, held.row.summonActionUntilMs, true
+}
+
+/*
+================
+restFactsAt
+
+The instance half of the rest-facts door (MonsterState.restFactsAt):
+the resident facts the settled verdict reads, projected where they
+sit instead of paying residentMonster.fill plus hotFill to expand
+the 2 KB instance. The slot hint is verified against the gid, then
+resolved by gid, exactly the snapshot fill's own resolution; a cold
+row answers from the hydration lookup itself falls back to,
+projected the same way. The confusion face is the one sparse join a
+verdict input touches (Tempted, behind the target guard): it reads
+the abnormal block the fill would join, never a copy of it. False
+only when the actor is gone.
+================
+*/
+func (s *monsterStorage) restFactsAt(slot uint32, gid uint32, facts *restFacts) bool {
+	if slot < uint32(len(s.hot)) && s.hot[slot].gid == gid {
+		s.hot[slot].row.projectRestFacts(s, gid, facts)
+		facts.monsterSlot = slot
+		return true
+	}
+	if row, resolved, ok := s.hotRowSlot(gid); ok {
+		row.projectRestFacts(s, gid, facts)
+		facts.monsterSlot = resolved
+		return true
+	}
+	instance, ok := s.lookup(gid)
+	if !ok {
+		return false
+	}
+	facts.projectInstance(instance)
+	// lookup leaves the snapshot's monster slot at the caller's hint
+	// for a cold row (behaviorActorMoverInto), and so does this door.
+	facts.monsterSlot = slot
+	return true
+}
+
+/*
+================
+residentMonster.projectRestFacts
+
+The resident row's verdict facts, read off the row and its interned
+handles: motion, help and hit points as they sit; the nest facts the
+detach test and the tactics projection read (ResolveTactics derives
+Aggressive from the nest's own flags - the door projects that one
+derivation); temptation from the sparse abnormal join.
+================
+*/
+func (r residentMonster) projectRestFacts(s *monsterStorage, gid uint32, facts *restFacts) {
+	facts.motion = r.motion
+	facts.help = r.help
+	facts.currentHP = r.currentHP
+	facts.refMaxHP = r.ref.Value().MaxHP
+	facts.nestDetached = r.nestDetached
+	nest := r.nest.Value()
+	facts.nestRegionID = nest.RegionID
+	facts.aggressive = nest.Aggressive && (nest.PolicyPinned || nest.RetailEvidence || nest.HasControls)
+	facts.tempted = r.currentHP != 0 && r.sparse&sparseAbnormal != 0 && s.abnormal[gid] != nil &&
+		s.abnormal[gid].Slots[abnormal.Confusion].Active
+}
+
+/*
+================
+restFacts.projectInstance
+
+projectRestFacts for a hydrated cold row: the same facts read off
+the expanded instance the fill would have built, through the same
+methods (Tempted is the instance's own).
+================
+*/
+func (facts *restFacts) projectInstance(instance monster.Instance) {
+	facts.motion = instance.Motion
+	facts.help = instance.Help
+	facts.currentHP = instance.CurrentHP
+	facts.refMaxHP = instance.Ref.MaxHP
+	facts.nestDetached = instance.NestDetached
+	facts.nestRegionID = instance.Nest.RegionID
+	facts.aggressive = instance.Nest.Aggressive && (instance.Nest.PolicyPinned || instance.Nest.RetailEvidence || instance.Nest.HasControls)
+	facts.tempted = instance.Tempted()
 }
 
 /*

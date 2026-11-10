@@ -496,6 +496,65 @@ func (s *moverStorage) lookupAtInto(dst *monster.MoverState, slot uint32, gid ui
 
 /*
 ================
+moverStorage.restFactsAt
+
+The mover half of the rest-facts door (MonsterState.restFactsAt):
+the verdict's mover facts read off the stored row instead of paying
+moverRecord.fill to expand it. A live row answers through its own
+accessors in place - the expansion is a copy of this same value, so
+the facts are the fill's by construction. A pending row expands to
+a pending or spawning mover with every other verdict fact zero
+(monster's expandInto), so the door projects just its mode, its
+per-actor cadence and pose region, and its shared deadline; the
+equivalence test pins the projection. False when gid has no row:
+the fill synthesizes the spawn mover there, and the caller stamps
+that answer (MonsterState.restFactsLocked).
+================
+*/
+func (s *moverStorage) restFactsAt(slot uint32, gid uint32, nowMs int64, facts *restFacts) bool {
+	if s == nil {
+		return false
+	}
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		resolved, ok := s.slotOf(gid)
+		if !ok {
+			return false
+		}
+		slot = resolved
+	}
+	facts.slot = slot
+	facts.moverGen = s.slots[slot].gen
+	rec := s.slots[slot].rec
+	switch {
+	case rec.live != nil:
+		live := rec.live
+		facts.mode = live.Mode()
+		facts.idleEntryPending = live.IdleEntryPending()
+		facts.activity = live.Activity
+		facts.controlMode = live.ControlMode()
+		facts.targetGID = live.TargetGID()
+		facts.behaviorDeadlineMs = live.BehaviorDeadlineMs
+		_, facts.navGoal = live.NavigationGoal()
+		facts.segFrom, facts.segTo = live.From, live.To
+		facts.segDepartMs, facts.segArriveMs = live.DepartMs, live.ArriveMs
+		facts.liveRegion = live.LiveRegionAt(nowMs)
+	case rec.pending != nil:
+		pending := rec.pending
+		facts.mode = monster.MoverPending
+		if pending.spawning {
+			facts.mode = monster.MoverSpawning
+		}
+		facts.activity = pending.activity
+		facts.behaviorDeadlineMs = pending.sharedRow().BehaviorDeadlineMs
+		facts.liveRegion = pending.pose.RegionID
+	default:
+		return false
+	}
+	return true
+}
+
+/*
+================
 stuckAt
 
 lookup(gid).Stuck() through a carried slot, without expanding the row:
