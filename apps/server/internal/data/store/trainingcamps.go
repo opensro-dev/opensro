@@ -274,7 +274,7 @@ func (door storeCampDoor) OpenCamp(divisionID string, opening domain.TrainingCam
 	key := campKey{division: divisionID, campID: camp.ID}
 	delete(s.changes.dissolvedCamp, key)
 	s.changes.camps[key] = true
-	s.changes.characters[master] = true
+	s.markCharacterLocked(master)
 	s.commitLocked(fmt.Sprintf("training-camp-open %s/%d", divisionID, camp.ID))
 	return domain.TrainingCampOpenResult{
 		Camp:    camp,
@@ -394,7 +394,7 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 	s.changes.dissolvedCamp[key] = true
 
 	master.CampDisbandedAtMs = nowMs
-	s.changes.characters[master] = true
+	s.markCharacterLocked(master)
 
 	rankChanges := door.recomputeEvaluationRanksLocked(divisionID)
 	if camp.EvaluationRank > 0 {

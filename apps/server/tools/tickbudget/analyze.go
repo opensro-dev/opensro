@@ -38,9 +38,15 @@ const (
 	// childTolerance is float dust for the children-vs-parent check:
 	// children are sub-spans of the parent measured on the same
 	// clock, so any real excess is a ledger bug, not noise.
-	childTolerance   = 0.001
-	topFramesPerZone = 3
-	topFuncsOverall  = 15
+	childTolerance = 0.001
+	// hooksChildTolerance is the one wider allowance: each hook is
+	// timed by its own span inside phase:hooks, so the hooks' sum
+	// legitimately exceeds the parent by the per-hook timer overhead
+	// (a few percent across dozens of hooks). Only the phase:hooks
+	// breach uses it (#3103).
+	hooksChildTolerance = 0.03
+	topFramesPerZone    = 3
+	topFuncsOverall     = 15
 )
 
 /*
@@ -127,6 +133,7 @@ type budget struct {
 		RunningMsPerTick  float64 `json:"running_ms_per_tick"`
 		RunnableMsPerTick float64 `json:"runnable_ms_per_tick"`
 		BlockedMsPerTick  float64 `json:"blocked_ms_per_tick"`
+		IdleMsPerTick     float64 `json:"idle_ms_per_tick"`
 	} `json:"trace,omitempty"`
 }
 
@@ -382,8 +389,8 @@ func reconcile(m *measurements) []check {
 	// (d) runnable and blocked, reported with their top stacks.
 	name = "runnable and blocked (trace report)"
 	if m.trace != nil && m.traceTick > 0 {
-		checks = append(checks, pass(name, "tick goroutines: runnable %.3f ms/tick, blocked %.3f ms/tick over %d ticks (%d tick goroutines)",
-			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.traceTick, m.trace.Goroutines))
+		checks = append(checks, pass(name, "tick goroutines: runnable %.3f ms/tick, blocked %.3f ms/tick over %d ticks (%d tick goroutines; the wait between ticks, %.3f ms/tick, is not counted as blocked)",
+			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.traceTick, m.trace.Goroutines, m.trace.IdleMs/float64(m.traceTick)))
 	} else {
 		checks = append(checks, skip(name, "no execution trace in the capture"))
 	}
@@ -392,10 +399,10 @@ func reconcile(m *measurements) []check {
 	name = "children within parents (metrics zones)"
 	if len(zones) > 0 {
 		var breaches []string
-		breach := func(parent string, parentMs float64, children []string) {
+		breach := func(parent string, parentMs float64, children []string, tolerance float64) {
 			sum := sumKeys(zones, children)
-			if sum > parentMs*(1+childTolerance) {
-				breaches = append(breaches, fmt.Sprintf("children of %s sum to %.3f ms/tick, above the parent's %.3f ms/tick", parent, sum, parentMs))
+			if sum > parentMs*(1+tolerance) {
+				breaches = append(breaches, fmt.Sprintf("children of %s sum to %.3f ms/tick, above the parent's %.3f ms/tick (tolerance %.0f%%)", parent, sum, parentMs, tolerance*100))
 			}
 		}
 		if total, ok := zones["phase:total"]; ok {
@@ -405,18 +412,18 @@ func reconcile(m *measurements) []check {
 					phases = append(phases, key)
 				}
 			}
-			breach("phase:total", total, phases)
+			breach("phase:total", total, phases, childTolerance)
 		}
 		if divisions, ok := zones["phase:divisions"]; ok {
-			breach("phase:divisions", divisions, sortedZoneKeys(zones, "division"))
-			breach("the divisions (sub-steps)", sumKeys(zones, sortedZoneKeys(zones, "division")), sortedZoneKeys(zones, "sub"))
+			breach("phase:divisions", divisions, sortedZoneKeys(zones, "division"), childTolerance)
+			breach("the divisions (sub-steps)", sumKeys(zones, sortedZoneKeys(zones, "division")), sortedZoneKeys(zones, "sub"), childTolerance)
 		}
 		if hooks, ok := zones["phase:hooks"]; ok {
-			breach("phase:hooks", hooks, sortedZoneKeys(zones, "hook"))
-			breach("the hooks (steps)", sumKeys(zones, sortedZoneKeys(zones, "hook")), sortedZoneKeys(zones, "step"))
+			breach("phase:hooks", hooks, sortedZoneKeys(zones, "hook"), hooksChildTolerance)
+			breach("the hooks (steps)", sumKeys(zones, sortedZoneKeys(zones, "hook")), sortedZoneKeys(zones, "step"), childTolerance)
 		}
 		if len(breaches) == 0 {
-			checks = append(checks, pass(name, "every container's children fit inside it"))
+			checks = append(checks, pass(name, "every container's children fit inside it (phase:hooks children allowed %.0f%% over for per-hook timer overhead)", hooksChildTolerance*100))
 		} else {
 			checks = append(checks, fail(name, "metrics zones disagree with themselves: %s", strings.Join(breaches, "; ")))
 		}
@@ -572,9 +579,9 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 	}
 
 	if m.trace != nil {
-		fmt.Fprintf(w, "trace: %d tick goroutines over %.1f ms: running %.3f ms/tick, runnable %.3f ms/tick, blocked %.3f ms/tick\n",
+		fmt.Fprintf(w, "trace: %d tick goroutines over %.1f ms: running %.3f ms/tick, runnable %.3f ms/tick, blocked %.3f ms/tick, waiting between ticks %.3f ms/tick\n",
 			m.trace.Goroutines, m.trace.DurationMs, m.trace.runningMs()/float64(m.traceTick),
-			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick))
+			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.trace.IdleMs/float64(m.traceTick))
 		if len(m.trace.topBlocking) > 0 {
 			fmt.Fprintln(w, "top blocking stacks (transitions into waiting):")
 			for _, sc := range m.trace.topBlocking {
@@ -635,8 +642,10 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 			RunningMsPerTick  float64 `json:"running_ms_per_tick"`
 			RunnableMsPerTick float64 `json:"runnable_ms_per_tick"`
 			BlockedMsPerTick  float64 `json:"blocked_ms_per_tick"`
+			IdleMsPerTick     float64 `json:"idle_ms_per_tick"`
 		}{Goroutines: m.trace.Goroutines, RunningMsPerTick: m.trace.runningMs() / float64(m.traceTick),
-			RunnableMsPerTick: m.trace.RunnableMs / float64(m.traceTick), BlockedMsPerTick: m.trace.BlockedMs / float64(m.traceTick)}
+			RunnableMsPerTick: m.trace.RunnableMs / float64(m.traceTick), BlockedMsPerTick: m.trace.BlockedMs / float64(m.traceTick),
+			IdleMsPerTick: m.trace.IdleMs / float64(m.traceTick)}
 	}
 
 	if len(targets) > 0 {

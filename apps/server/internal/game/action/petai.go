@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -96,6 +97,15 @@ type petSession struct {
 	// (simulation/tether.go); nil for every other companion state.
 	tether     *simulation.Tether
 	generation uint64
+	// The spawn row last published for this companion and the exact
+	// inputs it was derived from (companionPresentation): while they
+	// stand, the kept row and vitals are handed out again instead of
+	// re-deriving the speeds, the scale and the abnormal payload on
+	// every snapshot (#3100).
+	presentationPrimed      bool
+	presentationFingerprint companionRowFingerprint
+	presentationRow         wire.CosSpawnBand2
+	presentationVitals      []byte
 	// summonedAtMs marks a pet just called out of its item (not restored at
 	// entry): its first publication carries spawn sub-state 1.
 	summonedAtMs int64
@@ -785,28 +795,103 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		}
 		world, revision = state.follower.Presentation()
 	}
-	name := cos.Name
-	if name == "" {
-		name = ref.Name
-	}
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
-	walk, run := rt.cosMovementSpeeds(ref, cos, block)
+	// The row is a pure function of these inputs: the cos record and
+	// its catalog row, the committed abnormal block (immutable, so
+	// its pointer names its contents), the owner's committed record
+	// (its CommitRevision moves with every store door) and the two
+	// time-window faces (the trained attack speed and the relocated
+	// sub-state). While they stand,
+	// the kept row is handed out again; the live faces of the
+	// presentation (world, revision, freshness) are filled per call
+	// below either way.
+	fingerprint := companionRowFingerprint{
+		cos:           cos,
+		ref:           ref,
+		block:         block,
+		gid:           cos.GID,
+		refObjID:      cos.RefObjID,
+		codename:      cos.Codename,
+		name:          cos.Name,
+		level:         cos.Level,
+		satiety:       cos.Satiety,
+		mercenary:     cos.MercenaryAttributes,
+		summons:       cos.SummonGeneration,
+		followRun:     cos.FollowRunFactor,
+		followRunSet:  cos.FollowRunSet,
+		ownerRevision: c.CommitRevision,
+		attackSpeed:   rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now}),
+		mounted:       cos.Mounted,
+		nativeStatus:  cos.NativeBodyStatus,
+		dead:          cos.CurrentHP == 0,
+		relocated:     state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs,
+	}
 	result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs ||
-			state.arrivedAtMs != 0 && now-state.arrivedAtMs <= petAppearWindowMs,
-		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
+			state.arrivedAtMs != 0 && now-state.arrivedAtMs <= petAppearWindowMs}
+	if state.presentationPrimed && state.presentationFingerprint == fingerprint {
+		result.Row = state.presentationRow
+		result.AbnormalVitals = append([]byte(nil), state.presentationVitals...)
+	} else {
+		name := cos.Name
+		if name == "" {
+			name = ref.Name
+		}
+		walk, run := rt.cosMovementSpeeds(ref, cos, block)
+		result.Row = wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
-			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
-	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
-		result.Row.State = 7
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(fingerprint.attackSpeed), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}
+		if fingerprint.relocated {
+			result.Row.State = 7
+		}
+		if block != nil && block.Mask != 0 {
+			result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
+		}
+		state.presentationPrimed = true
+		state.presentationFingerprint = fingerprint
+		state.presentationRow = result.Row
+		state.presentationVitals = append([]byte(nil), result.AbnormalVitals...)
 	}
-	if block != nil && block.Mask != 0 {
-		result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
-	}
-	if cos.CurrentHP == 0 {
+	if fingerprint.dead {
 		result.LifeState = wire.LifeStateDead
 	}
 	return result
+}
+
+/*
+================
+companionRowFingerprint
+
+Everything one published companion spawn row is a pure function of:
+the cos record (pointer and the fields the row or its derivation
+reads), its catalog row, the committed abnormal block (immutable
+after publication, so the pointer names its contents), the owner's
+commit revision (the store bumps it on every committed write, so a
+suit, an alias or a pet change re-derives), the trained attack speed
+for this instant, and the relocated appearance window. Nothing here
+allocates; the compare is plain value equality.
+================
+*/
+type companionRowFingerprint struct {
+	cos           *enterworld.CharacterCOS
+	ref           *enterworld.CharacterRef
+	block         *abnormal.Block
+	gid           uint32
+	refObjID      uint32
+	codename      string
+	name          string
+	level         uint8
+	satiety       uint16
+	mercenary     uint8
+	summons       uint64
+	followRun     float32
+	ownerRevision uint64
+	attackSpeed   float64
+	mounted       bool
+	nativeStatus  uint8
+	dead          bool
+	followRunSet  bool
+	relocated     bool
 }
 
 // Called inside the summon transaction, with the division operation lock held.
@@ -1047,19 +1132,34 @@ func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int6
 	if owner == nil {
 		return nil
 	}
+	// One character door for the whole gather (#3027): the walk and
+	// every pet's record read share one hold, instead of a fresh door
+	// per pet as before. The reads are the same ones - the presented
+	// pets, then CompanionByGID per pet with its duplicate refusal -
+	// so the answer is unchanged, taken at one hold instead of many.
+	// The guild name companionPresentations resolves for spawn rows
+	// is not read here and is not paid for.
+	var pets []*simulation.PeerCOS
+	var records []enterworld.CharacterCOS
+	rt.deps.Read(division, func() {
+		pets, _ = rt.companionPresentationsInDoor(division, owner.Name)
+		if len(pets) == 0 {
+			return
+		}
+		records = make([]enterworld.CharacterCOS, len(pets))
+		for i, pet := range pets {
+			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
+				records[i] = *live
+			}
+		}
+	})
 	var out []simulation.CompanionTarget
-	for _, pet := range rt.companionPresentations(division, owner.Name) {
+	for i, pet := range pets {
 		// Natively a grab pet (slot 0x43C) is never a hostile target.
 		if pet.Mounted || pet.LifeState == wire.LifeStateDead || pet.Row.Band == domain.PickupPetBand {
 			continue
 		}
-		var record enterworld.CharacterCOS
-		rt.deps.Read(division, func() {
-			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
-				record = *live
-			}
-		})
-		ref, found := rt.cosReference(&record)
+		ref, found := rt.cosReference(&records[i])
 		if !found {
 			continue
 		}

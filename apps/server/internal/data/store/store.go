@@ -240,6 +240,11 @@ type Store struct {
 	// the actor-authorized guild door, and the dirty unit is the WHOLE guild.
 	guilds       map[string]map[int64]domain.GuildRecord
 	guildMembers map[string]map[int64][]domain.GuildMemberRecord
+	// guildRevisions counts committed writes per guild (runtime-only):
+	// the tick's kept guild appearance keys on it, so this door - the
+	// guild plane's owner - does the invalidation. Dissolving a guild
+	// deletes its entry, and a missing entry reads as no revision.
+	guildRevisions map[guildKey]uint64
 
 	// camps / campMembers are the training-camp plane (the
 	// training_camps and training_camp_members tables): the guild
@@ -347,6 +352,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		mailboxes:            map[string]map[int64][]domain.LetterRecord{},
 		guilds:               map[string]map[int64]domain.GuildRecord{},
 		guildMembers:         map[string]map[int64][]domain.GuildMemberRecord{},
+		guildRevisions:       map[guildKey]uint64{},
 		camps:                map[string]map[int64]domain.TrainingCampRecord{},
 		campMembers:          map[string]map[int64][]domain.TrainingCampMemberRecord{},
 		meta:                 Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
