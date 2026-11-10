@@ -213,7 +213,7 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	// A new character's gold is minted by its creation: the ledger starts
 	// it at nothing, so the creation commit records the starting gold.
 	s.seedLedgerAtLocked(c, 0)
-	s.changes.characters[c] = true
+	s.markCharacterLocked(c)
 	s.changes.nextCharID[divisionID] = true
 	s.commitLocked("create-character " + c.Name)
 	return nil
@@ -275,7 +275,7 @@ func (s *Store) ReserveCharacterDeletion(c *domain.Character, reservedAt string)
 	}
 	c.DeletePending = true
 	c.DeleteReservedAt = reservedAt
-	s.changes.characters[c] = true
+	s.markCharacterLocked(c)
 	s.commitLocked("delete-reserve " + c.Name)
 	return true
 }

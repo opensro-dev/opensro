@@ -82,6 +82,24 @@ type sessionWorld struct {
 	appearancePrimed   bool
 	appearanceInputs   peerAppearanceFingerprint
 	appearanceSnapshot *simulation.PeerAppearance
+
+	// The door capture last taken and the character CommitRevision it
+	// was taken at: while the store has committed no write to the
+	// record, the kept capture is handed out again instead of walking
+	// the inventory again (#3100). Guarded by appearanceMu.
+	capturePrimed   bool
+	captureRevision uint64
+	captureKept     peerAppearanceCapture
+
+	// The guild half last resolved and the guild door's revision it
+	// was resolved at: while that revision stands, the kept half is
+	// handed out again instead of re-reading the member set (#3100).
+	// Guarded by appearanceMu.
+	guildPrimed   bool
+	guildID       int64
+	guildCharID   int64
+	guildRevision uint64
+	guildKept     peerGuildHalf
 }
 
 /*
@@ -168,11 +186,7 @@ func (p *sessionWorld) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	p.rt.deps.Read(p.divisionID, func() {
 		p.rt.Worlds.SnapshotInto(key, &dst.World, func() simulation.WorldState { return simulation.SeedWorldState(p.character) })
 		anchor = p.rt.npcAnchor(p.character)
-		// Peer rows must resolve the model through the exact same chain as
-		// local-player entry: explicit ref, roster codename, race/gender
-		// fallback. Requiring the raw persisted ModelRef pointer made valid
-		// codename-backed characters invisible to every other session.
-		captured = capturePeerAppearance(p.character, p.rt.deps.CharacterModelRef(p.character))
+		captured = p.captureFor()
 		if resolved, ok := p.rt.deps.CharacterBodyRadius(p.character); ok {
 			bodyRadius = simulation.BodyRadius(resolved)
 		}
@@ -222,6 +236,42 @@ func (p *sessionWorld) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 
 /*
 ==================
+sessionWorld.captureFor
+
+The door capture for one snapshot: the kept capture while the store
+has committed no write to the record since it was taken, else a fresh
+capture. The record's CommitRevision is bumped by every store commit
+door, so the store - the record's owner - does the invalidation when
+equipment, a job suit, an avatar or a companion changes (#3100).
+
+MUST run inside the store's read door (WorldSnapshotInto): the
+revision and the fields it stands for are only stable there.
+==================
+*/
+func (p *sessionWorld) captureFor() peerAppearanceCapture {
+	revision := p.character.CommitRevision
+	p.appearanceMu.Lock()
+	if p.capturePrimed && p.captureRevision == revision {
+		kept := p.captureKept
+		p.appearanceMu.Unlock()
+		return kept
+	}
+	p.appearanceMu.Unlock()
+	// Peer rows must resolve the model through the exact same chain as
+	// local-player entry: explicit ref, roster codename, race/gender
+	// fallback. Requiring the raw persisted ModelRef pointer made valid
+	// codename-backed characters invisible to every other session.
+	captured := capturePeerAppearance(p.character, p.rt.deps.CharacterModelRef(p.character))
+	p.appearanceMu.Lock()
+	p.capturePrimed = true
+	p.captureRevision = revision
+	p.captureKept = captured
+	p.appearanceMu.Unlock()
+	return captured
+}
+
+/*
+==================
 sessionWorld.appearanceFor
 
 The session's peer appearance for one snapshot: the build of the
@@ -243,7 +293,7 @@ func (p *sessionWorld) appearanceFor(captured peerAppearanceCapture) *simulation
 		return nil
 	}
 	inputs := peerAppearanceFingerprint{captured: captured}
-	inputs.guild = resolvePeerGuild(p.rt.deps.GuildAuthority(), p.rt.Unions, p.divisionID, captured)
+	inputs.guild = p.guildHalfFor(captured)
 	if p.rt.Stalls != nil {
 		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
 			inputs.stallTitle, inputs.stallDecor = s.Title, s.Decoration
@@ -483,6 +533,78 @@ type peerGuildHalf struct {
 
 /*
 ==================
+guildRevisionSource
+
+The optional guild-door face that reports a guild's committed-write
+count (the store's guild door): a kept guild half is re-resolved
+exactly when the count moves. A door without the face (test stubs)
+reports no revision, and the half is resolved fresh every snapshot,
+as before.
+==================
+*/
+type guildRevisionSource interface {
+	GuildRevision(divisionID string, guildID int64) (uint64, bool)
+}
+
+/*
+==================
+sessionWorld.guildHalfFor
+
+The guild half for one snapshot: the last resolved half while the
+guild door's committed-write count for this guild stands where it
+was resolved (#3100), else a fresh resolve. The guild door - the
+guild plane's owner - does the invalidation, so a rename, a crest or
+a grant change re-resolves on the first snapshot after it commits.
+
+The union face is read live and folded in after: unions.Of is a map
+read, and folding it in here lets an alliance change rebuild through
+the appearance fingerprint compare without re-reading the member
+set. Runs OUTSIDE the character read door, like resolvePeerGuild.
+==================
+*/
+func (p *sessionWorld) guildHalfFor(captured peerAppearanceCapture) peerGuildHalf {
+	var half peerGuildHalf
+	if !captured.hasGuild {
+		return half
+	}
+	guilds := p.rt.deps.GuildAuthority()
+	found := false
+	if guilds != nil {
+		if source, ok := guilds.(guildRevisionSource); ok {
+			if revision, stands := source.GuildRevision(p.divisionID, captured.guildID); stands {
+				p.appearanceMu.Lock()
+				if p.guildPrimed && p.guildID == captured.guildID && p.guildCharID == captured.charID && p.guildRevision == revision {
+					half = p.guildKept
+					found = true
+				}
+				p.appearanceMu.Unlock()
+				if !found {
+					if base, ok := resolvePeerGuildBase(guilds, p.divisionID, captured); ok {
+						p.appearanceMu.Lock()
+						p.guildPrimed = true
+						p.guildID, p.guildCharID, p.guildRevision = captured.guildID, captured.charID, revision
+						p.guildKept = base
+						p.appearanceMu.Unlock()
+						half = base
+						found = true
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		half, found = resolvePeerGuildBase(guilds, p.divisionID, captured)
+	}
+	if found && p.rt.Unions != nil {
+		if alliance, ok := p.rt.Unions.Of(p.divisionID, captured.guildID); ok {
+			half.alliance, half.emblem = uint32(alliance.AllianceID), alliance.Crest
+		}
+	}
+	return half
+}
+
+/*
+==================
 resolvePeerGuild
 
 Resolve the guild half of one peer appearance from the captured FK:
@@ -493,20 +615,38 @@ takes the store lock, which must not be taken inside the door.
 ==================
 */
 func resolvePeerGuild(guilds enterworld.GuildStore, unions *union.Authority, divisionID string, captured peerAppearanceCapture) peerGuildHalf {
+	half, found := resolvePeerGuildBase(guilds, divisionID, captured)
+	if found {
+		if alliance, ok := unions.Of(divisionID, captured.guildID); ok {
+			half.alliance, half.emblem = uint32(alliance.AllianceID), alliance.Crest
+		}
+	}
+	return half
+}
+
+/*
+==================
+resolvePeerGuildBase
+
+The stored half of resolvePeerGuild (name, id, crest, this member's
+grant and fortress role), without the union face guildHalfFor folds
+in live. found=false is a guildless peer - a non-member or a dangling
+FK, which leaves the client's BindGuild leg unreached exactly like
+the retail no-guild row.
+==================
+*/
+func resolvePeerGuildBase(guilds enterworld.GuildStore, divisionID string, captured peerAppearanceCapture) (peerGuildHalf, bool) {
 	var half peerGuildHalf
 	if guilds == nil || !captured.hasGuild {
-		return half
+		return half, false
 	}
 	record, members, ok := guilds.Guild(divisionID, captured.guildID)
 	if !ok {
-		return half
+		return half, false
 	}
 	half.name = record.Name
 	half.id = uint32(record.ID)
 	half.crest = record.CrestParam
-	if alliance, ok := unions.Of(divisionID, record.ID); ok {
-		half.alliance, half.emblem = uint32(alliance.AllianceID), alliance.Crest
-	}
 	for _, member := range members {
 		if member.CharID == captured.charID {
 			half.grant = member.GrantName
@@ -518,7 +658,7 @@ func resolvePeerGuild(guilds enterworld.GuildStore, unions *union.Authority, div
 			break
 		}
 	}
-	return half
+	return half, true
 }
 
 /*

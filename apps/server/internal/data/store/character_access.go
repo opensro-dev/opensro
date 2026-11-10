@@ -228,6 +228,25 @@ func (s *Store) Mutate(label string, fn func()) {
 	s.commitLocked(label)
 }
 
+/*
+================
+markCharacterLocked
+
+Record one committed write to a character record: the dirty mark the
+commit carries, plus the CommitRevision bump the tick's presentation
+caches key their kept inputs on. Every store door that writes a record
+goes through here, so a change a commit persists is always a change
+the next snapshot rebuilds its presentation from. s.mu held.
+================
+*/
+func (s *Store) markCharacterLocked(c *domain.Character) {
+	if c == nil {
+		return
+	}
+	c.CommitRevision++
+	s.changes.characters[c] = true
+}
+
 // MutateCharacter is the scoped commit door: fn's mutations are declared
 // to touch ONLY the given character (plus the ground registry, which the
 // commit detects by revision). This is the gameplay hot path - the
@@ -255,11 +274,12 @@ func (s *Store) mutateCharacterLocked(c *domain.Character, label string, fn func
 	}
 	if c != nil {
 		if _, known := s.charDivision[c]; known {
-			s.changes.characters[c] = true
+			s.markCharacterLocked(c)
 		} else {
 			// A record the store does not own (detached fixture or a
 			// wiring bug): persisting everything is the lossless answer,
 			// and the log makes the wiring bug findable.
+			c.CommitRevision++
 			s.changes.all = true
 			log.Warnf("store: MutateCharacter(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
 		}
@@ -303,7 +323,7 @@ func (s *Store) updateCharacterLocked(c *domain.Character, label string, update 
 	if !update() {
 		return false
 	}
-	s.changes.characters[c] = true
+	s.markCharacterLocked(c)
 	s.finishDoorLocked(label, deferred, []*domain.Character{c})
 	return true
 }
@@ -354,12 +374,13 @@ func (s *Store) mutateCharactersLocked(cs []*domain.Character, label string, fn 
 			continue
 		}
 		if _, known := s.charDivision[c]; known {
-			s.changes.characters[c] = true
+			s.markCharacterLocked(c)
 		} else {
 			// The MutateCharacter posture for a record the store does
 			// not own (detached fixture or a wiring bug): persisting
 			// everything is the lossless answer, and the log makes the
 			// wiring bug findable.
+			c.CommitRevision++
 			s.changes.all = true
 			log.Warnf("store: MutateCharacters(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
 		}
@@ -403,7 +424,7 @@ func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, upd
 		return false
 	}
 	for _, character := range cs {
-		s.changes.characters[character] = true
+		s.markCharacterLocked(character)
 	}
 	s.finishDoorLocked(label, deferred, cs)
 	return true

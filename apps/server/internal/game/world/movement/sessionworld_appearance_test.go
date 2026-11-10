@@ -16,6 +16,7 @@ package movement
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"opensro.online/server/internal/data/store"
@@ -181,6 +182,137 @@ func TestWorldSnapshotRebuildsWhenInputsMove(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("equipment = %+v, want the +9 row", equipped.Equipment)
+	}
+}
+
+/*
+================
+TestWorldSnapshotRebuildsForAvatarAndJobSuit
+
+The two worn faces that reach the appearance only through the
+store's commit door: an avatar dress and a job suit. Each committed
+change rebuilds the next snapshot's appearance (#3100: the kept
+capture is keyed on the record's CommitRevision, which the door
+bumps), and the rebuilt appearance settles again afterwards.
+================
+*/
+func TestWorldSnapshotRebuildsForAvatarAndJobSuit(t *testing.T) {
+	provider, deps, character, _ := appearanceFixture(t)
+	before := provider.WorldSnapshot().Appearance
+	if before == nil {
+		t.Fatal("the snapshot lost its appearance")
+	}
+	if len(before.Avatars) != 0 || before.JobType != 0 {
+		t.Fatalf("fresh appearance carries avatars %v and job %d, want none", before.Avatars, before.JobType)
+	}
+
+	deps.Mutate(character, "memo-test-avatar", func() {
+		character.AvatarInventory = &enterworld.AvatarInventory{Capacity: 4,
+			Rows: []enterworld.InventoryRow{{Slot: 0, RefObjID: 23401, TypeFlags: 0x1234}}}
+	})
+	dressed := provider.WorldSnapshot().Appearance
+	if dressed == before {
+		t.Fatal("an avatar change kept the old appearance")
+	}
+	if len(dressed.Avatars) != 1 || dressed.Avatars[0].RefObjID != 23401 {
+		t.Fatalf("avatars = %+v, want the one dress", dressed.Avatars)
+	}
+
+	deps.Mutate(character, "memo-test-suit", func() {
+		character.MissionInventory = append(character.MissionInventory,
+			enterworld.InventoryRow{Slot: enterworld.JobSuitSlot, RefObjID: 4200, TypeFlags: 0x0bac})
+		character.Job.Alias = "TraderJoe"
+	})
+	suited := provider.WorldSnapshot().Appearance
+	if suited == dressed {
+		t.Fatal("a job suit change kept the old appearance")
+	}
+	if suited.JobType != 1 || suited.Name != "TraderJoe" {
+		t.Fatalf("suited appearance job = %d name = %q, want job 1 as TraderJoe", suited.JobType, suited.Name)
+	}
+	if settled := provider.WorldSnapshot().Appearance; settled != suited {
+		t.Fatal("the rebuilt appearance did not settle")
+	}
+}
+
+const benchSnapshotSessionCount = 100
+
+/*
+================
+snapshotProvidersFixture
+
+One hundred bound session worlds over one stored division, each with
+the worn set the appearance fixture wears: the synthetic crowd the
+tick's prepare leg snapshots every tick (#3100).
+================
+*/
+func snapshotProvidersFixture(b *testing.B) []worldsession.SnapshotIntoProvider {
+	b.Helper()
+	dir := filepath.Join(b.TempDir(), "authority")
+	authority, err := store.Open(dir, store.Options{DefaultSkills: doorSkillSeeder})
+	if err != nil {
+		b.Fatalf("store.Open: %v", err)
+	}
+	b.Cleanup(authority.Close)
+	modelRef, bodyShape := int64(1907), int64(1)
+	for i := 0; i < benchSnapshotSessionCount; i++ {
+		seed := &enterworld.Character{Name: "benchhero" + strconv.Itoa(i), ModelCodename: "CHAR_EU_MAN", ModelRef: &modelRef,
+			BodyShapeByte: &bodyShape, MissionInventory: raceEquipSet(0)}
+		if err := authority.CreateCharacter(doorTestDivision, "test-account-"+strconv.Itoa(i), seed); err != nil {
+			b.Fatalf("CreateCharacter: %v", err)
+		}
+	}
+	deps := &enterworld.Deps{Characters: authority.Characters()}
+	deps.MutateCharacter = func(c *enterworld.Character, label string, fn func()) {
+		authority.MutateCharacter(c, label, fn)
+	}
+	deps.ReadCharacter = func(divisionID string, fn func()) {
+		authority.ReadCharacters(divisionID, func([]*enterworld.Character) { fn() })
+	}
+	deps.Guilds = authority.Guilds()
+	rt := NewRuntime(deps, simulation.NewWorldStore())
+	rt.ActionSpeed = func(string, string) float32 { return 125 }
+	rt.SpawnSkills = func(string, string) []enterworld.EntrySkill { return nil }
+	providers := make([]worldsession.SnapshotIntoProvider, 0, benchSnapshotSessionCount)
+	for _, character := range authority.Characters().CharactersForDivision(doorTestDivision) {
+		recorded := &recordedWorld{}
+		rt.WorldBound(recorded, doorTestDivision, character)
+		provider, ok := recorded.snapshot.(worldsession.SnapshotIntoProvider)
+		if !ok {
+			b.Fatalf("the session world offers no retained snapshot: %T", recorded.snapshot)
+		}
+		providers = append(providers, provider)
+	}
+	if len(providers) != benchSnapshotSessionCount {
+		b.Fatalf("bound %d session worlds, want %d", len(providers), benchSnapshotSessionCount)
+	}
+	return providers
+}
+
+/*
+================
+BenchmarkWorldSnapshot100Sessions
+
+The prepare leg's per-tick bill at 100 synthetic sessions (#3100):
+every session's retained snapshot slot refilled once, appearances
+settled. The number this pins is what the kept-appearance and
+kept-companion work has to hold down as the crowd grows.
+================
+*/
+func BenchmarkWorldSnapshot100Sessions(b *testing.B) {
+	providers := snapshotProvidersFixture(b)
+	slots := make([]simulation.SessionSnapshot, benchSnapshotSessionCount)
+	for i, provider := range providers {
+		provider.WorldSnapshotInto(&slots[i])
+		if slots[i].Appearance == nil {
+			b.Fatal("the snapshot lost its appearance")
+		}
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		for i, provider := range providers {
+			provider.WorldSnapshotInto(&slots[i])
+		}
 	}
 }
 

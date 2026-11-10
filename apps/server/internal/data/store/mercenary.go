@@ -60,7 +60,7 @@ func (door storeGuildDoor) UpdateMercenaryOwner(division string, c *domain.Chara
 	if !update(context) {
 		return false
 	}
-	s.changes.characters[c] = true
+	s.markCharacterLocked(c)
 	s.commitLocked("mercenary-summon")
 	return true
 }
@@ -114,8 +114,8 @@ func (door storeGuildDoor) PurchaseMercenaryAttribute(division string, actorID i
 	actor.Gold = &remaining
 	guild.GP -= gp
 	s.guilds[division][id] = guild
-	s.changes.guilds[guildKey{division: division, guildID: id}] = true
-	s.changes.characters[actor] = true
+	s.markGuildLocked(guildKey{division: division, guildID: id})
+	s.markCharacterLocked(actor)
 	// The server refreshes only the requester and skips dead/unspawned actors.
 	for _, pet := range actor.Mercenaries {
 		if pet != nil && pet.Summoned && pet.CurrentHP > 0 {

@@ -208,3 +208,50 @@ func TestGuildedCompanionDoesNotReenterStore(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestCompanionPresentationRowIsKeptUntilAnInputMoves
+
+The published spawn row is kept between snapshots while its inputs
+stand (#3100): two reads publish the same row, a rename re-derives
+it, and a dismissal empties the set until the resummon.
+================
+*/
+func TestCompanionPresentationRowIsKeptUntilAnInputMoves(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, _ := newTestRuntime(c, refs)
+	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
+	rt.BindPetSession(testDivision, c, 101)
+	useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
+
+	first := rt.CompanionPresentations(testDivision, c.Name)
+	if len(first) == 0 {
+		t.Fatal("no summoned companion")
+	}
+	second := rt.CompanionPresentations(testDivision, c.Name)
+	if len(second) != len(first) || second[0].Row != first[0].Row {
+		t.Fatalf("an unmoved companion republished a different row: %+v then %+v", first[0].Row, second[0].Row)
+	}
+
+	record := c.CompanionByGID(first[0].Row.Gid)
+	if record == nil {
+		t.Fatal("companion record missing")
+	}
+	record.Name = "Renamed"
+	renamed := rt.CompanionPresentations(testDivision, c.Name)
+	if len(renamed) == 0 || renamed[0].Row.Name != "Renamed" {
+		t.Fatalf("a renamed companion published %+v", renamed)
+	}
+
+	record.Summoned = false
+	if pets := rt.CompanionPresentations(testDivision, c.Name); len(pets) != 0 {
+		t.Fatalf("a dismissed companion still presents: %+v", pets)
+	}
+	record.Summoned = true
+	record.SummonGeneration++
+	back := rt.CompanionPresentations(testDivision, c.Name)
+	if len(back) == 0 || back[0].Row.Name != "Renamed" {
+		t.Fatalf("a resummoned companion published %+v", back)
+	}
+}

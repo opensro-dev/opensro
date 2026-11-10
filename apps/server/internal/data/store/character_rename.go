@@ -296,7 +296,7 @@ func (s *Store) QueueCharacterRename(division string, character *domain.Characte
 	}
 	character.PendingRenameName = after
 	character.PendingRenameQueuedMs = nowMs
-	s.changes.characters[character] = true
+	s.markCharacterLocked(character)
 	s.finishDoorLocked("queue-character-rename", false, []*domain.Character{character})
 	return nil
 }
@@ -345,7 +345,7 @@ func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, n
 	cancel := func(reason string) (PendingRenameOutcome, bool) {
 		c.PendingRenameName = ""
 		c.PendingRenameQueuedMs = 0
-		s.changes.characters[c] = true
+		s.markCharacterLocked(c)
 		s.finishDoorLocked("cancel-pending-rename", false, []*domain.Character{c})
 		outcome.Reason = reason
 		return outcome, true
