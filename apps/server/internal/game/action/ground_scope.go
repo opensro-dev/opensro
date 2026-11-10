@@ -18,6 +18,7 @@ actor (register.go); this owner only settles what those routes miss.
 package action
 
 import (
+	"slices"
 	"sort"
 	"sync"
 
@@ -396,6 +397,7 @@ func (rt *Runtime) AdvanceGroundScope(nowMs int64, sessions []simulation.Session
 	for _, division := range divisions {
 		rt.advanceDivisionGroundScope(division, byDivision[division], nowMs, scene)
 	}
+	rt.groundScopePrune(sessions)
 }
 
 /*
@@ -414,15 +416,127 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 		if !ok {
 			continue
 		}
-		spawn, despawn := groundScope(rt.groundDropBuckets(division, population),
-			viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects, shown)
-		if len(spawn) == 0 && len(despawn) == 0 {
+		drops := rt.groundDivisionSnapshot(division)
+		buckets := rt.groundDropBuckets(division, population)
+		block := viewerBlock(session.World.LiveSpawnAt(nowMs))
+		if rt.groundScopeSettled(session, division, population, drops, block) {
 			continue
 		}
+		spawn, despawn := groundScope(buckets, block, session.PublishedObjects, shown)
+		if len(spawn) == 0 && len(despawn) == 0 {
+			rt.groundScopeSettle(session, division, population, drops, block)
+			continue
+		}
+		// Changes are outstanding until the scene admits them into
+		// the session's published set; the next pass recomputes
+		// rather than trusting a mark over unadmitted scope.
+		rt.groundScopeForget(session.SessionID)
 		s, revision, live := scene(session.SessionID)
 		if !live {
 			continue
 		}
 		rt.publishGroundScope(s, revision, spawn, despawn)
+	}
+}
+
+/*
+================
+groundScopeMark
+
+One viewer's settled ground scope (#3101): the division's cached
+drops entry it was computed from - the entry is rebuilt on every
+registry revision, so its identity pins the drop set - the viewer's
+division, identity, population and block, and the published set the
+pass settled on. groundScope is a pure function of the entry's
+buckets for the population, the block and the published set, so
+while they all stand its spawn/despawn diff is empty and the
+nine-block walk is skipped. The entry is read before the buckets:
+a drop write racing the two reads leaves the mark naming the older
+entry, and the next pass recomputes.
+================
+*/
+type groundScopeMark struct {
+	division    string
+	characterID int64
+	population  grounditem.Population
+	drops       *groundDivisionDrops
+	block       worldgeom.InterestBlock
+	published   []uint32
+}
+
+/*
+================
+groundScopeSettled
+
+Whether the viewer's last settled pass ran on exactly these inputs.
+================
+*/
+func (rt *Runtime) groundScopeSettled(session simulation.SessionView, division string, population grounditem.Population,
+	drops *groundDivisionDrops, block worldgeom.InterestBlock,
+) bool {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	mark, ok := rt.groundScopeMarks[session.SessionID]
+	return ok && mark.division == division && mark.characterID == session.CharacterID &&
+		mark.population == population && mark.drops == drops && mark.block == block &&
+		slices.Equal(mark.published, session.PublishedObjects)
+}
+
+/*
+================
+groundScopeSettle
+
+Record a pass whose diff was empty, keeping a copy of the published
+set it settled on.
+================
+*/
+func (rt *Runtime) groundScopeSettle(session simulation.SessionView, division string, population grounditem.Population,
+	drops *groundDivisionDrops, block worldgeom.InterestBlock,
+) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	if rt.groundScopeMarks == nil {
+		rt.groundScopeMarks = map[string]groundScopeMark{}
+	}
+	mark := rt.groundScopeMarks[session.SessionID]
+	mark.division, mark.characterID, mark.population = division, session.CharacterID, population
+	mark.drops, mark.block = drops, block
+	mark.published = append(mark.published[:0], session.PublishedObjects...)
+	rt.groundScopeMarks[session.SessionID] = mark
+}
+
+/*
+================
+groundScopeForget
+================
+*/
+func (rt *Runtime) groundScopeForget(sessionID string) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	delete(rt.groundScopeMarks, sessionID)
+}
+
+/*
+================
+groundScopePrune
+
+Drop the marks of sessions this pass did not see, so the table
+holds only live sessions.
+================
+*/
+func (rt *Runtime) groundScopePrune(sessions []simulation.SessionView) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	if len(rt.groundScopeMarks) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		seen[session.SessionID] = true
+	}
+	for sessionID := range rt.groundScopeMarks {
+		if !seen[sessionID] {
+			delete(rt.groundScopeMarks, sessionID)
+		}
 	}
 }
