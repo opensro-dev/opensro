@@ -235,7 +235,7 @@ func TestSeededBusyWorldSettledFraction(t *testing.T) {
 	if totals.drained > totals.settled {
 		t.Fatalf("drained %d exceeds settled %d", totals.drained, totals.settled)
 	}
-	t.Logf("busy world: steps/leg=%d settled/leg=%d settled/steps=%.3f candidates/steps=%.3f verdicts=%v cadarms=%d suspended=%d",
+	t.Logf("busy world: steps/leg=%d settled/leg=%d settled/steps=%.3f candidates/steps=%.3f verdicts=%v cadarms=%d suspended=%d drained=%d",
 		totals.steps/40, totals.settled/40, float64(totals.settled)/float64(totals.steps),
-		float64(candidates)/float64(totals.steps), totals.restGuards, totals.cadenceArms, totals.suspended)
+		float64(candidates)/float64(totals.steps), totals.restGuards, totals.cadenceArms, totals.suspended, totals.drained)
 }

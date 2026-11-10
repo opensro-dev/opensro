@@ -70,11 +70,6 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 		{"help pending", restGuardHelp, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			actor.Help = actor.Help.Replace(monster.HelpEvent{})
 		}},
-		{"summoned control", restGuardSummoned, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
-			if err := mover.BindController(monster.ControlSummoned, 777); err != nil {
-				t.Fatalf("bind summoned controller: %v", err)
-			}
-		}},
 		{"tempted", restGuardTarget, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			actor.Abnormal = &abnormal.Block{}
 			actor.Abnormal.Slots[abnormal.Confusion].Active = true
@@ -104,6 +99,23 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 		if got := restGuardFailure(ops, &actor, mover, tactics, now); got != flip.guard {
 			t.Fatalf("%s: verdict failed guard %s, want %s", flip.name, restGuardNames[got], restGuardNames[flip.guard])
 		}
+	}
+
+	// A summoned binding pends the idle entry it arrives with, so it
+	// cannot be flipped onto the resting mover like the others:
+	// bind, complete the entry through the step's own door, and the
+	// verdict must then refuse at the summoned guard alone.
+	bound := rest
+	if err := bound.BindController(monster.ControlSummoned, 777); err != nil {
+		t.Fatalf("bind summoned controller: %v", err)
+	}
+	ops.commitIdleEntry(monsterTestDivision, &instance, bound, nil, now)
+	summoned, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if idleRestQuiescent(ops, &instance, summoned, passiveTactics(), now) {
+		t.Fatal("summoned control: monster still quiescent")
+	}
+	if got := restGuardFailure(ops, &instance, summoned, passiveTactics(), now); got != restGuardSummoned {
+		t.Fatalf("summoned control: verdict failed guard %s, want %s", restGuardNames[got], restGuardNames[restGuardSummoned])
 	}
 
 	// Without an activity snapshot the gate is inert, so the cadence
