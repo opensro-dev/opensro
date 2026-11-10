@@ -44,11 +44,24 @@ through here. s.mu held.
 ================
 */
 func (s *Store) markGuildLocked(key guildKey) {
+	s.bumpGuildRevisionLocked(key)
+	s.changes.guilds[key] = true
+}
+
+/*
+================
+bumpGuildRevisionLocked
+
+Move only the guild's commit count, without the dirty mark, for a
+door that persisted the guild rows itself (the applied rename's own
+transaction); see bumpCharacterRevisionLocked. s.mu held.
+================
+*/
+func (s *Store) bumpGuildRevisionLocked(key guildKey) {
 	if s.guildRevisions == nil {
 		s.guildRevisions = map[guildKey]uint64{}
 	}
 	s.guildRevisions[key]++
-	s.changes.guilds[key] = true
 }
 
 /*

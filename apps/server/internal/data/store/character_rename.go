@@ -185,6 +185,11 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	// This door persists through its own transaction, never the dirty
+	// set, so it moves the commit counts here without dirty marks: the
+	// tick's presentation caches key on these counts (a rename they did
+	// not move for would leave the old name standing, #3100), and the
+	// offline door above requires the change set to stay clean.
 	for c, next := range updates {
 		c.Name = next.Name
 		c.PendingRenameName = next.PendingRenameName
@@ -193,10 +198,12 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 		c.RenameNoticeFrom = next.RenameNoticeFrom
 		domain.SwapFriends(c, next.Friends)
 		c.BlockedWhisperers = next.BlockedWhisperers
+		s.bumpCharacterRevisionLocked(c)
 	}
 	s.rebuildCharacterLookupLocked(division)
 	for id, members := range guilds {
 		s.guildMembers[division][id] = members
+		s.bumpGuildRevisionLocked(guildKey{division: division, guildID: id})
 	}
 	for id, letters := range mailboxes {
 		s.mailboxes[division][id] = letters

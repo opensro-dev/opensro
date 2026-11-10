@@ -102,7 +102,7 @@ func (s *Store) TransferCharacterOwnership(fromAccountID, toAccountID string) ([
 	}
 	for _, owner := range changed {
 		owner.character.AccountID = toAccountID
-		s.changes.characters[owner.character] = true
+		s.markCharacterLocked(owner.character)
 	}
 	if err := s.commitOnceLocked("account-ownership"); err != nil {
 		for _, owner := range changed {

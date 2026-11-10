@@ -236,15 +236,35 @@ Record one committed write to a character record: the dirty mark the
 commit carries, plus the CommitRevision bump the tick's presentation
 caches key their kept inputs on. Every store door that writes a record
 goes through here, so a change a commit persists is always a change
-the next snapshot rebuilds its presentation from. s.mu held.
+the next snapshot rebuilds its presentation from. A door that persists
+through its own transaction instead of the dirty set (the applied
+rename, the ownership transfer) marks here after its commit just the
+same: the caches cannot see a write this count did not move for.
+s.mu held.
 ================
 */
 func (s *Store) markCharacterLocked(c *domain.Character) {
 	if c == nil {
 		return
 	}
-	c.CommitRevision++
+	s.bumpCharacterRevisionLocked(c)
 	s.changes.characters[c] = true
+}
+
+/*
+================
+bumpCharacterRevisionLocked
+
+Move only the commit count, without the dirty mark: a door that has
+already persisted the record itself (the applied rename's own
+transaction) owes the presentation caches the count, but a dirty mark
+would make a later commit rewrite bytes this door just wrote - and
+would break the offline rename door, which requires an empty change
+set. s.mu held.
+================
+*/
+func (s *Store) bumpCharacterRevisionLocked(c *domain.Character) {
+	c.CommitRevision++
 }
 
 // MutateCharacter is the scoped commit door: fn's mutations are declared

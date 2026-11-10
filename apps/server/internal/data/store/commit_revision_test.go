@@ -102,3 +102,50 @@ func TestGuildRevisionMovesWithGuildDoors(t *testing.T) {
 		t.Fatal("a dissolved guild still reports a revision")
 	}
 }
+
+/*
+================
+TestCommitRevisionMovesWithAnAppliedRename
+
+The applied rename persists through its own transaction, never the
+dirty set; the counts it moves are the whole contract with the tick's
+kept presentations. A rename that changed the live records while the
+counts stood still would leave the old name on screen forever.
+================
+*/
+func TestCommitRevisionMovesWithAnAppliedRename(t *testing.T) {
+	t.Parallel()
+	s := openTest(t, t.TempDir(), newTestClock())
+	door := storeGuildDoor{s: s}
+
+	hero := &domain.Character{Name: "revhero"}
+	if err := s.CreateCharacter(testDivision, "test-account", hero); err != nil {
+		t.Fatal(err)
+	}
+	guildID, err := s.Guilds().CreateGuild(testDivision, domain.GuildRecord{Name: "RevNames", Level: 1},
+		domain.GuildMemberRecord{CharID: hero.ID, JID: uint32(hero.ID), Name: hero.Name, Grade: 0, PermMask: 0xffffffff}, hero)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := int64(1_700_000_000_000)
+	if err := s.QueueCharacterRename(testDivision, hero, "revrenamed", now); err != nil {
+		t.Fatal(err)
+	}
+	characterBefore := hero.CommitRevision
+	guildBefore, ok := door.GuildRevision(testDivision, guildID)
+	if !ok {
+		t.Fatal("a created guild reports no revision")
+	}
+
+	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now, nil)
+	if len(outcomes) != 1 || !outcomes[0].Applied || hero.Name != "revrenamed" {
+		t.Fatalf("outcomes: %+v hero: %+v", outcomes, hero)
+	}
+	if hero.CommitRevision == characterBefore {
+		t.Fatal("the applied rename left the character's commit revision standing")
+	}
+	if revision, _ := door.GuildRevision(testDivision, guildID); revision == guildBefore {
+		t.Fatal("the applied rename left the guild's commit revision standing")
+	}
+}
