@@ -38,6 +38,9 @@ type tauntCast struct {
 	skill               enterworld.SkillRow
 	primary             monster.Instance
 	now                 int64
+	// doors is the lane's commit pair for releaseTaunt (handlerDoors
+	// on a press, tickDoors on a tick strike); tauntVictims ignores it.
+	doors characterDoors
 }
 
 /*
@@ -153,7 +156,7 @@ func (rt *Runtime) releaseTaunt(c tauntCast) (OpResult, skillCastDecision) {
 		return OpResult{}, skillCastRefused
 	}
 	var refusal uint16
-	if !rt.deps.Update(c.character, "skill-taunt", func() bool {
+	if !c.doors.update(c.character, "skill-taunt", func() bool {
 		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillLearned(c.character, c.skill.ID) {
 			return false
 		}

@@ -457,7 +457,7 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now, doors)
 			out.returned = mergeOpResults(out.returned, returned)
 			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now, doors))
-			out.returned = mergeOpResults(out.returned, rt.screamMaskPlayer(division, victim.target.player, caster, now))
+			out.returned = mergeOpResults(out.returned, rt.screamMaskPlayer(division, victim.target.player, caster, now, doors))
 			continue
 		}
 		if victim.sequence >= len(commit.committed) {

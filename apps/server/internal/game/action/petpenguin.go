@@ -151,7 +151,7 @@ func (rt *Runtime) publishPenguinMagic(step petCombatStep) {
 		}
 	}
 	if step.pet.ArcaneMagicPercent != pct[0] {
-		rt.deps.Update(step.state.character, "penguin-magic", func() bool {
+		rt.deps.UpdateDeferred(step.state.character, "penguin-magic", func() bool {
 			if live := step.state.character.CompanionByGID(step.pet.GID); live != nil {
 				live.ArcaneMagicPercent = pct[0]
 			}

@@ -119,7 +119,7 @@ func (rt *Runtime) healCrowPlume(step petCombatStep, cast *crowPlumeCast, share 
 			continue
 		}
 		var public, private []wire.Frame
-		rt.deps.Update(member, "crow-plume-heal", func() bool {
+		rt.deps.UpdateDeferred(member, "crow-plume-heal", func() bool {
 			if !enterworld.CharacterAlive(member) {
 				delete(cast.recipients, gid)
 				return false

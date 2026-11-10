@@ -92,9 +92,13 @@ step wall: the queue build (behaviorBatchesForDivision) and the
 action lane's wall outside the step, with dispatch wired the way
 production wires it (RunAction around the step). The dormancy world
 wakes forty actors and a ten second jump makes them all due in one
-leg. Consistent with this file's doctrine, no absolute durations are
-asserted; the pins are the partition below and the slow-leg line's
-tail (TestLegSlowLineNamesQueueAndLane).
+leg. They are suspended actors, which the pending re-check lane
+would settle without a dispatch (monsterpending_recheck_test.go
+counts those); the dispatch's walls are this test's subject, so
+the fixture steps every due actor. Consistent with this file's
+doctrine, no absolute durations are asserted; the pins are the
+partition below and the slow-leg line's tail
+(TestLegSlowLineNamesQueueAndLane).
 ================
 */
 func TestMonsterLegStatsQueueAndLaneWalls(t *testing.T) {
@@ -107,7 +111,8 @@ func TestMonsterLegStatsQueueAndLaneWalls(t *testing.T) {
 		PlanPath: func(from, goal monster.Pose) *monster.NavigationPath {
 			return nil // geometry-free fixture: an unavailable region
 		},
-		RunAction: func(_ string, act func(MonsterAttackOperation)) { act(nil) },
+		RunAction:           func(_ string, act func(MonsterAttackOperation)) { act(nil) },
+		stepPendingRechecks: true,
 	}
 	ops.divisionID = "sleep"
 	session := SessionSnapshot{DivisionID: "sleep", Population: d.lease}

@@ -85,7 +85,9 @@ func (rt *Runtime) commitLinkedMana(division string, attacker uint32, impacts []
 			continue
 		}
 		var frame wire.Frame
-		rt.deps.Update(source, "linked-damage-mana", func() bool {
+		// Mana-link bookkeeping settles with the strike that caused
+		// it, on the tick; no answer waits on its commit.
+		rt.deps.UpdateDeferred(source, "linked-damage-mana", func() bool {
 			if source.DeletePending {
 				return false
 			}

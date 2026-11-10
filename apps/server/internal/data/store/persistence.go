@@ -41,6 +41,18 @@ commitLocked for a caller that acts on the outcome.
 */
 func (s *Store) commitCheckedLocked(label string) error {
 	s.noteGoldLocked(label)
+	// Every record this commit carries moves its write epoch, so a
+	// writer outside the scoped doors (the guild, camp and trade
+	// doors mark the change set directly) retires exactly its own
+	// records' cached copies; the scoped doors also count at mutation
+	// time, which is what retires a deferred write before its flush.
+	if s.changes.all {
+		s.noteRosterWriteLocked()
+	} else {
+		for c := range s.changes.characters {
+			s.noteCharacterWriteLocked(c)
+		}
+	}
 	if err := s.commitOnceLocked(label); err != nil {
 		s.recordWriteFailureLocked(label, err)
 		return err

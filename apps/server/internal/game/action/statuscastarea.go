@@ -50,7 +50,7 @@ func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *ente
 	var battleFrames []wire.Frame
 	var refusal uint16
 	roster := rt.monsterRewardRoster(division, c, now)
-	if !rt.deps.UpdateMany(roster.characters, "release-status-area", func() bool {
+	if !doors.updateMany(roster.characters, "release-status-area", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
 		}
