@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -185,7 +184,6 @@ func (rt *Runtime) takePreparingProjectile(token uint32) bool {
 	for i, p := range rt.pendingProjectileCasts {
 		if p.token == token {
 			rt.pendingProjectileCasts = append(rt.pendingProjectileCasts[:i], rt.pendingProjectileCasts[i+1:]...)
-			delete(rt.castWaitVerdicts, token)
 			return true
 		}
 	}
@@ -206,7 +204,6 @@ func (rt *Runtime) cancelPreparingProjectile(division, name string) []wire.Frame
 	for _, p := range rt.pendingProjectileCasts {
 		if p.ownerKey == ownerKey {
 			frames = append(frames, wire.SkillCastFinalizeFrame(p.token))
-			delete(rt.castWaitVerdicts, p.token)
 		} else {
 			kept = append(kept, p)
 		}
@@ -224,21 +221,6 @@ advanceProjectileCasts
 func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames {
 	rt.pendingSkillFinalizesMu.Lock()
 	pending := append([]pendingProjectileCast(nil), rt.pendingProjectileCasts...)
-	// Verdicts of casts that left the queue without take or cancel
-	// (an owner's teardown filter) are swept here, the one place the
-	// whole queue is in hand; the map stays within a small multiple
-	// of the queue between sweeps.
-	if len(rt.castWaitVerdicts) > 4*len(pending)+32 {
-		live := make(map[uint32]struct{}, len(pending))
-		for _, p := range pending {
-			live[p.token] = struct{}{}
-		}
-		for token := range rt.castWaitVerdicts {
-			if _, ok := live[token]; !ok {
-				delete(rt.castWaitVerdicts, token)
-			}
-		}
-	}
 	rt.pendingSkillFinalizesMu.Unlock()
 	var out []simulation.DivisionFrames
 	for _, p := range pending {
@@ -367,77 +349,6 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 
 /*
 ================
-projectileWaitVerdict
-
-One waiting cast's judged wait, cached by cast token (#3101). The
-priced leg's HP and MP amounts are fixed numbers once the caster's
-stats and keeper maxima are read, so the entry stores those amounts
-beside the abnormal block they were judged under: while the same
-block stands, the resource gate replays from the caster's current
-vitals alone and the stats graph is not re-priced. The life and
-target gates are never cached - they read the live facts on every
-tick, exactly as before.
-================
-*/
-type projectileWaitVerdict struct {
-	abnormalKey string
-	block       *abnormal.Block
-	hpCost      int64
-	mpCost      int64
-}
-
-/*
-================
-castWaitVerdict
-================
-*/
-func (rt *Runtime) castWaitVerdict(token uint32) (projectileWaitVerdict, bool) {
-	rt.pendingSkillFinalizesMu.Lock()
-	defer rt.pendingSkillFinalizesMu.Unlock()
-	verdict, ok := rt.castWaitVerdicts[token]
-	return verdict, ok
-}
-
-/*
-================
-storeCastWaitVerdict
-================
-*/
-func (rt *Runtime) storeCastWaitVerdict(token uint32, verdict projectileWaitVerdict) {
-	rt.pendingSkillFinalizesMu.Lock()
-	defer rt.pendingSkillFinalizesMu.Unlock()
-	if rt.castWaitVerdicts == nil {
-		rt.castWaitVerdicts = make(map[uint32]projectileWaitVerdict)
-	}
-	rt.castWaitVerdicts[token] = verdict
-}
-
-/*
-================
-projectileWaitCosts
-
-The HP and MP amounts the wait's priced leg judges against, in
-resourceCostVerdictFor's own arithmetic (hpCostRefusal, then
-resourceCostAt on the keeper maximum at the stats' consumption
-rate). An unpayable price shape (resourceCostAt's 0x3003) caches as
-an amount no vitals can meet, so the replay refuses identically.
-================
-*/
-func projectileWaitCosts(maxHP, maxMP int64, stats combat.Stats, consumption enterworld.SkillConsumption, group uint32) (hpCost, mpCost int64) {
-	if !consumption.Pinned || group == 0 {
-		return math.MaxInt64, math.MaxInt64
-	}
-	hpCost = int64(consumption.HP) + vitalPercent(maxHP, uint32(consumption.HPPercent))
-	cost := int64(consumption.MP) + vitalPercent(maxMP, uint32(consumption.MPPercent))
-	rate := float32(combat.FullMPConsumptionRate)
-	if consumption.MP != 0 || consumption.MPPercent != 0 {
-		rate = combat.MPConsumptionRate(stats)
-	}
-	return hpCost, crtFtol(float64(rate) / 100 * float64(int32(cost)))
-}
-
-/*
-================
 projectileWaitingValid
 
 The wait verdict of a prepared cast that is not due, judged without
@@ -445,25 +356,21 @@ detaching the caster (#2139 item 2, castwait item 5): the release
 verdict's life, target and resource gates in the same order. The
 life and target gates read the live record and monster state on
 every tick, so a cast is still refused the moment its target dies.
-The resource gate is the expensive one - it prices the caster
-through the stats memo - and its inputs can only move with the
-caster's vitals or abnormal block, so its judgement is cached by
-token (projectileWaitVerdict): a tick where neither moved replays
-the priced amounts against the current vitals instead of pricing
-again. The native timing this keeps is the charge's: B245 charges
-at release, and the wait's refusal still lands on the tick the
-resources actually run out, because the vitals are read live.
+The resource gate prices the caster through the stats memo on
+every tick too: its basis - the derived maxima and the consumption
+rate - moves without the abnormal block changing (an equipment
+swap or a modifier write mid-charge), so no earlier tick's amounts
+may stand in for this one's (#3101 review). The timing this keeps
+is the charge's: B245 charges at release, and the wait's refusal
+still lands on the tick the resources actually run out, because
+the vitals are read live.
 judged is false only when the memo cannot serve (a cold or moved
 caster): the caller then judges on the cast copy exactly as before,
 and that build memoises for the next tick.
 ================
 */
 func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld.Character) (valid, judged bool) {
-	verdict, cached := rt.castWaitVerdict(p.token)
-	abnormalKey := verdict.abnormalKey
-	if !cached {
-		abnormalKey = playerAbnormalKey(p.divisionID, c.Name)
-	}
+	abnormalKey := playerAbnormalKey(p.divisionID, c.Name)
 	block := rt.playerAbnormalKeyed(abnormalKey)
 
 	var alive bool
@@ -484,11 +391,6 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 	}
 	if p.selfEffect {
 		return true, true
-	}
-	// The priced gate replays while the block it was judged under
-	// stands: the amounts are compared against the vitals just read.
-	if cached && verdict.block == block {
-		return currentHP >= verdict.hpCost && currentMP >= verdict.mpCost, true
 	}
 	source := rt.deps.SkillData()
 	if source == nil {
@@ -534,12 +436,6 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 		_, refusal = resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, consumption, group)
 	} else {
 		_, refusal = resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, statsErr, skill)
-	}
-	if statsErr == nil {
-		hpCost, mpCost := projectileWaitCosts(maxHP, maxMP, stats, consumption, group)
-		rt.storeCastWaitVerdict(p.token, projectileWaitVerdict{
-			abnormalKey: abnormalKey, block: block, hpCost: hpCost, mpCost: mpCost,
-		})
 	}
 	return refusal == 0, true
 }

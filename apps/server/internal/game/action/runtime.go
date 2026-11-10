@@ -911,9 +911,6 @@ type Runtime struct {
 	pendingMonsterCasts     []pendingMonsterCast           // protected by pendingSkillFinalizesMu
 	pendingProjectileCasts  []pendingProjectileCast        // protected by pendingSkillFinalizesMu
 	currentSkillCommands    map[string]currentSkillCommand // same mutex; survives dequeue until release processing ends
-	// castWaitVerdicts is each waiting cast's judged wait, cached by
-	// cast token (#3101); same mutex. See projectileWaitingValid.
-	castWaitVerdicts map[uint32]projectileWaitVerdict
 
 	// pendingMonsterDefeats holds zero-HP reward sources through the authored
 	// death clip. Their movers are inert, but their client animation state must
