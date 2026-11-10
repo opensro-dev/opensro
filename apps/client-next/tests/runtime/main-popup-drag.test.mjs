@@ -63,7 +63,13 @@ test("the bag drags beside the magic option window", () => {
 	const f = uiFixture();
 	try {
 		f.ui.step( f.state, 0 );
-		f.state.gameplay.magicOption = { visible: true, item: null, parts: [], phase: "idle" };
+		// A new state object, as in the warehouse test above: the UI
+		// compares against the previous view, so an in-place edit of the
+		// old object would never repaint the popup.
+		f.state = {
+			...f.state,
+			gameplay: { ...f.state.gameplay, magicOption: { visible: true, item: null, parts: [], phase: "idle" } }
+		};
 		assertDrags( f, 10 );
 	} finally {
 		f.dispose();
