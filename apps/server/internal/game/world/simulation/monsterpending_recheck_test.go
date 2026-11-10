@@ -562,7 +562,8 @@ TestLegCensusReachesTheMetricsBlock
 What a leg did with its actors is readable from the live metrics,
 not only from a slow-leg log line: forty suspended actors count as
 forty settled in the lane world, and as forty dispatched, stepped
-and refused at the mode guard in the full-step world.
+and refused at the mode guard in the full-step world. The census is
+the monster_leg document (LegSnapshot, #3119), not navigation's.
 ================
 */
 func TestLegCensusReachesTheMetricsBlock(t *testing.T) {
@@ -572,11 +573,11 @@ func TestLegCensusReachesTheMetricsBlock(t *testing.T) {
 		metrics := &NavigationMetrics{}
 		fx.ops.Navigation = metrics
 		fx.leg(pendingLaneNowMs)
-		got := metrics.Snapshot()
-		want := map[string]uint64{"leg.count": 1, "leg.rechecked": actors}
+		got := metrics.LegSnapshot()
+		want := map[string]uint64{"count": 1, "rechecked": actors}
 		if fullStep {
-			want = map[string]uint64{"leg.count": 1, "leg.actors": actors, "leg.steps": actors,
-				"leg.rest.mode": actors, "leg.cadence_arms": actors}
+			want = map[string]uint64{"count": 1, "actors": actors, "steps": actors,
+				"rest.mode": actors, "cadence_arms": actors, "mode.pending": actors}
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("full step %v: census %v, want %v", fullStep, got, want)

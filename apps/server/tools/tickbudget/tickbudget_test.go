@@ -301,6 +301,71 @@ func TestAnalyzeConsistentSetPasses(t *testing.T) {
 
 /*
 ================
+TestAnalyzePrintsLegCensus
+
+A doctored pair carrying monster_leg blocks (#3119) prints the leg's
+window read: actors, steps and settled re-checks per tick, the rest
+guards as shares of the window's steps, and the steps by mode.
+================
+*/
+func TestAnalyzePrintsLegCensus(t *testing.T) {
+	from, to := fixtureSnapshots(100, 12.5)
+	from.MonsterLeg = map[string]uint64{
+		"count": 10, "actors": 1000, "steps": 5000, "rechecked": 200,
+		"mode.idle": 4000, "rest.mode": 500,
+	}
+	to.MonsterLeg = map[string]uint64{
+		"count": 20, "actors": 3000, "steps": 15000, "rechecked": 500,
+		"mode.idle": 9000, "mode.chasing": 1000, "rest.mode": 1500, "rest.pass": 500,
+	}
+	dir := t.TempDir()
+	snapshotJSON(t, dir, "metrics-1.json", from)
+	snapshotJSON(t, dir, "metrics-2.json", to)
+	var out bytes.Buffer
+	if _, err := analyzeDir(dir, "", &out); err != nil {
+		t.Fatal(err)
+	}
+	// Deltas over 100 ticks: actors 2000, steps 10000, re-checks 300;
+	// rest mode 1000 and pass 500 of 10000 steps; modes idle 5000,
+	// chasing 1000.
+	for _, want := range []string{
+		"monster leg (window deltas per tick):",
+		"actors dispatched 20.00/tick, steps 100.00/tick, re-checks settled 3.00/tick",
+		"rest guards (share of steps): mode 10.0%, pass 5.0%",
+		"idle 50.00",
+		"chasing 10.00",
+		"other 0.00",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+/*
+================
+TestAnalyzeOmitsLegCensusBeforeTheBlock
+
+Snapshots from before the monster_leg block existed carry no census:
+the leg section stays silent rather than printing zeros.
+================
+*/
+func TestAnalyzeOmitsLegCensusBeforeTheBlock(t *testing.T) {
+	from, to := fixtureSnapshots(100, 12.5)
+	dir := t.TempDir()
+	snapshotJSON(t, dir, "metrics-1.json", from)
+	snapshotJSON(t, dir, "metrics-2.json", to)
+	var out bytes.Buffer
+	if _, err := analyzeDir(dir, "", &out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "monster leg") {
+		t.Fatalf("a pre-block capture printed a leg census:\n%s", out.String())
+	}
+}
+
+/*
+================
 TestAnalyzeDoctoredSetShowsBlindSpots
 
 A child larger than its parent and a profile that disagrees with the

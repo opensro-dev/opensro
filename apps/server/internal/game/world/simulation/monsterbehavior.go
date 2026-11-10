@@ -48,7 +48,6 @@ func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance 
 }
 
 func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot *monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
-	ops.leg.noteStep()
 	ops.stepDrainedEvents = 0
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
@@ -56,6 +55,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 	// must never finish a wander/chase segment, emit a correction, retaliate,
 	// or choose another idle leg while CurrentHP is zero.
 	if instance.Motion.StateAt(nowMs) != 0 || (instance.Ref.MaxHP > 0 && instance.CurrentHP == 0) {
+		ops.leg.noteStep(stepModeOther)
 		return nil, nil
 	}
 	var mover monster.MoverState
@@ -64,11 +64,16 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 	} else {
 		stored, known := ops.Monsters.Mover(divisionID, instance.Gid)
 		if !known {
+			ops.leg.noteStep(stepModeOther)
 			return nil, nil
 		}
 		mover = stored
 	}
-	if ops.detachCrossPlaneNest(divisionID, instance, &mover, nowMs) {
+	detached := ops.detachCrossPlaneNest(divisionID, instance, &mover, nowMs)
+	// The step's one census count (#3119), under the mode it reads from
+	// here on; the holds above read no behaviour mode and count other.
+	ops.leg.noteStep(stepModeFor(mover.Mode()))
+	if detached {
 		return nil, nil
 	}
 	if frames, handled := ops.applyTacticsEvents(divisionID, instance, mover, nowMs); handled {

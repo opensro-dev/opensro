@@ -9,6 +9,7 @@ navigation_metrics_test.go - route plans and path clips are counted by caller
 package simulation
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
@@ -63,6 +64,81 @@ func TestNavigationMetricsCountPlansAndClipsByCaller(t *testing.T) {
 	none.clip(navChase)
 	if len(none.Snapshot()) != 0 {
 		t.Fatal("a nil owner counted")
+	}
+}
+
+/*
+================
+TestLegCensusSnapshot
+
+A finished leg folds into the monster_leg document (its own block
+since #3119): the steps carry the modes they read, the mode partition
+sums to the step count, and no leg.* key rides the navigation
+snapshot. The mode mapper names the issue's six buckets and folds
+every other mover mode into other.
+================
+*/
+func TestLegCensusSnapshot(t *testing.T) {
+	metrics := &NavigationMetrics{}
+	stats := &legStats{actors: 2, rechecked: 1, cadenceArms: 1, gateSuspended: 1}
+	stats.noteStep(stepModeIdle)
+	stats.noteStep(stepModeIdle)
+	stats.noteStep(stepModeChasing)
+	stats.noteStep(stepModeOther)
+	stats.restGuards[restGuardMode] = 2
+	stats.restGuards[restGuardPass] = 1
+	metrics.leg(stats)
+
+	got := metrics.LegSnapshot()
+	want := map[string]uint64{
+		"count":        1,
+		"actors":       2,
+		"steps":        4,
+		"rechecked":    1,
+		"cadence_arms": 1,
+		"suspended":    1,
+		"rest.mode":    2,
+		"rest.pass":    1,
+		"mode.idle":    2,
+		"mode.chasing": 1,
+		"mode.other":   1,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("monster_leg = %v, want exactly %v", got, want)
+	}
+	var modeSum uint64
+	for key, value := range want {
+		if got[key] != value {
+			t.Fatalf("%s = %d, want %d (all: %v)", key, got[key], value, got)
+		}
+	}
+	for mode := range stepModeCount {
+		modeSum += got["mode."+stepModeNames[mode]]
+	}
+	if modeSum != got["steps"] {
+		t.Fatalf("mode partition sums to %d, steps = %d", modeSum, got["steps"])
+	}
+	for key := range metrics.Snapshot() {
+		if strings.HasPrefix(key, "leg.") {
+			t.Fatalf("navigation snapshot still carries %q", key)
+		}
+	}
+
+	modes := map[monster.MoverMode]stepMode{
+		monster.MoverIdle:       stepModeIdle,
+		monster.MoverWandering:  stepModeWandering,
+		monster.MoverChasing:    stepModeChasing,
+		monster.MoverAttacking:  stepModeAttacking,
+		monster.MoverReturning:  stepModeReturning,
+		monster.MoverPending:    stepModePending,
+		monster.MoverSpawning:   stepModeOther,
+		monster.MoverRecovering: stepModeOther,
+		monster.MoverFollowing:  stepModeOther,
+	}
+	for mode, bucket := range modes {
+		if got := stepModeFor(mode); got != bucket {
+			t.Fatalf("stepModeFor(%v) = %v, want %v", mode, got, bucket)
+		}
 	}
 }
 
