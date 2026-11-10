@@ -2669,6 +2669,11 @@ export function createUi( ports: UiPorts ) {
 	/*
 	================
 	moveAvatar
+
+	An equip onto a class that is already worn is refused with the native
+	notice, never swapped and never silent: CIFEquipment_
+	DispatchItemDropAction @594980 checks the class slot control's occupied
+	byte and posts UIIT_MSG_STRGERR_EQUIPITEM as a system message.
 	================
 	*/
 	function moveAvatar( equip: boolean, source: number, destination?: number ) {
@@ -2679,10 +2684,11 @@ export function createUi( ports: UiPorts ) {
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || (item.typeFlags & 0x7fe) !== 0x6ac ) return;
 		if ( equip ) {
-			if (
-				avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ||
-				item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 )
-			) return;
+			if ( avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ) {
+				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
+				return;
+			}
+			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) return;
 			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
