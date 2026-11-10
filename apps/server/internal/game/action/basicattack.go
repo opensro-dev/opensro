@@ -140,6 +140,13 @@ type basicAttackIntent struct {
 	ActionReach    simulation.ActionReach
 	CooldownMs     int64
 	NextActionMs   int64
+	// WaitUntilMs is the first tick at which the full evaluation may
+	// act again, stamped by the evaluation itself when it settles
+	// into the swing wait (#3101). The tick skips the intent while
+	// nowMs < WaitUntilMs instead of re-resolving its whole combat
+	// context to arrive at the same wait. Zero - every fresh,
+	// promoted or replaced intent - always evaluates.
+	WaitUntilMs int64
 	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
 	// latency budget (record+28, reset when the reference server releases the record) the
 	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
@@ -486,6 +493,10 @@ Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
+	// An evaluation that runs has consumed the wait: every write-back
+	// below carries a cleared stamp, and only the two swing-wait
+	// gates stamp a new one (#3101).
+	intent.WaitUntilMs = 0
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
@@ -523,7 +534,17 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	var loadout combat.Loadout
 	var refusal string
 	if intent.ResumeBasic {
-		if nowMs <= intent.NextActionMs || rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+		if nowMs <= intent.NextActionMs {
+			// The resume is purely time-gated while no skill cast is
+			// open: stamp the wait so the tick skips to the first
+			// tick that can act (this gate fires past NextActionMs).
+			if !rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+				intent.WaitUntilMs = intent.NextActionMs + 1
+				rt.setCombatIntent(intent)
+			}
+			return OpResult{}
+		}
+		if rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
 			return OpResult{}
 		}
 		// The reference server transfers the target to a new basic command. Resolve
@@ -617,7 +638,22 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	// in state 0, holding basic attacks while a wall stands
 	// or a skill cast is open; its cast handler allows an in-range non-ao/pw
 	// skill to fire in place.
-	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
+	if nowMs < intent.NextActionMs {
+		// Settled into the swing wait and the transition published
+		// nothing: stamp the wait so the tick skips the resolution
+		// above until the first tick the swing can fire (this gate
+		// fires at NextActionMs). Admission blocks and the attack
+		// lock are re-judged by that evaluation, exactly as they
+		// were re-judged on every waiting tick before (#3101).
+		if len(combatTransition.Frames) == 0 && len(combatTransition.Broadcast) == 0 &&
+			len(combatTransition.ActorPrivate) == 0 && len(combatTransition.Recipients) == 0 &&
+			len(combatTransition.Around) == 0 {
+			intent.WaitUntilMs = intent.NextActionMs
+			rt.setCombatIntent(intent)
+		}
+		return combatTransition
+	}
+	if rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
 		return combatTransition
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
@@ -906,6 +942,17 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 	served := 0
 	for n := 0; n < len(intents); n++ {
 		intent := intents[(start+n)%len(intents)]
+		// A settled swing wait runs untouched to its stamped tick
+		// (#3101): the evaluation that stamped it had just resolved
+		// the caster, target and spacing, and only the swing timer
+		// can act next. Native attack actions evaluate on that same
+		// timer - EXECUTE waits the step's action duration between
+		// steps - so nothing the skipped ticks could see is lost:
+		// pursuit, admission and validity are all re-judged by the
+		// first evaluation at or past WaitUntilMs.
+		if nowMs < intent.WaitUntilMs {
+			continue
+		}
 		// A chain stage waits only on the casting instance; its root bracket
 		// is deliberately still open (see chainStageBlocked).
 		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]

@@ -163,6 +163,14 @@ type Runtime struct {
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache
+	// groundScopeMarks is the ground pass's per-session settled marks
+	// (ground_scope.go, #3101).
+	groundScopeMu    sync.Mutex
+	groundScopeMarks map[string]groundScopeMark
+	// skillObjectScopeMarks is the skill-object pass's per-session
+	// settled marks (skillobjects.go, #3101).
+	skillObjectScopeMu    sync.Mutex
+	skillObjectScopeMarks map[string]skillObjectScopeMark
 	// staticRefs is the published static reference set
 	// (ground_references.go).
 	staticRefs staticRefCache
@@ -903,6 +911,9 @@ type Runtime struct {
 	pendingMonsterCasts     []pendingMonsterCast           // protected by pendingSkillFinalizesMu
 	pendingProjectileCasts  []pendingProjectileCast        // protected by pendingSkillFinalizesMu
 	currentSkillCommands    map[string]currentSkillCommand // same mutex; survives dequeue until release processing ends
+	// castWaitVerdicts is each waiting cast's judged wait, cached by
+	// cast token (#3101); same mutex. See projectileWaitingValid.
+	castWaitVerdicts map[uint32]projectileWaitVerdict
 
 	// pendingMonsterDefeats holds zero-HP reward sources through the authored
 	// death clip. Their movers are inert, but their client animation state must
