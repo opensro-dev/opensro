@@ -10,7 +10,10 @@ The ledger closes that gap: every process that publishes into
 client-public/assets claims the files it wrote OR kept this run, and the
 pack tail soft-archives every swept file no owner claimed before packing
 (auditClaims), and the release packager refuses an index with unclaimed
-assets (verifyIndexClaims).
+assets (verifyIndexClaims). The audit also refuses the other direction:
+a claimed file that is not on disk (a damaged copy of the tree renamed
+it), and an unclaimed name that is not ASCII (the damaged spelling
+itself), so a published manifest can never lose a claimed path silently.
 
 One ledger file per owner (the outdoor build, the resource build, each
 focused family and publisher) lives beside the generated tree it describes
@@ -37,6 +40,7 @@ import path from "node:path";
 import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { PUBLISH_FAMILIES, REFRESH_FAMILIES } from "../../tasks/assets.mjs";
 import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
+import { listFiles } from "./fsUtils.mjs";
 
 const LEDGER_FORMAT = "sro-publication-ledger";
 const LEDGER_VERSION = 1;
@@ -435,6 +439,7 @@ async function ledgerStatus() {
 	return {
 		owners,
 		claimed: new Set( spellings.keys() ),
+		spellings,
 		referenced: await referencedFiles( spellings ),
 		missingOwners: expected.filter( owner => !owners.has( owner ) ),
 		retiredOwners: [ ...owners.keys() ].filter( owner => !known.has( owner ) )
@@ -469,6 +474,12 @@ recorded:
 - a file a claimed manifest names but no current step produced fails the
   build: a fresh clone would not have it, so the release would break for
   everyone but this machine;
+- a file an owner claims but that is not on disk fails the build, naming
+  it: the manifest would lose a claimed path without a word (2026-11-10,
+  three Korean-named textures a damaged tree copy had renamed);
+- a file whose name is not ASCII and that no owner claims fails the
+  build too: that is the damaged spelling itself, and soft-archiving it
+  would bury the evidence;
 - every other file no owner claimed is soft-archived (moved through
   archiveGeneratedArtifact, never deleted) and dropped from its group, and
   records of retired owners are archived too.
@@ -491,20 +502,60 @@ export async function auditClaims( groups, options = {} ) {
 		}
 	}
 	const { localOnly, unclaimed } = classify( rows, status );
+	// The disk itself, not the sweep: a claimed file the sweep never saw
+	// (the tree under it was renamed) and an unswept stranger both live
+	// here, and only the walk tells them from output.
+	const onDisk = new Map();
+	for ( const absolutePath of await listFiles( path.join( publicRoot, "assets" ), { missing: "empty" } ) ) {
+		const publicPath = toPublicPath( absolutePath );
+		if ( publicPath ) onDisk.set( publicPath.toLowerCase(), publicPath );
+	}
+	const onDiskPaths = new Set( onDisk.keys() );
+	const missingClaimed = [];
+	for ( const [ key, spelling ] of status.spellings ) {
+		if ( isClaimed( spelling, onDiskPaths ) ) continue;
+		missingClaimed.push( {
+			path: spelling,
+			owners: [ ...status.owners ].filter( ( [, files] ) => files.has( key ) ).map( ( [owner] ) => owner )
+		} );
+	}
+	missingClaimed.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	const suspectNames = [ ...onDisk.values() ]
+		.filter( publicPath => /[^\x00-\x7F]/.test( publicPath ) && !isClaimed( publicPath, status.claimed ) )
+		.sort()
+		.map( publicPath => ({ path: publicPath }) );
 	const complete = status.missingOwners.length === 0;
 	const report = {
 		complete,
-		archived: complete && localOnly.length === 0,
+		archived: complete && localOnly.length === 0 && missingClaimed.length === 0 && suspectNames.length === 0,
 		missingOwners: status.missingOwners,
 		retiredOwners: status.retiredOwners,
 		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
 		localOnly,
+		missingClaimed,
+		suspectNames,
 		files: unclaimed.length,
 		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
 		folders: folderTotals( unclaimed ),
 		unclaimed
 	};
 	await writeFile( generatedPath( "unclaimed-assets.json" ), JSON.stringify( report, null, "\t" ) );
+	if ( complete && missingClaimed.length > 0 ) {
+		throw new Error(
+			`${missingClaimed.length} file(s) are claimed by a build owner but are not on disk under the public tree, ` +
+				"so the packs would publish without them (restore the files, or re-run the owner so its record " +
+				`matches the tree; .generated/unclaimed-assets.json lists them): ` +
+				missingClaimed.slice( 0, 8 ).map( row => row.path ).join( ", " )
+		);
+	}
+	if ( complete && suspectNames.length > 0 ) {
+		throw new Error(
+			`${suspectNames.length} file(s) under the public tree have non-ASCII names no build owner claims; ` +
+				"a name like that is a damaged (mojibake) copy of a claimed name, not output of this pipeline " +
+				"(restore the claimed name or remove the file by hand; nothing was archived): " +
+				suspectNames.slice( 0, 8 ).map( row => row.path ).join( ", " )
+		);
+	}
 	if ( complete && localOnly.length > 0 ) {
 		throw new Error(
 			`${localOnly.length} file(s) are named by a manifest but no current build step produced them, ` +
