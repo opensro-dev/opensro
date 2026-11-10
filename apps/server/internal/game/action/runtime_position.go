@@ -36,12 +36,19 @@ func (rt *Runtime) characterSnapshot(
 	if character == nil {
 		return nil
 	}
+	// While a tick hook runs, this whole root family serves one
+	// epoch-checked copy per character and kind (tick_snapshots.go).
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotFull, character)
+	if ok {
+		return cached
+	}
 
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
 		snapshot = character.Snapshot()
 	})
+	rt.storeTickSnapshot(tickSnapshotFull, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -70,6 +77,16 @@ func (rt *Runtime) characterSnapshotAdmitted(
 	if character == nil {
 		return nil
 	}
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotFull, character)
+	if ok {
+		// Admission still judges the live record under the door; the
+		// cached copy stands in for the clone because its epoch proves
+		// the record unchanged since the copy was taken.
+		if rt.characterAdmitted(divisionID, character, admit) {
+			return cached
+		}
+		return nil
+	}
 
 	var snapshot *enterworld.Character
 
@@ -79,6 +96,7 @@ func (rt *Runtime) characterSnapshotAdmitted(
 		}
 		snapshot = character.Snapshot()
 	})
+	rt.storeTickSnapshot(tickSnapshotFull, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -133,12 +151,17 @@ func (rt *Runtime) characterSnapshotEquipment(
 	if character == nil {
 		return nil
 	}
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotEquipment, character)
+	if ok {
+		return cached
+	}
 
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
 		snapshot = character.SnapshotEquipment()
 	})
+	rt.storeTickSnapshot(tickSnapshotEquipment, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -164,12 +187,17 @@ func (rt *Runtime) characterSnapshotCombat(
 	if rt.combatCopy != nil {
 		return rt.combatCopy(divisionID, character)
 	}
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotCombat, character)
+	if ok {
+		return cached
+	}
 
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
 		snapshot = character.SnapshotCombat()
 	})
+	rt.storeTickSnapshot(tickSnapshotCombat, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -202,12 +230,17 @@ func (rt *Runtime) characterSnapshotCast(
 	if rt.castCopy != nil {
 		return rt.castCopy(divisionID, character)
 	}
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotCast, character)
+	if ok {
+		return cached
+	}
 
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
 		snapshot = character.SnapshotCast()
 	})
+	rt.storeTickSnapshot(tickSnapshotCast, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -247,6 +280,17 @@ func (rt *Runtime) characterSnapshotCombatAdmitted(
 		return rt.combatCopy(divisionID, character)
 	}
 
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotCombat, character)
+	if ok {
+		// Admission still judges the live record under the door; the
+		// cached copy stands in for the clone because its epoch proves
+		// the record unchanged since the copy was taken.
+		if rt.characterAdmitted(divisionID, character, admit) {
+			return cached
+		}
+		return nil
+	}
+
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
@@ -255,6 +299,7 @@ func (rt *Runtime) characterSnapshotCombatAdmitted(
 		}
 		snapshot = character.SnapshotCombat()
 	})
+	rt.storeTickSnapshot(tickSnapshotCombat, character, epoch, snapshot)
 
 	return snapshot
 }
@@ -300,6 +345,21 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 		return rt.companionCopy(divisionID, character)
 	}
 
+	cached, epoch, ok := rt.tickSnapshot(tickSnapshotCompanion, character)
+	if ok {
+		// Admission still judges the live record under the door (the
+		// epoch read stays outside it - the read door does not
+		// re-enter); the cached copy stands in for the clone because
+		// its epoch proves the record unchanged since it was taken.
+		guard := rt.deps.AcquireRead(divisionID)
+		admitted := admit == nil || admit(character)
+		guard.Release()
+		if !admitted {
+			return nil
+		}
+		return cached
+	}
+
 	guard := rt.deps.AcquireRead(divisionID)
 	if admit != nil && !admit(character) {
 		guard.Release()
@@ -307,6 +367,7 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 	}
 	snapshot := character.SnapshotCompanion()
 	guard.Release()
+	rt.storeTickSnapshot(tickSnapshotCompanion, character, epoch, snapshot)
 	return snapshot
 }
 

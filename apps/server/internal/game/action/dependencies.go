@@ -79,6 +79,11 @@ type Dependencies interface {
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())
+	// WriteEpoch is the record's authority write epoch (enterworld
+	// Deps.WriteEpoch): the tick snapshot cache shares a copy only
+	// while the epoch stands. Unwired reports false and nothing is
+	// shared.
+	WriteEpoch(character *domain.Character) (uint64, bool)
 	// AcquireRead holds the read door as a value (enterworld
 	// Deps.AcquireRead): the per-tick pet judges read their facts
 	// through it without a door closure per call (#2030).
