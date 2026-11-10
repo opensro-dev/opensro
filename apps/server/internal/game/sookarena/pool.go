@@ -29,6 +29,15 @@ BuildPool
 func BuildPool(refs []monster.MonsterRef) Pool {
 	var p Pool
 	for _, ref := range refs {
+		// Port-only: ordinary tomb species only, never traps, egos or chain bosses.
+		if strings.HasPrefix(ref.Codename, "MOB_TQ_") {
+			family := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(ref.Codename, "MOB_TQ_"), "_CLON2"), "_CLON")
+			switch family {
+			case "TOMBSOLDIER", "QINSHITOMBSTONE", "TOMBARCHER", "TOMBSTONEGHOST", "ROYALSOLDIER", "TOMBBUGGHOST", "SNAKESLAVE", "SNAKEWOMAN", "SNAKEDEMON", "SNAKEMAN":
+			default:
+				continue
+			}
+		}
 		// Quest-only Rocky clones have inflated boss-like HP; use ordinary field variants.
 		if strings.HasPrefix(ref.Codename, "MOB_QT_") {
 			continue

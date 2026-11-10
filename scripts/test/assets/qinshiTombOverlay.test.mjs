@@ -25,7 +25,8 @@ import {
 	loadQinShiTombCharacterRows,
 	loadQinShiTombSkillRows,
 	loadQinShiTombTeleportLinkRows,
-	qinshiTombEnabled
+	qinshiTombEnabled,
+	qinshiTombCombatEnabled
 } from "../../build/shared/qinshiTomb.mjs";
 
 // The server source root this process started with (fixtureServerRoot
@@ -234,4 +235,21 @@ test("tomb overlay rows are collision-free", () => {
 	for ( const cols of teleportLinks ) {
 		assert.equal( cols.length, 21 );
 	}
+});
+
+test("arena combat overlays do not enable tomb teleport links", ( t ) => {
+	withTombFlag( t, "off" );
+	const saved = process.env.SRO_SOOK_SURVIVAL_ARENA;
+	t.after( () => {
+		if ( saved === undefined ) delete process.env.SRO_SOOK_SURVIVAL_ARENA;
+		else process.env.SRO_SOOK_SURVIVAL_ARENA = saved;
+	} );
+	for ( const flag of [ "yes", "off", "on" ] ) {
+		process.env.SRO_SOOK_SURVIVAL_ARENA = flag;
+		assert.equal( qinshiTombCombatEnabled(), flag === "on" );
+		assert.equal( qinshiTombEnabled(), false );
+		const rows = loadCharacterDataRows( fixtureTextdata( t ), { codenamePattern: /./, qinshiTombOverlay: true } );
+		assert.equal( rows.size, flag === "on" ? 80 : 1 );
+	}
+	assert.ok( buildKnobLines().includes( "env SRO_SOOK_SURVIVAL_ARENA=on" ) );
 });

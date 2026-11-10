@@ -33,6 +33,7 @@ built native baseline. All roots below are explicit operator-provided paths.
 
 ```powershell
 $env:SRO_SURVIVAL_COLOSSEUM = 'on'
+$env:SRO_SOOK_SURVIVAL_ARENA = 'on'
 python scripts/import_survival_colosseum.py --client-root <owned-newer-client> --native-root <owned-v150-root> --variant-root <separate-output-root>
 $env:SRO_GAME_ROOT = '<separate-output-root>'
 $env:SRO_GENERATED_ROOT = '<absolute-generated-root-for-this-variant>'

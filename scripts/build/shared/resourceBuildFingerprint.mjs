@@ -54,6 +54,7 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the server's Qin-Shi tomb overlays join the
 	// client bake (shared/qinshiTomb.mjs).
 	"SRO_QINSHI_TOMB",
+	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",

@@ -85,3 +85,39 @@ func TestInstalledPoolHasEncountersAcrossNativeLevels(t *testing.T) {
 	}
 	t.Logf("eligible normal=%d unique=%d", len(pool.Normal), len(pool.Unique))
 }
+
+/*
+================
+TestArenaTombPoolUsesRegularSpeciesAndStageBounds
+================
+*/
+func TestArenaTombPoolUsesRegularSpeciesAndStageBounds(t *testing.T) {
+	seed := monster.TemplateFromParts(map[uint32]monster.MonsterRef{1: {RefObjID: 1}}, nil)
+	refs, err := seed.WithQinShiArenaRefs("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := BuildPool(refs.CreatableRefs())
+	if len(pool.Normal) != 30 || len(pool.Unique) != 0 {
+		t.Fatalf("normal=%d unique=%d", len(pool.Normal), len(pool.Unique))
+	}
+	low, high := 1000, 0
+	for _, ref := range pool.Normal {
+		low, high = min(low, int(ref.Level)), max(high, int(ref.Level))
+	}
+	if low != 81 || high != 100 {
+		t.Fatalf("cave levels %d..%d", low, high)
+	}
+	for stage := range 5 {
+		low, high := StageBounds(90, stage)
+		selected := pool.StageNormals(90, stage)
+		if len(selected) == 0 {
+			t.Fatalf("stage %d empty", stage+1)
+		}
+		for _, ref := range selected {
+			if int(ref.Level) < low || int(ref.Level) > high {
+				t.Fatal("cave monster exceeds stage bounds")
+			}
+		}
+	}
+}

@@ -90,6 +90,18 @@ export function qinshiTombEnabled() {
 
 /*
 ================
+qinshiTombCombatEnabled
+
+Port-only: arena encounters need cave actors and skills, never cave doors.
+================
+*/
+export function qinshiTombCombatEnabled() {
+	const arena = (process.env.SRO_SOOK_SURVIVAL_ARENA ?? "").trim().toLowerCase();
+	return qinshiTombEnabled() || [ "1", "true", "on" ].includes( arena );
+}
+
+/*
+================
 qinshiTombBranchFallback
 
 The degree-9 stand-in for a compound branch v1.150 does not ship, or
@@ -101,7 +113,7 @@ references both take it, so they see the same branches.
 ================
 */
 export function qinshiTombBranchFallback( branchPath ) {
-	if ( !qinshiTombEnabled() || !DEGREE_10_BRANCH.test( branchPath ) ) {
+	if ( !qinshiTombCombatEnabled() || !DEGREE_10_BRANCH.test( branchPath ) ) {
 		return null;
 	}
 	return branchPath.replace( DEGREE_10_BRANCH, "_09" );

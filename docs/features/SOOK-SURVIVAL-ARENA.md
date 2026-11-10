@@ -48,6 +48,26 @@ Skill reuse freezes during the reward decision, then runs normally during the
 15-second preparation countdown. You can cast self-buffs before the next wave;
 those buffs and their new cooldowns are preserved when combat starts. The ordinary death return still waits five seconds.
 
+## Cave encounters
+
+The arena can use 30 regular Qin-Shi Tomb variants, level 81–100, with their
+original levels and combat skills. The ten families are Tomb Soldier (81–83),
+Qin-Shi Tombstone (81–84), Tomb Archer (84–86), Tombstone Ghost (86–88), Royal
+Soldier (88–90), Tomb Bug Ghost (90–92), Snake Slave (91–95), Snake Woman
+(92–97), Snake Demon (94–99), and Snake Man (97–100).
+
+Stage bounds still win: a level-90 entrant can meet only level 84–96 monsters.
+Traps, egos, quest copies and tomb-chain bosses are excluded. Existing installed
+Donwhang cave monsters, such as Work Earth Ghost (62/64), Soldier Earth Ghost
+(65/66) and Nachal (69/70), already enter the pool when their levels fit.
+
+With the arena enabled and the public tomb disabled, only cave combat references
+and skills are loaded: no cave nests, trigger chains or teleport doors are
+activated. Client assets must be baked with `SRO_SOOK_SURVIVAL_ARENA=on`; the
+model, animation, effect and skill builders include the matching combat overlay
+without enabling cave teleport data. Rebuild/publish assets before restarting
+the updated arena server; old packs cannot draw these additional encounters.
+
 ## Rewards
 
 Ordinary equipment, consumable, gold-heap and quest-item floor drops are

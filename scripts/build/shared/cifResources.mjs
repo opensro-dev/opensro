@@ -38,7 +38,7 @@ import {
 	collectSkillMasteryIconDdjReferencesFromRows
 } from "./skillPaneImageReferences.mjs";
 import { collectWorldMapImageReferences } from "./worldMapImageReferences.mjs";
-import { loadQinShiTombSkillRows, qinshiTombEnabled } from "./qinshiTomb.mjs";
+import { loadQinShiTombSkillRows, qinshiTombCombatEnabled } from "./qinshiTomb.mjs";
 import { collectGuideImageReferences } from "./guideImageReferences.mjs";
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { buildPetItemIcons } from "./petItemIcons.mjs";
@@ -343,7 +343,7 @@ async function collectSkillDataIconDdjReferences() {
 	// Port-only, not native: with SRO_QINSHI_TOMB on, the server skill
 	// overlay's icons ship too (the trap buff/debuff DDJs exist in this
 	// Media.pk2; only the table rows were missing).
-	if ( qinshiTombEnabled() ) {
+	if ( qinshiTombCombatEnabled() ) {
 		for ( const cols of loadQinShiTombSkillRows().rows ) {
 			const icon = cols[61]?.trim().toLowerCase();
 			if ( icon && icon.endsWith( ".ddj" ) ) {

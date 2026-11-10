@@ -96,7 +96,7 @@ import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { readTextDataLinesSync, readTextDataRowsSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { readSkillEffectSourceText } from "../char/parseSkillEffect.mjs";
-import { loadQinShiTombSkillRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { loadQinShiTombSkillRows, qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 
 import { gameRoot, publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { tooltipAppearanceReferences } from "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts";
@@ -267,7 +267,7 @@ export async function buildSkillDataAsset() {
 	// overlay joins the canonical table (shared/qinshiTomb.mjs) under the
 	// same Service==1 / width admission as the retail shards.
 	let tombSkillSourcePath;
-	if ( qinshiTombEnabled() ) {
+	if ( qinshiTombCombatEnabled() ) {
 		const overlay = loadQinShiTombSkillRows();
 		tombSkillSourcePath = overlay.sourcePath;
 		for ( const cols of overlay.rows ) {

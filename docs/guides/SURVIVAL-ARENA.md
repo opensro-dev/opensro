@@ -29,6 +29,10 @@ earlier when you clear its wave budget. Then defeat every remaining monster.
 | 4 | 1 to 4 levels higher | 32–45 |
 | 5 | 3 to 6 levels higher | 50–70 |
 
+Regular Qin-Shi Tomb creatures can appear when their levels fit your stage.
+Their natural levels range from 81 to 100; a level-90 character meets only
+those within the stage bands above.
+
 Later stages bring substantially more monsters, up to **200 living monsters**
 in your arena. Some attack immediately; others notice you as you approach.
 After spawning stops, remaining monsters start hunting you after one minute,

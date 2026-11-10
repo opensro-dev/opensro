@@ -122,3 +122,25 @@ the race binary. Its cancelled pipeline-contract task passes independently.
 Use the existing isolated asset-tool Python interpreter for preparation and a
 supported race toolchain in CI. Full five-stage live acceptance remains
 outstanding as described above.
+
+## Cave encounter expansion
+
+Arena-only bootstrap imports Qin-Shi combat references and skills even when
+`SRO_QINSHI_TOMB=off`, preserving the public population and closed doors. The
+pool admits 30 regular variants from ten families (81–100), with unchanged stage
+bounds, and excludes traps/egos/quest variants/chain bosses. Matching asset
+builders use the combat overlay for either event; the teleport builder still
+uses only the tomb flag. The arena flag invalidates the resource fingerprint.
+
+Regression tests cover preserved native nests/input references, duplicate-ID
+refusal, skill overlay on/off, exact regular family count and level bounds,
+client combat overlay versus closed teleport posture, and cache invalidation.
+Full visual acceptance of every newly admitted cave species remains required;
+source existence or passing pool tests do not prove render compatibility.
+
+Cave expansion verification: arena/monster/entry focused Go tests pass; the
+changed-server gate passes its regular checks and fails only its unavailable
+local CGO race step. Eight overlay/fingerprint tests and two native-texture
+contract tests pass; scripts typecheck, encoding, size and formatting pass.
+The local GameWorld cave binary is built. Deployment and live rendering status
+are recorded in ignored `cave-expansion-status.json`, not inferred from builds.
