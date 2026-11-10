@@ -30,13 +30,14 @@ jobs:
     outputs:
       client: ${{ steps.diff.outputs.client }}
       server: ${{ steps.diff.outputs.server }}
+      shardsettings: ${{ steps.diff.outputs.shardsettings }}
     steps:
       - id: diff
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          if [ -z "$PR" ]; then printf 'client=true\nserver=true\n' >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -z "$PR" ]; then printf 'client=true\nserver=true\nshardsettings=true\n' >> "$GITHUB_OUTPUT"; exit 0; fi
           files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
           # Shared inputs (workflows, lockfile, task runner) affect both sides.
           shared='^(\.github/|pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|scripts/tasks/)'
@@ -44,6 +45,8 @@ jobs:
           echo "client=$(match '^(apps/client-next/|packages/)')" >> "$GITHUB_OUTPUT"
           # The Go gate also reads the pipeline paths and its own scripts.
           echo "server=$(match '^(apps/server/|scripts/checks/(check_go_server|checkStamps)\.mjs|scripts/build/world/paths\.mjs)')" >> "$GITHUB_OUTPUT"
+          # The shard-settings table against the private ops repo's job.
+          echo "shardsettings=$(match '^apps/server/internal/config/shardsettings/')" >> "$GITHUB_OUTPUT"
 
   client-source:
     needs: changes
@@ -192,12 +195,58 @@ jobs:
           CGO_ENABLED: "0"
         run: go vet ./...
 
+  # The shard-settings table against the private ops repo's GameWorld
+  # job. These tests skip in a plain checkout (opstree.Require: no ops
+  # tree beside the code), so until now only the release build ran them,
+  # and on 2026-11-10 it found the pair drifted in both directions
+  # (opensro-ops#242). A pull request that touches the table checks out
+  # opensro-ops at main, lays its server-ops/ into apps/server/ops as
+  # the release build does, and fails until the job there matches:
+  # land the ops change first, then this goes green. The ops repo runs
+  # the same two packages on its own pull requests and nightly.
+  # The checkout needs OPS_TREE_READ_TOKEN, a read-only credential for
+  # opensro-ops; fork pull requests do not receive it and cannot pass
+  # this job (the ops repo's nightly run is their backstop).
+  server-job-contract:
+    needs: changes
+    if: needs.changes.outputs.shardsettings == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # As server-source: every Go command compiles with -trimpath.
+      GOFLAGS: -trimpath
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: opensro-dev/opensro-ops
+          ref: main
+          path: ops-tree
+          token: ${{ secrets.OPS_TREE_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: Lay the ops tree into the module, as the release build does
+        run: |
+          rm -rf apps/server/ops
+          mkdir -p apps/server/ops
+          cp -a ops-tree/server-ops/. apps/server/ops/
+          cp apps/server/config/compatibility.json apps/server/config/shard-settings.json apps/server/ops/release/
+          test -f apps/server/ops/nomad/jobs/gameworld.nomad.hcl
+      - name: Check the job contract (setting table, job file, deployment tool)
+        working-directory: apps/server
+        run: go test -count=1 ./internal/config/shardsettings ./cmd/operations/sro-nomad
+
   # The one check from this workflow a ruleset can require (a job skipped by
   # `if:` satisfies a required check). It always runs and fails when a job
   # failed, or was skipped although this pull request's files needed it.
   gate-summary:
     name: gate-summary (linux)
-    needs: [changes, client-source, server-policy, server-source]
+    needs: [changes, client-source, server-policy, server-source, server-job-contract]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -207,9 +256,11 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           CLIENT: ${{ needs.changes.outputs.client }}
           SERVER: ${{ needs.changes.outputs.server }}
+          SHARDSETTINGS: ${{ needs.changes.outputs.shardsettings }}
           CLIENT_SOURCE: ${{ needs.client-source.result }}
           SERVER_POLICY: ${{ needs.server-policy.result }}
           SERVER_SOURCE: ${{ needs.server-source.result }}
+          JOB_CONTRACT: ${{ needs.server-job-contract.result }}
         run: |
           [ "$CHANGES" = success ] || { echo "changes: $CHANGES"; exit 1; }
           failed=0
@@ -225,4 +276,5 @@ jobs:
           need client-source "$CLIENT_SOURCE" "$CLIENT"
           need server-policy "$SERVER_POLICY" "$SERVER"
           need server-source "$SERVER_SOURCE" "$SERVER"
+          need server-job-contract "$JOB_CONTRACT" "$SHARDSETTINGS"
           exit $failed
