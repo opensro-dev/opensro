@@ -49,13 +49,15 @@ const ASSETS_ROOT = path.join( CLIENT_PUBLIC_ROOT, "assets" );
 // The pack tail owns everything under packs/ and the web manifests itself.
 const PACK_TAIL_PREFIXES = [ "/assets/packs/" ];
 const PACK_TAIL_FILES = new Set( [ "/assets/manifest.json" ] );
-// Families published loose beside the packs, never as pack members:
-// the fonts (shared/fontResources.mjs copies the .ttf files into the
-// tree and no pack group sweeps them). On the 2026-11-10 tree these
-// three files were the only claimed paths absent from the pack index
-// (42,358 claims against 42,330 packed assets); a claimed file
-// anywhere else belongs in the index.
-const LOOSE_PREFIXES = [ "/assets/fonts/" ];
+// The one loose family: the .ttf files under /assets/fonts/ ship loose
+// beside the packs (shared/fontResources.mjs copies them into the
+// tree and no pack group sweeps them). The font atlases in the same
+// folder (native-ui-font-atlas.json/.png) are pack members like
+// anything else, so the exemption is the .ttf files, not the folder:
+// on the 2026-11-10 tree they were the only claimed paths absent from
+// the pack index (3 of 42,358 claims). A claimed file anywhere else
+// belongs in the index.
+const LOOSE_FILE = /^\/assets\/fonts\/[^/]+\.ttf$/i;
 // The two builds always own records; a focused refresh of files the
 // resource build also writes may add its own.
 const CORE_OWNERS = [ "resource-build", "outdoor-world" ];
@@ -623,7 +625,7 @@ export async function indexClaimReport( index ) {
 	const missingClaimed = [];
 	for ( const [key, spelling] of status.spellings ) {
 		if ( PACK_TAIL_PREFIXES.some( prefix => key.startsWith( prefix ) ) || PACK_TAIL_FILES.has( key ) ) continue;
-		if ( LOOSE_PREFIXES.some( prefix => key.startsWith( prefix ) ) ) continue;
+		if ( LOOSE_FILE.test( key ) ) continue;
 		if ( isClaimed( spelling, indexPaths ) ) continue;
 		missingClaimed.push( spelling );
 	}

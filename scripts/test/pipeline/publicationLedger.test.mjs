@@ -397,19 +397,28 @@ test("an index that lost a claimed asset is refused, loose families aside", asyn
 				"/assets/models/a.glb",
 				"/assets/models/b.glb",
 				"/assets/fonts/sro-default.ttf",
+				"/assets/fonts/native-ui-font-atlas.png",
 				"/assets/packs/game-data-001-abcdef.bin"
 			] );
 		}
 		await ledger.commitPublication();
 	}
 	const problems = await ledger.verifyIndexClaims( { assets: [ { path: "/assets/models/a.glb" } ] } );
-	assert.match( problems.join( "; " ), /1 asset\(s\) claimed by a build owner but missing from the pack index/ );
+	assert.match( problems.join( "; " ), /2 asset\(s\) claimed by a build owner but missing from the pack index/ );
 	assert.ok( problems.join( "; " ).includes( "/assets/models/b.glb" ), "the refusal names the lost asset" );
+	assert.ok(
+		problems.join( "; " ).includes( "/assets/fonts/native-ui-font-atlas.png" ),
+		"a font atlas is a pack member, not loose: its loss is named too"
+	);
 	assert.deepEqual(
 		await ledger.verifyIndexClaims( {
-			assets: [ { path: "/assets/models/a.glb" }, { path: "/assets/models/b.glb" } ]
+			assets: [
+				{ path: "/assets/models/a.glb" },
+				{ path: "/assets/models/b.glb" },
+				{ path: "/assets/fonts/native-ui-font-atlas.png" }
+			]
 		} ),
 		[],
-		"fonts and the pack tail's own files are not pack members and never count as missing"
+		"the loose .ttf files and the pack tail's own files are not pack members and never count as missing"
 	);
 });
