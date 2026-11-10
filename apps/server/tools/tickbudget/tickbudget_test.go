@@ -342,6 +342,102 @@ func TestAnalyzeDoctoredSetShowsBlindSpots(t *testing.T) {
 
 /*
 ================
+TestAnalyzeFiveSnapshotCaptureScalesEachSourceByItsPair
+
+A capture's five snapshots pair by file order (#3103): the profile
+scales by metrics-1..2 (301 ticks), the trace by metrics-3..4 (50),
+the zone window by the whole span (954) - even though metrics-2 and
+metrics-3 share a tick counter, the tie the old re-sort dropped.
+================
+*/
+func TestAnalyzeFiveSnapshotCaptureScalesEachSourceByItsPair(t *testing.T) {
+	dir := t.TempDir()
+	counts := []uint64{1000, 1301, 1301, 1351, 1954}
+	for i, count := range counts {
+		snap := metricsSnapshot{TickCount: count, TickMeanMs: 60, LiveSessions: 105}
+		snapshotJSON(t, dir, "metrics-"+string(rune('1'+i))+".json", snap)
+	}
+	var out bytes.Buffer
+	if _, err := analyzeDir(dir, "", &out); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{"window: 954 ticks", "windows for profile and trace: cpu 301 ticks, trace 50 ticks"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+}
+
+/*
+================
+TestInterTickWaitClassification
+
+The tick machinery's wait for its next unit of work is idle, never
+blocked (#3103): the coordinator in Ticker.run's select, a shard
+worker in runShard's select, and the coordinator on a batch's done
+channel inside runScheduledTick. Real waits inside the tick stay
+blocked.
+================
+*/
+func TestInterTickWaitClassification(t *testing.T) {
+	tick := "opensro.online/server/internal/game/world/simulation.(*Ticker)."
+	cases := []struct {
+		name  string
+		funcs []string
+		want  bool
+	}{
+		{"coordinator select", []string{"runtime.selectgo", tick + "run", "main.main"}, true},
+		{"shard worker select", []string{"runtime.selectgo", tick + "runShard", tick + "run"}, true},
+		{"coordinator batch done", []string{"runtime.chanrecv", tick + "runScheduledTick", tick + "run"}, true},
+		{"lock wait inside the tick", []string{"runtime.semacquire", "sync.(*Mutex).Lock", tick + "runScheduledTick", tick + "run"}, false},
+		{"sleep inside the tick", []string{"runtime.gopark", "time.Sleep", "example.hook", tick + "runScheduledTick", tick + "run"}, false},
+		{"channel wait inside the tick", []string{"runtime.chanrecv", "example.hook", tick + "runScheduledTick", tick + "run"}, false},
+		{"select inside the tick", []string{"runtime.selectgo", "example.hook", tick + "runScheduledTick", tick + "run"}, false},
+		{"no frames", nil, false},
+	}
+	for _, tc := range cases {
+		if got := isInterTickWait(tc.funcs); got != tc.want {
+			t.Fatalf("%s: isInterTickWait = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+/*
+================
+TestChildrenWithinParentsHooksTolerance
+
+The hooks' sum may exceed phase:hooks by the per-hook timer overhead
+(under 3%, #3103); beyond it the check still fails.
+================
+*/
+func TestChildrenWithinParentsHooksTolerance(t *testing.T) {
+	hooksCheck := func(t *testing.T, hookMs float64) check {
+		t.Helper()
+		zones := map[string]float64{
+			"phase:total":        100,
+			"phase:before_hooks": 70,
+			"phase:hooks":        30,
+			"hook:action":        hookMs,
+		}
+		for _, c := range reconcile(&measurements{zones: zones}) {
+			if c.Name == "children within parents (metrics zones)" {
+				return c
+			}
+		}
+		t.Fatal("children-within-parents check missing")
+		return check{}
+	}
+	if c := hooksCheck(t, 30.6); c.Status != "PASS" { // +2% over the parent
+		t.Fatalf("hooks at +2%%: status = %s (%s), want PASS", c.Status, c.Detail)
+	}
+	if c := hooksCheck(t, 32); c.Status != "FAIL" { // +6.7% over the parent
+		t.Fatalf("hooks at +6.7%%: status = %s (%s), want FAIL", c.Status, c.Detail)
+	}
+}
+
+/*
+================
 TestCaptureRefusesNonLoopback
 
 Capture refuses a routable pprof or metrics address before any ssh
