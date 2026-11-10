@@ -114,10 +114,23 @@ test("the worker decodes a ranking whole and numbers each one", () => {
 });
 
 test("the ranking has its own opcode, and the crow's Tailwind still reaches pet training", () => {
-	// pettailwind.go's private 0x3FB7: recipient u32, book u8, stacks u8, speed x10 u16.
+	// pettailwind.go's public 0x3FB7: recipient u32, book u8, stacks u8, speed x10 u16.
+	// Public since #2555: the local row is the one whose recipient is the
+	// local player, so seed that player (gid 100002) before the frame.
 	assert.notEqual( OP_UNIQUE_DAMAGE_RANK, 0x3fb7 );
 	const game = createGameplay( () => {} );
 	game.bootstrap( {} );
+	game.seed( {
+		gid: 100002,
+		refObjId: 1,
+		kind: "local-player",
+		name: "Rank tester",
+		regionId: 1,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0
+	} );
 	const tailwind = new Uint8Array( 8 ), v = new DataView( tailwind.buffer );
 	v.setUint32( 0, 100002, true );
 	tailwind[4] = 57;
@@ -128,6 +141,14 @@ test("the ranking has its own opcode, and the crow's Tailwind still reaches pet 
 	const state = game.take();
 	assert.deepEqual( state?.petTailwind, { gid: 100002, book: 57, stacks: 10, speedPercent: 30 } );
 	assert.equal( state?.uniqueDamageRank?.selfRank, 2 );
+	// Another player's Tailwind row is public board data, never the local one.
+	const other = new Uint8Array( 8 ), ov = new DataView( other.buffer );
+	ov.setUint32( 0, 100003, true );
+	other[4] = 55;
+	other[5] = 3;
+	ov.setUint16( 6, 300, true );
+	game.receive( { opcode: 0x3fb7, payload: other }, 0 );
+	assert.deepEqual( game.take()?.petTailwind, { gid: 100002, book: 57, stacks: 10, speedPercent: 30 } );
 	game.dispose();
 });
 
