@@ -566,7 +566,9 @@
 			"functions": [
 				"download",
 				"activity",
-				"hdAvailability"
+				"hdAvailability",
+				"packGone",
+				"liveManifestValidator"
 			]
 		},
 		{

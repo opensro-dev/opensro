@@ -103,6 +103,17 @@ test("a different live entry offers the update and stops checking", () => {
 	assert.equal( assets.requests.length, 1 );
 });
 
+test("a moved packs manifest offers the update even when the entry is unchanged", () => {
+	// A data publish keeps the entry bundle: only the packs manifest
+	// shows the client-data generation moved (#3104).
+	const assets = scriptedAssets();
+	const watch = createReleaseWatch( assets, PAGE, RUNNING );
+	watch.step( 0, false );
+	assets.reply( { kind: "release", entry: RUNNING, packsChanged: true } );
+	watch.step( 16, false );
+	assert.equal( watch.newerAvailable(), true );
+});
+
 test("errors and entry-less pages are retried, never read as a release", () => {
 	const assets = scriptedAssets();
 	const watch = createReleaseWatch( assets, PAGE, RUNNING );

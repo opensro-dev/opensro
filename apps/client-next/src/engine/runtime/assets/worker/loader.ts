@@ -286,7 +286,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		url: string,
 		limit: number,
 		signal: AbortSignal,
-		range?: import("./packs/packs").PackRange
+		range?: import("./packs/packs").PackRange,
+		observeValidator?: ( validator: string | null ) => void
 	) {
 		// Every load in flight shares this pipe (packs.ts deduplicates its
 		// reads), so the download counts toward all of them: it flips any
@@ -298,7 +299,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			for ( let attempt = 0;; attempt++ ) {
 				signal.throwIfAborted();
 				try {
-					return await downloadAttempt( url, limit, signal, range );
+					return await downloadAttempt( url, limit, signal, range, observeValidator );
 				} catch ( error ) {
 					const transient = error instanceof TypeError || error instanceof NoProgressError ||
 						transientAssetFault( error ) ||
@@ -355,7 +356,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		url: string,
 		limit: number,
 		signal: AbortSignal,
-		range?: import("./packs/packs").PackRange
+		range?: import("./packs/packs").PackRange,
+		observeValidator?: ( validator: string | null ) => void
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
@@ -379,7 +381,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		};
 		stallWindows.add( restart );
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, restart, observeValidator );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
@@ -399,7 +401,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	and on every body chunk.
 	================
 	*/
-	async function downloadBytes( read: DownloadRead, progressed: () => void ) {
+	async function downloadBytes(
+		read: DownloadRead,
+		progressed: () => void,
+		observeValidator?: ( validator: string | null ) => void
+	) {
 		const { url, limit, signal, range } = read;
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
@@ -418,6 +424,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			headers: range ? { Range: `bytes=${range.start}-${range.end}` } : undefined
 		} );
 		progressed();
+		if ( response.ok && observeValidator ) observeValidator( response.headers.get( "etag" ) );
 		if ( !response.ok || !response.body ) {
 			// Cleanup is not awaited: a cancel that never settles must not hold the slot.
 			void response.body?.cancel().catch( () => {} );
@@ -471,7 +478,42 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	function hdAvailability( available: boolean ) {
 		send( { kind: "hd-availability", available }, [] );
 	}
-	const packs = createPacks( download, activity, hdAvailability );
+	/*
+	================
+	packGone
+
+	A pack this page's manifest names answered 404: the release moved
+	under the page (#3104). Posted at once, not attached to the job the
+	loose recovery may still satisfy.
+	================
+	*/
+	function packGone() {
+		send( { kind: "release-stale" }, [] );
+	}
+	/*
+	================
+	liveManifestValidator
+
+	The live packs manifest's HTTP validator, read with one HEAD so a
+	release check compares validators instead of downloading the whole
+	15 MB manifest again (#3104). Null when the server answers without
+	one (the caller then falls back to hashing the body); a failed read
+	throws, so a compare that never ran is never read as "unchanged".
+	================
+	*/
+	async function liveManifestValidator( url: string ): Promise<string | null> {
+		const response = await fetch( url, {
+			method: "HEAD",
+			credentials: "omit",
+			redirect: "error",
+			cache: "no-cache"
+		} );
+		if ( !response.ok ) {
+			throw Object.assign( new Error( `Asset HTTP ${response.status}` ), { status: response.status } );
+		}
+		return response.headers.get( "etag" );
+	}
+	const packs = createPacks( download, activity, hdAvailability, packGone, liveManifestValidator );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
 	// wait for the answer.
@@ -901,10 +943,26 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						alpha ? [ image, alpha.pixels.buffer ] : [ image ]
 					);
 				} else if ( request.decode === "release" ) {
-					// The live page (fetched no-cache): report the entry bundle it names.
+					// The live page (fetched no-cache): report the entry bundle it names,
+					// and whether the live packs manifest moved (a data publish keeps
+					// the entry, so the bundle alone cannot see it, #3104).
 					const html = new TextDecoder( "utf-8" ).decode( bytes );
+					// A compare that could not run is its own answer on the
+					// result (packsCheckFailed), never a silent "unchanged".
+					let packsChanged = false, packsCheckFailed = false;
+					try {
+						packsChanged = await packs.liveManifestChanged( url.origin );
+					} catch {
+						packsCheckFailed = true;
+					}
 					pending.delete( request.id );
-					send( { kind: "release", id: request.id, entry: pageEntryBundle( html, url.origin ) }, [] );
+					send( {
+						kind: "release",
+						id: request.id,
+						entry: pageEntryBundle( html, url.origin ),
+						...(packsChanged ? { packsChanged: true } : {}),
+						...(packsCheckFailed ? { packsCheckFailed: true } : {})
+					}, [] );
 				} else {
 					pending.delete( request.id );
 					send( { kind: "bytes", id: request.id, buffer: bytes.buffer }, [ bytes.buffer ] );
