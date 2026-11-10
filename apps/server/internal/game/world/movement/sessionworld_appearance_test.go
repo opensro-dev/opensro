@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport/worldsession"
@@ -313,6 +314,46 @@ func BenchmarkWorldSnapshot100Sessions(b *testing.B) {
 		for i, provider := range providers {
 			provider.WorldSnapshotInto(&slots[i])
 		}
+	}
+}
+
+/*
+================
+TestWorldSnapshotShowsTransientFacesWithoutACommit
+
+The PvP state and the event team never ride a store door: the
+aggression list is runtime-only and the combat lane notes it in
+place, and the event membership is a runtime-only projection. A
+commit revision cannot speak for either, so an in-place change
+with no commit at all must still show at the next snapshot instead
+of freezing at the kept capture until an unrelated commit.
+================
+*/
+func TestWorldSnapshotShowsTransientFacesWithoutACommit(t *testing.T) {
+	provider, _, character, _ := appearanceFixture(t)
+	first := provider.WorldSnapshot()
+	if first.Appearance.PVPState != 0 || first.Appearance.EventTeam != nil {
+		t.Fatalf("settled appearance = %+v, want no pvp state or event team", first.Appearance)
+	}
+	// In place, as the combat lane and the event owner write them:
+	// no store door moves the record's commit revision.
+	character.Aggressions = map[uint32]uint32{4242: 20}
+	character.EventMembership = &domain.EventMembership{ID: 7, Team: 2}
+	second := provider.WorldSnapshot()
+	if second.Appearance == first.Appearance {
+		t.Fatal("the transient faces moved but the appearance was not rebuilt")
+	}
+	if second.Appearance.PVPState != 1 {
+		t.Fatalf("appearance pvp state = %d, want 1 (grey)", second.Appearance.PVPState)
+	}
+	if second.Appearance.EventTeam == nil || *second.Appearance.EventTeam != 2 {
+		t.Fatalf("appearance event team = %v, want team 2", second.Appearance.EventTeam)
+	}
+	character.Aggressions = nil
+	character.EventMembership = nil
+	third := provider.WorldSnapshot()
+	if third.Appearance.PVPState != 0 || third.Appearance.EventTeam != nil {
+		t.Fatalf("cleared appearance = %+v, want both faces cleared", third.Appearance)
 	}
 }
 

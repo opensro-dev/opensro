@@ -254,6 +254,17 @@ func (p *sessionWorld) captureFor() peerAppearanceCapture {
 	if p.capturePrimed && p.captureRevision == revision {
 		kept := p.captureKept
 		p.appearanceMu.Unlock()
+		// The kept capture stands for the committed record, but two
+		// of its faces never ride a store door: the PvP state (the
+		// aggression list is runtime-only, noted in place by the
+		// combat lane) and the event team (the runtime-only event
+		// membership). Stamp them live on the handed-out copy, as
+		// NativeBodyStatus already is read beside the capture, so a
+		// player who just went grey or just enrolled shows it at the
+		// next scope-enter instead of at their next unrelated commit.
+		kept.pvpState = p.character.PVPState()
+		kept.eventTeam = p.character.EventTeam()
+		kept.hasEvent = kept.eventTeam != 0xff
 		return kept
 	}
 	p.appearanceMu.Unlock()
