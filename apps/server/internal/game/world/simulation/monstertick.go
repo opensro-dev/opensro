@@ -115,6 +115,14 @@ type MonsterMoverOps struct {
 	// whose step drained events is the settled lane's
 	// drain-and-carry population (#3027 stage 1).
 	stepDrainedEvents int
+	// recheckScratch backs the pending re-check lane's candidate
+	// list (monsterpending_recheck.go), kept between batches so a
+	// leg allocates none. Shard-owned like resumePending.
+	recheckScratch []pendingRecheck
+	// stepPendingRechecks routes every due actor through the full
+	// step, the lane's reference: the equivalence tests run one
+	// world each way and compare them. Never set in production.
+	stepPendingRechecks bool
 	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
 	// #2205): the zero value (everywhere but production wiring) runs
 	// the serial leg; >= 1 plans each batch on a pool - one worker
@@ -448,10 +456,17 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		}
 	}()
 	stats.queue = time.Since(queueStarted)
-	for _, batch := range batches {
+	for batchIndex, batch := range batches {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
 		ops.activity.askWorld(activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation})
+		// The suspended actors' activity re-check is answered for the
+		// whole batch first (monsterpending_recheck.go); only the
+		// actors it leaves are snapshot and stepped. The batch keeps
+		// the shortened list: the settled ones hold the due their
+		// commit armed, and the remainder sweep has nothing to add.
+		batch.actors = ops.recheckPendingBatch(batch, nowMs, stats)
+		batches[batchIndex].actors = batch.actors
 		var players []playerPose
 		for _, session := range sessions {
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
@@ -528,6 +543,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		navMissesEnd = ops.NavCacheMisses()
 	}
 	stats.finish(navMissesEnd, readGCSample())
+	ops.Navigation.leg(stats)
 	ops.lastLeg = stats
 	if stats.total >= SlowHookThreshold {
 		stats.logSlow(ops.divisionID)

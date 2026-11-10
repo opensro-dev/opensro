@@ -84,6 +84,13 @@ type monsterHotSlot struct {
 	// scalar was the probe's whole cost (#3027). removeHot swaps
 	// whole slots, so the cache travels with its row.
 	maxHP uint32
+	// nestRegion and trainingDummy are cached the same way and for
+	// the same reason: the pending re-check lane
+	// (monsterpending_recheck.go) weighs both per due actor, and the
+	// interned nest and reference rows are far larger than the one
+	// fact it needs from each.
+	nestRegion    uint16
+	trainingDummy bool
 }
 
 /*
@@ -201,13 +208,14 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		row.NestDetached, row.GMSpawned, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
+	held := monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP,
+		nestRegion: row.Nest.RegionID, trainingDummy: row.Ref.TrainingDummy}
 	if exists {
-		s.hot[slot].row = resident
-		s.hot[slot].maxHP = row.Ref.MaxHP
+		s.hot[slot] = held
 		return
 	}
 	s.byGID[gid] = uint32(len(s.hot))
-	s.hot = append(s.hot, monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP})
+	s.hot = append(s.hot, held)
 }
 
 /*
