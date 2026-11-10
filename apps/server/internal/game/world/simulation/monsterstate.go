@@ -158,6 +158,14 @@ type MonsterState struct {
 	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
 	legViewMu sync.Mutex
 	legViews  []*legSnapshot
+	// scopePhase and scopeFolded are fillScopeStamps' per-phase
+	// caches, kept between phases and cleared at each fill's entry
+	// under s.mu (#3027): they live exactly one phase, and remaking
+	// them every leg was the scope phase's allocation bill. The
+	// clear is load-bearing — a population released between phases
+	// must never answer through a dead state pointer.
+	scopePhase  scopePopulations
+	scopeFolded map[scopeStampKey]interestMemoStamp
 }
 
 /*

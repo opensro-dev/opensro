@@ -76,6 +76,17 @@ type MonsterMoverOps struct {
 	// per-actor publish path iterates one division's viewers instead of
 	// rescanning every session. Nil outside a leg.
 	legSessions map[string][]SessionSnapshot
+	// legViewers, legLive, legSessionBacking and legDivisionSet back
+	// the leg's viewer bookkeeping: one leg's worth of entries each,
+	// kept between legs and cleared at each leg's start (#3027).
+	// Shard-owned like resumePending: the ticker clones its ops
+	// before any leg runs, so each clone owns its maps. The
+	// legSessions index above points into legSessionBacking's
+	// buckets while a leg runs.
+	legViewers        map[string]worldgeom.RegionXZ
+	legLive           map[string]bool
+	legSessionBacking map[string][]SessionSnapshot
+	legDivisionSet    map[string]bool
 	// stepBaseGen is the commit generation the running step's actor
 	// was read at, armed by advanceAndPublish for the step's duration
 	// (#2137 slice 1): the generation-guarded commit helpers
@@ -288,6 +299,26 @@ func MonsterDespawnBracketFrames(gids []uint32) []Frame {
 	}
 }
 
+/*
+================
+retainedLegMap
+
+One of the leg's viewer indexes, kept across legs: made on first
+use, cleared with its buckets kept at the next leg's start, so a
+leg pays no map growth for bookkeeping that lives exactly one leg
+(#3027). Legs on one ops are serial and the leg's readers are done
+before it returns, so the clear at the next start happens after
+the last read.
+================
+*/
+func retainedLegMap[K comparable, V any](held map[K]V, hint int) map[K]V {
+	if held == nil {
+		return make(map[K]V, hint)
+	}
+	clear(held)
+	return held
+}
+
 // RunMonsterLeg advances actors independently of observer interest.
 /*
 ================
@@ -322,9 +353,12 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	ops.leg = stats
 	defer func() { ops.leg = nil }()
 
-	viewers := make(map[string]worldgeom.RegionXZ, len(sessions))
-	live := make(map[string]bool, len(sessions))
-	legSessions := make(map[string][]SessionSnapshot)
+	ops.legViewers = retainedLegMap(ops.legViewers, len(sessions))
+	ops.legLive = retainedLegMap(ops.legLive, len(sessions))
+	ops.legSessionBacking = retainedLegMap(ops.legSessionBacking, len(sessions))
+	viewers := ops.legViewers
+	live := ops.legLive
+	legSessions := ops.legSessionBacking
 	for _, session := range sessions {
 		live[session.SessionID] = true
 		pose := session.World.LiveSpawnAt(nowMs)
@@ -351,7 +385,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 
 	ops.activity = ops.captureActivity(sessions, nowMs)
 	defer func() { ops.activity = nil }()
-	divisionSet := make(map[string]bool)
+	ops.legDivisionSet = retainedLegMap(ops.legDivisionSet, len(sessions))
+	divisionSet := ops.legDivisionSet
 	// One dispatch for the whole leg. A variable captured by the closure
 	// handed to RunAction escapes through that indirect call: captured per
 	// actor, every monster's Instance snapshot and the closure itself were a
