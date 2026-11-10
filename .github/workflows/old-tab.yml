@@ -1,12 +1,14 @@
 # old-tab.yml - a pull request changing what a tab decodes declares it (opensro-ops#116)
 #
 # Its own workflow because editing the body must re-run this check and nothing
-# else. The body is read live from the API at run time, not from the event
-# payload: the payload carries the body the pull request had when the event
-# fired, so re-running a failed run judged the stale body and could never
-# pass after an edit (opensro#3113). The body reaches the script through the
-# environment, never the shell: the API answer lands in the env file as data
-# and is only parsed by the script.
+# else. The body is read live from the API inside the gate step, not from the
+# event payload: the payload carries the body the pull request had when the
+# event fired, so re-running a failed run judged the stale body and could
+# never pass after an edit (opensro#3113). The fetch is a command substitution
+# assigned to a variable and handed to the script as data: it is never
+# evaluated, and it never travels through the environment file, where a run
+# keeps its id across re-runs and a body line naming the delimiter could
+# have planted variables for the gate step itself (#3114 review).
 #
 # The script comes from the BASE when the base has one, never from the tree
 # under test: a pull request must not judge itself with its own copy. The
@@ -58,22 +60,15 @@ jobs:
         with:
           node-version: 24
 
-      - name: Read the pull request's current body
+      - name: Changes an old tab could notice are declared
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          {
-            echo "PR_BODY<<SRO_PR_BODY_${{ github.run_id }}"
-            gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.body // ""'
-            echo "SRO_PR_BODY_${{ github.run_id }}"
-          } >> "$GITHUB_ENV"
-
-      - name: Changes an old tab could notice are declared
         run: |
           if [ -f base-gate/scripts/checks/check_old_tab.mjs ]; then
             cp base-gate/scripts/checks/check_old_tab.mjs scripts/checks/check_old_tab.mjs
           fi
           PR_BASE_SHA=$(git -C base-gate rev-parse HEAD)
           git fetch --no-tags ./base-gate "$PR_BASE_SHA"
-          PR_BASE_SHA="$PR_BASE_SHA" node scripts/checks/check_old_tab.mjs
+          PR_BODY="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""')"
+          PR_BASE_SHA="$PR_BASE_SHA" PR_BODY="$PR_BODY" node scripts/checks/check_old_tab.mjs
