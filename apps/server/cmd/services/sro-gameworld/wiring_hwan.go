@@ -64,8 +64,9 @@ var (
 		{Name: "Exorcist's Home", RegionID: 25253, X: 150, Y: 225.27, Z: 730}, // map X 5775 Y 1225, by NPC_CH_SHAMAN near Jangan
 		{Name: "Sunset Witch", RegionID: 27728, X: 1800, Y: 715.26, Z: 1630},  // map X -10380 Y 3235, by NPC_EU_WITCH near Constantinople
 	}
-	// Just in front of the tomb's entrance: map X 7200 Y 2100.
-	qinShiReverseMapPoint = enterworld.ReverseMapPoint{Name: "Qin-Shi Tomb Entrance", RegionID: 26284, X: 960, Y: 117.04, Z: 1800}
+	// Near where the game places a player leaving the tomb: map X 7200 Y 2080 (Y 2100, a little further, put the
+	// player inside a staircase).
+	qinShiReverseMapPoint = enterworld.ReverseMapPoint{Name: "Qin-Shi Tomb Entrance", RegionID: 26284, X: 960, Y: 111.65, Z: 1600}
 )
 
 /*
