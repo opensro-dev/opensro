@@ -303,18 +303,6 @@ func (q *behaviorQueue) remove(gid uint32) {
 
 /*
 ================
-behaviorQueue.liveCopy
-
-Whether a bucket copy still names its slot's live due.
-================
-*/
-func (q *behaviorQueue) liveCopy(e behaviorCopy) bool {
-	s := q.slots[e.slot]
-	return s.live && s.at == e.at
-}
-
-/*
-================
 behaviorQueue.armedAt
 
 Whether the actor's queue row still holds a live due: a fired row
@@ -335,21 +323,27 @@ behaviorQueue.filterDue
 
 One list under drain at now: live copies due by now fire (their slot
 dies, so a second copy cannot fire again); live copies not yet due
-stay; stale copies drop. Array traffic only.
+stay; stale copies drop. Array traffic only. Each copy reads its
+queue row once: the liveness answer, the kill and the fired ref's
+fields all come from that one row (the drain used to index the row
+again for the fire after asking liveCopy, per copy per bucket).
+Nothing grows q.slots during a drain - re-arms land after takeDue
+returns - so the row pointer never dangles across an iteration
+(#3027).
 ================
 */
 func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behaviorActorRef) []behaviorCopy {
 	keep := list[:0]
 	for _, e := range list {
-		if !q.liveCopy(e) {
+		row := &q.slots[e.slot]
+		if !row.live || row.at != e.at {
 			continue
 		}
 		if e.at > now {
 			keep = append(keep, e)
 			continue
 		}
-		q.slots[e.slot].live = false
-		row := q.slots[e.slot]
+		row.live = false
 		*out = append(*out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 	}
 	return keep
@@ -380,7 +374,8 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 		farMin := int64(0)
 		haveFar := false
 		for _, e := range q.far {
-			if !q.liveCopy(e) {
+			row := &q.slots[e.slot]
+			if !row.live || row.at != e.at {
 				continue
 			}
 			if e.at > now+behaviorHorizonMs {
@@ -391,8 +386,7 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 				continue
 			}
 			if e.at <= now {
-				q.slots[e.slot].live = false
-				row := q.slots[e.slot]
+				row.live = false
 				out = append(out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 				continue
 			}
