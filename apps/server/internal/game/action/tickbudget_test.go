@@ -134,10 +134,13 @@ const (
 // with the pets tick's session walk list cached on the runtime and
 // rebuilt only on session membership writes, instead of rebuilt
 // and re-sorted every tick (#2033), measured 13,542 B / 59 allocs
-// on the combined tree.
+// on the combined tree; with the timed-window sweeps' owner lists
+// cached on their index and rebuilt only when an owner tracks or
+// is forgotten, instead of rebuilt and re-sorted on every sweep
+// (#2033), measured 13,499 B / 56 allocs on the combined tree.
 const (
 	tickBudgetBytesPerTick  = 14900
-	tickBudgetAllocsPerTick = 65
+	tickBudgetAllocsPerTick = 62
 )
 
 /*
