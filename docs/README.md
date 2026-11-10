@@ -35,6 +35,7 @@
 
 | Document | For |
 | --- | --- |
+| [Survival Arena player guide](guides/SURVIVAL-ARENA.md) | Entering, waves, egg powers, checkpoints and rewards |
 | [110-cap expansion](features/CAP110.md) | The optional cap, its imports, switches and open checks |
 | [Attack pet system](pet-expansion/ATTACK-PET-SYSTEM.md) | Skills, gear, procs, drops, the website guide and source owners |
 | [Pet drop configuration](pet-expansion/PET-LOOT-DB-CONFIG.md) | Native equipment tables and the DB drop factor |
