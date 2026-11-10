@@ -2,10 +2,12 @@
 
 Port-only, off by default: `SRO_SOOK_SURVIVAL_ARENA=on`. Uses the imported
 Colosseum in an isolated layer for each entrant. No PK2 changes. This release
-requires matched Agent/GameWorld/client protocol **16**, store **42**, layout 12.
+requires matched Agent/GameWorld/client protocol **17**, store **42**, layout 12.
 
 Talk to Event So-ok and choose **Survival Arena (5 stages, EXP/SP x5)**. There are
-three entries per character per UTC day. Enter alive, without a job suit,
+three entries per character per UTC day. The same off-by-default server flag
+gates entry, eggs/modifiers, chest claims and silk redemption; saved items remain
+stored when it is off. Login recovery still returns stranded characters safely. Enter alive, without a job suit,
 stall/exchange/storage interaction or another event return anchor.
 
 ## Five stages
@@ -67,8 +69,8 @@ Previous/Next page buttons. Bundles include:
 - **Silk scrolls**, each redeemable for 10 real Item Mall silk. Use one from the
   bag; consumption and wallet credit commit atomically. Scrolls stack to20;
   each use consumes one scroll for10silk. Reward stack ranges by stage are
-  **1–3 / 1–5 / 1–10 / 1–15 / 1–20**. They remain usable if
-  new arena entry is disabled. A stage provides at least one voucher.
+  **1–3 / 1–5 / 1–10 / 1–15 / 1–20**. They remain saved while the experimental flag is off; enabling it is required
+  to redeem or claim. A stage provides at least one voucher.
 - Native HP, MP and vigor recovery grains, in stacks of **50**. Regular HP/MP
   potions and universal pills are excluded from new rewards; saved rewards and
   carried items are not rewritten.

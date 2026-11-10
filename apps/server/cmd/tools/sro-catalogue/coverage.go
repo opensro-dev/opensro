@@ -68,6 +68,7 @@ var catalogueReaders = map[string]string{
 // catalogueExempt lists every other shard setting with the reason it
 // changes nothing the catalogue publishes.
 var catalogueExempt = map[string]string{
+	"SRO_SOOK_SURVIVAL_ARENA":                 "private encounters and checkpoint chests at runtime; the catalogue publishes static nests and timed global events, not private stage state or chest rolls",
 	"SRO_BETA_STARTER_KIT":                    "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                     "shows other players on the world map at runtime; the catalogue publishes no live positions",
 	"SRO_CAP110_SET_BONUSES":                  "wearing a set changes derived character stats; the catalogue publishes the set items and no set-bonus table",

@@ -85,7 +85,7 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 		}
 		if mover.TargetGID() == enterworld.ObjectIDForCharacter(a) {
 			aggressive++
-		} else if monster.ResolveTactics(actor).Aggressive {
+		} else if monster.ResolveTactics(&actor).Aggressive {
 			t.Fatal("unengaged actor can acquire a sight target")
 		}
 	}

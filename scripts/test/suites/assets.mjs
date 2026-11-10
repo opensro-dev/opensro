@@ -15,6 +15,7 @@ export default {
 	runner: "node",
 	files: [
 		"scripts/test/assets/petItemIcons.test.mjs",
+		"scripts/test/assets/survivalBuffIcons.test.mjs",
 		"scripts/test/assets/petLootCollar.test.mjs",
 		"scripts/test/assets/portItemRows.test.mjs",
 		"scripts/test/assets/meshCloth.test.mjs",

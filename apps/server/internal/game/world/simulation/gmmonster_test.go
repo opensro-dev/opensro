@@ -197,12 +197,11 @@ TestArenaNonImmediateSpawnKeepsNativeProximityAggro
 ================
 */
 func TestArenaNonImmediateSpawnKeepsNativeProximityAggro(t *testing.T) {
-	s, lease := gmMonsterState(t, 0)
 	ref := monster.MonsterRef{RefObjID: 2, Codename: "MOB_CH_TIGER", MaxHP: 100, WalkSpeed: 8, RunSpeed: 20}
-	s = NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{2: ref}, nil))
+	s := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{2: ref}, nil))
 	s.SetRandomSource(func() float64 { return 0 })
 	s.StartDivision("gm")
-	lease, _ = s.PopulationLease("gm", instance.Pack(1, 1))
+	lease, _ := s.PopulationLease("gm", instance.Pack(1, 1))
 	tactics, ok := monster.ResolveSummonTactics(ref, 0, func() float64 { return 0 })
 	if !ok || !tactics.HasControls || tactics.Controls.AggressType != 0 {
 		t.Fatal("fixture needs native aggressive tactics")
@@ -212,7 +211,7 @@ func TestArenaNonImmediateSpawnKeepsNativeProximityAggro(t *testing.T) {
 		t.Fatal("spawn")
 	}
 	actor, _ := s.Get("gm", ids[0])
-	policy := monster.ResolveTactics(actor)
+	policy := monster.ResolveTactics(&actor)
 	if !policy.Aggressive || actor.Nest.Controls.SightRange != tactics.Controls.SightRange {
 		t.Fatal("native proximity aggression overwritten")
 	}
