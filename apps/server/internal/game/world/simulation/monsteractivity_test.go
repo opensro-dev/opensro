@@ -408,7 +408,7 @@ func TestActivitySnapshotCountedHereFollowsTheAskedWorld(t *testing.T) {
 		here:  {counted: 2},
 		there: {foreign: 1},
 	}}
-	snap.world = here
+	snap.askWorld(here)
 	if !snap.countedHere(counted) {
 		t.Fatal("counted block inactive in its own world")
 	}
@@ -418,11 +418,11 @@ func TestActivitySnapshotCountedHereFollowsTheAskedWorld(t *testing.T) {
 	if snap.countedHere(worldgeom.MessageBlock{X: 1}) {
 		t.Fatal("uncounted block active")
 	}
-	snap.world = there
+	snap.askWorld(there)
 	if !snap.countedHere(foreign) || snap.countedHere(counted) {
 		t.Fatal("answers did not follow the asked world")
 	}
-	snap.world = activityWorld{division: "a", world: 3, generation: 1}
+	snap.askWorld(activityWorld{division: "a", world: 3, generation: 1})
 	if snap.countedHere(counted) || snap.countedHere(foreign) {
 		t.Fatal("uncounted world active")
 	}

@@ -27,13 +27,12 @@ type monsterActivitySnapshot struct {
 	counts     map[activityWorld]map[worldgeom.MessageBlock]uint16
 	unresolved map[activityWorld]bool
 	world      activityWorld
-	// bound is the asked world's count map, bound on rotation
-	// (countedHere): per batch, not per due actor. The snapshot
-	// is walked by the one leg goroutine that owns this ops
-	// clone, so the binding needs no lock.
-	bound      map[worldgeom.MessageBlock]uint16
-	boundWorld activityWorld
-	boundSet   bool
+	// bound is the asked world's count map, bound by askWorld
+	// on rotation: per batch, not per due actor. Every write to
+	// a snapshot (capture, askWorld) happens on the leg
+	// goroutine before the leg-plan bins dispatch; the bins
+	// share the snapshot read-only, so countedHere never writes.
+	bound map[worldgeom.MessageBlock]uint16
 }
 
 func (ops *MonsterMoverOps) activityBlock(p Spawn) (worldgeom.MessageBlock, bool) {
@@ -84,6 +83,22 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 
 /*
 ================
+monsterActivitySnapshot.askWorld
+
+Stamp the world this snapshot is asked about for the next
+batch and bind its count map in the same write. The stamp is
+the one snapshot write the leg makes after capture, and it
+runs on the leg goroutine before the batch's plan bins
+dispatch, so the bins read a settled snapshot (#3027).
+================
+*/
+func (a *monsterActivitySnapshot) askWorld(world activityWorld) {
+	a.world = world
+	a.bound = a.counts[world]
+}
+
+/*
+================
 monsterActivitySnapshot.countedHere
 
 Whether the census counted any admitted PC into the snapshot's
@@ -93,14 +108,12 @@ The gate used to probe the census by the whole bucket key,
 hashing the division string into every due actor's probe. The
 nested census plus the per-rotation binding pays one small
 block hash per actor instead: the world-keyed lookup happens
-once per batch rotation, where world itself is assigned
+once per batch rotation, where the world is stamped (askWorld).
+A pure read: leg-plan bins share the snapshot concurrently
 (#3027).
 ================
 */
 func (a *monsterActivitySnapshot) countedHere(b worldgeom.MessageBlock) bool {
-	if !a.boundSet || a.boundWorld != a.world {
-		a.bound, a.boundWorld, a.boundSet = a.counts[a.world], a.world, true
-	}
 	return a.bound[b] != 0
 }
 

@@ -406,7 +406,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	for _, batch := range batches {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
-		ops.activity.world = activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation}
+		ops.activity.askWorld(activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation})
 		var players []playerPose
 		for _, session := range sessions {
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
