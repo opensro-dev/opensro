@@ -13,9 +13,11 @@ character and copy kind; a door write retires it; outside the bracket
 package action
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -119,6 +121,125 @@ func TestTickSnapshotsAdmissionJudgesTheLiveRecord(t *testing.T) {
 		t.Fatal("the admitted root served a copy of a record admission now refuses")
 	}
 	rt.endTickSnapshots()
+}
+
+/*
+================
+TestTickSnapshotCloneBudget
+
+The clones are the cost the cache removes (#3099): a root served
+from the tick's cache allocates nothing, and the same root outside
+the bracket pays the clone - so the budget breaks if sharing
+silently stops working in either direction.
+================
+*/
+func TestTickSnapshotCloneBudget(t *testing.T) {
+	d := tickSnapshotDoorRuntime(t)
+	rt, c := d.rt, d.character
+
+	rt.beginTickSnapshots()
+	if got := rt.characterSnapshotCast(testDivision, c); got == nil {
+		t.Fatal("the warm-up root returned nothing")
+	}
+	if allocs := testing.AllocsPerRun(50, func() {
+		_ = rt.characterSnapshotCast(testDivision, c)
+	}); allocs != 0 {
+		t.Fatalf("a shared cast root allocated %v per run, want 0", allocs)
+	}
+	rt.endTickSnapshots()
+
+	if allocs := testing.AllocsPerRun(10, func() {
+		_ = rt.characterSnapshotCast(testDivision, c)
+	}); allocs == 0 {
+		t.Fatal("an unshared cast root allocated nothing: the clone is not being measured")
+	}
+}
+
+// tickSnapshotBenchPlayers is the synthetic population the benchmark
+// ticks over: 100 characters with a carried bag, on a real store.
+const tickSnapshotBenchPlayers = 100
+
+/*
+================
+tickSnapshotBenchRuntime
+================
+*/
+func tickSnapshotBenchRuntime(b *testing.B) (*Runtime, []*enterworld.Character) {
+	b.Helper()
+	authority, err := store.Open(filepath.Join(b.TempDir(), "authority"), store.Options{DefaultSkills: doorSkillSeeder})
+	if err != nil {
+		b.Fatalf("store.Open: %v", err)
+	}
+	b.Cleanup(authority.Close)
+	deps := &enterworld.Deps{
+		Characters: authority.Characters(),
+		Items:      testItems(),
+	}
+	deps.ReadCharacter = func(_ string, read func()) { authority.ReadState(read) }
+	deps.ReadLock = func(string) { authority.ReadLock() }
+	deps.ReadUnlock = func(string) { authority.ReadUnlock() }
+	deps.CharacterWriteEpoch = authority.CharacterWriteEpoch
+	rt := NewRuntime(deps, nil)
+
+	characters := make([]*enterworld.Character, 0, tickSnapshotBenchPlayers)
+	for i := range tickSnapshotBenchPlayers {
+		seed := testCharacter()
+		seed.Name = fmt.Sprintf("Bench%03d", i)
+		for slot := 0; slot < 24; slot++ {
+			row := seed.MissionInventory[0]
+			row.Slot = int64(30 + slot)
+			seed.MissionInventory = append(seed.MissionInventory, row)
+		}
+		if err := authority.CreateCharacter(testDivision, fmt.Sprintf("bench-%03d", i), seed); err != nil {
+			b.Fatalf("CreateCharacter: %v", err)
+		}
+		characters = append(characters, seed)
+	}
+	return rt, characters
+}
+
+/*
+================
+BenchmarkTickSnapshotRoots100
+
+One tick's snapshot-root traffic over 100 synthetic players: the
+press, finalize, pet and presentation roots ask for the same
+character's cast, combat and companion copies several times a tick
+(the 2026-11-10 profile put the repeated read-door clones at about
+10 ms of the 61 ms tick). The pair pins the store-clone share of the
+action hook with sharing on and off; off is the pre-#3099 behaviour,
+where every root cloned. Run with -benchmem: clones are allocations.
+================
+*/
+func BenchmarkTickSnapshotRoots100(b *testing.B) {
+	rt, characters := tickSnapshotBenchRuntime(b)
+	roots := func() {
+		for _, c := range characters {
+			_ = rt.characterSnapshotCast(testDivision, c)
+			_ = rt.characterSnapshotCast(testDivision, c)
+			_ = rt.characterSnapshotCast(testDivision, c)
+			_ = rt.characterSnapshotCombat(testDivision, c)
+			_ = rt.characterSnapshotCombat(testDivision, c)
+			_ = rt.characterSnapshotCombatAdmitted(testDivision, c, nil)
+			_ = rt.characterSnapshotCompanionAdmitted(testDivision, c, nil)
+			_ = rt.characterSnapshotCompanionAdmitted(testDivision, c, nil)
+			_ = rt.characterSnapshot(testDivision, c)
+		}
+	}
+	b.Run("shared", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			rt.beginTickSnapshots()
+			roots()
+			rt.endTickSnapshots()
+		}
+	})
+	b.Run("unshared", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			roots()
+		}
+	})
 }
 
 /*
