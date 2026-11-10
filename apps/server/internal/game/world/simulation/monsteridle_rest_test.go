@@ -167,7 +167,7 @@ func TestIdleRestGateLeavesCadenceUntouched(t *testing.T) {
 	// The only viewer stands far from the nest; even so, no gate may
 	// suspend an idle monster.
 	ops.activity = ops.captureActivity([]SessionSnapshot{playerSessionAt(1, 5000, 5000)}, now)
-	ops.activity.world = activityWorld{division: monsterTestDivision, world: 65537, generation: 1}
+	ops.activity.askWorld(activityWorld{division: monsterTestDivision, world: 65537, generation: 1})
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	mover.BehaviorDeadlineMs = now + 60000
 	mover.Activity = monster.ActivityCadence{Interval: 1000, LastCheck: uint32(now)}

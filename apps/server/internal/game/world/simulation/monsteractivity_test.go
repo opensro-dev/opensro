@@ -1,8 +1,10 @@
 package simulation
 
 import (
-	"opensro.online/server/internal/game/world/monster"
 	"testing"
+
+	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 func activityFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, int64) {
@@ -383,5 +385,45 @@ func TestPendingResumePreservesIndependentOpponentLedger(t *testing.T) {
 	row, _ = ops.Monsters.Get(monsterTestDivision, actor.Gid)
 	if row.Opponents != ledger {
 		t.Fatal("WANDER resume cleared opponent memory without a release event")
+	}
+}
+
+/*
+================
+TestActivitySnapshotCountedHereFollowsTheAskedWorld
+
+The gate's census verdict answers off the asked world's counts:
+a block counted under another world is inactive here, an
+uncounted block is inactive everywhere, and rotating the asked
+world (the snapshot's per-batch world) moves the answers with
+it (#3027).
+================
+*/
+func TestActivitySnapshotCountedHereFollowsTheAskedWorld(t *testing.T) {
+	here := activityWorld{division: "a", world: 1, generation: 1}
+	there := activityWorld{division: "a", world: 2, generation: 1}
+	counted := worldgeom.MessageBlock{X: 3, Z: 4}
+	foreign := worldgeom.MessageBlock{X: 9, Z: 9}
+	snap := &monsterActivitySnapshot{counts: map[activityWorld]map[worldgeom.MessageBlock]uint16{
+		here:  {counted: 2},
+		there: {foreign: 1},
+	}}
+	snap.askWorld(here)
+	if !snap.countedHere(counted) {
+		t.Fatal("counted block inactive in its own world")
+	}
+	if snap.countedHere(foreign) {
+		t.Fatal("another world's block active here")
+	}
+	if snap.countedHere(worldgeom.MessageBlock{X: 1}) {
+		t.Fatal("uncounted block active")
+	}
+	snap.askWorld(there)
+	if !snap.countedHere(foreign) || snap.countedHere(counted) {
+		t.Fatal("answers did not follow the asked world")
+	}
+	snap.askWorld(activityWorld{division: "a", world: 3, generation: 1})
+	if snap.countedHere(counted) || snap.countedHere(foreign) {
+		t.Fatal("uncounted world active")
 	}
 }
