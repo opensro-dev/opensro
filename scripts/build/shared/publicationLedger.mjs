@@ -10,7 +10,8 @@ The ledger closes that gap: every process that publishes into
 client-public/assets claims the files it wrote OR kept this run, and the
 pack tail soft-archives every swept file no owner claimed before packing
 (auditClaims), and the release packager refuses an index with unclaimed
-assets (verifyIndexClaims). The audit also refuses the other direction:
+assets, or with claimed assets missing from it (verifyIndexClaims). The
+audit also refuses the other direction:
 a claimed file that is not on disk (a damaged copy of the tree renamed
 it), and an unclaimed name that is not ASCII (the damaged spelling
 itself), so a published manifest can never lose a claimed path silently.
@@ -48,6 +49,13 @@ const ASSETS_ROOT = path.join( CLIENT_PUBLIC_ROOT, "assets" );
 // The pack tail owns everything under packs/ and the web manifests itself.
 const PACK_TAIL_PREFIXES = [ "/assets/packs/" ];
 const PACK_TAIL_FILES = new Set( [ "/assets/manifest.json" ] );
+// Families published loose beside the packs, never as pack members:
+// the fonts (shared/fontResources.mjs copies the .ttf files into the
+// tree and no pack group sweeps them). On the 2026-11-10 tree these
+// three files were the only claimed paths absent from the pack index
+// (42,358 claims against 42,330 packed assets); a claimed file
+// anywhere else belongs in the index.
+const LOOSE_PREFIXES = [ "/assets/fonts/" ];
 // The two builds always own records; a focused refresh of files the
 // resource build also writes may add its own.
 const CORE_OWNERS = [ "resource-build", "outdoor-world" ];
@@ -512,7 +520,7 @@ export async function auditClaims( groups, options = {} ) {
 	}
 	const onDiskPaths = new Set( onDisk.keys() );
 	const missingClaimed = [];
-	for ( const [ key, spelling ] of status.spellings ) {
+	for ( const [key, spelling] of status.spellings ) {
 		if ( isClaimed( spelling, onDiskPaths ) ) continue;
 		missingClaimed.push( {
 			path: spelling,
@@ -598,7 +606,9 @@ indexClaimReport
 
 Read-only: the published pack index's assets no build owner claims (split
 into local-only files a manifest names and unclaimed garbage), with totals
-per folder, and the expected owners that have no record. Nothing moves;
+per folder, the expected owners that have no record, and the claimed
+assets the index is missing (the pack tail's own files and the loose
+font family are not pack members and never count). Nothing moves;
 `pnpm assets ledger` prints it and the release packager refuses on
 anything but an empty report (verifyIndexClaims).
 ================
@@ -609,11 +619,21 @@ export async function indexClaimReport( index ) {
 		index.assets.map( asset => ({ path: asset.path, group: asset.group, bytes: asset.length }) ),
 		status
 	);
+	const indexPaths = new Set( index.assets.map( asset => asset.path.toLowerCase() ) );
+	const missingClaimed = [];
+	for ( const [key, spelling] of status.spellings ) {
+		if ( PACK_TAIL_PREFIXES.some( prefix => key.startsWith( prefix ) ) || PACK_TAIL_FILES.has( key ) ) continue;
+		if ( LOOSE_PREFIXES.some( prefix => key.startsWith( prefix ) ) ) continue;
+		if ( isClaimed( spelling, indexPaths ) ) continue;
+		missingClaimed.push( spelling );
+	}
+	missingClaimed.sort( ( left, right ) => left.localeCompare( right ) );
 	return {
 		missingOwners: status.missingOwners,
 		retiredOwners: status.retiredOwners,
 		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
 		localOnly,
+		missingClaimed,
 		files: unclaimed.length,
 		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
 		folders: folderTotals( unclaimed ),
@@ -625,9 +645,12 @@ export async function indexClaimReport( index ) {
 ================
 verifyIndexClaims
 
-The release gate: every expected owner has a record and every asset of a
-published pack index is claimed. Returns the problems; empty means the
-tree holds only what the current pipeline produces.
+The release gate: every expected owner has a record, every asset of a
+published pack index is claimed, and every claimed pack-bound asset is
+in the index. Returns the problems; empty means the tree holds only
+what the current pipeline produces. The last clause is the 2026-11-10
+direction: an index that quietly lost claimed paths passes the first
+two and ships a thinner world, so the packager refuses it too.
 ================
 */
 export async function verifyIndexClaims( index ) {
@@ -643,6 +666,12 @@ export async function verifyIndexClaims( index ) {
 		problems.push(
 			`${report.files} packed asset(s) claimed by no build owner, e.g. ` +
 				report.unclaimed.slice( 0, 5 ).map( row => row.path ).join( ", " )
+		);
+	}
+	if ( report.missingClaimed.length > 0 ) {
+		problems.push(
+			`${report.missingClaimed.length} asset(s) claimed by a build owner but missing from the pack index, e.g. ` +
+				report.missingClaimed.slice( 0, 5 ).join( ", " )
 		);
 	}
 	return problems;

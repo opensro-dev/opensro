@@ -388,3 +388,28 @@ test("a named baseline refuses a still-claimed path the new index drops", async 
 	const built = await build( [ model( "a" ), model( "b" ) ] );
 	assert.equal( built.assetCount, 2, "once the owner retires the path the same build passes" );
 });
+
+test("an index that lost a claimed asset is refused, loose families aside", async () => {
+	for ( const owner of ledger.expectedOwners() ) {
+		await ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) {
+			await ledger.claimPublicPaths( [
+				"/assets/models/a.glb",
+				"/assets/models/b.glb",
+				"/assets/fonts/sro-default.ttf",
+				"/assets/packs/game-data-001-abcdef.bin"
+			] );
+		}
+		await ledger.commitPublication();
+	}
+	const problems = await ledger.verifyIndexClaims( { assets: [ { path: "/assets/models/a.glb" } ] } );
+	assert.match( problems.join( "; " ), /1 asset\(s\) claimed by a build owner but missing from the pack index/ );
+	assert.ok( problems.join( "; " ).includes( "/assets/models/b.glb" ), "the refusal names the lost asset" );
+	assert.deepEqual(
+		await ledger.verifyIndexClaims( {
+			assets: [ { path: "/assets/models/a.glb" }, { path: "/assets/models/b.glb" } ]
+		} ),
+		[],
+		"fonts and the pack tail's own files are not pack members and never count as missing"
+	);
+});

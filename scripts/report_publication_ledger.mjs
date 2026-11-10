@@ -7,10 +7,10 @@ report_publication_ledger.mjs - which packed assets no build owner claims
 
 Read-only. Compares the published pack index with the publication ledger
 (build/shared/publicationLedger.mjs) and prints the expected owners with no
-record, the records of owners that no longer exist, and the packed assets
-no owner claims, by folder. The full build archives such files itself and
-the release packager refuses them; this shows them first. Exits 1 when the
-report is not empty.
+record, the records of owners that no longer exist, the packed assets
+no owner claims, by folder, and the claimed assets the index is missing.
+The full build archives such files itself and the release packager refuses
+them; this shows them first. Exits 1 when the report is not empty.
 
 ===========================================================================
 */
@@ -40,5 +40,11 @@ if ( process.argv.includes( "--json" ) ) {
 			)
 				.join( "" )
 	);
+	if ( report.missingClaimed.length > 0 ) {
+		console.log(
+			`Claimed assets missing from the pack index: ${report.missingClaimed.length} ` +
+				`(${report.missingClaimed.slice( 0, 5 ).join( ", " )})`
+		);
+	}
 }
-process.exitCode = report.files > 0 || report.missingOwners.length > 0 ? 1 : 0;
+process.exitCode = report.files > 0 || report.missingOwners.length > 0 || report.missingClaimed.length > 0 ? 1 : 0;
