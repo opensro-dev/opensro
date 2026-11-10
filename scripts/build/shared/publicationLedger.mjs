@@ -512,7 +512,7 @@ export async function auditClaims( groups, options = {} ) {
 	}
 	const onDiskPaths = new Set( onDisk.keys() );
 	const missingClaimed = [];
-	for ( const [ key, spelling ] of status.spellings ) {
+	for ( const [key, spelling] of status.spellings ) {
 		if ( isClaimed( spelling, onDiskPaths ) ) continue;
 		missingClaimed.push( {
 			path: spelling,
