@@ -35,14 +35,33 @@ const ObjectMoveSize = 20
 // Encode returns the 0x30E3 payload:
 // [u16 region][f32 x][f32 y][f32 z][u16 heading][u32 gid].
 func (m ObjectSourceMove) Encode() []byte {
-	return NewWriter(ObjectMoveSize).
+	return m.encodeInto(NewWriter(ObjectMoveSize)).Payload()
+}
+
+/*
+================
+ObjectSourceMove.AppendEncode
+
+AppendEncode appends the 0x30E3 payload to dst and returns the
+grown slice: the batch frame builders (simulation's NPC legs)
+encode a whole roster into one backing buffer instead of a
+writer per NPC (#2033).
+================
+*/
+func (m ObjectSourceMove) AppendEncode(dst []byte) []byte {
+	w := Writer{buf: dst}
+	return m.encodeInto(&w).buf
+}
+
+// encodeInto writes the 0x30E3 payload into w.
+func (m ObjectSourceMove) encodeInto(w *Writer) *Writer {
+	return w.
 		U16(m.RegionID).
 		F32(m.X).
 		F32(m.Y).
 		F32(m.Z).
 		U16(m.Heading).
-		U32(m.Gid).
-		Payload()
+		U32(m.Gid)
 }
 
 // DecodeObjectSourceMove parses a 0x30E3 payload.
@@ -82,14 +101,31 @@ type ObjectSourceCorrection struct {
 // Encode returns the 0xB2F5 payload:
 // [u32 gid][u16 region][f32 x][f32 y][f32 z][u16 heading].
 func (c ObjectSourceCorrection) Encode() []byte {
-	return NewWriter(ObjectMoveSize).
+	return c.encodeInto(NewWriter(ObjectMoveSize)).Payload()
+}
+
+/*
+================
+ObjectSourceCorrection.AppendEncode
+
+AppendEncode appends the 0xB2F5 payload to dst (see
+ObjectSourceMove.AppendEncode).
+================
+*/
+func (c ObjectSourceCorrection) AppendEncode(dst []byte) []byte {
+	w := Writer{buf: dst}
+	return c.encodeInto(&w).buf
+}
+
+// encodeInto writes the 0xB2F5 payload into w.
+func (c ObjectSourceCorrection) encodeInto(w *Writer) *Writer {
+	return w.
 		U32(c.Gid).
 		U16(c.RegionID).
 		F32(c.X).
 		F32(c.Y).
 		F32(c.Z).
-		U16(c.Heading).
-		Payload()
+		U16(c.Heading)
 }
 
 // DecodeObjectSourceCorrection parses a 0xB2F5 payload.
@@ -129,11 +165,28 @@ const ObjectStateRefreshSize = 6
 
 // Encode returns the 0x3122 payload: [u32 gid][u8 stateType][u8 value].
 func (s ObjectStateRefresh) Encode() []byte {
-	return NewWriter(ObjectStateRefreshSize).
+	return s.encodeInto(NewWriter(ObjectStateRefreshSize)).Payload()
+}
+
+/*
+================
+ObjectStateRefresh.AppendEncode
+
+AppendEncode appends the 0x3122 payload to dst (see
+ObjectSourceMove.AppendEncode).
+================
+*/
+func (s ObjectStateRefresh) AppendEncode(dst []byte) []byte {
+	w := Writer{buf: dst}
+	return s.encodeInto(&w).buf
+}
+
+// encodeInto writes the 0x3122 payload into w.
+func (s ObjectStateRefresh) encodeInto(w *Writer) *Writer {
+	return w.
 		U32(s.Gid).
 		U8(s.StateType).
-		U8(s.Value).
-		Payload()
+		U8(s.Value)
 }
 
 // DecodeObjectStateRefresh parses a 0x3122 payload.
