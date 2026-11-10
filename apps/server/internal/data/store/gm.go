@@ -97,7 +97,7 @@ func (s *Store) ReconcileGMPrivilege(allowed []GMIdentity) (promoted, demoted []
 				continue
 			}
 			c.GMPrivilege = target
-			s.changes.characters[c] = true
+			s.markCharacterLocked(c)
 			if target {
 				promoted = append(promoted, identity.String())
 			} else {

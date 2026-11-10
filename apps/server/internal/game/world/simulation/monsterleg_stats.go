@@ -123,6 +123,11 @@ type legStats struct {
 	navMisses                                                          uint64
 	gcStart                                                            gcSample
 	navStart                                                           uint64
+
+	// rechecked counts the due suspended actors the pending re-check
+	// lane settled without a step (monsterpending_recheck.go): they
+	// are in neither actors nor steps.
+	rechecked int
 }
 
 /*
@@ -239,6 +244,20 @@ func (s *legStats) noteRestSettled(drained bool) {
 
 /*
 ================
+legStats.noteRechecked
+
+One due suspended actor the pending re-check lane settled: its
+cadence stamped and its due re-armed with no step run.
+================
+*/
+func (s *legStats) noteRechecked() {
+	if s != nil {
+		s.rechecked++
+	}
+}
+
+/*
+================
 legStats.noteCadenceArm
 
 One activity-gate cadence-only commit (or a plan's record of
@@ -313,14 +332,14 @@ func (s *legStats) logSlow(divisionID string) {
 	}
 	log.Warnf("simulation: slow monster leg division=%s total=%v dormancy=%v visibility=%v batch=%v advance=%v "+
 		"actors=%d woken=%d resumed=%d plans{%s} outcomes{%s} maxplan=%v/%dprobes clips{%s} navmiss=+%d gcpause=%v gcassist=%v "+
-		"queue=%v lane=%v steps=%d rest{%s} settled=%d drained=%d cadarms=%d suspended=%d",
+		"queue=%v lane=%v steps=%d rest{%s} settled=%d drained=%d cadarms=%d suspended=%d rechecked=%d",
 		divisionID, s.total.Round(time.Microsecond), s.dormancy.Round(time.Microsecond), s.visibility.Round(time.Microsecond),
 		s.batch.Round(time.Microsecond), s.advance.Round(time.Microsecond), s.actors, s.woken, s.resumed,
 		strings.TrimSpace(plans.String()), strings.TrimSpace(outcomes.String()),
 		s.maxPlanTime.Round(time.Microsecond), s.maxPlanProbes, strings.TrimSpace(clips.String()),
 		s.navMisses, s.gcPause.Round(time.Microsecond), s.gcAssist.Round(time.Microsecond),
 		s.queue.Round(time.Microsecond), s.lane.Round(time.Microsecond), s.steps,
-		strings.TrimSpace(rest.String()), s.restSettled, s.restSettledDrained, s.cadenceArms, s.gateSuspended)
+		strings.TrimSpace(rest.String()), s.restSettled, s.restSettledDrained, s.cadenceArms, s.gateSuspended, s.rechecked)
 }
 
 /*
