@@ -171,6 +171,101 @@ func TestTickGateReportsALongHold(t *testing.T) {
 
 /*
 ================
+TestTickGateWaitEndsWithTheHold
+
+The tick's wait for a held gate is parked on the lock, not on a poll
+(#3102): with a bound far beyond the hold it returns as the holder
+lets go, and with a bound inside the hold it gives up at the bound
+and owns nothing afterwards - the abandoned waiter's reaper hands
+the gate straight back, so the next take is uncontended.
+================
+*/
+func TestTickGateWaitEndsWithTheHold(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	release := rt.LockPublication(testDivision, "test")
+	done := make(chan bool, 1)
+	go func() { done <- rt.tryLockTickPublication(10 * time.Second) }()
+	// Let the waiter park on the gate before the hold ends.
+	time.Sleep(100 * time.Millisecond)
+	heldAt := time.Now()
+	release()
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Fatal("the tick lost a wait its bound covered")
+		}
+		if elapsed := time.Since(heldAt); elapsed > 2*time.Second {
+			t.Fatalf("the tick took %v to follow the release, want the hold's end", elapsed)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the tick never took the released gate")
+	}
+	rt.releaseTickGate()
+
+	release = rt.LockPublication(testDivision, "test")
+	start := time.Now()
+	if rt.tryLockTickPublication(5 * time.Millisecond) {
+		t.Fatal("took a held gate")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("a cut wait ran %v, want its 5ms bound", elapsed)
+	}
+	release()
+	if !rt.tryLockTickPublication(5 * time.Second) {
+		t.Fatal("an abandoned wait left the gate held")
+	}
+	rt.releaseTickGate()
+}
+
+/*
+================
+TestTickGateQueuesAheadOfALaterHandler
+
+A tick parked on a held gate is served before a handler that arrives
+after it (#3102): the mutex queue is the wait, so the earlier arrival
+wins. The timer polling this replaces never queued, so a blocked
+handler took every release the tick was waiting on - this test fails
+against it.
+================
+*/
+func TestTickGateQueuesAheadOfALaterHandler(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	release := rt.LockPublication(testDivision, "test")
+	done := make(chan bool, 1)
+	go func() { done <- rt.tryLockTickPublication(10 * time.Second) }()
+	// Let the tick's waiter park on the gate.
+	time.Sleep(100 * time.Millisecond)
+	handlerServed := make(chan struct{})
+	go func() {
+		rt.LockPublication(testDivision, "test")()
+		close(handlerServed)
+	}()
+	// Let the handler queue behind the tick.
+	time.Sleep(100 * time.Millisecond)
+	release()
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Fatal("the tick lost its queued wait")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the tick never took the released gate")
+	}
+	select {
+	case <-handlerServed:
+		t.Fatal("a later handler barged ahead of the queued tick")
+	default:
+	}
+	rt.releaseTickGate()
+	select {
+	case <-handlerServed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the handler never got the gate")
+	}
+}
+
+/*
+================
 TestTickGateCutLeavesQueuedWorkForNextTick
 
 The cut is sticky: once a step loses the gate, the steps after it do not

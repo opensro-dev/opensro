@@ -28,10 +28,7 @@ import (
 // A var so a test can shrink the bound.
 var tickGateBound = 5 * time.Millisecond
 
-const (
-	maxTickGateCuts      = 5
-	tickGatePollInterval = 200 * time.Microsecond
-)
+const maxTickGateCuts = 5
 
 /*
 ================
@@ -236,7 +233,7 @@ tryLockTickPublication
 lockTickPublication that gives up after bound (#2143), holding in rt.tickGate
 for releaseTickGate. A request stuck on the disk holds one division's gate
 for seconds; the tick gives back whatever it took, so nothing waits behind a
-tick that is itself waiting. sync.Mutex has no timed lock, so the wait polls.
+tick that is itself waiting.
 ================
 */
 func (rt *Runtime) tryLockTickPublication(bound time.Duration) bool {
@@ -244,16 +241,64 @@ func (rt *Runtime) tryLockTickPublication(bound time.Duration) bool {
 	rt.tickGate.ids = rt.publicationDivisions(rt.tickGate.ids)
 	for _, id := range rt.tickGate.ids {
 		lane := rt.operations.lane(id, &rt.maintenance)
-		for !lane.publication.TryLock() {
-			if time.Now().After(deadline) {
-				rt.releaseTickGate()
-				return false
-			}
-			time.Sleep(tickGatePollInterval)
+		if !lane.publication.TryLock() && !waitTickGate(lane, time.Until(deadline)) {
+			rt.releaseTickGate()
+			return false
 		}
 		rt.tickGate.held = append(rt.tickGate.held, tickGateHold{lane: lane, acquired: time.Now()})
 	}
 	return true
+}
+
+/*
+================
+waitTickGate
+
+Takes lane's publication gate, waiting at most bound for the holder to
+release it (#3102). sync.Mutex has no timed lock, so a waiter goroutine
+parks on Lock and the caller races it against the deadline.
+
+The wait this replaces polled TryLock on a timer: the tick never queued
+on the gate, so a handler arriving while the tick polled could always
+take a released gate first - the tick only ever won a gate nobody else
+was reaching for. The parked waiter keeps the substance of that
+fairness with the mutex's own: it queues behind every earlier waiter,
+handlers included, and is served in arrival order, so a handler that
+was already waiting is never barged past, and the tick's wait is
+bounded by the holds ahead of it rather than by a sleep quantum.
+A handler arriving after the tick queues behind it, exactly as it
+would behind waitTickPublication's plain Lock.
+
+Ownership is decided at the caller's select alone: the waiter owns
+the gate from the moment Lock returns, so when the deadline wins a
+reaper takes that ownership only to give the gate straight back. The
+gate is therefore held for one handoff after a lost wait, and never
+by a tick that has already given up. The waiter starts only on a held
+gate - the free gate costs no goroutine, which the gate's
+zero-allocation contract (TestTickGateHoldAllocatesNothing) rests on.
+================
+*/
+func waitTickGate(lane *divisionLane, bound time.Duration) bool {
+	if bound <= 0 {
+		return false
+	}
+	acquired := make(chan struct{})
+	go func() {
+		lane.publication.Lock()
+		close(acquired)
+	}()
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	select {
+	case <-acquired:
+		return true
+	case <-timer.C:
+		go func() {
+			<-acquired
+			lane.publication.Unlock()
+		}()
+		return false
+	}
 }
 
 /*
