@@ -53,6 +53,10 @@ type metricsSnapshot struct {
 		HeapLiveBytes  uint64 `json:"heap_live_bytes"`
 	} `json:"runtime"`
 	TickZones map[string]zoneTotal `json:"tick_zones"`
+	// MonsterLeg is the monster_leg block (#3119): the leg census,
+	// cumulative since boot like the tick counters. Absent in
+	// captures from before the block existed.
+	MonsterLeg map[string]uint64 `json:"monster_leg"`
 }
 
 /*
@@ -72,6 +76,10 @@ type window struct {
 	SessionsTo     int
 	ZoneMsPerTick  map[string]float64
 	ZoneCounts     map[string]uint64
+	// LegDeltas is the window's monster_leg counter deltas (#3119):
+	// count/actors/steps/rechecked/cadence_arms/suspended, rest.<guard>,
+	// mode.<bucket>. Empty for pre-#3119 captures.
+	LegDeltas map[string]uint64
 }
 
 /*
@@ -187,6 +195,15 @@ func diffWindow(from, to metricsSnapshot) (window, error) {
 		deltaMs := to.TickZones[key].TotalMs - from.TickZones[key].TotalMs
 		w.ZoneMsPerTick[key] = deltaMs / float64(w.Ticks)
 		w.ZoneCounts[key] = to.TickZones[key].Count - from.TickZones[key].Count
+	}
+	w.LegDeltas = make(map[string]uint64)
+	for key, toValue := range to.MonsterLeg {
+		// Cumulative counters only grow within one boot; a key that
+		// somehow went backwards contributes nothing rather than a
+		// wrapped delta.
+		if delta := toValue - from.MonsterLeg[key]; toValue >= from.MonsterLeg[key] && delta != 0 {
+			w.LegDeltas[key] = delta
+		}
 	}
 	return w, nil
 }

@@ -548,6 +548,8 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 		fmt.Fprintln(w)
 	}
 
+	printLegCensus(w, m.overall)
+
 	if m.cpu != nil {
 		fmt.Fprintf(w, "cpu profile: %.1f ms over %d samples = %.3f ms/tick (cpu window)\n", m.cpu.totalMs(), m.cpu.samples, m.cpu.totalMs()/float64(m.cpuTicks))
 		fmt.Fprintln(w, "top cumulative functions (no node dropping):")
@@ -681,4 +683,69 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 		fmt.Fprintf(w, "%d BLIND SPOT line(s) above: the sources disagree and the tool does not pick a winner.\n", blindSpots)
 	}
 	return blindSpots, nil
+}
+
+/*
+================
+printLegCensus
+
+The monster leg's window read (#3119): actors dispatched, steps and
+settled re-checks per tick, the rest guards as shares of the window's
+steps, and the steps split by the mode each step read. A capture from
+before the monster_leg block existed prints nothing here - the census
+was not recorded, and silence says so.
+================
+*/
+func printLegCensus(w io.Writer, win window) {
+	if len(win.LegDeltas) == 0 || win.Ticks <= 0 {
+		return
+	}
+	ticks := float64(win.Ticks)
+	steps := win.LegDeltas["steps"]
+	fmt.Fprintln(w, "monster leg (window deltas per tick):")
+	fmt.Fprintf(w, "  actors dispatched %.2f/tick, steps %.2f/tick, re-checks settled %.2f/tick\n",
+		float64(win.LegDeltas["actors"])/ticks, float64(steps)/ticks, float64(win.LegDeltas["rechecked"])/ticks)
+	if steps == 0 {
+		fmt.Fprintln(w)
+		return
+	}
+	var guards []string
+	for key := range win.LegDeltas {
+		if name, ok := strings.CutPrefix(key, "rest."); ok {
+			guards = append(guards, name)
+		}
+	}
+	sort.Slice(guards, func(i, j int) bool {
+		left, right := win.LegDeltas["rest."+guards[i]], win.LegDeltas["rest."+guards[j]]
+		if left != right {
+			return left > right
+		}
+		return guards[i] < guards[j]
+	})
+	if len(guards) > 0 {
+		parts := make([]string, 0, len(guards))
+		for _, guard := range guards {
+			parts = append(parts, fmt.Sprintf("%s %.1f%%", guard, 100*float64(win.LegDeltas["rest."+guard])/float64(steps)))
+		}
+		fmt.Fprintf(w, "  rest guards (share of steps): %s\n", strings.Join(parts, ", "))
+	}
+	modes := []string{"idle", "wandering", "chasing", "attacking", "returning", "pending", "other"}
+	seen := make(map[string]bool, len(modes))
+	parts := make([]string, 0, len(modes)+2)
+	for _, mode := range modes {
+		seen[mode] = true
+		parts = append(parts, fmt.Sprintf("%s %.2f", mode, float64(win.LegDeltas["mode."+mode])/ticks))
+	}
+	var extra []string
+	for key := range win.LegDeltas {
+		if name, ok := strings.CutPrefix(key, "mode."); ok && !seen[name] {
+			extra = append(extra, name)
+		}
+	}
+	sort.Strings(extra)
+	for _, mode := range extra {
+		parts = append(parts, fmt.Sprintf("%s %.2f", mode, float64(win.LegDeltas["mode."+mode])/ticks))
+	}
+	fmt.Fprintf(w, "  steps by mode (per tick): %s\n", strings.Join(parts, ", "))
+	fmt.Fprintln(w)
 }

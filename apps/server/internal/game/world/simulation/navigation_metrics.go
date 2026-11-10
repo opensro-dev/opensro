@@ -9,11 +9,15 @@ plan a route, what each plan cost in path queries and how it ended, and how
 many path clips each caller makes. Counts are since boot; compare windows
 by diffing two reads. Atomics only: the tick never waits on a reader.
 
-The leg census rides the same block (leg.*): how many actors a leg
-dispatched, stepped and settled without a step, and which rest guard
-refused each resting step. Until 2026-11-10 those counts existed only
-on the slow-leg log line, so a live capture could not say what the
-monster leg's actors were doing, only that there were many.
+The leg census has its own snapshot (LegSnapshot, the monster_leg
+metrics block): how many actors a leg dispatched, stepped and settled
+without a step, which rest guard refused each resting step, and how
+the steps split by mover mode. Until 2026-11-10 those counts existed
+only on the slow-leg log line, so a live capture could not say what
+the monster leg's actors were doing, only that there were many; the
+census first rode this file's navigation block and moved out on
+2026-11-11 (#3119) - navigation owns pathfinding, the census is leg
+dispatch.
 
 ===========================================================================
 */
@@ -76,6 +80,7 @@ type NavigationMetrics struct {
 	legs, legActors, legSteps, legRechecked atomic.Uint64
 	legCadenceArms, legSuspended            atomic.Uint64
 	legRest                                 [restGuardCount]atomic.Uint64
+	legModeSteps                            [stepModeCount]atomic.Uint64
 }
 
 /*
@@ -195,6 +200,11 @@ func (m *NavigationMetrics) leg(stats *legStats) {
 			m.legRest[guard].Add(uint64(count))
 		}
 	}
+	for mode := range stats.modeSteps {
+		if count := stats.modeSteps[mode]; count != 0 {
+			m.legModeSteps[mode].Add(uint64(count))
+		}
+	}
 }
 
 /*
@@ -202,9 +212,8 @@ func (m *NavigationMetrics) leg(stats *legStats) {
 NavigationMetrics.Snapshot
 
 Flat counters for /transport/metrics: plan.<caller>.<outcome>,
-route_probes, plan_probes.<bucket>, clip.<caller>, and the leg census
-(leg.count, leg.actors, leg.steps, leg.rechecked, leg.cadence_arms,
-leg.suspended, leg.rest.<guard>). Zero counters are left out.
+route_probes, plan_probes.<bucket>, clip.<caller>. Zero counters are
+left out. The leg census is LegSnapshot below, not this block (#3119).
 ================
 */
 func (m *NavigationMetrics) Snapshot() map[string]uint64 {
@@ -228,14 +237,44 @@ func (m *NavigationMetrics) Snapshot() map[string]uint64 {
 	for i := range m.byCost {
 		put("plan_probes."+navProbeNames[i], m.byCost[i].Load())
 	}
-	put("leg.count", m.legs.Load())
-	put("leg.actors", m.legActors.Load())
-	put("leg.steps", m.legSteps.Load())
-	put("leg.rechecked", m.legRechecked.Load())
-	put("leg.cadence_arms", m.legCadenceArms.Load())
-	put("leg.suspended", m.legSuspended.Load())
+	return out
+}
+
+/*
+================
+NavigationMetrics.LegSnapshot
+
+The monster_leg document (#3119): the leg census under its own
+block - legs folded (count), actors dispatched (actors), step
+invocations (steps) and the steps split by the mode each step read
+(mode.<bucket>: idle, wandering, chasing, attacking, returning,
+pending, other), re-checks settled without a step (rechecked),
+cadence arms (cadence_arms), gate suspensions (suspended), and the
+rest-guard partition of the resting steps (rest.<guard>). Zero
+counters omitted, same convention as Snapshot.
+================
+*/
+func (m *NavigationMetrics) LegSnapshot() map[string]uint64 {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]uint64, 32)
+	put := func(key string, value uint64) {
+		if value != 0 {
+			out[key] = value
+		}
+	}
+	put("count", m.legs.Load())
+	put("actors", m.legActors.Load())
+	put("steps", m.legSteps.Load())
+	put("rechecked", m.legRechecked.Load())
+	put("cadence_arms", m.legCadenceArms.Load())
+	put("suspended", m.legSuspended.Load())
 	for guard := range m.legRest {
-		put("leg.rest."+restGuardNames[guard], m.legRest[guard].Load())
+		put("rest."+restGuardNames[guard], m.legRest[guard].Load())
+	}
+	for mode := range m.legModeSteps {
+		put("mode."+stepModeNames[mode], m.legModeSteps[mode].Load())
 	}
 	return out
 }

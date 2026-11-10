@@ -168,6 +168,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	if game.deps.MonsterState != nil {
 		navigation := &simulation.NavigationMetrics{}
 		game.hub.SetNavigationMetrics(navigation.Snapshot)
+		// The leg census publishes its own block beside navigation's (#3119).
+		game.hub.SetMonsterLegMetrics(navigation.LegSnapshot)
 		// The mover's routes come from the plane that owns the
 		// region: the open-terrain search outdoors, the cave's
 		// region route inside a dungeon floor (#1645/#1646).

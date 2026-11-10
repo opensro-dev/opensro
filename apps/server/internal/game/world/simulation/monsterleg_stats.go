@@ -128,6 +128,65 @@ type legStats struct {
 	// lane settled without a step (monsterpending_recheck.go): they
 	// are in neither actors nor steps.
 	rechecked int
+
+	// modeSteps partitions steps by the mover mode the step read
+	// (#3119), so a capture can say how many wandering monsters are
+	// stepped every tick. It sums to steps: every invocation counts
+	// exactly one bucket, the presentation holds that read no
+	// behaviour mode (a corpse, a motion hold) under other.
+	modeSteps [stepModeCount]int
+}
+
+// stepMode is the census bucket of a mover mode (monster.MoverMode).
+type stepMode uint8
+
+const (
+	stepModeIdle stepMode = iota
+	stepModeWandering
+	stepModeChasing
+	stepModeAttacking
+	stepModeReturning
+	stepModePending
+	stepModeOther
+
+	stepModeCount
+)
+
+// stepModeNames names each bucket for the monster_leg metrics block.
+var stepModeNames = [stepModeCount]string{
+	stepModeIdle:      "idle",
+	stepModeWandering: "wandering",
+	stepModeChasing:   "chasing",
+	stepModeAttacking: "attacking",
+	stepModeReturning: "returning",
+	stepModePending:   "pending",
+	stepModeOther:     "other",
+}
+
+/*
+================
+stepModeFor
+
+The census bucket of the mode a step read. Modes with no bucket of
+their own (spawning, recovering, following) count as other.
+================
+*/
+func stepModeFor(mode monster.MoverMode) stepMode {
+	switch mode {
+	case monster.MoverIdle:
+		return stepModeIdle
+	case monster.MoverWandering:
+		return stepModeWandering
+	case monster.MoverChasing:
+		return stepModeChasing
+	case monster.MoverAttacking:
+		return stepModeAttacking
+	case monster.MoverReturning:
+		return stepModeReturning
+	case monster.MoverPending:
+		return stepModePending
+	}
+	return stepModeOther
 }
 
 /*
@@ -198,12 +257,15 @@ func (s *legStats) noteAdvance(elapsed time.Duration) {
 legStats.noteStep
 
 One advanceInstanceStep invocation, serial or pooled-plan: the
-denominator every per-step census below divides by.
+denominator every per-step census below divides by, counted under
+the bucket of the mode the step read (stepModeOther when it read
+none - a presentation hold that returned before the mover).
 ================
 */
-func (s *legStats) noteStep() {
+func (s *legStats) noteStep(mode stepMode) {
 	if s != nil {
 		s.steps++
+		s.modeSteps[mode]++
 	}
 }
 
