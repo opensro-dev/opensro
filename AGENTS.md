@@ -200,6 +200,11 @@ package store, never through a link:
   It hard-links from the shared store in a few seconds. Never link
   `node_modules`: pnpm writes through the link into the other checkout, and
   every `pnpm task` refuses a linked one.
+- Go build cache: one for every checkout, nothing to set for the gates. The
+  scripts compile with `-trimpath` (`scripts/lib/goEnvironment.mjs`), so a
+  worktree reuses what any other checkout of the same sources compiled. Set
+  `go env -w GOFLAGS=-trimpath` once per workstation for hand-typed
+  commands, and never point `GOCACHE` into a worktree.
 - A worktree never holds its own `.generated` or `apps/server/.generated`:
   not a copy, not a symlink, not a junction. The resolvers refuse to run
   while one exists (unless that tree's override variable is set) and name

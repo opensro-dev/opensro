@@ -20,6 +20,7 @@ manifest against these same functions.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { TITLE_CROWD_ROSTER } from "./resolveCharRoster.mjs";
@@ -72,7 +73,8 @@ function loadServerRoster( subcommand, expectedFormat, label, env = process.env 
 	);
 	const result = spawnSync( "go", [ "run", "./cmd/tools/sro-evidence", subcommand, "-textdata-dir", textdataDir ], {
 		cwd: serverRoot,
-		env,
+		// Compiled once for every checkout (goEnvironment.mjs).
+		env: sharedCacheEnvironment( env ),
 		encoding: "utf8",
 		maxBuffer: ROSTER_EXPORT_MAX_BYTES
 	} );

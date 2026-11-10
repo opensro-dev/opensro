@@ -1,20 +1,37 @@
+/*
+===========================================================================
+
+shipped_catalog_test.go - the shard catalogue the module ships is usable
+
+config/shards.json is what a development cluster and the operator tools
+load by default; this test reads the shipped file itself, not a fixture.
+
+===========================================================================
+*/
 package shard
 
 import (
 	"net"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
 
+/*
+================
+TestShippedCatalog
+
+Every enabled shard has its own control and transport endpoint, loopback
+shards speak plain http, clients reach each shard through a same-origin
+route, and the default shard exists and is enabled.
+================
+*/
 func TestShippedCatalog(t *testing.T) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	catalogPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "config", "shards.json")
+	// A test runs in its package's folder. runtime.Caller is no way to the
+	// module: the gate compiles with -trimpath, which leaves no source
+	// folder in the binary (scripts/lib/goEnvironment.mjs).
+	catalogPath := filepath.Join("..", "..", "..", "config", "shards.json")
 	catalog, err := Load(catalogPath)
 	if err != nil {
 		t.Fatalf("load shipped catalog: %v", err)

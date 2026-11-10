@@ -41,6 +41,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { resolveServerGameDataRoot } from "../build/world/paths.mjs";
 import { resolveGeneratedRoot, resolveMainCheckout } from "../lib/generatedRoot.mjs";
+import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 
 const repoRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 const clientRoot = path.join( repoRoot, "apps", "client-next" );
@@ -398,6 +399,8 @@ The three Go programs a local run needs, into .state/local/bin.
 ================
 */
 function buildBinaries() {
+	// A local run from any checkout reuses what another already compiled.
+	const env = sharedCacheEnvironment();
 	for (
 		const [name, pkg] of [
 			[ "sro-agent", "./cmd/services/sro-agent" ],
@@ -407,7 +410,7 @@ function buildBinaries() {
 	) {
 		console.log( `building ${name}...` );
 		const out = path.join( binDir, name + exeSuffix );
-		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit" } );
+		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit", env } );
 		if ( result.status !== 0 ) {
 			console.error( `pnpm local: go build ${pkg} failed` );
 			process.exit( 1 );
