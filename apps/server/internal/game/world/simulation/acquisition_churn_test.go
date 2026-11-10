@@ -313,6 +313,58 @@ func TestNpcFrameBuildersSkipARosterWithoutPatrols(t *testing.T) {
 	if len(frames) != npcPatrolCount(roster) || len(frames) == 0 || cap(frames) != len(frames) {
 		t.Fatalf("patrol roster built %d frames (cap %d), want %d", len(frames), cap(frames), npcPatrolCount(roster))
 	}
+
+	// The batched builders encode a whole roster into one backing
+	// buffer: two allocations per call however many NPCs patrol,
+	// and every payload byte-identical to the per-NPC encoders
+	// (#2033).
+	two := DefaultNpcRoster()
+	for index := range two {
+		if !two[index].Patrol {
+			two[index].Patrol = true
+			break
+		}
+	}
+	if npcPatrolCount(two) != 2 {
+		t.Fatalf("fixture patrols = %d, want 2", npcPatrolCount(two))
+	}
+	if allocs := testing.AllocsPerRun(100, func() { NpcMoveFrames(two, NpcShopSpawn(), 3) }); allocs != 2 {
+		t.Fatalf("patrolling roster allocated %.1f times per call, want 2", allocs)
+	}
+	corrections := NpcCorrectionFrames(two, NpcShopSpawn(), 3)
+	states := NpcMoveStateFrames(two, 3)
+	if len(corrections) != 2 || len(states) != 2 {
+		t.Fatalf("batched builders built %d corrections / %d states, want 2 each", len(corrections), len(states))
+	}
+	built := 0
+	for index := range two {
+		if !two[index].Patrol {
+			continue
+		}
+		npcAnchor := NpcShopSpawn()
+		npcAnchor.X += two[index].SpawnOffsetX
+		npcAnchor.Z += two[index].SpawnOffsetZ
+		pose := npcPatrolPose(ComputeNpcPatrolState(npcAnchor, 3))
+		correction := wire.ObjectSourceCorrection{Gid: two[index].ObjectID, Position: pose}
+		if !reflect.DeepEqual(corrections[built].Payload, correction.Encode()) {
+			t.Fatalf("correction %d payload differs from the per-NPC encoder", built)
+		}
+		refresh := wire.ObjectStateRefresh{Gid: two[index].ObjectID, StateType: wire.StateChannelMove, Value: wire.MoveStateRun}
+		if !reflect.DeepEqual(states[built].Payload, refresh.Encode()) {
+			t.Fatalf("state refresh %d payload differs from the per-NPC encoder", built)
+		}
+		built++
+	}
+	despawns := NpcDespawnFrames(two)
+	if len(despawns) != len(two) {
+		t.Fatalf("despawn batch built %d frames, want %d", len(despawns), len(two))
+	}
+	for index := range two {
+		despawn := wire.ObjectDespawn{Gid: two[index].ObjectID}
+		if !reflect.DeepEqual(despawns[index].Payload, despawn.Encode()) {
+			t.Fatalf("despawn %d payload differs from the per-NPC encoder", index)
+		}
+	}
 }
 
 /*

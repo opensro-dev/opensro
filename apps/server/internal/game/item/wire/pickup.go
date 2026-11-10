@@ -64,7 +64,25 @@ const ObjectDespawnSize = 4
 
 // Encode returns the 0x36AB payload: [u32 gid].
 func (d ObjectDespawn) Encode() []byte {
-	return NewWriter(ObjectDespawnSize).U32(d.Gid).Payload()
+	return d.encodeInto(NewWriter(ObjectDespawnSize)).Payload()
+}
+
+/*
+================
+ObjectDespawn.AppendEncode
+
+AppendEncode appends the 0x36AB payload to dst (see
+ObjectSourceMove.AppendEncode).
+================
+*/
+func (d ObjectDespawn) AppendEncode(dst []byte) []byte {
+	w := Writer{buf: dst}
+	return d.encodeInto(&w).buf
+}
+
+// encodeInto writes the 0x36AB payload into w.
+func (d ObjectDespawn) encodeInto(w *Writer) *Writer {
+	return w.U32(d.Gid)
 }
 
 // DecodeObjectDespawn parses a 0x36AB payload.
