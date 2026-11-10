@@ -7,8 +7,13 @@ oldTabGate.test.mjs - planted violations for the old-tab gate
 */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { evaluateOldTab, oldTabFiles } from "../../checks/check_old_tab.mjs";
+
+const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
 
 const ENCODER = "apps/server/internal/game/action/coscancel.go";
 const DECODER = "apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts";
@@ -63,6 +68,29 @@ test("a removed encoder line and a deleted encoder file are wire", () => {
 test("a file that gains an encoder line after a plain one is wire only", () => {
 	const patch = patchFor( "apps/server/internal/game/action/y.go", "+\tn++", "+\tw.U8(1)" );
 	assert.deepEqual( oldTabFiles( patch ), { wire: [ "apps/server/internal/game/action/y.go" ], visible: [] } );
+});
+
+test("the body gates read the pull request's current body, never the event payload", () => {
+	// The payload carries the body the pull request had when the event
+	// fired, so a re-run of a failed run judged the stale body and could
+	// never pass after an edit (opensro#3113). Both gates must fetch the
+	// live body through the API - which is what the pull-requests: read
+	// grant is for - and hand it to the script as PR_BODY data.
+	for ( const workflow of [ "old-tab.yml", "native-claims.yml" ] ) {
+		const text = readFileSync( path.join( rebuildRoot, ".github", "workflows", workflow ), "utf8" );
+		assert.equal( text.includes( "github.event.pull_request.body" ), false, `${workflow} reads the payload body` );
+		assert.match( text, /pull-requests: read/, `${workflow} cannot read the body back` );
+		assert.match(
+			text,
+			/gh api "repos\/\$\{\{ github\.repository \}\}\/pulls\/\$\{PR_NUMBER\}"/,
+			`${workflow} never asks the API for the body`
+		);
+		assert.match( text, /echo "PR_BODY<</, `${workflow} does not hand the body over as PR_BODY` );
+		assert.ok(
+			text.indexOf( "Read the pull request's current body" ) < text.indexOf( "node scripts/checks/" ),
+			`${workflow} reads the body only after the gate has run`
+		);
+	}
 });
 
 test("an em dash is not the audit's hyphen", () => {

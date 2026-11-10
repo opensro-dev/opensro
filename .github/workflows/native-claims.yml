@@ -1,7 +1,12 @@
 # native-claims.yml - a pull request citing the client fills its claims table (#2219)
 #
 # Its own workflow because editing the body must re-run this check and nothing
-# else. The body reaches the script through the environment, never the shell.
+# else. The body is read live from the API at run time, not from the event
+# payload: the payload carries the body the pull request had when the event
+# fired, so re-running a failed run judged the stale body and could never
+# pass after an edit (opensro#3113). The body reaches the script through the
+# environment, never the shell: the API answer lands in the env file as data
+# and is only parsed by the script.
 #
 # The script always comes from the BASE, never from the tree under test. A
 # branch older than the gate has no script to run (run 41547159997 died with
@@ -29,6 +34,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   native-claims:
@@ -53,9 +59,18 @@ jobs:
         with:
           node-version: 24
 
-      - name: New client citations have a claims row
+      - name: Read the pull request's current body
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "PR_BODY<<SRO_PR_BODY_${{ github.run_id }}"
+            gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.body // ""'
+            echo "SRO_PR_BODY_${{ github.run_id }}"
+          } >> "$GITHUB_ENV"
+
+      - name: New client citations have a claims row
         run: |
           cp base-gate/scripts/checks/check_native_claims.mjs scripts/checks/check_native_claims.mjs
           PR_BASE_SHA=$(git -C base-gate rev-parse HEAD)
