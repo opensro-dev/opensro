@@ -131,13 +131,16 @@ const (
 // 16,413 B / 66 allocs on the combined tree; with the satiety tick
 // judging off the shared catalog row instead of a MaxHP-adjusted
 // copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
-// with the pet natural-recovery pulse weighing its zombie bit,
-// maxima and recovery reductions off the committed abnormal block
-// in place instead of building the committing owner and its block
-// copy per pulse (#2033), measured 14,717 B / 63 allocs.
+// with the pets tick's session walk list cached on the runtime and
+// rebuilt only on session membership writes, instead of rebuilt
+// and re-sorted every tick (#2033), measured 13,542 B / 59 allocs
+// on the combined tree; with the timed-window sweeps' owner lists
+// cached on their index and rebuilt only when an owner tracks or
+// is forgotten, instead of rebuilt and re-sorted on every sweep
+// (#2033), measured 13,499 B / 56 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 16200
-	tickBudgetAllocsPerTick = 70
+	tickBudgetBytesPerTick  = 14900
+	tickBudgetAllocsPerTick = 62
 )
 
 /*

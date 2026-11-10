@@ -532,6 +532,21 @@ type scopePopulations struct {
 
 /*
 ================
+scopeStampKey
+
+One fold of the stamp cache: the population state and the block
+whose reconciled generations the stamp summarizes. A field of
+MonsterState keeps the folded stamps between phases (#3027), so
+the key lives at package level.
+================
+*/
+type scopeStampKey struct {
+	state *divisionMonsterState
+	block worldgeom.InterestBlock
+}
+
+/*
+================
 scopePopulations.resolve
 
 The session's division state, reconciled at nowMs on first sight
@@ -588,15 +603,25 @@ from landing just after it.
 func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []SessionSnapshot, nowMs int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var populations scopePopulations
-	type stampKey struct {
-		state *divisionMonsterState
-		block worldgeom.InterestBlock
-	}
+	// The phase caches are kept on the state and cleared here,
+	// under the same hold that uses them (#3027): they answer
+	// exactly this phase, so nothing resolved or folded for one
+	// phase may leak into the next — the clear keeps a released
+	// population's state pointer out of every later answer.
+	populations := &s.scopePhase
+	clear(populations.states)
+	clear(populations.reconciled)
+	populations.lastKey, populations.lastState, populations.haveLast = populationKey{}, nil, false
 	// Made on first use: consecutive viewers usually share the
-	// last fold, and a leg with one block never touches the map.
-	var folded map[stampKey]interestMemoStamp
-	lastFold := stampKey{}
+	// last fold, and a phase with one block never touches the map.
+	folded := s.scopeFolded
+	if folded == nil {
+		folded = make(map[scopeStampKey]interestMemoStamp)
+		s.scopeFolded = folded
+	} else {
+		clear(folded)
+	}
+	lastFold := scopeStampKey{}
 	var lastStamp interestMemoStamp
 	for i := range slots {
 		slot := &slots[i]
@@ -604,7 +629,7 @@ func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []Sessi
 		if state == nil {
 			continue
 		}
-		foldKey := stampKey{state, slot.block}
+		foldKey := scopeStampKey{state, slot.block}
 		var stamp interestMemoStamp
 		if foldKey == lastFold {
 			stamp = lastStamp
@@ -612,9 +637,6 @@ func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []Sessi
 			stamp = cached
 		} else {
 			stamp = state.interestStampAt(slot.block)
-			if folded == nil {
-				folded = make(map[stampKey]interestMemoStamp)
-			}
 			folded[foldKey] = stamp
 		}
 		lastFold, lastStamp = foldKey, stamp

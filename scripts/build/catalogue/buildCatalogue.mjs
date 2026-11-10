@@ -28,6 +28,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
+import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
 import { playerNotes } from "./playerNotes.mjs";
 import { renderPortraits } from "./renderPortraits.mjs";
@@ -327,8 +328,9 @@ async function main() {
 	try {
 		execFileSync( "go", [ "run", "./cmd/tools/sro-catalogue", "-out", work, "-release", options.release ], {
 			cwd: serverRoot,
-			// The operator's own environment still wins, as it does for sro-nomad.
-			env: { ...readJSON( SHARD_SETTINGS ), ...process.env },
+			// The operator's own environment still wins, as it does for sro-nomad;
+			// the tool is compiled once for every checkout (goEnvironment.mjs).
+			env: sharedCacheEnvironment( { ...readJSON( SHARD_SETTINGS ), ...process.env } ),
 			stdio: [ "ignore", "inherit", "inherit" ]
 		} );
 		const text = textLookup();
