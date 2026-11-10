@@ -355,7 +355,9 @@ func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 	var out []RecipientFrames
 	for _, share := range after.shares {
 		var frames []wire.Frame
-		rt.deps.Update(share.member, "job-kill-share", func() bool {
+		// Kill shares settle on the tick (strike and abnormal
+		// settlements): the commit joins the tick's batch.
+		rt.deps.UpdateDeferred(share.member, "job-kill-share", func() bool {
 			var ok bool
 			frames, ok = rt.addJobExperience(after.division, share.member, share.exp)
 			return ok

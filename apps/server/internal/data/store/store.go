@@ -213,6 +213,15 @@ type Store struct {
 	db *sql.DB
 
 	characters map[string][]*domain.Character
+	// writeEpochs counts character-door writes per record, and
+	// writeEpochAll counts roster-wide writes (creates, reaps and
+	// commits that carry character rows). CharacterWriteEpoch reads
+	// the pair: a copy of a record taken at one epoch is identical to
+	// a copy taken at any later moment reporting the same epoch,
+	// because every write to the record passes a door below and bumps
+	// its count under the write lock (character_access.go).
+	writeEpochs   map[*domain.Character]uint64
+	writeEpochAll uint64
 	// characterLookups is the published per-division index (character_lookup.go).
 	characterLookups atomic.Pointer[map[string]*characterLookupIndex]
 	deleted          map[string][]json.RawMessage
@@ -338,6 +347,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		dbPath:               filepath.Join(dir, DBFileName),
 		dbBakPath:            filepath.Join(dir, DBBakFileName),
 		characters:           map[string][]*domain.Character{},
+		writeEpochs:          map[*domain.Character]uint64{},
 		deleted:              map[string][]json.RawMessage{},
 		mailboxes:            map[string]map[int64][]domain.LetterRecord{},
 		guilds:               map[string]map[int64]domain.GuildRecord{},

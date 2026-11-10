@@ -443,18 +443,18 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 	case skillRoutePosition:
 		return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
 	case skillRouteMirage:
-		result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, now, nil)
+		result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
 		return result
 	case skillRouteDiscordWave:
 		return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTaunt:
-		return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
+		return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill, doors: rt.handlerDoors()}, cast)
 	case skillRouteSupport:
 		return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
 	case skillRouteTimedTarget:
 		return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTimedSelf:
-		result, _ := rt.acceptTimedSelfEffect(divisionID, character, snapshot, cast, skill, now, nil)
+		result, _ := rt.acceptTimedSelfEffect(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
 		return result
 	case skillRoutePartyBuff:
 		return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
@@ -466,7 +466,7 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 	case skillRouteAreaBurst:
 		return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, now)
 	case skillRouteTrap:
-		result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, now, nil)
+		result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
 		return result
 	}
 	return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)

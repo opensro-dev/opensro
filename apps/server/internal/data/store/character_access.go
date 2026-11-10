@@ -64,6 +64,58 @@ func (s *Store) ReadUnlock() {
 	s.mu.RUnlock()
 }
 
+/*
+================
+CharacterWriteEpoch
+
+The write epoch of one record: its own door-write count plus the
+roster-wide count, read under the read door. Every mutation of a
+character record passes one of the doors in this file (a deferred
+door mutates at call time, exactly like an immediate one - only its
+commit waits), and each door bumps the count under the write lock
+before its mutation can be observed, so two reads of this epoch that
+agree prove the record between them is unchanged: a detached copy
+taken at the first is the copy a fresh clone would return at the
+second. The count never decreases and never resets; callers compare
+for equality only.
+================
+*/
+func (s *Store) CharacterWriteEpoch(c *domain.Character) uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writeEpochAll + s.writeEpochs[c]
+}
+
+/*
+================
+noteCharacterWriteLocked
+
+Counts one write to a record. Callers hold the write lock; the map
+is built lazily so a Store assembled by struct literal (test
+fixtures) cannot panic on a nil map.
+================
+*/
+func (s *Store) noteCharacterWriteLocked(c *domain.Character) {
+	if s.writeEpochs == nil {
+		s.writeEpochs = make(map[*domain.Character]uint64)
+	}
+	s.writeEpochs[c]++
+}
+
+/*
+================
+noteRosterWriteLocked
+
+Counts one roster-wide write: a create, a reap, an unscoped door, or
+a commit carrying character rows (its writers are not all declared
+per record). Every record's epoch moves, so no cached copy survives.
+Callers hold the write lock.
+================
+*/
+func (s *Store) noteRosterWriteLocked() {
+	s.writeEpochAll++
+}
+
 // ReadCharacters is the READ door, symmetric with the commit door: fn
 // runs under the store lock with the division's records, so field reads
 // cannot race a Mutate closure's writes. fn must be short and must not
@@ -224,6 +276,8 @@ func (s *Store) Mutate(label string, fn func()) {
 	if fn != nil {
 		fn()
 	}
+	// The unscoped door may have touched any record; its commit
+	// counts the roster-wide write (changes.all in persistence.go).
 	s.changes.all = true
 	s.commitLocked(label)
 }
@@ -294,11 +348,13 @@ func (s *Store) mutateCharacterLocked(c *domain.Character, label string, fn func
 	}
 	if c != nil {
 		if _, known := s.charDivision[c]; known {
+			s.noteCharacterWriteLocked(c)
 			s.markCharacterLocked(c)
 		} else {
 			// A record the store does not own (detached fixture or a
 			// wiring bug): persisting everything is the lossless answer,
 			// and the log makes the wiring bug findable.
+			s.noteRosterWriteLocked()
 			c.CommitRevision++
 			s.changes.all = true
 			log.Warnf("store: MutateCharacter(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
@@ -343,6 +399,7 @@ func (s *Store) updateCharacterLocked(c *domain.Character, label string, update 
 	if !update() {
 		return false
 	}
+	s.noteCharacterWriteLocked(c)
 	s.markCharacterLocked(c)
 	s.finishDoorLocked(label, deferred, []*domain.Character{c})
 	return true
@@ -394,12 +451,14 @@ func (s *Store) mutateCharactersLocked(cs []*domain.Character, label string, fn 
 			continue
 		}
 		if _, known := s.charDivision[c]; known {
+			s.noteCharacterWriteLocked(c)
 			s.markCharacterLocked(c)
 		} else {
 			// The MutateCharacter posture for a record the store does
 			// not own (detached fixture or a wiring bug): persisting
 			// everything is the lossless answer, and the log makes the
 			// wiring bug findable.
+			s.noteRosterWriteLocked()
 			c.CommitRevision++
 			s.changes.all = true
 			log.Warnf("store: MutateCharacters(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
@@ -444,6 +503,7 @@ func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, upd
 		return false
 	}
 	for _, character := range cs {
+		s.noteCharacterWriteLocked(character)
 		s.markCharacterLocked(character)
 	}
 	s.finishDoorLocked(label, deferred, cs)

@@ -119,7 +119,7 @@ argument). The strike is a linked one, so the attacker's own links do not
 run on it.
 ================
 */
-func (rt *Runtime) screamMaskPlayer(division string, member, attacker *enterworld.Character, now int64) OpResult {
+func (rt *Runtime) screamMaskPlayer(division string, member, attacker *enterworld.Character, now int64, doors characterDoors) OpResult {
 	// The attacker's record feeds its defender stats and the status
 	// roll, but only while it lives: a dead attacker never pays for
 	// its detached copy (#1943).
@@ -159,7 +159,7 @@ func (rt *Runtime) screamMaskPlayer(division string, member, attacker *enterworl
 		return OpResult{}
 	}
 	var struck playerStruck
-	if !rt.deps.Update(attacker, "scream-mask", func() bool {
+	if !doors.update(attacker, "scream-mask", func() bool {
 		if attacker.DeletePending || !enterworld.CharacterAlive(attacker) {
 			return false
 		}

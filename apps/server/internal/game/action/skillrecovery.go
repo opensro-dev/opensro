@@ -53,6 +53,7 @@ func (rt *Runtime) acceptSupportSkill(
 		skill,
 		rt.Now().UnixMilli(),
 		nil,
+		rt.handlerDoors(),
 	)
 	return result
 }
@@ -87,6 +88,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	skill enterworld.SkillRow,
 	now int64,
 	release *pendingProjectileCast,
+	doors characterDoors,
 ) (OpResult, skillCastDecision) {
 	cure := skill.Abnormal.CurePresent()
 	resu := skill.Abnormal.AdmitDeadParty
@@ -171,7 +173,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 
 	if release == nil && skill.ActionCastingTimeMs > 0 {
 		var refusal uint16
-		if !rt.deps.Update(character, "prepare-self-recovery", func() bool {
+		if !doors.update(character, "prepare-self-recovery", func() bool {
 			if !enterworld.CharacterAlive(character) ||
 				!enterworld.SkillLearned(character, skill.ID) {
 				return false
@@ -247,7 +249,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	var cureRecipients []RecipientFrames
 	selfThreat := makeSkillHealingThreat(division, character, character, skill)
 
-	if !rt.deps.Update(character, "skill-self-recovery", func() bool {
+	if !doors.update(character, "skill-self-recovery", func() bool {
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
 			return false
 		}
@@ -314,17 +316,17 @@ func (rt *Runtime) acceptSupportSkillPhase(
 				recipients = append(recipients, rt.findCharacterByGid(division, gid))
 			}
 		}
-		curePublic = append(curePublic, rt.installHealsOverTime(division, character, skill, recipients, now)...)
+		curePublic = append(curePublic, rt.installHealsOverTime(division, character, skill, recipients, now, doors)...)
 	case partyResu:
 		cureRecipients = append(cureRecipients, rt.proposePartyResurrection(division, snapshot, skill, party, now)...)
 	case partyHeal:
 		cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
-			division: division, caster: character, skill: skill, targets: party, percent: fullHealPercent, now: now})...)
+			division: division, caster: character, skill: skill, targets: party, percent: fullHealPercent, now: now, doors: doors})...)
 	case lowestHeal:
 		if lowest.ID != character.ID {
 			cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
 				division: division, caster: character, skill: skill,
-				targets: []uint32{enterworld.ObjectIDForCharacter(lowest)}, percent: fullHealPercent, now: now})...)
+				targets: []uint32{enterworld.ObjectIDForCharacter(lowest)}, percent: fullHealPercent, now: now, doors: doors})...)
 		}
 	case resu:
 		if prompt := rt.proposeResurrection(division, snapshot, recipientView, skill, now); len(prompt) != 0 {
@@ -336,7 +338,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	case targeted && recipient != character:
 		var frame wire.Frame
 		healingThreat := makeSkillHealingThreat(division, character, recipient, skill)
-		if !rt.deps.Update(recipient, "skill-target-heal", func() bool {
+		if !doors.update(recipient, "skill-target-heal", func() bool {
 			hp, mp, ok := rt.skillHealAmounts(division, recipient, character, skill, healCast)
 			if !ok {
 				return false
@@ -362,7 +364,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		share := fullHealPercent - skill.Abnormal.EffectArea.Reduction
 		for _, gid := range secondary {
 			cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
-				division: division, caster: character, skill: skill, targets: []uint32{gid}, percent: share, now: now})...)
+				division: division, caster: character, skill: skill, targets: []uint32{gid}, percent: share, now: now, doors: doors})...)
 			share = share * (fullHealPercent - skill.Abnormal.EffectArea.Reduction) / fullHealPercent
 		}
 	}
@@ -475,6 +477,9 @@ type partyHealRequest struct {
 	targets  []uint32
 	percent  uint32
 	now      int64
+	// doors is the cast lane's commit pair (handlerDoors on a press,
+	// tickDoors on a tick release): each member heals through it.
+	doors characterDoors
 }
 
 /*
@@ -508,7 +513,7 @@ func (rt *Runtime) applyPartyHeal(request partyHealRequest) []RecipientFrames {
 
 		var frame wire.Frame
 		healingThreat := makeSkillHealingThreat(division, caster, member, skill)
-		if !rt.deps.Update(member, "skill-party-heal", func() bool {
+		if !request.doors.update(member, "skill-party-heal", func() bool {
 			hp, mp, ok := rt.skillHealShareAmounts(division, member, caster, skill, percent)
 			if !ok {
 				return false

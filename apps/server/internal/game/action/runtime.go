@@ -194,6 +194,10 @@ type Runtime struct {
 	entrySpawnMu    sync.Mutex
 	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
 
+	// tickSnaps shares one epoch-checked record copy per character
+	// and copy kind across a tick hook's steps (tick_snapshots.go).
+	tickSnaps tickSnapshots
+
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex

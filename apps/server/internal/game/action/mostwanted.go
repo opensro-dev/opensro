@@ -557,7 +557,9 @@ func (rt *Runtime) payMostWantedBounty(owed mostWantedBounty) []RecipientFrames 
 		return nil
 	}
 	var paid uint64
-	if !rt.deps.UpdateMany([]*enterworld.Character{killer, victim}, mostWantedBountyDoor, func() bool {
+	// Bounties settle inside the tick's kill settlement: the commit
+	// joins the tick's batch.
+	if !rt.deps.UpdateManyDeferred([]*enterworld.Character{killer, victim}, mostWantedBountyDoor, func() bool {
 		if killer.DeletePending || victim.DeletePending {
 			return false
 		}

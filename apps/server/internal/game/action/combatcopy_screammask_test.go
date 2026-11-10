@@ -180,7 +180,7 @@ func screamMaskPlayerRun(t *testing.T, copyKind int) (string, bool) {
 	loadCombatBag(c)
 	loadCombatBag(attacker)
 	screamMaskArmCopy(rt, copyKind, c.Name, attacker.Name)
-	out := rt.screamMaskPlayer(testDivision, c, attacker, clock.NowMs())
+	out := rt.screamMaskPlayer(testDivision, c, attacker, clock.NowMs(), rt.handlerDoors())
 	block := rt.playerAbnormal(testDivision, attacker.Name)
 	stunned := block != nil && block.Slots[abnormal.Stun].Active
 	return fmt.Sprintf("%+v\n", out) + fmt.Sprintf("stunned=%v ahp=%d mrows=%s arows=%s", stunned, *attacker.CurrentHP, combatRowsView(c), combatRowsView(attacker)), stunned

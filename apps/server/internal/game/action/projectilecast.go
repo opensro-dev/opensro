@@ -293,7 +293,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	if valid {
 		if p.selfEffect {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptTimedSelfEffect(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptTimedSelfEffect(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.statusArea {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
@@ -301,15 +301,15 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 			}
 		} else if p.threatDecrease {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptMirage(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptMirage(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.trap {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptCombatTrap(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptCombatTrap(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.supportCast {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else {
 			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p, rt.tickDoors())
