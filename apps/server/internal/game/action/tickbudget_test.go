@@ -90,10 +90,64 @@ const (
 // 263 allocs; with the bond lane's revival walk judging its
 // refusal on door-read facts before bondSource's answer comes
 // home, instead of paying for the escaped SkillDef on every pet
-// owner's tick (#2030), measured 25,150 B / 258 allocs.
+// owner's tick (#2030), measured 25,150 B / 258 allocs; with the
+// judged pet tick refilling the session's retained owner-world
+// slot instead of cloning the world per tick, and its stuck answer
+// and movement constraint built once per session (#2033), measured
+// 23,897 B / 249 allocs; with the identity key's composition
+// memoized (namekey.Key), so the world store's lanes stop building
+// the same key strings every tick (#2033), measured 23,227 B / 221
+// allocs; with the crow-brood recharge verdict read under the stack
+// read guard instead of the callback door's boxed closure per crow
+// tick (#2033), measured 22,584 B / 217 allocs; with the ground
+// owner-expiry probe reading the registry's stamps under its lock
+// instead of a division list and the cached copies, and the
+// pending-pickup due probe building nothing while nothing matured
+// (#2033), measured 21,875 B / 187 allocs; with the basic-attack
+// intent snapshot, the live-chain owner set and the tick-start
+// action-owner snapshot refilled into runtime scratch instead of
+// rebuilt from empty every tick (#2033), measured 21,755 B /
+// 184 allocs; with the compound-job advance refilling its key
+// scratch under the job lock instead of rebuilding the list every
+// tick (#2033), measured 21,732 B / 183 allocs; with the bond tick
+// judging its expansion, refusal and idle verdicts ahead of
+// bondSource's escaping answer - an admitted bear whose cooldown
+// runs, or with nobody dead in band to revive, and any owner whose
+// pet is not even out, never pays for the call or its companion
+// copy (#2033), measured 19,651 B / 170 allocs; with the
+// natural-recovery pass refilling its due-key scratch under the
+// recovery lock instead of rebuilding the list every tick (#2033),
+// measured 19,516 B / 170 allocs; with the companion-admitted
+// snapshot reading on the stack read guard instead of the callback
+// door (#2033), measured 18,127 B / 115 allocs; with the judged
+// pet's COS abnormal identity weighed as a folded struct key,
+// folded once per session binding, instead of a string rebuilt on
+// every read (#2033), measured 17,790 B / 93 allocs; with the
+// elemental arm's capture reading on the stack read guard instead
+// of the callback door (#2033), measured 17,214 B / 75 allocs; with
+// the population doors' sorted key list cached on the monster
+// state and rebuilt only when a population registers or releases,
+// instead of rebuilt and re-sorted on every door (#2033), measured
+// 16,413 B / 66 allocs on the combined tree; with the satiety tick
+// judging off the shared catalog row instead of a MaxHP-adjusted
+// copy (#2033), measured 15,065 B / 63 allocs on the combined tree;
+// with the pets tick's session walk list cached on the runtime and
+// rebuilt only on session membership writes, instead of rebuilt
+// and re-sorted every tick (#2033), measured 13,542 B / 59 allocs
+// on the combined tree; with the timed-window sweeps' owner lists
+// cached on their index and rebuilt only when an owner tracks or
+// is forgotten, instead of rebuilt and re-sorted on every sweep
+// (#2033), measured 13,499 B / 56 allocs on the combined tree; with
+// the periodic pulse's COS recipient judged on the live record
+// instead of detached into its owner's pet-owner view (#2033),
+// measured 11,738 B / 46 allocs on the combined tree; with the pet
+// natural-recovery pulse weighing its zombie bit, maxima and
+// recovery reductions off the committed abnormal block in place
+// instead of building the committing owner and its block copy per
+// pulse (#2033), measured 11,358 B / 46 allocs on the combined tree.
 const (
-	tickBudgetBytesPerTick  = 27700
-	tickBudgetAllocsPerTick = 284
+	tickBudgetBytesPerTick  = 12500
+	tickBudgetAllocsPerTick = 51
 )
 
 /*

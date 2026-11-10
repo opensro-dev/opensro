@@ -194,7 +194,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "waterRefraction",
 						id: "experimental-water-refraction",
 						label: "Water refraction",
-						description: "Water bends the ground under it and foams at the shore."
+						description: "Water bends the ground below and foams at the shore."
 					}
 				]
 			},
@@ -292,6 +292,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-seal-under-heading",
 						label: "Seal line under item name",
 						description: "Show a rare item's seal right under its name."
+					},
+					{
+						key: "setBonusTooltip",
+						id: "experimental-set-bonus-tooltip",
+						label: "Set bonus on item tooltips",
+						description: "List an armor piece's set tiers and worn pieces."
 					},
 					{
 						key: "silkHistory",

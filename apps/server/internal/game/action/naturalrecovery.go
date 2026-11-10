@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/recovery"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -49,8 +50,16 @@ Replacement sessions start fresh clocks; repeat admission preserves phase.
 ================
 */
 type recoverySession struct {
-	session                    uint64
-	character                  *enterworld.Character
+	session   uint64
+	character *enterworld.Character
+	// abnormalKey and effectsKey are the resident's folded lookup
+	// keys (playerAbnormalKey, statuseffect.OwnerKey), folded once
+	// when the session is created (resident binding, or the potion
+	// admission that can precede it): while someone in the world
+	// holds a block or a buff, the stores are populated, and a pulse
+	// reads its resident's entries by the held keys instead of
+	// folding fresh ones (#2033).
+	abnormalKey, effectsKey    string
 	nextMs                     int64
 	questNextMs                int64
 	questItemNextMs            int64
@@ -81,7 +90,9 @@ func (rt *Runtime) BindRecoverySession(division string, c *enterworld.Character,
 		rt.recoverySessions = make(map[recoveryKey]*recoverySession)
 	}
 	now := rt.Now().UnixMilli()
-	rt.recoverySessions[key] = &recoverySession{session: session, character: c, nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
+	rt.recoverySessions[key] = &recoverySession{session: session, character: c,
+		abnormalKey: playerAbnormalKey(division, c.Name), effectsKey: statuseffect.OwnerKey(division, c.Name),
+		nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
 	rt.recoverySessions[key].questItemNextMs = now + questItemIntervalMs
 	rt.recoverySessions[key].potionNextMs = now + potionRecoveryIntervalMs
 }
@@ -127,18 +138,22 @@ func naturalRecoveryAmount(maximum int64, rate float32) int64 {
 advanceNaturalRecovery
 
 Snapshot due keys before entering division doors so collection readers never
-hold the recovery lock while waiting for a gameplay operation.
+hold the recovery lock while waiting for a gameplay operation. The snapshot
+refills the runtime's key scratch instead of rebuilding per tick (#2033):
+the tick step list is the only caller, the pass consumes the keys in line,
+and nothing retains the slice past the pass.
 ================
 */
 func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFrames {
 	rt.recoveryMu.Lock()
-	var keys []recoveryKey
+	keys := rt.recoveryKeys[:0]
 	for key, state := range rt.recoverySessions {
 		if nowMs >= state.potionNextMs || nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs ||
 			rt.AdvanceQuestItem != nil && nowMs >= state.questItemNextMs {
 			keys = append(keys, key)
 		}
 	}
+	rt.recoveryKeys = keys
 	rt.recoveryMu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].division != keys[j].division {
@@ -148,7 +163,7 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	})
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
-		out = append(out, rt.advanceNaturalRecoveryInDivision(key, nowMs)...)
+		out = rt.advanceNaturalRecoveryInDivision(key, nowMs, out)
 	}
 	return out
 }
@@ -158,16 +173,13 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 advanceNaturalRecoveryInDivision
 ================
 */
-func (rt *Runtime) advanceNaturalRecoveryInDivision(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+func (rt *Runtime) advanceNaturalRecoveryInDivision(key recoveryKey, nowMs int64, out []simulation.DivisionFrames) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	var out []simulation.DivisionFrames
 	out = append(out, rt.recoverPotionResident(key, nowMs)...)
 	out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
 	out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
-	frames := rt.recoverResident(key, nowMs)
-	out = append(out, frames...)
-	return out
+	return rt.recoverResident(key, nowMs, out)
 }
 
 /*
@@ -237,15 +249,17 @@ recoverResident
 
 An overrun consumes one period per update, including blocked pulses. A failed
 stat projection leaves stored gauges untouched rather than healing at a
-guessed rate that ignores equipped options or active effects.
+guessed rate that ignores equipped options or active effects. The committed
+pulse appends its wrapper to the caller's frame set (out) and returns the
+grown set.
 ================
 */
-func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64, out []simulation.DivisionFrames) []simulation.DivisionFrames {
 	rt.recoveryMu.Lock()
 	state := rt.recoverySessions[key]
 	if state == nil || nowMs < state.nextMs {
 		rt.recoveryMu.Unlock()
-		return nil
+		return out
 	}
 	// The native timer advance subtracts one period and invokes once per owner update.
 	// Keep the residual phase, including pulses skipped while moving/dead.
@@ -253,7 +267,12 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 	rt.recoveryMu.Unlock()
 	c := state.character
 	casting := rt.hasOpenSkillCast(key.division, c.Name)
-	var frames []simulation.DivisionFrames
+	// The committed pulse appends its one wrapper to the caller's
+	// growing frame set (out): a per-pulse wrapper slice was
+	// allocated only for the caller to copy its single element
+	// out of (#2033). The frame slice and payload inside stay
+	// freshly owned per pulse; the tick retains them.
+	var pulse simulation.DivisionFrames
 	var drain *drainPulse
 	committed := rt.deps.UpdateDeferred(c, "natural-recovery", func() bool {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
@@ -278,12 +297,19 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		}
 		// The native motion state writes source 2 to the flat channel. Keeping the base in
 		// the common graph also admits equipment recovery magic options.
-		writes := rt.statModifierWrites(key.division, c)
+		// The lane's scratch carries the pulse's writes: the memo
+		// compares them in place and clones what it keeps, so the
+		// buffer is free again when the update returns (#2033). The
+		// session's held keys seed the reads, so a populated abnormal
+		// or effect store folds nothing for this pulse either.
+		writes := append(rt.recoveryWrites[:0], rt.effects.ModifierWritesKeyed(state.effectsKey)...)
+		writes = rt.statModifierWritesFrom(key.division, writes, c)
 		writes = append(writes,
 			paramkeeper.Write{Parameter: itemParamHPRecovery, Source: recoveryPostureSource, Value: rate},
 			paramkeeper.Write{Parameter: itemParamMPRecovery, Source: recoveryPostureSource, Value: rate},
 		)
-		stats, _, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, rt.playerAbnormal(key.division, c.Name))
+		rt.recoveryWrites = writes
+		stats, _, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, rt.playerAbnormalKeyed(state.abnormalKey))
 		if err != nil {
 			return false
 		}
@@ -304,14 +330,14 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 			return false
 		}
 		c.CurrentHP, c.CurrentMP = &nextHP, &nextMP
-		frames = []simulation.DivisionFrames{{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: []simulation.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(enterworld.ObjectIDForCharacter(c), simulation.VitalsSourceNaturalRecovery, simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(nextMP)})}}}}
+		pulse = simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: []simulation.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(enterworld.ObjectIDForCharacter(c), simulation.VitalsSourceNaturalRecovery, simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(nextMP)})}}}
 		return true
 	})
 	if !committed {
-		return nil
+		return out
 	}
 	if drain != nil {
-		return rt.publishDrainPulse(key, c, nowMs, drain)
+		return append(out, rt.publishDrainPulse(key, c, nowMs, drain)...)
 	}
-	return frames
+	return append(out, pulse)
 }

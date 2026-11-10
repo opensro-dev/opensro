@@ -54,7 +54,7 @@ func TestAuthoredBaroiCompleteControlsAndPromotion(t *testing.T) {
 		t.Fatalf("lost authored controls: %+v", c)
 	}
 	nest := NestRow{Controls: c, HasControls: true, Radius: 200, PolicyPinned: true, HasChampionTactics: true, ChampionTactics: ChampionTactics{Controls: pair.Champion, HasControls: true}}
-	if ResolveTactics(Instance{Nest: nest}).ChaseLeash != 0 {
+	if ResolveTactics(&Instance{Nest: nest}).ChaseLeash != 0 {
 		t.Fatal("nest radius still overrides native trace")
 	}
 	champion := nest.PromoteToChampionTactics(1)

@@ -120,3 +120,52 @@ func TestCheckAITimerAtMatchesGidDoor(t *testing.T) {
 		t.Fatal("checkAITimerAt fired for an unknown gid")
 	}
 }
+
+/*
+================
+TestSelectedAITimerReadyAtMatchesGidDoor
+
+The attack step's carried selected-timer check returns the gid
+check's verdict for the same actor, under its own slot, another
+actor's slot and the sentinel. The first check creates the
+actor's timer bank, so each arm runs on a fresh fixture, where
+the gid door's verdict is the reference.
+================
+*/
+func TestSelectedAITimerReadyAtMatchesGidDoor(t *testing.T) {
+	verdict := func(t *testing.T, carried bool, slotOf func(t *testing.T, ops *MonsterMoverOps, gid uint32) uint32) bool {
+		t.Helper()
+		ops, actor, now := activityFixture(t)
+		if !carried {
+			return ops.Monsters.selectedAITimerReady(monsterTestDivision, actor.Gid, now)
+		}
+		return ops.Monsters.selectedAITimerReadyAt(monsterTestDivision, actor.Gid, slotOf(t, ops, actor.Gid), now)
+	}
+	own := func(t *testing.T, ops *MonsterMoverOps, gid uint32) uint32 {
+		_, monsterSlot := carriedSlots(t, ops, gid)
+		return monsterSlot
+	}
+	foreign := func(t *testing.T, ops *MonsterMoverOps, gid uint32) uint32 {
+		mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+		_, mateSlot := carriedSlots(t, ops, mate.Gid)
+		return mateSlot
+	}
+	sentinel := func(t *testing.T, ops *MonsterMoverOps, gid uint32) uint32 {
+		return behaviorNoMonsterSlot
+	}
+
+	want := verdict(t, false, nil)
+	for name, slotOf := range map[string]func(t *testing.T, ops *MonsterMoverOps, gid uint32) uint32{
+		"own slot": own,
+		"foreign":  foreign,
+		"sentinel": sentinel,
+	} {
+		if got := verdict(t, true, slotOf); got != want {
+			t.Fatalf("selectedAITimerReadyAt (%s) = %v, want %v (the gid door)", name, got, want)
+		}
+	}
+	ops, _, now := activityFixture(t)
+	if ops.Monsters.selectedAITimerReadyAt(monsterTestDivision, 999999, behaviorNoMonsterSlot, now) {
+		t.Fatal("selectedAITimerReadyAt fired for an unknown gid")
+	}
+}

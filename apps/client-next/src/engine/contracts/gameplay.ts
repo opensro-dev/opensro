@@ -896,6 +896,8 @@ export interface GameplayState extends MoverPublication {
 	// (level-cap.ts): the party form and the quest guide bound their level
 	// windows by it. Absent means the native cap (foundation/gameplay/level-cap.ts).
 	readonly levelCap?: number;
+	// The set groups of a shard that applies set bonuses (equipment-sets.ts); absent means none.
+	readonly equipmentSets?: readonly import("@/engine/foundation/gameplay/equipment-sets").EquipmentSet[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];
@@ -979,6 +981,9 @@ export interface GameplayState extends MoverPublication {
 	// worker's movement owner holds it; the main-thread mover (#1440) starts
 	// its walk from it.
 	readonly navigationOwner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner;
+	// Terrain retention beside navigationOwner (#3006): the stand is
+	// terrain the mover walked to, not a fresh FindNavCell point.
+	readonly navigationTerrainRetained?: boolean;
 	readonly navigationBlock?: number;
 	readonly activeCos?: {
 		readonly gid: number;

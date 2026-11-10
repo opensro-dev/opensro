@@ -27,6 +27,14 @@ orphaned: whatever is still alive after the grace period is killed.
 `pnpm local --reset` moves the local world aside (never deletes) and
 starts fresh.
 
+Three stops name their own fix instead of dying inside a child (#3081):
+the runner upgrades a local authority left behind by a schema bump
+(copy under .state/backups first, the offline upgrader second, never
+for a schema its own validator refuses); the doctor compares the
+assets the client requires at startup against the published pack
+manifest, not just the directory's existence; and a stdin close before
+ready says it was stdin, not a process that "never became ready".
+
 ===========================================================================
 */
 
@@ -39,8 +47,10 @@ import net from "node:net";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { authorityDirFor, backupStamp, unpublishedStartupAssets, upgradeLocalAuthority } from "./preboot.mjs";
 import { resolveServerGameDataRoot } from "../build/world/paths.mjs";
 import { resolveGeneratedRoot, resolveMainCheckout } from "../lib/generatedRoot.mjs";
+import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 
 const repoRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 const clientRoot = path.join( repoRoot, "apps", "client-next" );
@@ -205,8 +215,12 @@ async function doctor( settings, verbose ) {
 		"server game data is built",
 		"run `pnpm assets build full` then `pnpm task build server-game-data`"
 	);
-	const clientAssets = path.join( resolveGeneratedRoot( process.env, mainCheckout ), "client-public", "assets" );
-	check( existsSync( clientAssets ), "client assets are built", "run `pnpm assets build full`" );
+	// The client loads published assets only (the pack index), so a loose
+	// tree with a stale manifest is not built enough: compare the startup
+	// set against the manifest and name what it lacks.
+	const clientPublic = path.join( resolveGeneratedRoot( process.env, mainCheckout ), "client-public" );
+	const unpublished = await unpublishedStartupAssets( clientPublic );
+	check( unpublished === null, "client startup assets are published", unpublished ?? "" );
 
 	if ( problems.length === 0 ) {
 		const shard = readCatalog( settings );
@@ -260,6 +274,21 @@ function portFree( port ) {
 
 /*
 ================
+stopAnnouncement
+
+What a stop prints when it begins. A stdin close (no terminal) names
+itself (#3081): it is the runner working as designed, and the fix is a
+terminal, not a process hunt.
+================
+*/
+function stopAnnouncement( reason ) {
+	return reason === "stdin" ?
+		"stdin closed: stopping (start with a terminal, or keep stdin open)" :
+		"stopping...";
+}
+
+/*
+================
 resetWorld
 
 --reset: move the local world aside (the reset of GETTING_STARTED
@@ -283,15 +312,7 @@ async function resetWorld( settings ) {
 		console.log( "reset cancelled" );
 		process.exit( 0 );
 	}
-	const stamp = new Date();
-	const pad = n => String( n ).padStart( 2, "0" );
-	const backup = path.join(
-		stateDir,
-		"backups",
-		`local-reset-${stamp.getFullYear()}${pad( stamp.getMonth() + 1 )}${pad( stamp.getDate() )}-${
-			pad( stamp.getHours() )
-		}${pad( stamp.getMinutes() )}${pad( stamp.getSeconds() )}`
-	);
+	const backup = path.join( stateDir, "backups", `local-reset-${backupStamp( new Date() )}` );
 	let moved = 0;
 	for ( const name of [ "cluster", "shards", "agent", "local" ] ) {
 		const from = path.join( stateDir, name );
@@ -328,6 +349,20 @@ async function run( settings ) {
 	const shard = readCatalog( settings );
 	mkdirSync( binDir, { recursive: true } );
 	buildBinaries();
+	// Before provisioning and before any child opens the store: an
+	// authority left behind by a schema bump is upgraded in place (its
+	// copy stays under .state/backups), never discovered by the
+	// GameWorld's exact-version refusal.
+	try {
+		upgradeLocalAuthority( {
+			dir: authorityDirFor( settings, shard.id ),
+			tool: path.join( binDir, `sro-authority-upgrade${exeSuffix}` ),
+			backupsDir: path.join( stateDir, "backups" )
+		} );
+	} catch ( error ) {
+		console.error( `pnpm local: ${error.message}` );
+		process.exit( 1 );
+	}
 	provision();
 	const identity = await prepareIdentity( shard );
 	const agentAddr = localSetting( settings, "LOCAL_AGENT_ADDR", "127.0.0.1:8787" );
@@ -365,7 +400,7 @@ async function run( settings ) {
 	const vite = startVite();
 
 	const children = [ agent, gameworld, vite ];
-	const state = { stopping: false, consoleStop: false, failed: null };
+	const state = { stopping: false, consoleStop: false, stopReason: null, failed: null };
 	watchChildren( children, state );
 	installStopHandlers( children, state );
 
@@ -374,7 +409,12 @@ async function run( settings ) {
 		await waitReady( `${shard.transportUrl}/transport/readyz`, "GameWorld", children, state );
 		await waitReady( `http://127.0.0.1:${vitePort}/`, "Vite", children, state );
 	} catch ( error ) {
-		console.error( `pnpm local: ${error.message}` );
+		// A stdin-closed stop already printed its own reason; a
+		// "never became ready" line after it only sends the reader
+		// hunting for a crashed process (#3081).
+		if ( state.stopReason !== "stdin" ) {
+			console.error( `pnpm local: ${error.message}` );
+		}
 		await stopChildren( children, state );
 		process.exit( 1 );
 	}
@@ -398,16 +438,19 @@ The three Go programs a local run needs, into .state/local/bin.
 ================
 */
 function buildBinaries() {
+	// A local run from any checkout reuses what another already compiled.
+	const env = sharedCacheEnvironment();
 	for (
 		const [name, pkg] of [
 			[ "sro-agent", "./cmd/services/sro-agent" ],
 			[ "sro-gameworld", "./cmd/services/sro-gameworld" ],
-			[ "sro-bootstrap-development", "./cmd/operations/sro-bootstrap-development" ]
+			[ "sro-bootstrap-development", "./cmd/operations/sro-bootstrap-development" ],
+			[ "sro-authority-upgrade", "./cmd/tools/sro-authority-upgrade" ]
 		]
 	) {
 		console.log( `building ${name}...` );
 		const out = path.join( binDir, name + exeSuffix );
-		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit" } );
+		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit", env } );
 		if ( result.status !== 0 ) {
 			console.error( `pnpm local: go build ${pkg} failed` );
 			process.exit( 1 );
@@ -651,20 +694,21 @@ stop goes straight to killing trees.
 ================
 */
 function installStopHandlers( children, state ) {
-	const begin = graceful => {
+	const begin = ( graceful, reason ) => {
 		if ( !state.stopping ) {
 			state.consoleStop = graceful;
-			console.log( "stopping..." );
+			state.stopReason = reason;
+			console.log( stopAnnouncement( reason ) );
 			void stopChildren( children, state );
 		}
 	};
-	process.on( "SIGINT", () => begin( true ) );
-	process.on( "SIGTERM", () => begin( true ) );
-	process.on( "SIGBREAK", () => begin( true ) );
+	process.on( "SIGINT", () => begin( true, "console" ) );
+	process.on( "SIGTERM", () => begin( true, "console" ) );
+	process.on( "SIGBREAK", () => begin( true, "console" ) );
 	if ( !process.stdin.isTTY ) {
 		process.stdin.resume();
-		process.stdin.once( "end", () => begin( false ) );
-		process.stdin.once( "close", () => begin( false ) );
+		process.stdin.once( "end", () => begin( false, "stdin" ) );
+		process.stdin.once( "close", () => begin( false, "stdin" ) );
 	}
 }
 
@@ -799,7 +843,14 @@ function hostPortOf( url ) {
 	return `${parsed.hostname}:${parsed.port}`;
 }
 
-main().catch( error => {
-	console.error( `pnpm local: ${error.message}` );
-	process.exit( 1 );
-} );
+// The stop announcement is importable so its test runs without a
+// stack (the pre-boot checks are preboot.mjs); the runner itself
+// starts only when this file is the program.
+export { stopAnnouncement };
+
+if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
+	main().catch( error => {
+		console.error( `pnpm local: ${error.message}` );
+		process.exit( 1 );
+	} );
+}

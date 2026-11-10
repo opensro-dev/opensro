@@ -93,6 +93,21 @@ const (
 
 // Category 0x0A codes: the low byte of the GameServer's 0x3Cxx stall
 // errors, as the v1.150 notice table words them.
+//
+// #2358: seven of these words name no row of the client's notice
+// dispatch (packed category*256+code addresses 0x0A06, 0x0A07,
+// 0x0A09, 0x0A0A, 0x0A0F, 0x0A10, 0x0A14 in the generated
+// native-notice-data.ts; sha256
+// 375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a):
+// StallErrBadBagSlot, StallErrBadCount, StallErrNameLength,
+// StallErrGreeting, StallErrNotVisiting, StallErrBadSlot and
+// StallErrHasStall print nothing, as they do natively. The v1.188
+// server and client text tables, the later client's 0x3Cxx
+// dispatch (007B9C50) and the iSRO-R data word none of them
+// either, and the near-miss rows name other refusals.
+// stall_test.go pins each byte so the silence is not "fixed"
+// into a wrong line, as 0x30 -> 0x18 was (#2414, reverted by
+// #2633).
 const (
 	StallErrInvalidTarget uint8 = 0x03
 	StallErrTooFar        uint8 = 0x04

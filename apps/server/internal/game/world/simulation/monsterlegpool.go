@@ -337,7 +337,7 @@ accumulates its own and hands them over at the join.
 */
 type legPlanBin struct {
 	positions []int
-	memo      map[uint32]activityBlockMemo
+	memo      map[uint32]*activityBlockMemo
 	stats     legStats
 }
 
@@ -476,7 +476,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 	bins := partitionLegPlans(actors, ops.LegWorkers)
 	var wg sync.WaitGroup
 	for bin := range bins {
-		bins[bin].memo = make(map[uint32]activityBlockMemo, len(bins[bin].positions))
+		bins[bin].memo = make(map[uint32]*activityBlockMemo, len(bins[bin].positions))
 		wg.Add(1)
 		go func(bin *legPlanBin) {
 			defer wg.Done()
@@ -553,7 +553,7 @@ func planLegActor(owned *MonsterMoverOps, plan *legPlan, work legBatchWork) {
 		return
 	}
 	plan.frames, plan.targeted = owned.advanceInstanceStep(
-		work.division, &actor.instance, actor.mover, true, work.players, work.nowMs)
+		work.division, &actor.instance, &actor.mover, work.players, work.nowMs)
 }
 
 /*
@@ -576,7 +576,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 	gid := actor.instance.Gid
 	armed := *ops
 	armed.stepBaseGen, armed.stepGenArmed = actor.moverGen, true
-	armed.stepSlot, armed.stepMonsterSlot = actor.slot, actor.monsterSlot
+	armed.stepSlot, armed.stepMonsterSlot, armed.stepQueueSlot = actor.slot, actor.monsterSlot, actor.queueSlot
 	started := time.Now()
 	defer func() { stats.noteAdvance(time.Since(started)) }()
 
@@ -586,16 +586,13 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 		case legPlanOpMover:
 			landed = armed.commitSteppedMover(work.division, gid, op.mover)
 		case legPlanOpNavigation:
-			armed.commitSteppedNavigation(work.division,
+			// The transaction hands back its landing and the
+			// generation it wrote, so the replay rebases and
+			// judges the op without a stored-value witness read.
+			_, landed = armed.commitSteppedNavigation(work.division,
 				ops.Monsters.prepareNavigation(work.division, gid), op.mover, op.frames)
-			// commitNavigation's frame return cannot tell a landed
-			// commit with no frames from a dropped one; the stored
-			// value equalling next is the acceptance witness, the
-			// same one commitSteppedNavigation chains off.
-			stored, _, ok := ops.Monsters.MoverGenerationAt(work.division, gid, actor.slot, actor.monsterSlot)
-			landed = ok && stored == op.mover
 		case legPlanOpActivity:
-			landed = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
+			landed, _ = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, actor.queueSlot, actor.moverGen, op.before, op.after, work.nowMs)
 		case legPlanOpFollow:
 			// commitFollow hands back the frames it was given; the
 			// step's frames already ride the plan's output.
@@ -640,7 +637,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 		}
 	}
 	deliverMonsterTargetFrames(work.division, plan.targeted, work.sessions, work.push)
-	ops.vanishInSafeZone(work.division, gid, armed.stepSlot, armed.stepMonsterSlot, work.nowMs)
+	ops.vanishInSafeZone(work.division, &actor, work.nowMs)
 }
 
 /*
@@ -686,6 +683,14 @@ own phase walls and samples stay the leg goroutine's.
 */
 func (stats *legStats) absorbBin(bin *legStats) {
 	stats.advance += bin.advance
+	stats.steps += bin.steps
+	for guard := range bin.restGuards {
+		stats.restGuards[guard] += bin.restGuards[guard]
+	}
+	stats.restSettled += bin.restSettled
+	stats.restSettledDrained += bin.restSettledDrained
+	stats.cadenceArms += bin.cadenceArms
+	stats.gateSuspended += bin.gateSuspended
 	for caller := range bin.plans {
 		for outcome := range bin.plans[caller] {
 			stats.plans[caller][outcome] += bin.plans[caller][outcome]

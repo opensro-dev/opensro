@@ -78,3 +78,53 @@ func TestPetSessionDrivesIndependentMotionAndCleansUp(t *testing.T) {
 		t.Fatal("session retained AI owner")
 	}
 }
+
+/*
+================
+TestOrderedPetSessionKeysTrackMembership
+
+advancePets' walk list is cached on the runtime and rebuilt only
+when a membership writer drops it (#2033): the sorted gid-bearing
+keys track binds and forgets, owner sessions (gid 0) never walk,
+and readiness - which flips without a map write - leaves the
+cached list standing for the walk's live read at each visit.
+================
+*/
+func TestOrderedPetSessionKeysTrackMembership(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	seed := func(division, name string, gid uint32) petOwnerKey {
+		key := petOwnerKey{division: division, name: name, gid: gid}
+		rt.petMu.Lock()
+		if rt.petSessions == nil {
+			rt.petSessions = make(map[petOwnerKey]*petSession)
+		}
+		rt.petSessions[key] = &petSession{character: c, ready: true}
+		rt.petMu.Unlock()
+		return key
+	}
+	late := seed("zeta", "asd2", 9)
+	seed(testDivision, "asd2", 0)
+	second := seed(testDivision, "asd2", 7)
+	first := seed(testDivision, "asd2", 3)
+	keys := rt.orderedPetSessionKeys()
+	if want := []petOwnerKey{first, second, late}; !reflect.DeepEqual(keys, want) {
+		t.Fatalf("walk list %v, want %v", keys, want)
+	}
+	if again := rt.orderedPetSessionKeys(); &again[0] != &keys[0] {
+		t.Fatal("second read rebuilt the cached list")
+	}
+	// Readiness flips without a map write: the cached list stands,
+	// and the flip is the walk's live read to judge.
+	rt.petMu.Lock()
+	rt.petSessions[first].ready = false
+	rt.petMu.Unlock()
+	if again := rt.orderedPetSessionKeys(); &again[0] != &keys[0] {
+		t.Fatal("a readiness flip rebuilt the cached list")
+	}
+	// A forget is a membership writer: the next read drops its keys.
+	rt.forgetPetSession(testDivision, "asd2")
+	if keys := rt.orderedPetSessionKeys(); !reflect.DeepEqual(keys, []petOwnerKey{late}) {
+		t.Fatalf("walk list after forget %v, want [%v]", keys, late)
+	}
+}

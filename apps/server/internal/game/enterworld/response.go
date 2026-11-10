@@ -273,6 +273,9 @@ type BootstrapResult struct {
 	// (port-only plumbing for the expansion; zero is the native cap and
 	// is not published).
 	LevelCap int64
+	// EquipmentSets are the set groups the item tooltip lists (port-only,
+	// not native; empty unless SRO_CAP110_SET_BONUSES is on).
+	EquipmentSets []SetPublication
 	// StorageAutoStack tells the client's storage quick move to prefer a
 	// matching stack (port-only, not native; false is native).
 	StorageAutoStack bool
@@ -354,6 +357,7 @@ type bootstrapSuccessView struct {
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
+	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
@@ -442,6 +446,7 @@ type bootstrapBlobSuccessView struct {
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
+	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
@@ -488,6 +493,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	LevelCap                  int64                    `json:"levelCap,omitempty"`
+	EquipmentSets             []SetPublication         `json:"equipmentSets,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	ChatItemLinks             int64                    `json:"chatItemLinks,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
@@ -566,6 +572,7 @@ func (r *BootstrapResult) blobView() any {
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
+		EquipmentSets:             r.EquipmentSets,
 		StorageAutoStack:          r.StorageAutoStack,
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
@@ -626,6 +633,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
+		EquipmentSets:             r.EquipmentSets,
 		StorageAutoStack:          r.StorageAutoStack,
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,
@@ -700,6 +708,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		LevelCap:                  r.LevelCap,
+		EquipmentSets:             r.EquipmentSets,
 		StorageAutoStack:          r.StorageAutoStack,
 		ChatItemLinks:             r.ChatItemLinks,
 		FastDenReturn:             r.FastDenReturn,

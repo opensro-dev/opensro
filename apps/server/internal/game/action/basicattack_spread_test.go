@@ -144,3 +144,102 @@ func TestBasicAttackIntentsServeAllInsideBudget(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCombatIntentSnapshotServesFoldedOrder
+
+The snapshot's serve order is division, then the case-folded name:
+the order the old per-comparison ToLower sort imposed, now without
+building the lowered copies. Capitals fold, a longer name follows
+its prefix, and a non-ASCII name takes the lowered comparison
+itself. The allocating snapshot is the caller's own, so a later
+retirement cannot reach back into it.
+================
+*/
+func TestCombatIntentSnapshotServesFoldedOrder(t *testing.T) {
+	rt := NewRuntime(&enterworld.Deps{}, nil)
+	for _, intent := range []basicAttackIntent{
+		{DivisionID: "b-div", CharacterName: "charlie"},
+		{DivisionID: "a-div", CharacterName: "Åsa"},
+		{DivisionID: "b-div", CharacterName: "Alpha"},
+		{DivisionID: "b-div", CharacterName: "bravo"},
+		{DivisionID: "a-div", CharacterName: "zebra"},
+		{DivisionID: "b-div", CharacterName: "BRAVO2"},
+		{DivisionID: "b-div", CharacterName: "alpha2"},
+	} {
+		rt.setCombatIntent(intent)
+	}
+	want := []string{"zebra", "Åsa", "Alpha", "alpha2", "bravo", "BRAVO2", "charlie"}
+	got := rt.combatIntentSnapshot()
+	if len(got) != len(want) {
+		t.Fatalf("snapshot holds %d intents, want %d", len(got), len(want))
+	}
+	for i, name := range want {
+		if got[i].CharacterName != name {
+			t.Fatalf("snapshot[%d] = %q, want %q (snapshot %v)", i, got[i].CharacterName, name, got)
+		}
+	}
+	rt.basicAttackIntentsMu.Lock()
+	delete(rt.basicAttackIntents, simulation.WorldKey("b-div", "Alpha"))
+	rt.basicAttackIntentsMu.Unlock()
+	if len(got) != len(want) || got[2].CharacterName != "Alpha" {
+		t.Fatalf("a retirement reached into a served snapshot: %v", got)
+	}
+}
+
+/*
+================
+TestFillCombatIntentsScratchReflectsTheMap
+
+The tick's scratch refill mirrors the map at call time: an intent
+retired between ticks leaves no stale tail entry in the reused
+slice, and an empty map reads as no work.
+================
+*/
+func TestFillCombatIntentsScratchReflectsTheMap(t *testing.T) {
+	rt := NewRuntime(&enterworld.Deps{}, nil)
+	rt.setCombatIntent(basicAttackIntent{DivisionID: testDivision, CharacterName: "first"})
+	rt.setCombatIntent(basicAttackIntent{DivisionID: testDivision, CharacterName: "second"})
+
+	rt.basicAttackSnapshot = rt.fillCombatIntents(rt.basicAttackSnapshot)
+	if len(rt.basicAttackSnapshot) != 2 {
+		t.Fatalf("first fill holds %d intents, want 2", len(rt.basicAttackSnapshot))
+	}
+	rt.basicAttackIntentsMu.Lock()
+	delete(rt.basicAttackIntents, simulation.WorldKey(testDivision, "second"))
+	rt.basicAttackIntentsMu.Unlock()
+	rt.basicAttackSnapshot = rt.fillCombatIntents(rt.basicAttackSnapshot)
+	if len(rt.basicAttackSnapshot) != 1 || rt.basicAttackSnapshot[0].CharacterName != "first" {
+		t.Fatalf("second fill = %v, want only the surviving intent", rt.basicAttackSnapshot)
+	}
+	rt.basicAttackIntentsMu.Lock()
+	delete(rt.basicAttackIntents, simulation.WorldKey(testDivision, "first"))
+	rt.basicAttackIntentsMu.Unlock()
+	if got := rt.fillCombatIntents(rt.basicAttackSnapshot); len(got) != 0 {
+		t.Fatalf("an emptied map filled %d intents", len(got))
+	}
+}
+
+/*
+================
+TestLiveChainOwnersScratchDropsRetiredChains
+
+The drain's owner set is rebuilt every call: a chain whose intent
+retired must not hold its bracket on the next drain.
+================
+*/
+func TestLiveChainOwnersScratchDropsRetiredChains(t *testing.T) {
+	rt := NewRuntime(&enterworld.Deps{}, nil)
+	rt.setCombatIntent(basicAttackIntent{DivisionID: testDivision, CharacterName: "chained", ComboRootID: 7})
+	key := simulation.WorldKey(testDivision, "chained")
+	if _, held := rt.liveChainOwners()[key]; !held {
+		t.Fatal("a live chain root did not hold its owner")
+	}
+	rt.basicAttackIntentsMu.Lock()
+	delete(rt.basicAttackIntents, key)
+	rt.basicAttackIntentsMu.Unlock()
+	if _, held := rt.liveChainOwners()[key]; held {
+		t.Fatal("a retired chain still holds its owner from the scratch set")
+	}
+}

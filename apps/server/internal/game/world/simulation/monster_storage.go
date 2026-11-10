@@ -79,6 +79,12 @@ need an order sort or count, they never inherit one.
 type monsterHotSlot struct {
 	gid uint32
 	row residentMonster
+	// maxHP is the row's reference max, cached where the row
+	// lands (set): the behaviour batch build probes it per due
+	// ref, and copying the interned reference out for that one
+	// scalar was the probe's whole cost (#3027). removeHot swaps
+	// whole slots, so the cache travels with its row.
+	maxHP uint32
 }
 
 /*
@@ -198,10 +204,11 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		row.SummonSightRange, row.SummonerFollowRange}
 	if exists {
 		s.hot[slot].row = resident
+		s.hot[slot].maxHP = row.Ref.MaxHP
 		return
 	}
 	s.byGID[gid] = uint32(len(s.hot))
-	s.hot = append(s.hot, monsterHotSlot{gid: gid, row: resident})
+	s.hot = append(s.hot, monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP})
 }
 
 /*
@@ -248,15 +255,37 @@ fill
 value written in place: the leg-start snapshot builds every due actor
 straight into its view slot, so the 2 KB expansion is not copied again
 through a return value (#2982).
+
+Written field by field, not as one struct literal: the literal zeroes
+the whole 2 KB Instance first, and 660 of those bytes are the four
+sparse fields (LinkedEffects, SelfEffects, TargetEffects, Abnormal)
+this function never writes - hotFill owns them and assigns every one
+right after fill runs, so the literal's zero pass over them was pure
+waste on top of the copies the fields themselves need.
 ================
 */
 func (r residentMonster) fill(dst *monster.Instance, gid uint32) {
-	*dst = monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
-		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached, GMSpawned: r.gmSpawned, Arena: r.arena,
-		SpawnHeading: r.spawnHeading, TradeVariant: r.tradeVariant, StructureState: r.structureState, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
-		LastSummonCommandMs: r.lastSummonCommandMs,
-		Opponents:           r.opponents, SummonActionUntilMs: r.summonActionUntilMs, SummonerGID: r.summonerGID,
-		SummonSightRange: r.summonSightRange, SummonerFollowRange: r.summonerFollowRange}
+	dst.ConditionalUsed = r.conditionalUsed
+	dst.Gid = gid
+	dst.Ref = r.ref.Value()
+	dst.Nest = r.nest.Value()
+	dst.Help = r.help
+	dst.Motion = r.motion
+	dst.Spawn = r.spawn
+	dst.NestDetached = r.nestDetached
+	dst.GMSpawned = r.gmSpawned
+	dst.Arena = r.arena
+	dst.SpawnHeading = r.spawnHeading
+	dst.TradeVariant = r.tradeVariant
+	dst.StructureState = r.structureState
+	dst.CurrentHP = r.currentHP
+	dst.DamageSinceSummon = r.damageSinceSummon
+	dst.LastSummonCommandMs = r.lastSummonCommandMs
+	dst.Opponents = r.opponents
+	dst.SummonActionUntilMs = r.summonActionUntilMs
+	dst.SummonerGID = r.summonerGID
+	dst.SummonSightRange = r.summonSightRange
+	dst.SummonerFollowRange = r.summonerFollowRange
 }
 
 /*
@@ -278,25 +307,35 @@ func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instanc
 ================
 hotFill
 
-hotValue written in place (#2982): see residentMonster.fill.
+Patch the sparse fields onto a filled instance: the effect snapshots and
+the abnormal block live behind sparse bits beside the value because they
+are wide and usually absent. Every sparse field is assigned, bit set or
+not: the view slots this fills are no longer zeroed between batches
+(releaseLegSnapshot only drops the heap fields), so dst cannot be trusted
+to arrive zero here.
 ================
 */
 func (s *monsterStorage) hotFill(dst *monster.Instance, gid uint32, r residentMonster) {
 	r.fill(dst, gid)
-	if r.sparse == 0 {
-		return
-	}
 	if r.sparse&sparseLinked != 0 {
 		dst.LinkedEffects = s.linkedEffects[gid]
+	} else {
+		dst.LinkedEffects = nil
 	}
 	if r.sparse&sparseAbnormal != 0 {
 		dst.Abnormal = s.abnormal[gid]
+	} else {
+		dst.Abnormal = nil
 	}
 	if r.sparse&sparseSelf != 0 {
 		dst.SelfEffects = s.selfEffects[gid]
+	} else {
+		dst.SelfEffects = monster.SelfEffects{}
 	}
 	if r.sparse&sparseTarget != 0 {
 		dst.TargetEffects = s.targetEffects[gid]
+	} else {
+		dst.TargetEffects = monster.TargetEffects{}
 	}
 }
 
@@ -310,55 +349,6 @@ The dense slot of gid's hot row, when the storage holds one.
 func (s *monsterStorage) hotSlotOf(gid uint32) (uint32, bool) {
 	slot, ok := s.byGID[gid]
 	return slot, ok
-}
-
-/*
-================
-hotRow
-
-gid's resident row, when hot: lookup's probe without expanding the
-detached Instance. The row is a copy; write it back through set.
-================
-*/
-func (s *monsterStorage) hotRow(gid uint32) (residentMonster, bool) {
-	slot, ok := s.hotSlotOf(gid)
-	if !ok {
-		return residentMonster{}, false
-	}
-	return s.hot[slot].row, true
-}
-
-/*
-================
-hotRowAt
-
-hotRow through a slot carried from the last batch build, verified
-against the gid before use (#2133): a miss is the signal, exactly
-lookupAt's contract - the caller resolves by gid, so the read is
-the storage's either way.
-================
-*/
-func (s *monsterStorage) hotRowAt(slot uint32, gid uint32) (residentMonster, bool) {
-	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
-		return residentMonster{}, false
-	}
-	return s.hot[slot].row, true
-}
-
-/*
-================
-hotRowSlot
-
-hotRow with the dense slot the row sits in: the behaviour batch
-build stamps the slot on the ref it carries to dispatch (#2133).
-================
-*/
-func (s *monsterStorage) hotRowSlot(gid uint32) (residentMonster, uint32, bool) {
-	slot, ok := s.hotSlotOf(gid)
-	if !ok {
-		return residentMonster{}, 0, false
-	}
-	return s.hot[slot].row, slot, true
 }
 
 /*
@@ -616,6 +606,28 @@ func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
 		return r.hp, true
 	}
 	return 0, false
+}
+
+/*
+================
+squadApproach
+
+ordinarySquadApproach (monsterapproach.go) read off the resident
+row, without reconstructing the full Instance snapshot: the mover
+commit's approach sync classifies its actor on every commit, and
+expanding the shared catalogue rows dominates a lookup. The
+predicate reads only the nest, the summoner and the detached
+bit, so a hot row answers from those fields alone; a cold row
+hydrates through get, and the answer is the classification's
+either way.
+================
+*/
+func (s *monsterStorage) squadApproach(gid uint32) bool {
+	if r, ok := s.hotRow(gid); ok {
+		return ordinarySquadApproach(&monster.Instance{Nest: r.nest.Value(), SummonerGID: r.summonerGID, NestDetached: r.nestDetached})
+	}
+	actor := s.get(gid)
+	return ordinarySquadApproach(&actor)
 }
 
 /*

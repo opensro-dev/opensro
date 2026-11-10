@@ -18,6 +18,8 @@ O(1); the old binary heap's sift (less/swap per level, per actor, per
 tick) was the measured cost this replaces (#2135). The batch sorts its
 actors by gid, so the order monsters act in never depended on the
 container - only the due set did, and the wheel keeps it exact.
+The doors that arm the queue (the scheduleBehavior family and the
+due computation they share) live in monsteractivity_schedule.go.
 
 ===========================================================================
 */
@@ -50,6 +52,12 @@ const (
 	// monster slot: the batch build has not stamped one yet. The
 	// dispatch read resolves it by gid.
 	behaviorNoMonsterSlot = ^uint32(0)
+
+	// behaviorNoBaseGen marks a commitActivityAt caller with no
+	// snapshot generation in hand (a lane door whose before was
+	// read fresh): the commit guards on the whole row value, as
+	// every commit did before the generation guard (#3027).
+	behaviorNoBaseGen = ^uint64(0)
 
 	// behaviorNoQueueSlot marks an actor ref built without the
 	// drain (a hand-built ref): its queue doors resolve by gid.
@@ -228,6 +236,33 @@ func (q *behaviorQueue) setAt(ref behaviorActorRef, at int64) {
 
 /*
 ================
+behaviorQueue.setAtSlot
+
+set through a carried queue slot alone, verified against the gid
+before use (#2133): the activity commit's re-arm holds the slot
+its snapshot carried but no storage-slot answer fresher than the
+row's own note, so the row keeps the mover and monster slots it
+noted - the gid set's preservation, without its byGID probe
+(#3027). A slot recycled onto another actor, or the
+no-queue-slot sentinel, delegates to set, so the asked actor is
+scheduled either way.
+================
+*/
+func (q *behaviorQueue) setAtSlot(queueSlot uint32, gid uint32, at int64) {
+	if queueSlot >= uint32(len(q.slots)) || q.slots[queueSlot].gid != gid {
+		q.set(gid, at)
+		return
+	}
+	held := q.slots[queueSlot]
+	if held.live && held.at == at {
+		return
+	}
+	q.slots[queueSlot] = behaviorSlot{gid: gid, at: at, live: true, moverSlot: held.moverSlot, monsterSlot: held.monsterSlot}
+	q.place(queueSlot, at)
+}
+
+/*
+================
 behaviorQueue.removeAt
 
 remove through a carried queue slot, verified against the gid
@@ -268,14 +303,18 @@ func (q *behaviorQueue) remove(gid uint32) {
 
 /*
 ================
-behaviorQueue.liveCopy
+behaviorQueue.armedAt
 
-Whether a bucket copy still names its slot's live due.
+Whether the actor's queue row still holds a live due: a fired row
+stays dead until a set revives it, so this reads the drain's pop
+contract back - true when some door has re-armed the actor since
+its due fired. The slot is verified against the gid before use
+(#2133): a row recycled onto another actor answers for its new
+owner, never for the stale ref.
 ================
 */
-func (q *behaviorQueue) liveCopy(e behaviorCopy) bool {
-	s := q.slots[e.slot]
-	return s.live && s.at == e.at
+func (q *behaviorQueue) armedAt(queueSlot uint32, gid uint32) bool {
+	return queueSlot < uint32(len(q.slots)) && q.slots[queueSlot].gid == gid && q.slots[queueSlot].live
 }
 
 /*
@@ -284,21 +323,27 @@ behaviorQueue.filterDue
 
 One list under drain at now: live copies due by now fire (their slot
 dies, so a second copy cannot fire again); live copies not yet due
-stay; stale copies drop. Array traffic only.
+stay; stale copies drop. Array traffic only. Each copy reads its
+queue row once: the liveness answer, the kill and the fired ref's
+fields all come from that one row (the drain used to index the row
+again for the fire after asking liveCopy, per copy per bucket).
+Nothing grows q.slots during a drain - re-arms land after takeDue
+returns - so the row pointer never dangles across an iteration
+(#3027).
 ================
 */
 func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behaviorActorRef) []behaviorCopy {
 	keep := list[:0]
 	for _, e := range list {
-		if !q.liveCopy(e) {
+		row := &q.slots[e.slot]
+		if !row.live || row.at != e.at {
 			continue
 		}
 		if e.at > now {
 			keep = append(keep, e)
 			continue
 		}
-		q.slots[e.slot].live = false
-		row := q.slots[e.slot]
+		row.live = false
 		*out = append(*out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 	}
 	return keep
@@ -329,7 +374,8 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 		farMin := int64(0)
 		haveFar := false
 		for _, e := range q.far {
-			if !q.liveCopy(e) {
+			row := &q.slots[e.slot]
+			if !row.live || row.at != e.at {
 				continue
 			}
 			if e.at > now+behaviorHorizonMs {
@@ -340,8 +386,7 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 				continue
 			}
 			if e.at <= now {
-				q.slots[e.slot].live = false
-				row := q.slots[e.slot]
+				row.live = false
 				out = append(out, behaviorActorRef{gid: row.gid, queueSlot: e.slot, slot: row.moverSlot, monsterSlot: row.monsterSlot})
 				continue
 			}
@@ -450,217 +495,6 @@ func (q *behaviorQueue) shrinkExcess() {
 
 /*
 ================
-MonsterState.scheduleBehavior
-================
-*/
-func (s *MonsterState) scheduleBehavior(state *divisionMonsterState, gid uint32, now int64) {
-	s.scheduleBehaviorSlot(state, gid, now)
-}
-
-/*
-================
-MonsterState.wakeBehavior
-
-Re-arm an actor for the next leg, the event doors' set(gid, 0)
-through the division door: a dropped pooled plan replans at its
-next due, and the far idle due the batch build armed from the
-leg-start row (#2136) must not strand that replan.
-================
-*/
-func (s *MonsterState) wakeBehavior(division string, gid uint32) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if state := s.populationForObject(division, gid); state != nil {
-		state.behavior.set(gid, 0)
-	}
-}
-
-/*
-================
-MonsterState.scheduleBehaviorSlot
-
-scheduleBehavior, also returning the mover slot the read resolved.
-The batch build carries the slot to the dispatch read
-(behaviorActorMover), which verifies it against the gid before use
-and falls back to the gid resolve when a despawn recycled it
-(#2135). behaviorNoMoverSlot means the actor had no mover row: it
-still joins the batch, and its mover is synthesized at the read,
-exactly as before the carry.
-================
-*/
-func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uint32, now int64) uint32 {
-	state.forgetDormant(gid)
-	m, slot, ok := state.movers.scheduleSlot(gid)
-	if !ok {
-		state.behavior.remove(gid)
-		return behaviorNoMoverSlot
-	}
-	if s.tryDormant(state, gid, m, now) {
-		return slot
-	}
-	resident, _ := state.instances.hotRow(gid)
-	state.behavior.set(gid, s.nextBehaviorDue(state, gid, m, resident, now))
-	return slot
-}
-
-/*
-================
-MonsterState.nextBehaviorDue
-
-When the actor's next behaviour step falls due: the next tick, or
-the pending row's cadence phase when it is armed and no help
-command pends - the activity cadence's own deadline, brought
-forward to the arrival when the mover lands sooner. An idle row
-arms at its real next due instead (idleBehaviorDue, #2136). The
-gid door and the batch build's carried door share it, so both arm
-the same due for the same rows.
-================
-*/
-func (s *MonsterState) nextBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) int64 {
-	at := now + 1
-	commandPending := resident.help.HasPending()
-	if m.mode == monster.MoverPending && m.activity.Interval != 0 && !commandPending {
-		elapsed := uint32(now) - m.activity.LastCheck
-		if elapsed <= uint32(m.activity.Interval) {
-			at = now + int64(uint32(m.activity.Interval)-elapsed) + 1
-		}
-		if m.arriveMs > now && m.arriveMs < at {
-			at = m.arriveMs
-		}
-	}
-	if m.mode == monster.MoverIdle && !commandPending {
-		if due, gated := s.idleBehaviorDue(state, gid, m, resident, now); gated {
-			at = due
-		}
-	}
-	return at
-}
-
-/*
-================
-MonsterState.idleBehaviorDue
-
-When an idle monster next needs its step, and whether that time is
-knowable from the rows the scheduler already reads. The step of an
-idle monster at rest can only act at three times: its idle deadline
-(advanceIdle's decideIdle), its activity-gate cadence (the gate's
-Due test, in the pending branch's own phase arithmetic) and, for an
-aggressive nest, its acquisition timer (the sight scan; deferring
-to the timer's fire time defers nothing, the check consumes the
-timer when read). Everything else that can move it - damage, help,
-hostility, a queued tactics event - arrives through an event door
-that reschedules it at once, so sleeping until the earliest of the
-three changes no outcome. Any fact this read cannot prove keeps
-the next tick: a pending idle entry or stuck latch, a summoned
-control or a held target (the step's own branches), a corpse or a
-detached nest, an active abnormal or motion hold, a zero gate
-interval, or an acquisition bank not yet created (its first check
-arms the timer; the step that runs next tick creates it).
-
-The aggressive read mirrors monster.ResolveTactics' nest branch;
-the ops' TacticsFor override is a test seam the scheduler sits
-below, so a nest the tables call passive keeps the gate cadence.
-================
-*/
-func (s *MonsterState) idleBehaviorDue(state *divisionMonsterState, gid uint32, m moverSchedule, resident residentMonster, now int64) (int64, bool) {
-	if m.idleEntryPending || m.stuck || m.controlMode == monster.ControlSummoned || m.targetGID != 0 {
-		return 0, false
-	}
-	if resident.currentHP == 0 || resident.nestDetached || resident.sparse&sparseAbnormal != 0 {
-		return 0, false
-	}
-	if resident.motion.StateAt(now) != 0 || m.activity.Interval == 0 {
-		return 0, false
-	}
-	at := m.deadlineMs + 1
-	if at < now+1 {
-		at = now + 1
-	}
-	if elapsed := uint32(now) - m.activity.LastCheck; elapsed <= uint32(m.activity.Interval) {
-		if due := now + int64(uint32(m.activity.Interval)-elapsed) + 1; due < at {
-			at = due
-		}
-	} else {
-		at = now + 1
-	}
-	nest := resident.nest.Value()
-	if (nest.PolicyPinned || nest.RetailEvidence || nest.HasControls) && nest.Aggressive {
-		due, known := s.acquisitionDue(state, gid, now)
-		if !known {
-			return 0, false
-		}
-		if due < at {
-			at = due
-		}
-	}
-	return at, true
-}
-
-/*
-================
-MonsterState.acquisitionDue
-
-When the actor's acquisition timer next fires, read off its bank
-without consuming it: an armed-immediate entry fires at the first
-check, so the next tick; otherwise the first millisecond whose
-uint32 clock reaches LastCheckMs + IntervalMs, the fire test's own
-arithmetic. False when the bank does not exist yet.
-================
-*/
-func (s *MonsterState) acquisitionDue(state *divisionMonsterState, gid uint32, now int64) (int64, bool) {
-	timers := state.aiTimer(gid)
-	if timers == nil {
-		return 0, false
-	}
-	entry := timers.GetTimer(monster.TimerIDAcquisition)
-	if entry.ArmedImmediate {
-		return now + 1, true
-	}
-	if delta := entry.LastCheckMs + entry.IntervalMs - uint32(now); delta <= 1<<31 {
-		return now + int64(delta), true
-	}
-	return now + 1, true
-}
-
-/*
-================
-MonsterState.scheduleBehaviorCarried
-
-scheduleBehaviorSlot for one ref out of the batch build (#2133):
-the mover schedule reads through the mover slot the ref carried
-(scheduleSlotAt), the resident row through its monster slot, and
-the re-arm lands through the ref's queue slot (setAt), noting the
-resolved storage slots back for the next leg's drain. Every hint
-is verified against the gid before use and delegates to the gid
-resolve on a miss, so the armed due and the ref's slots are
-scheduleBehaviorSlot's either way: ref.slot ends as the mover slot
-the read resolved, behaviorNoMoverSlot when the actor has no mover
-row and still joins the batch, exactly as the build stamped it
-before the carry.
-================
-*/
-func (s *MonsterState) scheduleBehaviorCarried(state *divisionMonsterState, ref *behaviorActorRef, now int64) {
-	gid := ref.gid
-	state.forgetDormant(gid)
-	m, slot, ok := state.movers.scheduleSlotAt(ref.slot, gid)
-	if !ok {
-		state.behavior.removeAt(ref.queueSlot, gid)
-		ref.slot = behaviorNoMoverSlot
-		return
-	}
-	ref.slot = slot
-	if s.tryDormant(state, gid, m, now) {
-		return
-	}
-	resident, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
-	if !hot {
-		resident, _ = state.instances.hotRow(gid)
-	}
-	state.behavior.setAt(*ref, s.nextBehaviorDue(state, gid, m, resident, now))
-}
-
-/*
-================
 behaviorActorRef
 
 One due actor as the batch carries it: its gid, the queue slot the
@@ -717,6 +551,7 @@ with no pointers, so the backing needs no clearing before reuse.
 */
 type behaviorRefScratch struct {
 	refs []behaviorActorRef
+	sort []behaviorActorRef
 }
 
 // behaviorRefScratchPool holds built refs backings, ready for the
@@ -771,7 +606,14 @@ type behaviorActorSnapshot struct {
 	// batch carried none.
 	slot        uint32
 	monsterSlot uint32
-	ok          bool
+	// queueSlot is the behaviour queue slot the same ref carried:
+	// the step arms it with the storage slots so the activity
+	// commit's re-arm lands on the queue row through it
+	// (setAtSlot) instead of resolving the gid through byGID again
+	// (#3027). Meaningful only while ok: a snapshot the fill found
+	// gone is zeroed whole.
+	queueSlot uint32
+	ok        bool
 }
 
 /*
@@ -861,28 +703,38 @@ dst reads as the zero snapshot (ok false) when the actor is gone.
 func (s *MonsterState) behaviorActorMoverInto(dst *behaviorActorSnapshot, state *divisionMonsterState, ref behaviorActorRef) {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
-	if !state.instances.lookupAtInto(&dst.instance, ref.monsterSlot, ref.gid) {
+	// The snapshot stamps the slot the read actually resolved, so a
+	// hint left stale by a row swap since the last remainder arm
+	// costs the fill one gid resolve, never the step's doors a
+	// second one.
+	monsterSlot := ref.monsterSlot
+	if !state.instances.lookupAtInto(&dst.instance, monsterSlot, ref.gid) {
 		actor, ok := state.instances.lookup(ref.gid)
 		if !ok {
 			*dst = behaviorActorSnapshot{}
 			return
 		}
 		dst.instance = actor
+		_, monsterSlot, _ = state.instances.hotRowSlot(ref.gid)
 	}
 	// The batch carried the mover's slot (#2135): read through it
 	// when it still names this actor, else resolve by gid as before.
-	if !state.movers.lookupAtInto(&dst.mover, ref.slot, ref.gid) {
+	slot := ref.slot
+	if !state.movers.lookupAtInto(&dst.mover, slot, ref.gid) {
 		mover, ok := state.movers.lookup(ref.gid)
 		if !ok {
 			mover = monster.NewSpawnMover(dst.instance, s.nowMillis())
+			slot = behaviorNoMoverSlot
+		} else if resolved, found := state.movers.slotOf(ref.gid); found {
+			slot = resolved
 		}
 		dst.mover = mover
 	}
 	if err := dst.mover.Validate(); err != nil {
 		panic(err)
 	}
-	dst.moverGen = state.movers.generationAt(ref.slot, ref.gid)
-	dst.slot, dst.monsterSlot, dst.ok = ref.slot, ref.monsterSlot, true
+	dst.moverGen = state.movers.generationAt(slot, ref.gid)
+	dst.slot, dst.monsterSlot, dst.queueSlot, dst.ok = slot, monsterSlot, ref.queueSlot, true
 }
 
 /*
@@ -897,6 +749,17 @@ func (s *MonsterState) behaviorBatches(now int64) []behaviorBatch {
 /*
 ================
 MonsterState.behaviorBatchesForDivision
+
+The due batches for one leg. Building a batch consumes the actors'
+dues WITHOUT re-arming them: the carried re-arm used to run here,
+for every due actor, before its step - and an actor whose step then
+committed (the gate's activity commit, a mover wake, an event door)
+re-armed itself from its post-step rows, so the build's computation
+was pure waste for exactly the actors that acted, while actors the
+dispatch dropped paid it too. The dispatcher now arms the remainder
+(armBehaviorRemainders) once the batches are through: actors a door
+re-armed meanwhile are skipped, the rest are armed from the same
+computation the build ran, on the rows their step left.
 ================
 */
 func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []behaviorBatch {
@@ -917,33 +780,146 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			// The row reads through the monster slot the drain
 			// carried (#2133); a slot that no longer names the
 			// actor resolves by gid, as before the carry.
-			i, hot := state.instances.hotRowAt(ref.monsterSlot, gid)
+			hp, maxHP, summonUntil, hot := state.instances.hotProbeAt(ref.monsterSlot, gid)
 			if !hot {
 				var exists bool
-				i, ref.monsterSlot, exists = state.instances.hotRowSlot(gid)
+				ref.monsterSlot, hp, maxHP, summonUntil, exists = state.instances.hotProbe(gid)
 				if !exists {
 					state.behavior.removeAt(ref.queueSlot, gid)
 					continue
 				}
 			}
-			if i.currentHP == 0 && i.ref.Value().MaxHP > 0 {
+			if hp == 0 && maxHP > 0 {
 				state.behavior.removeAt(ref.queueSlot, gid)
 				continue
 			}
-			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
+			if summonUntil != 0 && now >= summonUntil {
+				i, _ := state.instances.hotRowAt(ref.monsterSlot, gid)
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
-			s.scheduleBehaviorCarried(state, &ref, now)
 			actors = append(actors, ref)
 		}
 		batch.actors = actors
-		// slices.SortFunc, not sort.Slice: no reflection swapper per
-		// batch (#2985). Gids are unique within a batch, so the order
-		// is the same total order either sort produces.
-		slices.SortFunc(batch.actors, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		sortBehaviorRefs(batch.actors, scratch)
 		out = append(out, batch)
 	}
 	return out
+}
+
+// behaviorRefSortThreshold is the batch size where ordering the
+// refs by counting the gid's bytes passes the comparison sort:
+// below it the counting passes' fixed cost (four 256-wide tallies)
+// is the larger bill.
+const behaviorRefSortThreshold = 128
+
+/*
+================
+sortBehaviorRefs
+
+Order a batch's refs by gid, the total order the dispatch walks.
+Gids are unique within a batch (the queue's byGID), so four stable
+counting passes over the gid's bytes produce exactly the sequence
+a comparison sort does, in linear time, ping-ponging between the
+refs and the scratch's sort backing (kept pooled with the refs, so
+a warmed build allocates neither). The comparison sort this
+replaces was half the batch build in the seeded profile (#3027);
+small batches keep it, under the threshold above.
+
+The drain often hands the batch its refs in gid order already -
+a population armed in spawn order (server start, a region load) -
+so every size first walks one pass of adjacent compares: an
+ordered drain costs that pass (an ordered batch is a fixed point
+of the sort, gids being unique), and an unordered one pays only
+the compares up to its first descent (two in expectation) before
+the sort it would have paid anyway. The pass used to guard only
+the counting path; the seeded steady state hands the small
+batches ordered too (2800 of 2800 over 350 legs, #3027), and
+they paid the closure comparison sort for a sequence they
+already held.
+================
+*/
+func sortBehaviorRefs(refs []behaviorActorRef, scratch *behaviorRefScratch) {
+	ordered := true
+	for i := 1; i < len(refs); i++ {
+		if refs[i-1].gid > refs[i].gid {
+			ordered = false
+			break
+		}
+	}
+	if ordered {
+		return
+	}
+	if len(refs) < behaviorRefSortThreshold {
+		// slices.SortFunc, not sort.Slice: no reflection swapper
+		// per batch (#2985).
+		slices.SortFunc(refs, func(a, b behaviorActorRef) int { return cmp.Compare(a.gid, b.gid) })
+		return
+	}
+	if cap(scratch.sort) < len(refs) {
+		scratch.sort = make([]behaviorActorRef, len(refs))
+	}
+	src, dst := refs, scratch.sort[:len(refs)]
+	for shift := uint(0); shift < 32; shift += 8 {
+		var count [256]int
+		for _, ref := range src {
+			count[byte(ref.gid>>shift)]++
+		}
+		sum := 0
+		for i, c := range count {
+			count[i], sum = sum, sum+c
+		}
+		for _, ref := range src {
+			d := byte(ref.gid >> shift)
+			dst[count[d]] = ref
+			count[d]++
+		}
+		src, dst = dst, src
+	}
+}
+
+/*
+================
+MonsterState.armBehaviorRemainders
+
+The deferred half of the batch build: arm every actor the dispatch
+left unscheduled. behaviorBatchesForDivision consumed the dues
+without re-arming; an actor whose step committed through a door
+(the activity commit, a mover wake, any event lane's set) already
+holds its next due from its post-step rows and is skipped - the
+carried computation the build used to spend on it was overwritten
+by that due anyway. The rest get the build's own carried arm, on
+the rows their step left: a step that committed nothing scheduling
+left those rows as they were, and a step that moved its actor
+without arming is covered by the idle due's own proof (the earliest
+of deadline, gate and acquisition is the actor's next act time
+either way).
+
+An actor a door put dormant during the dispatch keeps the door's
+decision: it is registered in state.dormant, and re-running the
+carried arm would forget the registration and re-evaluate a sleep
+the door already settled. A population that left mid-leg is
+skipped whole.
+================
+*/
+func (s *MonsterState) armBehaviorRemainders(batches []behaviorBatch, now int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range batches {
+		state := s.populationForLease(batches[i].key.division, batches[i].key.lease)
+		if state == nil {
+			continue
+		}
+		for j := range batches[i].actors {
+			ref := &batches[i].actors[j]
+			if _, sleeping := state.dormant[ref.gid]; sleeping {
+				continue
+			}
+			if state.behavior.armedAt(ref.queueSlot, ref.gid) {
+				continue
+			}
+			s.scheduleBehaviorCarried(state, ref, now)
+		}
+	}
 }
 
 /*
@@ -965,6 +941,7 @@ func (s *MonsterState) releaseBehaviorBatches(batches []behaviorBatch) {
 			continue
 		}
 		scratch.refs = batches[i].actors[:0]
+		scratch.sort = scratch.sort[:0]
 		batches[i].scratch = nil
 		behaviorRefScratchPool.Put(scratch)
 	}

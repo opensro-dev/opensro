@@ -11,8 +11,6 @@ same town protection. Unknown regions have no combat authority.
 */
 package world
 
-import "sort"
-
 /*
 ================
 regionCombatRange
@@ -25,6 +23,47 @@ type regionCombatRange struct {
 	allowed     bool
 }
 
+// The verdicts RegionPlayerCombat answers, one per region id.
+const (
+	regionVerdictUnknown = iota
+	regionVerdictAllowed
+	regionVerdictDenied
+)
+
+/*
+================
+regionCombatVerdicts
+
+The ranges above as a direct-index table: a region id is a
+uint16, and the verdict is asked per stepped actor per leg (the
+safe-zone vanish) as well as per attack validation, so the
+binary search the ranges used to pay per call is paid once, at
+package load, for all 65536 ids (#3027). The ranges stay the
+source of truth - this table is only their expansion, and the
+package tests check it against them.
+================
+*/
+var regionCombatVerdicts = buildRegionCombatVerdicts()
+
+/*
+================
+buildRegionCombatVerdicts
+================
+*/
+func buildRegionCombatVerdicts() [65536]uint8 {
+	var verdicts [65536]uint8
+	for _, row := range regionCombatRanges {
+		verdict := uint8(regionVerdictDenied)
+		if row.allowed {
+			verdict = regionVerdictAllowed
+		}
+		for id := int(row.first); id <= int(row.last); id++ {
+			verdicts[id] = verdict
+		}
+	}
+	return verdicts
+}
+
 /*
 ================
 RegionPlayerCombat
@@ -35,9 +74,11 @@ permission to enter one.
 ================
 */
 func RegionPlayerCombat(region uint16) (allowed, known bool) {
-	i := sort.Search(len(regionCombatRanges), func(i int) bool { return regionCombatRanges[i].last >= region })
-	if i == len(regionCombatRanges) || region < regionCombatRanges[i].first {
-		return false, false
+	switch regionCombatVerdicts[region] {
+	case regionVerdictAllowed:
+		return true, true
+	case regionVerdictDenied:
+		return false, true
 	}
-	return regionCombatRanges[i].allowed, true
+	return false, false
 }

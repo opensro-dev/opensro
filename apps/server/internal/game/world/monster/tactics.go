@@ -112,14 +112,17 @@ type Tactics struct {
 
 // TacticsResolver is an explicit mission-plane dependency. Production uses
 // ResolveTactics; tests may inject a fixed contract without changing shipped
-// monster data.
-type TacticsResolver func(Instance) Tactics
+// monster data. The instance arrives by pointer: it is a 2 KB value and the
+// step resolves tactics for every due actor on every leg, so the by-value
+// copy the resolver used to take was a measurable slice of the monster leg
+// (settled BenchmarkMonsterLegSeeded profile, #2150). A resolver only reads.
+type TacticsResolver func(*Instance) Tactics
 
 // ResolveTactics maps one instance to its server behavior. Every mobile
 // monster receives the class-wide retail idle-wander primitive. Per-nest
 // aggression, sight, and chase containment are applied only with a matched
 // population row. An unmatched monster is therefore mobile but passive.
-func ResolveTactics(instance Instance) Tactics {
+func ResolveTactics(instance *Instance) Tactics {
 	nest := instance.Nest
 	if !nest.PolicyPinned && !nest.RetailEvidence && !nest.HasControls && instance.Ref.WalkSpeed <= 0 {
 		return Tactics{}

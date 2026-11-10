@@ -62,6 +62,33 @@ type petSession struct {
 	// (readPetTickFactsInto, runtime_position.go), zeroed per tick:
 	// the settled follow tick judges without allocating.
 	tickFacts petTickFacts
+	// judgedOwnerWorld is the judged tick's retained owner-world slot:
+	// WorldStore.SnapshotExistingInto refills it per tick and the tick
+	// consumes it before returning, so the follow pays no world clone.
+	judgedOwnerWorld simulation.WorldState
+	// judgedStuckAnswer is the judged tick's lazy stuck answer, built
+	// once per session. It reads the two cells below, which every judged
+	// tick refreshes before installing it, so installing the answer
+	// allocates nothing; advancePet's deferred call runs it as before.
+	judgedStuckAnswer  func() []simulation.Frame
+	judgedStuckNowMs   int64
+	judgedStuckTidWord uint16
+	// judgedConstraint is the judged tick's movement constraint, built
+	// once per session; it reads the session's character at call time,
+	// exactly as the per-tick closure did.
+	judgedConstraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
+	// judgedCosKey is the judged tick's folded COS abnormal map key
+	// (cosabnormal.go), folded once for the binding judgedCosKeyFrom
+	// names and folded again only when that binding changes, so the
+	// tick's two abnormal reads allocate nothing (#2033).
+	judgedCosKey     cosAbnormalKey
+	judgedCosKeyFrom petOwnerKey
+	judgedCosKeySet  bool
+	// broodRecharge is the crow session's recharge verdict memo
+	// (petbrood.go): the still verdict and the record fields it
+	// was derived from, so an idle crow tick answers without
+	// re-walking the skill table and the modifiers graph (#2033).
+	broodRecharge petBroodRechargeMemo
 	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
@@ -152,6 +179,7 @@ func (rt *Runtime) bindPetSession(division string, c *enterworld.Character, sess
 	}
 	state := &petSession{session: session, character: c, ready: ready, mercenaryPenalty: mercenaryPenaltyClock{lastMs: rt.Now().UnixMilli()}}
 	rt.petSessions[key] = state
+	rt.petSessionKeys = nil
 	rt.petMu.Unlock()
 	var companions []*enterworld.CharacterCOS
 	rt.deps.Read(division, func() { companions = c.Companions() })
@@ -191,6 +219,9 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 			delete(rt.petSessions, key)
 		}
 	}
+	if len(retired) != 0 {
+		rt.petSessionKeys = nil
+	}
 	rt.petMu.Unlock()
 	// The owner's pets leave the world with the owner: the gid index
 	// forgets them here (cosownerindex.go).
@@ -227,19 +258,31 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 
 /*
 ================
-advancePets
+orderedPetSessionKeys
+
+The tick's session walk list: every gid-bearing session key in
+(division, name, gid) order. Membership turns only on petSessions
+writes - the binds and the forgets, all under petMu - so the sorted
+list is cached on the runtime (petSessionKeys) and rebuilt only
+after a writer drops it; a rebuild always allocates a fresh slice,
+so a walk already ranging the old list is never disturbed (#2033).
+Readiness is not membership: a session readies without a map write
+(bindPetSession readies the children in place), so advancePets
+still judges state.ready live at each visit.
 ================
 */
-func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
-	shieldFrames := rt.advancePetShields(nowMs)
+func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	if rt.petSessionKeys != nil {
+		return rt.petSessionKeys
+	}
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
-	for key, state := range rt.petSessions {
-		if key.gid != 0 && state.ready {
+	for key := range rt.petSessions {
+		if key.gid != 0 {
 			keys = append(keys, key)
 		}
 	}
-	rt.petMu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].division != keys[j].division {
 			return keys[i].division < keys[j].division
@@ -249,9 +292,26 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		}
 		return keys[i].gid < keys[j].gid
 	})
+	rt.petSessionKeys = keys
+	return keys
+}
+
+/*
+================
+advancePets
+================
+*/
+func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
+	shieldFrames := rt.advancePetShields(nowMs)
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
-	for _, key := range keys {
+	for _, key := range rt.orderedPetSessionKeys() {
+		rt.petMu.Lock()
+		state := rt.petSessions[key]
+		rt.petMu.Unlock()
+		if state == nil || !state.ready {
+			continue
+		}
 		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
 		if tether != nil {
 			if tethers == nil {
@@ -803,6 +863,7 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 		state.generation = old.generation + 1
 	}
 	rt.petSessions[key] = state
+	rt.petSessionKeys = nil
 	rt.petMu.Unlock()
 	pose := rt.liveSpawn(simulation.WorldKey(division, owner.character.Name), owner.character, rt.Now().UnixMilli())
 	pose = rt.companionAdmissionSpawn(pet, pose)

@@ -11,7 +11,7 @@ sender's own state (ItemLinkSource) and appends the item bodies after the
 broadcast text, so a reader sees the exact item and a client cannot forge
 one. A line without links is byte-identical to the native one.
 
-Request block:   [u8 count] count x {[u8 source] [u16 slot]}
+Request block:   [u8 count] count x {[u8 source] [u16 slot] [u32 petGid, source = pet only]}
 Broadcast tail:  [u8 count] count x {[u16 bodyLen] [ItemBody.Encode()]}
 
 Link i belongs to the i-th LinkMarker in the text.
@@ -67,10 +67,17 @@ func ItemLinksFromEnv() bool {
 // maximum. A larger block can only come from another client.
 const MaxLinksOnWire = 8
 
-// LinkRef is one link as the client sends it: where the item is.
+// LinkRef is one link as the client sends it: where the item is. A pet
+// link names WHICH pet (its GID): the Character has more than one bagged
+// companion over its lifetime and two bags can hold an item at the same
+// slot, so a bare {pet, slot} is ambiguous by construction (owner report
+// 2026-11-09: grab-pet links linked the transport's items instead). Pet
+// is only meaningful (and only present on the wire) for LinkSourcePet;
+// protocol 16 carries it, an older client never sends one (426).
 type LinkRef struct {
 	Source uint8
 	Slot   uint16
+	Pet    uint32
 }
 
 // LinkedItem is one link as the server read it: the item body readers
@@ -128,7 +135,16 @@ func DecodeLinkRefs(reader *wire.Reader) ([]LinkRef, error) {
 		if err != nil {
 			return nil, err
 		}
-		refs = append(refs, LinkRef{Source: source, Slot: slot})
+		ref := LinkRef{Source: source, Slot: slot}
+		if source == LinkSourcePet {
+			// A pet link names its pet: [u32 gid] after the slot.
+			gid, err := reader.U32()
+			if err != nil {
+				return nil, err
+			}
+			ref.Pet = gid
+		}
+		refs = append(refs, ref)
 	}
 	return refs, nil
 }
@@ -141,11 +157,21 @@ The request link block for refs.
 ================
 */
 func EncodeLinkRefs(refs []LinkRef) []byte {
-	writer := wire.NewWriter(1 + len(refs)*3)
+	size := 1
+	for _, ref := range refs {
+		size += 3
+		if ref.Source == LinkSourcePet {
+			size += 4 // [u32 pet gid]
+		}
+	}
+	writer := wire.NewWriter(size)
 	writer.U8(uint8(len(refs)))
 	for _, ref := range refs {
 		writer.U8(ref.Source)
 		writer.U16(ref.Slot)
+		if ref.Source == LinkSourcePet {
+			writer.U32(ref.Pet)
+		}
 	}
 	return writer.Payload()
 }

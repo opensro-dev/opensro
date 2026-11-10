@@ -32,6 +32,7 @@ import { exists } from "../io.mjs";
 import { generatedRoot } from "../paths.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
 import { runPython } from "../../shared/pythonRun.mjs";
+import { applyObjectTextureLevels } from "./objectTextureLevels.mjs";
 
 const DDJ_HEADER_SIZE = 20;
 const DDS_HEADER_BYTES = 148;
@@ -400,7 +401,7 @@ async function drainPendingJobs() {
 		}
 		for ( const group of groups.values() ) {
 			for ( const entry of group.entries ) {
-				await copyCached( group.cachedTexture, entry.job.target );
+				await copyCached( group.cachedTexture, entry.job.target, entry.job.source );
 				entry.resolve();
 			}
 		}
@@ -433,8 +434,8 @@ foreign artifact there (a crashed old writer, an editor, a bad restore)
 fails the build here instead of shipping.
 ================
 */
-async function copyCached( cachedTexture, target ) {
-	const bytes = await readFile( cachedTexture );
+async function copyCached( cachedTexture, target, source ) {
+	const bytes = applyObjectTextureLevels( await readFile( cachedTexture ), source );
 	validateBlockContainer( bytes, cachedTexture );
 	await mkdir( path.dirname( target ), { recursive: true } );
 	const staged = `${target}.${randomUUID()}.tmp`;

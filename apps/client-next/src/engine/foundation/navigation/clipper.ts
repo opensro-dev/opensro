@@ -94,8 +94,9 @@ export function createNavigation() {
 		a: readonly number[],
 		b: readonly number[],
 		owner?: NavOwner,
-		terrainY?: number
-	) => walkTerrain( rows, a, b, owner, index, terrainY );
+		terrainY?: number,
+		retainedTerrain?: boolean
+	) => walkTerrain( rows, a, b, owner, index, terrainY, retainedTerrain );
 	let objects: readonly NavPlacement[] = [], origin = 0, complete = false;
 	let blockKey = "", blockValue: number | undefined;
 	const floors = new Map<string, number | undefined>();
@@ -603,6 +604,11 @@ export function createNavigation() {
 			to: Pose,
 			output?: {
 				sourceOwner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner;
+				// The mover stands on terrain it walked to (the server's
+				// retained TerrainOwner), not at a fresh FindNavCell point:
+				// a placed object's cell it already stands in seats it
+				// (#3006). Only meaningful when sourceOwner is undefined.
+				sourceTerrainRetained?: boolean;
 				owners?: readonly import("@/engine/foundation/navigation/dungeon-ownership").NavOwnerSpan[];
 				context?: number;
 				events?: readonly NavigationEvent[];
@@ -624,6 +630,7 @@ export function createNavigation() {
 				output.edge = undefined;
 			}
 			let status = 0, sourceOwner = output?.sourceOwner, firstLeg = true;
+			let sourceTerrainRetained = output?.sourceTerrainRetained ?? false;
 			let reachedOwner: NavOwner | undefined;
 			const segment = ( from: Pose, to: Pose ): Pose | null => {
 				status = 0;
@@ -656,7 +663,7 @@ export function createNavigation() {
 				if ( features.residentOnly && (!complete || origin !== from.regionId) ) return null;
 				const [ox, oz] = regionOffsetXZ( origin, from.regionId );
 				// An unretained start takes native FindNavCell's surface: the nearest by |deltaY|, terrain winning ties.
-				if ( firstLeg && !sourceOwner ) {
+				if ( firstLeg && !sourceOwner && !sourceTerrainRetained ) {
 					const point = [ from.x + ox, from.y, from.z + oz ],
 						resident = dungeonOwnerPath( objects, point, point ).owner ?? undefined;
 					const deckY = resident ? surfaceHeight( from, resident ) : null,
@@ -691,7 +698,7 @@ export function createNavigation() {
 				const fromPoint = [ from.x + ox, from.y, from.z + oz ], toPoint = [ to.x + ox, to.y, to.z + oz ];
 				const requestedSpan = Math.max( Math.abs( to.x - from.x ), Math.abs( to.z - from.z ), .01 );
 				// FindNavCell's terrain-first tie applies only to a mover with no retained cell.
-				const startTerrainY = onTerrainPlane && !sourceOwner ?
+				const startTerrainY = onTerrainPlane && !sourceOwner && !sourceTerrainRetained ?
 					surfaceHeight( from, undefined, false ) ?? undefined :
 					undefined;
 				const candidatePath = !onTerrainPlane ?
@@ -706,7 +713,8 @@ export function createNavigation() {
 						fromPoint,
 						toPoint,
 						sourceOwner,
-						startTerrainY
+						startTerrainY,
+						sourceTerrainRetained
 					);
 				const ownerPath = candidatePath.owner ? candidatePath : null;
 				if (
@@ -1010,6 +1018,10 @@ export function createNavigation() {
 				}
 				// Continue from the reached cell, never the original source cell.
 				sourceOwner = reachedOwner;
+				// A leg that ends off an object stands on terrain it walked
+				// to: retained for the next leg, as the server's walk keeps
+				// its TerrainOwner across the seam.
+				sourceTerrainRetained = !reachedOwner;
 				start = point!;
 			}
 			if ( output ) output.status = 0x10000000;

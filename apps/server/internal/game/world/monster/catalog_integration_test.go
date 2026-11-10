@@ -281,7 +281,7 @@ func TestNestPromotionProducesChampionAndGiantRarity(t *testing.T) {
 	// row, while
 	// population fields stay with the nest.
 	for _, instance := range instances {
-		tactics := ResolveTactics(instance)
+		tactics := ResolveTactics(&instance)
 		if !tactics.Aggressive || tactics.SightRange != 150 || instance.Nest.NativeTacticsFlags != 0x200 ||
 			instance.Nest.TargetPolicy != 0 || instance.Nest.MaxCount != 2 || instance.Nest.ChampionGenPercentage != 100 {
 			t.Fatalf("promoted instance kept the ordinary tactics: %+v / %+v", instance.Nest, tactics)
@@ -338,7 +338,7 @@ func TestOrdinarySpawnKeepsNestTacticsBesideChampionRow(t *testing.T) {
 	if len(instances) != 1 || instances[0].Rarity() != 0 {
 		t.Fatalf("instance = %+v, want ordinary spawn", instances)
 	}
-	if tactics := ResolveTactics(instances[0]); tactics.Aggressive || tactics.SightRange != 100 {
+	if tactics := ResolveTactics(&instances[0]); tactics.Aggressive || tactics.SightRange != 100 {
 		t.Fatalf("ordinary spawn used champion tactics: %+v", tactics)
 	}
 }
@@ -382,7 +382,7 @@ TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering
 ================
 */
 func TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering(t *testing.T) {
-	unmatched := ResolveTactics(Instance{
+	unmatched := ResolveTactics(&Instance{
 		Ref:  MonsterRef{WalkSpeed: 8},
 		Nest: NestRow{Radius: 900, Aggressive: true, SightRange: 200},
 	})
@@ -391,12 +391,12 @@ func TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering(t *testin
 		t.Fatalf("unmatched mobile tactics = %+v, want passive retail idle wander", unmatched)
 	}
 
-	immobile := ResolveTactics(Instance{Ref: MonsterRef{WalkSpeed: 0}})
+	immobile := ResolveTactics(&Instance{Ref: MonsterRef{WalkSpeed: 0}})
 	if immobile != (Tactics{}) {
 		t.Fatalf("unmatched immobile tactics = %+v, want stationary zero contract", immobile)
 	}
 
-	matched := ResolveTactics(Instance{Nest: NestRow{
+	matched := ResolveTactics(&Instance{Nest: NestRow{
 		RetailEvidence: true,
 		Radius:         700,
 		Aggressive:     true,

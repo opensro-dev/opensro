@@ -90,11 +90,18 @@ func petSkillWindowRemaining(window domain.PetSkillWindow, nowMs int64) uint32 {
 /*
 ================
 petSkillWindowIndex
+
+The owners one timed-row sweep (pet-skill windows, param jobs, PK
+records) walks. sorted caches the owners in keys() order between
+membership turns: the sweeps run every tick, the membership turns
+only when track hands an owner in or a sweep forgets an empty one,
+so the per-tick rebuild and re-sort bought the same list (#2033).
 ================
 */
 type petSkillWindowIndex struct {
 	mu     sync.Mutex
 	owners map[petOwnerKey]struct{}
+	sorted []petOwnerKey
 }
 
 /*
@@ -108,17 +115,33 @@ func (index *petSkillWindowIndex) track(divisionID, characterName string) {
 	if index.owners == nil {
 		index.owners = map[petOwnerKey]struct{}{}
 	}
-	index.owners[petOwnerKey{division: divisionID, name: characterName}] = struct{}{}
+	key := petOwnerKey{division: divisionID, name: characterName}
+	if _, ok := index.owners[key]; !ok {
+		// A new owner turns the membership; re-tracking a live
+		// one leaves the cached order standing.
+		index.sorted = nil
+	}
+	index.owners[key] = struct{}{}
 }
 
 /*
 ================
 keys
+
+The owners in (division, name) order - unique in an index, so the
+order is total and the cached list is the list a fresh sort builds.
+A rebuild always allocates a fresh slice and the cache swaps to it
+whole: a sweep ranging the list while it forgets an owner mid-range
+(forget drops the cache, not the backing) never sees it move.
+Callers only range the result.
 ================
 */
 func (index *petSkillWindowIndex) keys() []petOwnerKey {
 	index.mu.Lock()
 	defer index.mu.Unlock()
+	if index.sorted != nil {
+		return index.sorted
+	}
 	keys := make([]petOwnerKey, 0, len(index.owners))
 	for key := range index.owners {
 		keys = append(keys, key)
@@ -129,6 +152,7 @@ func (index *petSkillWindowIndex) keys() []petOwnerKey {
 		}
 		return keys[i].name < keys[j].name
 	})
+	index.sorted = keys
 	return keys
 }
 
@@ -140,7 +164,10 @@ forget
 func (index *petSkillWindowIndex) forget(key petOwnerKey) {
 	index.mu.Lock()
 	defer index.mu.Unlock()
-	delete(index.owners, key)
+	if _, ok := index.owners[key]; ok {
+		delete(index.owners, key)
+		index.sorted = nil
+	}
 }
 
 /*

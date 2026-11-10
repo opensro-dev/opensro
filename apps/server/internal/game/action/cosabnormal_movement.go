@@ -96,7 +96,18 @@ facts answer without a record copy (#1943).
 ================
 */
 func (rt *Runtime) cosMovementBlockedFor(division, name string, petGID uint32) bool {
-	block := rt.cosAbnormal(division, name, petGID)
+	return rt.cosMovementBlockedKeyed(cosAbnormalKeyFor(division, name, petGID))
+}
+
+/*
+================
+cosMovementBlockedKeyed
+
+The blocked-mask question for one folded pet identity.
+================
+*/
+func (rt *Runtime) cosMovementBlockedKeyed(key cosAbnormalKey) bool {
+	block := rt.cosAbnormalKeyed(key)
 	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0
 }
 

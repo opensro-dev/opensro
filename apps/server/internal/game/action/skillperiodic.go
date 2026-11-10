@@ -222,7 +222,9 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 	// resolution weighs the attacker's name, ID and world instance, and
 	// the hit commits read the name and pose. No reader resolves the
 	// caster's companions or bag rows; the one companion resolution
-	// (resolveCOSTarget) walks the target owner's own full copy.
+	// (resolveCOSTarget) walks the target owner's own full copy;
+	// the pulse's own resolution (resolvePulseTarget) judges a COS
+	// recipient on the live record instead and takes no copy of it.
 	snapshot := rt.characterSnapshotCombatAdmitted(effect.Division, c, func(live *enterworld.Character) bool {
 		return enterworld.CharacterAlive(live) && !live.DeletePending
 	})
@@ -234,7 +236,7 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 		owner, ok := rt.characterAdmissions.Load(simulation.WorldKey(effect.Division, effect.SourceName))
 		live = live && ok && owner.(populationAdmission).session == effect.SourceSession
 	}
-	target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
+	target, exists := rt.resolvePulseTarget(effect.Division, snapshot, effect.TargetGID, now)
 	live = live && exists
 	var result OpResult
 	if live && step.Pulse {

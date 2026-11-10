@@ -27,7 +27,7 @@ func TestHomingClipsFromNestThenPlansFromLiveAndRetainsGoal(t *testing.T) {
 		}
 		return monster.NewNavigationPath(from, goal, rest, monster.NavResultClipped, func(float64, monster.Pose) (float64, bool) { return 20, true })
 	}
-	frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+	frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(&instance), mover, monster.MoverEventTargetLost, 10000)
 	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if calls != 2 || after.To.X != 1050.25 || after.MovementGoal().X != 1008 || len(frames) < 2 {
 		t.Fatalf("lost navigation: %+v calls=%d", after, calls)
@@ -53,7 +53,7 @@ func TestMissingNavigationSettlesAndRejectedPlanPublishesNothing(t *testing.T) {
 			}
 			return nil
 		}
-		frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(instance), mover, monster.MoverEventTargetLost, 10000)
+		frames := ops.startReturnLeg(monsterTestDivision, &instance, monster.ResolveTactics(&instance), mover, monster.MoverEventTargetLost, 10000)
 		after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 		if stale {
 			if len(frames) != 0 || after.TargetGID() != PlayerObjectID(2) {

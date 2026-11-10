@@ -103,3 +103,27 @@ func TestExpansionCapMissingCurveRefusesAtomically(t *testing.T) {
 		t.Fatal("missing level-91 curve leaked a partial transition")
 	}
 }
+
+/*
+================
+TestEnterworldExpansionRuntimeFollowsTheLevelCap
+
+enterworld cannot import this package, so it mirrors the flag's name and its expansion value;
+this keeps the mirror and LevelCapFromEnv in step.
+================
+*/
+func TestEnterworldExpansionRuntimeFollowsTheLevelCap(t *testing.T) {
+	if enterworld.EnvLevelCap != EnvLevelCap {
+		t.Fatalf("enterworld names the flag %q, progression %q", enterworld.EnvLevelCap, EnvLevelCap)
+	}
+	for _, value := range []string{"", "off", "false", "0", "90", "110"} {
+		t.Setenv(EnvLevelCap, value)
+		limit, err := LevelCapFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if enterworld.ExpansionRuntime() != (limit == ExpansionLevelCap) {
+			t.Fatalf("%s=%q: progression says cap %d, enterworld expansion %v", EnvLevelCap, value, limit, enterworld.ExpansionRuntime())
+		}
+	}
+}

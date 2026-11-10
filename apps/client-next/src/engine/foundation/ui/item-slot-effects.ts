@@ -23,10 +23,10 @@ the avatar attachment slot under a one-piece dress (5965E0).
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
+import { itemRarityIsSealed } from "../gameplay/item-seal";
 
 const SHEET = "/assets/images/Media_extracted/";
 // CSOItemData_IsRare (789340): item +0xA0 (itemdata column 15) == 2.
-const RARITY_RARE = 2;
 // Summoner rent state (0x3645 flag 0x40, CIFSlot_ApplySummonerRentState
 // 54FC80): 2 summoned, 3 dormant, 4 dead.
 const RENT_SUMMONED = 2;
@@ -140,8 +140,11 @@ CSOItemData_IsRare (789340). Retail also refuses a CTRL quick sell of a rare
 item (567290), so the shop reads the same test.
 ================
 */
-export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; }; } ) {
-	return item.tooltip?.fields.rarity === RARITY_RARE;
+export function itemIsRare(
+	item: { readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; }; },
+	expansion = false
+) {
+	return itemRarityIsSealed( item.tooltip?.fields.rarity, expansion );
 }
 
 /*
@@ -178,7 +181,8 @@ export function itemSlotOverlays(
 	rect: UiRect,
 	seed: number,
 	nowMs: number,
-	flashes: readonly ItemSlotFlash[] = []
+	flashes: readonly ItemSlotFlash[] = [],
+	expansion = false
 ): readonly ItemSlotOverlay[] {
 	if ( !item ) return [];
 	const out: ItemSlotOverlay[] = [];
@@ -190,7 +194,7 @@ export function itemSlotOverlays(
 			rect
 		} );
 	}
-	if ( itemIsRare( item ) ) {
+	if ( itemIsRare( item, expansion ) ) {
 		const frame = loopFrame( nowMs, RARE_STEP_MS, RARE_FRAMES, seed & (RARE_FRAMES - 1) );
 		out.push( {
 			path: SHEET + "icon/item/etc/icon_edge_rare.png",

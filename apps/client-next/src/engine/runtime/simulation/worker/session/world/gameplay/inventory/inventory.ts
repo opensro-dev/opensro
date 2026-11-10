@@ -781,8 +781,9 @@ bootstrap
 			companionRentals.reset();
 			gacha.reset();
 			exchange = emptyExchange();
-			// Keep naming identity when an empty phase is not published to the UI.
-			stall = emptyStall( stall.namingSequence );
+			// Keep naming identity and the log sequence when an empty phase is not
+			// published to the UI.
+			stall = { ...emptyStall( stall.namingSequence ), logSequence: stall.logSequence };
 			mall.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
@@ -909,7 +910,7 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, widePrice: raisedGoldCaps } );
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, names, widePrice: raisedGoldCaps } );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {
@@ -2496,7 +2497,7 @@ clear
 			alchemy.reset();
 			gacha.reset();
 			exchange = emptyExchange();
-			stall = emptyStall( stall.namingSequence );
+			stall = { ...emptyStall( stall.namingSequence ), logSequence: stall.logSequence };
 			magicOption.reset();
 			mall.reset();
 			arena.clear();

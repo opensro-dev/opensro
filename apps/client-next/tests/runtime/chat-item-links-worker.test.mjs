@@ -146,6 +146,66 @@ test("the beta echo matches a trimmed line", () => {
 	assert.equal( lines[0].outgoing, true );
 });
 
+test("a pet link reads the pet it names, with a transport out too", () => {
+	const u32 = n => [ n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff ];
+	// One COS record frame (0x3158, band 4) whose bag holds one potion stack.
+	const cos = ( gid, slot, qty ) => ({
+		opcode: 0x3158,
+		payload: Uint8Array.from( [
+			...u32( gid ),
+			...u32( 102 ),
+			...u32( 100 ),
+			...u32( 50 ),
+			...u32( 0 ),
+			0,
+			0, // the pet's name is empty
+			28,
+			1,
+			slot,
+			...u32( 8 ),
+			qty,
+			0,
+			...u32( 0 ),
+			0
+		] )
+	});
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	gameplay.bootstrap( {
+		chatItemLinks: 2,
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 102, tidWord: 0x21c6 } ],
+		refItemSnapshot: [ { refObjId: 8, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ]
+	} );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Author"
+	} );
+	// A transport (gid 7) holding slot 0 and a grab pet (gid 9) holding
+	// slot 1: two bags out at once, as #3022 reports.
+	gameplay.receive( cos( 7, 0, 30 ), 1 );
+	gameplay.receive( cos( 9, 1, 40 ), 2 );
+	const say = ( links, now ) => {
+		gameplay.command( { kind: "chat", channel: 1, text: "x" + M, target: "", links }, now, undefined );
+		gameplay.receive( { opcode: 0xb367, payload: Uint8Array.of( 1, 1, 255 ) }, now );
+		return sent.at( -1 ).payload;
+	};
+	// The grab pet's slot 1 links, and the block names gid 9.
+	assert.deepEqual( say( [ { source: 2, slot: 1, pet: 9 } ], 3 ).slice( -8 ), bytes( "01 02 01 00 09 00 00 00" ) );
+	// The transport holds no slot 1: naming it drops the link and marker.
+	assert.deepEqual( say( [ { source: 2, slot: 1, pet: 7 } ], 4 ), Uint8Array.from( [ 1, 255, ...wide( "x" ) ] ) );
+	// A pet ref naming no pet reads nothing; the first-bag read kept it.
+	assert.deepEqual( say( [ { source: 2, slot: 0 } ], 5 ), Uint8Array.from( [ 1, 255, ...wide( "x" ) ] ) );
+});
+
 test("the Global Chatting use appends its refs", () => {
 	const GLOBAL_CHATTING = 3 << 2 | 3 << 5 | 3 << 7 | 5 << 11;
 	const sent = [];

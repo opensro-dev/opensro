@@ -477,6 +477,12 @@ var NotSettings = map[string]string{
 	"SRO_PUBLIC_API_ADDR":                  "the public API listener, per shard",
 	"SRO_TRANSPORT_TLS_ID":                 "transport certificate identity",
 	"SRO_RELEASE_ID":                       "release identity",
+	// The bug-report set (opensro-ops #213): the GameWorld hosts /report
+	// beside the Agent and reads the same operator values; they shape report
+	// delivery, not the game a player plays.
+	"SRO_BUG_REPORT_REPLAY_DEFAULT": "bug-report delivery: replay recording default",
+	"SRO_BUG_REPORT_MAX_BYTES":      "bug-report delivery: attachment size cap",
+	"SRO_BUG_REPORT_DIRECTORY":      "bug-report delivery: report archive path",
 }
 
 /*

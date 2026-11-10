@@ -66,6 +66,36 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPlayerAbnormalEmptyStoreAnswersNil
+
+A store holding no block answers nil; once a block is stored the keyed
+path answers exactly as before - the stored character reads its block
+back, every other character reads nil - and clearing the last block
+returns the store to the empty answer (#2033).
+================
+*/
+func TestPlayerAbnormalEmptyStoreAnswersNil(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	if got := rt.playerAbnormal(testDivision, c.Name); got != nil {
+		t.Fatalf("empty store answered %+v", got)
+	}
+	block := &abnormal.Block{Mask: 1}
+	rt.storePlayerAbnormal(testDivision, c.Name, block)
+	if got := rt.playerAbnormal(testDivision, c.Name); got != block {
+		t.Fatalf("stored block read back %+v", got)
+	}
+	if got := rt.playerAbnormal(testDivision, "nobody"); got != nil {
+		t.Fatalf("another character answered %+v", got)
+	}
+	rt.storePlayerAbnormal(testDivision, c.Name, nil)
+	if got := rt.playerAbnormal(testDivision, c.Name); got != nil {
+		t.Fatalf("cleared store answered %+v", got)
+	}
+}
+
 // Client 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
 // and one byte (level for 0x203F, grade for 0x017FCFC0, otherwise 0).
 /*

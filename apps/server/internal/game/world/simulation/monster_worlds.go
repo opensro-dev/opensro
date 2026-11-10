@@ -28,11 +28,6 @@ const (
 	defaultWorldDefinition instance.DefinitionID = 1
 )
 
-type populationKey struct {
-	division string
-	lease    instance.Lease
-}
-
 /*
 ================
 CurrentTimeMillis
@@ -68,6 +63,7 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 		s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 	}
 	s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+	s.popKeysMemo = nil
 	return lease, status
 }
 
@@ -103,6 +99,7 @@ func (s *MonsterState) OpenInstanceLayer(division string, defID instance.Definit
 			s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 		}
 		s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+		s.popKeysMemo = nil
 		return lease, true
 	}
 	return instance.Lease{}, false
@@ -160,6 +157,7 @@ func (s *MonsterState) ReleasePopulation(division string, lease instance.Lease) 
 	}
 	delete(s.worldPopulations, key)
 	delete(s.retirementRequests, key)
+	s.popKeysMemo = nil
 	return true
 }
 
@@ -169,7 +167,7 @@ populationForLease
 ================
 */
 func (s *MonsterState) populationForLease(division string, lease instance.Lease) *divisionMonsterState {
-	if state := s.divs[division]; state != nil && state.lease == lease {
+	if state := s.divisionState(division); state != nil && state.lease == lease {
 		return state
 	}
 	return s.worldPopulations[populationKey{division, lease}]
@@ -209,7 +207,7 @@ gid probes were the store map walk this removes.
 ================
 */
 func (s *MonsterState) populationForObjectAt(division string, gid uint32, monsterSlot uint32) *divisionMonsterState {
-	if state := s.divs[division]; state != nil {
+	if state := s.divisionState(division); state != nil {
 		if state.instances.containsAt(monsterSlot, gid) {
 			return state
 		}
@@ -244,7 +242,7 @@ nothing.
 ================
 */
 func (s *MonsterState) locateObject(division string, gid uint32) (*divisionMonsterState, monsterSlot) {
-	if state := s.divs[division]; state != nil {
+	if state := s.divisionState(division); state != nil {
 		if slot := state.instances.locate(gid); slot.residency != slotMissing {
 			return state, slot
 		}
@@ -534,6 +532,21 @@ type scopePopulations struct {
 
 /*
 ================
+scopeStampKey
+
+One fold of the stamp cache: the population state and the block
+whose reconciled generations the stamp summarizes. A field of
+MonsterState keeps the folded stamps between phases (#3027), so
+the key lives at package level.
+================
+*/
+type scopeStampKey struct {
+	state *divisionMonsterState
+	block worldgeom.InterestBlock
+}
+
+/*
+================
 scopePopulations.resolve
 
 The session's division state, reconciled at nowMs on first sight
@@ -590,15 +603,25 @@ from landing just after it.
 func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []SessionSnapshot, nowMs int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var populations scopePopulations
-	type stampKey struct {
-		state *divisionMonsterState
-		block worldgeom.InterestBlock
-	}
+	// The phase caches are kept on the state and cleared here,
+	// under the same hold that uses them (#3027): they answer
+	// exactly this phase, so nothing resolved or folded for one
+	// phase may leak into the next — the clear keeps a released
+	// population's state pointer out of every later answer.
+	populations := &s.scopePhase
+	clear(populations.states)
+	clear(populations.reconciled)
+	populations.lastKey, populations.lastState, populations.haveLast = populationKey{}, nil, false
 	// Made on first use: consecutive viewers usually share the
-	// last fold, and a leg with one block never touches the map.
-	var folded map[stampKey]interestMemoStamp
-	lastFold := stampKey{}
+	// last fold, and a phase with one block never touches the map.
+	folded := s.scopeFolded
+	if folded == nil {
+		folded = make(map[scopeStampKey]interestMemoStamp)
+		s.scopeFolded = folded
+	} else {
+		clear(folded)
+	}
+	lastFold := scopeStampKey{}
 	var lastStamp interestMemoStamp
 	for i := range slots {
 		slot := &slots[i]
@@ -606,7 +629,7 @@ func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []Sessi
 		if state == nil {
 			continue
 		}
-		foldKey := stampKey{state, slot.block}
+		foldKey := scopeStampKey{state, slot.block}
 		var stamp interestMemoStamp
 		if foldKey == lastFold {
 			stamp = lastStamp
@@ -614,9 +637,6 @@ func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []Sessi
 			stamp = cached
 		} else {
 			stamp = state.interestStampAt(slot.block)
-			if folded == nil {
-				folded = make(map[stampKey]interestMemoStamp)
-			}
 			folded[foldKey] = stamp
 		}
 		lastFold, lastStamp = foldKey, stamp
@@ -975,26 +995,4 @@ func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gi
 		state.instances.set(gid, actor)
 	}
 	return actor, true
-}
-
-/*
-================
-populationKeys
-================
-*/
-func (s *MonsterState) populationKeys() []populationKey {
-	keys := make([]populationKey, 0, len(s.divs)+len(s.worldPopulations))
-	for division, state := range s.divs {
-		keys = append(keys, populationKey{division, state.lease})
-	}
-	for key := range s.worldPopulations {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].division != keys[j].division {
-			return keys[i].division < keys[j].division
-		}
-		return keys[i].lease.Generation < keys[j].lease.Generation
-	})
-	return keys
 }

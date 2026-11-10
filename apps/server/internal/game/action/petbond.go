@@ -94,6 +94,101 @@ func (rt *Runtime) bondSourceRefused(key petOwnerKey, state *petSession) (refuse
 
 /*
 ================
+bondRevivalTarget
+
+Whether a candidate record is one the revival walk could take:
+dead by a monster and inside the bear's level band. These are
+the target admission's own tests, read on the live record the
+walk itself would find.
+================
+*/
+func bondRevivalTarget(target *enterworld.Character, band int64) bool {
+	return target != nil && !enterworld.CharacterAlive(target) &&
+		target.DeathKind == uint8(pk.DeathMonster) && rewardLevel(target) <= band
+}
+
+/*
+================
+bondRevivalIdle
+
+Whether this tick's revival provably cannot fire, judged on
+door-read facts before bondSource's companion copy is taken
+(#2033): the bear's rank never fires, its saved cooldown is
+still running, or no candidate - the owner, and at tier III the
+party - is a dead, monster-killed, in-band record. The copy was
+the tick's top flat allocator, and on nearly every tick of a
+bond bear's life one of the three holds (the cooldown alone
+runs for minutes after a revival), so the walk below discarded
+what the copy bought. The detached row answers the bear's half
+exactly: GuardianRevival's rank and the passive ready stamp
+read Training alone (ModifiersFor walks gear and slotted rows),
+never the container or rentals the row detaches. The candidate
+half is the target admission's own tests on the records
+findCharacterByGid returns. Anything the facts cannot prove -
+the forced-copy seam, no live bear, no slotted passive, a
+ready-stamp index outside the training rows - abstains and the
+copy judges as before; a tick the facts prove live also falls
+through, so the copy's own read still owns the firing verdict.
+================
+*/
+func (rt *Runtime) bondRevivalIdle(key petOwnerKey, state *petSession, now int64) (idle, judged bool) {
+	if rt.companionCopy != nil {
+		return false, false
+	}
+	guard := rt.deps.AcquireRead(key.division)
+	owner := state.character
+	pet := owner.CompanionByGID(key.gid)
+	if pet == nil {
+		guard.Release()
+		return false, false
+	}
+	row := *pet
+	row.Container, row.Rentals = nil, nil
+	skill, _, slotted := companion.Passive(&row, "Guardian's Bond", companion.ModifiersFor(&row))
+	if !slotted {
+		guard.Release()
+		return false, false
+	}
+	rank, _ := companion.GuardianRevival(&row)
+	if rank == 0 {
+		guard.Release()
+		return true, true
+	}
+	index := skill.Row - companion.ActiveRowCount
+	if index < 0 || index >= len(row.Training.PassiveReadyAtMs) {
+		guard.Release()
+		return false, false
+	}
+	if row.Training.PassiveReadyAtMs[index] > now {
+		guard.Release()
+		return true, true
+	}
+	ownerGID := enterworld.ObjectIDForCharacter(owner)
+	band := int64(row.Level) + 10
+	party := skill.Option == 3
+	// The owner candidate is the session's own live record - the
+	// record the revival closure itself writes through - so it is
+	// judged in hand; party members resolve through the store.
+	ownerTarget := bondRevivalTarget(owner, band)
+	guard.Release()
+	if ownerTarget {
+		return false, true
+	}
+	if party {
+		// The party scan runs with no guard held: findCharacterByGid
+		// takes the store's own read lock per lookup, exactly as
+		// the revival walk below runs it.
+		for gid := range rt.auraParty(key.division, owner) {
+			if gid != ownerGID && bondRevivalTarget(rt.findCharacterByGid(key.division, gid), band) {
+				return false, true
+			}
+		}
+	}
+	return true, true
+}
+
+/*
+================
 bondSource
 
 The same opt-in, session, job, world and town gates protect transfer and revival.
@@ -270,17 +365,26 @@ scale HP/EXP recovery and the saved shared cooldown, surviving resummon.
 ================
 */
 func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
-	// Judge the refusal before taking bondSource's answer home (#2030):
-	// the SkillDef it returns escapes in this frame even when the
-	// admission refuses, so every pet owner paid 160 B a tick for
-	// a verdict the door-read facts already hold. Behind the same gate
-	// bondSource judges under; the facts abstain behind the
-	// companionCopy seam (judged false), and bondSource re-judges the
-	// same facts inside. Nothing about the verdict moves.
-	if rt.AttackPetExpansion && state != nil && state.ready && state.follower != nil {
-		if refused, judged := rt.bondSourceRefused(key, state); judged && refused {
-			return nil
-		}
+	// Judge every cheap verdict before taking bondSource's answer
+	// home: the SkillDef it returns escapes in this frame, so an
+	// owner who pays the call at all pays ~160 B a tick even when
+	// the admission refuses (#2030). bondSource's own first gates
+	// - expansion off, no ready session - refuse here; the refusal
+	// facts and the idle facts (bondRevivalIdle) judge next, and
+	// none of the three needs the follower the copy path does, so
+	// an owner whose pet is not even out no longer pays for the
+	// call either. An admitted, live tick still takes the copy
+	// and bondSource re-judges everything on it; behind the
+	// companionCopy seam the facts abstain (judged false) and the
+	// copy judges as before. Nothing about any verdict moves.
+	if !rt.AttackPetExpansion || state == nil || !state.ready {
+		return nil
+	}
+	if refused, judged := rt.bondSourceRefused(key, state); judged && refused {
+		return nil
+	}
+	if idle, judged := rt.bondRevivalIdle(key, state, now); judged && idle {
+		return nil
 	}
 	owner, pet, skill, _, ok := rt.bondSource(key, state)
 	if !ok {

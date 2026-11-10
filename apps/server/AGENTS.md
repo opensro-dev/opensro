@@ -47,6 +47,10 @@ this way (see `internal/game/world/movement/runtime.go`); match it.
   `clientdata.ClientPublicRoot`, which resolves the main checkout's tree (or
   `SRO_GENERATED_ROOT`) the way `scripts/lib/generatedRoot.mjs` does. Never join a relative
   `.generated/client-public`.
+- A test finds its files from its working directory (`go test` runs it in
+  the package's folder) or through `config.FindModuleRoot`, never through
+  `runtime.Caller`: the gate compiles with `-trimpath`, so a compiled file
+  carries its import path, not the folder it came from.
 - Test fixtures in `internal/game/action` use the level-1 leveldata row;
   raising a fixture character's level silently breaks `playerCombatStats`.
 
@@ -87,6 +91,21 @@ golangci-lint is pinned in its own tool module so the repository's Go
 toolchain builds it; do not use a globally installed binary. A `//nolint`
 must name its linter and give a reason (nolintlint enforces both). The
 reasons each linter is on or off are in `.golangci.yml`.
+
+Every checkout shares one build cache. Go keys a compiled package by the
+folder it was compiled in unless `-trimpath` is set, so each git worktree
+compiled the whole server again (measured 2026-11-10: 535 MB per tree for
+one build, vet and test compile; 39.8 GB in twelve hours of four agents).
+The scripts compile with `-trimpath` (`scripts/lib/goEnvironment.mjs`). Set
+the same flag once per workstation for the commands you type yourself:
+
+```
+go env -w GOFLAGS=-trimpath
+```
+
+Build a test binary you want to keep (`go test -c -o`) into the worktree's
+ignored `temp/`, never into a scratch folder outside it: it then goes when
+the worktree does.
 
 `pnpm task check:server` runs the full gate (tidy, gofmt, vet, tests, race
 subset, govulncheck). Each step is skipped when its inputs match a recorded

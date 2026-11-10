@@ -18,6 +18,8 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 16 names the pet a chat item link means ([u32 gid] after the
+// slot of a pet-source ref; chat-item-links.ts), which 15 misread.
 // Protocol 15 adds pet passive cooldowns, paid Bond feedback and public
 // buffs, with crow wind moved to 0x3FBE so most-wanted keeps 0x3FBA.
 // Protocol 14 carries the port-only item links in player chat
@@ -42,8 +44,8 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
-// Protocol 16 admits the survival chest projection and owner-only checkpoint decisions.
-export const RELEASE_PROTOCOL = 16;
+// Protocol 17 adds survival checkpoint rewards alongside protocol 16 pet chat links.
+export const RELEASE_PROTOCOL = 17;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

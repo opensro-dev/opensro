@@ -9,7 +9,7 @@ A chat line's text holds CHAT_LINK_MARKER where a link sits. The sender's
 reads the item itself and appends its body after the 0x3667 text (server
 chat/itemlinks.go):
 
-	request:   [u8 count] count x {[u8 source][u16 slot]}
+	request:   [u8 count] count x {[u8 source][u16 slot][u32 pet gid, pet source only]}
 	broadcast: [u8 count] count x {[u16 bodyLen][item body]}
 
 Link i belongs to the i-th marker. The broadcast tail is player-adjacent
@@ -34,12 +34,17 @@ const UNKNOWN_LINK_LABEL = "<?>";
 ================
 ChatLinkRef
 
-One link as the sender names it: where the item is.
+One link as the sender names it: where the item is. A pet-source link
+also names WHICH pet (its gid): a grab pet lives on its summon item's
+row beside other bagged companions, and two bags can hold an item at
+the same slot, so a bare {pet, slot} would name the wrong bag
+(protocol 16 carries the gid; the server reads that pet's bag).
 ================
 */
 export interface ChatLinkRef {
 	readonly source: number;
 	readonly slot: number;
+	readonly pet?: number;
 }
 
 /*
@@ -47,18 +52,27 @@ export interface ChatLinkRef {
 encodeChatLinkRefs
 
 The request link block; no refs is no block at all, so an unlinked line
-stays the native frame.
+stays the native frame. A pet-source ref is 7 bytes ([u32 gid] after
+the slot), the others 3.
 ================
 */
 export function encodeChatLinkRefs( refs: readonly ChatLinkRef[] ): Uint8Array {
 	if ( !refs.length ) return new Uint8Array( 0 );
-	const p = new Uint8Array( 1 + refs.length * 3 );
+	let size = 1;
+	for ( const ref of refs ) size += ref.source === CHAT_LINK_SOURCE.pet ? 7 : 3;
+	const p = new Uint8Array( size );
 	const v = new DataView( p.buffer );
 	p[0] = refs.length;
-	refs.forEach( ( ref, i ) => {
-		p[1 + i * 3] = ref.source;
-		v.setUint16( 2 + i * 3, ref.slot, true );
-	} );
+	let o = 1;
+	for ( const ref of refs ) {
+		p[o] = ref.source;
+		v.setUint16( o + 1, ref.slot, true );
+		o += 3;
+		if ( ref.source === CHAT_LINK_SOURCE.pet ) {
+			v.setUint32( o, ref.pet ?? 0, true );
+			o += 4;
+		}
+	}
 	return p;
 }
 
@@ -178,7 +192,9 @@ chatLinkSpans
 A displayed chat line with each marker replaced by its item's label, and,
 when linked, the span each label covers (kind "chat-item:<index>") for the
 chat log's hover regions. A marker without an item shows "<?>" and links
-nothing.
+nothing. With links off the text is the line as it arrived, unchanged:
+a pasted marker is plain text then, and no "<?>" stands in for it
+(an owner report: links off turned a pasted marker into "<?>").
 ================
 */
 export function chatLinkSpans(
@@ -187,7 +203,7 @@ export function chatLinkSpans(
 	linked: boolean
 ): { text: string; spans: { kind: `chat-item:${number}`; start: number; end: number; }[]; } {
 	const spans: { kind: `chat-item:${number}`; start: number; end: number; }[] = [];
-	if ( !text.includes( CHAT_LINK_MARKER ) ) return { text, spans };
+	if ( !linked || !text.includes( CHAT_LINK_MARKER ) ) return { text, spans };
 	let out = "", index = 0;
 	for ( const c of text ) {
 		if ( c !== CHAT_LINK_MARKER ) {

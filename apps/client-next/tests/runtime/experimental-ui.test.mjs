@@ -436,8 +436,8 @@ test("two rows share each line and a section header spans both columns", () => {
 	try {
 		const view = f.activate( "open-window:Experimental" );
 		const control = id => defined( view.controls.find( c => c.id === id ) );
-		// Image's third line: MSAA 4x, then Anisotropic filtering.
-		const left = control( "experimental-msaa" ), right = control( "experimental-anisotropic-filtering" );
+		// Image's third line: MSAA 4x, then Scene FXAA.
+		const left = control( "experimental-msaa" ), right = control( "experimental-scene-fxaa" );
 		assert.equal( left.rect[1], right.rect[1] );
 		assert.equal( right.rect[0] - left.rect[0], 312 + 8 );
 		assert.equal( left.rect[2], 312 );
