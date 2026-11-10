@@ -653,22 +653,35 @@ The entries of byRegion[region] that have no mover. Most generated actors
 have a mover once their population is active, so this keeps a scan from
 probing each of them per viewer. A duplicate listing stays duplicated,
 as byRegion lists it.
+
+One region's row is built on its first read under the current statics
+stamp and kept while the stamp stands; a moved stamp drops every row
+unbuilt. The stamp moves on any roster or listing change anywhere in
+the division, and rebuilding every region on the first read after such
+a move probed the whole division's listings for the sake of the few
+regions a viewer's ring actually asks (#3027).
 ================
 */
 func (state *divisionMonsterState) regionStatics(region uint16) []uint32 {
 	now := state.interestStaticsNow()
-	if state.interestStatics == nil || state.interestStaticsStamp != now {
-		state.interestStatics = make(map[uint16][]uint32, len(state.byRegion))
+	if state.interestStaticsStamp != now {
+		state.interestStatics = nil
 		state.interestStaticsStamp = now
-		for key, gids := range state.byRegion {
-			for _, gid := range gids {
-				if !state.movers.has(gid) {
-					state.interestStatics[key] = append(state.interestStatics[key], gid)
-				}
-			}
+	}
+	if rows, ok := state.interestStatics[region]; ok {
+		return rows
+	}
+	var rows []uint32
+	for _, gid := range state.byRegion[region] {
+		if !state.movers.has(gid) {
+			rows = append(rows, gid)
 		}
 	}
-	return state.interestStatics[region]
+	if state.interestStatics == nil {
+		state.interestStatics = make(map[uint16][]uint32)
+	}
+	state.interestStatics[region] = rows
+	return rows
 }
 
 /*

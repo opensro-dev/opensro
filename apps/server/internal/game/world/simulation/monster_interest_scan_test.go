@@ -542,3 +542,52 @@ func TestPopulationInterestScanFollowsStaticChanges(t *testing.T) {
 		t.Fatalf("a mover-less actor did not return to its spawn: %v", got)
 	}
 }
+
+/*
+================
+TestRegionStaticsBuildsOnlyAskedRegions
+
+The statics answers are the listing order with mover-owned gids
+probed out, duplicates kept (#3027): a region's row is built on its
+first read under the current stamp only, so a roster move far away
+never pays to rebuild regions nobody asked for.
+================
+*/
+func TestRegionStaticsBuildsOnlyAskedRegions(t *testing.T) {
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	near := uint16(interestScanRegion)
+	far := uint16(interestScanRegion + 0x400)
+	pose := monster.Pose{RegionID: near, X: 960, Z: 960}
+	// gid 1 is static in near and listed twice; gid 2 is listed in
+	// near but mover-owned; gid 3 is static in far.
+	state.listRegionGid(near, 1)
+	state.listRegionGid(near, 2)
+	state.listRegionGid(near, 1)
+	state.listRegionGid(far, 3)
+	state.movers.set(2, monster.MoverState{Pose: pose})
+
+	if got := state.regionStatics(near); !slices.Equal(got, []uint32{1, 1}) {
+		t.Fatalf("near statics = %v, want [1 1]", got)
+	}
+	if _, built := state.interestStatics[far]; built {
+		t.Fatal("an unasked region was built")
+	}
+	// A mover arriving for gid 1 moves the stamp: near re-derives
+	// empty, far stays unbuilt until its own first read.
+	state.movers.set(1, monster.MoverState{Pose: pose})
+	if got := state.regionStatics(near); len(got) != 0 {
+		t.Fatalf("mover-owned statics = %v, want none", got)
+	}
+	if _, built := state.interestStatics[far]; built {
+		t.Fatal("a stamp move built an unasked region")
+	}
+	if got := state.regionStatics(far); !slices.Equal(got, []uint32{3}) {
+		t.Fatalf("far statics = %v, want [3]", got)
+	}
+	// The mover leaving makes gid 1 static again under the new stamp.
+	state.movers.remove(1)
+	if got := state.regionStatics(near); !slices.Equal(got, []uint32{1, 1}) {
+		t.Fatalf("returned statics = %v, want [1 1]", got)
+	}
+}
