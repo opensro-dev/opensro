@@ -400,7 +400,7 @@ extra exists for.
 ================
 */
 func TestRestSettledStepOutcomeIsNil(t *testing.T) {
-	ops, s, d, instance := restDoorFixture(t)
+	ops, s, _, instance := restDoorFixture(t)
 	mover, _ := s.Mover(restDoorDivision, instance.Gid)
 	mover.Activity.LastCheck = wrappedLastCheck(restDoorNow)
 	s.CommitMover(restDoorDivision, instance.Gid, mover)
@@ -419,16 +419,18 @@ func TestRestSettledStepOutcomeIsNil(t *testing.T) {
 
 	// Queue an event and the same step drains it: not a settled
 	// outcome, and the door says so.
-	ops, s, d, instance = restDoorFixture(t)
-	mover, _ = s.Mover(restDoorDivision, instance.Gid)
-	mover.Activity.LastCheck = wrappedLastCheck(restDoorNow)
-	s.CommitMover(restDoorDivision, instance.Gid, mover)
-	d.aiEvents[instance.Gid] = []monsterAIEvent{{Event: aiEventStart, Kind: 9, Source: 42}}
-	if _, _, settled := restDoorVerdicts(t, ops, s, instance.Gid, restDoorNow); settled {
-		t.Fatal("an actor with a queued event settled")
-	}
-	ops.advanceInstance(restDoorDivision, instance, nil, restDoorNow)
-	if len(d.aiEvents[instance.Gid]) != 0 {
-		t.Fatal("the step left a queued tactics event undrained")
+	{
+		ops, s, d, instance := restDoorFixture(t)
+		mover, _ := s.Mover(restDoorDivision, instance.Gid)
+		mover.Activity.LastCheck = wrappedLastCheck(restDoorNow)
+		s.CommitMover(restDoorDivision, instance.Gid, mover)
+		d.aiEvents[instance.Gid] = []monsterAIEvent{{Event: aiEventStart, Kind: 9, Source: 42}}
+		if _, _, settled := restDoorVerdicts(t, ops, s, instance.Gid, restDoorNow); settled {
+			t.Fatal("an actor with a queued event settled")
+		}
+		ops.advanceInstance(restDoorDivision, instance, nil, restDoorNow)
+		if len(d.aiEvents[instance.Gid]) != 0 {
+			t.Fatal("the step left a queued tactics event undrained")
+		}
 	}
 }
