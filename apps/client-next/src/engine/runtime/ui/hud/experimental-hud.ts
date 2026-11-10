@@ -194,7 +194,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "waterRefraction",
 						id: "experimental-water-refraction",
 						label: "Water refraction",
-						description: "Water bends the ground under it and foams at the shore."
+						description: "Water bends the ground below and foams at the shore."
 					}
 				]
 			},
