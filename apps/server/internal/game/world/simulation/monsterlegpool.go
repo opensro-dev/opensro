@@ -683,6 +683,14 @@ own phase walls and samples stay the leg goroutine's.
 */
 func (stats *legStats) absorbBin(bin *legStats) {
 	stats.advance += bin.advance
+	stats.steps += bin.steps
+	for guard := range bin.restGuards {
+		stats.restGuards[guard] += bin.restGuards[guard]
+	}
+	stats.restSettled += bin.restSettled
+	stats.restSettledDrained += bin.restSettledDrained
+	stats.cadenceArms += bin.cadenceArms
+	stats.gateSuspended += bin.gateSuspended
 	for caller := range bin.plans {
 		for outcome := range bin.plans[caller] {
 			stats.plans[caller][outcome] += bin.plans[caller][outcome]

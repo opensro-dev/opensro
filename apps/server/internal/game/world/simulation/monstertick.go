@@ -109,6 +109,12 @@ type MonsterMoverOps struct {
 	// again (#3027). Read only while stepGenArmed, like the
 	// storage slots.
 	stepQueueSlot uint32
+	// stepDrainedEvents is the running step's tactics-event drain
+	// count (monsterbehavior.go's applyTacticsEvents), reset at the
+	// step's head and read at its rest verdict: a settled candidate
+	// whose step drained events is the settled lane's
+	// drain-and-carry population (#3027 stage 1).
+	stepDrainedEvents int
 	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
 	// #2205): the zero value (everywhere but production wiring) runs
 	// the serial leg; >= 1 plans each batch on a pool - one worker

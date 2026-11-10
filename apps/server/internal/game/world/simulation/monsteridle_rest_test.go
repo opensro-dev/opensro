@@ -29,7 +29,10 @@ TestIdleRestQuiescentGuardMatrix
 
 At rest every guard passes; flipping any single fact the predicate
 reads must refuse the skip, so the full step runs for that monster
-exactly as before.
+exactly as before. Each flip also names the guard the named
+verdict (restGuardFailure) must report for it, so a guard that
+stops reading its fact fails here even if the skip still refuses
+(#3027 stage 1).
 ================
 */
 func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
@@ -49,42 +52,41 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 	if !idleRestQuiescent(ops, &instance, rest, passiveTactics(), now) {
 		t.Fatal("resting idle monster was not quiescent")
 	}
+	if got := restGuardFailure(ops, &instance, rest, passiveTactics(), now); got != restGuardPass {
+		t.Fatalf("resting idle monster failed guard %s, want pass", restGuardNames[got])
+	}
 
 	flips := []struct {
 		name   string
+		guard  restGuard
 		mutate func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics)
 	}{
-		{"wandering mode", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"wandering mode", restGuardMode, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mustMoverTransition(mover, monster.MoverEventStartWander, 0)
 		}},
-		{"activity cadence due", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"activity cadence due", restGuardCadence, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mover.Activity.LastCheck = wrappedLastCheck(now)
 		}},
-		{"help pending", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"help pending", restGuardHelp, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			actor.Help = actor.Help.Replace(monster.HelpEvent{})
 		}},
-		{"summoned control", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
-			if err := mover.BindController(monster.ControlSummoned, 777); err != nil {
-				t.Fatalf("bind summoned controller: %v", err)
-			}
-		}},
-		{"tempted", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"tempted", restGuardTarget, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			actor.Abnormal = &abnormal.Block{}
 			actor.Abnormal.Slots[abnormal.Confusion].Active = true
 		}},
-		{"aggressive tactics", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"aggressive tactics", restGuardAggressive, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			*tactics = aggressiveTactics()
 		}},
-		{"idle deadline passed", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"idle deadline passed", restGuardDeadline, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mover.BehaviorDeadlineMs = now - 1
 		}},
-		{"navigation goal held", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"navigation goal held", restGuardGoal, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mover.WaitNavigation(mover.Pose, now+1000)
 		}},
-		{"segment endpoints held", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"segment endpoints held", restGuardSegment, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mover.From = mover.Pose
 		}},
-		{"segment matured", func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
+		{"segment matured", restGuardSegment, func(mover *monster.MoverState, actor *monster.Instance, tactics *monster.Tactics) {
 			mover.DepartMs, mover.ArriveMs = now-2000, now-1000
 		}},
 	}
@@ -94,6 +96,26 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 		if idleRestQuiescent(ops, &actor, mover, tactics, now) {
 			t.Fatalf("%s: monster still quiescent", flip.name)
 		}
+		if got := restGuardFailure(ops, &actor, mover, tactics, now); got != flip.guard {
+			t.Fatalf("%s: verdict failed guard %s, want %s", flip.name, restGuardNames[got], restGuardNames[flip.guard])
+		}
+	}
+
+	// A summoned binding pends the idle entry it arrives with, so it
+	// cannot be flipped onto the resting mover like the others:
+	// bind, complete the entry through the step's own door, and the
+	// verdict must then refuse at the summoned guard alone.
+	bound := rest
+	if err := bound.BindController(monster.ControlSummoned, 777); err != nil {
+		t.Fatalf("bind summoned controller: %v", err)
+	}
+	ops.commitIdleEntry(monsterTestDivision, &instance, bound, nil, now)
+	summoned, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if idleRestQuiescent(ops, &instance, summoned, passiveTactics(), now) {
+		t.Fatal("summoned control: monster still quiescent")
+	}
+	if got := restGuardFailure(ops, &instance, summoned, passiveTactics(), now); got != restGuardSummoned {
+		t.Fatalf("summoned control: verdict failed guard %s, want %s", restGuardNames[got], restGuardNames[restGuardSummoned])
 	}
 
 	// Without an activity snapshot the gate is inert, so the cadence
@@ -103,6 +125,9 @@ func TestIdleRestQuiescentGuardMatrix(t *testing.T) {
 	due.Activity.LastCheck = wrappedLastCheck(now)
 	if !idleRestQuiescent(ops, &instance, due, passiveTactics(), now) {
 		t.Fatal("nil activity snapshot must leave the resting monster quiescent")
+	}
+	if got := restGuardFailure(ops, &instance, due, passiveTactics(), now); got != restGuardPass {
+		t.Fatalf("nil activity snapshot failed guard %s, want pass", restGuardNames[got])
 	}
 }
 
