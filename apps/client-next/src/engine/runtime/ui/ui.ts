@@ -11060,6 +11060,10 @@ export function createUi( ports: UiPorts ) {
 							rect: row.slot,
 							kind: "button",
 							rightActivate: true,
+							// Dragging a command onto the hotbar binds kind 0x25
+							// with this command id (quickSlotDrag); the press
+							// dispatches it through executeCosCommand.
+							draggable: true,
 							disabled: !cosCommandEnabled( command, context )
 						} );
 					} );
@@ -13631,12 +13635,19 @@ export function createUi( ports: UiPorts ) {
 						undefined;
 					const petAvailable = !!(petDesign && binding && game &&
 						quickSlotCommand( binding, game ));
+					// A kind 0x25 binding wears the command bar's own icon and
+					// label (cos-command.ts), greyed while the command is off.
+					const petCommand = binding?.kind === 0x25 ? binding.payload : undefined,
+						petContext = petCommand !== undefined ? cosCommandContext() : undefined,
+						petLabel = petCommand !== undefined ? cosCommandLabel( petCommand, petContext! ) : "";
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
 						(item.name ?? String( item.refObjId )) + " x" + item.quantity :
 						petDesign ?
 						petDesign.name :
+						petLabel ?
+						hudCopy( petLabel ) :
 						action ?
 						hudCopy( action.name ) :
 						binding?.kind === 0x4e ?
@@ -13655,6 +13666,8 @@ export function createUi( ports: UiPorts ) {
 					blocks.push( r );
 					const icon = petDesign ?
 						petSkillIcon( petDesign ) :
+						petCommand !== undefined ?
+						cosCommandIcon( petCommand, petContext! ) :
 						iconPath( skill?.icon ?? item?.icon ?? action?.icon );
 					// A held press outlines the slot; a denied one shakes and tints it.
 					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
