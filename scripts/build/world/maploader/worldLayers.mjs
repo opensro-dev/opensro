@@ -33,13 +33,15 @@ parseWorldLayerTable
 */
 export function parseWorldLayerTable( text, sourcePath = WORLD_LAYER_TABLE ) {
 	const table = JSON.parse( text );
-	if ( table?.format !== WORLD_LAYER_FORMAT || !Array.isArray( table.layers ) || !Array.isArray( table.placements ) ) {
+	if (
+		table?.format !== WORLD_LAYER_FORMAT || !Array.isArray( table.layers ) || !Array.isArray( table.placements )
+	) {
 		throw new Error( `${sourcePath}: not a ${WORLD_LAYER_FORMAT} table` );
 	}
 	const layers = new Set( table.layers.map( layer => layer.id ) );
 	const members = new Map();
 	for ( const row of table.placements ) {
-		const [ region, uid, layer ] = row;
+		const [region, uid, layer] = row;
 		if ( !Number.isInteger( region ) || !Number.isInteger( uid ) || !layers.has( layer ) ) {
 			throw new Error( `${sourcePath}: invalid placement row ${JSON.stringify( row )}` );
 		}

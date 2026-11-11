@@ -32,7 +32,7 @@ export function activeWorldLayers( groups: Readonly<Record<number, number>> | un
 	if ( !groups ) return NO_WORLD_LAYERS;
 	let layers = derived.get( groups );
 	if ( !layers ) {
-		const active = Object.entries( groups ).filter( ( [ , state ] ) => (state & 1) !== 0 ).map( ( [ id ] ) =>
+		const active = Object.entries( groups ).filter( ( [, state] ) => (state & 1) !== 0 ).map( ( [id] ) =>
 			Number( id )
 		);
 		layers = active.length ? new Set( active ) : NO_WORLD_LAYERS;

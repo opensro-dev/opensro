@@ -41,20 +41,20 @@ function table( placements ) {
 	} );
 }
 
-test( "a placement finds its layer by region and the uid's 16 bits", () => {
+test("a placement finds its layer by region and the uid's 16 bits", () => {
 	const layers = parseWorldLayerTable( table( [ [ JANGAN, 7, 5 ], [ JANGAN, 0xfffe, 5 ] ] ) );
 	assert.equal( placementLayer( layers, { regionId: "0x61a8", uid: 7 } ), 5 );
 	assert.equal( placementLayer( layers, { regionId: "0x61a8", uid: -2 } ), 5, "a negative uid is its 16 bits" );
 	assert.equal( placementLayer( layers, { regionId: "0x61a8", uid: 8 } ), undefined );
 	assert.equal( placementLayer( layers, { regionId: "0x61a9", uid: 7 } ), undefined );
-} );
+});
 
-test( "a row naming a layer the table lacks is refused", () => {
+test("a row naming a layer the table lacks is refused", () => {
 	assert.throws( () => parseWorldLayerTable( table( [ [ JANGAN, 7, 9 ] ] ) ), /invalid placement row/ );
-	assert.throws( () => parseWorldLayerTable( "{\"format\":\"other\"}" ), /not a/ );
-} );
+	assert.throws( () => parseWorldLayerTable( '{"format":"other"}' ), /not a/ );
+});
 
-test( "a game root without the table has no layers", async () => {
+test("a game root without the table has no layers", async () => {
 	const root = await mkdtemp( path.join( tmpdir(), "world-layers-" ) );
 	try {
 		const empty = await readWorldLayerTable( root );
@@ -66,9 +66,9 @@ test( "a game root without the table has no layers", async () => {
 	} finally {
 		await rm( root, { recursive: true, force: true } );
 	}
-} );
+});
 
-test( "the resource closure follows a compound's branches", () => {
+test("the resource closure follows a compound's branches", () => {
 	const name = "x_mas_boxset01";
 	const branches = [ "res/etc/x_mas/x_mas_boxset01_01.bsr", "res/etc/x_mas/x_mas_boxset01_02.bsr" ];
 	const text = value => Buffer.concat( [ uint32( value.length ), Buffer.from( value, "ascii" ) ] );
@@ -87,9 +87,12 @@ test( "the resource closure follows a compound's branches", () => {
 	const cpd = Buffer.concat( [ header, nameBlock, uint32( branches.length ), ...branches.map( text ) ] );
 	const script = fileURLToPath( new URL( "../../analysis/cap110_asset_dependencies.mjs", import.meta.url ) );
 	const run = spawnSync( process.execPath, [ script ], {
-		input: JSON.stringify( [ { path: "compound/struct/etc/x_mas/x_mas_boxset01.cpd", bytes: cpd.toString( "base64" ) } ] ),
+		input: JSON.stringify( [ {
+			path: "compound/struct/etc/x_mas/x_mas_boxset01.cpd",
+			bytes: cpd.toString( "base64" )
+		} ] ),
 		encoding: "utf8"
 	} );
 	assert.equal( run.status, 0, run.stderr );
 	assert.deepEqual( JSON.parse( run.stdout ), [ branches ] );
-} );
+});

@@ -390,7 +390,7 @@ readJmxMapObjectPlacementSector
 */
 export async function readJmxMapObjectPlacementSector( sectorX, sectorY, sourceExtractedRoot, sourceGameRoot ) {
 	const objects2Path = path.join( sourceExtractedRoot, "Map_extracted", String( sectorY ), `${sectorX}.o2` );
-	const [ objects, layers ] = await Promise.all( [
+	const [objects, layers] = await Promise.all( [
 		readFile( objects2Path ).then( buffer => parseJmxMapObjectPlacementO2( buffer, objects2Path ) ),
 		readWorldLayerTable( sourceExtractedRoot )
 	] );
@@ -415,7 +415,9 @@ export async function readJmxMapObjectPlacementSector( sectorX, sectorY, sourceE
 		placements: objects.placements.map( ( placement ) => ({
 			...placement,
 			// A seasonal layer member (worldLayers.mjs); absent on ordinary placements.
-			...(placementLayer( layers, placement ) === undefined ? {} : { layer: placementLayer( layers, placement ) }),
+			...(placementLayer( layers, placement ) === undefined ?
+				{} :
+				{ layer: placementLayer( layers, placement ) }),
 			sourceSector: {
 				sectorId: toHex16( (sectorY << 8) | sectorX ),
 				sectorX,
