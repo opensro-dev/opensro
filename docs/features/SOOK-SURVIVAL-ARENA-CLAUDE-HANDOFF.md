@@ -185,3 +185,15 @@ normal wave slots, before uniques, ambushes or population-cap truncation.
 Tests pin the totals and unchanged first/final patterns, all five fast clears,
 and the exhaustive native 15-bit egg distribution. Damage/Chain weights are
 unchanged while KABUM gains 30% and Ambush loses 30% of their previous shares.
+
+## Retained buff casting visual (2026-11-11)
+
+Healing Division (10236) retained its cast token for the five-minute buff,
+leaving its READY looping casting glyph at the original position. READY/WAIT
+command visuals now release at the authoritative shot time through the existing
+fade/drain path. SHOT and attached buff visuals retain their existing lifetimes.
+Regression checks cover completed windups, still-charging windups and sustained
+SHOT loops; focused effect suites, client typecheck, ownership/capability and
+execution checks pass, with no new test-type errors. Live visual confirmation
+is pending; applying the client update must wait until the active arena run
+ends or the player accepts a reload. No server or character-data change.
