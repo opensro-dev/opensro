@@ -595,7 +595,8 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 				const flips: SystemNotice[] = [];
 				for ( let i = 0; i < count; i++ ) {
 					const id = u32(), mask = commonMask ?? u8(), old = guild.members.find( m => m.id === id );
-					if ( !old || mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
+					// An unknown leg bit leaves the rest of the frame unreadable.
+					if ( mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
 					// 5E9D20 @5e9d90: the applicator order is &1 level (+0x24),
 					// &2 offline (+0x26), &4 grade (+0x25), then donated,
 					// permissions, name, role. (The &1/&2 legs stood swapped
@@ -610,6 +611,24 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 						...(mask & 32 ? { name: str() } : {}),
 						...(mask & 64 ? { role: u8() } : {})
 					};
+					// A member this roster does not hold: the block was built
+					// before a join this client never received. The legs are
+					// read above, so the frame still parses; the delta is
+					// dropped as a degraded step instead of ending the
+					// session (#3211). INFERENCE: the client applicator
+					// (5E9D20) finds the member by jid before writing, so a
+					// missing row has nothing to write; no trace of the miss
+					// arm.
+					if ( !old ) {
+						next = {
+							...next,
+							degradation: {
+								code: "guild-member-delta-unknown",
+								message: "Guild member delta for unheld member " + id
+							}
+						};
+						continue;
+					}
 					// 5F3340: the announcement block is gated on the offline
 					// leg (mask &2 @5f3392) and prints only on an actual
 					// flip; the native row latch (+0x374, set @5f36d1 and

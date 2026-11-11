@@ -304,6 +304,38 @@ test("member delta flips print connect, disconnect and the self notice (5F3340)"
 	assert.equal( levelOnly.notice, undefined );
 });
 
+test("a member delta for an unheld member degrades instead of ending the session (#3211)", () => {
+	// A login push (&2) and a GP push (&8) for jid 99, which the roster
+	// does not hold: the frame parses, nothing is written, and the
+	// lane hands the gameplay owner a degraded step.
+	for (
+		const frame of [
+			writer().u8( 6 ).u32( 99 ).u8( 2 ).u8( 0 ).frame( 0x3b29 ),
+			writer().u8( 6 ).u32( 99 ).u8( 8 ).u32( 500 ).frame( 0x3b29 )
+		]
+	) {
+		const state = socialPacketOf( rosterState, frame );
+		assert.equal( state.degradation?.code, "guild-member-delta-unknown" );
+		assert.deepEqual( state.guild?.members, rosterGuild.members );
+		assert.equal( state.notices, undefined );
+	}
+	// In a batch the held member still applies after the unheld one.
+	const batch = socialPacketOf(
+		rosterState,
+		writer().u8( 0x16 ).u8( 2 ).u8( 2 ).u32( 99 ).u8( 0 ).u32( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.equal( batch.degradation?.code, "guild-member-delta-unknown" );
+	assert.equal( batch.guild?.members.find( m => m.id === 2 )?.offline, 0 );
+	// The next frame starts clean: the step is transient, like notice.
+	const after = socialPacketOf( batch, writer().u8( 6 ).u32( 2 ).u8( 1 ).u8( 8 ).frame( 0x3b29 ) );
+	assert.equal( after.degradation, undefined );
+	// An unknown leg bit still ends the session: the rest cannot be read.
+	assert.throws(
+		() => social.socialPacket( rosterState, writer().u8( 6 ).u32( 99 ).u8( 0x80 ).frame( 0x3b29 ) ),
+		/Unsupported guild member delta/
+	);
+});
+
 test("the 0x16 batch prints one line per flipped member", () => {
 	const state = socialPacketOf(
 		rosterState,
