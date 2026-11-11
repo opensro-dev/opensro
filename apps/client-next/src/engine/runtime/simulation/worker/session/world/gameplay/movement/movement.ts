@@ -246,9 +246,10 @@ export function createMovement(
 	let navigationRequestId: number | undefined;
 	let navigationFailure: { region: number; requestId?: number; error: string; } | undefined;
 	let navigationRegion: number | undefined, owner: NavOwner | undefined;
-	// The dungeon cell the last state() read resolved (#3178): floor,
-	// room and block belong to the cell the pose stands in (and its
-	// owner), so they are resolved once per cell, not per publication.
+	// The dungeon cell the last state() read resolved (#3178): with an
+	// owner, floor, room and block are the owner's values, resolved
+	// once per cell (and owner), not per publication. An ownerless
+	// stand retains nothing (retainedCell).
 	let navigationCellKey: string | undefined;
 	let navigationCell: {
 		floor: number | undefined;
@@ -940,10 +941,16 @@ every high-latency acknowledgement and skill press.
 ================
 retainedCell
 
-The pose's dungeon floor, room and block, resolved once per
-navigation cell (and owner) and read from the retained values while
-the pose stays in it (#3178). A new cell, a new owner or a fresh
-navigation install resolves again.
+The pose's dungeon floor, room and block (#3178). With an owner the
+three are the owner's own values - the clipper reads them from
+objects[placement] - so they cannot change while the owner (and the
+cell) lasts, and are resolved once per navigation cell, not per
+publication. Without an owner they are not cell values: the clipper
+resolves the dungeon owner from the exact point, height included,
+and owner volumes are not the navigation grid, so one cell can
+straddle two owners or two heights. The ownerless path therefore
+resolves on every publication; the clipper memoizes that per exact
+pose itself.
 ================
 	*/
 	function retainedCell() {
@@ -952,12 +959,21 @@ navigation install resolves again.
 			navigationCell = undefined;
 			return undefined;
 		}
+		if ( !owner ) {
+			navigationCellKey = undefined;
+			navigationCell = undefined;
+			return {
+				floor: navigation.floor( pose, owner ),
+				room: navigation.room( pose, owner ),
+				block: navigation.block( pose, owner )
+			};
+		}
 		const key = [
 			pose.regionId,
 			Math.floor( pose.x / NAVIGATION_CELL_SIZE ),
 			Math.floor( pose.z / NAVIGATION_CELL_SIZE ),
-			owner?.placement,
-			owner?.cell
+			owner.placement,
+			owner.cell
 		].join( ":" );
 		if ( key !== navigationCellKey ) {
 			navigationCellKey = key;
