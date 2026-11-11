@@ -562,25 +562,27 @@ AdvanceGroundScope
 The per-tick pass: every live scene gains the drops that came into its range
 and loses those that left it. scene resolves a tick session id to its
 transport session and scene revision. Each division's sessions are settled
-under that division's publication gate.
+under that division's publication gate, divisions in name order.
+
+The sessions are walked where they lie. Grouping them used to copy
+every session view into a per-division slice each tick - 82 KB a tick
+at 100 players, most of what this pass allocated (#3164). A shard has
+a handful of divisions, so one walk of the tick's sessions per
+division costs less than the copy did.
 ================
 */
 func (rt *Runtime) AdvanceGroundScope(nowMs int64, sessions []simulation.SessionView,
 	scene func(sessionID string) (*transport.Session, uint64, bool),
 ) {
-	byDivision := make(map[string][]simulation.SessionView)
-	for _, session := range sessions {
-		if session.PublishedObjects != nil {
-			byDivision[session.DivisionID] = append(byDivision[session.DivisionID], session)
+	var divisions []string
+	for i := range sessions {
+		if sessions[i].PublishedObjects != nil && !slices.Contains(divisions, sessions[i].DivisionID) {
+			divisions = append(divisions, sessions[i].DivisionID)
 		}
-	}
-	divisions := make([]string, 0, len(byDivision))
-	for division := range byDivision {
-		divisions = append(divisions, division)
 	}
 	sort.Strings(divisions)
 	for _, division := range divisions {
-		rt.advanceDivisionGroundScope(division, byDivision[division], nowMs, scene)
+		rt.advanceDivisionGroundScope(division, sessions, nowMs, scene)
 	}
 	rt.groundScopePrune(sessions)
 }
@@ -588,6 +590,9 @@ func (rt *Runtime) AdvanceGroundScope(nowMs int64, sessions []simulation.Session
 /*
 ================
 advanceDivisionGroundScope
+
+One division's sessions out of the tick's: those of another division,
+and those with no published set yet, are passed over.
 ================
 */
 func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simulation.SessionView, nowMs int64,
@@ -596,20 +601,24 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
 	shown := make(map[uint32]struct{})
-	for _, session := range sessions {
-		population, ok := sessionGroundPopulation(session)
+	for i := range sessions {
+		session := &sessions[i]
+		if session.DivisionID != division || session.PublishedObjects == nil {
+			continue
+		}
+		population, ok := sessionGroundPopulation(*session)
 		if !ok {
 			continue
 		}
 		drops := rt.groundDivisionSnapshot(division)
 		buckets := rt.groundDropBuckets(division, population)
 		block := viewerBlock(session.World.LiveSpawnAt(nowMs))
-		if rt.groundScopeSettled(session, division, population, drops, block) {
+		if rt.groundScopeSettled(*session, division, population, drops, block) {
 			continue
 		}
 		spawn, despawn := groundScope(buckets, block, session.PublishedObjects, shown)
 		if len(spawn) == 0 && len(despawn) == 0 {
-			rt.groundScopeSettle(session, division, population, drops, block)
+			rt.groundScopeSettle(*session, division, population, drops, block)
 			continue
 		}
 		// Changes are outstanding until the scene admits them into
@@ -705,14 +714,18 @@ func (rt *Runtime) groundScopeForget(sessionID string) {
 ================
 groundScopePrune
 
-Drop the marks of sessions this pass did not see, so the table
-holds only live sessions.
+Drop the marks of sessions this pass did not see. It runs only when
+the table holds more marks than the tick has sessions: a mark is keyed
+by a session id that never returns, so a stale one costs memory and
+nothing else, and the table still never outgrows the session count.
+Every tick it used to build a set of all session ids to find none
+gone (#3164).
 ================
 */
 func (rt *Runtime) groundScopePrune(sessions []simulation.SessionView) {
 	rt.groundScopeMu.Lock()
 	defer rt.groundScopeMu.Unlock()
-	if len(rt.groundScopeMarks) == 0 {
+	if len(rt.groundScopeMarks) <= len(sessions) {
 		return
 	}
 	seen := make(map[string]bool, len(sessions))
