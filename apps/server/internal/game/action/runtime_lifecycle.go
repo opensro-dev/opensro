@@ -45,6 +45,8 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 			return nil
 		}
 		defer rt.releaseTickGate()
+		rt.beginTickSnapshots()
+		defer rt.endTickSnapshots()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 		}
@@ -69,6 +71,11 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		var out []simulation.DivisionFrames
 		sealed := 0
+		// One copy per character serves every step of this hook
+		// (tick_snapshots.go); the bracket closes even when a step
+		// panics and the ticker recovers it.
+		rt.beginTickSnapshots()
+		defer rt.endTickSnapshots()
 		// Every step commits inside character doors and routes its private
 		// tail later. Each step holds the publication gate over its commit
 		// and the capture of its recipients (sealTickPrivate), ordering

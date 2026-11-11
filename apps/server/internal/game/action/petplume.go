@@ -86,7 +86,15 @@ advanceCrowPlume
 ================
 */
 func (rt *Runtime) advanceCrowPlume(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advanceCrowPlumeSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advanceCrowPlumeSession
+================
+*/
+func (rt *Runtime) advanceCrowPlumeSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil || state.plume == nil {
 		return
 	}
@@ -119,7 +127,7 @@ func (rt *Runtime) healCrowPlume(step petCombatStep, cast *crowPlumeCast, share 
 			continue
 		}
 		var public, private []wire.Frame
-		rt.deps.Update(member, "crow-plume-heal", func() bool {
+		rt.deps.UpdateDeferred(member, "crow-plume-heal", func() bool {
 			if !enterworld.CharacterAlive(member) {
 				delete(cast.recipients, gid)
 				return false

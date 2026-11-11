@@ -271,6 +271,13 @@ type Character struct {
 	SiegeDeathAtMs   int64  `json:"-"`
 	NativeBodyStatus uint8  `json:"-"`
 	BodyStatusOwner  uint64 `json:"-"`
+	// CommitRevision counts the store commit doors that have written
+	// this record: the tick's presentation caches key their kept inputs
+	// on it, so the store - the record's owner - does the invalidation
+	// when equipment, a job suit, an avatar or a companion changes.
+	// Runtime-only: a loaded record starts at zero and primes its first
+	// capture from there.
+	CommitRevision uint64 `json:"-"`
 	// TransformRefObjID is the transform block (player object +0x21A0): the
 	// monster a mask made the player (msch 1), or the player a Duplicate
 	// copies (msch 2). Runtime-only; the effect instance that set it clears

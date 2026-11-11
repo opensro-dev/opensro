@@ -157,7 +157,7 @@ func (rt *Runtime) advanceCompoundJob(key compoundKey, nowMs int64) []wire.Frame
 	job, due = compoundClock(job, nowMs)
 	if due {
 		step := job.steps[0]
-		frames, ok = rt.commitAlchemyProcess(character, alchemy.OpCompoundResult, step, job.expected)
+		frames, ok = rt.commitAlchemyProcess(character, alchemy.OpCompoundResult, step, job.expected, rt.tickDoors())
 		if !ok {
 			frames[len(frames)-1].Opcode = 0x3359
 		}

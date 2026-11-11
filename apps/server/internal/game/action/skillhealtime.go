@@ -63,7 +63,7 @@ through the row's replacement rules (auraReplacementAllowed), whose
 stopped instance stops pulsing.
 ==================
 */
-func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Character, skill enterworld.SkillRow, recipients []*enterworld.Character, now int64) []wire.Frame {
+func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Character, skill enterworld.SkillRow, recipients []*enterworld.Character, now int64, doors characterDoors) []wire.Frame {
 	casterView := rt.characterSnapshotCombat(division, caster)
 	if casterView == nil {
 		return nil
@@ -79,7 +79,7 @@ func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Char
 		}
 		token := atomic.AddUint32(&rt.castTokenCounter, 1)
 		var installed []wire.Frame
-		if !rt.deps.Update(who, "heal-over-time-install", func() bool {
+		if !doors.update(who, "heal-over-time-install", func() bool {
 			if who.DeletePending || !enterworld.CharacterAlive(who) {
 				return false
 			}

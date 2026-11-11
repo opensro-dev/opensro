@@ -355,11 +355,11 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffPlayer(debuffCast{division: division, character: character, snapshot: snapshot,
-			skill: skill, target: target.gid, player: target.player, now: now})
+			skill: skill, target: target.gid, player: target.player, now: now, doors: st.doors})
 	}
 	if skill.TimedEffect.Periodic.Pinned {
 		return rt.installPeriodicCast(periodicCast{division: division, character: character, snapshot: snapshot,
-			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
+			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release, doors: st.doors})
 	}
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)
@@ -538,7 +538,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now, st.doors)
 	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now, st.doors)
 	// A Scream Mask on the victim rolls its statuses on the attacker (screammask.go).
-	shared = mergeOpResults(shared, rt.screamMaskPlayer(division, target.player, character, now))
+	shared = mergeOpResults(shared, rt.screamMaskPlayer(division, target.player, character, now, st.doors))
 	return mergeOpResults(mergeOpResults(out, returned), shared), skillCastAccepted
 }
 

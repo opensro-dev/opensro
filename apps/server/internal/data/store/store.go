@@ -213,6 +213,15 @@ type Store struct {
 	db *sql.DB
 
 	characters map[string][]*domain.Character
+	// writeEpochs counts character-door writes per record, and
+	// writeEpochAll counts roster-wide writes (creates, reaps and
+	// commits that carry character rows). CharacterWriteEpoch reads
+	// the pair: a copy of a record taken at one epoch is identical to
+	// a copy taken at any later moment reporting the same epoch,
+	// because every write to the record passes a door below and bumps
+	// its count under the write lock (character_access.go).
+	writeEpochs   map[*domain.Character]uint64
+	writeEpochAll uint64
 	// characterLookups is the published per-division index (character_lookup.go).
 	characterLookups atomic.Pointer[map[string]*characterLookupIndex]
 	deleted          map[string][]json.RawMessage
@@ -231,6 +240,11 @@ type Store struct {
 	// the actor-authorized guild door, and the dirty unit is the WHOLE guild.
 	guilds       map[string]map[int64]domain.GuildRecord
 	guildMembers map[string]map[int64][]domain.GuildMemberRecord
+	// guildRevisions counts committed writes per guild (runtime-only):
+	// the tick's kept guild appearance keys on it, so this door - the
+	// guild plane's owner - does the invalidation. Dissolving a guild
+	// deletes its entry, and a missing entry reads as no revision.
+	guildRevisions map[guildKey]uint64
 
 	// camps / campMembers are the training-camp plane (the
 	// training_camps and training_camp_members tables): the guild
@@ -333,10 +347,12 @@ func Open(dir string, opts Options) (*Store, error) {
 		dbPath:               filepath.Join(dir, DBFileName),
 		dbBakPath:            filepath.Join(dir, DBBakFileName),
 		characters:           map[string][]*domain.Character{},
+		writeEpochs:          map[*domain.Character]uint64{},
 		deleted:              map[string][]json.RawMessage{},
 		mailboxes:            map[string]map[int64][]domain.LetterRecord{},
 		guilds:               map[string]map[int64]domain.GuildRecord{},
 		guildMembers:         map[string]map[int64][]domain.GuildMemberRecord{},
+		guildRevisions:       map[guildKey]uint64{},
 		camps:                map[string]map[int64]domain.TrainingCampRecord{},
 		campMembers:          map[string]map[int64][]domain.TrainingCampMemberRecord{},
 		meta:                 Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},

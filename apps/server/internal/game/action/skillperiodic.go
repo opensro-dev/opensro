@@ -41,6 +41,9 @@ type periodicCast struct {
 	attacker            combat.Stats
 	now                 int64
 	release             *pendingProjectileCast
+	// doors is the lane's commit pair (handlerDoors on a press,
+	// tickDoors on a tick strike or release).
+	doors characterDoors
 }
 
 /*
@@ -99,7 +102,7 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 		return OpResult{}, skillCastRefused
 	}
 	var refusal uint16
-	if !rt.deps.Update(p.character, "periodic-skill-release", func() bool {
+	if !p.doors.update(p.character, "periodic-skill-release", func() bool {
 		cost, code := rt.offensivePhaseCost(p.division, p.character, p.skill, p.now, p.release)
 		if refusal = code; code != 0 || !enterworld.CharacterAlive(p.character) {
 			return false

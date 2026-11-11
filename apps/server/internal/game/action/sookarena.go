@@ -496,7 +496,7 @@ func (rt *Runtime) endSookArena(run *sookArenaRun, c *enterworld.Character, win 
 		if win {
 			_, fault = rt.claimSookChest(c)
 		}
-		if rt.returnCharacterFromInstance(run.division, c) != instance.Success {
+		if rt.returnCharacterFromInstance(run.division, c, rt.handlerDoors()) != instance.Success {
 			return
 		}
 		if win {
@@ -504,7 +504,7 @@ func (rt *Runtime) endSookArena(run *sookArenaRun, c *enterworld.Character, win 
 			rt.PushCharacterFrames(run.division, c.Name, rt.arenaChestFrames(c, nil, fault))
 		}
 	} else if c != nil && c.SookArenaActive && c.World != nil && c.World.InstanceReturn != nil {
-		if rt.returnCharacterFromInstance(run.division, c) != instance.Success {
+		if rt.returnCharacterFromInstance(run.division, c, rt.handlerDoors()) != instance.Success {
 			return
 		}
 	}

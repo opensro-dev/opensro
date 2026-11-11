@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -140,6 +139,13 @@ type basicAttackIntent struct {
 	ActionReach    simulation.ActionReach
 	CooldownMs     int64
 	NextActionMs   int64
+	// WaitUntilMs is the first tick at which the full evaluation may
+	// act again, stamped by the evaluation itself when it settles
+	// into the swing wait (#3101). The tick skips the intent while
+	// nowMs < WaitUntilMs instead of re-resolving its whole combat
+	// context to arrive at the same wait. Zero - every fresh,
+	// promoted or replaced intent - always evaluates.
+	WaitUntilMs int64
 	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
 	// latency budget (record+28, reset when the reference server releases the record) the
 	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
@@ -486,6 +492,10 @@ Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
+	// An evaluation that runs has consumed the wait: every write-back
+	// below carries a cleared stamp, and only the two swing-wait
+	// gates stamp a new one (#3101).
+	intent.WaitUntilMs = 0
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
@@ -523,7 +533,17 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	var loadout combat.Loadout
 	var refusal string
 	if intent.ResumeBasic {
-		if nowMs <= intent.NextActionMs || rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+		if nowMs <= intent.NextActionMs {
+			// The resume is purely time-gated while no skill cast is
+			// open: stamp the wait so the tick skips to the first
+			// tick that can act (this gate fires past NextActionMs).
+			if !rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+				intent.WaitUntilMs = intent.NextActionMs + 1
+				rt.setCombatIntent(intent)
+			}
+			return OpResult{}
+		}
+		if rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
 			return OpResult{}
 		}
 		// The reference server transfers the target to a new basic command. Resolve
@@ -617,7 +637,22 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	// in state 0, holding basic attacks while a wall stands
 	// or a skill cast is open; its cast handler allows an in-range non-ao/pw
 	// skill to fire in place.
-	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
+	if nowMs < intent.NextActionMs {
+		// Settled into the swing wait and the transition published
+		// nothing: stamp the wait so the tick skips the resolution
+		// above until the first tick the swing can fire (this gate
+		// fires at NextActionMs). Admission blocks and the attack
+		// lock are re-judged by that evaluation, exactly as they
+		// were re-judged on every waiting tick before (#3101).
+		if len(combatTransition.Frames) == 0 && len(combatTransition.Broadcast) == 0 &&
+			len(combatTransition.ActorPrivate) == 0 && len(combatTransition.Recipients) == 0 &&
+			len(combatTransition.Around) == 0 {
+			intent.WaitUntilMs = intent.NextActionMs
+			rt.setCombatIntent(intent)
+		}
+		return combatTransition
+	}
+	if rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
 		return combatTransition
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
@@ -871,126 +906,4 @@ func prependOpResult(prefix, tail OpResult) OpResult {
 		Around:       append(append([]ObservedFrames{}, prefix.Around...), tail.Around...),
 		Pending:      tail.Pending,
 	}
-}
-
-/*
-================
-advanceBasicAttackIntents
-
-The simulation tick advances detached commands under their division lock,
-then routes their results after releasing authority locks.
-================
-*/
-func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
-	rt.basicAttackSnapshot = rt.fillCombatIntents(rt.basicAttackSnapshot)
-	intents := rt.basicAttackSnapshot
-	if len(intents) == 0 {
-		return nil
-	}
-	// The scan resumes past the intent the last call served last, so a
-	// burst draining over several ticks under the spread budget cannot
-	// starve the tail of the sorted snapshot (#2143). A cursor whose
-	// intent retired finds no match and the scan starts at the head.
-	start := 0
-	for i, intent := range intents {
-		if simulation.WorldKey(intent.DivisionID, intent.CharacterName) == rt.basicAttackCursor {
-			start = i + 1
-			break
-		}
-	}
-	if start == len(intents) {
-		start = 0
-	}
-	started := time.Now()
-	served := 0
-	for n := 0; n < len(intents); n++ {
-		intent := intents[(start+n)%len(intents)]
-		// A chain stage waits only on the casting instance; its root bracket
-		// is deliberately still open (see chainStageBlocked).
-		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]
-		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
-			continue
-		}
-		if served > 0 && time.Since(started) >= basicAttackSpreadBudget {
-			return out
-		}
-		character, result, ok := rt.advanceBasicAttackIntentInDivision(intent, nowMs)
-		served++
-		rt.basicAttackCursor = simulation.WorldKey(intent.DivisionID, intent.CharacterName)
-		if !ok {
-			continue
-		}
-		if result.DiagnosticRefusal != "" {
-			log.Debugf(
-				"action: 0x72CD continuation refused for %s: %s",
-				intent.CharacterName, result.DiagnosticRefusal,
-			)
-		}
-		if intent.SingleCast && len(result.Broadcast) == 0 {
-			if character != nil && len(result.Frames) > 0 {
-				private := simulation.DivisionFrames{DivisionID: intent.DivisionID, OnlyCharacterID: character.ID}
-				for _, frame := range result.Frames {
-					private.Frames = append(private.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
-				}
-				out = append(out, private)
-			}
-			continue
-		}
-		// A result that declares an actor-only tail has said what is public;
-		// only a result with neither portion publishes its whole burst.
-		frames := result.Broadcast
-		if len(frames) == 0 && len(result.ActorPrivate) == 0 {
-			frames = result.Frames
-		}
-		if len(frames) > 0 {
-			routed := simulation.DivisionFrames{DivisionID: intent.DivisionID, SourceGID: enterworld.ObjectIDForCharacter(character)}
-			for _, frame := range frames {
-				routed.Frames = append(routed.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
-			}
-			out = append(out, routed)
-		}
-		out = append(out, observedDivisionFrames(intent.DivisionID, result.Around)...)
-		out = append(out, recipientDivisionFrames(intent.DivisionID, result.Recipients)...)
-		if character != nil && len(result.ActorPrivate) > 0 {
-			private := simulation.DivisionFrames{
-				DivisionID:      intent.DivisionID,
-				OnlyCharacterID: character.ID,
-			}
-			for _, frame := range result.ActorPrivate {
-				private.Frames = append(private.Frames, simulation.Frame{
-					Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope,
-				})
-			}
-			out = append(out, private)
-		}
-	}
-	// The whole snapshot was served: no burst is draining, so the next
-	// tick starts at the head and keeps the sorted order.
-	rt.basicAttackCursor = ""
-	return out
-}
-
-/*
-================
-advanceBasicAttackIntentInDivision
-================
-*/
-func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, nowMs int64) (*enterworld.Character, OpResult, bool) {
-	// The wait for the division lane is named as its own slow step
-	// (basicAttackDivisionWait): a slow advanceBasicAttackIntents reading
-	// beside it is the lane holder's cost, not the intent's work (#2143).
-	// The wait still sits inside the enclosing step's time.
-	var unlock func()
-	rt.Steps.Time("basicAttackDivisionWait", func() {
-		unlock = rt.lockDivision(intent.DivisionID)
-	})
-	defer unlock()
-	// A request can cancel/replace an intent after the tick snapshots it but
-	// before this division lock is acquired. Never resurrect that stale cast.
-	if !rt.combatIntentIsCurrent(intent) {
-		return nil, OpResult{}, false
-	}
-	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
-	return character, rt.advanceBasicAttackIntent(character, intent, nowMs, rt.tickDoors()), true
 }

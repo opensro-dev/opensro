@@ -379,12 +379,27 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				}
 			}
 		}
+		// One character of an account in the world at a time: claim the
+		// account's world seat before admission, so a second session of
+		// the account entering another character is refused with the
+		// already-connected answer instead of joining the first in the
+		// world. A malformed request claims nothing (Build refuses it
+		// below); the claim is handed back when this entry fails.
+		var worldClaim *transport.AccountWorldClaim
+		refused := false
+		if request, err := transport.DecodeEnterWorld(payload); err == nil {
+			division := resolveBootstrapDivision(deps, request.Division)
+			worldClaim, refused = hub.ClaimAccountWorld(s, division, request.CharName)
+		}
 		s.BeginSceneAdmission()
 		var claimedDivision, claimedName string
 		published := false
 		defer func() {
-			if !published && claimedName != "" && deps.RetireCharacterSession != nil {
-				deps.RetireCharacterSession(claimedDivision, claimedName, s.ID)
+			if !published {
+				if claimedName != "" && deps.RetireCharacterSession != nil {
+					deps.RetireCharacterSession(claimedDivision, claimedName, s.ID)
+				}
+				hub.ReleaseAccountWorld(worldClaim)
 			}
 		}()
 		if deps.AdmitCharacterSession != nil {
@@ -400,7 +415,14 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				return nil
 			}
 		}
-		result, failure, built := buildEnterWorld(&admission, payload)
+		var result *BootstrapResult
+		var failure EnterWorldOutcome
+		built := false
+		if refused {
+			failure = enterWorldFailureOutcome(Failure(nativeErrorOverlap, "accountAlreadyInWorld"))
+		} else {
+			result, failure, built = buildEnterWorld(&admission, payload)
+		}
 		if built {
 			// Bind identity before the gate opens (#2294): lanes that
 			// wake during the encode below must see this scene's
@@ -462,6 +484,11 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			}).Warn("bootstrap: atomic admission delivery failed")
 		} else {
 			published = outcome.OK
+			if published {
+				// The entry is in the world: the seat is this
+				// claim's outright, with no hand-back left.
+				hub.AccountWorldClaimBound(worldClaim)
+			}
 			// The scene has its answer on the wire (bootstrap or
 			// refusal): the transport's unenqueued-window watchdog
 			// stands down for this admission.

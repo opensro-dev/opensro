@@ -443,33 +443,6 @@ type interestMemoStamp struct {
 
 /*
 ================
-interestStaticsStamp
-
-movers is compared too: a population can be handed a fresh storage whose
-counters restart.
-================
-*/
-type interestStaticsStamp struct {
-	movers   *moverStorage
-	roster   uint64
-	byRegion uint64
-}
-
-/*
-================
-interestStaticsNow
-================
-*/
-func (state *divisionMonsterState) interestStaticsNow() interestStaticsStamp {
-	stamp := interestStaticsStamp{movers: state.movers, byRegion: state.byRegionGeneration}
-	if state.movers != nil {
-		stamp.roster = state.movers.blocks.rosterGeneration
-	}
-	return stamp
-}
-
-/*
-================
 interestStampAt
 
 The stamp a viewer answer for block keys on: the generations of the
@@ -643,32 +616,6 @@ func (s *MonsterState) fillScopeStamps(slots []scopeViewerSlot, sessions []Sessi
 		slot.stamp = stamp
 		slot.stampOK = true
 	}
-}
-
-/*
-================
-regionStatics
-
-The entries of byRegion[region] that have no mover. Most generated actors
-have a mover once their population is active, so this keeps a scan from
-probing each of them per viewer. A duplicate listing stays duplicated,
-as byRegion lists it.
-================
-*/
-func (state *divisionMonsterState) regionStatics(region uint16) []uint32 {
-	now := state.interestStaticsNow()
-	if state.interestStatics == nil || state.interestStaticsStamp != now {
-		state.interestStatics = make(map[uint16][]uint32, len(state.byRegion))
-		state.interestStaticsStamp = now
-		for key, gids := range state.byRegion {
-			for _, gid := range gids {
-				if !state.movers.has(gid) {
-					state.interestStatics[key] = append(state.interestStatics[key], gid)
-				}
-			}
-		}
-	}
-	return state.interestStatics[region]
 }
 
 /*

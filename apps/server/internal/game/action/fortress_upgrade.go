@@ -306,7 +306,7 @@ func (rt *Runtime) guildPointsOf(division string, c *enterworld.Character) uint6
 	if store == nil || c.GuildID == nil || *c.GuildID == 0 {
 		return 0
 	}
-	record, _, ok := store.Guild(division, *c.GuildID)
+	record, ok := store.GuildRecord(division, *c.GuildID)
 	if !ok {
 		return 0
 	}

@@ -60,7 +60,7 @@ func (door storeGuildDoor) OpenMasterReleaseVoteAs(divisionID string, actorID in
 	}
 	guild.Vote = vote
 	s.guilds[divisionID][guildID] = guild
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 	s.commitLocked(fmt.Sprintf("guild-vote-open %s/%d", divisionID, guildID))
 	return domain.GuildSnapshot{Guild: guild, Members: members}, domain.GuildRefusalNone
 }
@@ -98,7 +98,7 @@ func (door storeGuildDoor) CastGuildBallotAs(divisionID string, actorID int64, v
 	vote.Ballots[voter] = option
 	guild.Vote = vote
 	s.guilds[divisionID][guildID] = guild
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 	s.commitLocked(fmt.Sprintf("guild-vote-ballot %s/%d", divisionID, guildID))
 	return domain.GuildVoteBallot{Snapshot: domain.GuildSnapshot{Guild: guild, Members: members},
 		VoteID: voteID, Previous: previous, Option: option, Count: vote.Count(option)}, domain.GuildRefusalNone
@@ -158,7 +158,7 @@ func (door storeGuildDoor) CloseDueGuildVotes(divisionID string, nowMs int64, fo
 			}
 		}
 		s.guilds[divisionID][guildID] = guild
-		s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+		s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
 		outcome.Snapshot = domain.GuildSnapshot{Guild: guild, Members: members}
 		outcomes = append(outcomes, outcome)
 	}
@@ -213,8 +213,8 @@ func (door storeGuildDoor) TransactGuildStorageAs(divisionID string, actorID int
 	stored := storage
 	guild.Storage = &stored
 	s.guilds[divisionID][guildID] = guild
-	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
-	s.changes.characters[actor] = true
+	s.markGuildLocked(guildKey{division: divisionID, guildID: guildID})
+	s.markCharacterLocked(actor)
 	s.commitLocked(fmt.Sprintf("guild-storage %s/%d", divisionID, guildID))
 	return storage, domain.GuildRefusalNone, nil
 }

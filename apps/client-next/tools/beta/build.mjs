@@ -226,6 +226,7 @@ export function requireNativeAssets( applicationFiles, native, members ) {
 buildBeta
 ================
 */
+/** @param {{ destination?: string, assetRoot?: string, makeArchive?: boolean, sourceSnapshot?: string }} [options] */
 export async function buildBeta(
 	{
 		destination = path.join( root, "temp/artifacts", "beta", new Date().toISOString().replace( /[:.]/g, "-" ) ),
@@ -241,6 +242,27 @@ export async function buildBeta(
 	const source = sourceSnapshot ? JSON.parse( await readFile( sourceSnapshot, "utf8" ) ) : await freezeSource(),
 		inputHash = sha( JSON.stringify( source ) );
 	await write( path.join( privateRoot, "source.json" ), JSON.stringify( source ) );
+	// The asset base is refused before the application is compiled: a
+	// release ships only what the current pipeline produced (every packed
+	// asset has a build owner) and everything the pipeline claims (no
+	// claimed asset missing), so an index that quietly lost claimed
+	// paths is never packaged thinner (2026-11-10;
+	// scripts/build/shared/publicationLedger.mjs).
+	const authority = await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) );
+	const original = JSON.parse( authority ), index = publicIndex( original );
+	requireRuntimeTextAssets( index.assets.map( asset => asset.path ) );
+	// The client reads one data format; packaging any other would ship a
+	// release whose code and data disagree.
+	if ( original.assetSchema !== ASSET_SCHEMA ) {
+		throw Error( `Asset data is schema ${original.assetSchema}; this client reads ${ASSET_SCHEMA}` );
+	}
+	const ledger = await verifyIndexClaims( original );
+	if ( ledger.length > 0 ) {
+		throw Error(
+			`The published pack index disagrees with the publication ledger: ${ledger.join( "; " )}. ` +
+				"Run `pnpm assets build full`, then package again."
+		);
+	}
 	const applicationRoot = path.join( packageRoot, "application" ),
 		maps = await buildApplication( { directory: applicationRoot, source } );
 	for ( const [name, map] of maps ) await write( path.join( privateRoot, "maps", name ), map );
@@ -293,24 +315,7 @@ export async function buildBeta(
 			mime: name.endsWith( ".js" ) ? "text/javascript" : name.endsWith( ".css" ) ? "text/css" : "text/html"
 		} );
 	}
-	const authority = await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) );
 	manifest.assetAuthorityHash = sha( authority );
-	const original = JSON.parse( authority ), index = publicIndex( original );
-	requireRuntimeTextAssets( index.assets.map( asset => asset.path ) );
-	// The client reads one data format; packaging any other would ship a
-	// release whose code and data disagree.
-	if ( original.assetSchema !== ASSET_SCHEMA ) {
-		throw Error( `Asset data is schema ${original.assetSchema}; this client reads ${ASSET_SCHEMA}` );
-	}
-	// A release ships only what the current pipeline produced: every packed
-	// asset must have a build owner (scripts/build/shared/publicationLedger.mjs).
-	const ledger = await verifyIndexClaims( original );
-	if ( ledger.length > 0 ) {
-		throw Error(
-			`The generated tree holds files the current pipeline did not produce: ${ledger.join( "; " )}. ` +
-				"Run `pnpm assets build full`, then package again."
-		);
-	}
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );
 	const native = new Set( nativeAssetUrls() );
 	requireNativeAssets( applicationFiles, native, new Set( index.assets.map( a => a.path ) ) );

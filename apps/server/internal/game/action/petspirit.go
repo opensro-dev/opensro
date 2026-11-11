@@ -201,7 +201,15 @@ Expiry, death, town, slot changes and resummons cannot retain a free heal.
 ================
 */
 func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Frame {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	return rt.advancePetSpiritSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advancePetSpiritSession
+================
+*/
+func (rt *Runtime) advancePetSpiritSession(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
 	if state == nil || state.character == nil {
 		return nil
 	}

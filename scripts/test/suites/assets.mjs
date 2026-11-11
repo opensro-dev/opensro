@@ -23,6 +23,7 @@ export default {
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
 		"scripts/test/assets/entityCompoundParticles.test.mjs",
 		"scripts/test/assets/monsterPortraitError.test.mjs",
+		"scripts/test/assets/monsterPortraitNames.test.mjs",
 		"scripts/test/assets/skillEffectBinding.test.mjs",
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",

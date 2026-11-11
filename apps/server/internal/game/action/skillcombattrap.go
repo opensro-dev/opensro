@@ -36,7 +36,7 @@ authored number of live traps per link group, retiring the oldest first.
 A trap field has no lnks: no board instance and no live-trap cap.
 ================
 */
-func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	trap := skill.CombatTrap
 	program, planted := plantedTrapProgram(skill)
 	if !planted {
@@ -54,7 +54,7 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	var refusal uint16
 	var effects []wire.Frame
-	if !rt.deps.Update(c, "release-combat-trap", func() bool {
+	if !doors.update(c, "release-combat-trap", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
 		}

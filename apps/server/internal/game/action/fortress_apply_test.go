@@ -43,6 +43,35 @@ func (g fortressGuilds) Guild(_ string, id int64) (domain.GuildRecord, []domain.
 
 /*
 ================
+fortressGuilds.GuildRecord
+================
+*/
+func (g fortressGuilds) GuildRecord(_ string, id int64) (domain.GuildRecord, bool) {
+	if id != g.guild.ID {
+		return domain.GuildRecord{}, false
+	}
+	return g.guild, true
+}
+
+/*
+================
+fortressGuilds.GuildMember
+================
+*/
+func (g fortressGuilds) GuildMember(_ string, id int64, characterID int64) (domain.GuildMemberRecord, bool) {
+	if id != g.guild.ID {
+		return domain.GuildMemberRecord{}, false
+	}
+	for _, member := range g.members {
+		if member.CharID == characterID {
+			return member, true
+		}
+	}
+	return domain.GuildMemberRecord{}, false
+}
+
+/*
+================
 officialFixture
 
 The shipped portal and fortress catalogs, the Jangan official selected, a

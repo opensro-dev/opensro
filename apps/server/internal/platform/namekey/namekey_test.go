@@ -17,6 +17,7 @@ package namekey
 
 import (
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -119,4 +120,75 @@ func BenchmarkLower(b *testing.B) {
 			sink = baselineKey("division", "TigerGirl")
 		}
 	})
+}
+
+/*
+================
+BenchmarkKeyHotSet
+
+BenchmarkKeyHotSet is the tick's shape of lookup (#3126): a small
+roster of online names composed again and again, from one lane and
+from every lane at once. The memo's read side takes no lock, so the
+parallel run must sit near the sequential one; when the memo guarded
+its hits with a mutex it read 20.9 ns/op sequential and 53.4 ns/op at
+16 threads on the 2026-11-11 workstation (Ryzen 7 6800HS, medians of
+three alternating runs).
+================
+*/
+func BenchmarkKeyHotSet(b *testing.B) {
+	names := []string{"TigerGirl", "xXShadowXx", "SteadyStateMixed", "DragonLord99", "already-lower"}
+	for _, name := range names {
+		_ = Key("division", name)
+	}
+	b.Run("sequential", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			sink = Key("division", names[i%len(names)])
+		}
+	})
+	b.Run("parallel", func(b *testing.B) {
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				sink = Key("division", names[i%len(names)])
+				i++
+			}
+		})
+	})
+}
+
+/*
+================
+TestKeyMemoConcurrentReaders
+
+The memo publishes a fresh snapshot per insert and never mutates one:
+readers racing the first-touch of new names must still read the exact
+composed bytes, and the race detector must stay silent (a snapshot
+mutated in place would trip it here).
+================
+*/
+func TestKeyMemoConcurrentReaders(t *testing.T) {
+	steady := []string{"TigerGirl", "xXShadowXx", "SteadyStateMixed", "DragonLord99"}
+	for _, name := range steady {
+		_ = Key("division", name)
+	}
+	var wg sync.WaitGroup
+	for worker := 0; worker < 8; worker++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			for i := 0; i < 2000; i++ {
+				name := steady[(worker+i)%len(steady)]
+				if i%97 == 0 {
+					name = "FreshName" + string(rune('A'+worker)) + string(rune('a'+i%26))
+				}
+				if got, want := Key("division", name), "division:"+strings.ToLower(name); got != want {
+					t.Errorf("Key(division, %q) = %q, want %q", name, got, want)
+					return
+				}
+			}
+		}(worker)
+	}
+	wg.Wait()
 }

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -31,6 +32,23 @@ petOwnerKey
 type petOwnerKey struct {
 	division, name string
 	gid            uint32
+}
+
+/*
+================
+petSessionEntry
+
+One row of the tick's session walk (orderedPetSessions): a session
+key and the session pointer the map held for it when the walk was
+built. The pointer is a capture, not a claim: advancePetInDivision
+revalidates it against the map under the division lock, so a forget
+or rebind since the build is judged on the live entry exactly as
+when the sweep fetched each pointer itself (#3126).
+================
+*/
+type petSessionEntry struct {
+	key   petOwnerKey
+	state *petSession
 }
 
 /*
@@ -96,6 +114,15 @@ type petSession struct {
 	// (simulation/tether.go); nil for every other companion state.
 	tether     *simulation.Tether
 	generation uint64
+	// The spawn row last published for this companion and the exact
+	// inputs it was derived from (companionPresentation): while they
+	// stand, the kept row and vitals are handed out again instead of
+	// re-deriving the speeds, the scale and the abnormal payload on
+	// every snapshot (#3100).
+	presentationPrimed      bool
+	presentationFingerprint companionRowFingerprint
+	presentationRow         wire.CosSpawnBand2
+	presentationVitals      []byte
 	// summonedAtMs marks a pet just called out of its item (not restored at
 	// entry): its first publication carries spawn sub-state 1.
 	summonedAtMs int64
@@ -269,13 +296,30 @@ so a walk already ranging the old list is never disturbed (#2033).
 Readiness is not membership: a session readies without a map write
 (bindPetSession readies the children in place), so advancePets
 still judges state.ready live at each visit.
+
+The same rebuild fills petSessionEntries with the pointer each key
+holds at build time; the two lists are one walk in two shapes and
+are only ever built and dropped together.
 ================
 */
 func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
+	rt.rebuildPetSessionWalkLocked()
+	return rt.petSessionKeys
+}
+
+/*
+================
+rebuildPetSessionWalkLocked
+
+Builds the cached walk (both shapes) if a membership writer dropped
+it. The caller holds petMu.
+================
+*/
+func (rt *Runtime) rebuildPetSessionWalkLocked() {
 	if rt.petSessionKeys != nil {
-		return rt.petSessionKeys
+		return
 	}
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
 	for key := range rt.petSessions {
@@ -292,8 +336,34 @@ func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 		}
 		return keys[i].gid < keys[j].gid
 	})
+	entries := make([]petSessionEntry, len(keys))
+	for i, key := range keys {
+		entries[i] = petSessionEntry{key: key, state: rt.petSessions[key]}
+	}
 	rt.petSessionKeys = keys
-	return keys
+	rt.petSessionEntries = entries
+}
+
+/*
+================
+orderedPetSessions
+
+The session walk as (key, session) pairs: the sweep judges the
+pointer captured at build time instead of re-hashing the owner's
+two-string key through petSessions for every pet on every tick
+(#3126). The capture can be a tick stale - a session bound since
+the build waits for the next rebuild exactly as it waited outside
+the key list, and a forget or rebind since the build is caught by
+advancePetInDivision's revalidation under the division lock, which
+judges the live entry. Readiness flips land on the same pointer,
+so the sweep still judges state.ready live.
+================
+*/
+func (rt *Runtime) orderedPetSessions() []petSessionEntry {
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	rt.rebuildPetSessionWalkLocked()
+	return rt.petSessionEntries
 }
 
 /*
@@ -305,14 +375,12 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	shieldFrames := rt.advancePetShields(nowMs)
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
-	for _, key := range rt.orderedPetSessionKeys() {
-		rt.petMu.Lock()
-		state := rt.petSessions[key]
-		rt.petMu.Unlock()
+	for _, entry := range rt.orderedPetSessions() {
+		key, state := entry.key, entry.state
 		if state == nil || !state.ready {
 			continue
 		}
-		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
+		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, state, nowMs)
 		if tether != nil {
 			if tethers == nil {
 				tethers = make(map[string]simulation.Tether)
@@ -344,15 +412,33 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 /*
 ================
 advancePetInDivision
+
+One session fetch serves the whole per-pet tick (#3126): the sweep
+hands in the state it already holds, and every lane below judges that
+pointer instead of re-hashing the owner's string key through
+petSessionFor. The entry under key cannot move while this runs - the
+division lock is held and every session bind/forget takes it too -
+and lanes only ever bind or retire child sessions, never this one.
+The sweep captured its pointer before this lock, though, so a forget
+and rebind in that gap still moves the entry: the capture is
+revalidated against the map once the lock is held, with the raw key
+(no fold, one map read). The key-only lane names stay for direct
+callers (tests): each fetches the session exactly as every lane once
+did for itself.
 ================
 */
-func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
+func (rt *Runtime) advancePetInDivision(key petOwnerKey, state *petSession, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	frames := rt.advanceCrowBrood(key, nowMs)
-	frames = append(frames, rt.advancePenguin(key, nowMs)...)
-	rt.advancePetGearFields(key, nowMs)
-	rt.advancePetGearPoison(key, nowMs)
+	rt.petMu.Lock()
+	if current := rt.petSessions[key]; current != state {
+		state = current
+	}
+	rt.petMu.Unlock()
+	frames := rt.advanceCrowBroodSession(key, state, nowMs)
+	frames = append(frames, rt.advancePenguinSession(key, state, nowMs)...)
+	rt.advancePetGearFieldsSession(key, state, nowMs)
+	rt.advancePetGearPoisonSession(key, state, nowMs)
 	// One facts capture, and at most one owner snapshot behind it,
 	// serve the tailwind, crow-kit, plume and wolf lanes (#2030):
 	// nothing between here and the wolf lane writes an owner record
@@ -362,22 +448,19 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	// before the spirit lane: it and the hunt lane judge fresh. The
 	// deferred clear is panic hygiene only; the explicit one below
 	// is the one the spirit lane's freshness rests on.
-	factsKey := rt.armElementalFacts(key, nowMs)
+	factsKey := rt.armElementalFactsSession(key, state, nowMs)
 	defer rt.clearElementalFacts(factsKey)
-	rt.advanceTailwind(key, nowMs)
-	rt.advanceCrowKit(key, nowMs)
-	rt.advanceCrowPlume(key, nowMs)
-	rt.resetWolfExecution(key, nowMs)
-	frames = append(frames, rt.advanceWolfKit(key, nowMs)...)
+	rt.advanceTailwindSession(key, state, nowMs)
+	rt.advanceCrowKitSession(key, state, nowMs)
+	rt.advanceCrowPlumeSession(key, state, nowMs)
+	rt.resetWolfExecutionSession(key, state, nowMs)
+	frames = append(frames, rt.advanceWolfKitSession(key, state, nowMs)...)
 	rt.clearElementalFacts(factsKey)
-	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
-	frames = append(frames, rt.advancePetBond(key, rt.petSessionFor(key.division, key.name, key.gid), nowMs)...)
-	frames = append(frames, rt.advancePetSatiety(key, nowMs)...)
-	frames = append(frames, rt.advancePetNaturalRecovery(key, nowMs)...)
-	frames = append(frames, rt.advancePet(key, nowMs)...)
-	rt.petMu.Lock()
-	state := rt.petSessions[key]
-	rt.petMu.Unlock()
+	frames = append(frames, rt.advancePetSpiritSession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetBond(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetSatietySession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetNaturalRecoverySession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetSession(key, state, nowMs)...)
 	if state == nil {
 		return 0, frames, nil, nil, nil, "", nil
 	}
@@ -435,12 +518,25 @@ func routePetPublicFrames(divisionID string, petGID uint32, ownerCharacterID int
 /*
 ================
 advancePet
+
+Key-only entry for direct callers: fetch the session, then judge it.
+The per-tick sweep enters through advancePetSession with the state it
+already holds (#3126).
 ================
 */
 func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation.Frame) {
 	rt.petMu.Lock()
 	state := rt.petSessions[key]
 	rt.petMu.Unlock()
+	return rt.advancePetSession(key, state, nowMs)
+}
+
+/*
+================
+advancePetSession
+================
+*/
+func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs int64) (output []simulation.Frame) {
 	if state == nil {
 		return nil
 	}
@@ -687,7 +783,7 @@ func (rt *Runtime) companionPresentations(division, name string) []*simulation.P
 	guildName := ""
 	if guildID != 0 {
 		if store := rt.deps.GuildAuthority(); store != nil {
-			if guild, _, found := store.Guild(division, guildID); found {
+			if guild, found := store.GuildRecord(division, guildID); found {
 				guildName = guild.Name
 			}
 		}
@@ -785,28 +881,103 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		}
 		world, revision = state.follower.Presentation()
 	}
-	name := cos.Name
-	if name == "" {
-		name = ref.Name
-	}
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
-	walk, run := rt.cosMovementSpeeds(ref, cos, block)
+	// The row is a pure function of these inputs: the cos record and
+	// its catalog row, the committed abnormal block (immutable, so
+	// its pointer names its contents), the owner's committed record
+	// (its CommitRevision moves with every store door) and the two
+	// time-window faces (the trained attack speed and the relocated
+	// sub-state). While they stand,
+	// the kept row is handed out again; the live faces of the
+	// presentation (world, revision, freshness) are filled per call
+	// below either way.
+	fingerprint := companionRowFingerprint{
+		cos:           cos,
+		ref:           ref,
+		block:         block,
+		gid:           cos.GID,
+		refObjID:      cos.RefObjID,
+		codename:      cos.Codename,
+		name:          cos.Name,
+		level:         cos.Level,
+		satiety:       cos.Satiety,
+		mercenary:     cos.MercenaryAttributes,
+		summons:       cos.SummonGeneration,
+		followRun:     cos.FollowRunFactor,
+		followRunSet:  cos.FollowRunSet,
+		ownerRevision: c.CommitRevision,
+		attackSpeed:   rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now}),
+		mounted:       cos.Mounted,
+		nativeStatus:  cos.NativeBodyStatus,
+		dead:          cos.CurrentHP == 0,
+		relocated:     state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs,
+	}
 	result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs ||
-			state.arrivedAtMs != 0 && now-state.arrivedAtMs <= petAppearWindowMs,
-		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
+			state.arrivedAtMs != 0 && now-state.arrivedAtMs <= petAppearWindowMs}
+	if state.presentationPrimed && state.presentationFingerprint == fingerprint {
+		result.Row = state.presentationRow
+		result.AbnormalVitals = append([]byte(nil), state.presentationVitals...)
+	} else {
+		name := cos.Name
+		if name == "" {
+			name = ref.Name
+		}
+		walk, run := rt.cosMovementSpeeds(ref, cos, block)
+		result.Row = wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
-			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
-	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
-		result.Row.State = 7
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(fingerprint.attackSpeed), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}
+		if fingerprint.relocated {
+			result.Row.State = 7
+		}
+		if block != nil && block.Mask != 0 {
+			result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
+		}
+		state.presentationPrimed = true
+		state.presentationFingerprint = fingerprint
+		state.presentationRow = result.Row
+		state.presentationVitals = append([]byte(nil), result.AbnormalVitals...)
 	}
-	if block != nil && block.Mask != 0 {
-		result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
-	}
-	if cos.CurrentHP == 0 {
+	if fingerprint.dead {
 		result.LifeState = wire.LifeStateDead
 	}
 	return result
+}
+
+/*
+================
+companionRowFingerprint
+
+Everything one published companion spawn row is a pure function of:
+the cos record (pointer and the fields the row or its derivation
+reads), its catalog row, the committed abnormal block (immutable
+after publication, so the pointer names its contents), the owner's
+commit revision (the store bumps it on every committed write, so a
+suit, an alias or a pet change re-derives), the trained attack speed
+for this instant, and the relocated appearance window. Nothing here
+allocates; the compare is plain value equality.
+================
+*/
+type companionRowFingerprint struct {
+	cos           *enterworld.CharacterCOS
+	ref           *enterworld.CharacterRef
+	block         *abnormal.Block
+	gid           uint32
+	refObjID      uint32
+	codename      string
+	name          string
+	level         uint8
+	satiety       uint16
+	mercenary     uint8
+	summons       uint64
+	followRun     float32
+	ownerRevision uint64
+	attackSpeed   float64
+	mounted       bool
+	nativeStatus  uint8
+	dead          bool
+	followRunSet  bool
+	relocated     bool
 }
 
 // Called inside the summon transaction, with the division operation lock held.
@@ -1047,19 +1218,34 @@ func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int6
 	if owner == nil {
 		return nil
 	}
+	// One character door for the whole gather (#3027): the walk and
+	// every pet's record read share one hold, instead of a fresh door
+	// per pet as before. The reads are the same ones - the presented
+	// pets, then CompanionByGID per pet with its duplicate refusal -
+	// so the answer is unchanged, taken at one hold instead of many.
+	// The guild name companionPresentations resolves for spawn rows
+	// is not read here and is not paid for.
+	var pets []*simulation.PeerCOS
+	var records []enterworld.CharacterCOS
+	rt.deps.Read(division, func() {
+		pets, _ = rt.companionPresentationsInDoor(division, owner.Name)
+		if len(pets) == 0 {
+			return
+		}
+		records = make([]enterworld.CharacterCOS, len(pets))
+		for i, pet := range pets {
+			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
+				records[i] = *live
+			}
+		}
+	})
 	var out []simulation.CompanionTarget
-	for _, pet := range rt.companionPresentations(division, owner.Name) {
+	for i, pet := range pets {
 		// Natively a grab pet (slot 0x43C) is never a hostile target.
 		if pet.Mounted || pet.LifeState == wire.LifeStateDead || pet.Row.Band == domain.PickupPetBand {
 			continue
 		}
-		var record enterworld.CharacterCOS
-		rt.deps.Read(division, func() {
-			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
-				record = *live
-			}
-		})
-		ref, found := rt.cosReference(&record)
+		ref, found := rt.cosReference(&records[i])
 		if !found {
 			continue
 		}

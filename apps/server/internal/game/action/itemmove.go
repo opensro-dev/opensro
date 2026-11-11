@@ -321,7 +321,10 @@ monster capsules (TID3 2) are the one exemption, a capsule exists to
 be set down - and a row whose authored CanDrop bit is clear is kept;
 the quest items are the visible mass of the second bar. Either bar
 answers the indisposable refusal (01:38); the native routine checks
-the family first, then the bit.
+the family first, then the bit. Trade goods (TID 3/3/8, CanDrop
+clear) are barred like the rest: they live in a transport's cargo
+and never enter the personal bag (costransfer.go, #3144), so no
+bag-held row needs a disposal exemption here.
 ================
 */
 func groundDropBarred(ref *enterworld.ItemRef) bool {

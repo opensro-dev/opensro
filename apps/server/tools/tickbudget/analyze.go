@@ -38,9 +38,15 @@ const (
 	// childTolerance is float dust for the children-vs-parent check:
 	// children are sub-spans of the parent measured on the same
 	// clock, so any real excess is a ledger bug, not noise.
-	childTolerance   = 0.001
-	topFramesPerZone = 3
-	topFuncsOverall  = 15
+	childTolerance = 0.001
+	// hooksChildTolerance is the one wider allowance: each hook is
+	// timed by its own span inside phase:hooks, so the hooks' sum
+	// legitimately exceeds the parent by the per-hook timer overhead
+	// (a few percent across dozens of hooks). Only the phase:hooks
+	// breach uses it (#3103).
+	hooksChildTolerance = 0.03
+	topFramesPerZone    = 3
+	topFuncsOverall     = 15
 )
 
 /*
@@ -127,6 +133,7 @@ type budget struct {
 		RunningMsPerTick  float64 `json:"running_ms_per_tick"`
 		RunnableMsPerTick float64 `json:"runnable_ms_per_tick"`
 		BlockedMsPerTick  float64 `json:"blocked_ms_per_tick"`
+		IdleMsPerTick     float64 `json:"idle_ms_per_tick"`
 	} `json:"trace,omitempty"`
 }
 
@@ -365,15 +372,18 @@ func reconcile(m *measurements) []check {
 		checks = append(checks, skip(name, "needs both an execution trace and tick_zones in the window"))
 	}
 
-	// (c) profile CPU vs trace running.
+	// (c) profile CPU vs trace running: both sides are the tick
+	// goroutines. The rest of the process (session loops, store lanes,
+	// the collector) is reported beside it, never compared.
 	name = "profile CPU vs trace running"
 	if m.cpu != nil && m.trace != nil && m.cpuTicks > 0 && m.traceTick > 0 {
-		cpuPerTick := m.cpu.totalMs() / float64(m.cpuTicks)
+		cpuPerTick := m.cpu.tickMs() / float64(m.cpuTicks)
+		offTick := (m.cpu.totalMs() - m.cpu.tickMs()) / float64(m.cpuTicks)
 		tracePerTick := m.trace.runningMs() / float64(m.traceTick)
 		if within(cpuPerTick, tracePerTick, crossTolerance) {
-			checks = append(checks, pass(name, "CPU profile %.3f ms/tick vs trace running %.3f ms/tick (within %.0f%%)", cpuPerTick, tracePerTick, crossTolerance*100))
+			checks = append(checks, pass(name, "CPU profile on the tick goroutines %.3f ms/tick vs trace running %.3f ms/tick (within %.0f%%); the rest of the process used %.3f ms/tick", cpuPerTick, tracePerTick, crossTolerance*100, offTick))
 		} else {
-			checks = append(checks, fail(name, "CPU profile measured %.3f ms/tick of CPU but the execution trace ran the tick goroutines %.3f ms/tick (tolerance %.0f%%) - one of the two is being misread", cpuPerTick, tracePerTick, crossTolerance*100))
+			checks = append(checks, fail(name, "CPU profile measured %.3f ms/tick of CPU on the tick goroutines but the execution trace ran them %.3f ms/tick (tolerance %.0f%%) - one of the two is being misread", cpuPerTick, tracePerTick, crossTolerance*100))
 		}
 	} else {
 		checks = append(checks, skip(name, "needs both a CPU profile and an execution trace"))
@@ -382,8 +392,8 @@ func reconcile(m *measurements) []check {
 	// (d) runnable and blocked, reported with their top stacks.
 	name = "runnable and blocked (trace report)"
 	if m.trace != nil && m.traceTick > 0 {
-		checks = append(checks, pass(name, "tick goroutines: runnable %.3f ms/tick, blocked %.3f ms/tick over %d ticks (%d tick goroutines)",
-			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.traceTick, m.trace.Goroutines))
+		checks = append(checks, pass(name, "tick goroutines: runnable %.3f ms/tick, blocked %.3f ms/tick over %d ticks (%d tick goroutines; the wait between ticks, %.3f ms/tick, is not counted as blocked)",
+			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.traceTick, m.trace.Goroutines, m.trace.IdleMs/float64(m.traceTick)))
 	} else {
 		checks = append(checks, skip(name, "no execution trace in the capture"))
 	}
@@ -392,10 +402,10 @@ func reconcile(m *measurements) []check {
 	name = "children within parents (metrics zones)"
 	if len(zones) > 0 {
 		var breaches []string
-		breach := func(parent string, parentMs float64, children []string) {
+		breach := func(parent string, parentMs float64, children []string, tolerance float64) {
 			sum := sumKeys(zones, children)
-			if sum > parentMs*(1+childTolerance) {
-				breaches = append(breaches, fmt.Sprintf("children of %s sum to %.3f ms/tick, above the parent's %.3f ms/tick", parent, sum, parentMs))
+			if sum > parentMs*(1+tolerance) {
+				breaches = append(breaches, fmt.Sprintf("children of %s sum to %.3f ms/tick, above the parent's %.3f ms/tick (tolerance %.0f%%)", parent, sum, parentMs, tolerance*100))
 			}
 		}
 		if total, ok := zones["phase:total"]; ok {
@@ -405,18 +415,18 @@ func reconcile(m *measurements) []check {
 					phases = append(phases, key)
 				}
 			}
-			breach("phase:total", total, phases)
+			breach("phase:total", total, phases, childTolerance)
 		}
 		if divisions, ok := zones["phase:divisions"]; ok {
-			breach("phase:divisions", divisions, sortedZoneKeys(zones, "division"))
-			breach("the divisions (sub-steps)", sumKeys(zones, sortedZoneKeys(zones, "division")), sortedZoneKeys(zones, "sub"))
+			breach("phase:divisions", divisions, sortedZoneKeys(zones, "division"), childTolerance)
+			breach("the divisions (sub-steps)", sumKeys(zones, sortedZoneKeys(zones, "division")), sortedZoneKeys(zones, "sub"), childTolerance)
 		}
 		if hooks, ok := zones["phase:hooks"]; ok {
-			breach("phase:hooks", hooks, sortedZoneKeys(zones, "hook"))
-			breach("the hooks (steps)", sumKeys(zones, sortedZoneKeys(zones, "hook")), sortedZoneKeys(zones, "step"))
+			breach("phase:hooks", hooks, sortedZoneKeys(zones, "hook"), hooksChildTolerance)
+			breach("the hooks (steps)", sumKeys(zones, sortedZoneKeys(zones, "hook")), sortedZoneKeys(zones, "step"), childTolerance)
 		}
 		if len(breaches) == 0 {
-			checks = append(checks, pass(name, "every container's children fit inside it"))
+			checks = append(checks, pass(name, "every container's children fit inside it (phase:hooks children allowed %.0f%% over for per-hook timer overhead)", hooksChildTolerance*100))
 		} else {
 			checks = append(checks, fail(name, "metrics zones disagree with themselves: %s", strings.Join(breaches, "; ")))
 		}
@@ -541,8 +551,11 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 		fmt.Fprintln(w)
 	}
 
+	printLegCensus(w, m.overall)
+
 	if m.cpu != nil {
-		fmt.Fprintf(w, "cpu profile: %.1f ms over %d samples = %.3f ms/tick (cpu window)\n", m.cpu.totalMs(), m.cpu.samples, m.cpu.totalMs()/float64(m.cpuTicks))
+		fmt.Fprintf(w, "cpu profile: %.1f ms over %d samples = %.3f ms/tick whole process, %.3f ms/tick on the tick goroutines (cpu window)\n",
+			m.cpu.totalMs(), m.cpu.samples, m.cpu.totalMs()/float64(m.cpuTicks), m.cpu.tickMs()/float64(m.cpuTicks))
 		fmt.Fprintln(w, "top cumulative functions (no node dropping):")
 		for _, ft := range m.cpu.topFuncs(topFuncsOverall) {
 			fmt.Fprintf(w, "  %9.3f ms/tick  %s\n", ft.Ms/float64(m.cpuTicks), ft.Func)
@@ -572,9 +585,9 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 	}
 
 	if m.trace != nil {
-		fmt.Fprintf(w, "trace: %d tick goroutines over %.1f ms: running %.3f ms/tick, runnable %.3f ms/tick, blocked %.3f ms/tick\n",
+		fmt.Fprintf(w, "trace: %d tick goroutines over %.1f ms: running %.3f ms/tick, runnable %.3f ms/tick, blocked %.3f ms/tick, waiting between ticks %.3f ms/tick\n",
 			m.trace.Goroutines, m.trace.DurationMs, m.trace.runningMs()/float64(m.traceTick),
-			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick))
+			m.trace.RunnableMs/float64(m.traceTick), m.trace.BlockedMs/float64(m.traceTick), m.trace.IdleMs/float64(m.traceTick))
 		if len(m.trace.topBlocking) > 0 {
 			fmt.Fprintln(w, "top blocking stacks (transitions into waiting):")
 			for _, sc := range m.trace.topBlocking {
@@ -635,8 +648,10 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 			RunningMsPerTick  float64 `json:"running_ms_per_tick"`
 			RunnableMsPerTick float64 `json:"runnable_ms_per_tick"`
 			BlockedMsPerTick  float64 `json:"blocked_ms_per_tick"`
+			IdleMsPerTick     float64 `json:"idle_ms_per_tick"`
 		}{Goroutines: m.trace.Goroutines, RunningMsPerTick: m.trace.runningMs() / float64(m.traceTick),
-			RunnableMsPerTick: m.trace.RunnableMs / float64(m.traceTick), BlockedMsPerTick: m.trace.BlockedMs / float64(m.traceTick)}
+			RunnableMsPerTick: m.trace.RunnableMs / float64(m.traceTick), BlockedMsPerTick: m.trace.BlockedMs / float64(m.traceTick),
+			IdleMsPerTick: m.trace.IdleMs / float64(m.traceTick)}
 	}
 
 	if len(targets) > 0 {
@@ -672,4 +687,69 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 		fmt.Fprintf(w, "%d BLIND SPOT line(s) above: the sources disagree and the tool does not pick a winner.\n", blindSpots)
 	}
 	return blindSpots, nil
+}
+
+/*
+================
+printLegCensus
+
+The monster leg's window read (#3119): actors dispatched, steps and
+settled re-checks per tick, the rest guards as shares of the window's
+steps, and the steps split by the mode each step read. A capture from
+before the monster_leg block existed prints nothing here - the census
+was not recorded, and silence says so.
+================
+*/
+func printLegCensus(w io.Writer, win window) {
+	if len(win.LegDeltas) == 0 || win.Ticks <= 0 {
+		return
+	}
+	ticks := float64(win.Ticks)
+	steps := win.LegDeltas["steps"]
+	fmt.Fprintln(w, "monster leg (window deltas per tick):")
+	fmt.Fprintf(w, "  actors dispatched %.2f/tick, steps %.2f/tick, re-checks settled %.2f/tick\n",
+		float64(win.LegDeltas["actors"])/ticks, float64(steps)/ticks, float64(win.LegDeltas["rechecked"])/ticks)
+	if steps == 0 {
+		fmt.Fprintln(w)
+		return
+	}
+	var guards []string
+	for key := range win.LegDeltas {
+		if name, ok := strings.CutPrefix(key, "rest."); ok {
+			guards = append(guards, name)
+		}
+	}
+	sort.Slice(guards, func(i, j int) bool {
+		left, right := win.LegDeltas["rest."+guards[i]], win.LegDeltas["rest."+guards[j]]
+		if left != right {
+			return left > right
+		}
+		return guards[i] < guards[j]
+	})
+	if len(guards) > 0 {
+		parts := make([]string, 0, len(guards))
+		for _, guard := range guards {
+			parts = append(parts, fmt.Sprintf("%s %.1f%%", guard, 100*float64(win.LegDeltas["rest."+guard])/float64(steps)))
+		}
+		fmt.Fprintf(w, "  rest guards (share of steps): %s\n", strings.Join(parts, ", "))
+	}
+	modes := []string{"idle", "wandering", "chasing", "attacking", "returning", "pending", "other"}
+	seen := make(map[string]bool, len(modes))
+	parts := make([]string, 0, len(modes)+2)
+	for _, mode := range modes {
+		seen[mode] = true
+		parts = append(parts, fmt.Sprintf("%s %.2f", mode, float64(win.LegDeltas["mode."+mode])/ticks))
+	}
+	var extra []string
+	for key := range win.LegDeltas {
+		if name, ok := strings.CutPrefix(key, "mode."); ok && !seen[name] {
+			extra = append(extra, name)
+		}
+	}
+	sort.Strings(extra)
+	for _, mode := range extra {
+		parts = append(parts, fmt.Sprintf("%s %.2f", mode, float64(win.LegDeltas["mode."+mode])/ticks))
+	}
+	fmt.Fprintf(w, "  steps by mode (per tick): %s\n", strings.Join(parts, ", "))
+	fmt.Fprintln(w)
 }

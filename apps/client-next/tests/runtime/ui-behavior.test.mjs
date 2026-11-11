@@ -4078,6 +4078,49 @@ test("avatar attachment admission requires a dress and split modal retires on di
 	}
 });
 
+test("avatar equip onto a worn class refuses with the native notice on every gesture", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0xeac, quantity: 1 } ],
+			avatarInventory: [ { slot: 0, refObjId: 2, typeFlags: 0xeac, quantity: 1 } ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), false );
+		// Right-click (double-activate): 594980 refuses a worn class with
+		// UIIT_MSG_STRGERR_EQUIPITEM and sends no move; it never swaps.
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		for ( let k = 0; k < 6; k++ ) f.ui.step( state, now += 100 );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), true );
+		// The avatar button: select the bag slot, then press the class button.
+		f.ui.event( { kind: "activate", id: "equipment-view" } );
+		const scene = f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "avatar:1" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		// The drag: carry the bag hat onto the avatar panel.
+		const dest = scene.controls.find( c => c.id === "avatar:1" ).rect;
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 36, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x: dest[0] + 16, y: dest[1] + 16 } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), true );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("ground names are hover or hold-only, use gold amount, and invalidate retained UI on release", () => {
 	const f = uiFixture();
 	try {

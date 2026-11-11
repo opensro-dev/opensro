@@ -195,6 +195,10 @@ type Metrics struct {
 	// MonsterNavigation is the world's route-plan and path-clip counters
 	// (simulation.NavigationMetrics), when the GameWorld installed them.
 	MonsterNavigation map[string]uint64 `json:"monster_navigation,omitempty"`
+	// MonsterLeg is the monster leg's census - legs, actors, steps by
+	// mover mode, rest guards (simulation.NavigationMetrics.LegSnapshot,
+	// #3119) - when the GameWorld installed it.
+	MonsterLeg map[string]uint64 `json:"monster_leg,omitempty"`
 	// Economy is the gold committed since start, per ledger reason and
 	// direction ("gold.<reason>.gain" / ".loss"; store/economy_ledger.go).
 	Economy map[string]uint64 `json:"economy,omitempty"`
@@ -219,6 +223,41 @@ type Metrics struct {
 
 /*
 ==================
+metricsProviders
+
+Who supplies each published metrics block: one provider per block,
+installed by its Set*Metrics call below and read by Metrics(). It
+lives here, with the setters and the document, instead of widening
+the Hub struct in hub.go; the Hub embeds it, so accesses keep the
+provider's name. A nil provider publishes no block.
+==================
+*/
+type metricsProviders struct {
+	// navigationMetrics reads the world's monster navigation counters
+	// (SetNavigationMetrics).
+	navigationMetrics atomic.Pointer[func() map[string]uint64]
+	// monsterLegMetrics reads the world's monster leg census
+	// (SetMonsterLegMetrics, #3119).
+	monsterLegMetrics atomic.Pointer[func() map[string]uint64]
+	// economyMetrics reads the store's committed gold per reason
+	// (SetEconomyMetrics).
+	economyMetrics atomic.Pointer[func() map[string]uint64]
+	// petCombatMetrics reads the attack pets' ended-target counters
+	// (SetPetCombatMetrics).
+	petCombatMetrics atomic.Pointer[func() map[string]uint64]
+	// placementMetrics reads the placement guard's counters
+	// (SetPlacementMetrics).
+	placementMetrics atomic.Pointer[func() map[string]uint64]
+	// storeLockMetrics reads the authority lock's waits, holds and commit
+	// phases (SetStoreLockMetrics).
+	storeLockMetrics atomic.Pointer[func() any]
+	// tickZoneMetrics reads the simulation's exact per-zone tick totals
+	// (SetTickZoneMetrics, #2824).
+	tickZoneMetrics atomic.Pointer[func() map[string]TickZone]
+}
+
+/*
+==================
 SetNavigationMetrics
 
 Installs the provider of the monster_navigation block. The transport only
@@ -227,6 +266,18 @@ reads its counters; it never imports the world that counts them.
 */
 func (h *Hub) SetNavigationMetrics(read func() map[string]uint64) {
 	h.navigationMetrics.Store(&read)
+}
+
+/*
+==================
+SetMonsterLegMetrics
+
+Installs the provider of the monster_leg block, as SetNavigationMetrics
+does for its own: the transport never imports the world that counts.
+==================
+*/
+func (h *Hub) SetMonsterLegMetrics(read func() map[string]uint64) {
+	h.monsterLegMetrics.Store(&read)
 }
 
 /*
@@ -396,6 +447,9 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
 		metrics.MonsterNavigation = (*read)()
+	}
+	if read := h.monsterLegMetrics.Load(); read != nil && *read != nil {
+		metrics.MonsterLeg = (*read)()
 	}
 	if read := h.economyMetrics.Load(); read != nil && *read != nil {
 		metrics.Economy = (*read)()

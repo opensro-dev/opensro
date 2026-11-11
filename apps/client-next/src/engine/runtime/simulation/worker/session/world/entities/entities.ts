@@ -373,8 +373,13 @@ export function createEntities(
 			pendingGameplay = { index: events.length - 1, size };
 			return;
 		}
-		const state = mergeGameplaySnapshots( queued.state, event.state );
-		const merged: WorldEvent = { kind: "gameplay", state }, size = snapshotCost( merged );
+		// Two deltas merge into a delta; a whole snapshot on either side makes
+		// the merged publication whole.
+		const state = mergeGameplaySnapshots( queued.state, event.state, event.delta );
+		const merged: Extract<WorldEvent, { kind: "gameplay"; }> = queued.delta && event.delta ?
+			{ kind: "gameplay", state, delta: true } :
+			{ kind: "gameplay", state };
+		const size = snapshotCost( merged );
 		const nextBytes = bytes - pendingGameplay.size + size;
 		if ( nextBytes + stagedBytes > journalByteLimit ) {
 			// The merged snapshot alone outgrows the queue behind a stalled
@@ -2012,6 +2017,9 @@ export function createEntities(
 		// How many queues compaction dropped into a resync (dropQueuedJournal):
 		// the world core republishes the gameplay catalogue when this moves.
 		resyncs: () => resyncs,
+		// The world publication's epoch: every reset starts a new one, and the
+		// reader on the other side drops its gameplay state with it.
+		epoch: () => epoch,
 		// Port-only (#1640): the Experimental Sun drop marker row, applied
 		// to the drops already on the ground and to every later one.
 		sunDropMarker( enabled: boolean ) {

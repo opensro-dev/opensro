@@ -224,6 +224,31 @@ test("both bars bind live references across all 51 slots without moving or grant
 	assert.deepEqual( state.skills, [ 7 ] );
 	assert.equal( state.inventory[0].slot, 13 );
 });
+/*
+================
+petCommandDragBindsKind25
+
+A pet command dragged from the COS command bar mints the kind 0x25
+binding the native dispatch (572770 case 0) executes: payload is the
+bare command id (INFO 0 .. STANCE 6). Anything outside the command set
+mints nothing. Pressing the slot is the UI's executeCosCommand path,
+which is why quickSlotCommand stays null for the kind (pinned above).
+================
+*/
+test("pet command bar drags mint kind 0x25 bindings; ids outside the command set mint nothing", () => {
+	const state = { skills: [], inventory: [], quickSlots: [] };
+	for ( let slot = 0; slot < 51; slot++ ) {
+		assert.deepEqual( quickSlotDrag( "cos-command:2", slot, state ), { slot, kind: 0x25, payload: 2 } );
+	}
+	assert.deepEqual( quickSlotDrag( "cos-command:0", 50, state ), { slot: 50, kind: 0x25, payload: 0 } );
+	assert.deepEqual( quickSlotDrag( "cos-command:3", 50, state ), { slot: 50, kind: 0x25, payload: 3 } );
+	assert.deepEqual( quickSlotDrag( "cos-command:6", 50, state ), { slot: 50, kind: 0x25, payload: 6 } );
+	assert.equal( quickSlotDrag( "cos-command:7", 50, state ), null );
+	assert.equal( quickSlotDrag( "cos-command:-1", 50, state ), null );
+	assert.equal( quickSlotDrag( "cos-command:2.5", 50, state ), null );
+	assert.equal( quickSlotDrag( "cos-command:x", 50, state ), null );
+	assert.equal( quickSlotDrag( "cos-command:", 50, state ), null );
+});
 test("mastery UI prices current level and preserves the free first train at zero SP", () => {
 	const costs = masteryCosts( {
 			"1": { masteryTrainSpCost: 1 },

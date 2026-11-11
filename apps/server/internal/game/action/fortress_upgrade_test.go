@@ -58,6 +58,25 @@ func (g upgradeGuilds) Guild(division string, id int64) (domain.GuildRecord, []d
 
 /*
 ================
+upgradeGuilds.GuildRecord
+
+The record door must apply the same live-GP override Guild does
+(#3126): guildPointsOf reads a guild's spendable points through it,
+and the promoted fortressGuilds door would answer the seeded GP the
+fixture has since spent.
+================
+*/
+func (g upgradeGuilds) GuildRecord(division string, id int64) (domain.GuildRecord, bool) {
+	record, ok := g.fortressGuilds.GuildRecord(division, id)
+	if !ok {
+		return domain.GuildRecord{}, false
+	}
+	record.GP = *g.gp
+	return record, true
+}
+
+/*
+================
 upgradeGuilds.UpdateGuildAs
 ================
 */

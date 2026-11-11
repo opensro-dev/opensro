@@ -8,7 +8,9 @@ keep talking to an updated server with outdated code, so this owner asks
 the asset worker for the entry bundle the live page names (fetched
 no-cache) and compares it with the one this page loaded. A different entry
 means a newer release is live; the platform then offers a refresh. Nothing
-reloads on its own: that would drop a player mid-session.
+reloads on its own: that would drop a player mid-session. The check also
+compares the live packs manifest with this page's: a data publish keeps
+the entry bundle, so only the manifest shows it moved (#3104).
 
 It checks when a trigger arrives (the title screen opens, the connection
 drops, the tab becomes visible again), no more than once per
@@ -59,7 +61,10 @@ export function createReleaseWatch( assets: AssetOwner, pageUrl: string, running
 				if ( !result ) return;
 				job = null;
 				// An error (offline, a 5xx) is simply retried at the next check.
-				if ( result.kind === "release" && result.entry !== null && result.entry !== runningEntry ) newer = true;
+				if (
+					result.kind === "release" &&
+					(result.entry !== null && result.entry !== runningEntry || result.packsChanged === true)
+				) newer = true;
 				return;
 			}
 			// A stale file means the scene in hand cannot finish: check now.

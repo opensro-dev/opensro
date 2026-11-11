@@ -11,7 +11,10 @@ package party_test
 // same session re-enters the same character and keeps its membership.
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,6 +140,38 @@ func TestPartyResumeKeepsMembership(t *testing.T) {
 	sendFrame(t, connB2, transport.OpBye, []byte{transport.ByeReasonNormal})
 }
 
+// admissionTokens holds the admission token each socket greeted with,
+// so a socket resuming an earlier session re-presents that player's
+// token (its account identity) instead of minting a new player.
+var (
+	admissionTokensMu sync.Mutex
+	admissionTokens   = map[*websocket.Conn][]byte{}
+	admissionSeq      atomic.Int64
+)
+
+/*
+================
+admissionTokenFor
+
+The admission token a greeting socket presents: the resumed socket
+(old non-nil) re-presents the token its predecessor greeted with; a
+fresh socket mints a new player's token.
+================
+*/
+func admissionTokenFor(c *websocket.Conn, old *websocket.Conn) []byte {
+	admissionTokensMu.Lock()
+	defer admissionTokensMu.Unlock()
+	if old != nil {
+		if token, ok := admissionTokens[old]; ok {
+			admissionTokens[c] = token
+			return token
+		}
+	}
+	token := []byte(fmt.Sprintf("test-admission-%d", admissionSeq.Add(1)))
+	admissionTokens[c] = token
+	return token
+}
+
 /*
 ================
 helloResumeWS
@@ -147,7 +182,7 @@ client read); old nil sends a fresh HELLO.
 */
 func helloResumeWS(t *testing.T, c *websocket.Conn, resumeToken []byte, old *websocket.Conn) transport.Welcome {
 	t.Helper()
-	hello := transport.Hello{ResumeToken: resumeToken, AdmissionToken: []byte("test-admission")}
+	hello := transport.Hello{ResumeToken: resumeToken, AdmissionToken: admissionTokenFor(c, old)}
 	if old != nil {
 		hello.HasPosition, hello.LastApplied = true, wiretest.StreamPosition(old)
 	}

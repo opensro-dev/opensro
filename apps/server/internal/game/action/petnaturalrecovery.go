@@ -86,6 +86,15 @@ func (rt *Runtime) advancePetNaturalRecovery(key petOwnerKey, nowMs int64) []sim
 	rt.petMu.Lock()
 	petState := rt.petSessions[key]
 	rt.petMu.Unlock()
+	return rt.advancePetNaturalRecoverySession(key, petState, nowMs)
+}
+
+/*
+================
+advancePetNaturalRecoverySession
+================
+*/
+func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *petSession, nowMs int64) []simulation.Frame {
 	if petState == nil || petState.character == nil ||
 		petState.naturalRecoveryAtMs == 0 || nowMs < petState.naturalRecoveryAtMs {
 		return nil

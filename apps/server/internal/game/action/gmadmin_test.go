@@ -47,6 +47,44 @@ func (g oneGuild) Guild(_ string, id int64) (enterworld.GuildRecord, []enterworl
 
 /*
 ================
+oneGuild.GuildRecord
+
+Bootstrap resolves a mercenary's guild name through the record door
+(#3126); before it, that name came through Guild and this fake's
+embedded nil interface was never reached. The door answers exactly
+what the fake's Guild answers, so it is defined here rather than
+promoted from the nil embed.
+================
+*/
+func (g oneGuild) GuildRecord(division string, id int64) (enterworld.GuildRecord, bool) {
+	record, _, ok := g.Guild(division, id)
+	return record, ok
+}
+
+/*
+================
+oneGuild.GuildMember
+
+One member's view out of the same rows the fake's Guild builds; the
+fake's rows carry names only, so a member resolves by the row's
+CharID exactly as the stored member set would answer.
+================
+*/
+func (g oneGuild) GuildMember(division string, id int64, characterID int64) (enterworld.GuildMemberRecord, bool) {
+	_, rows, ok := g.Guild(division, id)
+	if !ok {
+		return enterworld.GuildMemberRecord{}, false
+	}
+	for _, row := range rows {
+		if row.CharID == characterID {
+			return row, true
+		}
+	}
+	return enterworld.GuildMemberRecord{}, false
+}
+
+/*
+================
 TestWorldStatusCountsTheDivision
 
 Players are the admitted ones; others are the resident monsters and the

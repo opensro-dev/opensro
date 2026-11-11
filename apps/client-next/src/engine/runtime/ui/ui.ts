@@ -2673,6 +2673,11 @@ export function createUi( ports: UiPorts ) {
 	/*
 	================
 	moveAvatar
+
+	An equip onto a class that is already worn is refused with the native
+	notice, never swapped and never silent: CIFEquipment_
+	DispatchItemDropAction @594980 checks the class slot control's occupied
+	byte and posts UIIT_MSG_STRGERR_EQUIPITEM as a system message.
 	================
 	*/
 	function moveAvatar( equip: boolean, source: number, destination?: number ) {
@@ -2683,10 +2688,11 @@ export function createUi( ports: UiPorts ) {
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || (item.typeFlags & 0x7fe) !== 0x6ac ) return;
 		if ( equip ) {
-			if (
-				avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ||
-				item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 )
-			) return;
+			if ( avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ) {
+				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
+				return;
+			}
+			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) return;
 			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
@@ -11099,6 +11105,10 @@ export function createUi( ports: UiPorts ) {
 							rect: row.slot,
 							kind: "button",
 							rightActivate: true,
+							// Dragging a command onto the hotbar binds kind 0x25
+							// with this command id (quickSlotDrag); the press
+							// dispatches it through executeCosCommand.
+							draggable: true,
 							disabled: !cosCommandEnabled( command, context )
 						} );
 					} );
@@ -13673,12 +13683,19 @@ export function createUi( ports: UiPorts ) {
 						undefined;
 					const petAvailable = !!(petDesign && binding && game &&
 						quickSlotCommand( binding, game ));
+					// A kind 0x25 binding wears the command bar's own icon and
+					// label (cos-command.ts), greyed while the command is off.
+					const petCommand = binding?.kind === 0x25 ? binding.payload : undefined,
+						petContext = petCommand !== undefined ? cosCommandContext() : undefined,
+						petLabel = petCommand !== undefined ? cosCommandLabel( petCommand, petContext! ) : "";
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
 						(item.name ?? String( item.refObjId )) + " x" + item.quantity :
 						petDesign ?
 						petDesign.name :
+						petLabel ?
+						hudCopy( petLabel ) :
 						action ?
 						hudCopy( action.name ) :
 						binding?.kind === 0x4e ?
@@ -13697,6 +13714,8 @@ export function createUi( ports: UiPorts ) {
 					blocks.push( r );
 					const icon = petDesign ?
 						petSkillIcon( petDesign ) :
+						petCommand !== undefined ?
+						cosCommandIcon( petCommand, petContext! ) :
 						iconPath( skill?.icon ?? item?.icon ?? action?.icon );
 					// A held press outlines the slot; a denied one shakes and tints it.
 					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
@@ -24652,8 +24671,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && crestRegisterAsk ) {
 				// 52F460 types 0x15/0x18 (#2282): the register box's own
 				// title and its USER_CREST/FILE/FOLDER instruction lines.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				const registerKeys = crestRegisterKeys( crestRegisterAsk.kind );
 				simpleMessageBox( {
 					title: hudCopy( registerKeys.title ),

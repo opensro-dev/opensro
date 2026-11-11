@@ -32,7 +32,7 @@ func (rt *Runtime) HandleAlchemyProcess(division string, character *enterworld.C
 		return nil
 	}
 	if r.Mode == 3 {
-		frames, _ := rt.commitAlchemyProcess(character, op, r, nil)
+		frames, _ := rt.commitAlchemyProcess(character, op, r, nil, rt.handlerDoors())
 		return frames
 	}
 	snapshot := character.Snapshot()
@@ -41,7 +41,7 @@ func (rt *Runtime) HandleAlchemyProcess(division string, character *enterworld.C
 	if err != nil {
 		return alchemyFailure(op, err)
 	}
-	frames, committed := rt.commitAlchemyProcess(character, op, steps[0], nil)
+	frames, committed := rt.commitAlchemyProcess(character, op, steps[0], nil, rt.handlerDoors())
 	if committed && len(steps) > 1 {
 		rt.storeCompoundJob(key, compoundJob{character: character, steps: steps[1:], expected: compoundExpected(before, steps[1:]), lastMs: rt.Now().UnixMilli()})
 	}
@@ -49,10 +49,12 @@ func (rt *Runtime) HandleAlchemyProcess(division string, character *enterworld.C
 }
 
 // Caller holds the division lock. Each native batch step has one durable commit.
-func (rt *Runtime) commitAlchemyProcess(character *enterworld.Character, op uint16, r alchemy.ProcessRequest, expected map[uint8]inventory.Item) ([]wire.Frame, bool) {
+// The lane chooses the commit timing (doors): the handler's first step
+// answers from its commit, the tick's later steps join the tick batch.
+func (rt *Runtime) commitAlchemyProcess(character *enterworld.Character, op uint16, r alchemy.ProcessRequest, expected map[uint8]inventory.Item, doors characterDoors) ([]wire.Frame, bool) {
 	var frames []wire.Frame
 	var err error
-	committed := rt.deps.Update(character, "alchemy-process", func() bool {
+	committed := doors.update(character, "alchemy-process", func() bool {
 		if character.DeletePending || enterworld.CurrentHP(character) <= 0 {
 			return false
 		}

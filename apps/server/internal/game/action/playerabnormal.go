@@ -828,7 +828,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 			if killer != nil {
 				var actor, public []wire.Frame
 				var after jobKillPayout
-				if !rt.deps.Update(killer, "player-abnormal-kill", func() bool {
+				if !rt.deps.UpdateDeferred(killer, "player-abnormal-kill", func() bool {
 					actor, public, after = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
 					// The pay is unconditional once the door holds the
 					// killer: its bookkeeping (a counted Most Wanted kill

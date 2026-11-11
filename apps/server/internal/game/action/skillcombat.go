@@ -323,18 +323,18 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	primary := combatTarget{gid: target.Gid, monster: &target, at: targetAt}
 	if skill.TimedEffect.Periodic.Pinned {
 		return rt.installPeriodicCast(periodicCast{division: divisionID, character: character,
-			snapshot: snapshot, skill: skill, cast: cast, target: primary, attacker: attacker, now: nowMs, release: release})
+			snapshot: snapshot, skill: skill, cast: cast, target: primary, attacker: attacker, now: nowMs, release: release, doors: doors})
 	}
 	_, precision := rt.crowPlayerBonuses(divisionID, snapshot, target.Gid, skill, nowMs)
 	attacker.HitRate *= 1 + precision/100
 	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
 	if skill.Threat.Only {
 		return rt.releaseTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot,
-			skill: skill, primary: target, now: nowMs})
+			skill: skill, primary: target, now: nowMs, doors: doors})
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffMonster(debuffCast{division: divisionID, character: character, snapshot: snapshot,
-			skill: skill, target: target.Gid, now: nowMs})
+			skill: skill, target: target.Gid, now: nowMs, doors: doors})
 	}
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release, doors)

@@ -300,9 +300,9 @@ TestCommitActivityAtArmsTheGidDoorsDue
 The commit's reschedule resolves the mover and resident rows
 through the slots the commit carried (scheduleBehaviorCommitted);
 the due it arms must be the gid door's. The actor rests idle with
-its gate cadence nearest, so the due reads the resident row: a
+its deadline five seconds out, so the due reads the resident row: a
 commit addressed with another actor's slots delegates both reads
-to the gid resolves and still arms the gate due, where a dropped
+to the gid resolves and still arms the idle due, where a dropped
 hotRowAt fallback would arm the next tick from a zero resident.
 ================
 */
@@ -327,8 +327,8 @@ func TestCommitActivityAtArmsTheGidDoorsDue(t *testing.T) {
 		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, slot, monsterSlot, behaviorNoQueueSlot, gen, before, before, now); !committed || !cadenceOnly {
 			t.Fatal("cadence-only commitActivityAt rejected or misread")
 		}
-		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
-			t.Fatalf("carried reschedule armed %d, want the gate due %d", got, want)
+		if got, want := scheduleDue(t, d, actor.Gid), now+5001; got != want {
+			t.Fatalf("carried reschedule armed %d, want the idle deadline's due %d", got, want)
 		}
 	}
 	commit(moverSlot, monsterSlot)
@@ -373,8 +373,8 @@ func TestCommitActivityAtCarriedQueueSlotArmsTheSameDue(t *testing.T) {
 		if committed, cadenceOnly := s.commitActivityAt("sleep", actor.Gid, moverSlot, monsterSlot, queueSlot, gen, before, before, now); !committed || !cadenceOnly {
 			t.Fatal("cadence-only commitActivityAt rejected or misread")
 		}
-		if got, want := scheduleDue(t, d, actor.Gid), now+2001; got != want {
-			t.Fatalf("carried-queue reschedule armed %d, want the gate due %d", got, want)
+		if got, want := scheduleDue(t, d, actor.Gid), now+5001; got != want {
+			t.Fatalf("carried-queue reschedule armed %d, want the idle deadline's due %d", got, want)
 		}
 	}
 	commit(queueSlot)

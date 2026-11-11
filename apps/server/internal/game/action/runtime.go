@@ -163,6 +163,14 @@ type Runtime struct {
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache
+	// groundScopeMarks is the ground pass's per-session settled marks
+	// (ground_scope.go, #3101).
+	groundScopeMu    sync.Mutex
+	groundScopeMarks map[string]groundScopeMark
+	// skillObjectScopeMarks is the skill-object pass's per-session
+	// settled marks (skillobjects.go, #3101).
+	skillObjectScopeMu    sync.Mutex
+	skillObjectScopeMarks map[string]skillObjectScopeMark
 	// staticRefs is the published static reference set
 	// (ground_references.go).
 	staticRefs staticRefCache
@@ -193,6 +201,10 @@ type Runtime struct {
 	// not use it; EntrySkills still builds a fresh projection per call.
 	entrySpawnMu    sync.Mutex
 	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
+
+	// tickSnaps shares one epoch-checked record copy per character
+	// and copy kind across a tick hook's steps (tick_snapshots.go).
+	tickSnaps tickSnapshots
 
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
@@ -340,6 +352,11 @@ type Runtime struct {
 	// list, cached under petMu and rebuilt only when a membership
 	// writer drops it (orderedPetSessionKeys, petai.go) (#2033).
 	petSessionKeys []petOwnerKey
+	// petSessionEntries is the same walk with the session pointer
+	// each key held at build time, so the sweep reads no map per
+	// pet (orderedPetSessions, petai.go) (#3126). It is rebuilt
+	// and dropped together with petSessionKeys, never on its own.
+	petSessionEntries []petSessionEntry
 	// mercenaryKeys is the cooldown pass's owner-key scratch
 	// (mercenary_clock.go): refilled under petMu on every pass and
 	// consumed in line by the same pass, so a steady tick grows

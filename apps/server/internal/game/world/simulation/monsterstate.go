@@ -61,8 +61,9 @@ type divisionMonsterState struct {
 	// mover crosses one of its own block's edges or the actors or
 	// static lists change.
 	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
-	// interestStatics is byRegion without the gids that have a mover,
-	// rebuilt when interestStaticsStamp stops matching.
+	// interestStatics holds, per region, the byRegion entries that have
+	// no mover; a region's row is built on its first read under the
+	// current interestStaticsStamp and dropped when the stamp moves.
 	interestStatics      map[uint16][]uint32
 	interestStaticsStamp interestStaticsStamp
 	// byRegionGeneration advances on every byRegion write
@@ -113,6 +114,11 @@ type MonsterState struct {
 	abnormalContext MonsterAbnormalContext
 	archive         *monsterArchive
 	regionDormancy  bool
+	// tacticsReplaced is set by a leg whose ops resolves tactics
+	// through a replacement (MonsterMoverOps.TacticsFor, fixtures
+	// only): the idle due then keeps its conservative cadence wake
+	// (idleBehaviorDue). Guarded by mu.
+	tacticsReplaced bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
 	players          func(string, int64) []PopulationPlayer

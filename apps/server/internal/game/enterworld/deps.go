@@ -251,6 +251,11 @@ type Deps struct {
 	// is wired.
 	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
 	ReadCharacter         func(divisionID string, read func())
+	// CharacterWriteEpoch is the authority's per-record write count
+	// (store CharacterWriteEpoch): a reader that copied a record at
+	// one epoch may reuse the copy while the epoch stands. Nil leaves
+	// every copy unshared (WriteEpoch reports unwired).
+	CharacterWriteEpoch func(character *Character) uint64
 	// ReadLock and ReadUnlock are the two halves of the read door the
 	// callback above runs between, exposed so a per-tick reader can
 	// hold the door as a value (AcquireRead) instead of boxing a
@@ -669,6 +674,22 @@ func (d *Deps) Read(divisionID string, read func()) {
 		return
 	}
 	read()
+}
+
+/*
+================
+WriteEpoch
+
+The record's write epoch and whether an authority reports one. A
+composition without the epoch wired (detached fixtures) reports
+unwired, and its readers never share a copy across calls.
+================
+*/
+func (d *Deps) WriteEpoch(character *Character) (uint64, bool) {
+	if d == nil || d.CharacterWriteEpoch == nil || character == nil {
+		return 0, false
+	}
+	return d.CharacterWriteEpoch(character), true
 }
 
 /*

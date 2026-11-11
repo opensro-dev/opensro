@@ -178,6 +178,9 @@ The dense slot of gid, when the storage holds one.
 ================
 */
 func (s *moverStorage) slotOf(gid uint32) (uint32, bool) {
+	if s == nil {
+		return 0, false
+	}
 	slot, ok := s.byGID[gid]
 	return slot, ok
 }
@@ -721,6 +724,13 @@ type moverSchedule struct {
 	controlMode      monster.ControlMode
 	targetGID        uint32
 	stuck            bool
+	// segmentHeld says the row still carries a movement segment
+	// (endpoints or times), gliding or matured: an idle row settles
+	// it at arrival. goalHeld says a navigation goal is held, whose
+	// next segment the step commits. Both false on a pending row,
+	// whose compact form admits neither.
+	segmentHeld bool
+	goalHeld    bool
 }
 
 /*
@@ -802,10 +812,13 @@ flat cost in the seeded profile (#3027).
 ================
 */
 func scheduleOf(row *monster.MoverState) moverSchedule {
+	_, goalHeld := row.NavigationGoal()
 	return moverSchedule{mode: row.Mode(), activity: row.Activity, arriveMs: row.ArriveMs,
 		regionID: row.Pose.RegionID, deadlineMs: row.BehaviorDeadlineMs,
 		idleEntryPending: row.IdleEntryPending(), controlMode: row.ControlMode(),
-		targetGID: row.TargetGID(), stuck: row.Stuck()}
+		targetGID: row.TargetGID(), stuck: row.Stuck(),
+		segmentHeld: row.From != (monster.Pose{}) || row.To != (monster.Pose{}) || row.ArriveMs != 0 || row.DepartMs != 0,
+		goalHeld:    goalHeld}
 }
 
 /*

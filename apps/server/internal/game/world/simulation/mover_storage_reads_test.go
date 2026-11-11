@@ -235,6 +235,8 @@ func TestMoverStorageScheduleMatchesLookup(t *testing.T) {
 				want.controlMode = m.ControlMode()
 				want.targetGID = m.TargetGID()
 				want.stuck = m.Stuck()
+				_, want.goalHeld = m.NavigationGoal()
+				want.segmentHeld = m.From != (monster.Pose{}) || m.To != (monster.Pose{}) || m.ArriveMs != 0 || m.DepartMs != 0
 			}
 			if ok != exists || got != want {
 				t.Fatalf("step %d gid %d: schedule = %+v %v, want %+v %v", step, probe, got, ok, want, exists)

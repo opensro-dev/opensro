@@ -123,6 +123,70 @@ type legStats struct {
 	navMisses                                                          uint64
 	gcStart                                                            gcSample
 	navStart                                                           uint64
+
+	// rechecked counts the due suspended actors the pending re-check
+	// lane settled without a step (monsterpending_recheck.go): they
+	// are in neither actors nor steps.
+	rechecked int
+
+	// modeSteps partitions steps by the mover mode the step read
+	// (#3119), so a capture can say how many wandering monsters are
+	// stepped every tick. It sums to steps: every invocation counts
+	// exactly one bucket, the presentation holds that read no
+	// behaviour mode (a corpse, a motion hold) under other.
+	modeSteps [stepModeCount]int
+}
+
+// stepMode is the census bucket of a mover mode (monster.MoverMode).
+type stepMode uint8
+
+const (
+	stepModeIdle stepMode = iota
+	stepModeWandering
+	stepModeChasing
+	stepModeAttacking
+	stepModeReturning
+	stepModePending
+	stepModeOther
+
+	stepModeCount
+)
+
+// stepModeNames names each bucket for the monster_leg metrics block.
+var stepModeNames = [stepModeCount]string{
+	stepModeIdle:      "idle",
+	stepModeWandering: "wandering",
+	stepModeChasing:   "chasing",
+	stepModeAttacking: "attacking",
+	stepModeReturning: "returning",
+	stepModePending:   "pending",
+	stepModeOther:     "other",
+}
+
+/*
+================
+stepModeFor
+
+The census bucket of the mode a step read. Modes with no bucket of
+their own (spawning, recovering, following) count as other.
+================
+*/
+func stepModeFor(mode monster.MoverMode) stepMode {
+	switch mode {
+	case monster.MoverIdle:
+		return stepModeIdle
+	case monster.MoverWandering:
+		return stepModeWandering
+	case monster.MoverChasing:
+		return stepModeChasing
+	case monster.MoverAttacking:
+		return stepModeAttacking
+	case monster.MoverReturning:
+		return stepModeReturning
+	case monster.MoverPending:
+		return stepModePending
+	}
+	return stepModeOther
 }
 
 /*
@@ -193,12 +257,15 @@ func (s *legStats) noteAdvance(elapsed time.Duration) {
 legStats.noteStep
 
 One advanceInstanceStep invocation, serial or pooled-plan: the
-denominator every per-step census below divides by.
+denominator every per-step census below divides by, counted under
+the bucket of the mode the step read (stepModeOther when it read
+none - a presentation hold that returned before the mover).
 ================
 */
-func (s *legStats) noteStep() {
+func (s *legStats) noteStep(mode stepMode) {
 	if s != nil {
 		s.steps++
+		s.modeSteps[mode]++
 	}
 }
 
@@ -234,6 +301,20 @@ func (s *legStats) noteRestSettled(drained bool) {
 	s.restSettled++
 	if drained {
 		s.restSettledDrained++
+	}
+}
+
+/*
+================
+legStats.noteRechecked
+
+One due suspended actor the pending re-check lane settled: its
+cadence stamped and its due re-armed with no step run.
+================
+*/
+func (s *legStats) noteRechecked() {
+	if s != nil {
+		s.rechecked++
 	}
 }
 
@@ -313,14 +394,14 @@ func (s *legStats) logSlow(divisionID string) {
 	}
 	log.Warnf("simulation: slow monster leg division=%s total=%v dormancy=%v visibility=%v batch=%v advance=%v "+
 		"actors=%d woken=%d resumed=%d plans{%s} outcomes{%s} maxplan=%v/%dprobes clips{%s} navmiss=+%d gcpause=%v gcassist=%v "+
-		"queue=%v lane=%v steps=%d rest{%s} settled=%d drained=%d cadarms=%d suspended=%d",
+		"queue=%v lane=%v steps=%d rest{%s} settled=%d drained=%d cadarms=%d suspended=%d rechecked=%d",
 		divisionID, s.total.Round(time.Microsecond), s.dormancy.Round(time.Microsecond), s.visibility.Round(time.Microsecond),
 		s.batch.Round(time.Microsecond), s.advance.Round(time.Microsecond), s.actors, s.woken, s.resumed,
 		strings.TrimSpace(plans.String()), strings.TrimSpace(outcomes.String()),
 		s.maxPlanTime.Round(time.Microsecond), s.maxPlanProbes, strings.TrimSpace(clips.String()),
 		s.navMisses, s.gcPause.Round(time.Microsecond), s.gcAssist.Round(time.Microsecond),
 		s.queue.Round(time.Microsecond), s.lane.Round(time.Microsecond), s.steps,
-		strings.TrimSpace(rest.String()), s.restSettled, s.restSettledDrained, s.cadenceArms, s.gateSuspended)
+		strings.TrimSpace(rest.String()), s.restSettled, s.restSettledDrained, s.cadenceArms, s.gateSuspended, s.rechecked)
 }
 
 /*
