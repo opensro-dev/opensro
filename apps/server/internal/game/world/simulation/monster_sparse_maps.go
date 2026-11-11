@@ -24,11 +24,14 @@ func compactSparseMap[V any](m map[uint32]V, peak *int, allow bool) map[uint32]V
 // Called by the population owner. Archive work has priority. The time check
 // bounds admission, not an individual map copy or GC pause.
 func (state *divisionMonsterState) compactDormantIndexes(deadline time.Time) {
-	allow := len(state.archiveQueue) == 0
-	state.instances.shrinkHotExcess(&state.sparseMapPeaks[0], allow && time.Now().Before(deadline))
-	state.aiTimers = compactSparseMap(state.aiTimers, &state.sparseMapPeaks[1], allow && time.Now().Before(deadline))
-	state.behavior.byGID = compactSparseMap(state.behavior.byGID, &state.sparseMapPeaks[2], allow && time.Now().Before(deadline))
-	if allow && time.Now().Before(deadline) {
+	// One clock read serves the whole pass (#3126): the deadline is
+	// a budget the pass starts inside, not four separate readings of
+	// it between the compactions it gates.
+	allow := len(state.archiveQueue) == 0 && time.Now().Before(deadline)
+	state.instances.shrinkHotExcess(&state.sparseMapPeaks[0], allow)
+	state.aiTimers = compactSparseMap(state.aiTimers, &state.sparseMapPeaks[1], allow)
+	state.behavior.byGID = compactSparseMap(state.behavior.byGID, &state.sparseMapPeaks[2], allow)
+	if allow {
 		state.behavior.shrinkExcess()
 	}
 }
