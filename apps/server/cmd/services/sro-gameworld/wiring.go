@@ -30,10 +30,7 @@ import (
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
-	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/game/world/worldarea"
-	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
@@ -126,23 +123,6 @@ type gameWorldApplication struct {
 
 /*
 ================
-standbyBoot
-
-How construction treats the shard process guard (opensro-ops#281).
-Unarmed (the zero value): the caller already holds the guard and the
-boot is the boot there has always been. Armed: construction probes the
-guard at guardPath - won, it is the shard's writer; held by another
-process, it loads everything that does not need the save and waits as
-that process's standby.
-================
-*/
-type standbyBoot struct {
-	armed     bool
-	guardPath string
-}
-
-/*
-================
 newGameWorldApplication
 ================
 */
@@ -159,17 +139,10 @@ func newGameWorldApplication(
 	standbyWaiting := false
 	var standbyGuard *processguard.Guard
 	if boot.armed {
-		if err := startStandbyHealth(startupContext, ts); err != nil {
-			return nil, err
-		}
-		guard, held, err := processguard.TryAcquire(boot.guardPath)
+		var err error
+		standbyGuard, standbyWaiting, err = probeStandbyGuard(startupContext, ts, ownedShard, boot)
 		if err != nil {
-			return nil, fmt.Errorf("shard %q process guard: %w", ownedShard.ID, err)
-		}
-		if held {
-			standbyGuard = guard
-		} else {
-			standbyWaiting = true
+			return nil, err
 		}
 	}
 	// The liveness listener comes first (#3186): /transport/healthz
@@ -202,34 +175,20 @@ func newGameWorldApplication(
 	if err := tunables.Load(); err != nil {
 		return nil, fmt.Errorf("tunables: %w", err)
 	}
-	// Canary standby (opensro-ops#281): armed, everything that does not
-	// need the save loads here - the game data bundle, authored areas,
-	// the roster and the textdata catalogues - so a standby is fully
-	// loaded while it waits, and a standby whose load fails fails its
-	// deployment before the live process is stopped. The settings
-	// store lies beside the save, so it opens after the guard, with the
-	// rest of the ordinary boot below.
+	// Canary standby (opensro-ops#281): armed, the save-free load and
+	// any guard wait happen here, ahead of everything that needs the
+	// save (the settings store first of them, below).
 	var inputs saveFreeInputs
 	var loaded authorityTextdata
 	if boot.armed {
+		var guard *processguard.Guard
 		var err error
-		inputs, err = loadSaveFreeInputs()
+		inputs, loaded, guard, err = loadStandbyInputs(startupContext, ts, ownedShard, boot, standbyWaiting)
 		if err != nil {
 			return nil, err
 		}
-		loaded, err = loadAuthorityTextdata(inputs.devPaths)
-		if err != nil {
-			return nil, err
-		}
-		if standbyWaiting {
-			ts.SetBootPhase(transport.BootPhaseStandby)
-			log.WithField("shard", ownedShard.ID).Info("standby: loaded and waiting for the live process's guard")
-			guard, err := processguard.Acquire(startupContext, boot.guardPath)
-			if err != nil {
-				return nil, fmt.Errorf("standby: shard %q process guard: %w", ownedShard.ID, err)
-			}
+		if guard != nil {
 			application.guard = guard
-			log.WithField("shard", ownedShard.ID).Info("standby: the live process is gone; taking over")
 		}
 	}
 	// Port-only: the staff console's approved overrides (settings.db, next
@@ -526,98 +485,6 @@ func newGameWorldApplication(
 
 /*
 ================
-saveFreeInputs
-
-What construction loads from the game data bundle before any of it
-needs the save: the bundle's paths, the dev paths over them, the
-authored areas and the character roster. The standby handover loads
-these while it waits (opensro-ops#281); a cold boot loads them in the
-same order.
-================
-*/
-type saveFreeInputs struct {
-	dataPaths     gamedata.Paths
-	devPaths      enterworld.DevPaths
-	authoredAreas *worldarea.Catalog
-	roster        *enterworld.Roster
-}
-
-/*
-================
-loadSaveFreeInputs
-================
-*/
-func loadSaveFreeInputs() (saveFreeInputs, error) {
-	dataPaths, err := gamedata.Resolve()
-	if err != nil {
-		return saveFreeInputs{}, fmt.Errorf("game data: %w", err)
-	}
-	log.Infof(
-		"game data: bundle=%q manifest=%s",
-		dataPaths.BundleRoot,
-		dataPaths.ManifestDigest,
-	)
-	// SRO_ALEXANDRIA (port-only, not native) needs its overlay in the data.
-	if err := alexandria.Check(dataPaths.TextdataDir); err != nil {
-		return saveFreeInputs{}, fmt.Errorf("game data: %w", err)
-	}
-	authoredAreas, err := worldarea.LoadAuthority(dataPaths.WorldAuthorityDir)
-	if err != nil {
-		return saveFreeInputs{}, fmt.Errorf("authored world areas: %w", err)
-	}
-	devPaths := enterworld.DevPathsFromEnv(
-		dataPaths.CharacterAuthorityDir,
-		dataPaths.TextdataDir,
-	)
-	devPaths.AuthoredAreas = authoredAreas
-	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
-	characterRoster, err := enterworld.LoadRoster(devPaths.RosterPath)
-	if err != nil {
-		return saveFreeInputs{}, fmt.Errorf("character roster: %w", err)
-	}
-	return saveFreeInputs{dataPaths, devPaths, authoredAreas, characterRoster}, nil
-}
-
-// standbyBindRetry bounds the standby-health bind's retry window, and
-// standbyBindPoll its pace: a transient scanner copy of this
-// allocation starts with the same environment and can win the bind for
-// the seconds it lives (the process guard's own history); the tracked
-// process outlasts it instead of failing its boot.
-const (
-	standbyBindRetry = 15 * time.Second
-	standbyBindPoll  = 250 * time.Millisecond
-)
-
-/*
-================
-startStandbyHealth
-
-The standby-health listener, retried over standbyBindRetry: at the
-deployment-assigned health port the GameWorld answers healthz and
-standbyz from process start, before any public port exists.
-================
-*/
-func startStandbyHealth(startupContext context.Context, ts *transport.Server) error {
-	addr := standbyHealthAddr()
-	deadline := time.Now().Add(standbyBindRetry)
-	for {
-		err := ts.StartStandbyHealth(addr)
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("standby health listener: %w", err)
-		}
-		select {
-		case <-startupContext.Done():
-			return fmt.Errorf("standby health listener: %w", startupContext.Err())
-		case <-time.After(standbyBindPoll):
-		}
-	}
-}
-
-/*
-================
 configuredAgentURL
 ================
 */
@@ -891,12 +758,7 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	// The guard is the boot's outermost lock: it goes last, after the
 	// authority store, so a standby waiting on it wakes to a shard
 	// whose writer holds nothing (opensro-ops#281).
-	if application.guard != nil {
-		if err := application.guard.Close(); err != nil {
-			log.Warnf("shutdown: process guard: %v", err)
-		}
-		application.guard = nil
-	}
+	application.closeGuard("shutdown")
 
 	return errors.Join(runErr, drainErr)
 }
@@ -1025,12 +887,7 @@ func (application *gameWorldApplication) rollback() {
 	if application.history != nil {
 		_ = application.history.Close()
 	}
-	if application.guard != nil {
-		if err := application.guard.Close(); err != nil {
-			log.Warnf("startup rollback: process guard: %v", err)
-		}
-		application.guard = nil
-	}
+	application.closeGuard("startup rollback")
 }
 
 // boundedCatalogueEnv opts a small host into the disk-backed skill and item
