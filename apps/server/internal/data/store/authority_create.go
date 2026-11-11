@@ -9,6 +9,7 @@ authority_create.go - creating a fresh authority database from its seed
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -84,7 +85,7 @@ func createAuthorityDatabase(targetPath string, data *authoritySeed) (err error)
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("committing authority seed: %w", err)
 	}
-	if err := quickCheck(db); err != nil {
+	if err := quickCheck(context.Background(), db); err != nil {
 		return fmt.Errorf("validating authority database: %w", err)
 	}
 	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion); err != nil {

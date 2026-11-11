@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -87,6 +88,14 @@ type Options struct {
 	// (commit_writer.go, SRO_STORE_ASYNC_COMMIT, #2802); false is the
 	// native-default synchronous door. Port-only, not native.
 	AsyncCommit bool
+	// Context cancels the open (#3186): a stopped boot must leave
+	// within a second from whatever long step it sits in, and a
+	// cancelled open must never fall into the quarantine or
+	// bak-recovery rungs on its way out. Nil means context.Background.
+	Context context.Context
+	// OpenProbe is the test seam that holds an open step open; nil in
+	// production. A returned error stops the open.
+	OpenProbe func(ctx context.Context, step string) error
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -303,6 +312,10 @@ type Store struct {
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
 	requireStore bool
+	// openCtx and openProbe are Open's cancellation lane (#3186);
+	// openCtx is never nil once Open has built the store.
+	openCtx   context.Context
+	openProbe func(ctx context.Context, step string) error
 	// releaseClaim drops this instance's hold on the process-wide
 	// single-writer claim (claimAuthority); nil once released by Close.
 	releaseClaim func()
@@ -341,6 +354,10 @@ func Open(dir string, opts Options) (*Store, error) {
 	if now == nil {
 		now = time.Now
 	}
+	openCtx := opts.Context
+	if openCtx == nil {
+		openCtx = context.Background()
+	}
 
 	s := &Store{
 		dir:                  dir,
@@ -370,6 +387,8 @@ func Open(dir string, opts Options) (*Store, error) {
 		inventoryPages:   opts.InventoryPages,
 		requireStore:     opts.RequireStore,
 		asyncCommit:      opts.AsyncCommit,
+		openCtx:          openCtx,
+		openProbe:        opts.OpenProbe,
 		now:              now,
 		writeFile:        writeFileAtomic,
 	}
@@ -402,9 +421,32 @@ func Open(dir string, opts Options) (*Store, error) {
 	return s, nil
 }
 
+/*
+================
+openStep
+
+One checkpoint of the cancellable open (#3186): the test probe runs
+first, then the context's word stands. A cancelled context returns its
+own error straight up the ladder - Open closes the store, the claim is
+released, and nothing on the cancellation path ever quarantines a
+database or recovers from a bak.
+================
+*/
+func (s *Store) openStep(step string) error {
+	if s.openProbe != nil {
+		if err := s.openProbe(s.openCtx, step); err != nil {
+			return err
+		}
+	}
+	return s.openCtx.Err()
+}
+
 // loadLadder picks the current database generation, its recovery copy, or a
 // clean first boot.
 func (s *Store) loadLadder(opts Options) error {
+	if err := s.openStep("load ladder"); err != nil {
+		return err
+	}
 	dbExists := fileExists(s.dbPath)
 	dbBakExists := fileExists(s.dbBakPath)
 
@@ -416,11 +458,17 @@ func (s *Store) loadLadder(opts Options) error {
 		return fmt.Errorf("%s missing and %s=1: refusing to boot empty in a store-required environment", s.dbPath, EnvRequireStore)
 	}
 	log.Infof("store: no %s - atomically initializing an empty development authority (production sets %s=1 and runs sro-init explicitly)", DBFileName, EnvRequireStore)
+	if err := s.openStep("initialize empty authority"); err != nil {
+		return err
+	}
 	if err := createAuthorityDatabase(s.dbPath, emptyAuthoritySeed(s.now().UnixMilli())); err != nil {
 		return fmt.Errorf("initializing empty development authority: %w", err)
 	}
 	db, loaded, err := s.openAndLoadDB(s.dbPath)
 	if err != nil {
+		if cErr := s.openCtx.Err(); cErr != nil {
+			return cErr
+		}
 		return fmt.Errorf("opening initialized development authority: %w", err)
 	}
 	s.adoptDB(db, loaded)
@@ -435,6 +483,9 @@ func fileExists(path string) bool {
 // loadDBLadder reads the database with the quarantine -> bak -> refuse
 // chain.
 func (s *Store) loadDBLadder(mainExists bool) error {
+	if err := s.openStep("open database"); err != nil {
+		return err
+	}
 	if !mainExists {
 		// A missing MAIN with a live bak is a deleted main or a reboot
 		// that landed between a bak recovery and its first commit -
@@ -446,11 +497,20 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 	if err == nil {
 		s.adoptDB(db, loaded)
 		// Refresh the single bak generation from the database just
-		// proven good - once per boot, never while running.
-		if bakErr := refreshDBBak(db, s.dbBakPath); bakErr != nil {
-			log.Warnf("store: refreshing %s failed: %v", DBBakFileName, bakErr)
+		// proven good - once per boot, never while running. A stop
+		// that already arrived skips the refresh (#3186): the boot is
+		// leaving, and the previous bak is still a good generation.
+		if s.openCtx.Err() == nil {
+			if bakErr := refreshDBBak(s.openCtx, db, s.dbBakPath); bakErr != nil {
+				log.Warnf("store: refreshing %s failed: %v", DBBakFileName, bakErr)
+			}
 		}
 		return nil
+	}
+	// A cancellation is not corruption: it returns before the
+	// quarantine and bak rungs, untouched database and all (#3186).
+	if cErr := s.openCtx.Err(); cErr != nil {
+		return cErr
 	}
 	if isVersionMismatch(err) {
 		// A healthy database this binary cannot serve. Not corruption:
@@ -468,18 +528,31 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 }
 
 // openAndLoadDB opens one database file and loads it fully; the handle
-// is closed on any failure.
+// is closed on any failure. The open context stands over the whole
+// load (#3186): a cancellation closes the handle, which aborts
+// whichever step is running - including the quick check, the one boot
+// step that scales with the database's history.
 func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 	db, err := connectDB(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := quickCheck(db); err != nil {
+	stopCancelWatch := context.AfterFunc(s.openCtx, func() { _ = db.Close() })
+	defer stopCancelWatch()
+	if err := quickCheck(s.openCtx, db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	if err := s.openStep("load database"); err != nil {
 		db.Close()
 		return nil, nil, err
 	}
 	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion)
 	if err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	if err := s.openStep("configure database"); err != nil {
 		db.Close()
 		return nil, nil, err
 	}
@@ -495,6 +568,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 // not land on the missing-main rung again), load it, and flag the
 // recovery LOUD YELLOW in Health.
 func (s *Store) recoverFromDBBak(cause error) error {
+	// Recovery is real work on the database's bytes; a boot that is
+	// already stopping leaves instead (#3186).
+	if err := s.openCtx.Err(); err != nil {
+		return err
+	}
 	bakPayload, bakReadErr := os.ReadFile(s.dbBakPath)
 	if bakReadErr != nil {
 		if os.IsNotExist(bakReadErr) {
@@ -510,6 +588,9 @@ func (s *Store) recoverFromDBBak(cause error) error {
 	}
 	db, loaded, err := s.openAndLoadDB(s.dbPath)
 	if err != nil {
+		if cErr := s.openCtx.Err(); cErr != nil {
+			return cErr
+		}
 		if isVersionMismatch(err) {
 			return fmt.Errorf("%s is for a different binary version: %w", DBBakFileName, err)
 		}

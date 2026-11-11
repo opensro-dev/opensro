@@ -9,6 +9,7 @@ db.go - the SQLite authority store: open, layout version, quarantine
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -245,15 +246,17 @@ func ensureSchema(db *sql.DB) error {
 }
 
 // quickCheck runs SQLite's integrity probe; any answer but "ok" is
-// corruption.
+// corruption. The context bounds it (#3186): this is the one boot step
+// that scales with the database's history, and an interrupt must end
+// it, not wait for it.
 /*
 ================
 quickCheck
 ================
 */
-func quickCheck(db *sql.DB) error {
+func quickCheck(ctx context.Context, db *sql.DB) error {
 	var verdict string
-	if err := db.QueryRow("PRAGMA quick_check(1)").Scan(&verdict); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA quick_check(1)").Scan(&verdict); err != nil {
 		return err
 	}
 	if verdict != "ok" {
@@ -315,14 +318,16 @@ refreshDBBak
 
 refreshDBBak writes the one-generation previous copy with VACUUM INTO
 (a transactionally consistent, checkpointed, compact image). Once per
-boot, only after the MAIN file proved good - never while running.
+boot, only after the MAIN file proved good - never while running. The
+context bounds it like the quick check (#3186); a cancelled refresh
+leaves the previous generation in place.
 ==================
 */
-func refreshDBBak(db *sql.DB, bakPath string) error {
+func refreshDBBak(ctx context.Context, db *sql.DB, bakPath string) error {
 	if err := os.Remove(bakPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	_, err := db.Exec("VACUUM INTO ?", bakPath)
+	_, err := db.ExecContext(ctx, "VACUUM INTO ?", bakPath)
 	return err
 }
 
