@@ -66,12 +66,15 @@ const EnvTradeTiers = "SRO_TRADE_TIERS"
 
 // tradeTierGold are the cargo gold values that reach 2..5 stars; anything
 // carried below the first is 1 star. The 5-star mark (#2791, owner
-// 2026-11-08) is a brim-full ordinary transport - 101 slots of 40 goods at
-// the flag's scaled price 7,308 (29,524,320) - and the marks below keep
-// the old ladder's ratios to the top (1/5, 2/5, 7/10 of 50M), so a mall
-// transport's 141/159/177 slots still read 5 stars and earn their extra
-// as profit, never a higher tier.
-var tradeTierGold = [...]uint64{5_896_080, 11_792_160, 20_761_408, 29_495_680}
+// 2026-11-08) is a brim-full ordinary transport - any one of them, so the
+// mark is the smallest ordinary bag the shipped characterdata authors
+// (COS_T_DONKEY, 32 slots), full of 40-stacks at the flag's scaled price
+// 7,308: 32 x 40 x 7,308 = 9,354,240 (#3142: the old 101-slot calibration
+// left every smaller ordinary transport short of five stars however full
+// it stood). The marks below keep the ladder's ratios to the top (1/5,
+// 2/5, 7/10), so bigger bags crown earlier in their fill and earn their
+// extra as profit, never a higher tier.
+var tradeTierGold = [...]uint64{1_870_848, 3_741_696, 6_547_968, 9_354_240}
 
 // tradeTown names a town's specialty trade.
 type tradeTown uint8
@@ -418,7 +421,7 @@ CaravanStarFrames
 Port-only, not native (#2958): the division's 5-star caravan transport
 gids (wire.OpCaravanStars), recomputed at the push pace from the same
 tier the sales use, so a caravan that loads or sells its way across the
-50M mark gains and loses its nameplate star on its own. The wiring hook
+5-star mark gains and loses its nameplate star on its own. The wiring hook
 pushes the frame to the whole division; it goes out even when empty so
 a lost fifth star clears. Nil off the pace, and nil with the flag off,
 when no client ever hears of the mark.

@@ -29,8 +29,8 @@ TestTradeTierForGold
 ================
 */
 func TestTradeTierForGold(t *testing.T) {
-	for value, want := range map[uint64]uint8{0: 0, 1: 1, 5_896_079: 1, 5_896_080: 2, 11_792_159: 2,
-		11_792_160: 3, 20_761_407: 3, 20_761_408: 4, 29_495_679: 4, 29_495_680: 5, 900_000_000: 5} {
+	for value, want := range map[uint64]uint8{0: 0, 1: 1, 1_870_847: 1, 1_870_848: 2, 3_741_695: 2,
+		3_741_696: 3, 6_547_967: 3, 6_547_968: 4, 9_354_239: 4, 9_354_240: 5, 900_000_000: 5} {
 		if got := TradeTierForGold(value); got != want {
 			t.Fatalf("%d: tier %d, want %d", value, got, want)
 		}
@@ -39,28 +39,77 @@ func TestTradeTierForGold(t *testing.T) {
 
 /*
 ================
-TestFullTransportsReachTheirStars
+TestEveryFullTransportReachesFiveStars
 
-A full bag of 40-stacks under SRO_TRADE_TIERS' factor: every transport -
-the ordinary 101-slot one and the item-mall level-90/105/120 ones
-(141/159/177 slots) - reaches 5 stars (#2791, owner 2026-11-08), and one
-stack short of a brim-full ordinary transport is 4. At the native 348
-every one of them is 1 star.
+The owner's rule (#2791) as a property of the shipped data, not of one
+hand-picked case (#3142): walking every transport row in characterdata
+against every good stocked at the five towns' specialty shops, a
+brim-full load of 40-stacks at the flag's scaled prices reads 5 stars.
+The smallest bag walked must be the ladder's own calibration - its full
+load is exactly the 5-star mark - so the marks and the authored data
+cannot drift apart silently. With the flag off the tier is the native
+one; that side is pinned by TestCaravanTierFollowsCargoGold.
 ================
 */
-func TestFullTransportsReachTheirStars(t *testing.T) {
-	scaled := uint64(348 * enterworld.TradeGoodsPriceFactor)
-	full := func(slots uint64) uint64 { return slots * 40 * scaled }
-	for _, slots := range []uint64{101, 141, 159, 177} {
-		if got := TradeTierForGold(full(slots)); got != 5 {
-			t.Fatalf("a full %d-slot transport: %d stars, want 5", slots, got)
+func TestEveryFullTransportReachesFiveStars(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(dir)
+	if _, err := items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor); err != nil {
+		t.Fatal(err)
+	}
+	shops, err := commerce.Load(dir, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goods := map[uint32]*enterworld.ItemRef{}
+	for _, shop := range tradeTownShops {
+		offers := shops.TabOffers(shop.tab)
+		if len(offers) == 0 {
+			t.Fatalf("%s stocks nothing", shop.tab)
 		}
-		if got := TradeTierForGold(slots * 40 * 348); got != 1 {
-			t.Fatalf("a full %d-slot transport at the native price: %d stars, want 1", slots, got)
+		for _, offer := range offers {
+			if offer.Ref != nil {
+				goods[offer.Ref.RefObjID] = offer.Ref
+			}
+			for _, content := range offer.Contents {
+				if content.Ref != nil {
+					goods[content.Ref.RefObjID] = content.Ref
+				}
+			}
 		}
 	}
-	if got := TradeTierForGold(full(101) - 40*scaled); got != 4 {
-		t.Fatalf("one stack short of a full 101-slot transport: %d stars, want 4", got)
+	if len(goods) == 0 {
+		t.Fatal("no town stocks any trade good")
+	}
+	transports := 0
+	smallest := uint64(0)
+	for _, ref := range items.SummonableCharacterRefs() {
+		if !isVehicleCOS(ref.TidWord) {
+			continue
+		}
+		transports++
+		slots := uint64(ref.InventoryCapacity)
+		if smallest == 0 || slots < smallest {
+			smallest = slots
+		}
+		for _, good := range goods {
+			if !enterworld.IsTradeGoods(good.TypeIDs) {
+				t.Fatalf("%s is stocked at a specialty shop but is not a trade good", good.Codename)
+			}
+			price := good.NativeFields.Get("price")
+			stack := good.NativeFields.Get("maxStack")
+			full := slots * uint64(stack) * uint64(price)
+			if got := TradeTierForGold(full); got != 5 {
+				t.Fatalf("%s brim-full of %s: value %d reads %d stars, want 5", ref.Codename, good.Codename, full, got)
+			}
+		}
+	}
+	if transports < 35 || smallest == 0 {
+		t.Fatalf("walked %d transports (smallest %d slots), want the shipped fleet", transports, smallest)
+	}
+	if full := smallest * 40 * 348 * enterworld.TradeGoodsPriceFactor; full != tradeTierGold[len(tradeTierGold)-1] {
+		t.Fatalf("the smallest full bag is %d, the 5-star mark is %d", full, tradeTierGold[len(tradeTierGold)-1])
 	}
 }
 
