@@ -12,6 +12,9 @@ async function load( file ) {
 const { createWorldRenderer } = await load( "src/engine/runtime/renderer/world/world.ts" );
 const { createGeometryResources } = await load( "src/engine/runtime/renderer/device/geometry.ts" );
 const { createRetirement } = await load( "src/engine/runtime/renderer/device/retirement.ts" );
+const { viewProjection, prepareViewFrustum, visibleFrustumSphere } = await load(
+	"src/engine/foundation/rendering/world-math.ts"
+);
 globalThis.GPUBufferUsage = GPU_BUFFER_USAGE;
 globalThis.GPUTextureUsage = GPU_TEXTURE_USAGE;
 
@@ -83,7 +86,8 @@ terrainGroup
 
 One terrain group: a 3x3 grid of 320-metre cells, each a range of its
 own indices, flat at y=0 (heights all zero), every range at LOD 0. The
-ranges' centres and radii are the real cell bounds the frustum tests.
+ranges' centres and radii are the real cell bounds the exactness walk
+below tests against each view's frustum.
 ================
 */
 function terrainGroup() {
@@ -146,10 +150,21 @@ function terrainGroup() {
 	};
 }
 
-test("the terrain choice keys on cell and view (native A2D1B0 parity)", () => {
+test("the terrain choice keys on the eye cell alone; the view never re-chooses (#3177)", () => {
 	const world = createWorldRenderer();
-	const owner = geometryOwner(), geometry = owner.commands;
+	const owner = geometryOwner();
+	// Every index upload the world performs, in order: the choice a frame
+	// submits is the last of these for its draw.
+	const submitted = [];
+	const geometry = {
+		...owner.commands,
+		updateIndices( draw, indices ) {
+			submitted.push( new Uint32Array( indices ) );
+			return owner.commands.updateIndices( draw, indices );
+		}
+	};
 	const textures = { upload: () => ({}), release() {} };
+	const group = terrainGroup();
 	const scene = {
 		id: "terrain-frustum",
 		originRegion: 257,
@@ -162,13 +177,14 @@ test("the terrain choice keys on cell and view (native A2D1B0 parity)", () => {
 				color0x124: [ { t: 0, r: .55, g: .55, b: .55 } ]
 			}
 		},
-		groups: [ terrainGroup() ]
+		groups: [ group ]
 	};
 	world.scene( scene );
 	const views = [
 		// The eye stays over the grid's centre cell for every view, so the
-		// LOD rule alone cannot drop a range: only the frustum can. A narrow
-		// fov quarter-turn faces one 320-metre column of the 3x3 grid.
+		// LOD rule alone cannot drop a range: under the old cell-and-view
+		// choice only the frustum could. A narrow fov quarter-turn faces
+		// one 320-metre column of the 3x3 grid.
 		{ eye: [ 480, 60, 480 ], target: [ 480, 0, 160 ], originRegion: 257, fov: .4, near: 1, far: 5000 },
 		{ eye: [ 480, 60, 480 ], target: [ 800, 0, 480 ], originRegion: 257, fov: .4, near: 1, far: 5000 },
 		{ eye: [ 480, 60, 480 ], target: [ 480, 0, 478.5 ], originRegion: 257, fov: .4, near: 1, far: 5000 }
@@ -180,29 +196,41 @@ test("the terrain choice keys on cell and view (native A2D1B0 parity)", () => {
 		const terrain = prepared.draws[0];
 		counts.push( terrain ? terrain.indexCount / 3 : 0 );
 	}
-	// The three views submit three different triangle counts: the cull
-	// engages with the view, not only the cell.
-	assert.ok(
-		counts[0] >= counts[1] && counts[1] > counts[2] && counts[2] > 0,
-		`Narrower views submit fewer triangles: ${counts.join( ", " )}`
+	// Every view submits the whole grid the eye cell selects (9 cells of
+	// 512 triangles): nothing about the choice follows the view any more.
+	assert.deepEqual(
+		counts,
+		[ 4608, 4608, 4608 ],
+		`Every view of one cell submits its whole choice: ${counts.join( ", " )}`
 	);
-	// Returning to the first view reproduces its exact choice: same count,
-	// same selection (the walk's draw indices are the choice).
-	world.camera( views[0] );
-	const replay = world.prepare( geometry, textures, 1.6, 1, 192, 120, 3500, false, false );
-	const replayTriangles = replay.draws[0] ? replay.draws[0].indexCount / 3 : 0;
-	assert.equal(
-		replayTriangles,
-		counts[0],
-		`The first view replays its exact count (${replayTriangles} vs ${counts[0]})`
-	);
-	// The narrow fov faces one column: the sphere test keeps the column's
-	// cells plus any whose sphere pokes into the cone, and drops the rest -
-	// strictly fewer than the fixed eye's whole grid, strictly more than
-	// none (the LOD rule alone cannot drop a range at this distance).
-	assert.ok(
-		counts[0] < 9 * 512 && counts[0] >= 3 * 512,
-		`The facing view submits its column, not the grid (${counts[0]} of 4608)`
-	);
+	// One upload carried the choice; turning the camera inside the cell
+	// uploaded nothing more (the old cell-and-view choice uploaded per view).
+	assert.equal( submitted.length, 1, `${submitted.length} index uploads for three views of one cell` );
+	// Exactness (PROFILING.md section 4, GPU-move form): what each frame
+	// shows inside the frustum is unchanged. Every range the old
+	// cell-and-view rule would have shown - at the cell's LOD, sphere
+	// against the view frustum - is present in the submission, whole.
+	const chosen = new Set( submitted[0] );
+	for ( const camera of views ) {
+		const frustum = prepareViewFrustum( viewProjection( camera, 1.6 ) );
+		for ( const range of group.ranges ) {
+			if (
+				!visibleFrustumSphere( frustum, range.center[0], range.center[1], range.center[2], range.radius )
+			) continue;
+			for ( let i = range.indexStart; i < range.indexStart + range.indexCount; i++ ) {
+				assert.ok(
+					chosen.has( group.geometry.indices[i] ),
+					`view ${camera.target}: a range the old rule showed is missing index ${i}`
+				);
+			}
+		}
+	}
+	// Crossing into the next eye cell re-chooses and re-uploads, once,
+	// even though this grid's ranges sit at LOD 0 from both cells and
+	// the packed indices come out identical.
+	world.camera( { eye: [ 800, 60, 480 ], target: [ 800, 0, 160 ], originRegion: 257, fov: .4, near: 1, far: 5000 } );
+	world.prepare( geometry, textures, 1.6, 1, 192, 120, 3500, false, false );
+	assert.equal( submitted.length, 2, `${submitted.length} index uploads after crossing one cell line` );
+	assert.deepEqual( submitted[1], submitted[0], "both cells pack the same ranges here" );
 	world.dispose();
 });

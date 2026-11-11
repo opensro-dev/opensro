@@ -1073,13 +1073,14 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	assert.ok( edge.length );
 	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( lastIndexCount, 1536 );
-	// Cross the LOD boundary while looking away. The eye cell chooses the
-	// LOD and the frustum culls the ranges turned away from (A2D1B0), so
-	// the crossing submits nothing and stitches nothing; turning back
-	// stitches the edge at once and changes nothing else.
+	// Cross the LOD boundary while looking away. The eye cell alone
+	// chooses (#3177): the crossing re-chooses, stitches and submits at
+	// once - the GPU clips what the view turns away from, where the
+	// native per-frame range cull (A2D1B0) submitted nothing and
+	// stitched nothing until the turn back. Turning back now is free.
 	world.camera( { eye: [ -960, 500, 10 ], target: [ -2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
-	assert.ok( edge.every( i => positions[i] === 0 ) );
+	assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
+	assert.ok( edge.every( i => positions[i] === 10 ) );
 	assert.equal( prepare( -960 ), draw );
 	assert.ok( edge.every( i => positions[i] === 10 ) );
 	const writes = [ indexWrites, positionWrites ];
@@ -1094,9 +1095,12 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 		prepare( x );
 		assert.equal( lastIndexCount, x === -1600 ? 384 : 1536 );
 	}
+	// Looking away from a cell changes nothing either: the seam state
+	// follows the eye cell, and the same draw stays submitted throughout.
 	for ( const [x, height] of [ [ -960, 10 ], [ -1280, 0 ], [ -960, 10 ] ] ) {
 		world.camera( { eye: [ x, 500, 10 ], target: [ x - 2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+		assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
+		assert.ok( edge.every( i => positions[i] === height ) );
 		assert.equal( prepare( x ), draw );
 		assert.ok( edge.every( i => positions[i] === height ) );
 	}
