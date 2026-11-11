@@ -298,3 +298,13 @@ share StageBounds, with the existing level-one floor. Tests cover all five
 ranges, pool filtering and low-level floors; focused arena/action tests pass
 against the fresh v1.150 server dataset. No asset rebuild is needed. The
 change requires a GameWorld restart and is not yet active in the running game.
+
+## One extra stage-I monster per wave (2026-11-11)
+
+Stage I now adds exactly one monster to each normal wave: 3/3/3/3/2 instead
+of 2/2/2/2/1, totaling 42 normal slots across 15 waves. Stage-II through
+stage-V counts are unchanged; stage V remains 15/14/15/14/14 (216 slots).
+Tests pin every stage total, the first/final patterns, the five-wave budget
+and real initial spawn counts. Focused arena/action tests and vet pass.
+This is committed source only; the currently running game has not restarted
+to activate this spawn-count change. Monster level bands remain unchanged.

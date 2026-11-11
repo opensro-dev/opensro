@@ -71,10 +71,10 @@ func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 	rt.advanceSookArena(clock.Now().UnixMilli())
 	clock.now = clock.now.Add(1200 * time.Millisecond)
 	rt.advanceSookArena(clock.Now().UnixMilli())
-	if len(rt.Monsters.PopulationInstances(testDivision, ra.lease, []uint16{ra.center.RegionID})) != 2 {
+	if len(rt.Monsters.PopulationInstances(testDivision, ra.lease, []uint16{ra.center.RegionID})) != 3 {
 		t.Fatal("initial wave missing")
 	}
-	if len(rt.Monsters.PopulationInstances(testDivision, rb.lease, []uint16{rb.center.RegionID})) != 2 {
+	if len(rt.Monsters.PopulationInstances(testDivision, rb.lease, []uint16{rb.center.RegionID})) != 3 {
 		t.Fatal("second player's independent wave missing")
 	}
 	aggressive := 0

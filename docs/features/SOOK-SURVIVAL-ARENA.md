@@ -20,7 +20,7 @@ cutoff; survivors must then be cleared. Decisions can extend the total event.
 
 | Stage | Monster levels relative to player | Average monsters per Pandora | Total chest items |
 | --- | --- | ---: | ---: |
-| 1 | −8 to −5 | 1.8 | 3–7 |
+| 1 | −8 to −5 | 2.8 | 3–7 |
 | 2 | −6 to −3 | 4.95 | 8–15 |
 | 3 | −3 to 0 | 8.1 | 18–28 |
 | 4 | −1 to +2 | 11.25 | 32–45 |
@@ -30,8 +30,9 @@ Level 1 is the floor. References, including uniques, must fit their stage's
 band; an unavailable unique is skipped. The safety cap is 200 living
 monsters per private arena. Waves reinforce survivors every 15 seconds;
 clearing a wave early starts the next Pandora without waiting. Its windup
-is 1.2 seconds. Density rises linearly from stage I to the former stage-IV ceiling, carrying
-fractional monsters between waves (stage I: 2/2/2/2/1; V: 15/14/15/14/14).
+is 1.2 seconds. Stage I adds one monster per wave to the original carried-density pattern
+(3/3/3/3/2; 42 normal wave slots over 15 waves). Stages II–V are unchanged;
+stage V keeps 15/14/15/14/14 (216 slots), before uniques, ambushes or cap truncation.
 The opening has a visible **20-second countdown**. Three in
 ten normal spawns immediately aggro; the others keep native sight aggression.
 

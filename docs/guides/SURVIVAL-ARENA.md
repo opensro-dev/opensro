@@ -33,7 +33,7 @@ Regular Qin-Shi Tomb creatures can appear when their levels fit your stage.
 Their natural levels range from 81 to 100; a level-90 character meets only
 those within the stage bands above.
 
-Wave density increases evenly through stages 1–5: approximately **1.8, 4.95,
+Average monsters per wave through stages 1–5: approximately **2.8, 4.95,
 8.1, 11.25 and 14.4 monsters per wave**, carrying fractions across waves.
 There can be up to **200 living monsters**
 in your arena. Some attack immediately; others notice you as you approach.

@@ -77,7 +77,7 @@ func TestStagePacingAndRepeatedHunt(t *testing.T) {
 		for wave := 0; wave < 5; wave++ {
 			total += WaveSize(stage, wave)
 		}
-		if total != [5]int{9, 25, 41, 57, 72}[stage] {
+		if total != [5]int{14, 25, 41, 57, 72}[stage] {
 			t.Fatalf("stage %d five-wave budget %d", stage+1, total)
 		}
 	}
@@ -235,11 +235,11 @@ func TestStageWaveCapRespectsShortenedTimers(t *testing.T) {
 
 /*
 ================
-TestLinearStageDensityAndFinalStageCeiling
+TestStageDensityAndFinalStageCeiling
 ================
 */
-func TestLinearStageDensityAndFinalStageCeiling(t *testing.T) {
-	for stage, want := range []int{27, 75, 122, 169, 216} {
+func TestStageDensityAndFinalStageCeiling(t *testing.T) {
+	for stage, want := range []int{42, 75, 122, 169, 216} {
 		total := 0
 		for wave := range StageWaveLimit {
 			total += WaveSize(stage, wave)
@@ -249,8 +249,8 @@ func TestLinearStageDensityAndFinalStageCeiling(t *testing.T) {
 		}
 	}
 	for wave := range StageWaveLimit {
-		if WaveSize(0, wave) != [5]int{2, 2, 2, 2, 1}[wave%5] {
-			t.Fatal("stage one changed")
+		if WaveSize(0, wave) != [5]int{3, 3, 3, 3, 2}[wave%5] {
+			t.Fatal("stage one must add one monster per wave")
 		}
 		if WaveSize(4, wave) != [5]int{15, 14, 15, 14, 14}[wave%5] {
 			t.Fatal("final stage differs from former stage four")

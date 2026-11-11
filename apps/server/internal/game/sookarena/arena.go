@@ -283,13 +283,17 @@ func Fivefold(value int64) int64 {
 
 /*
 ================
-WaveSize - linear density from stage I to the former stage IV, with carried fractions.
+WaveSize - carried stage density, with one additional monster per stage-I wave.
 ================
 */
 func WaveSize(stage, wave int) int {
 	// Quarter-sized bases: 3, 8.25, 13.5, 18.75, 24, retaining the 60% density.
 	baseQuarters := 12 + 21*max(0, min(StageCount-1, stage))
-	return ((wave+1)*baseQuarters*3+19)/20 - (wave*baseQuarters*3+19)/20
+	count := ((wave+1)*baseQuarters*3+19)/20 - (wave*baseQuarters*3+19)/20
+	if stage <= 0 {
+		count++
+	}
+	return count
 }
 
 /*
