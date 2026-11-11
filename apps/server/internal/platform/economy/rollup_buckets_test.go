@@ -175,3 +175,37 @@ VALUES (?, 'd1', 'shop_buy', 0, -777, -777, -777, 1)`, (dayStart+(11*24+3)*3600)
 		t.Fatalf("rollup with an unfolded tail differs from the row fold\nwant %+v\ngot  %+v", want, got)
 	}
 }
+
+/*
+================
+TestMergeSurvivesAGrowingSlice
+
+The bucket entries arrive in a slice with no room to spare. A tail
+entry with a new key makes the merge grow it, which moves the slice;
+a tail entry for an existing key that follows must still land in the
+result. With pointers into the old array it was added there and lost:
+the hour read 70 where it holds 100.
+================
+*/
+func TestMergeSurvivesAGrowingSlice(t *testing.T) {
+	entries := make([]rollupEntry, 2, 2)
+	entries[0] = rollupEntry{t: 1000, division: "main", reason: "monster_gold", gain: true, sum: 70, min: 5, max: 40, count: 3}
+	entries[1] = rollupEntry{t: 2000, division: "main", reason: "monster_gold", gain: true, sum: 10, min: 10, max: 10, count: 1}
+	tail := []rollupEntry{
+		{t: 3000, division: "main", reason: "npc_sale", gain: true, sum: 8, min: 8, max: 8, count: 1},
+		{t: 1000, division: "main", reason: "monster_gold", gain: true, sum: 30, min: 2, max: 28, count: 2},
+		{t: 3000, division: "main", reason: "npc_sale", gain: true, sum: 4, min: 4, max: 4, count: 1},
+	}
+	merged := mergeRollupEntries(entries, tail)
+	if len(merged) != 3 {
+		t.Fatalf("the merge returned %d entries, want 3", len(merged))
+	}
+	first := merged[0]
+	if first.t != 1000 || first.sum != 100 || first.min != 2 || first.max != 40 || first.count != 5 {
+		t.Fatalf("the hour merged after the slice grew reads %+v, want sum 100, min 2, max 40, count 5", first)
+	}
+	last := merged[2]
+	if last.t != 3000 || last.sum != 12 || last.count != 2 {
+		t.Fatalf("the appended hour reads %+v, want sum 12, count 2", last)
+	}
+}

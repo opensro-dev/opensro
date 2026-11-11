@@ -444,7 +444,7 @@ GROUP BY 1, division, reason, gold > 0`, economyHourMs, economyHourMs, foldSeq, 
 		return false, err
 	}
 	charRows, err := read.Query(`SELECT (at_ms / ?) * ?, char_id, reason, SUM(gold), COUNT(*)
-FROM economy_ledger WHERE seq > ? AND seq <= ? AND reason IN ('monster_gold', 'npc_sale')
+FROM economy_ledger WHERE seq > ? AND seq <= ? AND bucketed IS NULL AND reason IN ('monster_gold', 'npc_sale')
 GROUP BY 1, char_id, reason`, economyHourMs, economyHourMs, foldSeq, endSeq)
 	if err != nil {
 		return false, err

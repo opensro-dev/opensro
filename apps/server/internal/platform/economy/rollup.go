@@ -156,6 +156,11 @@ mergeRollupEntries
 Folds tail entries into the bucket entries by hour, division, reason
 and direction: totals and counts add, minima and maxima combine.
 Both sides are oldest first; the result stays oldest first.
+
+The index holds positions, not pointers. A tail entry with a new key
+is appended, and an append at capacity moves the slice: a pointer
+taken before it would name the old array, and a later merge into an
+existing key would be added there and lost (#3195 review).
 ================
 */
 func mergeRollupEntries(entries, tail []rollupEntry) []rollupEntry {
@@ -168,14 +173,15 @@ func mergeRollupEntries(entries, tail []rollupEntry) []rollupEntry {
 		reason   string
 		gain     bool
 	}
-	index := make(map[key]*rollupEntry, len(entries))
+	index := make(map[key]int, len(entries))
 	for i := range entries {
-		index[key{entries[i].t, entries[i].division, entries[i].reason, entries[i].gain}] = &entries[i]
+		index[key{entries[i].t, entries[i].division, entries[i].reason, entries[i].gain}] = i
 	}
 	out := entries
 	for _, e := range tail {
 		k := key{e.t, e.division, e.reason, e.gain}
-		if have := index[k]; have != nil {
+		if at, held := index[k]; held {
+			have := &out[at]
 			have.sum += e.sum
 			if e.min < have.min {
 				have.min = e.min
@@ -187,7 +193,7 @@ func mergeRollupEntries(entries, tail []rollupEntry) []rollupEntry {
 			continue
 		}
 		out = append(out, e)
-		index[k] = &out[len(out)-1]
+		index[k] = len(out) - 1
 	}
 	slices.SortFunc(out, func(a, b rollupEntry) int {
 		return cmp.Compare(a.t, b.t)
