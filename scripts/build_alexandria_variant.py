@@ -621,8 +621,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	weapons = add_items(vsro_root, native, out)
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	from mall_avatar_import import add_avatars
+	from mall_avatar_import import add_avatars, add_source, v1696_root, V1696_SOURCE
 	mall_avatars = add_avatars(vsro_root, native, out)
+	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
+	# pinned by v1696_archive_pins.json). Unset removes a previous import.
+	later_avatars = add_source(v1696_root(), native, out, V1696_SOURCE)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -656,6 +659,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcServices": city_services,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
+		"mallAvatarsV1696": later_avatars,
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,

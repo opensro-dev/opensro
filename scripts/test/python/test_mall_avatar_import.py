@@ -56,6 +56,26 @@ def native_row(identity, code="ITEM_CH_SWORD_01"):
 	return row
 
 
+class TextLayoutTests(unittest.TestCase):
+	# ================
+	# test_v1696_row_takes_the_vsro_layout
+	# ================
+	def test_v1696_row_takes_the_vsro_layout(self):
+		row = ["1", "5979", "SN_X", "ko"] + ["0"] * 5 + ["Devil"] + ["0"] * 3 + ["Devil"] * 4
+		cells = importer.vsro_text_row(row)
+		self.assertEqual(len(cells), importer.VSRO_TEXT_COLUMNS)
+		self.assertEqual(cells[:4], ["1", "SN_X", "ko", ""])
+		self.assertEqual(cells[importer.TEXT_ENGLISH], "Devil")
+		self.assertNotIn(importer.V1696_ABSENT, cells[3:])
+
+	# ================
+	# test_vsro_row_passes_through
+	# ================
+	def test_vsro_row_passes_through(self):
+		row = ["1", "SN_X", "ko", "", "tw", "cn", "en", "ja", "en", "vi", "en", "ru", "en", "en", "en"]
+		self.assertIs(importer.vsro_text_row(row), row)
+
+
 class SwitchTests(unittest.TestCase):
 	# ================
 	# test_unset_is_on
@@ -231,15 +251,42 @@ class MallTests(unittest.TestCase):
 		self.assertEqual(importer.avatar_kind("ITEM_MALL_AVATAR_M_ADMIRAL_2011"), "dress")
 
 	# ================
-	# test_attachments_take_the_hat_tab_after_present_slots
+	# test_attachments_take_their_own_tab_after_present_slots
 	# ================
-	def test_attachments_take_the_hat_tab_after_present_slots(self):
+	def test_attachments_take_their_own_tab_after_present_slots(self):
 		later, current, avatars = self.tables()
 		rows, _ = importer.mall_rows(later, avatars, current, {1})
 		slots = {row[3]: (row[2], row[4]) for row in rows["refshopgoods.txt"]}
 		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_HAT"], ("MALL_AVATAR_HAT", "2"))
-		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_ATTACH"], ("MALL_AVATAR_HAT", "3"))
+		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_ATTACH"], (importer.ATTACH_TAB, "0"))
 		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY"], ("MALL_AVATAR_DRESS", "0"))
+
+	# ================
+	# test_attach_tab_row_is_carried_over_once
+	# ================
+	def test_attach_tab_row_is_carried_over_once(self):
+		later = [["1", "15", "3401", importer.ATTACH_TAB, "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_ATTACH", "xxx"]]
+		current = [["1", "11", "1982", "MALL_AVATAR_HAT", "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_HAT"],
+			["1", "11", "3401", "OTHER_TAB", "OTHER_GROUP", "X"]]
+		row = importer.attach_tab_row(current, later)
+		self.assertEqual(row, ["1", "11", "3402", importer.ATTACH_TAB, "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_ATTACH", "xxx"])
+		self.assertIsNone(importer.attach_tab_row(current + [row], later))
+		with self.assertRaises(ValueError):
+			importer.attach_tab_row(current, [])
+
+	# ================
+	# test_strip_tabs_removes_only_the_added_tab
+	# ================
+	def test_strip_tabs_removes_only_the_added_tab(self):
+		with tempfile.TemporaryDirectory() as folder:
+			output = Path(folder)
+			path = output / importer.TEXT_ROOT / importer.SHOP_TAB_TABLE
+			path.parent.mkdir(parents=True)
+			path.write_bytes(utf16([["1", "11", "1982", "MALL_AVATAR_HAT"], ["1", "11", "2379", importer.ATTACH_TAB]]))
+			importer.strip_tabs(output, {importer.ATTACH_TAB})
+			text = path.read_bytes().decode("utf-16")
+			self.assertIn("MALL_AVATAR_HAT", text)
+			self.assertNotIn(importer.ATTACH_TAB, text)
 
 	# ================
 	# test_unsold_and_packageless_avatars_stay_unlisted
@@ -250,6 +297,62 @@ class MallTests(unittest.TestCase):
 		reasons = {entry["code"]: entry["reason"] for entry in summary["unlisted"]}
 		self.assertEqual(reasons["ITEM_MALL_AVATAR_M_NOSALE"], "not sold in the later mall")
 		self.assertEqual(reasons["ITEM_MALL_AVATAR_M_NOPACKAGE"], "no package")
+
+	# ================
+	# test_list_all_authors_the_unsold_and_packageless
+	#
+	# Port-only listing: both avatars the later mall could not list get an
+	# authored package, plain scrap and native silk price, and take the
+	# dress tab after the avatars the later mall sold.
+	# ================
+	def test_list_all_authors_the_unsold_and_packageless(self):
+		later, current, avatars = self.tables()
+		rows, summary = importer.mall_rows(later, avatars, current, {1}, list_all=True)
+		self.assertEqual(summary["listed"], 5)
+		self.assertEqual(summary["unlisted"], [])
+		self.assertEqual(sorted(summary["authored"]), ["ITEM_MALL_AVATAR_M_NOPACKAGE", "ITEM_MALL_AVATAR_M_NOSALE"])
+		package = [row for row in rows["refpackageitem.txt"] if row[3] == "PACKAGE_ITEM_MALL_AVATAR_M_NOPACKAGE"][0]
+		self.assertEqual(package[4:9], ["0", "EXPAND_TERM_ALL", "SN_ITEM_MALL_AVATAR_M_NOPACKAGE",
+			"SN_ITEM_MALL_AVATAR_M_NOPACKAGE_TT_DESC", "item/avatar.ddj"])
+		self.assertEqual(len(package), 17)
+		scrap = [row for row in rows["refscrapofpackageitem.txt"] if row[2] == package[3]][0]
+		self.assertEqual((len(scrap), scrap[3]), (29, "ITEM_MALL_AVATAR_M_NOPACKAGE"))
+		prices = [row for row in rows["refpricepolicyofitem.txt"] if row[2] == package[3]]
+		self.assertEqual([row[3:5] for row in prices], [["2", "130"]])
+		slots = {row[3]: (row[2], row[4]) for row in rows["refshopgoods.txt"]}
+		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY"], ("MALL_AVATAR_DRESS", "0"))
+		self.assertEqual(slots["PACKAGE_ITEM_MALL_AVATAR_M_NOPACKAGE"], ("MALL_AVATAR_DRESS", "1"))
+		self.assertEqual(slots["PACKAGE_ITEM_MALL_AVATAR_M_NOSALE"], ("MALL_AVATAR_DRESS", "2"))
+
+	# ================
+	# test_authored_identities_pass_every_shipped_one
+	# ================
+	def test_authored_identities_pass_every_shipped_one(self):
+		later, current, avatars = self.tables()
+		rows, summary = importer.mall_rows(later, avatars, current, {90000}, list_all=True)
+		authored = {"PACKAGE_" + code for code in summary["authored"]}
+		ids = [int(row[2]) for row in rows["refpackageitem.txt"] if row[3] in authored]
+		serials = [int(row[28]) for row in rows["refscrapofpackageitem.txt"] if row[2] in authored]
+		self.assertTrue(all(identity > 90000 for identity in ids))
+		self.assertTrue(all(serial > 80000 for serial in serials))
+		self.assertEqual(len(set(ids)), 2)
+		self.assertEqual(len(set(serials)), 2)
+
+	# ================
+	# test_a_full_tab_is_refused
+	# ================
+	def test_a_full_tab_is_refused(self):
+		later, current, avatars = self.tables()
+		current["refshopgoods.txt"].append(["1", "11", "MALL_AVATAR_DRESS", "PACKAGE_Y", "255"] + ["-1", "xxx"] * 4)
+		with self.assertRaises(ValueError):
+			importer.mall_rows(later, avatars, current, {1}, list_all=True)
+
+	# ================
+	# test_list_all_switch_is_read
+	# ================
+	def test_list_all_switch_is_read(self):
+		self.assertTrue(importer.enabled({}, importer.LIST_ALL_FLAG))
+		self.assertFalse(importer.enabled({importer.LIST_ALL_FLAG: "off"}, importer.LIST_ALL_FLAG))
 
 	# ================
 	# test_package_identity_clash_is_refused
@@ -337,6 +440,59 @@ class BuildTests(unittest.TestCase):
 				self.assertFalse((output / importer.TEXT_ROOT / importer.OUTPUT_SHARD).exists())
 				self.assertFalse((output / importer.REPORT_NAME).exists())
 				self.assertTrue(importer.add_avatars(later, native, output)["enabled"])
+
+	# ================
+	# stage_v1696
+	#
+	# A v1.696-shaped client: the text table is a shard index naming one
+	# part, whose rows carry the numeric text id and "0" cells.
+	# ================
+	def stage_v1696(self, root):
+		later = root / "v1696"
+		later.mkdir()
+		codes = ("ITEM_MALL_AVATAR_M_DEVIL_HAT", "ITEM_MALL_AVATAR_M_DEVIL")
+		rows = [avatar(code, FIRST_ID + index) for index, code in enumerate(codes)]
+		texts = [
+			["1", str(5000 + index), row[5], "ko"] + ["0"] * 5 + ["Devil"] + ["0"] * 3 + ["Devil"] * 4
+			for index, row in enumerate(rows)
+		]
+		manifest = utf16([["itemdata_100001.txt"]])
+		files = {
+			"itemdata.txt": manifest, "itemdata_100001.txt": utf16(rows),
+			"textdata_equip&skill.txt": utf16([["textdata_equip&skill_1.txt"]]),
+			"textdata_equip&skill_1.txt": utf16(texts),
+			"textdata_object.txt": utf16([]),
+		}
+		(later / "Media.pk2").write_bytes(archive_bytes(files))
+		(later / "Data.pk2").write_bytes(archive_bytes({}))
+		(later / "Particles.pk2").write_bytes(archive_bytes({}))
+		return later
+
+	# ================
+	# test_second_source_adds_its_own_shard
+	#
+	# The v1.696 pass runs after the VSRO pass: its rows land in their own
+	# shard, its sharded 17-column text is read, and it takes no identity
+	# the VSRO pass holds.
+	# ================
+	def test_second_source_adds_its_own_shard(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output, later = self.stage(Path(folder))
+			v1696 = self.stage_v1696(Path(folder))
+			closure, check = self.patched()
+			with closure, check:
+				first = importer.add_avatars(later, native, output)
+				second = importer.add_avatars(v1696, native, output, importer.V1696_SOURCE)
+			self.assertEqual(second["added"], 2)
+			self.assertEqual(second["source"], "v1696")
+			targets = [{entry["target"] for entry in summary["idMap"].values()} for summary in (first, second)]
+			self.assertFalse(targets[0] & targets[1])
+			self.assertEqual(
+				self.manifest_names(output),
+				["itemdata_5000.txt", importer.OUTPUT_SHARD, importer.V1696_SOURCE["shard"]],
+			)
+			names = (output / importer.TEXT_ROOT / "textdataname.txt").read_bytes().decode("utf-16")
+			self.assertIn("Devil", names)
 
 	# ================
 	# test_absent_client_skips_without_failing
