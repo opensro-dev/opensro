@@ -29,6 +29,14 @@ func TestEconomyRowReasonSplitsASettlement(t *testing.T) {
 		{"trade-sale 42", 7, true, "trade_party_share"},
 		{"thief-sale 42", 42, true, "thief_den_sale"},
 		{"thief-sale 42", 7, true, "trade_party_share"},
+		// The caravan's "-<slots>s<stars>" stamp (#3162) changes the
+		// stored door, never the reasons.
+		{"trade-sale-101s5 42", 42, true, "trade_sale_credit"},
+		{"trade-sale-101s5 42", 7, true, "trade_party_share"},
+		{"thief-sale-32s5 42", 42, true, "thief_den_sale"},
+		// Loading a transport burns at the trade-load door, stamped or not.
+		{"trade-load-32s5", 42, false, "trade_goods_cost"},
+		{"trade-load", 42, false, "trade_goods_cost"},
 		// A settlement without a readable subject pays nobody as the seller.
 		{"trade-sale", 42, true, "trade_party_share"},
 		{"trade-sale x", 42, true, "trade_party_share"},
