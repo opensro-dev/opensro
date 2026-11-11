@@ -49,6 +49,20 @@ FLAG = "SRO_MALL_AVATARS"
 FLAG_OFF = ("0", "off", "false", "no")
 REPORT_NAME = ".opensro-mall-avatars.json"
 OUTPUT_SHARD = "itemdata_100000.txt"
+
+# The later clients the avatars come from, in import order. Each owns one
+# shard and one marker, so a source's off path removes only its own rows.
+# The v1.696 client (owner, 2026-11-11: "we need all of them") adds the
+# 264 avatars the VSRO client lacks; its pass runs second and treats every
+# row already imported as existing, so a codename is imported once, from
+# the earliest client that has it.
+VSRO_SOURCE = {"name": "vsro", "shard": OUTPUT_SHARD, "report": REPORT_NAME, "pins": None}
+V1696_PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
+V1696_ENV = "SRO_V1696_ROOT"
+V1696_SOURCE = {"name": "v1696", "shard": "itemdata_100001.txt", "report": ".opensro-mall-avatars-v1696.json",
+	"pins": V1696_PIN_FILE}
+SOURCES = (VSRO_SOURCE, V1696_SOURCE)
+PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 FOLDERS = shared.FOLDERS
 TEXT_ROOT = shared.TEXT_ROOT
 CODE_PREFIX = "ITEM_MALL_AVATAR_"
@@ -71,7 +85,15 @@ MALL_TABLES = (
 	("refpackageitem.txt", 3), ("refscrapofpackageitem.txt", 2),
 	("refpricepolicyofitem.txt", 2), ("refshopgoods.txt", 3),
 )
-MALL_TAB_FOR = {"MALL_AVATAR_DRESS": "MALL_AVATAR_DRESS", "MALL_AVATAR_HAT": "MALL_AVATAR_HAT", "MALL_AVATAR_ATTACH": "MALL_AVATAR_HAT"}
+# Attachments take the later clients' own attachment tab (owner 2026-11-12,
+# replacing the 2026-10-13 hat-tab rule once the hats and attachments
+# together passed a tab's 256 slots). v1.150 ships the tab's label
+# (UIIT_STT_SILKMALL_ATTACH) but not its refshoptab row, so the import
+# carries the row over from the later client.
+ATTACH_TAB = "MALL_AVATAR_ATTACH"
+SHOP_TAB_TABLE = "refshoptab.txt"
+SHOP_TAB_CODE = 3
+MALL_TAB_FOR = {"MALL_AVATAR_DRESS": "MALL_AVATAR_DRESS", "MALL_AVATAR_HAT": "MALL_AVATAR_HAT", ATTACH_TAB: ATTACH_TAB}
 NATIVE_SOURCE = "11"
 # The silk price of every listed avatar is the v1.150 mall's own tier, not the
 # later client's authored amount (owner, 2026-11-04: "same as the others"):
@@ -83,6 +105,18 @@ HAT_CODE = re.compile(r"_HAT(_|$)")
 ATTACH_CODE = re.compile(r"_ATTACH(_|$)")
 PACKAGE_FLAG_COLUMN = 4
 MALL_PRICE_AMOUNT = 5
+# Port-only, not native (owner 2026-11-12: "we need it all"): an imported
+# avatar the later client never packaged or sold is listed anyway, with
+# the rows the server's authored mall goods carry (mallextra.go
+# authorMallPackage): a package drawn as the item, one plain scrap, the
+# native silk tier. Off lists only what the later mall sold.
+LIST_ALL_FLAG = "SRO_MALL_AVATARS_LIST_ALL"
+KIND_TAB = {"dress": "MALL_AVATAR_DRESS", "hat": "MALL_AVATAR_HAT", "attach": ATTACH_TAB}
+PACKAGE_PREFIX = "PACKAGE_"
+SCRAP_ZERO_COLUMNS = 16
+SCRAP_SERIAL = 28
+# A goods row's slot is one byte on the wire (mallcatalog.go MallAddress.Slot).
+MALL_SLOTS = 256
 
 
 # ================
@@ -92,13 +126,13 @@ MALL_PRICE_AMOUNT = 5
 # is on, and only an explicit off value turns it off. An unreadable value is
 # refused rather than guessed.
 # ================
-def enabled(env=os.environ):
-	value = env.get(FLAG, "").strip().lower()
+def enabled(env=os.environ, flag=FLAG):
+	value = env.get(flag, "").strip().lower()
 	if value in ("", "1", "on", "true", "yes"):
 		return True
 	if value in FLAG_OFF:
 		return False
-	raise ValueError(f"{FLAG} must be on or off, not {value!r}")
+	raise ValueError(f"{flag} must be on or off, not {value!r}")
 
 
 # ================
@@ -231,7 +265,7 @@ def avatar_kind(code):
 # tab's present slots. Avatars with no package, no sale or no price stay
 # unlisted and are reported.
 # ================
-def mall_rows(later, avatars, current, native_package_ids):
+def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 20}
 	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 9}
 	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == SERVICE_ON and len(row) >= 5}
@@ -244,24 +278,28 @@ def mall_rows(later, avatars, current, native_package_ids):
 		if len(row) >= 5 and row[2] in MALL_TAB_FOR.values():
 			next_slot[row[2]] = max(next_slot[row[2]], int(row[4]) + 1)
 	rows = {name: [] for name, _ in MALL_TABLES}
-	packages, unlisted = [], []
-	order = sorted(avatars, key=lambda row: (sale.get(scrap_of.get(row[items.CODENAME]), ("", 0))[1], row[items.CODENAME]))
+	packages, unlisted, authored = [], [], []
+	ids = AuthoredIds(later, current, native_package_ids)
+	order = sorted(avatars, key=lambda row: (
+		unlisted_reason(row[items.CODENAME], scrap_of, package_row, sale, prices) is not None,
+		sale.get(scrap_of.get(row[items.CODENAME]), ("", 0))[1], row[items.CODENAME],
+	))
 	for row in order:
 		code = row[items.CODENAME]
-		package = scrap_of.get(code)
-		if package is None or package not in package_row:
-			unlisted.append({"code": code, "reason": "no package"})
+		reason = unlisted_reason(code, scrap_of, package_row, sale, prices)
+		if reason is not None and list_all:
+			package = author_package(rows, row, ids)
+			tab = KIND_TAB[avatar_kind(code)]
+			rows["refshopgoods.txt"].append(["1", NATIVE_SOURCE, tab, package, str(next_slot[tab])] + ["-1", items.UNUSED] * 4)
+			next_slot[tab] += 1
+			packages.append(package)
+			authored.append(code)
 			continue
-		if package not in sale:
-			unlisted.append({"code": code, "reason": "not sold in the later mall"})
+		if reason is not None:
+			unlisted.append({"code": code, "reason": reason})
 			continue
-		tab = MALL_TAB_FOR.get(sale[package][0])
-		if tab is None:
-			unlisted.append({"code": code, "reason": "tab " + sale[package][0]})
-			continue
-		if not prices[package]:
-			unlisted.append({"code": code, "reason": "no price"})
-			continue
+		package = scrap_of[code]
+		tab = MALL_TAB_FOR[sale[package][0]]
 		if int(package_row[package][2]) in native_package_ids:
 			raise ValueError(f"package identity clash: {package}")
 		package_cells = list(package_row[package])
@@ -278,7 +316,127 @@ def mall_rows(later, avatars, current, native_package_ids):
 		rows["refshopgoods.txt"].append(["1", NATIVE_SOURCE, tab, package, str(next_slot[tab])] + ["-1", items.UNUSED] * 4)
 		next_slot[tab] += 1
 		packages.append(package)
-	return rows, {"packages": packages, "listed": len(packages), "unlisted": unlisted}
+	for tab, slots in next_slot.items():
+		if slots > MALL_SLOTS:
+			raise ValueError(f"{tab} would hold {slots} goods; the mall's one-byte slot holds {MALL_SLOTS}")
+	return rows, {"packages": packages, "listed": len(packages), "authored": authored, "unlisted": unlisted}
+
+
+# ================
+# attach_tab_row
+#
+# The attachment tab's refshoptab row as the later client authors it (its
+# group, label and identity), or None when the tree already has the tab.
+# The later identity is kept unless the tree uses it, then the next free
+# one. Appended last, it is the avatar shop's fourth tab, as in the later
+# clients, and shifts no other tab's index (mallcatalog.go numbers tabs
+# by row order within a shop).
+# ================
+def attach_tab_row(current, later):
+	if any(len(row) > SHOP_TAB_CODE and row[SHOP_TAB_CODE] == ATTACH_TAB for row in current):
+		return None
+	authored = [row for row in later if len(row) > SHOP_TAB_CODE and row[0] == SERVICE_ON and row[SHOP_TAB_CODE] == ATTACH_TAB]
+	if not authored:
+		raise ValueError(f"the later client has no {ATTACH_TAB} tab to carry over")
+	row = list(authored[0])
+	row[1] = NATIVE_SOURCE
+	taken = {int(cells[2]) for cells in current if len(cells) > 2 and cells[2].isdigit()}
+	identity = int(row[2])
+	while identity in taken:
+		identity += 1
+	row[2] = str(identity)
+	return row
+
+
+# ================
+# strip_tabs
+#
+# Drops the refshoptab rows a previous run added, by tab code.
+# ================
+def strip_tabs(output, codes):
+	if not codes:
+		return
+	path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
+	if not path.exists():
+		return
+	lines = tables.decode_table(path.read_bytes()).splitlines()
+	kept = [line for line in lines if not (len(line.split("\t")) > SHOP_TAB_CODE and line.split("\t")[SHOP_TAB_CODE] in codes)]
+	if len(kept) != len(lines):
+		write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
+
+
+# ================
+# unlisted_reason
+#
+# Why the later client's own mall rows cannot list an avatar, or None when
+# they can: no package, a package it never sold, a tab the v1.150 mall
+# lacks, or no price.
+# ================
+def unlisted_reason(code, scrap_of, package_row, sale, prices):
+	package = scrap_of.get(code)
+	if package is None or package not in package_row:
+		return "no package"
+	if package not in sale:
+		return "not sold in the later mall"
+	if MALL_TAB_FOR.get(sale[package][0]) is None:
+		return "tab " + sale[package][0]
+	if not prices[package]:
+		return "no price"
+	return None
+
+
+# ================
+# AuthoredIds
+#
+# The package identities and scrap serials an authored listing takes: past
+# every one the native tree and the later client hold, so no authored row
+# can collide with a shipped one or with a later package imported beside it.
+# ================
+class AuthoredIds:
+	def __init__(self, later, current, native_package_ids):
+		package_ids = set(native_package_ids)
+		serials = set()
+		for tables_ in (later, current):
+			for row in tables_["refpackageitem.txt"]:
+				if len(row) > 3 and row[2].isdigit():
+					package_ids.add(int(row[2]))
+			for row in tables_["refscrapofpackageitem.txt"]:
+				if len(row) > SCRAP_SERIAL and row[SCRAP_SERIAL].isdigit():
+					serials.add(int(row[SCRAP_SERIAL]))
+		# Only the built tree's names can clash: a later package this import
+		# does not carry over (one it never sold) never reaches the output.
+		names = {row[3] for row in current["refpackageitem.txt"] if len(row) > 3}
+		self.package_names = names
+		self.next_package = max(package_ids, default=0) + 1
+		self.next_serial = max(serials, default=0) + 1
+
+
+# ================
+# author_package
+#
+# The package, scrap and silk price v1.150 would carry for a one-avatar
+# package it never shipped, in the later client's column layout: named,
+# described and drawn as the item itself (mallextra.go authorMallPackage
+# writes the same rows for an operator-listed item).
+# ================
+def author_package(rows, row, ids):
+	code = row[items.CODENAME]
+	package = PACKAGE_PREFIX + code
+	if package in ids.package_names:
+		raise ValueError(f"authored package {package} already exists")
+	ids.package_names.add(package)
+	none = ["-1", items.UNUSED] * 4
+	rows["refpackageitem.txt"].append(
+		["1", NATIVE_SOURCE, str(ids.next_package), package, "0", "EXPAND_TERM_ALL",
+		row[items.NAME_KEY], row[items.DESCRIPTION_KEY], row[items.ICON]] + none
+	)
+	rows["refscrapofpackageitem.txt"].append(
+		["1", NATIVE_SOURCE, package, code] + ["0"] * SCRAP_ZERO_COLUMNS + none + [str(ids.next_serial)]
+	)
+	rows["refpricepolicyofitem.txt"].append(["1", NATIVE_SOURCE, package, SILK_CURRENCY, SILK_PRICE[avatar_kind(code)]] + none)
+	ids.next_package += 1
+	ids.next_serial += 1
+	return package
 
 
 # ================
@@ -289,12 +447,14 @@ def mall_rows(later, avatars, current, native_package_ids):
 # ================
 def remove_import(output, marker, shard, manifest):
 	if marker.exists():
-		strip_mall(output, set(json.loads(marker.read_text(encoding="utf-8")).get("mall", {}).get("packages", [])))
+		mall = json.loads(marker.read_text(encoding="utf-8")).get("mall", {})
+		strip_mall(output, set(mall.get("packages", [])))
+		strip_tabs(output, set(mall.get("tabs", [])))
 	if shard.exists():
 		shard.unlink()
 	if manifest.exists():
 		names = [row[0] for row in tables.table_rows(manifest.read_bytes()) if row]
-		kept = [name for name in names if sro_pk2.fold_ascii(name) != OUTPUT_SHARD]
+		kept = [name for name in names if sro_pk2.fold_ascii(name) != shard.name]
 		if len(kept) != len(names):
 			write_atomically(manifest, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
 	if marker.exists():
@@ -325,19 +485,82 @@ def resource_check(archives, native_paths):
 
 
 # ================
+# later_text_rows
+#
+# The rows of one later text table. The VSRO client keeps each table in
+# one file; the v1.696 client keeps a short index of shard names
+# (textdata_equip&skill_150.txt, ...) under the table's own name, as
+# itemdata.txt indexes its shards. A table the client does not ship
+# contributes no rows (v1.696 has no textdata_new.txt).
+# ================
+def later_text_rows(media, index, name):
+	return [vsro_text_row(row) for row in later_table_rows(media, index, name)]
+
+
+# ================
+# later_table_rows
+#
+# The rows of one later-client table, [] when the client lacks it. v1.696
+# shards its big tables: the named file then lists only `<stem>_<n>.txt`
+# names, and the rows are those files' rows in the listed order.
+# ================
+def later_table_rows(media, index, name):
+	if tables.TEXTDATA + name not in index:
+		return []
+	rows = tables.table_rows(tables.table_text(media, index, name))
+	stem = sro_pk2.fold_ascii(name)[:-len(".txt")]
+	shard = re.compile(re.escape(stem) + r"_\d+\.txt", re.IGNORECASE)
+	listed = [row[0].strip() for row in rows if row and row[0].strip()]
+	if not listed or not all(len(row) == 1 and shard.fullmatch(row[0].strip()) for row in rows if row and row[0].strip()):
+		return rows
+	return [row for part in listed for row in tables.table_rows(tables.table_text(media, index, sro_pk2.fold_ascii(part)))]
+
+
+# The VSRO text layout: service, key, then 13 language cells; 8 is the
+# English one the port reads, and the VSRO client repeats English in 6,
+# 10, 12, 13 and 14 where it has no translation.
+VSRO_TEXT_COLUMNS = 15
+TEXT_ENGLISH = 8
+V1696_TEXT_COLUMNS = 17
+V1696_ABSENT = "0"
+
+
+# ================
+# vsro_text_row
+#
+# One text row in the VSRO layout. A v1.696 row carries a numeric text id
+# after the service cell, one more language cell at the end, and "0" in
+# every cell it has no translation for (read 2026-11-11 off
+# SN_ITEM_MALL_AVATAR_M_TURKEY in both clients: v1.696 cell i+1 is VSRO
+# cell i). The id goes, the cells shift back, and an absent translation
+# takes the English name, as the VSRO client authors it. VSRO rows pass
+# through unchanged.
+# ================
+def vsro_text_row(row):
+	if len(row) != V1696_TEXT_COLUMNS or not row[1].strip().isdigit():
+		return row
+	cells = [row[0]] + row[2:2 + VSRO_TEXT_COLUMNS - 1]
+	english = cells[TEXT_ENGLISH]
+	for column in range(3, VSRO_TEXT_COLUMNS):
+		if cells[column] == V1696_ABSENT:
+			cells[column] = "" if column == 3 else english
+	return cells
+
+
+# ================
 # add_avatars
 #
 # A successful marker owns exactly one generated shard. The manifest is read
 # from the output when the cap-110 import already wrote it, else from the
 # native tree, and gains one line.
 # ================
-def add_avatars(vsro_root, native, output):
+def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 	native, output = native.resolve(), output.resolve()
 	if native == output or native in output.parents or output in native.parents:
 		raise ValueError("avatar output must be separate from the native extraction")
-	marker = output / REPORT_NAME
+	marker = output / source["report"]
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
-	shard = safe_target(output / TEXT_ROOT, OUTPUT_SHARD)
+	shard = safe_target(output / TEXT_ROOT, source["shard"])
 	manifest = safe_target(output / TEXT_ROOT, "itemdata.txt")
 	if shard.exists():
 		if not marker.exists():
@@ -347,7 +570,7 @@ def add_avatars(vsro_root, native, output):
 	if not enabled():
 		remove_import(output, marker, shard, manifest)
 		return {"enabled": False, "added": 0}
-	if not all((Path(vsro_root) / f"{name}.pk2").is_file() for name in FOLDERS):
+	if vsro_root is None or not all((Path(vsro_root) / f"{name}.pk2").is_file() for name in FOLDERS):
 		remove_import(output, marker, shard, manifest)
 		return {"enabled": False, "added": 0, "skipped": "no later client found"}
 	with ExitStack() as stack:
@@ -381,6 +604,15 @@ def add_avatars(vsro_root, native, output):
 		other_shard = output / TEXT_ROOT / items.OUTPUT_SHARD
 		if other_shard.exists():
 			reserved |= {int(row[items.IDENTITY]) for row in tables.table_rows(other_shard.read_bytes())}
+		# An earlier source's avatars are already in the game: this source
+		# skips their codenames as it skips native ones, and keeps clear of
+		# their identities.
+		for earlier in SOURCES[:SOURCES.index(source)]:
+			earlier_shard = output / TEXT_ROOT / earlier["shard"]
+			if earlier_shard.exists():
+				earlier_rows = tables.table_rows(earlier_shard.read_bytes())
+				native_rows = native_rows + earlier_rows
+				reserved |= {int(row[items.IDENTITY]) for row in earlier_rows}
 		native_paths = {
 			name: {
 				shared.normalized_path(path.relative_to(native / folder).as_posix())
@@ -389,7 +621,7 @@ def add_avatars(vsro_root, native, output):
 		}
 		later_texts = [
 			row for name in ("textdata_equip&skill.txt", "textdata_object.txt", "textdata_new.txt")
-			for row in tables.table_rows(read_later(name))
+			for row in later_text_rows(media, index, name)
 		]
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
@@ -401,6 +633,7 @@ def add_avatars(vsro_root, native, output):
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, avatars)
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
 		strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
+		strip_tabs(output, set(prior.get("mall", {}).get("tabs", [])))
 		mall_files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in MALL_TABLES}
 		mall_summary = {"packages": [], "listed": 0, "unlisted": [], "note": "no mall tables in the later client or native tree"}
 		if all(sro_pk2.fold_ascii(name) in base_paths and tables.TEXTDATA + name in index for name, _ in MALL_TABLES):
@@ -408,20 +641,30 @@ def add_avatars(vsro_root, native, output):
 				name: tables.table_rows(mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name))
 				for name, _ in MALL_TABLES
 			}
-			later_mall = {name: tables.table_rows(read_later(name)) for name, _ in MALL_TABLES}
-			mall, mall_summary = mall_rows(later_mall, avatars, current, {int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2})
+			later_mall = {name: later_table_rows(media, index, name) for name, _ in MALL_TABLES}
+			mall, mall_summary = mall_rows(
+				later_mall, avatars, current, {int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2},
+				enabled(flag=LIST_ALL_FLAG),
+			)
 			for name, _ in MALL_TABLES:
 				raw = mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name)
 				write_atomically(mall_files[name], text_tables.append_rows(raw, mall[name]))
+			if any(row[2] == ATTACH_TAB for row in mall["refshopgoods.txt"]):
+				tab_path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
+				raw = tab_path.read_bytes() if tab_path.exists() else read_native(SHOP_TAB_TABLE)
+				row = attach_tab_row(tables.table_rows(raw), later_table_rows(media, index, SHOP_TAB_TABLE))
+				if row is not None:
+					write_atomically(tab_path, text_tables.append_rows(raw, [row]))
+					mall_summary["tabs"] = [ATTACH_TAB]
 		raw_shard = b"\xff\xfe" + text_tables.table_text(avatars).encode("utf-16-le")
 		current = manifest.read_bytes() if manifest.exists() else read_native("itemdata.txt")
 		names = [row[0] for row in tables.table_rows(current) if row]
-		names = [name for name in names if sro_pk2.fold_ascii(name) != OUTPUT_SHARD]
+		names = [name for name in names if sro_pk2.fold_ascii(name) != shard.name]
 		write_atomically(shard, raw_shard)
 		write_atomically(text_path, merged_text)
-		write_atomically(manifest, b"\xff\xfe" + ("\r\n".join(names + [OUTPUT_SHARD]) + "\r\n").encode("utf-16-le"))
+		write_atomically(manifest, b"\xff\xfe" + ("\r\n".join(names + [shard.name]) + "\r\n").encode("utf-16-le"))
 		summary.update({
-			"enabled": True, "format": "opensro-mall-avatars-v1", "portOnly": True,
+			"enabled": True, "format": "opensro-mall-avatars-v1", "portOnly": True, "source": source["name"],
 			"laterArchiveHashes": identities, "shardSha256": sro_pk2.digest(raw_shard),
 			"absentAuthoredDescriptions": missing_descriptions,
 			"assets": assets, "mall": mall_summary,
@@ -436,26 +679,68 @@ def add_avatars(vsro_root, native, output):
 
 
 # ================
+# source_pins
+#
+# The pinned archive hashes of one source: None keeps the VSRO pin file
+# import_vsro_alexandria reads; another source names its own file, in the
+# same format, so its archives are checked before any of them is read.
+# ================
+def source_pins(source):
+	if source["pins"] is None:
+		return None
+	try:
+		pin = json.loads(Path(source["pins"]).read_text(encoding="utf-8"))
+	except (OSError, ValueError) as error:
+		raise SystemExit(f"{source['pins']} is unreadable: {error}")
+	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
+		raise SystemExit(f"{source['pins']} is not a {PIN_FORMAT} pin file")
+	return pin["archives"]
+
+
+# ================
+# add_source
+#
+# One source's pass: its archives are verified against its pins when the
+# import is on and the client is present, then imported; an absent
+# client removes the source's previous import.
+# ================
+def add_source(root, native, output, source):
+	if root is not None and enabled() and all((Path(root) / f"{name}.pk2").is_file() for name in FOLDERS):
+		tables.require_vsro_pin(root, tuple(FOLDERS), source_pins(source))
+	return add_avatars(root, native, output, source)
+
+
+# ================
+# v1696_root
+#
+# The v1.696 client folder from SRO_V1696_ROOT, or None when unset.
+# ================
+def v1696_root(env=os.environ):
+	value = env.get(V1696_ENV, "").strip()
+	return Path(value) if value else None
+
+
+# ================
 # main
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--vsro-root", type=Path, required=True)
+	parser.add_argument("--v1696-root", type=Path, default=v1696_root(), help=f"the v1.696 client (else {V1696_ENV})")
 	parser.add_argument("--native-extracted", type=Path, default=EXTRACTED_ROOT)
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "mall-avatars" / "extracted")
 	args = parser.parse_args()
-	if enabled() and all((args.vsro_root / f"{name}.pk2").is_file() for name in FOLDERS):
-		tables.require_vsro_pin(args.vsro_root, tuple(FOLDERS))
-	summary = add_avatars(args.vsro_root, args.native_extracted, args.output_extracted)
-	print(f"Avatars: {summary['added']}; enabled: {summary['enabled']}")
-	if summary["enabled"]:
-		print(f"Hats: {summary['hats']}; skipped: {len(summary['skipped'])}; verified resources: {len(summary['assets'])}")
-		print(f"Item Mall: {summary['mall']['listed']} listed; {len(summary['mall']['unlisted'])} unlisted")
-		for entry in summary["skipped"]:
-			print(f"  skipped {entry['code']}: {', '.join(entry['missing'])}")
-		print(f"Report: {args.output_extracted / REPORT_NAME}")
-	elif "skipped" in summary:
-		print(summary["skipped"])
+	for source, root in ((VSRO_SOURCE, args.vsro_root), (V1696_SOURCE, args.v1696_root)):
+		summary = add_source(root, args.native_extracted, args.output_extracted, source)
+		print(f"[{source['name']}] Avatars: {summary['added']}; enabled: {summary['enabled']}")
+		if summary["enabled"]:
+			print(f"  Hats: {summary['hats']}; skipped: {len(summary['skipped'])}; verified resources: {len(summary['assets'])}")
+			print(f"  Item Mall: {summary['mall']['listed']} listed; {len(summary['mall']['unlisted'])} unlisted")
+			for entry in summary["skipped"]:
+				print(f"  skipped {entry['code']}: {', '.join(entry['missing'])}")
+			print(f"  Report: {args.output_extracted / source['report']}")
+		elif "skipped" in summary:
+			print(f"  {summary['skipped']}")
 
 
 if __name__ == "__main__":

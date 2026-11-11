@@ -1,0 +1,9 @@
+{
+	"format": "opensro-vsro-archive-pins-v1",
+	"archives": {
+		"Data": "ad64f20f6a29f0023ace4101ef3f1d07a039ee15223e91b7f7969e7ee3e011d9",
+		"Map": "6db6af2b44477f5048dc143b353562d20f34ba9db6b0773d863ada0fa0e04ab7",
+		"Media": "db4f4424f4f74e46cf6ff7a401b41235d974f6879480a7936a7b841ae323ae87",
+		"Particles": "d482dde8a4fefc18e5546770ed0b6bd51ecc715b758ccc5827dda304851643d4"
+	}
+}
