@@ -443,6 +443,9 @@ type divisionTickState struct {
 	shownCOS            map[string]map[uint32]shownCOS
 	monsters            *MonsterMoverOps
 	playerMapDueMs      int64
+	// shownPeers inverted for the session legs only (peer_motion.go).
+	peerWatchers      map[uint32][]string
+	peerWatchersValid bool
 }
 
 /*
@@ -760,10 +763,13 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	span.End()
 	t.watch.step()
 	span = t.zone(ZoneKindSub, "sessionLegs")
+	// One inversion serves every leg: shownPeers changed only above.
+	work.state.indexPeerWatchers()
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
 		t.watch.step()
 	}
+	work.state.dropPeerWatchers()
 	span.End()
 	for sessionID := range work.state.settled {
 		if !live[sessionID] {
@@ -988,9 +994,7 @@ pushPeerMovement
 ================
 */
 func (t *Ticker) pushPeerMovement(state *divisionTickState, gid uint32, frames []Frame) {
-	for viewer, shown := range state.shownPeers {
-		if shown[gid] {
-			t.Push.PushToSession(viewer, frames)
-		}
-	}
+	state.forEachPeerWatcher(gid, func(viewer string) {
+		t.Push.PushToSession(viewer, frames)
+	})
 }
