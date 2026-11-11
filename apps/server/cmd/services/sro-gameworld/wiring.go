@@ -30,14 +30,12 @@ import (
 	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
-	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/game/world/worldarea"
-	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/platform/census"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
+	"opensro.online/server/internal/platform/processguard"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/platform/settingsapi"
@@ -114,6 +112,11 @@ type gameWorldApplication struct {
 	returnArrivals func(context.Context)
 	readiness      *readiness.Gate
 	leaseOwned     bool
+	// guard is the shard process guard when this construction won it
+	// (the standby handover's probe or wait, opensro-ops#281); nil on a
+	// boot whose caller holds the guard. Closed by rollback, or at the
+	// end of Run's shutdown tail after the authority store.
+	guard *processguard.Guard
 	// population and shardID let Run hold admission until the boot fill.
 	population *simulation.MonsterState
 	shardID    string
@@ -128,18 +131,38 @@ func newGameWorldApplication(
 	startupContext context.Context,
 	ts *transport.Server,
 	ownedShard shard.Definition,
+	boot standbyBoot,
 ) (application *gameWorldApplication, resultErr error) {
+	// Canary standby handover (opensro-ops#281, port-only, not native):
+	// armed, the standby-health listener comes up before anything else
+	// and the guard probe decides whether this process is the shard's
+	// writer or its loaded standby. Unarmed, none of this runs.
+	standbyWaiting := false
+	var standbyGuard *processguard.Guard
+	if boot.armed {
+		var err error
+		standbyGuard, standbyWaiting, err = probeStandbyGuard(startupContext, ts, ownedShard, boot)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// The liveness listener comes first (#3186): /transport/healthz
 	// answers from process start, before any of the load below, and
 	// names the boot phase it is in. Game routes and the WebTransport
 	// listener stay closed until Start at the end of construction -
-	// readiness still belongs to the gate.
-	if err := ts.StartHealth(); err != nil {
-		return nil, fmt.Errorf("transport health listener: %w", err)
+	// readiness still belongs to the gate. A standby skips the public
+	// listener here: its port stays unbound until the takeover (Start
+	// binds it then), and the standby-health listener answers liveness
+	// meanwhile.
+	if !standbyWaiting {
+		if err := ts.StartHealth(); err != nil {
+			return nil, fmt.Errorf("transport health listener: %w", err)
+		}
 	}
 	application = &gameWorldApplication{
 		transport: ts,
 		readiness: readiness.NewGate(),
+		guard:     standbyGuard,
 	}
 	ownedApplication := application
 	defer func() {
@@ -152,6 +175,22 @@ func newGameWorldApplication(
 	// stops the boot here, before anything reads it.
 	if err := tunables.Load(); err != nil {
 		return nil, fmt.Errorf("tunables: %w", err)
+	}
+	// Canary standby (opensro-ops#281): armed, the save-free load and
+	// any guard wait happen here, ahead of everything that needs the
+	// save (the settings store first of them, below).
+	var inputs saveFreeInputs
+	var loaded authorityTextdata
+	if boot.armed {
+		var guard *processguard.Guard
+		var err error
+		inputs, loaded, guard, err = loadStandbyInputs(startupContext, ts, ownedShard, boot, standbyWaiting)
+		if err != nil {
+			return nil, err
+		}
+		if guard != nil {
+			application.guard = guard
+		}
 	}
 	// Port-only: the staff console's approved overrides (settings.db, next
 	// to the shard's other operator stores) lie over the environment.
@@ -204,33 +243,15 @@ func newGameWorldApplication(
 			log.WithField("dir", traceDir).Info("tick trace: armed, one Perfetto file per slow tick")
 		}
 	}
-	dataPaths, err := gamedata.Resolve()
-	if err != nil {
-		return nil, fmt.Errorf("game data: %w", err)
+	if !boot.armed {
+		var err error
+		inputs, err = loadSaveFreeInputs()
+		if err != nil {
+			return nil, err
+		}
 	}
-	log.Infof(
-		"game data: bundle=%q manifest=%s",
-		dataPaths.BundleRoot,
-		dataPaths.ManifestDigest,
-	)
-	// SRO_ALEXANDRIA (port-only, not native) needs its overlay in the data.
-	if err := alexandria.Check(dataPaths.TextdataDir); err != nil {
-		return nil, fmt.Errorf("game data: %w", err)
-	}
-	authoredAreas, err := worldarea.LoadAuthority(dataPaths.WorldAuthorityDir)
-	if err != nil {
-		return nil, fmt.Errorf("authored world areas: %w", err)
-	}
-	devPaths := enterworld.DevPathsFromEnv(
-		dataPaths.CharacterAuthorityDir,
-		dataPaths.TextdataDir,
-	)
-	devPaths.AuthoredAreas = authoredAreas
-	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
-	characterRoster, err := enterworld.LoadRoster(devPaths.RosterPath)
-	if err != nil {
-		return nil, fmt.Errorf("character roster: %w", err)
-	}
+	dataPaths, devPaths := inputs.dataPaths, inputs.devPaths
+	authoredAreas, characterRoster := inputs.authoredAreas, inputs.roster
 
 	agentURL, err := configuredAgentURL()
 	if err != nil {
@@ -268,6 +289,13 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("EnterWorld process key: %w", err)
 	}
+	if !boot.armed {
+		var err error
+		loaded, err = loadAuthorityTextdata(devPaths)
+		if err != nil {
+			return nil, err
+		}
+	}
 	authority, err := openAuthorityPlane(
 		startupContext,
 		ts,
@@ -278,6 +306,7 @@ func newGameWorldApplication(
 		characterRoster,
 		sessionVerifier,
 		enterWorldSecret,
+		loaded,
 	)
 	if err != nil {
 		return nil, err
@@ -728,6 +757,10 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	} else {
 		log.Infof("shutdown: complete in %s (budget %s)", shutdownTotal, shutdownBudget)
 	}
+	// The guard is the boot's outermost lock: it goes last, after the
+	// authority store, so a standby waiting on it wakes to a shard
+	// whose writer holds nothing (opensro-ops#281).
+	application.closeGuard("shutdown")
 
 	return errors.Join(runErr, drainErr)
 }
@@ -859,6 +892,7 @@ func (application *gameWorldApplication) rollback() {
 	if application.history != nil {
 		_ = application.history.Close()
 	}
+	application.closeGuard("startup rollback")
 }
 
 // boundedCatalogueEnv opts a small host into the disk-backed skill and item

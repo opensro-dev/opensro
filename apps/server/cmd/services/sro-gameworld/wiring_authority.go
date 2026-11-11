@@ -119,6 +119,97 @@ func characterItems(items []enterworld.VisualItem) []agentapi.CharacterItem {
 
 /*
 ================
+authorityTextdata
+
+What opening the authority needs of the game data, loaded without the
+save: the textdata catalogues (every env-gated transform applied) and
+the quest definitions loader. The standby handover loads this before
+it holds the shard guard (opensro-ops#281); any other boot loads it on
+its way to the store, in the same order.
+================
+*/
+type authorityTextdata struct {
+	catalogs   *enterworld.TextdataCatalogs
+	loadQuests questDefinitionLoader
+}
+
+/*
+================
+loadAuthorityTextdata
+================
+*/
+func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, error) {
+	textdataDir := devPaths.TextdataDir
+	textdata, err := enterworld.LoadTextdataCatalogs(textdataDir)
+	if err != nil {
+		return authorityTextdata{}, err
+	}
+	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
+		return authorityTextdata{}, err
+	}
+	textdata.Items.ApplyAttackPetExpansion()
+	// Port-only, not native: raise configured stack caps before any owner
+	// reads a reference row. Unset keeps every itemdata cap.
+	stackSizes, err := enterworld.StackSizesFromEnv()
+	if err != nil {
+		return authorityTextdata{}, err
+	}
+	raised, err := textdata.Items.ApplyStackSizes(stackSizes)
+	if err != nil {
+		return authorityTextdata{}, err
+	}
+	if len(stackSizes) > 0 {
+		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
+	}
+	// Port-only, not native: trade goods are worth TradeGoodsPriceFactor times
+	// their v1.150 price (SRO_TRADE_TIERS, enterworld/tradegoodsprice.go).
+	if action.TradeTiersFromEnv() {
+		scaled, err := textdata.Items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor)
+		if err != nil {
+			return authorityTextdata{}, err
+		}
+		log.Infof("trade: %s priced %d trade goods x%d (port-only, not native)", action.EnvTradeTiers, scaled, enterworld.TradeGoodsPriceFactor)
+	}
+	// Port-only, not native: the Item Mall transports move 1.5 times as fast.
+	if enterworld.MallTransportSpeedFromEnv() {
+		scaled, err := textdata.Items.ApplyMallTransportSpeed()
+		if err != nil {
+			return authorityTextdata{}, err
+		}
+		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
+	}
+	// Port-only, not native (#2474): the job trade transports move 1.3
+	// times as fast (malltransport's families keep their own 1.5 rule).
+	if enterworld.JobTransportSpeedFromEnv() {
+		scaled, err := textdata.Items.ApplyJobTransportSpeed()
+		if err != nil {
+			return authorityTextdata{}, err
+		}
+		log.Infof("cos: %s scaled %d job transport(s) (port-only, not native)", enterworld.EnvJobTransportSpeed, scaled)
+	}
+	// Port-only, not native: the Item Mall vehicles and pets move faster
+	// (1.3 times by default, game/tunables).
+	rideFactor, rideOn, err := enterworld.MallRideSpeedFromEnv()
+	if err != nil {
+		return authorityTextdata{}, err
+	}
+	if rideOn {
+		scaled, err := textdata.Items.ApplyMallRideSpeed(rideFactor)
+		if err != nil {
+			return authorityTextdata{}, err
+		}
+		log.Infof("cos: %s=%v scaled %d mall vehicle and pet row(s) (port-only, not native)",
+			enterworld.EnvMallRideSpeed, rideFactor, scaled)
+	}
+	questCatalog := quest.NewCatalog(textdataDir)
+	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
+		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
+	})
+	return authorityTextdata{catalogs: textdata, loadQuests: loadQuests}, nil
+}
+
+/*
+================
 openAuthorityPlane
 ================
 */
@@ -132,75 +223,12 @@ func openAuthorityPlane(
 	characterRoster *enterworld.Roster,
 	sessionVerifier *auth.AgentSessionVerifier,
 	enterWorldSecret []byte,
+	loaded authorityTextdata,
 ) (authorityPlane, error) {
 	if err := startupContext.Err(); err != nil {
 		return authorityPlane{}, err
 	}
-	textdataDir := devPaths.TextdataDir
-	textdata, err := enterworld.LoadTextdataCatalogs(textdataDir)
-	if err != nil {
-		return authorityPlane{}, err
-	}
-	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
-		return authorityPlane{}, err
-	}
-	textdata.Items.ApplyAttackPetExpansion()
-	// Port-only, not native: raise configured stack caps before any owner
-	// reads a reference row. Unset keeps every itemdata cap.
-	stackSizes, err := enterworld.StackSizesFromEnv()
-	if err != nil {
-		return authorityPlane{}, err
-	}
-	raised, err := textdata.Items.ApplyStackSizes(stackSizes)
-	if err != nil {
-		return authorityPlane{}, err
-	}
-	if len(stackSizes) > 0 {
-		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
-	}
-	// Port-only, not native: trade goods are worth TradeGoodsPriceFactor times
-	// their v1.150 price (SRO_TRADE_TIERS, enterworld/tradegoodsprice.go).
-	if action.TradeTiersFromEnv() {
-		scaled, err := textdata.Items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor)
-		if err != nil {
-			return authorityPlane{}, err
-		}
-		log.Infof("trade: %s priced %d trade goods x%d (port-only, not native)", action.EnvTradeTiers, scaled, enterworld.TradeGoodsPriceFactor)
-	}
-	// Port-only, not native: the Item Mall transports move 1.5 times as fast.
-	if enterworld.MallTransportSpeedFromEnv() {
-		scaled, err := textdata.Items.ApplyMallTransportSpeed()
-		if err != nil {
-			return authorityPlane{}, err
-		}
-		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
-	}
-	// Port-only, not native (#2474): the job trade transports move 1.3
-	// times as fast (malltransport's families keep their own 1.5 rule).
-	if enterworld.JobTransportSpeedFromEnv() {
-		scaled, err := textdata.Items.ApplyJobTransportSpeed()
-		if err != nil {
-			return authorityPlane{}, err
-		}
-		log.Infof("cos: %s scaled %d job transport(s) (port-only, not native)", enterworld.EnvJobTransportSpeed, scaled)
-	}
-	// Port-only, not native: the Item Mall vehicles and pets move faster
-	// (1.3 times by default, game/tunables).
-	rideFactor, rideOn, err := enterworld.MallRideSpeedFromEnv()
-	if err != nil {
-		return authorityPlane{}, err
-	}
-	if rideOn {
-		scaled, err := textdata.Items.ApplyMallRideSpeed(rideFactor)
-		if err != nil {
-			return authorityPlane{}, err
-		}
-		log.Infof("cos: %s=%v scaled %d mall vehicle and pet row(s) (port-only, not native)",
-			enterworld.EnvMallRideSpeed, rideFactor, scaled)
-	}
-	if err := startupContext.Err(); err != nil {
-		return authorityPlane{}, err
-	}
+	textdata := loaded.catalogs
 	options := store.OptionsFromEnv()
 	// The startup context reaches the store's open (#3186): a stop
 	// during the long load leaves within a second, and a cancelled
@@ -217,12 +245,8 @@ func openAuthorityPlane(
 		devPaths.EquipItemsEnabled,
 	)
 
-	questCatalog := quest.NewCatalog(textdataDir)
-	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
-		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
-	})
 	options.DefaultQuests = func(raceKey string) ([]enterworld.ActiveQuestRecord, error) {
-		definitions, err := loadQuests()
+		definitions, err := loaded.loadQuests()
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +357,7 @@ func openAuthorityPlane(
 	return authorityPlane{
 		store:      authorityStore,
 		agentAPI:   api,
-		loadQuests: loadQuests,
+		loadQuests: loaded.loadQuests,
 		textdata:   textdata,
 		crests:     crests,
 	}, nil

@@ -11282,43 +11282,57 @@ export function createUi( ports: UiPorts ) {
 					}
 				}
 				// Port-only (Experimental "Fit window labels", off is the original):
-				// an English label that would run past its window's left edge (the
-				// trade window's "Purchase amount", right-aligned in 63 pixels, with
-				// a wider text face, or the consignment window's "Large category",
-				// right-aligned at x = 74 in a 43-pixel box) wraps onto two lines
-				// inside the room to the window's left margin instead.
-				if ( !clipToControl && experimental.state().saved.fitWindowLabels && value.includes( " " ) ) {
+				// an authored label (the static carries a text key; value fields
+				// with an empty authored text keep the native fitting) wider than
+				// its box (the trade window's "Purchase amount", right-aligned in
+				// 63 pixels, with a wider text face, or the consignment window's
+				// "Large category", right-aligned at x = 74 in a 43-pixel box)
+				// wraps onto two lines instead of running past its window's left
+				// edge or into the next control. A right-aligned label's lines may
+				// use the room to the window's left margin; the wrap width splits
+				// the label near its middle (never under its longest word) so a
+				// label whose room is the rest of the window still breaks in two
+				// instead of ellipsizing.
+				if (
+					!clipToControl && experimental.state().saved.fitWindowLabels && node.text !== "" &&
+					value.includes( " " )
+				) {
 					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
-					const width = measure( value ),
-						left = node.hAlign === 2 ?
-							box[0] + box[2] - width :
-							node.hAlign === 1 ?
-							box[0] + (box[2] - width) / 2 :
-							box[0],
-						room = node.hAlign === 2 ?
-							Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
-							box[2];
-					const lines = left < ox + WINDOW_LABEL_MARGIN ? textLines( value, room, measure ) : [];
-					if ( lines.length === 2 && lines.every( line => measure( line ) <= room ) ) {
-						const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-							top = box[1] + (box[3] - 2 * lineHeight) / 2;
-						lines.forEach( ( line, index ) =>
-							quads.push(
-								...text.quads(
-									line,
-									[ box[0], top + index * lineHeight, box[2], lineHeight ],
-									full,
-									node.color,
-									{
-										fontIndex: node.fontIndex,
-										fontStyle,
-										hAlign: node.hAlign,
-										vAlign: 1
-									}
+					const width = measure( value );
+					if ( width > box[2] ) {
+						const room = node.hAlign === 2 ?
+								Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
+								box[2],
+							balanced = Math.max(
+								box[2],
+								Math.ceil( width / 2 ),
+								...value.split( " " ).map( measure )
+							);
+						// The balanced split first (its widest line stays farthest
+						// from the window's edge), the room-wide split after it.
+						for ( const wrapWidth of balanced < room ? [ balanced, room ] : [ room ] ) {
+							const lines = textLines( value, wrapWidth, measure );
+							if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
+							const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
+								top = box[1] + (box[3] - 2 * lineHeight) / 2;
+							lines.forEach( ( line, index ) =>
+								quads.push(
+									...text.quads(
+										line,
+										[ box[0], top + index * lineHeight, box[2], lineHeight ],
+										full,
+										node.color,
+										{
+											fontIndex: node.fontIndex,
+											fontStyle,
+											hAlign: node.hAlign,
+											vAlign: 1
+										}
+									)
 								)
-							)
-						);
-						return;
+							);
+							return;
+						}
 					}
 				}
 				quads.push(

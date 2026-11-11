@@ -346,3 +346,11 @@ fresh archive-only import completed for region 25580 / sector 236,99 (83
 model/data entries and 11 particle entries). Four focused importer tests,
 source encoding, formatting, source-size and diff-whitespace checks pass.
 The existing published runtime was not rebuilt, restarted or reloaded.
+
+Merged main through c1e2a412 in the isolated source worktree; regenerated the
+sole conflicted file, the UI census, from the merged UI source. Client quick
+checks and 11 focused census/arena tests pass. Full Go sookarena, action and
+GameWorld wiring packages pass against the existing matched test data. The
+rewrite preserves the final source tree and removes the retail-input path
+from every feature commit; a force-with-lease push updates only this PR's
+feature branch. The running game continues on its prior deployed snapshot.
