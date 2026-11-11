@@ -108,9 +108,7 @@ func startGuildServer(t *testing.T, dir string, seeds []*enterworld.Character) g
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 	directory := presence.NewDirectory(srv.Hub)
 	communitySeeds := community.SeedFramesFunc(directory, deps.Letters)
