@@ -9,12 +9,14 @@ war roster and war sub-ops (0x32BB, 0x3B29), the alliance rows
 (0x341E, 0x3B29) and the guild and union answer notices. social.ts
 lends the lane its frame cursor and publishes the state it returns;
 party and invitation frames never reach here. The native addresses
-on the arms are the handlers the printers follow.
+on the arms are the handlers the printers follow. The member delta
+(0x3B29 subOp 6 and 0x16) reads and announces in guild-member-delta.ts.
 
 ===========================================================================
 */
 import { MASTER_RELEASE_VOTE } from "./guild-manager";
 import { guildWarProposalReply } from "./guild-war";
+import { readGuildMemberDelta } from "./guild-member-delta";
 import { withVoteBallot, withVoteCandidates } from "./guild-vote";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
@@ -591,87 +593,17 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 					)
 				};
 			} else if ( type === 6 || type === 0x16 ) {
-				const count = type === 6 ? 1 : u8(), commonMask = type === 6 ? undefined : u8();
-				const flips: SystemNotice[] = [];
-				for ( let i = 0; i < count; i++ ) {
-					const id = u32(), mask = commonMask ?? u8(), old = guild.members.find( m => m.id === id );
-					// An unknown leg bit leaves the rest of the frame unreadable.
-					if ( mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
-					// 5E9D20 @5e9d90: the applicator order is &1 level (+0x24),
-					// &2 offline (+0x26), &4 grade (+0x25), then donated,
-					// permissions, name, role. (The &1/&2 legs stood swapped
-					// here until #2281; both are u8 reads, so only the field
-					// assignment was wrong.)
-					const patch = {
-						...(mask & 1 ? { level: u8() } : {}),
-						...(mask & 2 ? { offline: u8() } : {}),
-						...(mask & 4 ? { grade: u8() } : {}),
-						...(mask & 8 ? { donated: u32() } : {}),
-						...(mask & 16 ? { permissions: u32() } : {}),
-						...(mask & 32 ? { name: str() } : {}),
-						...(mask & 64 ? { role: u8() } : {})
-					};
-					// A member this roster does not hold: the block was built
-					// before a join this client never received. The legs are
-					// read above, so the frame still parses; the delta is
-					// dropped as a degraded step instead of ending the
-					// session (#3211). INFERENCE: the client applicator
-					// (5E9D20) finds the member by jid before writing, so a
-					// missing row has nothing to write; no trace of the miss
-					// arm.
-					if ( !old ) {
-						next = {
-							...next,
-							degradation: {
-								code: "guild-member-delta-unknown",
-								message: "Guild member delta for unheld member " + id
-							}
-						};
-						continue;
-					}
-					// 5F3340: the announcement block is gated on the offline
-					// leg (mask &2 @5f3392) and prints only on an actual
-					// flip; the native row latch (+0x374, set @5f36d1 and
-					// cleared by the disconnect arm @5f38e0) collapses to
-					// the transition itself in this state model.
-					if ( (mask & 2) && patch.offline !== undefined && patch.offline !== old.offline ) {
-						const self = old.name === next.localName;
-						if ( patch.offline === 0 ) {
-							if ( self ) {
-								// @5f3687: the self leg prints the guild notice
-								// text when one exists - the object at record
-								// +0x50 (buffer +0x54, size +0x64), which the
-								// 5E4710 write arm fills from wire string #1
-								// @5e4a64: the port's subject. Contents is
-								// wire string #2, the window body.
-								if ( guild.subject ) {
-									flips.push( {
-										key: "UIIT_MSG_GUILD_CONNECT_NOTICE",
-										value: 0,
-										nativeType: 0,
-										arguments: [ guild.subject ]
-									} );
-								}
-							} else {
-								flips.push( {
-									key: "UIIT_MSG_GUILD_CONNECT",
-									value: 0,
-									nativeType: 0,
-									arguments: [ old.name ]
-								} );
-							}
-						} else if ( !self ) {
-							flips.push( {
-								key: "UIIT_MSG_GUILD_DISCONNECT",
-								value: 0,
-								nativeType: 0,
-								arguments: [ old.name ]
-							} );
-						}
-					}
-					guild = { ...guild, members: guild.members.map( m => m.id === id ? { ...m, ...patch } : m ) };
-				}
-				if ( flips.length ) next = { ...next, notices: flips };
+				const applied = readGuildMemberDelta( {
+					batch: type === 0x16,
+					guild,
+					localName: next.localName,
+					u8,
+					u32,
+					str
+				} );
+				guild = applied.guild;
+				if ( applied.notices.length ) next = { ...next, notices: applied.notices };
+				if ( applied.degradation ) next = { ...next, degradation: applied.degradation };
 			} else {
 				throw Error( "Unsupported guild update" );
 			}
