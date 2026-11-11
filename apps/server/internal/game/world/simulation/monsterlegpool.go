@@ -490,6 +490,13 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		}
 		stats.absorbBin(&bins[bin].stats)
 	}
+	// The commit half reads the clock once per batch, not once per
+	// actor (#3126): advance is a sum, and the per-actor pairs the
+	// serial leg's lane split needs have no second figure to serve
+	// here. The defer keeps the note when a worker's panic is
+	// re-raised out of the loop.
+	commitStarted := time.Now()
+	defer func() { stats.noteAdvance(time.Since(commitStarted)) }()
 	for pos := range plans {
 		if plans[pos].panicValue != nil {
 			// A worker's panic is re-raised here, at the actor's own
@@ -518,6 +525,11 @@ func (ops *MonsterMoverOps) runLegPlanBin(bin *legPlanBin, plans []legPlan, work
 	binOps.leg = &bin.stats
 	binOps.activityBlocks = bin.memo
 	canAttack := ops.RunAction != nil || ops.BasicAttack != nil
+	// One clock pair prices the whole bin (#3126): advance is a sum,
+	// so per-actor reads only bought the clock's own cost. The GC
+	// sample in the leg record already keeps this posture - once per
+	// leg, never per actor.
+	started := time.Now()
 	for _, pos := range bin.positions {
 		plan := &plans[pos]
 		owned := binOps
@@ -526,10 +538,9 @@ func (ops *MonsterMoverOps) runLegPlanBin(bin *legPlanBin, plans []legPlan, work
 		if canAttack {
 			owned.BasicAttack = legPlanDeferredAttack
 		}
-		started := time.Now()
 		planLegActor(&owned, plan, work)
-		bin.stats.noteAdvance(time.Since(started))
 	}
+	bin.stats.noteAdvance(time.Since(started))
 }
 
 /*
@@ -577,8 +588,6 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 	armed := *ops
 	armed.stepBaseGen, armed.stepGenArmed = actor.moverGen, true
 	armed.stepSlot, armed.stepMonsterSlot, armed.stepQueueSlot = actor.slot, actor.monsterSlot, actor.queueSlot
-	started := time.Now()
-	defer func() { stats.noteAdvance(time.Since(started)) }()
 
 	landed := true
 	for _, op := range plan.ops {
