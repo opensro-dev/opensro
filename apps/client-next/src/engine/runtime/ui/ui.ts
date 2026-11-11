@@ -301,6 +301,7 @@ import {
 } from "@/engine/foundation/gameplay/guild-names";
 import {
 	cargoBuyTotal,
+	COS_TRADE_LEVEL,
 	COS_TRADE_SELL_ALL,
 	COS_TRADE_STAR_FIRST,
 	COS_TRADE_STAR_LAST,
@@ -309,6 +310,7 @@ import {
 	type SellAllRun,
 	sellAllEnabled,
 	sellAllStep,
+	tradeProgressLine,
 	tradeStarCount,
 	tradeStarTint
 } from "@/engine/foundation/gameplay/cos-trade-info";
@@ -2987,6 +2989,7 @@ export function createUi( ports: UiPorts ) {
 			cosGid: shop.cosGid,
 			unitBuy: Number( offer.price ),
 			stack: offer.maxStack,
+			maxStack: offer.maxStack,
 			count: offer.maxStack
 		} );
 		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( offer.maxStack ).length );
@@ -3016,6 +3019,7 @@ export function createUi( ports: UiPorts ) {
 			cosGid: game.shop.cosGid,
 			unitBuy: item.tooltip?.fields.price ?? 0,
 			stack: item.quantity,
+			maxStack: item.tooltip?.fields.maxStack ?? item.quantity,
 			count: item.quantity
 		} );
 		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( item.quantity ).length );
@@ -19151,6 +19155,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					if ( buySum ) authoredText( buySum, px, py, grouped( sums.buy ) );
 					if ( profitSum ) authoredText( profitSum, px, py, grouped( sums.profit ) );
 					if ( sellSum ) authoredText( sellSum, px, py, grouped( sums.sell ) );
+					// Port-only (#3163): the caravan's distance to the next
+					// star in stacks of this window's goods, one line under
+					// the trade-scale row; nothing without the server's
+					// published answer (SRO_TRADE_TIERS off).
+					const progressLine = tradeProgressLine(
+							game?.tradeProgress,
+							specialtyDeal.unitBuy * specialtyDeal.maxStack
+						),
+						scaleLabel = byId( 24 );
+					if ( scaleLabel && progressLine ) {
+						authoredText(
+							{ ...scaleLabel, rect: [ scaleLabel.rect[0], scaleLabel.rect[1] + 21, 196, 15 ] },
+							px,
+							py,
+							progressLine
+						);
+					}
 					const combo = byId( 34 );
 					if ( combo ) {
 						const r = authoredRect( combo, px, py );
@@ -19359,6 +19380,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							for ( let i = 0; i < stars; i++ ) {
 								const star = node( COS_TRADE_STAR_FIRST + i );
 								if ( star ) authoredImage( star, ox, oy, star.texture, 1, tint );
+							}
+							// Port-only (#3163): the distance to the next star,
+							// one line under the trade level, in stacks of the
+							// goods in front of the player - the selected
+							// cargo row, else the first stocked one. Nothing
+							// without the server's published answer.
+							const level = node( COS_TRADE_LEVEL ),
+								front = rows.find( r => r.slot === cosSlot && r.quantity > 0 ) ??
+									rows.find( r => r.quantity > 0 ),
+								progressLine = tradeProgressLine(
+									game?.tradeProgress,
+									front ? front.price * front.maxStack : 0
+								);
+							if ( level && progressLine ) {
+								authoredText(
+									{ ...level, rect: [ level.rect[0], level.rect[1] + 14, 240, 12 ] },
+									ox,
+									oy,
+									progressLine
+								);
 							}
 							const sell = node( COS_TRADE_SELL_ALL );
 							if ( sell ) {
