@@ -55,6 +55,39 @@ test("ambient admission keeps named/state modifiers inactive, validates active o
 	);
 	assert.throws( () => modelAmbientParticles( [ { ...raw[0], kind: 9 } ] ), /selector/ );
 });
+test("ambient admission accepts the shipped plant_lingt row's nonzero event key without surfacing it", () => {
+	// The shipped row (world/dungeon/regions/0x8004.json): the original binds
+	// this entry - field4c is its animation-event registration key (AE36C0),
+	// never an admission test in CRTMod_BindModelParticles_AE3840 (#3134).
+	const particles = modelAmbientParticles( [ {
+		kind: 2,
+		stateId: -1,
+		animationSetName: "ambient",
+		entries: [ {
+			field00: 1,
+			effectPath: "dun\\plant_lingt.efp",
+			boneName: "",
+			vector3c: [ -887.889404296875, -143.37686157226562, 781.6449584960938 ],
+			field4c: 80,
+			flags50: [ 31, 0, 0 ],
+			flag53: 0
+		} ]
+	} ] );
+	assert.equal( particles.length, 1 );
+	assert.equal( particles[0].effectPath, "dun/plant_lingt.efp" );
+	assert.equal( particles[0].root, true );
+	assert.equal( particles[0].deferred, 31 );
+	assert.equal( particles[0].triggerMs, undefined );
+	assert.deepEqual( particles[0].offset, [ -887.889404296875, -143.37686157226562, -781.6449584960938 ] );
+	assert.throws(
+		() => modelAmbientParticles( [ { ...raw[0], entries: [ { ...raw[0].entries[0], field4c: -1 } ] } ] ),
+		/trigger or override/
+	);
+	assert.throws(
+		() => modelAmbientParticles( [ { ...raw[0], entries: [ { ...raw[0].entries[0], field4c: 1.5 } ] } ] ),
+		/trigger or override/
+	);
+});
 test("cold resources, capacity pressure and clip changes preserve bounded emitter ownership; replacement and reset retire it", () => {
 	let id = -1, ready = false;
 	const owner = createModelEmission( () => id-- ),

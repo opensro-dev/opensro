@@ -293,6 +293,93 @@ func TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows(t *testing.T) {
 
 /*
 ================
+castCargoCharacter
+
+A transport owner for the cast-copy tests: the active transport carries
+cargo rows with children and rentals, and a summoner row carries a
+pickup pet whose bag holds petBagRows rows.
+================
+*/
+func castCargoCharacter(petBagRows int) *Character {
+	transport := &CharacterCOS{
+		GID: 8001, Codename: "COS_C_DHORSE1", Summoned: true, CurrentHP: 900,
+		Rentals: []COSRental{{ID: 1, RemainingSeconds: 60}},
+		Container: &COSContainer{Capacity: 4, Rows: []InventoryRow{
+			{Slot: 0, Codename: "ITEM_ETC_TRADE_01", StackCount: 5, TypeFlags: 3, MagicOptions: []uint64{7}},
+			{Slot: 1, Codename: "ITEM_ETC_TRADE_02", StackCount: 2},
+		}},
+	}
+	bag := make([]InventoryRow, petBagRows)
+	for i := range bag {
+		bag[i] = InventoryRow{Slot: int64(i), Codename: "ITEM_ETC_LOOT", StackCount: 1, MagicOptions: []uint64{uint64(i)}}
+	}
+	pet := &CharacterCOS{
+		GID: 8002, Codename: "COS_P_RABBIT", Summoned: true, CurrentHP: 100,
+		Rentals:   []COSRental{{ID: 2, RemainingSeconds: 60}},
+		Container: &COSContainer{Capacity: 196, Rows: bag},
+	}
+	return &Character{
+		Name:      "cargoOwner",
+		ActiveCOS: transport,
+		MissionInventory: []InventoryRow{
+			{Slot: 6, Codename: "WEAPON"},
+			{Slot: 30, Codename: "PET_ITEM", Summon: pet},
+		},
+	}
+}
+
+/*
+================
+TestSnapshotCastCarriesCompanionsWithoutTheirBags
+
+The press copy's companions (#3164): both still resolve, the active
+transport keeps its cargo as detached values (the caravan and trade
+tier verdicts weigh codename, stack and type), and nothing else of a
+companion's deep children rides along - no rentals, no cargo row
+children, no summoner-row bag. The allocation count must not grow
+with a summoner-row pet's bag: copying it into every press copy was
+the bulk this view drops, and restoring CloneCOS in cloneCastRows
+fails here.
+================
+*/
+func TestSnapshotCastCarriesCompanionsWithoutTheirBags(t *testing.T) {
+	character := castCargoCharacter(3)
+	cast := character.SnapshotCast()
+
+	if cast.CompanionByGID(8001) == nil || cast.CompanionByGID(8002) == nil {
+		t.Fatal("the cast copy lost a companion")
+	}
+	active := cast.ActiveCOS
+	if active == character.ActiveCOS || active.Container == nil || active.Container == character.ActiveCOS.Container {
+		t.Fatal("the cast copy's active transport is not a detached copy with cargo")
+	}
+	rows := active.Container.Rows
+	if len(rows) != 2 || rows[0].Codename != "ITEM_ETC_TRADE_01" || rows[0].StackCount != 5 || rows[0].TypeFlags != 3 {
+		t.Fatalf("cast cargo = %+v, want the two rows as values", rows)
+	}
+	if rows[0].MagicOptions != nil || active.Rentals != nil {
+		t.Fatal("the cast copy carries cargo row children or rentals")
+	}
+	rows[0].StackCount = 1
+	if character.ActiveCOS.Container.Rows[0].StackCount != 5 {
+		t.Fatal("the cast cargo aliases the live cargo")
+	}
+	pet := cast.MissionInventory[1].Summon
+	if pet == character.MissionInventory[1].Summon || pet.Container != nil || pet.Rentals != nil {
+		t.Fatal("the summoner-row pet rides with its bag or rentals, or is not a copy")
+	}
+
+	small := castCargoCharacter(1)
+	large := castCargoCharacter(150)
+	smallAllocs := testing.AllocsPerRun(50, func() { small.SnapshotCast() })
+	largeAllocs := testing.AllocsPerRun(50, func() { large.SnapshotCast() })
+	if largeAllocs != smallAllocs {
+		t.Fatalf("cast copy allocates %v with a 150-row pet bag, %v with a 1-row bag; want no growth", largeAllocs, smallAllocs)
+	}
+}
+
+/*
+================
 TestCloneCharacterStagedSharesFrozenChildren
 
 The store stages one committed copy per save and compares the next
