@@ -128,7 +128,7 @@ export interface DebugConsoleState {
 	// The store is this window's, as natively; the camera owner gets a
 	// copy of the records and the byte through the extensions, and the
 	// playback stepping is its own. The records arrive with the HUD's
-	// cameradata asset (cameraWaypointsLoaded below): nothing native
+	// cameradata asset (cameraWaypointsLoaded in ui.ts): nothing native
 	// ever loads the track, so the published rows are the port's
 	// content source (issue #1716).
 	cameraWaypoints: CameraWaypointStore;
