@@ -110,10 +110,16 @@ area effects) with c as its source and the attack's skill (context +0xC),
 then the kill. Inferred: the queued context is published as the linked
 pulses' are, since both are tagAreaEffectContext records the attacker's
 manager drains.
+
+The defender is re-read through the combat copy, not the whole record:
+every read below is covered by it - the name, the world instance, the
+combat stats and the credited-hit commit, which the area pulses already
+feed from combat copies. The bag rows and the companions the whole
+record also clones are never read here (#3164).
 ================
 */
 func (rt *Runtime) returnDamageToMonster(division string, c *enterworld.Character, attacker monster.Instance, attackerPose monster.Pose, attackSkill uint32, defender combat.Stats, hits []combat.Result, now int64) OpResult {
-	snapshot := rt.characterSnapshot(division, c)
+	snapshot := rt.characterSnapshotCombat(division, c)
 	if snapshot == nil {
 		return OpResult{}
 	}
@@ -151,10 +157,16 @@ The player branch: c's dmgr returns its share to the attacking player as
 c's credited hit, published as the monster branch's is. INFERENCE: the
 queued context (+0x70) is not a hit outcome, so the attacker's own wall
 does not split it.
+
+The defender is re-read through the combat copy for the monster
+branch's reasons: the reads below are the name, the world instance, the
+target resolution (which takes its own companion copy when the target
+rides) and the credited-hit commit. No bag row or companion is read
+(#3164).
 ================
 */
 func (rt *Runtime) returnDamageToPlayer(division string, c, attacker *enterworld.Character, attackSkill uint32, defender combat.Stats, hits []combat.Result, now int64, doors characterDoors) OpResult {
-	snapshot := rt.characterSnapshot(division, c)
+	snapshot := rt.characterSnapshotCombat(division, c)
 	if snapshot == nil || attacker == nil {
 		return OpResult{}
 	}
