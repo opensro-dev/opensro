@@ -378,6 +378,31 @@ func TestPendingRecheckLeavesTheStepItsCases(t *testing.T) {
 
 /*
 ================
+TestPendingRecheckStuckBitFollowsTheRowWrite
+
+The lane reads the stuck bit off the pending record, where set -
+the record's only writer - keeps it beside the spawning bit: a
+stuck actor is no candidate, and the same actor rewritten unstuck
+through the storage's own set is a candidate again. A bit cached
+at any moment but the write would fail one side.
+================
+*/
+func TestPendingRecheckStuckBitFollowsTheRowWrite(t *testing.T) {
+	fx := newPendingLaneFixture(t, 1, false)
+	key := populationKey{division: pendingLaneDivision, lease: fx.state.lease}
+	refs := []behaviorActorRef{{gid: pendingLaneGID, queueSlot: behaviorNoQueueSlot, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot}}
+	fx.editMover(func(m *monster.PendingMover) { m.Stuck = true })
+	if got := fx.ops.Monsters.pendingRecheckCandidates(key, refs, pendingLaneNowMs, nil); len(got) != 0 {
+		t.Fatalf("stuck actor produced %d candidates, want none", len(got))
+	}
+	fx.editMover(func(m *monster.PendingMover) { m.Stuck = false })
+	if got := fx.ops.Monsters.pendingRecheckCandidates(key, refs, pendingLaneNowMs, nil); len(got) != 1 {
+		t.Fatalf("unstuck actor produced %d candidates, want the one quiet actor", len(got))
+	}
+}
+
+/*
+================
 TestPendingRecheckCommitRefusesARowThatMoved
 
 The candidate list is read in one locked pass and committed in a
