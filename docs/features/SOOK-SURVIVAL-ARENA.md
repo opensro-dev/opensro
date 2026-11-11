@@ -143,19 +143,27 @@ window opens; no old eggs remain during the decision or next-stage countdown.
 
 ## Asset build from the original v1.150 client
 
-The additional Colosseum inputs are included in
-`docs/features/assets/survival/colosseum/`. No newer PK2, separate download,
-or external asset bundle is required. The original v1.150 extraction remains
-the base; the importer stages a separate game root using the existing safe
-link/catalog merge operations. The normal world/model/texture/server-data
-converters produce the runtime assets and standard packs.
+The baseline v1.150 client does not include the event's Colosseum sector.
+Operators must additionally supply their own legally obtained **Silkroad
+Online v1.696** client (Media.pk2 `SV.T` build 696). Put its unchanged
+`Map.pk2`, `Media.pk2`, `Data.pk2` and `Particles.pk2` in `C:/SRO-v1.696`
+or another folder passed as `--client-root`. No retail arena files are
+committed or downloaded by this project.
 
-After preparing the original v1.150 extraction, run from the repository root
-(the environment examples below use PowerShell):
+Run `--help` to see the required version, folder layout and exact SHA-256
+hashes from `scripts/survival_archive_pins.json`. The importer verifies all
+four archives before parsing or writing anything; another version, regional
+build or patched archive is rejected. It uses the existing Alexandria safe
+link/catalog merges and normal converters, with v1.150 as the base. Neither
+client's source files are modified or executed.
+
+After preparing the original v1.150 extraction with the documented Python
+asset-tool environment, run from the repository root (PowerShell):
 
 ```powershell
+python scripts/import_survival_colosseum.py --help
 $env:SRO_SURVIVAL_COLOSSEUM = "on"
-python scripts/import_survival_colosseum.py --native-root "C:/SRO-v150" --variant-root "C:/SRO-survival-build"
+python scripts/import_survival_colosseum.py --client-root "C:/SRO-v1.696" --native-root "C:/SRO-v150" --variant-root "C:/SRO-survival-build"
 $env:SRO_GAME_ROOT = "C:/SRO-survival-build"
 $env:SRO_SOOK_SURVIVAL_ARENA = "on"
 pnpm assets build full
@@ -163,10 +171,9 @@ pnpm task build server-game-data
 pnpm assets ledger
 ```
 
-Use the project's Python environment and standard extraction preparation.
-The generated tree follows the usual shared-root resolver; operators can use
-its documented `SRO_GENERATED_ROOT` override for an isolated build. Package and
-publish the result through the normal release workflow. Deploy the matching
-server projection and client packs together. Merely compiling the server does
-not rebuild or publish data. `--client-root` is optional legacy input for the
-pinned source archives; the default reads the checked-in arena inputs.
+Generated output stays ignored. The generated tree follows the usual
+shared-root resolver; use its documented `SRO_GENERATED_ROOT` override for
+an isolated build. Package and publish through the normal release workflow,
+with matching server data and client packs. Merely compiling the server does
+not rebuild or publish assets. See [the map import guide](SURVIVAL-ARENA-MAP.md)
+for import contents, conflict guards and focused verification.

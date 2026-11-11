@@ -317,3 +317,32 @@ the requested stage-I increase. The entire sookarena and action packages pass
 locally, not just filtered stage tests. Merged main through c85e47bd and
 regenerated the UI census. Client quick checks and focused arena/census tests
 also pass. No runtime behavior or running-game deployment was changed.
+
+## Retail-asset distribution correction (2026-11-11)
+
+This supersedes the repository-input instructions above. Retail Colosseum
+models, maps, textures and effects have been removed from the source tree;
+the PR branch history is being rewritten to omit these retail inputs from
+every feature commit while retaining the code changes. Earlier local conversion results remain useful
+evidence, not permission to distribute extracted Joymax media.
+
+The importer now requires `--client-root` pointing to an operator-supplied
+v1.696 client (Media.pk2 SV.T build 696), alongside the original v1.150
+extraction passed as `--native-root`. `--help` prints the folder layout and
+all four pinned SHA-256 hashes. Every archive is verified before directory
+parsing, extraction or output writes. Missing, empty and mismatched files
+fail with actionable errors. Normal staging/conversion/publication paths
+are unchanged; no download, retail execution or new asset delivery system
+was added. See SOOK-SURVIVAL-ARENA.md for complete build commands.
+
+Synthetic regression tests cover matching archives, missing/empty input,
+last-archive corruption and refusal to parse/write on a mismatch. The donor
+build number was read statically from Media.pk2 SV.T; no executable ran.
+The existing running game, generated assets, databases and characters are
+untouched by this source correction.
+
+Verification: all four real donor archives matched their pinned hashes and a
+fresh archive-only import completed for region 25580 / sector 236,99 (83
+model/data entries and 11 particle entries). Four focused importer tests,
+source encoding, formatting, source-size and diff-whitespace checks pass.
+The existing published runtime was not rebuilt, restarted or reloaded.

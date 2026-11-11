@@ -13,6 +13,8 @@ import hashlib
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -25,35 +27,34 @@ import import_survival_colosseum as arena
 class ColosseumImportTests(unittest.TestCase):
 
 	# ================
-	# test_repository_assets_have_complete_pinned_inputs
+	# test_archives_require_exact_hashes_before_parsing_or_writing
 	# ================
-	def test_repository_assets_have_complete_pinned_inputs(self):
-		manifest = json.loads((arena.ASSET_ROOT / arena.ASSET_MANIFEST).read_text(encoding="utf8"))
-		self.assertEqual(manifest["region"], 25580)
-		self.assertEqual(manifest["archives"], json.loads(arena.PIN_FILE.read_text(encoding="utf8")))
-		self.assertGreater(len(manifest["files"]), 0)
-		for key in manifest["files"]:
-			archive, name = key.split("/", 1)
-			self.assertNotEqual(Path(name).suffix.lower(), ".pk2")
-			arena.read_asset_input(arena.ASSET_ROOT, manifest, archive, name)
-
-	# ================
-	# test_repository_input_refuses_corruption_and_traversal
-	# ================
-	def test_repository_input_refuses_corruption_and_traversal(self):
+	def test_archives_require_exact_hashes_before_parsing_or_writing(self):
 		with tempfile.TemporaryDirectory() as folder:
 			root = Path(folder)
-			(root / "Map").mkdir()
-			(root / "Map/terrain.m").write_bytes(b"terrain")
-			manifest = {"files": {"Map/terrain.m": hashlib.sha256(b"terrain").hexdigest()}}
-			self.assertEqual(arena.read_asset_input(root, manifest, "Map", "TERRAIN.M"), b"terrain")
-			(root / "Map/terrain.m").write_bytes(b"changed")
-			with self.assertRaises(ValueError):
-				arena.read_asset_input(root, manifest, "Map", "terrain.m")
-			with self.assertRaises(ValueError):
-				arena.read_asset_input(root, manifest, "Map", "absent.m")
-			with self.assertRaises(ValueError):
-				arena.read_asset_input(root, manifest, "Map", "../../outside.m")
+			client, output = root / "client", root / "output"
+			client.mkdir()
+			pins = {name: hashlib.sha256(name.encode()).hexdigest() for name in ("Map", "Media", "Data", "Particles")}
+			pin_file = root / "pins.json"
+			pin_file.write_text(json.dumps(pins), encoding="utf8")
+			with patch.object(arena, "PIN_FILE", pin_file), patch.object(arena.source, "archive_index") as parse:
+				with self.assertRaisesRegex(ValueError, "Missing.*Map.pk2"):
+					arena.build_variant(client, root / "native", output)
+				for name in pins:
+					(client / f"{name}.pk2").write_bytes(name.encode())
+				(client / "Particles.pk2").write_bytes(b"wrong build")
+				with self.assertRaisesRegex(ValueError, "Expected SHA-256.*\\nActual SHA-256"):
+					arena.build_variant(client, root / "native", output)
+				parse.assert_not_called()
+				self.assertFalse(output.exists())
+			(client / "Particles.pk2").write_bytes(b"")
+			with ExitStack() as stack, self.assertRaisesRegex(ValueError, "Empty archive"):
+				arena.open_archives(stack, client, pins)
+			(client / "Particles.pk2").write_bytes(b"Particles")
+			with ExitStack() as stack:
+				archives = arena.open_archives(stack, client, pins)
+				self.assertEqual({name: bytes(data) for name, data in archives.items()}, {name: name.encode() for name in pins})
+			self.assertIn("v1.696", arena.archive_requirements(pins))
 
 	# ================
 	# test_higher_level_rows_reuse_native_models_and_skills

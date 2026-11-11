@@ -10,13 +10,20 @@ provides the venue reference, not the gameplay specification for this feature.
 
 The baseline v1.150 asset set lacks sector236/99. Constantinople's older
 colosseum world prop is not this arena. Do not enable a teleport into a missing
-sector. The missing Colosseum inputs are included under
-`docs/features/assets/survival/colosseum/`. The default importer uses those
-inputs plus the original v1.150 extraction, with no newer PK2 or download.
-It never runs a retail executable or edits the original archives. The asset
-manifest pins each included file; `scripts/survival_archive_pins.json` records
-its source provenance. An explicit `--client-root` still supports the original
-pinned-archive import for reproduction.
+sector. Operators must supply a legally obtained **Silkroad Online v1.696**
+client separately. Its Media.pk2 `SV.T` identifies build 696. Version labels
+alone are insufficient: the exact four archive SHA-256 hashes are pinned in
+`scripts/survival_archive_pins.json` and printed by the importer's `--help`.
+A patched or different regional client is rejected even if labelled v1.696.
+
+Place unchanged `Map.pk2`, `Media.pk2`, `Data.pk2` and `Particles.pk2` together
+in a folder such as `C:/SRO-v1.696`. The importer reads them in place, validates
+**all four hashes before parsing or writing**, and stages only required arena
+resources into a separate build root. It does not download clients, execute
+retail programs or modify the source archives. The repository contains the
+import/conversion code, pins and original authored icons, not retail arena
+models, textures, maps or effects. The original v1.150 extraction remains the
+base for the rest of the world.
 
 `scripts/import_survival_colosseum.py` creates a separate variant root using
 the existing guarded Alexandria import helpers. It imports the sector terrain,
@@ -38,7 +45,8 @@ built native baseline. All roots below are explicit operator-provided paths.
 ```powershell
 $env:SRO_SURVIVAL_COLOSSEUM = 'on'
 $env:SRO_SOOK_SURVIVAL_ARENA = 'on'
-python scripts/import_survival_colosseum.py --native-root <owned-v150-root> --variant-root <separate-output-root>
+python scripts/import_survival_colosseum.py --help
+python scripts/import_survival_colosseum.py --client-root C:/SRO-v1.696 --native-root <owned-v150-root> --variant-root <separate-output-root>
 $env:SRO_GAME_ROOT = '<separate-output-root>'
 $env:SRO_GENERATED_ROOT = '<absolute-generated-root-for-this-variant>'
 pnpm assets build world-outdoor -- --region=0x63ec --force --jobs=1
@@ -72,5 +80,5 @@ world entry; they do not replace a fresh full-stage regression of each merged
 build. See [implementation handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md).
 
 Generated client/server bundles, PK2 files, local databases, executable builds
-and recordings remain untracked. Only the missing arena build inputs are
-included; native v1.150 assets and complete archives are not copied into Git.
+and recordings remain untracked. Retail arena inputs are not included; only
+import/conversion code, archive hashes and original authored art are tracked.
