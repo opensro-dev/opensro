@@ -187,6 +187,11 @@ type Store struct {
 	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
 	// whenever no database was adopted.
 	checkpoints *walCheckpointer
+	// economyFold is the ledger history fold/delete lane
+	// (economy_fold.go, #3187): started by adoptDB, stopped by Close
+	// before the store lock is taken, nil whenever no database was
+	// adopted.
+	economyFold *economyFoldLane
 	// writer is the asynchronous SQLite writer (commit_writer.go,
 	// SRO_STORE_ASYNC_COMMIT, port-only): started by adoptDB when the
 	// flag is on, stopped by Close, nil whenever commits apply in place.
@@ -487,6 +492,19 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The economy bucket tables (#3187) are created at open: purely
+	// additive, so no schema stamp moves and an older binary on the
+	// same file ignores them (loadDB has already shape-checked them
+	// when they existed). The shrink runs here too, once the fold
+	// has emptied the old ledger rows into the file's freelist.
+	if err := ensureEconomyBuckets(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	if err := vacuumIfFreelistDominates(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	return db, loaded, nil
 }
 
@@ -579,6 +597,9 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	// (configureDB); the background checkpointer copies its WAL
 	// instead (#2142 slice 0).
 	s.checkpoints = startWALCheckpointer(s.dbPath)
+	// The economy fold lane (#3187) folds the ledger's old rows into
+	// the hourly buckets and deletes them in bounded batches.
+	s.economyFold = startEconomyFold(s)
 	if s.asyncCommit && s.writer == nil {
 		s.writer = startCommitWriter(db, s.mu.now)
 	}
