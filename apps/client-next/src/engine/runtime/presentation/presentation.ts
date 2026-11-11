@@ -116,7 +116,7 @@ export function createPresentation() {
 				else if ( event.kind === "ui-sound" || event.kind === "item-sound" || event.kind === "buff-ended" ) {
 					nextSounds.push( event );
 				} else if ( event.kind === "gameplay" ) {
-					const state = mergeGameplaySnapshots( nextGameplay, event.state );
+					const state = mergeGameplaySnapshots( nextGameplay, event.state, event.delta );
 					nextGameplay = {
 						...state,
 						skillIndex: skillIndex( state.skillCatalog ),
