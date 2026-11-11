@@ -6,9 +6,10 @@ unique-notices.ts - the 0x3058 event notice: unique appearances and kills
 v1.150 74D451 registers 0x3058 -> 7508C0. Unlike the newer server's 0x300C
 envelope, v1.150 starts with one kind byte; no live entity or GID is
 required. Kinds 5 and 6 announce a unique's appearance and death; kind 7
-is the 2005 badge event (no live server sends it); kinds outside 5..10,
-and 8 and 9, show the category 0x11 notice whose code is the kind
-(kind 1: a thief may not enter a town with its transport).
+is the 2005 badge event (no live server sends it); kinds 8, 9 and 10 are
+the specialty-goods announcements, and every other kind shows the
+category 0x11 notice whose code is the kind (kind 1: a thief may not
+enter a town with its transport).
 
 ===========================================================================
 */
@@ -20,6 +21,7 @@ import type { SystemNotice } from "./system-notices";
 const KIND_UNIQUE_APPEARED = 5;
 const KIND_UNIQUE_KILLED = 6;
 const KIND_BADGE_EVENT = 7;
+const KIND_SELL_READY = 8;
 const KIND_LAST_SPECIAL = 10;
 const EVENT_NOTICE_CATEGORY = 0x11;
 
@@ -95,13 +97,17 @@ export function uniqueReferences( value: unknown ): ReadonlyMap<number, UniqueRe
 ================
 eventNotice
 
-7508C0's other kinds: outside 5..10, and 8 and 9, the category 0x11 notice
-of that code. Kind 10 also closes an open NPC shop and is not handled here;
-kind 7 has its own branch.
+7508C0's other kinds: outside 5..10, and 8, 9 and 10 inside it, the
+category 0x11 notice of that code prints on the centre banner (751155).
+Kind 10 (751114) is the specialty sell-end: natively the banner gives
+way to a silent NPC-shop close only while the specialty-goods page is
+open (75113D, closed at 751150). The port's shop state carries no
+specialty-page marker, so that case cannot arise here and the banner
+always prints. Kind 7 has its own branch.
 ================
 */
 function eventNotice( kind: number ): SystemNotice | null {
-	if ( kind < KIND_UNIQUE_APPEARED || kind > KIND_LAST_SPECIAL || kind === 8 || kind === 9 ) {
+	if ( kind < KIND_UNIQUE_APPEARED || kind > KIND_LAST_SPECIAL || kind >= KIND_SELL_READY ) {
 		return constantNativeNotice( EVENT_NOTICE_CATEGORY, kind );
 	}
 	return null;

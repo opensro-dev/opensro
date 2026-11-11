@@ -105,7 +105,6 @@ test("truncations and trailing bytes reject before any gameplay notice is publis
 	}
 	assert.deepEqual( defined( g.take() ).notices, [] );
 	assert.equal( uniqueNotice( 0x3058, packet( 5, 99 ), refs ), null );
-	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 10 ), refs ), null );
 	g.receive( { opcode: 0x3058, payload: packet( 6, 6 ) }, 0 );
 	const notices = defined( g.take() ).notices;
 	assert.equal( defined( notices ).length, 1 );
@@ -133,7 +132,7 @@ test("banner waits for assets, replaces rather than queues, fades and resets acr
 	b.step( [ n ], 24000, true );
 	assert.equal( b.alpha(), 1 );
 });
-test("other 0x3058 kinds show their category 0x11 notice; kind 10 stays unpresented", () => {
+test("other 0x3058 kinds show their category 0x11 notice, kind 10 included", () => {
 	// 7508C0: kind 1 is the thief's stolen-goods rule (#721).
 	assert.equal(
 		defined( uniqueNotice( 0x3058, Uint8Array.of( 1 ), refs ) ).key,
@@ -144,7 +143,19 @@ test("other 0x3058 kinds show their category 0x11 notice; kind 10 stays unpresen
 		defined( uniqueNotice( 0x3058, Uint8Array.of( 1, 9, 9 ), refs ) ).key,
 		"UIIT_MSG_JSERR_ROBBER_CANT_ENTER_TOWN_WITH_CART"
 	);
-	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 10 ), refs ), null );
+	// 751155 via the 75118C table: kinds 8, 9 and 10 are the specialty
+	// sell announcements, banner notices like the unique ones.
+	for (
+		const [kind, key] of [
+			[ 8, "UIIT_MSG_SPECIALTY_ANNOUNCE_SELL_READY" ],
+			[ 9, "UIIT_MSG_SPECIALTY_ANNOUNCE_SELL_START" ],
+			[ 10, "UIIT_MSG_SPECIALTY_ANNOUNCE_SELL_END" ]
+		]
+	) {
+		const notice = defined( uniqueNotice( 0x3058, Uint8Array.of( kind ), refs ) );
+		assert.equal( notice.key, key );
+		assert.equal( notice.banner, true );
+	}
 });
 /*
 ================
