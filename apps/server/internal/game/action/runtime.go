@@ -594,8 +594,9 @@ type Runtime struct {
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
 	// PremiumUpgrade lets a strictly higher-grade premium ticket of the
-	// same family replace the running lower one (premiumticket.go;
-	// port-only, not native). False is native: 0x1894 while one runs.
+	// same family replace the running lower one, and a full premium
+	// replace a running skill-only ticket (premiumticket.go; port-only,
+	// not native). False is native: 0x1894 while one runs.
 	PremiumUpgrade bool
 	// KillStats counts kills and EXP per online hour by level band
 	// (killstats.go; port-only, not native). False counts nothing.
