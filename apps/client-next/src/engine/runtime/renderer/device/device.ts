@@ -6,6 +6,7 @@ device.ts - WebGPU generation and resource lifecycle
 ===========================================================================
 */
 import {
+	adapterRoutesBitmapsViaPixels,
 	type GpuFacts,
 	isGpuToken,
 	reportedDegradedPipelines,
@@ -25,6 +26,7 @@ import { createGpuTiming } from "./timing";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
 import { createUiResources } from "./ui";
+import { bitmapPixels } from "@/engine/foundation/rendering/pick-alpha";
 import { createPipelines, sceneStageKey, type SceneSurface } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
@@ -488,7 +490,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				retirement.retire,
 				pipelines.lightmapSampling
 			);
-			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), sceneFormat, retirement.retire );
+			ui = createUiResources(
+				created,
+				navigator.gpu.getPreferredCanvasFormat(),
+				sceneFormat,
+				retirement.retire,
+				// #3147: on Kepler-class adapters the external-image copy
+				// corrupts the font atlas and window plates; read bitmaps
+				// back to pixels and write those instead.
+				facts && adapterRoutesBitmapsViaPixels( facts ) ? bitmapPixels : undefined
+			);
 
 			thunder = createThunder( created, navigator.gpu.getPreferredCanvasFormat() );
 
