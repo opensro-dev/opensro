@@ -131,9 +131,7 @@ func startCommunityServer(t *testing.T, dir string, seed *enterworld.Character) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 	enterworld.Register(srv.Hub, deps)
 	community.Register(srv.Hub, deps)

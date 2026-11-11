@@ -4,6 +4,8 @@
 package entryauth
 
 import (
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +42,46 @@ func NewAuthenticatedSessionFixture(t testing.TB, hub *transport.Hub) *SessionFi
 		return true, 0
 	})
 	return fixture
+}
+
+/*
+================
+UniqueAccountHelloAuth
+
+A hello-auth handler that seats every connection under its own
+account ("test-account-1", "test-account-2", ...). A wire fixture's
+connections are distinct players, and world entry refuses a second
+character of one account, so a fixture that means several players
+must not hand every connection the same account. A fixture that is
+about one account installs its own constant identity instead.
+================
+*/
+func UniqueAccountHelloAuth() func([]byte) (transport.AdmissionIdentity, error) {
+	var next atomic.Int64
+	return func([]byte) (transport.AdmissionIdentity, error) {
+		return transport.AdmissionIdentity{
+			AccountID: fmt.Sprintf("test-account-%d", next.Add(1)),
+			ShardID:   "global-official",
+		}, nil
+	}
+}
+
+/*
+================
+AdmissionTokenHelloAuth
+
+A hello-auth handler that takes the account from the admission token
+presented: the token is the player's credential, so a connection
+re-presenting a player's token (a transport resume) lands on the same
+account, and distinct players are distinct tokens. Suites whose
+handshakes mint one token per player use this; suites that present a
+shared token use UniqueAccountHelloAuth instead.
+================
+*/
+func AdmissionTokenHelloAuth() func([]byte) (transport.AdmissionIdentity, error) {
+	return func(token []byte) (transport.AdmissionIdentity, error) {
+		return transport.AdmissionIdentity{AccountID: string(token), ShardID: "global-official"}, nil
+	}
 }
 
 // Entry returns a token-bearing payload bound to the requested division and

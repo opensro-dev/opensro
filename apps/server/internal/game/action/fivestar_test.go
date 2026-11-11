@@ -211,7 +211,7 @@ func TestFiveStarBountyRaisesTheJobKillPayoff(t *testing.T) {
 ================
 TestCaravanStarFramesListOnlyFiveStarTransports
 
-The nameplate roster: a transport past the 50M mark is listed by gid,
+The nameplate roster: a transport past the 5-star mark is listed by gid,
 at the push pace and no faster; an emptied caravan clears in an empty
 roster; with the flag off nothing is ever sent.
 ================
@@ -219,10 +219,11 @@ roster; with the flag off nothing is ever sent.
 func TestCaravanStarFramesListOnlyFiveStarTransports(t *testing.T) {
 	rt, c := traderFixture(t, false)
 	rt.TradeTiers = true
-	// The fixture's good at its reference price of 101, stacked past 50M.
+	// The fixture's good at its reference price of 101, a brim-full bag.
 	good := c.MissionInventory[1]
 	c.ActiveCOS = &enterworld.CharacterCOS{GID: 4242, Codename: "COS_TRANSPORT", Container: &domain.COSContainer{
-		Rows: []domain.InventoryRow{{Codename: good.Codename, TypeFlags: good.TypeFlags, StackCount: 500_000}},
+		Capacity: 4,
+		Rows:     []domain.InventoryRow{{Codename: good.Codename, TypeFlags: good.TypeFlags, StackCount: 160}},
 	}}
 	views := []simulation.SessionView{{SessionID: "s1", DivisionID: testDivision, CharacterID: c.ID}}
 	frames := rt.CaravanStarFrames(testDivision, views, 10_000)

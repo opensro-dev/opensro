@@ -92,8 +92,9 @@ func writeTraceFixture(t *testing.T, dir string, ticks int) int {
 ================
 writeProfileFixture
 
-A CPU profile whose samples stack through the fake tick entry and
-whose total CPU is the given nanoseconds.
+A CPU profile whose tick samples stack through the fake tick entry and
+carry the given nanoseconds of CPU, beside as much again on a session
+loop: off-tick CPU that the profile-versus-trace check must leave out.
 ================
 */
 func writeProfileFixture(t *testing.T, dir string, totalNs int64) {
@@ -116,6 +117,18 @@ func writeProfileFixture(t *testing.T, dir string, totalNs int64) {
 	for i := 0; i < samples; i++ {
 		prof.Sample = append(prof.Sample, &profile.Sample{
 			Location: []*profile.Location{locLeaf, locStep, locTick},
+			Value:    []int64{1, per},
+		})
+	}
+	// The process beside the tick: a session loop's samples carry as much
+	// CPU again and must never count against the tick goroutines.
+	fnLoop := &profile.Function{ID: 4, Name: "opensro.test/transport.(*Session).readLoop"}
+	locLoop := &profile.Location{ID: 4, Line: []profile.Line{{Function: fnLoop}}}
+	prof.Function = append(prof.Function, fnLoop)
+	prof.Location = append(prof.Location, locLoop)
+	for i := 0; i < samples; i++ {
+		prof.Sample = append(prof.Sample, &profile.Sample{
+			Location: []*profile.Location{locLoop},
 			Value:    []int64{1, per},
 		})
 	}

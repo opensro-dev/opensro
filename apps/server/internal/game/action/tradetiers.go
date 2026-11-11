@@ -6,13 +6,18 @@ tradetiers.go - trade stars by cargo gold, and Jangan route profit
 Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 With SRO_TRADE_TIERS on:
 
-Stars. A caravan's tier (1-5 stars) is its cargo's gold value, the sum of
-count x each good's reference price (the quotation basis at its home
-town; what was actually paid is not stored), against tradeTierGold:
-under the first mark is 1 star, and each mark crossed adds a star. The
-5-star mark is a brim-full ordinary transport (owner 2026-11-08, #2791);
-on the advisor's first ladder only a mall transport's biggest bag
-crossed the top. Natively the tier
+Stars. A caravan's tier (1-5 stars) measures how full its own
+transport stands: the cargo's gold value (count x each good's
+reference price, the quotation basis at its home town; what was
+actually paid is not stored) against the value of the same transport
+brim-full - 2, 3, 4 and 5 stars at 1/5, 2/5, 7/10 and all of that
+full load, so a full ordinary transport is 5 stars however small its
+bag (owner 2026-11-08, #2791; measured per transport 2026-11-11,
+#3142). A mall transport's measure is its own full load capped at
+the largest ordinary transport's (the 101-slot bag): a bigger one
+reaches 5 stars at that load and carries its extra slots as profit,
+never as a higher tier, and a smaller one is full at its own brim.
+Natively the tier
 is cargo "units" (count x 348 over the level's gold basis),
 which barely moves with what the goods are worth. The tier drives the
 bandit count (the native caravan bandit count, still capped by
@@ -64,14 +69,12 @@ import (
 // EnvTradeTiers turns the rule on ("on", "1", "true").
 const EnvTradeTiers = "SRO_TRADE_TIERS"
 
-// tradeTierGold are the cargo gold values that reach 2..5 stars; anything
-// carried below the first is 1 star. The 5-star mark (#2791, owner
-// 2026-11-08) is a brim-full ordinary transport - 101 slots of 40 goods at
-// the flag's scaled price 7,308 (29,524,320) - and the marks below keep
-// the old ladder's ratios to the top (1/5, 2/5, 7/10 of 50M), so a mall
-// transport's 141/159/177 slots still read 5 stars and earn their extra
-// as profit, never a higher tier.
-var tradeTierGold = [...]uint64{5_896_080, 11_792_160, 20_761_408, 29_495_680}
+// mallTierReferenceSlots caps the bag a mall transport's stars are
+// measured against: the 101 slots of COS_T_DHORSE3, the full ordinary
+// transport the #2791 ruling (owner 2026-11-08) took as its measure,
+// pinned against the shipped characterdata by
+// TestEveryFullTransportReachesFiveStars.
+const mallTierReferenceSlots = 101
 
 // tradeTown names a town's specialty trade.
 type tradeTown uint8
@@ -264,22 +267,78 @@ func (rt *Runtime) cargoGoldValue(c *enterworld.Character) uint64 {
 
 /*
 ================
-TradeTierForGold
+TradeTierForLoad
 
-The stars a cargo of this gold value earns: 0 for none, then 1..5.
+The stars a cargo earns, measured against its own transport's
+brim-full value: 0 for no cargo, then 2, 3, 4 and 5 stars at 1/5, 2/5,
+7/10 and all of the full load. A load that cannot be measured (a bag
+with no capacity on record) reads 1 star - anything carried is worth
+at least the first.
 ================
 */
-func TradeTierForGold(value uint64) uint8 {
-	if value == 0 {
+func TradeTierForLoad(value, full uint64) uint8 {
+	switch {
+	case value == 0:
+		return 0
+	case full == 0:
+		return 1
+	case value >= full:
+		return 5
+	case value*10 >= full*7:
+		return 4
+	case value*5 >= full*2:
+		return 3
+	case value*5 >= full:
+		return 2
+	}
+	return 1
+}
+
+/*
+================
+caravanFullValue
+
+The brim-full value of the character's transport: its bag's slots
+(full, by the stack value of the best trade good it actually hauls -
+the shipped goods share one price and cap, so one stack of any of
+them measures the bag) filled end to end. A mall transport's bag is
+capped at the 101-slot reference (mallTierReferenceSlots): slots
+past it are profit, never a higher tier, while a smaller mall bag
+keeps its own brim as its measure. Zero when no trade goods are
+carried: the tier is 0 there anyway.
+================
+*/
+func (rt *Runtime) caravanFullValue(c *enterworld.Character) uint64 {
+	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
 		return 0
 	}
-	tier := uint8(1)
-	for _, mark := range tradeTierGold {
-		if value >= mark {
-			tier++
+	items := rt.deps.ItemReferences()
+	stackValue := uint64(0)
+	for _, row := range c.ActiveCOS.Container.Rows {
+		if row.StackCount <= 0 || !inventory.IsTradeGoods(row.TypeFlags) {
+			continue
+		}
+		ref, found := items.ItemRefByCodename(row.Codename)
+		if !found || ref == nil {
+			continue
+		}
+		price, present := ref.NativeFields.Lookup("price")
+		stack, stackPresent := ref.NativeFields.Lookup("maxStack")
+		if !present || !stackPresent || price < 1 || stack < 1 {
+			continue
+		}
+		if value := uint64(price) * uint64(stack); value > stackValue {
+			stackValue = value
 		}
 	}
-	return tier
+	if stackValue == 0 {
+		return 0
+	}
+	slots := uint64(c.ActiveCOS.Container.Capacity)
+	if ref, ok := rt.cosCharacterRef(c); ok && enterworld.IsMallTransport(ref) && slots > mallTierReferenceSlots {
+		slots = mallTierReferenceSlots
+	}
+	return slots * stackValue
 }
 
 /*
@@ -292,7 +351,7 @@ both the gold tier with the flag on.
 */
 func (rt *Runtime) caravanTier(c *enterworld.Character) (uint8, uint32) {
 	if rt.TradeTiers {
-		tier := TradeTierForGold(rt.cargoGoldValue(c))
+		tier := TradeTierForLoad(rt.cargoGoldValue(c), rt.caravanFullValue(c))
 		return tier, uint32(tier)
 	}
 	value := rt.caravanCargoValue(c)
@@ -418,7 +477,7 @@ CaravanStarFrames
 Port-only, not native (#2958): the division's 5-star caravan transport
 gids (wire.OpCaravanStars), recomputed at the push pace from the same
 tier the sales use, so a caravan that loads or sells its way across the
-50M mark gains and loses its nameplate star on its own. The wiring hook
+5-star mark gains and loses its nameplate star on its own. The wiring hook
 pushes the frame to the whole division; it goes out even when empty so
 a lost fifth star clears. Nil off the pace, and nil with the flag off,
 when no client ever hears of the mark.

@@ -239,6 +239,7 @@ func (s *Session) ClearGameplayContext() {
 	s.player.mu.Unlock()
 	s.mu.Unlock()
 	s.hub.reindexDivision(s)
+	s.hub.releaseAccountWorldOf(s)
 }
 
 /*
