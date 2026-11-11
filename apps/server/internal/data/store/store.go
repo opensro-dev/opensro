@@ -689,6 +689,12 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	if s.meta.NextGuildID == nil {
 		s.meta.NextGuildID = map[string]int64{}
 	}
+	// A load-seeded halloween plane (loadedDB.halloweenSeeded) holds
+	// derived bytes, not the disk's: flag it so the first commit
+	// writes its row, as every commit did before the plane skip.
+	if loaded.halloweenSeeded {
+		s.changes.halloweenBoxes = true
+	}
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}
