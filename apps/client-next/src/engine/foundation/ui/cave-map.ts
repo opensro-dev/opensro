@@ -12,7 +12,8 @@ the world map.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
-import { isDungeonRegion, REGION_SIZE } from "@/engine/foundation/world/world-space";
+import { REGION_SIZE } from "@/engine/foundation/world/world-space";
+import { planeKindOf } from "@/engine/foundation/world/plane";
 import { minimapRotation } from "./hud-readouts";
 import { MAP_LOCAL_MARKER } from "./world-map";
 
@@ -113,12 +114,12 @@ export function caveDungeonFloors(
 ): readonly CaveMapPage[] {
 	if ( !catalog ) return [];
 	const dungeon = regionId & 0x7fff;
-	if ( isDungeonRegion( regionId ) && dungeon === 1 ) {
+	if ( planeKindOf( regionId ) === "cave" && dungeon === 1 ) {
 		return catalog.maps
 			.filter( map => map.regionId === regionId )
 			.sort( ( a, b ) => a.floorIndex - b.floorIndex );
 	}
-	if ( isDungeonRegion( regionId ) && dungeon >= 2 && dungeon <= 7 ) {
+	if ( planeKindOf( regionId ) === "cave" && dungeon >= 2 && dungeon <= 7 ) {
 		return catalog.maps
 			.filter( map => (map.regionId & 0x7fff) >= 2 && (map.regionId & 0x7fff) <= 7 )
 			.sort( ( a, b ) => a.layer - b.layer );
