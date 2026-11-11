@@ -214,6 +214,7 @@ func (rt *Runtime) RestoreTimedSkillJobs(division, name string) {
 	defer unlock()
 	rt.restoreCharacterCOS(division, name)
 	rt.restoreSkillJobs(division, name)
+	rt.repairBagTradeGoods(division, name)
 }
 
 // Claim runtime lifetime before projecting entry effects/speeds. A displaced
