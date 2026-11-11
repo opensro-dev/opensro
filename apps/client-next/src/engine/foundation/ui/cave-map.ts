@@ -131,6 +131,39 @@ export function caveDungeonFloors(
 
 /*
 ================
+caveDungeonName
+
+The dungeon a page belongs to, the name both dungeon doors carry on
+the world map: region 1 of the mask is Donwhang's cave and 2..7 are
+the Ch'in Tomb. Null for a page in no known dungeon.
+================
+*/
+export function caveDungeonName( regionId: number ): string | null {
+	const dungeon = regionId & 0x7fff;
+	if ( dungeon === 1 ) return "Donwhang Cave";
+	if ( dungeon >= 2 && dungeon <= 7 ) return "Ch'in Tomb";
+	return null;
+}
+
+/*
+================
+cavePageCaption
+
+The later client's dungeon page title (issue #3238):
+"Underground Level <n> of <dungeon>", its level the page's authored
+layer. The title names the tomb "Tomb of Qin-Shi" where the doors
+and zones say "Ch'in Tomb" (the reference page head). Null when the
+page's dungeon is unknown.
+================
+*/
+export function cavePageCaption( page: CaveMapPage ): string | null {
+	const dungeon = page.regionId & 0x7fff;
+	const name = dungeon === 1 ? "Donwhang Cave" : dungeon >= 2 && dungeon <= 7 ? "Tomb of Qin-Shi" : null;
+	return name ? "Underground Level " + page.layer + " of " + name : null;
+}
+
+/*
+================
 cavePageCenter
 
 The world position a page's centre shows, for viewing a dungeon the

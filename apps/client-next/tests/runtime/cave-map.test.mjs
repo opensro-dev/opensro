@@ -8,7 +8,9 @@ cave-map.test.mjs - a dungeon page lays out around the player
 import "../helpers/native-source-loader.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-const { caveMapCatalog, caveMapPage, caveMapView } = await import( "../../src/engine/foundation/ui/cave-map.ts" );
+const { caveMapCatalog, caveMapPage, caveMapView, caveDungeonName, cavePageCaption } = await import(
+	"../../src/engine/foundation/ui/cave-map.ts"
+);
 
 const CLIP = [ 100, 50, 300, 300 ];
 // B2's row: 22 x 10 regions drawn 1408 x 640, so 64 pixels a region.
@@ -75,6 +77,17 @@ test("the view stops at the page's edge and reports the clamped pan", () => {
 	const { pan } = view( { pan: [ 5000, 0 ] } );
 	assert.ok( pan[0] < 5000 );
 	assert.deepEqual( view( { pan } ).quads.at( -1 )?.rect, view( { pan: [ 5000, 0 ] } ).quads.at( -1 )?.rect );
+});
+
+test("a dungeon page captions as the later client's underground level", () => {
+	// The page title names the level and the dungeon, never the raw
+	// floor label key the catalogue row carries.
+	assert.equal( caveDungeonName( 32769 ), "Donwhang Cave" );
+	assert.equal( caveDungeonName( 32775 ), "Ch'in Tomb" );
+	assert.equal( caveDungeonName( 250 ), null );
+	assert.equal( cavePageCaption( PAGE ), "Underground Level 2 of Tomb of Qin-Shi" );
+	assert.equal( cavePageCaption( { ...PAGE, regionId: 32769, layer: 1 } ), "Underground Level 1 of Donwhang Cave" );
+	assert.equal( cavePageCaption( { ...PAGE, regionId: 250 } ), null );
 });
 
 test("a page is found by region and floor, and a bad catalogue is refused", () => {

@@ -348,6 +348,32 @@ test("the dungeon page wears the later client's chrome and its arrows walk the f
 	hud.dispose();
 });
 
+test("the floor selector is one compact stepper and the page foot names the level filter", () => {
+	const hud = tools();
+	const floors = caveDungeonFloors( CAVE, 32769 );
+	// The selector's pieces stack on one 28x56 plate at the clip's
+	// right edge below the globe row: up chevron, the B-floor box,
+	// down chevron. No tall track stretches down the edge (#3238).
+	const view = paint( hud, { cave: true, floors, floor: floors[0] } );
+	const plate = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_big_box.png" ) );
+	assert.deepEqual( plate?.rect, [ 860, 188, 28, 56 ], "one compact plate, not the 228px track" );
+	const up = defined( control( view, "map-floor-up" ) ), down = defined( control( view, "map-floor-down" ) );
+	assert.deepEqual( up.rect, [ 860, 194, 28, 12 ], "the up chevron heads the stepper" );
+	assert.deepEqual( down.rect, [ 860, 230, 28, 12 ], "the down chevron closes the stepper" );
+	const box = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_box.png" ) );
+	assert.deepEqual( box?.rect, [ 862, 208, 24, 20 ], "the floor box sits between the chevrons" );
+	// The page foot carries the later client's filter note in its
+	// black strip, with the switch that drives the same state.
+	const note = view.quads.find( quad => quad.texture === "" && quad.rect[1] === 676 && quad.rect[3] === 20 );
+	assert.deepEqual( note?.color, [ 0, 0, 0, .92 ], "the note strip is the black bar at the page foot" );
+	assert.equal(
+		view.quads.some( quad => quad.texture.endsWith( "com_checkbutton_on.png" ) ),
+		true,
+		"the foot shows the filter's checkbox"
+	);
+	hud.dispose();
+});
+
 const GUIDE_PATH = "/transport/references/" + "b".repeat( 64 ) + ".json";
 const REGION_A = 60 * 256 + 100, REGION_B = 61 * 256 + 100, REGION_C = 62 * 256 + 100;
 const GUIDE_BYTES = new TextEncoder().encode( JSON.stringify( {
@@ -507,9 +533,26 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 		f.moveTo( defined( worldMapDungeonPose( 0x8001 ), "the cave mouth pose" ) );
 		let view = f.step();
 		defined( control( view, "map-dungeon:1" ), "the cave entrance is offered" );
-		// The entrance's own icon takes the click too (issue #3210).
+		// The entrance's own icon takes the click too (issue #3210),
+		// and the marker is painted where its control stands, so
+		// hovering the marker shows the same popup as the label
+		// (issue #3238: the popup used to answer to the name alone).
 		const icon = defined( control( view, "map-dungeon-icon:1" ) );
 		assert.deepEqual( [ icon.rect[2], icon.rect[3] ], [ 16, 16 ], "the icon control is the marker itself" );
+		assert.equal( icon.helpText, "Open the Donwhang Cave map", "the marker carries the popup text" );
+		assert.equal(
+			defined( control( view, "map-dungeon:1" ) ).helpText,
+			icon.helpText,
+			"marker and label name the same popup"
+		);
+		assert.equal(
+			f.scenes.at( -1 )?.quads.some( quad =>
+				quad.texture.endsWith( "wmap_sign_huntingpoint.png" ) &&
+				quad.rect[0] === icon.rect[0] && quad.rect[1] === icon.rect[1]
+			),
+			true,
+			"the hunt sign is painted at the marker's rect"
+		);
 		view = f.activate( "map-dungeon-icon:1" );
 		// The dungeon page wears the later client's chrome: globe and
 		// pin at the top right, the floor selector down the right edge.

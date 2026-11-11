@@ -24,7 +24,8 @@ import {
 	caveDungeonFloors,
 	caveMapImage,
 	caveMapPage,
-	caveMapView
+	caveMapView,
+	cavePageCaption
 } from "@/engine/foundation/ui/cave-map";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
@@ -828,8 +829,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
 					// wide chars at 0xBD959C (space dash space), then the town's
 					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A cave
-					// floor captions with its own label instead.
-					caption = (cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
+					// floor captions with its own label instead. The later
+					// client heads a dungeon page "Underground Level <n> of
+					// <dungeon>" (issue #3238): the level is the page's
+					// authored layer and the dungeon is its entrance name.
+					caveCaption = cavePage && caveMap ? cavePageCaption( cavePage ) ?? undefined : undefined,
+					caption = caveCaption ||
+						(cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
 						(page ?
 							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
