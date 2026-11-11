@@ -2671,7 +2671,9 @@ test("customization prepares both genders and swaps every figure without a new r
 	const { createItemCodenameIndex } = await load( "src/engine/foundation/animation/equipment-appearance.ts" );
 	const itemIds = createItemCodenameIndex( JSON.parse( roster.toString( "utf8" ) ).dress );
 	// No protector: the ownerless preview wears the native default clothing.
-	const defaultClothing = ':["clothes_BA","clothes_LA"]';
+	// The trailing :0 is the wear key's enchant-sparks flag (#3145): this
+	// fake renderer has no such answer, so the preview dresses native.
+	const defaultClothing = ':["clothes_BA","clothes_LA"]:0';
 	for ( const gender of [ 0, 1, 0 ] ) {
 		for ( let figure = 1; figure <= 13; figure++ ) {
 			Object.assign( selection, { gender, figure } );

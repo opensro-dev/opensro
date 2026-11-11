@@ -36,6 +36,7 @@ const BODY_GLB = "/assets/char/body-preview.glb";
 const SWORD_GLB = "/assets/char/equipment/sword.glb";
 const GLOW_BONE = "ai_end";
 const GLOW_EFFECT = "system/system_raretype_a_step1.efp";
+const SPARK_EFFECT = "system/system_enchantspark_step1.efp";
 const OTHER_GLOW_EFFECT = "system/system_raretype_b_step1.efp";
 const PROGRAMS = "/assets/effects/programs.json#";
 
@@ -72,7 +73,11 @@ function dress() {
 			CH_M_clothes_BA: { glb: "/assets/char/default-chest.glb", parts: [ "BA" ] },
 			CH_M_clothes_LA: { glb: "/assets/char/default-legs.glb", parts: [ "LA" ] }
 		},
-		specialGlows: { [RARE_SWORD]: glow( GLOW_EFFECT ), [OTHER_RARE_SWORD]: glow( OTHER_GLOW_EFFECT ) }
+		specialGlows: { [RARE_SWORD]: glow( GLOW_EFFECT ), [OTHER_RARE_SWORD]: glow( OTHER_GLOW_EFFECT ) },
+		// Port-only, not native: the Experimental enchant sparks for the
+		// rare sword, priced at any plus so the fixture's plus-0 row wears
+		// them whenever the option is on.
+		enchantSparks: { [RARE_SWORD]: [ { ...glow( SPARK_EFFECT )[0], threshold: 0 } ] }
 	};
 }
 
@@ -84,13 +89,16 @@ One dock owner over the real emission owners, publishing into frames, with
 ready answering for every path the test has not withheld.
 ================
 */
-function createDock( withheld = new Set() ) {
-	const frames = [];
+function createDock( withheld = new Set(), sparksOn = false ) {
+	const frames = [], assemblies = [];
 	let nextId = -1;
 	const allocate = () => nextId--;
 	const preview = createDockPreview( {
 		renderer: {
-			setCharacterAssembly() {},
+			enchantSparks: () => sparksOn,
+			setCharacterAssembly( model, base, parts ) {
+				assemblies.push( parts );
+			},
 			setCharacterActors( actors ) {
 				frames.push( actors );
 			},
@@ -119,6 +127,7 @@ function createDock( withheld = new Set() ) {
 	const output = { previewReady: false, dockReady: false, displayed: new Map(), failure: null, cameraTarget: null };
 	return {
 		output,
+		assemblies,
 		frame( seconds, refItemId ) {
 			const dock = [ {
 				id: CHARACTER_ID,
@@ -164,6 +173,36 @@ test("a roster character wears its rare item's glow on the item's socket", () =>
 
 test("a plain item draws no glow", () => {
 	assert.deepEqual( glowsOf( createDock().frame( 10, SWORD ) ), [] );
+});
+
+test("the dock carries the world's enchant sparks answer, on and off (#3145)", () => {
+	// The selection screen must dress a character exactly as the world
+	// does: with the Experimental option on, the enhanced glow tier and
+	// the enchant sparks; with it off, the native glow rows alone.
+	const on = createDock( new Set(), true ), onActors = on.frame( 10, RARE_SWORD );
+	const onModels = glowsOf( onActors ).map( actor => actor.model );
+	assert.ok(
+		onModels.includes( PROGRAMS + encodeURIComponent( SPARK_EFFECT ) ),
+		"the spark shows with the option on"
+	);
+	assert.ok( onModels.includes( PROGRAMS + encodeURIComponent( GLOW_EFFECT ) ), "the native glow stays under it" );
+	assert.equal(
+		on.assemblies.at( -1 ).find( part => part.equipment?.refObjId === RARE_SWORD )?.equipment.enhanced,
+		true,
+		"the weapon part carries the enhanced tier with the option on"
+	);
+	const off = createDock( new Set(), false ), offActors = off.frame( 10, RARE_SWORD );
+	const offModels = glowsOf( offActors ).map( actor => actor.model );
+	assert.ok( !offModels.includes( PROGRAMS + encodeURIComponent( SPARK_EFFECT ) ), "no spark with the option off" );
+	assert.ok(
+		offModels.includes( PROGRAMS + encodeURIComponent( GLOW_EFFECT ) ),
+		"the native glow shows with the option off"
+	);
+	assert.equal(
+		off.assemblies.at( -1 ).find( part => part.equipment?.refObjId === RARE_SWORD )?.equipment.enhanced,
+		false,
+		"the weapon part stays on the native tier with the option off"
+	);
 });
 
 test("the glow keeps its emitter across dock frames", () => {

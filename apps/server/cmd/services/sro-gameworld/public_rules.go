@@ -52,6 +52,7 @@ var unlistedSettings = map[string]string{
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
+	"SRO_MALL_STARTER_SILK":           "the starting silk of the beta silk rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
 	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",

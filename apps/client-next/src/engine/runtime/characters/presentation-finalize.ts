@@ -389,7 +389,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 interface PortraitBindings {
 	readonly renderer: Pick<
 		Renderer,
-		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions"
+		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "enchantSparks"
 	>;
 	readonly resources: PortraitResources;
 	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
@@ -407,7 +407,7 @@ interface PortraitBindings {
 				shape?: number;
 			},
 			resources: Pick<PortraitResources, "ready" | "plan">,
-			renderer: Pick<Renderer, "setCharacterAssembly">
+			renderer: Pick<Renderer, "setCharacterAssembly" | "enchantSparks">
 		): readonly CharacterActor[];
 	};
 }

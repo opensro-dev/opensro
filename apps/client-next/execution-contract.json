@@ -2748,6 +2748,46 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"rect"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads",
+				"run"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/characters/characters.ts",
 			"provider": "src/engine/runtime/characters/presentation-poses.ts",
 			"functions": [
@@ -3059,6 +3099,13 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "The parent character owner lends renderer assembly publication to its synchronous dock phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Port-only, not native: the dock phase reads the renderer's Experimental enchant-sparks setting so a roster character wears what it wears in the world (#3145)."
 		},
 		{
 			"file": "src/engine/runtime/characters/dock-preview.ts",
@@ -3472,6 +3519,13 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "The mall preview receives the existing parent renderer assembly capability through finalization."
+		},
+		{
+			"file": "src/engine/runtime/characters/mall-preview.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Port-only, not native: the mall preview reads the renderer's Experimental enchant-sparks setting so the mannequin's cloned weapon wears what it wears in the world (#3145)."
 		},
 		{
 			"file": "src/engine/foundation/animation/animation-emission.ts",

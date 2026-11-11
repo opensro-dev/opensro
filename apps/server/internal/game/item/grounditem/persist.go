@@ -197,6 +197,7 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 	for divisionID := range r.byDivision {
 		r.divRevisions[divisionID] = r.revision
 	}
+	r.forgetDivisionLogsLocked()
 	// The plane was replaced wholesale, so the earliest owned stamp
 	// may have moved either way: the next peek refreshes it.
 	r.ownerStampStale = true
