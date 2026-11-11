@@ -4078,6 +4078,118 @@ test("avatar attachment admission requires a dress and split modal retires on di
 	}
 });
 
+test("avatar equip onto a worn class refuses with the native notice on every gesture", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0xeac, quantity: 1 } ],
+			avatarInventory: [ { slot: 0, refObjId: 2, typeFlags: 0xeac, quantity: 1 } ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), false );
+		// Right-click (double-activate): 594980 refuses a worn class with
+		// UIIT_MSG_STRGERR_EQUIPITEM and sends no move; it never swaps.
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		for ( let k = 0; k < 6; k++ ) f.ui.step( state, now += 100 );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), true );
+		// The avatar button: select the bag slot, then press the class button.
+		f.ui.event( { kind: "activate", id: "equipment-view" } );
+		const scene = f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "avatar:1" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		// The drag: carry the bag hat onto the avatar panel.
+		const dest = scene.controls.find( c => c.id === "avatar:1" ).rect;
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 36, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x: dest[0] + 16, y: dest[1] + 16 } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		assert.equal( f.hasText( "Cannot equip the selected item" ), true );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("avatar attachment with no dress worn refuses with the native notice on every gesture", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			// 0x1eac: the avatar mask (0x6ac) with class 3 in the top bits.
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0x1eac, quantity: 1 } ],
+			avatarInventory: []
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), false );
+		// Right-click (double-activate): 594BC7 refuses with
+		// UIIT_STT_AVATAR_MAIL_ONLY_WEAR and sends no move.
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		for ( let k = 0; k < 6; k++ ) f.ui.step( state, now += 100 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), true );
+		// The avatar button: select the bag slot, then press the class button.
+		f.ui.event( { kind: "activate", id: "equipment-view" } );
+		const scene = f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "avatar:3" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		// The drag: carry the bag attachment onto the avatar panel.
+		const dest = scene.controls.find( c => c.id === "avatar:3" ).rect;
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 36, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x: dest[0] + 16, y: dest[1] + 16 } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), true );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("avatar attachment equips once a dress is worn", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0x1eac, quantity: 1 } ],
+			// 0x16ac: the avatar mask with class 2 (the dress) in slot 0.
+			avatarInventory: [ { slot: 0, refObjId: 2, typeFlags: 0x16ac, quantity: 1 } ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.filter( c => c?.kind === "avatar-move" ).length, 1 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), false );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("ground names are hover or hold-only, use gold amount, and invalidate retained UI on release", () => {
 	const f = uiFixture();
 	try {
@@ -6761,6 +6873,29 @@ test("showing a stall switches the main popup to Inventory once", () => {
 		};
 		draw();
 		assert.equal( inventory(), true, "a visitor's stall show opens the inventory too" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("Escape closes the stall network window instead of opening the System menu", () => {
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: {
+				...emptyStall(),
+				network: { open: true, rows: [], pages: 0, page: 0, category: 0, buying: null }
+			}
+		};
+		for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, 1000 + i );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual(
+			commands.filter( c => c.kind === "stall-network-open" ),
+			[ { kind: "stall-network-open", open: false } ],
+			"Escape closes the search window the way its close control does"
+		);
+		assert.equal( f.ui.stats().panel, "", "and does not open the System menu over it" );
 	} finally {
 		f.dispose();
 	}

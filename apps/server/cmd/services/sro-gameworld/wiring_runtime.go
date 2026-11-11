@@ -168,6 +168,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	if game.deps.MonsterState != nil {
 		navigation := &simulation.NavigationMetrics{}
 		game.hub.SetNavigationMetrics(navigation.Snapshot)
+		// The leg census publishes its own block beside navigation's (#3119).
+		game.hub.SetMonsterLegMetrics(navigation.LegSnapshot)
 		// The mover's routes come from the plane that owns the
 		// region: the open-terrain search outdoors, the cave's
 		// region route inside a dungeon floor (#1645/#1646).
@@ -175,7 +177,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		ticker.Monsters = &simulation.MonsterMoverOps{
 			Navigation: navigation,
 			Monsters:   game.deps.MonsterState,
-			TacticsFor: monster.ResolveTactics,
+			// TacticsFor stays unset: the step then resolves through
+			// monster.ResolveTactics, the resolver the scheduler's idle
+			// due mirrors (idleBehaviorDue). A replacement here would
+			// put every idle monster back on the conservative wake.
 			// #1695: live heights come from the plane that owns the
 			// region (the deck/cave-floor surface nearest the caller),
 			// not the bare terrain sampler.

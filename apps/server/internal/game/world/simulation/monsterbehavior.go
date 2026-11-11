@@ -20,7 +20,7 @@ out (the CloneWorldState discipline).
 ==================
 */
 func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
-	return ops.advanceInstanceSnapshot(divisionID, &instance, monster.MoverState{}, false, divisionPlayers, nowMs)
+	return ops.advanceInstanceSnapshot(divisionID, &instance, nil, divisionPlayers, nowMs)
 }
 
 /*
@@ -29,40 +29,51 @@ advanceInstanceSnapshot
 
 advanceInstance with the actor's mover already resolved by the leg
 dispatch (behaviorActorMover, #2029): the step starts from that value
-instead of re-reading it under a second lock. hasSnapshot is false for
+instead of re-reading it under a second lock. A nil snapshot marks
 direct callers outside a leg, which keep the step's own read. The
 snapshot is taken at dispatch, the same moment the instance snapshot
 beside it is read, so it is never staler than the value the step used
-to start from.
+to start from. It arrives by pointer and the step copies it exactly
+once: at 632 bytes, the by-value hand-offs on the way in were a
+measurable slice of the leg (#2150).
 ==================
 */
-func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance *monster.Instance, snapshot *monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	if instance.Ref.TrainingDummy {
 		return nil, nil
 	}
-	frames, targeted := ops.advanceInstanceStep(divisionID, instance, snapshot, hasSnapshot, divisionPlayers, nowMs)
+	frames, targeted := ops.advanceInstanceStep(divisionID, instance, snapshot, divisionPlayers, nowMs)
 	frames = ops.resolveStuck(divisionID, instance.Gid, divisionPlayers, nowMs, frames)
 	return frames, targeted
 }
 
-func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot *monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+	ops.stepDrainedEvents = 0
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
 	// must never finish a wander/chase segment, emit a correction, retaliate,
 	// or choose another idle leg while CurrentHP is zero.
 	if instance.Motion.StateAt(nowMs) != 0 || (instance.Ref.MaxHP > 0 && instance.CurrentHP == 0) {
+		ops.leg.noteStep(stepModeOther)
 		return nil, nil
 	}
-	mover := snapshot
-	ok := hasSnapshot
-	if !ok {
-		mover, ok = ops.Monsters.Mover(divisionID, instance.Gid)
-		if !ok {
+	var mover monster.MoverState
+	if snapshot != nil {
+		mover = *snapshot
+	} else {
+		stored, known := ops.Monsters.Mover(divisionID, instance.Gid)
+		if !known {
+			ops.leg.noteStep(stepModeOther)
 			return nil, nil
 		}
+		mover = stored
 	}
-	if ops.detachCrossPlaneNest(divisionID, instance, mover, nowMs) {
+	detached := ops.detachCrossPlaneNest(divisionID, instance, &mover, nowMs)
+	// The step's one census count (#3119), under the mode it reads from
+	// here on; the holds above read no behaviour mode and count other.
+	ops.leg.noteStep(stepModeFor(mover.Mode()))
+	if detached {
 		return nil, nil
 	}
 	if frames, handled := ops.applyTacticsEvents(divisionID, instance, mover, nowMs); handled {
@@ -70,13 +81,16 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 	}
 	// Direct actor events (including control binding) may enter IDLE outside
 	// this tick. Complete that entry before invoking its first OnTick.
+	completedIdleEntry := false
 	if mover.IdleEntryPending() {
+		completedIdleEntry = true
 		frames := ops.commitIdleEntry(divisionID, instance, mover, nil, nowMs)
 		// The entry commit advanced the row; the fresh read below is
 		// the step's new base, generation included (#2137 slice 1). A
 		// planning step reads its plan's shadow instead (the commit
 		// is recorded, not yet applied) - stepMoverGeneration.
 		var freshGen uint64
+		var ok bool
 		mover, freshGen, ok = ops.stepMoverGeneration(divisionID, instance.Gid)
 		if ok {
 			ops.rebaseStepBase(freshGen)
@@ -86,14 +100,26 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 		}
 	}
 	tactics := ops.resolveTactics(instance)
-	if idleRestQuiescent(ops, instance, mover, tactics, nowMs) {
+	restFailure := restGuardFailure(ops, instance, mover, tactics, nowMs)
+	ops.leg.noteRestGuard(restFailure)
+	if restFailure == restGuardPass {
 		return nil, nil
 	}
+	// The settled lane's candidate (#3027): every rest guard but the
+	// cadence passes on the value this step started from, so the whole
+	// step can only re-check the cadence and return. An entry completed
+	// above disqualifies the step - the snapshot the verdict would
+	// read still showed the entry pending, so the lane would step it.
+	restCandidate := restFailure == restGuardCadence && !completedIdleEntry
+	drainedEvents := ops.stepDrainedEvents
 	if mover.Mode() != monster.MoverPending {
 		// The gate hands back the mover it gated (its cadence may have
 		// been consumed and committed); re-reading the row here would
 		// repeat the locked lookup the gate just made.
 		frames, gated, handled, gateAdvanced := ops.runActivityGate(divisionID, instance, mover, nowMs)
+		if gated.Mode() == monster.MoverPending {
+			ops.leg.noteGateSuspended()
+		}
 		if handled {
 			return frames, nil
 		}
@@ -217,23 +243,27 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 		if mover.Mode() == monster.MoverIdle {
 			return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 		}
-		if mover.Mode() == monster.MoverWandering && tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
+		if mover.Mode() == monster.MoverWandering {
+			// One live pose serves the sight scan and the homing
+			// test below: the mover is unchanged between them.
 			live := mover.LivePoseAt(nowMs, ops.GroundHeight)
-			if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
-				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
-				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
-					ops.adoptMonsterAttack(&mover, plan)
-					if frames, targeted, handled := ops.tryMonsterAttack(
-						divisionID, instance, tactics, mover, divisionPlayers, nowMs,
-					); handled {
-						return frames, targeted
+			if tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
+				if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
+					mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
+					if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
+						ops.adoptMonsterAttack(&mover, plan)
+						if frames, targeted, handled := ops.tryMonsterAttack(
+							divisionID, instance, tactics, mover, divisionPlayers, nowMs,
+						); handled {
+							return frames, targeted
+						}
 					}
+					return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 				}
-				return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 			}
-		}
-		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.GroundHeight)) {
-			return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
+			if needsHoming(instance, live) {
+				return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
+			}
 		}
 		return ops.chaseRetarget(divisionID, instance, tactics, mover, divisionPlayers, nowMs), nil
 	}
@@ -285,63 +315,131 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *mon
 		return ops.commitIdleEntry(divisionID, instance, mover, nil, nowMs), nil
 	}
 
-	return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
+	frames, targeted := ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
+	if restCandidate && frames == nil && targeted == nil {
+		// The candidate's whole observable outcome: no frame, no
+		// commit door fired (the guards disarm each branch that
+		// could reach one) and the leg-end remainder arm re-arms
+		// the unchanged row. Counted so the settled lane's stage
+		// gate prices this population before any code depends on
+		// it (#3027 stage 1).
+		ops.leg.noteRestSettled(drainedEvents > 0)
+	}
+	return frames, targeted
+}
+
+/*
+================
+restGuard
+
+The idle-rest verdict's failing guard (restGuardFailure), named so
+the leg record can count which guard refuses each resting step
+(#3027 stage 1). The cadence slot names the settled lane's
+candidate: an idle monster failing only there is due a cadence
+re-check whose step can otherwise only return nil, so a verdict
+frozen at snapshot time could settle it without stepping. Every
+other slot names a fact the step itself must still read.
+================
+*/
+type restGuard uint8
+
+const (
+	restGuardPass restGuard = iota
+	restGuardMode
+	restGuardCadence
+	restGuardHelp
+	restGuardSummoned
+	restGuardTarget
+	restGuardDeadline
+	restGuardAggressive
+	restGuardGoal
+	restGuardSegment
+
+	restGuardCount
+)
+
+// restGuardNames names each guard for the slow-leg line's rest census.
+var restGuardNames = [restGuardCount]string{
+	restGuardPass:       "pass",
+	restGuardMode:       "mode",
+	restGuardCadence:    "cadence",
+	restGuardHelp:       "help",
+	restGuardSummoned:   "summoned",
+	restGuardTarget:     "target",
+	restGuardDeadline:   "deadline",
+	restGuardAggressive: "aggressive",
+	restGuardGoal:       "goal",
+	restGuardSegment:    "segment",
+}
+
+/*
+================
+restGuardFailure
+
+The idle-rest verdict as its failing guard: restGuardPass when an
+idle monster at rest can only return nil from the rest of
+advanceInstanceStep, so the step may skip its pose, activity-gate
+and AI-timer reads until the monster's next due time (#2136 item 3).
+Each guard names the branch it disarms and reads only what the
+caller already carries - the instance snapshot and the mover
+value - so a monster failing any guard runs the full step exactly
+as before.
+================
+*/
+func restGuardFailure(ops *MonsterMoverOps, instance *monster.Instance, mover monster.MoverState, tactics monster.Tactics, nowMs int64) restGuard {
+	// Mode branches below: pending, battle re-entry, wander expiry,
+	// returning, following, recovering, chasing and spawning.
+	if mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
+		return restGuardMode
+	}
+	// The activity gate's Due test, read without committing the cadence.
+	if ops.activity != nil && uint32(nowMs)-mover.Activity.LastCheck > uint32(mover.Activity.Interval) {
+		return restGuardCadence
+	}
+	// A pending help event or queued command is handled below.
+	if instance.Help.HasPending() {
+		return restGuardHelp
+	}
+	// A summoned monster at rest looks for its summoner's target.
+	if mover.ControlMode() == monster.ControlSummoned {
+		return restGuardSummoned
+	}
+	// Temptation rewrites the plan; a held target is fought below.
+	if instance.Tempted() || mover.TargetGID() != 0 {
+		return restGuardTarget
+	}
+	// advanceIdle decides only once the idle deadline passes.
+	if nowMs > mover.BehaviorDeadlineMs {
+		return restGuardDeadline
+	}
+	// An aggressive monster's sight scan reads the AI timer, and the
+	// check consumes selection state: the scan cadence (a few hundred
+	// milliseconds) cannot be deferred to the idle deadline (seconds).
+	if tactics.Aggressive {
+		return restGuardAggressive
+	}
+	// A held navigation goal commits its next segment below, even with
+	// no segment open.
+	if _, active := mover.NavigationGoal(); active {
+		return restGuardGoal
+	}
+	// A live or matured segment still has to glide or settle.
+	if mover.From != (monster.Pose{}) || mover.To != (monster.Pose{}) || mover.ArriveMs > mover.DepartMs || mover.InFlight(nowMs) {
+		return restGuardSegment
+	}
+	return restGuardPass
 }
 
 /*
 ================
 idleRestQuiescent
 
-True when an idle monster at rest can only return nil from the rest of
-advanceInstanceStep, so the step may skip its pose, activity-gate and
-AI-timer reads until the monster's next due time (#2136 item 3). Each
-guard names the branch it disarms and reads only what the caller
-already carries - the instance snapshot and the mover value - so a
-monster failing any guard runs the full step exactly as before.
+True when the idle-rest verdict passes every guard
+(restGuardFailure); the step then returns at once.
 ================
 */
 func idleRestQuiescent(ops *MonsterMoverOps, instance *monster.Instance, mover monster.MoverState, tactics monster.Tactics, nowMs int64) bool {
-	// Mode branches below: pending, battle re-entry, wander expiry,
-	// returning, following, recovering, chasing and spawning.
-	if mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
-		return false
-	}
-	// The activity gate's Due test, read without committing the cadence.
-	if ops.activity != nil && uint32(nowMs)-mover.Activity.LastCheck > uint32(mover.Activity.Interval) {
-		return false
-	}
-	// A pending help event or queued command is handled below.
-	if instance.Help.HasPending() {
-		return false
-	}
-	// A summoned monster at rest looks for its summoner's target.
-	if mover.ControlMode() == monster.ControlSummoned {
-		return false
-	}
-	// Temptation rewrites the plan; a held target is fought below.
-	if instance.Tempted() || mover.TargetGID() != 0 {
-		return false
-	}
-	// advanceIdle decides only once the idle deadline passes.
-	if nowMs > mover.BehaviorDeadlineMs {
-		return false
-	}
-	// An aggressive monster's sight scan reads the AI timer, and the
-	// check consumes selection state: the scan cadence (a few hundred
-	// milliseconds) cannot be deferred to the idle deadline (seconds).
-	if tactics.Aggressive {
-		return false
-	}
-	// A held navigation goal commits its next segment below, even with
-	// no segment open.
-	if _, active := mover.NavigationGoal(); active {
-		return false
-	}
-	// A live or matured segment still has to glide or settle.
-	if mover.From != (monster.Pose{}) || mover.To != (monster.Pose{}) || mover.ArriveMs > mover.DepartMs || mover.InFlight(nowMs) {
-		return false
-	}
-	return true
+	return restGuardFailure(ops, instance, mover, tactics, nowMs) == restGuardPass
 }
 
 func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
@@ -398,6 +496,7 @@ The end event needs no port action: the next scan resumes.
 */
 func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance *monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
 	events := ops.takeStepAIEvents(divisionID, instance.Gid)
+	ops.stepDrainedEvents = len(events)
 	battle := mover.Mode() == monster.MoverChasing || mover.Mode() == monster.MoverAttacking
 	for _, event := range events {
 		if event.Event != aiEventStart || !battle || mover.TargetGID() == 0 {

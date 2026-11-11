@@ -38,17 +38,27 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor *behavior
 	// actor was snapshot at (#2137 slice 1): a slower lane's set
 	// since the snapshot drops them instead of being overwritten.
 	ops.stepBaseGen, ops.stepGenArmed = actor.moverGen, true
-	ops.stepSlot, ops.stepMonsterSlot = actor.slot, actor.monsterSlot
-	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, actor.mover, true, players, nowMs)
+	ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot = actor.slot, actor.monsterSlot, actor.queueSlot
+	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, &actor.mover, players, nowMs)
 	ops.stepGenArmed = false
-	for _, session := range ops.divisionSessions(divisionID, sessions) {
-		if len(frames) > 0 && ops.scopeShown(session.SessionID)[instance.Gid] {
-			push.PushToSession(session.SessionID, frames)
+	// A step that emitted nothing has no viewer to find. Most steps emit
+	// nothing, and the walk below is one pass over the division's
+	// sessions per stepped actor: with it unguarded the leg paid actors
+	// times sessions every tick (2.8 ms of a 61 ms tick at 105 players,
+	// live profile 2026-11-10). By index, because a SessionSnapshot is a
+	// large value and the range copy was most of that cost.
+	if len(frames) > 0 {
+		viewers := ops.divisionSessions(divisionID, sessions)
+		for i := range viewers {
+			sessionID := viewers[i].SessionID
+			if ops.scopeShown(sessionID)[instance.Gid] {
+				push.PushToSession(sessionID, frames)
+			}
 		}
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
-	ops.vanishInSafeZone(divisionID, instance.Gid, actor.slot, actor.monsterSlot, nowMs)
+	ops.vanishInSafeZone(divisionID, actor, nowMs)
 }
 
 /*
@@ -59,9 +69,11 @@ The running step's whole-value commit of its own actor: guarded by
 the step's base generation while advanceAndPublish has it armed, so
 a slower lane's set since the snapshot (or since the step's last
 accepted commit) drops the commit instead of being overwritten -
-the actor replans at its next due. Outside a step the plain commit
-of before runs unchanged. An accepted commit re-bases the step on
-the row's new generation, so the step's own commits chain.
+the actor replans at its next due. The commit reads and answers
+through the slots the snapshot carried, as commitSteppedActivity's
+does (#3027). Outside a step the plain commit of before runs
+unchanged. An accepted commit re-bases the step on the row's new
+generation, so the step's own commits chain.
 ================
 */
 func (ops *MonsterMoverOps) commitSteppedMover(divisionID string, gid uint32, mover monster.MoverState) bool {
@@ -75,7 +87,7 @@ func (ops *MonsterMoverOps) commitSteppedMover(divisionID string, gid uint32, mo
 	if !ops.stepGenArmed {
 		return ops.Monsters.CommitMover(divisionID, gid, mover)
 	}
-	gen, ok := ops.Monsters.CommitMoverGen(divisionID, gid, mover, ops.stepBaseGen)
+	gen, ok := ops.Monsters.CommitMoverGenAt(divisionID, gid, ops.stepSlot, ops.stepMonsterSlot, mover, ops.stepBaseGen)
 	if ok {
 		ops.stepBaseGen = gen
 	}
@@ -100,7 +112,7 @@ func (ops *MonsterMoverOps) commitSteppedMoverFrames(divisionID string, gid uint
 	if !ops.stepGenArmed {
 		return ops.Monsters.CommitMoverFrames(divisionID, gid, mover, frames)
 	}
-	return ops.Monsters.CommitMoverFramesGen(divisionID, gid, mover, ops.stepBaseGen, frames)
+	return ops.Monsters.CommitMoverFramesGenAt(divisionID, gid, ops.stepSlot, ops.stepMonsterSlot, mover, ops.stepBaseGen, frames)
 }
 
 /*
@@ -109,21 +121,35 @@ commitSteppedActivity
 
 The activity gate's commit routed through the step's funnel
 (monsteractivity.go's runActivityGate): applied at once outside a
-plan, recorded for the ordered commit inside one (#2205).
+plan, recorded for the ordered commit inside one (#2205). The
+second answer is the write's cadence verdict (commitActivityAt's,
+or the pair's own comparison on the plan path, which records
+without writing): the gate reads its generation rule from it
+instead of comparing the rows again (#2029).
 ================
 */
-func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
+func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) (bool, bool) {
 	if ops.plan != nil {
 		ops.plan.recordActivity(before, after)
-		return true
+		// A plan records the pair's own verdict; the ordered commit
+		// replays through commitActivityAt directly, so counting
+		// here - and only here - counts each arm once (#3027).
+		cadenceOnly := cadenceOnlyWrite(before, after)
+		ops.leg.noteCadenceArm(cadenceOnly)
+		return true, cadenceOnly
 	}
 	// The step's own actor is armed: commit through its carried
-	// slots (#2133). The doors verify each hint against the gid, so
+	// slots (#2133) and the base generation its snapshot read
+	// (#3027). The doors verify each hint against the gid, so
 	// this is the gid commit with the map resolves left out.
 	if ops.stepGenArmed {
-		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, before, after, now)
+		committed, cadenceOnly := ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, ops.stepQueueSlot, ops.stepBaseGen, before, after, now)
+		ops.leg.noteCadenceArm(committed && cadenceOnly)
+		return committed, cadenceOnly
 	}
-	return ops.Monsters.commitActivity(division, gid, before, after, now)
+	committed, cadenceOnly := ops.Monsters.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
+	ops.leg.noteCadenceArm(committed && cadenceOnly)
+	return committed, cadenceOnly
 }
 
 /*

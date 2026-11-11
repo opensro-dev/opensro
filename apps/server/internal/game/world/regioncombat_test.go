@@ -36,6 +36,30 @@ func TestRegionPlayerCombat(t *testing.T) {
 
 /*
 ================
+TestRegionCombatVerdictsMatchRanges
+
+The direct-index table answers as the ranges do for every region
+id, gaps included: a brute-force walk of the ranges is the
+reference the table was built from (#3027).
+================
+*/
+func TestRegionCombatVerdictsMatchRanges(t *testing.T) {
+	for id := 0; id <= 0xffff; id++ {
+		wantAllowed, wantKnown := false, false
+		for _, row := range regionCombatRanges {
+			if uint16(id) >= row.first && uint16(id) <= row.last {
+				wantAllowed, wantKnown = row.allowed, true
+				break
+			}
+		}
+		if allowed, known := RegionPlayerCombat(uint16(id)); allowed != wantAllowed || known != wantKnown {
+			t.Fatalf("region %04x: allowed=%v known=%v, want %v/%v from the ranges", id, allowed, known, wantAllowed, wantKnown)
+		}
+	}
+}
+
+/*
+================
 TestRegionCombatRangesCoverReferenceRows
 
 Validate the compact representation, including every boundary and gap.

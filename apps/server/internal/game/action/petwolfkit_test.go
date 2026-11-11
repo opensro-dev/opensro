@@ -191,7 +191,7 @@ func TestWolfHowlExpiryBroadcastsToRecipientViewers(t *testing.T) {
 	rt.castWolfHowl(testDivision, c, c.ActiveCOS.GID, skill, clock.NowMs())
 	clock.now = clock.now.Add(8 * time.Second)
 	key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
-	rt.advancePetInDivision(key, clock.NowMs())
+	rt.advancePetInDivision(key, rt.petSessionFor(key.division, key.name, key.gid), clock.NowMs())
 	seen := map[uint32]bool{}
 	for _, batch := range rt.drainMonsterLegRecipients() {
 		for _, frame := range batch.Frames {

@@ -41,6 +41,18 @@ commitLocked for a caller that acts on the outcome.
 */
 func (s *Store) commitCheckedLocked(label string) error {
 	s.noteGoldLocked(label)
+	// Every record this commit carries moves its write epoch, so a
+	// writer outside the scoped doors (the guild, camp and trade
+	// doors mark the change set directly) retires exactly its own
+	// records' cached copies; the scoped doors also count at mutation
+	// time, which is what retires a deferred write before its flush.
+	if s.changes.all {
+		s.noteRosterWriteLocked()
+	} else {
+		for c := range s.changes.characters {
+			s.noteCharacterWriteLocked(c)
+		}
+	}
 	if err := s.commitOnceLocked(label); err != nil {
 		s.recordWriteFailureLocked(label, err)
 		return err
@@ -307,7 +319,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		}
 	}
 
-	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
+	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
@@ -462,6 +474,13 @@ Close
 ================
 */
 func (s *Store) Close() {
+	// The economy fold lane (#3187) stops before the lock is taken:
+	// its write batches hold the lock briefly, so it is joined while
+	// the lock is still free.
+	if s.economyFold != nil {
+		s.economyFold.stop()
+		s.economyFold = nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// The background checkpointer stops first (#2142 slice 0): its
@@ -471,6 +490,13 @@ func (s *Store) Close() {
 	if s.checkpoints != nil {
 		s.checkpoints.stop()
 		s.checkpoints = nil
+	}
+	// The boot verifier is interrupted next: it reads through its own
+	// connection and takes no store door either, and a stop must not
+	// wait for a whole-file check or copy to finish.
+	if s.verifier != nil {
+		s.verifier.stop()
+		s.verifier = nil
 	}
 	if s.db != nil {
 		// A graceful stop never drops a tick: rows a deferred door left
@@ -612,7 +638,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 	// already holds, so it costs no encode and no hash. The digest
 	// below remains the write gate for characters that did move - and
 	// the debug check that the comparison told the truth.
-	if committed, known := w.committedRows[key]; known && len(characterSectionsChanged(c, committed)) == 0 {
+	if committed, known := w.committedRows[key]; known && !characterChanged(c, committed) {
 		w.rows.skipped++
 		return nil
 	}

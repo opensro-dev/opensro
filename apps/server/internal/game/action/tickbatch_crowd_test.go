@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -166,6 +168,51 @@ BenchmarkRecoveringCrowdTick
 One recovery pulse of the whole crowd: immediate doors against the batch.
 ================
 */
+/*
+================
+BenchmarkRecoveringCrowdTickPopulatedStores
+
+The recovering crowd while someone outside it holds a buff and a
+status: both stores populated, no crowd member in either. The pulse's
+reads must miss by the session's held keys, never by folding fresh
+ones (#2033); with empty stores this bench degenerates to
+BenchmarkRecoveringCrowdTick.
+================
+*/
+func BenchmarkRecoveringCrowdTickPopulatedStores(b *testing.B) {
+	for _, batched := range []bool{false, true} {
+		name := "immediate"
+		if batched {
+			name = "batched"
+		}
+		b.Run(name, func(b *testing.B) {
+			rt, st, clock, crowd := crowdStoreRuntime(b, batched)
+			modifiers, err := statuseffect.NewModifiers([]paramkeeper.Write{{Parameter: 5, Value: 20}})
+			if err != nil {
+				b.Fatal(err)
+			}
+			if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: "benchkeeper",
+				SkillID: 901, SkillGroup: 901, InstanceToken: 901, State: statuseffect.StateActive, Modifiers: modifiers}) {
+				b.Fatal("install unrelated effect")
+			}
+			rt.storePlayerAbnormal(testDivision, "benchkeeper", &abnormal.Block{Mask: 1})
+			nowMs, commits := clock.NowMs(), uint64(0)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				for _, c := range crowd {
+					hp := int64(1)
+					c.CurrentHP = &hp
+				}
+				nowMs += 4000
+				b.StartTimer()
+				commits += crowdTick(rt, st, nowMs)
+			}
+			b.ReportMetric(float64(commits)/float64(b.N), "commits/tick")
+		})
+	}
+}
+
 func BenchmarkRecoveringCrowdTick(b *testing.B) {
 	for _, batched := range []bool{false, true} {
 		name := "immediate"

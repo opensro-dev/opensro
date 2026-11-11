@@ -64,6 +64,14 @@ type guildE2EServer struct {
 // derive through.
 func startGuildServer(t *testing.T, dir string, seeds []*enterworld.Character) guildE2EServer {
 	t.Helper()
+	return startGuildServerWith(t, dir, seeds, false)
+}
+
+// startGuildServerWith is startGuildServer that, when memberStatus is set,
+// also wires the GameWorld's login and logout roster pushes
+// (memberstatus.go) the way wiring_sessions.go does.
+func startGuildServerWith(t *testing.T, dir string, seeds []*enterworld.Character, memberStatus bool) guildE2EServer {
+	t.Helper()
 
 	authority, err := store.Open(dir, store.Options{DefaultSkills: guildSkillSeeder})
 	if err != nil {
@@ -108,9 +116,7 @@ func startGuildServer(t *testing.T, dir string, seeds []*enterworld.Character) g
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 	directory := presence.NewDirectory(srv.Hub)
 	communitySeeds := community.SeedFramesFunc(directory, deps.Letters)
@@ -127,6 +133,15 @@ func startGuildServer(t *testing.T, dir string, seeds []*enterworld.Character) g
 	// without it the offline flags cannot see the online member.
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
+		if memberStatus {
+			guild.MemberWorldBound(deps, directory, divisionID, character)
+		}
+	}
+	if memberStatus {
+		srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {
+			guild.MemberSessionClosed(deps, directory, s)
+			guild.ForgetSession(s)
+		})
 	}
 	// The entry seed records its guild block as the GameWorld does.
 	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })

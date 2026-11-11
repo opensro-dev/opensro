@@ -70,12 +70,23 @@ type MonsterMoverOps struct {
 	resumePending map[populationKey]map[uint32]struct{}
 	// activityBlocks memoizes the activity gate's per-actor block
 	// resolution (monsteractivity.go); shard-owned like resumePending.
-	activityBlocks map[uint32]activityBlockMemo
+	activityBlocks map[uint32]*activityBlockMemo
 	// legSessions groups the running leg's sessions by division, built
 	// at the top of RunMonsterLeg and cleared when it returns, so the
 	// per-actor publish path iterates one division's viewers instead of
 	// rescanning every session. Nil outside a leg.
 	legSessions map[string][]SessionSnapshot
+	// legViewers, legLive, legSessionBacking and legDivisionSet back
+	// the leg's viewer bookkeeping: one leg's worth of entries each,
+	// kept between legs and cleared at each leg's start (#3027).
+	// Shard-owned like resumePending: the ticker clones its ops
+	// before any leg runs, so each clone owns its maps. The
+	// legSessions index above points into legSessionBacking's
+	// buckets while a leg runs.
+	legViewers        map[string]worldgeom.RegionXZ
+	legLive           map[string]bool
+	legSessionBacking map[string][]SessionSnapshot
+	legDivisionSet    map[string]bool
 	// stepBaseGen is the commit generation the running step's actor
 	// was read at, armed by advanceAndPublish for the step's duration
 	// (#2137 slice 1): the generation-guarded commit helpers
@@ -91,6 +102,27 @@ type MonsterMoverOps struct {
 	// commit through these gid-verified hints while armed.
 	stepSlot        uint32
 	stepMonsterSlot uint32
+	// stepQueueSlot is the running step actor's behaviour queue
+	// slot, armed with the storage slots above: the activity
+	// commit's re-arm lands on the queue row through it
+	// (setAtSlot) instead of resolving the gid through byGID
+	// again (#3027). Read only while stepGenArmed, like the
+	// storage slots.
+	stepQueueSlot uint32
+	// stepDrainedEvents is the running step's tactics-event drain
+	// count (monsterbehavior.go's applyTacticsEvents), reset at the
+	// step's head and read at its rest verdict: a settled candidate
+	// whose step drained events is the settled lane's
+	// drain-and-carry population (#3027 stage 1).
+	stepDrainedEvents int
+	// recheckScratch backs the pending re-check lane's candidate
+	// list (monsterpending_recheck.go), kept between batches so a
+	// leg allocates none. Shard-owned like resumePending.
+	recheckScratch []pendingRecheck
+	// stepPendingRechecks routes every due actor through the full
+	// step, the lane's reference: the equivalence tests run one
+	// world each way and compare them. Never set in production.
+	stepPendingRechecks bool
 	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
 	// #2205): the zero value (everywhere but production wiring) runs
 	// the serial leg; >= 1 plans each batch on a pool - one worker
@@ -281,6 +313,26 @@ func MonsterDespawnBracketFrames(gids []uint32) []Frame {
 	}
 }
 
+/*
+================
+retainedLegMap
+
+One of the leg's viewer indexes, kept across legs: made on first
+use, cleared with its buckets kept at the next leg's start, so a
+leg pays no map growth for bookkeeping that lives exactly one leg
+(#3027). Legs on one ops are serial and the leg's readers are done
+before it returns, so the clear at the next start happens after
+the last read.
+================
+*/
+func retainedLegMap[K comparable, V any](held map[K]V, hint int) map[K]V {
+	if held == nil {
+		return make(map[K]V, hint)
+	}
+	clear(held)
+	return held
+}
+
 // RunMonsterLeg advances actors independently of observer interest.
 /*
 ================
@@ -291,6 +343,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	if ops == nil || ops.Monsters == nil {
 		return
 	}
+	// The scheduler mirrors the production tactics resolver; tell it
+	// when this ops resolves through a replacement instead, so its
+	// idle due stays conservative (idleBehaviorDue).
+	ops.Monsters.noteTacticsReplaced(ops.TacticsFor != nil)
 
 	// The activity gate's memo lives on the ops, but the dispatch below
 	// binds each actor to a value copy (owned := *ops): a memo map first
@@ -301,7 +357,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// the one map header, as the memo's shard-owned design intends. The
 	// gate keeps its lazy make for direct callers outside a leg.
 	if ops.activityBlocks == nil {
-		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+		ops.activityBlocks = make(map[uint32]*activityBlockMemo)
 	}
 
 	// Slow-leg attribution (#1820 part C): one record per leg, filled
@@ -315,9 +371,12 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	ops.leg = stats
 	defer func() { ops.leg = nil }()
 
-	viewers := make(map[string]worldgeom.RegionXZ, len(sessions))
-	live := make(map[string]bool, len(sessions))
-	legSessions := make(map[string][]SessionSnapshot)
+	ops.legViewers = retainedLegMap(ops.legViewers, len(sessions))
+	ops.legLive = retainedLegMap(ops.legLive, len(sessions))
+	ops.legSessionBacking = retainedLegMap(ops.legSessionBacking, len(sessions))
+	viewers := ops.legViewers
+	live := ops.legLive
+	legSessions := ops.legSessionBacking
 	for _, session := range sessions {
 		live[session.SessionID] = true
 		pose := session.World.LiveSpawnAt(nowMs)
@@ -344,7 +403,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 
 	ops.activity = ops.captureActivity(sessions, nowMs)
 	defer func() { ops.activity = nil }()
-	divisionSet := make(map[string]bool)
+	ops.legDivisionSet = retainedLegMap(ops.legDivisionSet, len(sessions))
+	divisionSet := ops.legDivisionSet
 	// One dispatch for the whole leg. A variable captured by the closure
 	// handed to RunAction escapes through that indirect call: captured per
 	// actor, every monster's Instance snapshot and the closure itself were a
@@ -383,11 +443,30 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// The batches die with this leg: their refs backings return to
 	// the scratch pool once every batch below is dispatched (#2030).
 	defer ops.Monsters.releaseBehaviorBatches(batches)
+	// The build consumed the actors' dues without re-arming them
+	// (behaviorBatchesForDivision): the sweep after the dispatch
+	// arms the remainder, and this backstop runs the same sweep on
+	// the way out when a step panics mid-leg, so a popped actor is
+	// never left unscheduled. An actor a door re-armed meanwhile is
+	// skipped by the sweep either way.
+	remaindersArmed := false
+	defer func() {
+		if !remaindersArmed {
+			ops.Monsters.armBehaviorRemainders(batches, nowMs)
+		}
+	}()
 	stats.queue = time.Since(queueStarted)
-	for _, batch := range batches {
+	for batchIndex, batch := range batches {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
-		ops.activity.world = activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation}
+		ops.activity.askWorld(activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation})
+		// The suspended actors' activity re-check is answered for the
+		// whole batch first (monsterpending_recheck.go); only the
+		// actors it leaves are snapshot and stepped. The batch keeps
+		// the shortened list: the settled ones hold the due their
+		// commit armed, and the remainder sweep has nothing to add.
+		batch.actors = ops.recheckPendingBatch(batch, nowMs, stats)
+		batches[batchIndex].actors = batch.actors
 		var players []playerPose
 		for _, session := range sessions {
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
@@ -447,6 +526,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		}
 		ops.Monsters.releaseLegSnapshot(view)
 	}
+	queueArmStarted := time.Now()
+	ops.Monsters.armBehaviorRemainders(batches, nowMs)
+	stats.queue += time.Since(queueArmStarted)
+	remaindersArmed = true
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped
 	for divisionID := range divisionSet {
@@ -460,6 +543,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		navMissesEnd = ops.NavCacheMisses()
 	}
 	stats.finish(navMissesEnd, readGCSample())
+	ops.Navigation.leg(stats)
 	ops.lastLeg = stats
 	if stats.total >= SlowHookThreshold {
 		stats.logSlow(ops.divisionID)
@@ -518,9 +602,9 @@ resolveTactics
 */
 func (ops *MonsterMoverOps) resolveTactics(instance *monster.Instance) monster.Tactics {
 	if ops.TacticsFor != nil {
-		return ops.TacticsFor(*instance)
+		return ops.TacticsFor(instance)
 	}
-	return monster.ResolveTactics(*instance)
+	return monster.ResolveTactics(instance)
 }
 
 // startWanderLeg probes the facing-relative direction, then requests the
@@ -531,13 +615,14 @@ startWanderLeg
 ================
 */
 func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
+	before := ops.stepNavigationAdmission(divisionID, instance.Gid)
 	if !monster.CanEnterWander(instance.Ref.TidWord, instance.Ref.RunSpeed) || instance.Ref.WalkSpeed <= 0 || tactics.WanderProbeDistance <= 0 {
 		// Zero-speed types never wander.
 		mustMoverTransition(&mover, monster.MoverEventEntryRefused, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		mover, frames := ops.planIdleEntry(instance, mover, nowMs)
-		return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+		committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+		return committed
 	}
 	// Nest containment, probe origin and movement goal are separate inputs.
 	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
@@ -554,7 +639,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.
 			// Missing geometry cannot be interpreted as a successful probe.
 			mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 			mover, frames := ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+			committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+			return committed
 		}
 		motion = motion.AfterProbe(path.Result())
 	}
@@ -562,7 +648,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance *monster.
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
-	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	return committed
 }
 
 /*
@@ -580,8 +667,30 @@ lifecycle.
 ==================
 */
 func (ops *MonsterMoverOps) commitSegment(divisionID string, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
+	before := ops.stepNavigationAdmission(divisionID, instance.Gid)
 	return ops.commitPreparedSegment(divisionID, before, instance, mover, dest, speed, channel, nowMs)
+}
+
+/*
+================
+stepNavigationAdmission
+
+The admission the step's navigation commits (commitSegment,
+startReturnLeg, startWanderLeg, commitIdleEntry) prepare against
+the stored row. A planning step (#2205) prepares none: its commit
+funnel records the navigation and the serial replay re-prepares
+against the row at commit (commitSteppedNavigation), so a
+plan-time admission is never read - and the read is not free:
+every worker would take the population lock and copy the instance
+and mover rows to build a value it throws away. The serial step
+prepares exactly as before.
+================
+*/
+func (ops *MonsterMoverOps) stepNavigationAdmission(divisionID string, gid uint32) navigationAdmission {
+	if ops.plan != nil {
+		return navigationAdmission{}
+	}
+	return ops.Monsters.prepareNavigation(divisionID, gid)
 }
 
 /*
@@ -594,28 +703,27 @@ transaction itself value-guards its commit exactly as before, and
 an accepted one re-bases the running step's commit generation on
 the row's new generation, so the step's later generation-guarded
 commits chain off it instead of dropping against their own leg
-(#2137 slice 1). The stored value equalling next is the acceptance
-witness - commitNavigation's frame return cannot tell a landed
-commit with no frames from a dropped one. Unarmed callers pay
-nothing.
+(#2137 slice 1). The rebase spends no read: the transaction hands
+back the generation it just wrote. The second answer is the
+landing itself - a landed commit with no frames is otherwise
+indistinguishable from a dropped one - for the pooled replay.
+Unarmed callers pay nothing.
 ================
 */
-func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) ([]Frame, bool) {
 	if ops.plan != nil {
 		// Planning (#2205): record the transaction's result; the
 		// commit re-prepares the admission against the row then, the
 		// moment the serial call reads it, so the plan-time admission
 		// is deliberately not carried over.
 		ops.plan.recordNavigation(next, frames)
-		return frames
+		return frames, true
 	}
-	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
-	if ops.stepGenArmed {
-		if mover, gen, ok := ops.Monsters.MoverGenerationAt(divisionID, before.instance.Gid, ops.stepSlot, ops.stepMonsterSlot); ok && mover == next {
-			ops.stepBaseGen = gen
-		}
+	committed, gen, landed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
+	if landed && ops.stepGenArmed {
+		ops.stepBaseGen = gen
 	}
-	return committed
+	return committed, landed
 }
 
 // Approach allocation and geometry must publish in the same navigation transaction.
@@ -626,7 +734,8 @@ commitPreparedSegment
 */
 func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance *monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
-	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	committed, _ := ops.commitSteppedNavigation(divisionID, before, mover, frames)
+	return committed
 }
 
 // Plan only: terrain sampling may run concurrently with damage/lifecycle work.

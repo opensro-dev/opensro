@@ -272,6 +272,63 @@ func TestProjectileCastWaitVerdictPricesFromThePreparedSnapshot(t *testing.T) {
 
 /*
 ================
+TestProjectileCastWaitRejudgesWhenMaximaMove
+
+The priced basis of a waiting cast is its maxima and consumption
+rate, and those move without the abnormal block changing - an
+equipment swap, a modifier write, a stat change mid-charge. The wait
+must price the tick in front of it: when the caster's maximum MP
+collapses under the price, the refusal lands on that tick, and
+restoring the purse afterwards cannot resurrect the cast (#3101
+review: a verdict cached on the block alone fired it at release).
+================
+*/
+func TestProjectileCastWaitRejudgesWhenMaximaMove(t *testing.T) {
+	rt, c, target, skill, now := arrowFixture(t)
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
+	if decision != skillCastAccepted || len(start.Frames) != 1 {
+		t.Fatalf("arrow did not prepare: %+v %v", start, decision)
+	}
+	if len(rt.pendingProjectileCasts) != 1 || !rt.pendingProjectileCasts[0].verdictCost.Pinned {
+		t.Fatalf("prepare left the cast unpriced: %+v", rt.pendingProjectileCasts)
+	}
+	if out := rt.advanceProjectileCasts(now + 300); len(out) != 0 {
+		t.Fatalf("wait tick produced frames: %+v", out)
+	}
+	if len(rt.pendingProjectileCasts) != 1 {
+		t.Fatal("wait tick retired the cast")
+	}
+	// Collapse the derived maximum under the price; the purse itself
+	// (CurrentMP) never moves, so only the clamped vital can refuse.
+	savedIntellect := c.Intellect
+	c.Intellect = testInt64(1)
+	if maxMP := enterworld.DerivedMaxMP(c); maxMP >= 100 {
+		t.Fatalf("intellect lever left the maximum standing: %d", maxMP)
+	}
+	out := rt.advanceProjectileCasts(now + 301)
+	if len(rt.pendingProjectileCasts) != 0 {
+		t.Fatal("cast whose priced basis moved stayed queued")
+	}
+	if len(out) == 0 {
+		t.Fatal("basis-moved cast produced no close")
+	}
+	// The refusal already landed: a restored purse fires nothing.
+	c.Intellect = savedIntellect
+	c.CurrentMP = testInt64(10000)
+	before, _ := rt.Monsters.Get(testDivision, target)
+	if out := rt.advanceProjectileCasts(now + 302); len(out) != 0 {
+		t.Fatalf("restored purse produced frames: %+v", out)
+	}
+	after, _ := rt.Monsters.Get(testDivision, target)
+	if len(rt.pendingProjectileCasts) != 0 || after.CurrentHP != before.CurrentHP {
+		t.Fatalf("refused cast resurrected: queued %d, hp %d -> %d",
+			len(rt.pendingProjectileCasts), before.CurrentHP, after.CurrentHP)
+	}
+}
+
+/*
+================
 emptyMagicOptionSource
 
 A magic-option catalogue with a source identity and no rows, so the

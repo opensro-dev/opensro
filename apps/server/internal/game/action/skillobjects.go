@@ -12,12 +12,14 @@ division serialization used by item admission and monster combat.
 package action
 
 import (
+	"slices"
 	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
 )
@@ -146,7 +148,8 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 	// before names it, so the post-pass copy is paid only on a pass that
 	// created, retired or restamped an object.
 	after := before
-	if rt.SkillObjects.Generation() != generation {
+	settled := rt.SkillObjects.Generation() == generation
+	if !settled {
 		after = rt.SkillObjects.Snapshot()
 	}
 	for _, session := range sessions {
@@ -154,10 +157,14 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 			continue
 		}
 		pose := session.World.LiveSpawnAt(nowMs)
+		position := worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}
+		if settled && rt.skillObjectScopeSettled(session, generation, position) {
+			continue
+		}
 		viewer := skillobject.Viewer{
 			Division: session.DivisionID, Population: session.Population, Published: session.PublishedObjects,
 			CharacterGID: simulation.PlayerObjectID(session.CharacterID),
-			Position:     worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z},
+			Position:     position,
 		}
 		frames := simFrames(skillobject.ScopeFrames(before, viewer))
 		// This is a prediction inside one reliable batch, not another scope
@@ -179,9 +186,110 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 		if len(frames) > 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: session.DivisionID,
 				OnlyCharacterID: session.CharacterID, Frames: frames})
+			// Frames are outstanding until transport admits them into
+			// the session's published set; the next pass recomputes
+			// rather than trusting a mark over unadmitted scope.
+			rt.skillObjectScopeForget(session.SessionID)
+		} else if settled {
+			rt.skillObjectScopeSettle(session, generation, position)
 		}
 	}
+	rt.skillObjectScopePrune(sessions)
 	return out
+}
+
+/*
+================
+skillObjectScopeMark
+
+One viewer's settled scope inputs (#3101): the registry generation,
+the viewer's division, identity and population, its pose and the
+published set a scope pass last found settled - it computed no frames.
+The scope frames are a pure function of those inputs (ScopeFrames
+over the registry the generation names), so while they all stand the
+pass is empty and the per-object geometry walk is skipped.
+================
+*/
+type skillObjectScopeMark struct {
+	generation  uint64
+	division    string
+	characterID int64
+	population  instance.Lease
+	position    worldgeom.RegionXZ
+	published   []uint32
+}
+
+/*
+================
+skillObjectScopeSettled
+
+Whether the viewer's settled pass ran on exactly these inputs.
+================
+*/
+func (rt *Runtime) skillObjectScopeSettled(session simulation.SessionView, generation uint64, position worldgeom.RegionXZ) bool {
+	rt.skillObjectScopeMu.Lock()
+	defer rt.skillObjectScopeMu.Unlock()
+	mark, ok := rt.skillObjectScopeMarks[session.SessionID]
+	return ok && mark.generation == generation && mark.division == session.DivisionID &&
+		mark.characterID == session.CharacterID && mark.population == session.Population &&
+		mark.position == position && slices.Equal(mark.published, session.PublishedObjects)
+}
+
+/*
+================
+skillObjectScopeSettle
+
+Record a scope pass that computed no frames, keeping a copy of the
+published set it settled on.
+================
+*/
+func (rt *Runtime) skillObjectScopeSettle(session simulation.SessionView, generation uint64, position worldgeom.RegionXZ) {
+	rt.skillObjectScopeMu.Lock()
+	defer rt.skillObjectScopeMu.Unlock()
+	if rt.skillObjectScopeMarks == nil {
+		rt.skillObjectScopeMarks = map[string]skillObjectScopeMark{}
+	}
+	mark := rt.skillObjectScopeMarks[session.SessionID]
+	mark.generation, mark.division = generation, session.DivisionID
+	mark.characterID, mark.population, mark.position = session.CharacterID, session.Population, position
+	mark.published = append(mark.published[:0], session.PublishedObjects...)
+	rt.skillObjectScopeMarks[session.SessionID] = mark
+}
+
+/*
+================
+skillObjectScopeForget
+================
+*/
+func (rt *Runtime) skillObjectScopeForget(sessionID string) {
+	rt.skillObjectScopeMu.Lock()
+	defer rt.skillObjectScopeMu.Unlock()
+	delete(rt.skillObjectScopeMarks, sessionID)
+}
+
+/*
+================
+skillObjectScopePrune
+
+Drop the marks of sessions this pass did not see, so the table holds
+only live sessions.
+================
+*/
+func (rt *Runtime) skillObjectScopePrune(sessions []simulation.SessionView) {
+	rt.skillObjectScopeMu.Lock()
+	defer rt.skillObjectScopeMu.Unlock()
+	if len(rt.skillObjectScopeMarks) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		seen[session.SessionID] = true
+	}
+	for sessionID := range rt.skillObjectScopeMarks {
+		if !seen[sessionID] {
+			delete(rt.skillObjectScopeMarks, sessionID)
+		}
+	}
 }
 
 /*
@@ -212,6 +320,9 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 	before := rt.SkillObjects.Snapshot()
 	var routed []simulation.DivisionFrames
 	for _, object := range before {
+		if rt.skillObjectWaiting(object, nowMs) {
+			continue
+		}
 		for _, batch := range rt.advanceSkillObject(object, nowMs) {
 			if batch.SourceGID == object.Spawn.GID {
 				*results = append(*results, batch)
@@ -222,6 +333,56 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 	}
 	*out = append(*out, rt.sealTickPrivate(routed)...)
 	return before, generation
+}
+
+/*
+================
+skillObjectOwnerAdmit
+
+The owner-presence verdict of one object: the facts the admitted
+copy is weighed on, shared by the waiting probe below and the copy
+in advanceSkillObject so the two can never disagree.
+================
+*/
+func skillObjectOwnerAdmit(object skillobject.Object) func(*enterworld.Character) bool {
+	return func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			live.NativeTeleportMode == 0 &&
+			enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&
+			domain.CharacterWorldInstance(live) == uint32(object.Population.ID)
+	}
+}
+
+/*
+================
+skillObjectWaiting
+
+Whether the object cannot change this tick (#3101). The registry
+weighs expiry and capture in the scan itself (Scan/Advance), and the
+scan only runs at the object's deadline, so an object whose deadline
+has not come and whose duration has not run out can only change
+through its owner: the population lease going, or the presence
+verdict turning. Both are probed here on their owners' terms - the
+lease index, and the presence verdict on the live record
+(characterAdmitted, no copy) - so an owner who dies, teleports or
+leaves still retires the object on this tick's full pass, while a
+waiting object stays off the division lock, the admitted character
+copy and the monster candidate walk until its deadline. One
+retirement does move to the deadline: a combat trap's owner-distance
+retirement is weighed from the owner's pose inside the scan pass,
+which is the cadence its tests advance by (CombatTrapScanMs).
+================
+*/
+func (rt *Runtime) skillObjectWaiting(object skillobject.Object, nowMs int64) bool {
+	if nowMs >= object.NextScanMs || nowMs-object.CreatedMs > int64(object.Program.DurationMs) {
+		return false
+	}
+	lease, present := rt.EntryPopulationLease(object.Division, object.OwnerName)
+	if !present || lease != object.Population {
+		return false
+	}
+	c := rt.findCharacter(object.Division, object.OwnerName)
+	return rt.characterAdmitted(object.Division, c, skillObjectOwnerAdmit(object))
 }
 
 /*
@@ -250,12 +411,7 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	// GID of theirs).
 	var snapshot *enterworld.Character
 	if present && lease == object.Population {
-		snapshot = rt.characterSnapshotCombatAdmitted(object.Division, c, func(live *enterworld.Character) bool {
-			return !live.DeletePending && enterworld.CharacterAlive(live) &&
-				live.NativeTeleportMode == 0 &&
-				enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&
-				domain.CharacterWorldInstance(live) == uint32(object.Population.ID)
-		})
+		snapshot = rt.characterSnapshotCombatAdmitted(object.Division, c, skillObjectOwnerAdmit(object))
 	}
 	ownerPresent := snapshot != nil
 	if object.Program.Field {

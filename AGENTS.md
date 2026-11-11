@@ -196,10 +196,21 @@ package store, never through a link:
   and reads its `.generated` and `apps/server/.generated/game-data`. A build
   run from a worktree writes into that shared tree. `SRO_GENERATED_ROOT` and
   `SRO_SERVER_GAME_DATA_ROOT` (absolute paths) override it.
+- Local world: nothing to set. `pnpm local` from any worktree runs the
+  main checkout's world (`scripts/local/worldRoot.mjs`), so the owner's
+  characters are there whichever tree starts the game. That world is a
+  person's: a test, a smoke run or a load tool sets `SRO_LOCAL_STATE_ROOT`
+  to a scratch directory and never writes into the shared one, and nobody
+  runs `pnpm local --reset` to get past a boot error.
 - Packages: run `pnpm install --frozen-lockfile --offline` in the worktree.
   It hard-links from the shared store in a few seconds. Never link
   `node_modules`: pnpm writes through the link into the other checkout, and
   every `pnpm task` refuses a linked one.
+- Go build cache: one for every checkout, nothing to set for the gates. The
+  scripts compile with `-trimpath` (`scripts/lib/goEnvironment.mjs`), so a
+  worktree reuses what any other checkout of the same sources compiled. Set
+  `go env -w GOFLAGS=-trimpath` once per workstation for hand-typed
+  commands, and never point `GOCACHE` into a worktree.
 - A worktree never holds its own `.generated` or `apps/server/.generated`:
   not a copy, not a symlink, not a junction. The resolvers refuse to run
   while one exists (unless that tree's override variable is set) and name

@@ -44,6 +44,7 @@ import { livePackFiles } from "./assetPackLiveSet.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
 import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
 import { baselinePacksOf, planPackLayout, packSlotOf } from "./assetPackLayout.mjs";
+import { currentClaims, isClaimed } from "./shared/publicationLedger.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -141,7 +142,7 @@ export async function buildAssetPacks( options = {} ) {
 	// Injectable for the same reason as hashCachePath.
 	const memberCompression = openMemberCompression( { cacheRoot: options.memberCacheRoot } );
 	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
-	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
+	const { index: baselineIndex, named: baselineNamed } = await layoutBaseline( options, root, outputRoot, indexPath );
 
 	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, hd?: boolean, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
@@ -198,6 +199,26 @@ export async function buildAssetPacks( options = {} ) {
 		index.hd = true;
 	}
 	validateAssetPackIndex( index, packRoot );
+	// A named baseline is the last publication players hold: the main
+	// index may not lose one of its paths that a build owner still
+	// claims, or the release ships a manifest thinner than the one it
+	// replaces and nobody is told (2026-11-10). A path no owner claims
+	// any more was retired and may go.
+	if ( baselineNamed && path.resolve( outputRoot ) === path.resolve( root, "assets", "packs" ) ) {
+		const losses = unretiredBaselineLosses(
+			baselineIndex,
+			index.assets.map( asset => asset.path ),
+			await currentClaims()
+		);
+		if ( losses.length > 0 ) {
+			for ( const lost of losses ) console.warn( `[asset-packs] baseline path lost: ${lost}` );
+			throw new Error(
+				`Asset pack index lost ${losses.length} path(s) the baseline published and no build owner retired ` +
+					"(restore them, or retire them in the owner's publication record; every lost path is listed above): " +
+					losses.slice( 0, 8 ).join( ", " )
+			);
+		}
+	}
 	await prepareAssetDelivery( index, root );
 	// Sparse builders publish partial indexes; the final merged publication
 	// requires every descriptor dependency before it replaces the live index.
@@ -256,6 +277,30 @@ export async function buildAssetPacks( options = {} ) {
 
 /*
 ================
+unretiredBaselineLosses
+
+The baseline index's paths this index no longer publishes although a
+build owner still claims them: silent losses, as opposed to retirements
+(a path no owner claims is gone on purpose). publishedPaths and
+claimedPaths are injected, so the rule is tested without a tree; a path
+still ships when the index carries it or its packed sidecar form.
+================
+*/
+/** @param {{ assets?: { path: string }[] } | undefined} baselineIndex @param {Iterable<string>} publishedPaths @param {Set<string>} claimedPaths */
+export function unretiredBaselineLosses( baselineIndex, publishedPaths, claimedPaths ) {
+	if ( !Array.isArray( baselineIndex?.assets ) ) return [];
+	const published = new Set( [ ...publishedPaths ].map( publicPath => publicPath.toLowerCase() ) );
+	const losses = [];
+	for ( const asset of baselineIndex.assets ) {
+		if ( isClaimed( asset.path, published ) ) continue;
+		if ( !isClaimed( asset.path, claimedPaths ) ) continue;
+		losses.push( asset.path );
+	}
+	return losses.sort( ( left, right ) => left.localeCompare( right ) );
+}
+
+/*
+================
 layoutBaseline
 
 The index the pack layout stays stable against (assetPackLayout.mjs): for
@@ -263,18 +308,19 @@ the main index, options.baselineIndexPath or SRO_ASSET_PACK_BASELINE (a
 release passes the live publication, so unchanged packs keep the URLs
 players have cached); otherwise the previous local index. A named baseline
 that cannot be read stops the build: silently repacking everything would
-re-ship the whole data set.
+re-ship the whole data set. named says a baseline was named (the previous
+local index is a layout aid, never a publication to answer to).
 ================
 */
 async function layoutBaseline( options, root, outputRoot, indexPath ) {
 	const mainIndex = path.resolve( outputRoot ) === path.resolve( root, "assets", "packs" );
 	const named = options.baselineIndexPath ?? (mainIndex ? process.env.SRO_ASSET_PACK_BASELINE?.trim() : undefined);
-	if ( !named ) return readJsonOrUndefined( indexPath );
+	if ( !named ) return { index: await readJsonOrUndefined( indexPath ), named: false };
 	const baseline = await readJsonOrUndefined( path.resolve( named ) );
 	if ( baseline?.format !== "sro-asset-pack-index" || !Array.isArray( baseline.groups ) ) {
 		throw new Error( `Asset pack layout baseline is not a pack index: ${named}` );
 	}
-	return baseline;
+	return { index: baseline, named: true };
 }
 
 /*

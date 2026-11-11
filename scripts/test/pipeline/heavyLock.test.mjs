@@ -198,6 +198,51 @@ test("isAncestorPid walks the parent chain", () => {
 	assert.equal( isAncestorPid( 999, parentOf ), false );
 });
 
+test("isAncestorPid trusts no chain that cycles (a reused pid)", () => {
+	// An ancestor died and its pid now names the holder, a child of this
+	// process: the chain from here runs 111 -> holder -> back to here.
+	// A live chain never revisits a pid (every parent is older than its
+	// child), so the cycle proves the table was poisoned by pid reuse
+	// and no pid on it may be called an ancestor (#3206).
+	const holderPid = 4242;
+	const chain = new Map( [ [ process.pid, 111 ], [ 111, holderPid ], [ holderPid, process.pid ] ] );
+	const parentOf = ( pid ) => chain.get( pid ) ?? 0;
+	assert.equal( isAncestorPid( holderPid, parentOf ), false );
+	assert.equal( isAncestorPid( 111, parentOf ), false );
+});
+
+test("a holder whose pid a dead ancestor's pid was reused for is waited on (#3206)", async ( t ) => {
+	const { target } = await tempTarget( t );
+	const sleeper = spawn( process.execPath, [ "-e", "setTimeout( () => {}, 60000 )" ], {
+		stdio: "ignore",
+		windowsHide: true
+	} );
+	t.after( () => {
+		if ( sleeper.exitCode === null ) sleeper.kill();
+	} );
+	assert.ok( sleeper.pid );
+	// The record names a live stranger, but the parent table - poisoned
+	// by the reuse above - calls it this process's ancestor.
+	await writeFile(
+		target.lockPath,
+		JSON.stringify( { owner: "holder", pid: sleeper.pid, since: "?", cmd: "heavy" } )
+	);
+	const chain = new Map( [ [ process.pid, 111 ], [ 111, sleeper.pid ], [ sleeper.pid, process.pid ] ] );
+	const parentOf = ( pid ) => chain.get( pid ) ?? 0;
+	let acquired = false;
+	const pending = acquireHeavyLock( { target, owner: "waiter", pollMs: 25, log: () => {}, parentOf } )
+		.then( ( hold ) => {
+			acquired = true;
+			return hold;
+		} );
+	await new Promise( ( resolve ) => setTimeout( resolve, 300 ) );
+	assert.equal( acquired, false, "the waiter took a live stranger for an ancestor and took its lock" );
+	sleeper.kill();
+	const hold = await pending;
+	assert.equal( acquired, true, "the dead holder's lock was not reclaimed" );
+	hold.release();
+});
+
 test("heavyLockTarget follows the workflow beside the checkout", async ( t ) => {
 	const { dir } = await tempTarget( t );
 	const checkout = path.join( dir, "rebuild" );

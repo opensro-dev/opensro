@@ -18,16 +18,13 @@ import (
 
 /*
 ================
-advancePetSatiety
+advancePetSatietySession
 
 The caller holds the division operation lock. Do not retain a detached pet
 copy across the transaction; feeding and death update the same durable HGP.
 ================
 */
-func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.Frame {
-	rt.petMu.Lock()
-	state := rt.petSessions[key]
-	rt.petMu.Unlock()
+func (rt *Runtime) advancePetSatietySession(key petOwnerKey, state *petSession, nowMs int64) []simulation.Frame {
 	if state == nil {
 		return nil
 	}
@@ -46,7 +43,7 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 	guard := rt.deps.AcquireRead(key.division)
 	pet := state.character.CompanionByGID(key.gid)
 	if pet != nil && pet.BroodStage == 0 {
-		ref, valid := rt.cosReference(pet)
+		ref, valid := rt.cosReferenceVerdict(pet)
 		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
 			commit = true
 		} else if !valid || !pet.Summoned || pet.CurrentHP == 0 || ref.TidWord>>11 != 3 || ref.SatietyMinutes == 0 {
@@ -75,7 +72,7 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 		if pet != nil && pet.BroodStage != 0 {
 			return false
 		}
-		ref, valid := rt.cosReference(pet)
+		ref, valid := rt.cosReferenceVerdict(pet)
 		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
 			if ref.TidWord>>11 == 5 {
 				c.RemoveMercenary(pet.GID)

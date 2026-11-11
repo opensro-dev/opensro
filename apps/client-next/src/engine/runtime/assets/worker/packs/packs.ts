@@ -97,7 +97,9 @@ pack member or a loose file.
 export function createPacks(
 	download: PackDownload,
 	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {},
-	hdAvailability: ( available: boolean ) => void = () => {}
+	hdAvailability: ( available: boolean ) => void = () => {},
+	packGone: ( packPath: string ) => void = () => {},
+	liveManifestValidator: ( url: string ) => Promise<string | null> = () => Promise.resolve( null )
 ) {
 	const persistent = createPersistentAssets(), parser = createPackIndex(), lifetime = new AbortController();
 	const blocks = createPackBlocks( download, lifetime.signal );
@@ -119,6 +121,40 @@ export function createPacks(
 		hdInstall: AbortController | null = null,
 		hdInstallKicked = false;
 	const headers = new Map<string, Promise<number>>();
+	// The digest of the admitted packs manifest: this page's client-data
+	// generation, compared against the live one by liveManifestChanged.
+	let manifestDigest: string | null = null;
+	// The admitted manifest's HTTP validator (its ETag), observed on the
+	// admission download: the cheap live compare (a HEAD, never the 15 MB
+	// body again). Null when the server sent none; the digest then serves.
+	let manifestValidator: string | null = null;
+	// Packs the server answered 404 for, reported once each: the manifest
+	// this page holds names files a newer release replaced (#3104). Loose
+	// recovery may still serve the member; the release news stands.
+	const gonePacks = new Set<string>();
+	/*
+	================
+	digest
+
+	The manifest's own digest, kept out of the member hash stats.
+	================
+	*/
+	async function digest( bytes: Uint8Array<ArrayBuffer> ): Promise<string> {
+		return Array.from(
+			new Uint8Array( await crypto.subtle.digest( "SHA-256", bytes ) ),
+			b => b.toString( 16 ).padStart( 2, "0" )
+		).join( "" );
+	}
+	/*
+	================
+	notePackGone
+	================
+	*/
+	function notePackGone( packPath: string ) {
+		if ( gonePacks.has( packPath ) ) return;
+		gonePacks.add( packPath );
+		packGone( packPath );
+	}
 	/*
 	================
 	member
@@ -219,8 +255,21 @@ export function createPacks(
 		// download here, the first moment it can.
 		kickHdInstall();
 		if ( !index ) {
-			const operation = download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal ).then(
+			const operation = download(
+				base + "/assets/packs/manifest.json",
+				16 << 20,
+				lifetime.signal,
+				undefined,
+				validator => {
+					manifestValidator = validator;
+				}
+			).then(
 				bytes => {
+					// The generation digest trails admission; a release check
+					// that beats it simply sees no change yet.
+					void digest( bytes ).then( value => {
+						manifestDigest = value;
+					} );
 					const admitted = parser.manifest(
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) )
 					);
@@ -368,7 +417,16 @@ export function createPacks(
 				bytes = null;
 			}
 			const missing = !bytes;
-			bytes ??= await download( base + descriptor.path, descriptor.bytes, lifetime.signal );
+			if ( !bytes ) {
+				try {
+					bytes = await download( base + descriptor.path, descriptor.bytes, lifetime.signal );
+				} catch ( error ) {
+					if ( error instanceof Error && "status" in error && Number( error.status ) === 404 ) {
+						notePackGone( descriptor.path );
+					}
+					throw error;
+				}
+			}
 			// Wrong bytes, not wrong content: the persistent path above
 			// evicts and refetches this same fact, so a network body cut or
 			// re-framed in transit is transient for the bounded recovery
@@ -480,6 +538,7 @@ export function createPacks(
 					// container does not remove the manifest's per-file integrity contract.
 					// Never recover from corruption, cancellation or a different HTTP error.
 					if ( !(error instanceof Error) || !("status" in error) || error.status !== 404 ) throw error;
+					notePackGone( entry.packPath );
 					unpacked.add( entry.packPath );
 					bytes = await loose( url.origin, entry, signal );
 				}
@@ -614,6 +673,31 @@ export function createPacks(
 		read: ( url: URL, limit: number, signal: AbortSignal, report = true ) =>
 			readVerified( url, limit, signal, report ),
 		install,
+		/*
+		================
+		liveManifestChanged
+
+		Whether the live packs manifest differs from the one this page
+		admitted: the client-data generation moved (a data publish keeps
+		the same entry bundle, so the page check alone cannot see it).
+		The admitted copy's HTTP validator answers first - one HEAD
+		against the live manifest, never the 15 MB body per check - and
+		only a server that sent no validator falls back to downloading
+		and hashing it. False while no manifest has been admitted. A
+		failed compare throws: the caller must hear that the check did
+		not run, never read silence as "unchanged".
+		================
+		*/
+		async liveManifestChanged( base: string ): Promise<boolean> {
+			const url = base + "/assets/packs/manifest.json";
+			if ( manifestValidator !== null ) {
+				const live = await liveManifestValidator( url );
+				if ( live !== null ) return live !== manifestValidator;
+			}
+			if ( manifestDigest === null ) return false;
+			const bytes = await download( url, 16 << 20, lifetime.signal );
+			return await digest( bytes ) !== manifestDigest;
+		},
 		/*
 		================
 		worldAnimationManifests

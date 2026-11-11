@@ -7,7 +7,13 @@ Builds the Agent and one GameWorld, provisions the development world
 (the existing sro-bootstrap-development), and runs both plus the Vite
 dev server as plain child processes. No Nomad: the deployment contract
 the processes actually read is environment plus the bootstrap state
-under apps/server/.state, and this runner supplies both. The workload
+under the local world root, and this runner supplies both. The world
+(accounts, characters, cluster identity) has one home for every
+checkout - the main checkout's apps/server/.state, or the directory
+SRO_LOCAL_STATE_ROOT names (worldRoot.mjs) - so a run from a git
+worktree plays the same characters instead of booting an empty second
+world. The binaries and the minted identity stay with the checkout
+that runs, under its own apps/server/.state/local. The workload
 identity the GameWorld shows the Agent (a Nomad JWT in production) is
 minted locally instead: the runner holds a development Ed25519 key
 under .state/local, serves its JWKS on loopback, and rewrites the
@@ -27,6 +33,14 @@ orphaned: whatever is still alive after the grace period is killed.
 `pnpm local --reset` moves the local world aside (never deletes) and
 starts fresh.
 
+Three stops name their own fix instead of dying inside a child (#3081):
+the runner upgrades a local authority left behind by a schema bump
+(copy under .state/backups first, the offline upgrader second, never
+for a schema its own validator refuses); the doctor compares the
+assets the client requires at startup against the published pack
+manifest, not just the directory's existence; and a stdin close before
+ready says it was stdin, not a process that "never became ready".
+
 ===========================================================================
 */
 
@@ -39,17 +53,26 @@ import net from "node:net";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { authorityDirFor, backupStamp, unpublishedStartupAssets, upgradeLocalAuthority } from "./preboot.mjs";
+import { countWorldCharacters, describeWorld, resolveLocalWorldRoot } from "./worldRoot.mjs";
 import { resolveServerGameDataRoot } from "../build/world/paths.mjs";
 import { resolveGeneratedRoot, resolveMainCheckout } from "../lib/generatedRoot.mjs";
+import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 
 const repoRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 const clientRoot = path.join( repoRoot, "apps", "client-next" );
 const serverRoot = path.join( repoRoot, "apps", "server" );
 const configDir = path.join( serverRoot, "config" );
-const stateDir = path.join( serverRoot, ".state" );
-const localStateDir = path.join( stateDir, "local" );
+// This checkout's own products: the binaries built from its sources and
+// the identity minted for one run.
+const checkoutStateDir = path.join( serverRoot, ".state" );
+const localStateDir = path.join( checkoutStateDir, "local" );
 const binDir = path.join( localStateDir, "bin" );
-const clusterStateDir = path.join( stateDir, "cluster" );
+// The world every checkout shares (worldRoot.mjs).
+const worldRoot = resolveLocalWorldRoot( repoRoot );
+const clusterStateDir = path.join( worldRoot, "cluster" );
+const shardStateRoot = path.join( worldRoot, "shards" );
+const backupsDir = path.join( worldRoot, "backups" );
 const catalogPath = path.join( configDir, "shards.json" );
 const localEnvPath = path.join( configDir, "local.env" );
 const devAccountPath = path.join( configDir, "dev-account.env" );
@@ -62,6 +85,8 @@ const stopTimeoutMs = 30_000;
 const tokenLifetimeMs = 2 * 60 * 60_000;
 const tokenRefreshMs = 30 * 60_000;
 const childOutputTail = 40;
+// What --reset asks the person to type before it moves a world aside.
+const resetWord = "reset";
 
 /*
 ================
@@ -127,6 +152,19 @@ localSetting
 */
 function localSetting( settings, key, fallback ) {
 	return settings.local.get( key ) ?? fallback;
+}
+
+/*
+================
+settingOrEnvironment
+
+A server setting the runner would compute, unless the settings file or
+the process environment already names it (the order
+preboot.authorityDirFor keeps).
+================
+*/
+function settingOrEnvironment( settings, key, fallback ) {
+	return settings.env.get( key )?.trim() || process.env[key]?.trim() || fallback;
 }
 
 /*
@@ -205,8 +243,12 @@ async function doctor( settings, verbose ) {
 		"server game data is built",
 		"run `pnpm assets build full` then `pnpm task build server-game-data`"
 	);
-	const clientAssets = path.join( resolveGeneratedRoot( process.env, mainCheckout ), "client-public", "assets" );
-	check( existsSync( clientAssets ), "client assets are built", "run `pnpm assets build full`" );
+	// The client loads published assets only (the pack index), so a loose
+	// tree with a stale manifest is not built enough: compare the startup
+	// set against the manifest and name what it lacks.
+	const clientPublic = path.join( resolveGeneratedRoot( process.env, mainCheckout ), "client-public" );
+	const unpublished = await unpublishedStartupAssets( clientPublic );
+	check( unpublished === null, "client startup assets are published", unpublished ?? "" );
 
 	if ( problems.length === 0 ) {
 		const shard = readCatalog( settings );
@@ -260,6 +302,21 @@ function portFree( port ) {
 
 /*
 ================
+stopAnnouncement
+
+What a stop prints when it begins. A stdin close (no terminal) names
+itself (#3081): it is the runner working as designed, and the fix is a
+terminal, not a process hunt.
+================
+*/
+function stopAnnouncement( reason ) {
+	return reason === "stdin" ?
+		"stdin closed: stopping (start with a terminal, or keep stdin open)" :
+		"stopping...";
+}
+
+/*
+================
 resetWorld
 
 --reset: move the local world aside (the reset of GETTING_STARTED
@@ -276,25 +333,24 @@ async function resetWorld( settings ) {
 			process.exit( 1 );
 		}
 	}
+	// The prompt names what is at stake: where the world is and how many
+	// characters it holds. A bare y is not enough to put them aside.
+	const characters = await countWorldCharacters( authorityDirFor( settings, shard.id ) );
+	console.log( describeWorld( worldRoot, checkoutStateDir, characters ) );
 	const answer = await ask(
-		"Move the local world (accounts, characters, cluster state) aside and start fresh? [y/N] "
+		`Move this world (accounts, characters, cluster state) aside and start an empty one? Type ${resetWord} to confirm: `
 	);
-	if ( answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes" ) {
+	if ( answer.toLowerCase() !== resetWord ) {
 		console.log( "reset cancelled" );
 		process.exit( 0 );
 	}
-	const stamp = new Date();
-	const pad = n => String( n ).padStart( 2, "0" );
-	const backup = path.join(
-		stateDir,
-		"backups",
-		`local-reset-${stamp.getFullYear()}${pad( stamp.getMonth() + 1 )}${pad( stamp.getDate() )}-${
-			pad( stamp.getHours() )
-		}${pad( stamp.getMinutes() )}${pad( stamp.getSeconds() )}`
-	);
+	const backup = path.join( backupsDir, `local-reset-${backupStamp( new Date() )}` );
 	let moved = 0;
-	for ( const name of [ "cluster", "shards", "agent", "local" ] ) {
-		const from = path.join( stateDir, name );
+	const parts = [
+		...[ "cluster", "shards", "agent" ].map( name => [ name, path.join( worldRoot, name ) ] ),
+		[ "local", localStateDir ]
+	];
+	for ( const [name, from] of parts ) {
 		if ( existsSync( from ) ) {
 			mkdirSync( backup, { recursive: true } );
 			renameSync( from, path.join( backup, name ) );
@@ -328,6 +384,23 @@ async function run( settings ) {
 	const shard = readCatalog( settings );
 	mkdirSync( binDir, { recursive: true } );
 	buildBinaries();
+	// Before provisioning and before any child opens the store: an
+	// authority left behind by a schema bump is upgraded in place (its
+	// copy stays under the world's backups), never discovered by the
+	// GameWorld's exact-version refusal.
+	const authorityDir = authorityDirFor( settings, shard.id );
+	const worldLine = describeWorld( worldRoot, checkoutStateDir, await countWorldCharacters( authorityDir ) );
+	console.log( worldLine );
+	try {
+		upgradeLocalAuthority( {
+			dir: authorityDir,
+			tool: path.join( binDir, `sro-authority-upgrade${exeSuffix}` ),
+			backupsDir
+		} );
+	} catch ( error ) {
+		console.error( `pnpm local: ${error.message}` );
+		process.exit( 1 );
+	}
 	provision();
 	const identity = await prepareIdentity( shard );
 	const agentAddr = localSetting( settings, "LOCAL_AGENT_ADDR", "127.0.0.1:8787" );
@@ -337,8 +410,8 @@ async function run( settings ) {
 		env: {
 			SRO_SHARD_CATALOG_PATH: catalogPath,
 			SRO_AGENT_ACCOUNTS_PATH: path.join( clusterStateDir, "accounts.json" ),
-			SRO_AGENT_ACCOUNTS_DB_PATH: path.join( stateDir, "agent", "accounts.db" ),
-			SRO_AGENT_DIRECTORY_STATE_PATH: path.join( stateDir, "agent", "shard-leases.json" ),
+			SRO_AGENT_ACCOUNTS_DB_PATH: path.join( worldRoot, "agent", "accounts.db" ),
+			SRO_AGENT_DIRECTORY_STATE_PATH: path.join( worldRoot, "agent", "shard-leases.json" ),
 			SRO_AGENT_PROVISIONING_TOKEN_PATH: path.join( clusterStateDir, "agent-provisioning-token" ),
 			SRO_AGENT_SESSION_KEYRING_PATH: path.join( clusterStateDir, "agent-session-keys.json" ),
 			SRO_AGENT_API_ADDR: agentAddr,
@@ -358,14 +431,22 @@ async function run( settings ) {
 			SRO_AGENT_IDENTITY_FILE: identity.tokenPath,
 			SRO_AGENT_SESSION_PUBLIC_KEYS_PATH: identity.sessionKeysPath,
 			SRO_GAMEWORLD_CONTROL_ADDR: hostPortOf( shard.controlUrl ),
-			SRO_AUTHORITY_REQUIRE: "1"
+			SRO_AUTHORITY_REQUIRE: "1",
+			// The GameWorld would otherwise resolve both under its working
+			// directory, which is this checkout, not the world.
+			SRO_AUTHORITY_STATE_DIR: authorityDir,
+			TRANSPORT_CERT_DIR: settingOrEnvironment(
+				settings,
+				"TRANSPORT_CERT_DIR",
+				path.join( clusterStateDir, "dev-certs" )
+			)
 		},
 		settings
 	} );
 	const vite = startVite();
 
 	const children = [ agent, gameworld, vite ];
-	const state = { stopping: false, consoleStop: false, failed: null };
+	const state = { stopping: false, consoleStop: false, stopReason: null, failed: null };
 	watchChildren( children, state );
 	installStopHandlers( children, state );
 
@@ -374,7 +455,12 @@ async function run( settings ) {
 		await waitReady( `${shard.transportUrl}/transport/readyz`, "GameWorld", children, state );
 		await waitReady( `http://127.0.0.1:${vitePort}/`, "Vite", children, state );
 	} catch ( error ) {
-		console.error( `pnpm local: ${error.message}` );
+		// A stdin-closed stop already printed its own reason; a
+		// "never became ready" line after it only sends the reader
+		// hunting for a crashed process (#3081).
+		if ( state.stopReason !== "stdin" ) {
+			console.error( `pnpm local: ${error.message}` );
+		}
 		await stopChildren( children, state );
 		process.exit( 1 );
 	}
@@ -382,6 +468,7 @@ async function run( settings ) {
 	console.log(
 		`Local game is ready: open http://127.0.0.1:${vitePort}/ and log in as ${account.id} / ${account.password} (apps/server/config/dev-account.env).`
 	);
+	console.log( worldLine );
 	console.log( "Ctrl+C stops the client, the GameWorld and the Agent." );
 
 	const code = await new Promise( resolve => {
@@ -394,20 +481,23 @@ async function run( settings ) {
 ================
 buildBinaries
 
-The three Go programs a local run needs, into .state/local/bin.
+The Go programs a local run needs, into this checkout's .state/local/bin.
 ================
 */
 function buildBinaries() {
+	// A local run from any checkout reuses what another already compiled.
+	const env = sharedCacheEnvironment();
 	for (
 		const [name, pkg] of [
 			[ "sro-agent", "./cmd/services/sro-agent" ],
 			[ "sro-gameworld", "./cmd/services/sro-gameworld" ],
-			[ "sro-bootstrap-development", "./cmd/operations/sro-bootstrap-development" ]
+			[ "sro-bootstrap-development", "./cmd/operations/sro-bootstrap-development" ],
+			[ "sro-authority-upgrade", "./cmd/tools/sro-authority-upgrade" ]
 		]
 	) {
 		console.log( `building ${name}...` );
 		const out = path.join( binDir, name + exeSuffix );
-		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit" } );
+		const result = spawnSync( "go", [ "build", "-o", out, pkg ], { cwd: serverRoot, stdio: "inherit", env } );
 		if ( result.status !== 0 ) {
 			console.error( `pnpm local: go build ${pkg} failed` );
 			process.exit( 1 );
@@ -420,14 +510,17 @@ function buildBinaries() {
 provision
 
 The existing development bootstrap: cluster identity, the shared dev
-account and an empty authority per enabled shard. Idempotent.
+account and an empty authority per enabled shard. Idempotent. Both
+state directories are named, so it provisions the world and not the
+checkout it runs from.
 ================
 */
 function provision() {
-	const result = spawnSync( path.join( binDir, `sro-bootstrap-development${exeSuffix}` ), [], {
-		cwd: serverRoot,
-		stdio: "inherit"
-	} );
+	const result = spawnSync(
+		path.join( binDir, `sro-bootstrap-development${exeSuffix}` ),
+		[ "-state-dir", clusterStateDir, "-shard-state-root", shardStateRoot ],
+		{ cwd: serverRoot, stdio: "inherit" }
+	);
 	if ( result.status !== 0 ) {
 		console.error( "pnpm local: development provisioning failed" );
 		process.exit( 1 );
@@ -438,8 +531,8 @@ function provision() {
 ================
 prepareIdentity
 
-The local workload identity. A development Ed25519 key lives in
-.state/local (created once); the runner serves its JWKS on an
+The local workload identity. A development Ed25519 key lives in this
+checkout's .state/local (created once); the runner serves its JWKS on an
 ephemeral loopback port for the run, mints the GameWorld's control
 token from it (refreshed as it ages; the GameWorld re-reads the file
 per call), and derives the session public keys the GameWorld verifies
@@ -651,20 +744,21 @@ stop goes straight to killing trees.
 ================
 */
 function installStopHandlers( children, state ) {
-	const begin = graceful => {
+	const begin = ( graceful, reason ) => {
 		if ( !state.stopping ) {
 			state.consoleStop = graceful;
-			console.log( "stopping..." );
+			state.stopReason = reason;
+			console.log( stopAnnouncement( reason ) );
 			void stopChildren( children, state );
 		}
 	};
-	process.on( "SIGINT", () => begin( true ) );
-	process.on( "SIGTERM", () => begin( true ) );
-	process.on( "SIGBREAK", () => begin( true ) );
+	process.on( "SIGINT", () => begin( true, "console" ) );
+	process.on( "SIGTERM", () => begin( true, "console" ) );
+	process.on( "SIGBREAK", () => begin( true, "console" ) );
 	if ( !process.stdin.isTTY ) {
 		process.stdin.resume();
-		process.stdin.once( "end", () => begin( false ) );
-		process.stdin.once( "close", () => begin( false ) );
+		process.stdin.once( "end", () => begin( false, "stdin" ) );
+		process.stdin.once( "close", () => begin( false, "stdin" ) );
 	}
 }
 
@@ -799,7 +893,14 @@ function hostPortOf( url ) {
 	return `${parsed.hostname}:${parsed.port}`;
 }
 
-main().catch( error => {
-	console.error( `pnpm local: ${error.message}` );
-	process.exit( 1 );
-} );
+// The stop announcement is importable so its test runs without a
+// stack (the pre-boot checks are preboot.mjs); the runner itself
+// starts only when this file is the program.
+export { stopAnnouncement };
+
+if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
+	main().catch( error => {
+		console.error( `pnpm local: ${error.message}` );
+		process.exit( 1 );
+	} );
+}

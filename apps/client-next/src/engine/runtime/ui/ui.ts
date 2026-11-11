@@ -301,6 +301,7 @@ import {
 } from "@/engine/foundation/gameplay/guild-names";
 import {
 	cargoBuyTotal,
+	COS_TRADE_LEVEL,
 	COS_TRADE_SELL_ALL,
 	COS_TRADE_STAR_FIRST,
 	COS_TRADE_STAR_LAST,
@@ -309,6 +310,7 @@ import {
 	type SellAllRun,
 	sellAllEnabled,
 	sellAllStep,
+	tradeProgressLine,
 	tradeStarCount,
 	tradeStarTint
 } from "@/engine/foundation/gameplay/cos-trade-info";
@@ -556,7 +558,7 @@ import {
 	PARTY_TITLE_MAX_LENGTH,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
-import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
+import { EXPANSION_LEVEL_CAP, NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { createSkillGauge, createGaugePresentation } from "./hud/progression-bars";
 import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui/progression-bars";
 import { shieldGauge, shieldGaugeFill } from "@/engine/foundation/ui/shield-gauge";
@@ -577,6 +579,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { itemTooltipSet, tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -703,6 +706,7 @@ import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
+import { createDebugConsole } from "./hud/debug-console";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
 import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
@@ -726,7 +730,7 @@ import {
 	minimapRotation,
 	skillPointReadouts
 } from "@/engine/foundation/ui/hud-readouts";
-import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
+import { hudTooltipKey, sideBubble, tooltipBubble } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
@@ -1272,65 +1276,18 @@ export function createUi( ports: UiPorts ) {
 	const experimental = createExperimentalHud();
 	const companionPotions = createCompanionPotions( pageStorage() );
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
-	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
-	// +0x7BC, the /Debug flag: the native debug-message switch (690C40 case 0).
-	let debugMessages = false;
-	// The interface timer's debug state (690C40 ids 100-109): the sampler
-	// reads it through the handle's debugClockSeed.
-	let debugClock: DebugClock = createDebugClock();
-	// The camera family's debug bytes (690C40 ids 110-135): the
-	// interface's zoom rail (+0x3CF, standing from its constructor), its
-	// free-camera byte (+0x3CE), its camera-apply byte (+0x3CC, also
-	// standing from its constructor) and the cursor manager's visibility
-	// (+0x20). Each owner applies its own through the extensions.
-	let debugZoomRail = true;
-	let debugFreeCamera = false;
-	let debugCursorVisible = true;
-	// The camera-waypoint family (690C40 ids 130-134, #1716): the
-	// interface's keyframe track (+0x3FC) and its play byte (+0x3CD).
-	// The store is this window's, as natively; the camera owner gets a
-	// copy of the records and the byte through the extensions, and the
-	// playback stepping is its own. The records arrive with the HUD's
-	// cameradata asset (cameraWaypointsLoaded below): nothing native
-	// ever loads the track, so the published rows are the port's
-	// content source (issue #1716).
-	const cameraWaypoints = createCameraWaypointStore();
+	let consoleHistory: string[] = [], consoleHistoryIndex = 0;
+	// The debug console window (hud/debug-console.ts, #2530): its lines,
+	// debug bytes and camera-waypoint store.
+	const debugConsole = createDebugConsole( {
+		sendGameplay,
+		useInventorySlot,
+		extensions,
+		worldClock: () => view?.gameplay?.worldClock,
+		quickslotTime: () => quickslotTime
+	} );
+	const { appendConsoleLine, runDebugCommand } = debugConsole;
 	let cameraWaypointsLoaded = false;
-	// The camera family's kept values: the free-camera move speed
-	// (+0x7B0, seeded 100, case 136; the camera owner holds a copy for
-	// the free-fly arm, #1787), the snapped second speed (+0x7C0,
-	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
-	// clear, case 117), the /id byte (0xCCB5D8, seeded standing,
-	// case 137) and the local
-	// player's written speed (+0x658, case 600; 100 is the scale's
-	// neutral point, the value the word 10 writes). The movement speed
-	// is the server's, so it and the second speed are kept as written
-	// for the consumers in #1717. The /id byte
-	// is read: while it is clear the overhead boards and their kind-4
-	// pass are skipped (85F5DC), and the character owner holds a copy
-	// for the hit damage numbers (8D5856, #1785).
-	let debugCameraSpeed = 100;
-	let debugFast = 50;
-	let debugFrameStats = false;
-	let debugShowIds = true;
-	let debugMoveSpeed = 100;
-	// The render family's SWorld graphic options (690C40 ids 150-155):
-	// SWorld_Construct seeds wireframe clear and the five others standing,
-	// each command negates one, and the renderer applies the result. The
-	// copies here are the interface's negation state, as with the zoom
-	// rail; the applied state lives with the renderer.
-	let debugWireFrame = false;
-	let debugGround = true;
-	let debugSky = true;
-	let debugMapObjects = true;
-	let debugCharacters = true;
-	let debugLevelOfDetail = true;
-	// The mission window's visible flag (CIFWnd +0x6D, written through
-	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
-	// down the frame carries only the console's own quads and controls -
-	// the console belongs to the interface, not the hidden window tree,
-	// exactly as the native stays able to read /uion.
-	let debugUiVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -1684,6 +1641,10 @@ export function createUi( ports: UiPorts ) {
 		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
 	const chatLayoutCache = createRetainedLayout<ReturnType<typeof chatLayout>>(),
 		statusLayoutCache = createRetainedLayout<ReturnType<typeof systemMessageLayout>>();
+	// The chat wraps kept across rebuilds (#3176): the retained layout
+	// above reuses a whole product; this keeps the per-line wraps for
+	// the rebuilds a new line (or a blinking caret) still forces.
+	const chatWrapCache = new Map<string, readonly string[]>();
 	/*
 	================
 	HudSection
@@ -1802,7 +1763,11 @@ export function createUi( ports: UiPorts ) {
 		country: number | undefined;
 		sex: number | undefined;
 		sealUnderHeading: boolean;
+		expansion: boolean;
+		setGroups: unknown;
+		setEquipment: unknown;
 		rows: readonly TooltipRow[];
+		side: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
@@ -2664,6 +2629,13 @@ export function createUi( ports: UiPorts ) {
 	/*
 	================
 	moveAvatar
+
+	An equip onto a class that is already worn is refused with the native
+	notice, never swapped and never silent: CIFEquipment_
+	DispatchItemDropAction @594980 checks the class slot control's occupied
+	byte and posts UIIT_MSG_STRGERR_EQUIPITEM as a system message. An
+	attachment (class 3) with no dress (class 2) worn is refused the same
+	way one branch down (594BC7, UIIT_STT_AVATAR_MAIL_ONLY_WEAR).
 	================
 	*/
 	function moveAvatar( equip: boolean, source: number, destination?: number ) {
@@ -2674,10 +2646,17 @@ export function createUi( ports: UiPorts ) {
 			item = (equip ? bag : avatars).find( i => i.slot === source );
 		if ( !item || (item.typeFlags & 0x7fe) !== 0x6ac ) return;
 		if ( equip ) {
-			if (
-				avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ||
-				item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 )
-			) return;
+			if ( avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ) {
+				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
+				return;
+			}
+			// 594BC7: an attachment (class 3) with no dress (class 2) worn
+			// refuses with this line (ChatSystemMessage type 5, as the
+			// class refusal above); no move is sent.
+			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) {
+				hudMessages.append( hudCopy( "UIIT_STT_AVATAR_MAIL_ONLY_WEAR" ), 0xffff7070 );
+				return;
+			}
 			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
@@ -2976,6 +2955,7 @@ export function createUi( ports: UiPorts ) {
 			cosGid: shop.cosGid,
 			unitBuy: Number( offer.price ),
 			stack: offer.maxStack,
+			maxStack: offer.maxStack,
 			count: offer.maxStack
 		} );
 		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( offer.maxStack ).length );
@@ -3005,6 +2985,7 @@ export function createUi( ports: UiPorts ) {
 			cosGid: game.shop.cosGid,
 			unitBuy: item.tooltip?.fields.price ?? 0,
 			stack: item.quantity,
+			maxStack: item.tooltip?.fields.maxStack ?? item.quantity,
 			count: item.quantity
 		} );
 		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( item.quantity ).length );
@@ -3132,337 +3113,6 @@ export function createUi( ports: UiPorts ) {
 	}
 	/*
 	================
-	appendConsoleLine
-	================
-	*/
-	function appendConsoleLine( value: string ) {
-		consoleRows = [ ...consoleRows.slice( -99 ), value ];
-	}
-	/*
-	================
-	runDebugCommand
-
-	CGInterface_OnCommandMessage (690C40) for the console family, the position
-	pair, bag-slot use and FOV. The weather rows write the worker's weather
-	slot (the sampler's state, not this window's); the time rows drive the
-	local debug clock the sampler reads through debugClockSeed. The camera
-	rows flip this window's debug bytes and hand each to its owner; the
-	shown byte (112/113) rides the gameplay lane to the entity owner, and
-	the mission window's visible flag (115/116) is this window's own. 137
-	gates this window's overhead boards and hands the byte to the
-	character owner for the damage numbers (#1785). The
-	remaining camera rows (111/117/136) and the 600 family keep their
-	values on this window for consumers the port does not have yet (#1717);
-	601 frames the named item as a packet the client hands itself (see
-	the case); the port builds nothing. 602 is the native table's shared exit.
-	The camera-waypoint rows (130-134) drive this window's waypoint store
-	and forward the play byte to the camera owner (#1716). Every row the
-	table names is consumed here, as natively.
-	================
-	*/
-	function runDebugCommand( command: DebugCommand ) {
-		switch ( command.id ) {
-			case DEBUG_COMMAND_DEBUG:
-				// Case 0 flips +0x7BC and reports the new state.
-				debugMessages = !debugMessages;
-				appendConsoleLine( debugMessages ? "DebugMsg On" : "DebugMsg Off" );
-				break;
-			case DEBUG_COMMAND_MESSAGE_CLEAR:
-				// Case 1 empties the console's lines, the command's echo included.
-				consoleRows = [];
-				break;
-			case DEBUG_COMMAND_POSITION: {
-				// Case 2: "/Pos region,x,y,z" walks the local player (or its
-				// mount) to the destination, the ground-click walk, not a
-				// teleport. The native destination carries no heading.
-				const destination = debugPosition( command.args );
-				if ( destination ) sendGameplay( { kind: "move", destination: { ...destination, angle: 0 } } );
-				break;
-			}
-			case DEBUG_COMMAND_GET_POSITION:
-				// Case 3 flips the +CEAD84 byte and writes it as the local
-				// player's body visual state (85EC00): berserk look on or off.
-				sendGameplay( { kind: "debug-body-visual" } );
-				break;
-			case DEBUG_COMMAND_NULL:
-				// Port-only, not native: case 4 writes through a null pointer to
-				// crash the client on purpose; the port ignores the line.
-				break;
-			case DEBUG_COMMAND_PLAYER_COUNT:
-				// Id 0 is below the 691CC4 table: 690C40 does nothing with it.
-				break;
-			case DEBUG_COMMAND_ITEM:
-				// The 0x190 branch: exactly one word, read by wcstol, then
-				// CIFInventory_ExecuteItemAction(slot, -1, -1) as a double click.
-				if ( command.args.length === 1 ) useInventorySlot( commandInteger( command.args[0]! ) );
-				break;
-			case DEBUG_COMMAND_POWER:
-				// 99: one word; the weather intensity alone (mode kept).
-				if ( command.args.length === 1 ) {
-					sendGameplay( { kind: "debug-weather", amount: commandInteger( command.args[0]! ) } );
-				}
-				break;
-			case DEBUG_COMMAND_RAIN:
-				// 105: one word; rain at the word's intensity.
-				if ( command.args.length === 1 ) {
-					sendGameplay( { kind: "debug-weather", mode: 2, amount: commandInteger( command.args[0]! ) } );
-				}
-				break;
-			case DEBUG_COMMAND_SNOW:
-				// 106: one word; snow at the word's intensity.
-				if ( command.args.length === 1 ) {
-					sendGameplay( { kind: "debug-weather", mode: 3, amount: commandInteger( command.args[0]! ) } );
-				}
-				break;
-			case DEBUG_COMMAND_CLEAR:
-				// 107: clear weather at full intensity, no word read.
-				sendGameplay( { kind: "debug-weather", mode: 1, amount: 255 } );
-				break;
-			case DEBUG_COMMAND_TIME_OFF:
-				// 100: hold the interface timer where it stands (+0x7AD).
-				debugClock = debugClockHold( debugClock, view?.gameplay?.worldClock, quickslotTime );
-				break;
-			case DEBUG_COMMAND_TIME_ON:
-				// 101: let the timer run again from the held time.
-				debugClock = debugClockResume( debugClock, quickslotTime );
-				break;
-			case DEBUG_COMMAND_TIME_SET:
-				// 102: one word, an atof hour the timer restarts from.
-				if ( command.args.length === 1 ) {
-					debugClock = debugClockSetHours(
-						debugClock,
-						view?.gameplay?.worldClock,
-						quickslotTime,
-						commandFloat( command.args[0]! )
-					);
-				}
-				break;
-			case DEBUG_COMMAND_DAY:
-				// 103: the day fraction set to 0.5.
-				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 0.5 );
-				break;
-			case DEBUG_COMMAND_NIGHT:
-				// 104: the day fraction set to 1.0.
-				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 1.0 );
-				break;
-			case DEBUG_COMMAND_TIME_PLUS:
-				// 108: "/+" steps a held clock BACK (the native sign quirk).
-				debugClock = debugClockStep( debugClock, -DEBUG_CLOCK_STEP_MINUTES );
-				break;
-			case DEBUG_COMMAND_TIME_MINUS:
-				// 109: "/-" steps a held clock forward.
-				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
-				break;
-			case DEBUG_COMMAND_ZOOM:
-				// Case 0x10 flips +0x3CF: the 150-unit wheel rail (67CC3C)
-				// stands or falls. The native prints nothing.
-				debugZoomRail = !debugZoomRail;
-				extensions.setCameraZoomRail?.( debugZoomRail );
-				break;
-			case DEBUG_COMMAND_FAST:
-				// Case 17 (0x691367): snap +0x7C0 between its 50 and 240
-				// presets. Nothing native reads the field; the value is
-				// kept as the handler leaves it. The native prints nothing.
-				debugFast = debugFastSpeedValue( debugFast );
-				break;
-			case DEBUG_COMMAND_SHOW_ME:
-				// Case 0x12 writes the local player's shown byte
-				// (CICPlayer +0xB8) to 1. The native prints nothing.
-				sendGameplay( { kind: "debug-local-visible", visible: true } );
-				break;
-			case DEBUG_COMMAND_HIDE_ME:
-				// Case 0x13 writes the shown byte to 0: the local
-				// presentation (body and name board) is skipped. The
-				// native prints nothing.
-				sendGameplay( { kind: "debug-local-visible", visible: false } );
-				break;
-			case DEBUG_COMMAND_FREE_CAMERA:
-				// Case 0x14 flips +0x3CE and reports the new state: while it
-				// stands the camera keeps its last eye and target (68FAD0,
-				// 68F830); clearing it re-aims at the player.
-				debugFreeCamera = !debugFreeCamera;
-				extensions.setFreeCamera?.( debugFreeCamera );
-				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
-				break;
-			case DEBUG_COMMAND_UI_OFF:
-				// Case 0x15 writes the mission window's visible flag
-				// (CIFWnd +0x6D) to 0 through 9FCD70: the HUD tree
-				// hides and the hovered window is released; the console
-				// stays, so /uion can be typed. The native prints nothing.
-				debugUiVisible = false;
-				break;
-			case DEBUG_COMMAND_UI_ON:
-				// Case 0x16 writes the flag back to 1. The native
-				// prints nothing.
-				debugUiVisible = true;
-				break;
-			case DEBUG_COMMAND_FRAME:
-				// Case 23 flips the engine global's frame byte (+0x4A),
-				// the frame-statistics switch; a GM string arm flips the
-				// same byte. The port has no readout for it to gate yet
-				// (#1717); the byte is kept. The native prints nothing.
-				debugFrameStats = !debugFrameStats;
-				break;
-			case DEBUG_COMMAND_COLON:
-				// Case 0x76 writes +0x3CC back to 1: the clamp casts
-				// the eye-to-target segment again (68FAD0). The native
-				// prints nothing.
-				extensions.setCameraCollision?.( true );
-				break;
-			case DEBUG_COMMAND_COLON_OFF:
-				// Case 0x77 writes +0x3CC to 0: the clamp takes its
-				// no-hit arm and the camera keeps the requested
-				// distance; the follow still tracks. Prints nothing.
-				extensions.setCameraCollision?.( false );
-				break;
-			case DEBUG_COMMAND_WAYPOINT_CLEAR:
-				// Case 130: the store reset (CRenderContext_Reset on
-				// the +0x3FC track), and the same block's next write
-				// clears the play byte (+0x3CD): the stop row (133)
-				// enters at that write, so clear and stop share it.
-				// The records, the clock and the byte all go. The
-				// native prints nothing.
-				resetCameraWaypoints( cameraWaypoints );
-				extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
-				extensions.setCameraPlaying?.( false );
-				break;
-			case DEBUG_COMMAND_WAYPOINT_POP:
-			case DEBUG_COMMAND_WAYPOINT_GO:
-				// Cases 131/132 are one native block: the free-camera
-				// byte (+0x3CE) must stand and the store be non-empty;
-				// then the play byte (+0x3CD) is written and the track
-				// clock zeroed. Either gate failing leaves the byte
-				// clear. The camera owner holds the byte's copy. The
-				// native prints nothing.
-				if ( debugFreeCamera && cameraWaypoints.keyframes.length > 0 ) {
-					cameraWaypoints.clockSeconds = 0;
-					extensions.setCameraPlaying?.( true );
-				}
-				break;
-			case DEBUG_COMMAND_WAYPOINT_STOP:
-				// Case 133: the play byte is cleared; the camera stays
-				// where playback left it until the free-camera byte
-				// also falls. The native prints nothing.
-				extensions.setCameraPlaying?.( false );
-				break;
-			case DEBUG_COMMAND_WAYPOINT_SAVE:
-				// Case 134: the whole store written in the native line
-				// form - natively to c:\cw.txt, here the downloaded
-				// cw.txt the platform writes (#1716). Prints nothing.
-				extensions.saveCameraWaypoints?.( cameraWaypointSaveText( cameraWaypoints ) );
-				break;
-			case DEBUG_COMMAND_CURSOR:
-				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
-				// or goes away (A15A70), silently.
-				debugCursorVisible = !debugCursorVisible;
-				extensions.setCursorVisible?.( debugCursorVisible );
-				break;
-			case DEBUG_COMMAND_CAMERA_SPEED: {
-				// Case 136 writes +0x7B0 from one word clamped to
-				// 1..500: the free-fly arm's translation speed (690146
-				// reads it at 6902AD and 69040B), forwarded to the
-				// camera owner (#1787). No print.
-				const speed = debugCameraSpeedValue( command.args );
-				if ( speed !== null ) {
-					debugCameraSpeed = speed;
-					extensions.setFreeCameraSpeed?.( speed );
-				}
-				break;
-			}
-			case DEBUG_COMMAND_ID:
-				// Case 137 flips the /id byte (0xCCB5D8, sete at 691678).
-				// Its readers draw while it stands: 85F5DC (the name
-				// board and the kind-4 overhead pass, read below in the
-				// overhead composition) and 8D5856 (a hit's damage
-				// number, the character owner's). The native prints
-				// nothing.
-				debugShowIds = !debugShowIds;
-				extensions.setDamageNumbers?.( debugShowIds );
-				break;
-			case DEBUG_COMMAND_WIRE_FRAME:
-				// 150 (691686) negates graphic option 0x12: while it stands
-				// SWorld_Render fills wireframe (8B9C28). The port's device
-				// has no line topology, so the byte is carried unapplied.
-				// The native prints nothing.
-				debugWireFrame = !debugWireFrame;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_WIRE_FRAME, debugWireFrame );
-				break;
-			case DEBUG_COMMAND_GROUND:
-				// 151 (6916BF) negates option 0x13: cleared, the terrain
-				// and ground-decal pass returns whole (8ABFDE).
-				debugGround = !debugGround;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_GROUND, debugGround );
-				break;
-			case DEBUG_COMMAND_SKY:
-				// 152 (6916F8) negates option 0x14: cleared, the sky pass
-				// in CWorld_RenderScenePasses is skipped (8B32F9, 8B3489).
-				debugSky = !debugSky;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_SKY, debugSky );
-				break;
-			case DEBUG_COMMAND_MAP_OBJECTS:
-				// 153 (691731) negates option 0x15: cleared, the model
-				// pass returns whole (SWorld_RenderPostModelPass_8AA750).
-				debugMapObjects = !debugMapObjects;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_MAP_OBJECTS, debugMapObjects );
-				break;
-			case DEBUG_COMMAND_CHARACTERS:
-				// 154 (69176A) negates option 0x16: its proven readers are
-				// the character shadow and dungeon passes (8B130B,
-				// 8B1B4E); the port clears every character draw with it.
-				debugCharacters = !debugCharacters;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_CHARACTERS, debugCharacters );
-				break;
-			case DEBUG_COMMAND_LEVEL_OF_DETAIL:
-				// 155 (6917A3) negates option 0x17: cleared, every cell
-				// takes LOD 0 in place of its distance band (8B7F1D).
-				debugLevelOfDetail = !debugLevelOfDetail;
-				extensions.setRenderMode?.( GRAPHIC_OPTION_LEVEL_OF_DETAIL, debugLevelOfDetail );
-				break;
-			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
-				const degrees = debugFieldOfView( command.args );
-				if ( degrees !== null ) extensions.setWorldFieldOfView?.( degrees );
-				break;
-			}
-			case DEBUG_COMMAND_SET_SPEED:
-				// Case 600 writes the local player's (or its mount's)
-				// speed field (+0x658) as the word times ten, clamped
-				// to 10..500. The port's movement is the server's, so
-				// the value is kept, not applied (#1717); the GM
-				// family's /SETSPEED stays the server-side speed lever.
-				// The native prints nothing.
-				debugMoveSpeed = debugSetSpeedValue( command.args );
-				break;
-			case DEBUG_COMMAND_EQUIP:
-				// Case 601 builds the named item's descriptor, frames
-				// it as a packet stream headed by opcode 0x3314 and
-				// self-dispatches it through the client's own packet
-				// handler (690BD0); the stream is destroyed after and
-				// nothing is transmitted. The port's inventory is the
-				// server's snapshot, so there is nothing for the
-				// crafted packet to land on; the line is consumed and
-				// nothing is built (#1717).
-				break;
-			case DEBUG_COMMAND_MAKE_OBJECT:
-				// 602 has no native case: the over-400 table sends it
-				// to the shared exit, so the handler does nothing at
-				// all. The line is consumed the same way here.
-				break;
-			case DEBUG_COMMAND_SOUND:
-				// Case 603 hands its first word to the sound manager's
-				// play-by-name; the audio owner answers the name (a
-				// name with no authored row stays silent, as a native
-				// label-map miss does). Further words are not read.
-				// With no word the native still calls through, with an
-				// unset argument - whatever the stack held becomes the
-				// name - so there is no defined sound to reproduce;
-				// the port deliberately plays nothing for a wordless
-				// line instead of inventing one.
-				if ( command.args.length >= 1 ) extensions.playSoundByName?.( command.args[0]! );
-				break;
-		}
-	}
-	/*
-	================
 	focusAtEnd
 	================
 	*/
@@ -3515,7 +3165,8 @@ export function createUi( ports: UiPorts ) {
 			inventory: game.inventory,
 			avatarInventory: game.avatarInventory,
 			storage: game.storage?.items,
-			pet: game.cosRecords?.find( record => record.gid === cosGid )?.inventory
+			pet: game.cosRecords?.find( record => record.gid === cosGid )?.inventory,
+			petGid: cosGid || undefined
 		} );
 		if ( !link ) return false;
 		const text = editor === "chat-text" ? chatText : wholeChat!.text;
@@ -6464,8 +6115,8 @@ export function createUi( ports: UiPorts ) {
 			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
 			nowMs: number
 		) {
-			debugClock = debugClockNoteSeed( debugClock, seed, nowMs );
-			return debugClockSeed( debugClock, seed, nowMs );
+			debugConsole.state.debugClock = debugClockNoteSeed( debugConsole.state.debugClock, seed, nowMs );
+			return debugClockSeed( debugConsole.state.debugClock, seed, nowMs );
 		},
 		/*
 		================
@@ -9106,7 +8757,10 @@ export function createUi( ports: UiPorts ) {
 						if ( item ) {
 							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
 							// items refuse a quick sell.
-							if ( itemIsMallItem( item ) || itemIsRare( item ) || item.summon?.state === 2 ) {
+							if (
+								itemIsMallItem( item ) || itemIsRare( item, game.levelCap === EXPANSION_LEVEL_CAP ) ||
+								item.summon?.state === 2
+							) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;
@@ -9507,6 +9161,17 @@ export function createUi( ports: UiPorts ) {
 					if ( goldDialog ) {
 						goldDialog = false;
 						focus = null;
+						dirty = true;
+						return;
+					}
+					// The stall network window is game state, not a panel, so
+					// the panel tail below never saw it and Escape opened the
+					// System menu over it (#3150). Close it the way its own
+					// close control does; a stall prompt above it has already
+					// taken Escape by here, and the drawn body stays the
+					// shared close every window gets (53D480).
+					if ( view?.gameplay?.stall?.network.open ) {
+						sendGameplay( { kind: "stall-network-open", open: false } );
 						dirty = true;
 						return;
 					}
@@ -10129,8 +9794,8 @@ export function createUi( ports: UiPorts ) {
 				const cameraRows = hud.data()?.cameraDataRows;
 				if ( cameraRows ) {
 					cameraWaypointsLoaded = true;
-					loadCameraDataKeyframes( cameraWaypoints, cameraRows );
-					extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+					loadCameraDataKeyframes( debugConsole.state.cameraWaypoints, cameraRows );
+					extensions.setCameraWaypoints?.( debugConsole.state.cameraWaypoints.keyframes );
 				}
 			}
 			// The stall prompts follow the stall: naming opens the title entry
@@ -10406,7 +10071,7 @@ export function createUi( ports: UiPorts ) {
 				consolePhase = 0;
 				consoleY = -112;
 				consoleText = "";
-				consoleRows = [];
+				debugConsole.state.consoleRows = [];
 				consoleHistory = [];
 				consoleHistoryIndex = 0;
 				gmCatalogSeen = null;
@@ -11045,6 +10710,10 @@ export function createUi( ports: UiPorts ) {
 							rect: row.slot,
 							kind: "button",
 							rightActivate: true,
+							// Dragging a command onto the hotbar binds kind 0x25
+							// with this command id (quickSlotDrag); the press
+							// dispatches it through executeCosCommand.
+							draggable: true,
 							disabled: !cosCommandEnabled( command, context )
 						} );
 					} );
@@ -11191,43 +10860,57 @@ export function createUi( ports: UiPorts ) {
 					}
 				}
 				// Port-only (Experimental "Fit window labels", off is the original):
-				// an English label that would run past its window's left edge (the
-				// trade window's "Purchase amount", right-aligned in 63 pixels, with
-				// a wider text face, or the consignment window's "Large category",
-				// right-aligned at x = 74 in a 43-pixel box) wraps onto two lines
-				// inside the room to the window's left margin instead.
-				if ( !clipToControl && experimental.state().saved.fitWindowLabels && value.includes( " " ) ) {
+				// an authored label (the static carries a text key; value fields
+				// with an empty authored text keep the native fitting) wider than
+				// its box (the trade window's "Purchase amount", right-aligned in
+				// 63 pixels, with a wider text face, or the consignment window's
+				// "Large category", right-aligned at x = 74 in a 43-pixel box)
+				// wraps onto two lines instead of running past its window's left
+				// edge or into the next control. A right-aligned label's lines may
+				// use the room to the window's left margin; the wrap width splits
+				// the label near its middle (never under its longest word) so a
+				// label whose room is the rest of the window still breaks in two
+				// instead of ellipsizing.
+				if (
+					!clipToControl && experimental.state().saved.fitWindowLabels && node.text !== "" &&
+					value.includes( " " )
+				) {
 					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
-					const width = measure( value ),
-						left = node.hAlign === 2 ?
-							box[0] + box[2] - width :
-							node.hAlign === 1 ?
-							box[0] + (box[2] - width) / 2 :
-							box[0],
-						room = node.hAlign === 2 ?
-							Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
-							box[2];
-					const lines = left < ox + WINDOW_LABEL_MARGIN ? textLines( value, room, measure ) : [];
-					if ( lines.length === 2 && lines.every( line => measure( line ) <= room ) ) {
-						const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-							top = box[1] + (box[3] - 2 * lineHeight) / 2;
-						lines.forEach( ( line, index ) =>
-							quads.push(
-								...text.quads(
-									line,
-									[ box[0], top + index * lineHeight, box[2], lineHeight ],
-									full,
-									node.color,
-									{
-										fontIndex: node.fontIndex,
-										fontStyle,
-										hAlign: node.hAlign,
-										vAlign: 1
-									}
+					const width = measure( value );
+					if ( width > box[2] ) {
+						const room = node.hAlign === 2 ?
+								Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
+								box[2],
+							balanced = Math.max(
+								box[2],
+								Math.ceil( width / 2 ),
+								...value.split( " " ).map( measure )
+							);
+						// The balanced split first (its widest line stays farthest
+						// from the window's edge), the room-wide split after it.
+						for ( const wrapWidth of balanced < room ? [ balanced, room ] : [ room ] ) {
+							const lines = textLines( value, wrapWidth, measure );
+							if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
+							const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
+								top = box[1] + (box[3] - 2 * lineHeight) / 2;
+							lines.forEach( ( line, index ) =>
+								quads.push(
+									...text.quads(
+										line,
+										[ box[0], top + index * lineHeight, box[2], lineHeight ],
+										full,
+										node.color,
+										{
+											fontIndex: node.fontIndex,
+											fontStyle,
+											hAlign: node.hAlign,
+											vAlign: 1
+										}
+									)
 								)
-							)
-						);
-						return;
+							);
+							return;
+						}
 					}
 				}
 				quads.push(
@@ -11885,7 +11568,8 @@ export function createUi( ports: UiPorts ) {
 					r,
 					slotSeed( id + ":" + owned.refObjId ),
 					next.simulationTimeMs ?? 0,
-					flashes
+					flashes,
+					game?.levelCap === EXPANSION_LEVEL_CAP
 				);
 				for ( const overlay of overlays ) {
 					image( overlay.rect, overlay.path, white, overlay.uv );
@@ -13076,6 +12760,7 @@ export function createUi( ports: UiPorts ) {
 								offset: chatScroll.offset(),
 								hidden: chatHidden,
 								measure: ( value, style ) => text.run( value, style?.fontStyle ?? 0 ).width,
+								wrapCache: chatWrapCache,
 								editState: {
 									caretVisible,
 									caretHeight: text.height() + 2,
@@ -13615,12 +13300,19 @@ export function createUi( ports: UiPorts ) {
 						undefined;
 					const petAvailable = !!(petDesign && binding && game &&
 						quickSlotCommand( binding, game ));
+					// A kind 0x25 binding wears the command bar's own icon and
+					// label (cos-command.ts), greyed while the command is off.
+					const petCommand = binding?.kind === 0x25 ? binding.payload : undefined,
+						petContext = petCommand !== undefined ? cosCommandContext() : undefined,
+						petLabel = petCommand !== undefined ? cosCommandLabel( petCommand, petContext! ) : "";
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
 						(item.name ?? String( item.refObjId )) + " x" + item.quantity :
 						petDesign ?
 						petDesign.name :
+						petLabel ?
+						hudCopy( petLabel ) :
 						action ?
 						hudCopy( action.name ) :
 						binding?.kind === 0x4e ?
@@ -13639,6 +13331,8 @@ export function createUi( ports: UiPorts ) {
 					blocks.push( r );
 					const icon = petDesign ?
 						petSkillIcon( petDesign ) :
+						petCommand !== undefined ?
+						cosCommandIcon( petCommand, petContext! ) :
 						iconPath( skill?.icon ?? item?.icon ?? action?.icon );
 					// A held press outlines the slot; a denied one shakes and tints it.
 					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
@@ -19122,6 +18816,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					if ( buySum ) authoredText( buySum, px, py, grouped( sums.buy ) );
 					if ( profitSum ) authoredText( profitSum, px, py, grouped( sums.profit ) );
 					if ( sellSum ) authoredText( sellSum, px, py, grouped( sums.sell ) );
+					// Port-only (#3163): the caravan's distance to the next
+					// star in stacks of this window's goods, one line under
+					// the trade-scale row; nothing without the server's
+					// published answer (SRO_TRADE_TIERS off).
+					const progressLine = tradeProgressLine(
+							game?.tradeProgress,
+							specialtyDeal.unitBuy * specialtyDeal.maxStack
+						),
+						scaleLabel = byId( 24 );
+					if ( scaleLabel && progressLine ) {
+						authoredText(
+							{ ...scaleLabel, rect: [ scaleLabel.rect[0], scaleLabel.rect[1] + 21, 196, 15 ] },
+							px,
+							py,
+							progressLine
+						);
+					}
 					const combo = byId( 34 );
 					if ( combo ) {
 						const r = authoredRect( combo, px, py );
@@ -19330,6 +19041,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							for ( let i = 0; i < stars; i++ ) {
 								const star = node( COS_TRADE_STAR_FIRST + i );
 								if ( star ) authoredImage( star, ox, oy, star.texture, 1, tint );
+							}
+							// Port-only (#3163): the distance to the next star,
+							// one line under the trade level, in stacks of the
+							// goods in front of the player - the selected
+							// cargo row, else the first stocked one. Nothing
+							// without the server's published answer.
+							const level = node( COS_TRADE_LEVEL ),
+								front = rows.find( r => r.slot === cosSlot && r.quantity > 0 ) ??
+									rows.find( r => r.quantity > 0 ),
+								progressLine = tradeProgressLine(
+									game?.tradeProgress,
+									front ? front.price * front.maxStack : 0
+								);
+							if ( level && progressLine ) {
+								authoredText(
+									{ ...level, rect: [ level.rect[0], level.rect[1] + 14, 240, 12 ] },
+									ox,
+									oy,
+									progressLine
+								);
 							}
 							const sell = node( COS_TRADE_SELL_ALL );
 							if ( sell ) {
@@ -20182,8 +19913,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const box = authoredRect( at( 3 ), px, py ),
 						messages = authoredRect( chat.GDR_CHAT_CHATMESSAGE!, box[0], box[1] ),
 						rows = Math.max( 0, Math.floor( messages[3] / STALL_CHAT_ROW ) ),
-						said = stallHud.messages().flatMap( line =>
-							textBoxLines( line.name + ":" + line.text, messages[2], value => text.run( value ).width )
+						// Players print "name:text" in white; the stall's own state,
+						// sale and network lines print in the system message gold.
+						said = stallHud.messages().flatMap( entry =>
+							textBoxLines(
+								entry.kind === "chat" ?
+									entry.line.name + ":" + entry.line.text :
+									noticeText( hudCopy, {
+										key: entry.line.key,
+										value: 0,
+										arguments: entry.line.args
+									} ),
+								messages[2],
+								value => text.run( value ).width
+							).map( value => ({ value, color: entry.kind === "chat" ? white : gold }) )
 						),
 						end = Math.max( 0, said.length - stallChatScroll.offset() ),
 						first = Math.max( 0, end - rows ),
@@ -20198,7 +19941,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							STALL_CHAT_ROW
 						];
 						quads.push(
-							...text.quads( line, row, messages, white, { overflow: "clip" } )
+							...text.quads( line.value, row, messages, line.color, { overflow: "clip" } )
 						);
 					}
 					const messageScroll = chatScrollbar(
@@ -22355,7 +22098,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								"Unknown speaker";
 							label(
 								`${line.outgoing && line.channel === 2 ? "To " : ""}${sender}: ${
-									chatLinkSpans( line.text, line.links, false ).text
+									chatLinkSpans( line.text, line.links, chatLinksOn() ).text
 								}`,
 								px + 22,
 								py + 78 + i * 22,
@@ -22434,7 +22177,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const overheads = new Map(
 					next.entities.map( entity => {
 						const layout = game ? overheadLayout( entity, local, game, options, hudCopy ) : null;
-						return [ entity.gid, layout && !debugShowIds ? withoutBoardPass( layout ) : layout ] as const;
+						return [
+							entity.gid,
+							layout && !debugConsole.state.debugShowIds ? withoutBoardPass( layout ) : layout
+						] as const;
 					} )
 				);
 				// Characters whose guild line, fortress mark or quick status bars show;
@@ -22669,7 +22415,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// skips the name board and the icon pass while the /id byte
 					// (0xCCB5D8) is clear; the dress bar above is CICUser_Draw's
 					// (86AB90) and stays.
-					const named = debugShowIds && !entity.debugHidden &&
+					const named = debugConsole.state.debugShowIds && !entity.debugHidden &&
 						!hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
 							boardAt( entity ),
@@ -22820,7 +22566,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
 				bugReport?.chat( game?.chat?.lines ?? [] );
-				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now ) ) {
+				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now, chatLinksOn() ) ) {
 					const lines = textBoardLines( row.text, 200, value => text.run( value ).width ),
 						lineHeight = text.boardHeight(),
 						height = lines.length * lineHeight,
@@ -24582,8 +24328,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && crestRegisterAsk ) {
 				// 52F460 types 0x15/0x18 (#2282): the register box's own
 				// title and its USER_CREST/FILE/FOLDER instruction lines.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				const registerKeys = crestRegisterKeys( crestRegisterAsk.kind );
 				simpleMessageBox( {
 					title: hudCopy( registerKeys.title ),
@@ -28029,6 +27775,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				// Port-only set panel: the rows of the second box beside an item's own (Experimental set tooltip).
+				let sideTooltip: readonly TooltipRow[] = [];
 				const petBinding = control?.id.startsWith( "hotbar:" ) ?
 					game?.quickSlots?.find( entry =>
 						entry.slot === Number( control.id.slice( 7 ) ) && entry.kind === 0x4a &&
@@ -28134,20 +27882,33 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
 							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
-							sealUnderHeading = experimental.state().saved.sealUnderHeading;
+							sealUnderHeading = experimental.state().saved.sealUnderHeading,
+							expansion = game.levelCap === EXPANSION_LEVEL_CAP,
+							// Port-only set block: the published groups with the bag they are counted in.
+							sets = tooltipSetViewer(
+								experimental.state().saved.setBonusTooltip,
+								game.equipmentSets,
+								game.inventory
+							),
+							setGroups = sets?.groups,
+							setEquipment = sets?.equipment;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
-						) tooltip = tooltipMemo.rows;
-						else {
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading &&
+							tooltipMemo.expansion === expansion &&
+							tooltipMemo.setGroups === setGroups && tooltipMemo.setEquipment === setEquipment
+						) {
+							tooltip = tooltipMemo.rows;
+							sideTooltip = tooltipMemo.side;
+						} else {
 							tooltip = item ?
 								itemTooltip(
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								) :
 								skillTooltip(
 									{
@@ -28159,6 +27920,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									lookup,
 									id => lookup( hudData.skillUi.masteries.find( m => m.id === id )?.name ?? "" )
 								);
+							sideTooltip = item && sets ?
+								itemTooltipSet( item, sets.groups, sets.equipment, lookup ) :
+								[];
 							tooltipMemo = {
 								item,
 								skill,
@@ -28168,16 +27932,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								country,
 								sex,
 								sealUnderHeading,
-								rows: tooltip
+								expansion,
+								setGroups,
+								setEquipment,
+								rows: tooltip,
+								side: sideTooltip
 							};
 						}
 						if ( items.length > 1 ) {
+							sideTooltip = [];
 							tooltip = items.flatMap( item =>
 								itemTooltip(
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, expansion, sets }
 								)
 							);
 						}
@@ -28218,6 +27987,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									fontStyle: row.strong ? 2 : 0
 								} )
 							);
+						}
+					}
+					// The set panel stands beside the item's own box, as in the later client.
+					if ( sideTooltip.length ) {
+						const side = sideBubble(
+							sideTooltip,
+							bubble.quads[0]!.rect,
+							full,
+							( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
+							experimental.state().saved.fitWindowLabels
+						);
+						paths.push( ...side.paths );
+						if ( side.paths.every( resources.has ) ) {
+							quads.push( ...side.quads );
+							for ( const row of side.lines ) {
+								quads.push(
+									...text.quads( row.value, row.rect, full, tooltipColor( row.color ), {
+										fontStyle: row.strong ? 2 : 0
+									} )
+								);
+							}
 						}
 					}
 				}
@@ -28348,7 +28138,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						texture: "",
 						clip: full
 					} );
-					for ( const [i, row] of consoleRows.slice( -7 ).entries() ) {
+					for ( const [i, row] of debugConsole.state.consoleRows.slice( -7 ).entries() ) {
 						label( row, 5, consoleY + 2 + i * 13, [ 200 / 255, 200 / 255, 200 / 255, 1 ], r );
 					}
 				}
@@ -28390,7 +28180,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					maxLength: 255
 				} );
 			}
-			if ( !debugUiVisible ) {
+			if ( !debugConsole.state.debugUiVisible ) {
 				// /uioff (690C40 case 115): the frame keeps only what the
 				// console block above contributed; everything built
 				// before it is the hidden window tree's.

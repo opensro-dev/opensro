@@ -37,6 +37,9 @@ go build -o sro-tickbudget .
 ./sro-tickbudget capture --ssh USER@HOST --out capture-2026-11-08
 ```
 
+Add `--ssh-identity KEYFILE` when the host takes a key that is not
+ssh's default (the deploy key): ssh then offers that key only.
+
 This runs the whole sequence on the host in a private `/tmp`
 directory that is deleted when it ends (the files hold player names
 in stack samples - never copy a capture into this repository):

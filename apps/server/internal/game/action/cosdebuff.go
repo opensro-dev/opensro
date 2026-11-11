@@ -59,7 +59,7 @@ One pet's active hostile words, keyed as the abnormal blocks are
 */
 type cosDebuffStore struct {
 	mu      sync.Mutex
-	entries map[string]*cosDebuffEntry
+	entries map[cosAbnormalKey]*cosDebuffEntry
 }
 
 /*
@@ -90,7 +90,7 @@ The pet's words whose window holds now; an expired word reads as none.
 func (rt *Runtime) cosDebuffWords(division, name string, gid uint32, now int64) []monster.SelfEffect {
 	rt.cosDebuffs.mu.Lock()
 	defer rt.cosDebuffs.mu.Unlock()
-	entry := rt.cosDebuffs.entries[cosAbnormalKey(division, name, gid)]
+	entry := rt.cosDebuffs.entries[cosAbnormalKeyFor(division, name, gid)]
 	if entry == nil {
 		return nil
 	}
@@ -117,12 +117,12 @@ func (rt *Runtime) installCosDebuffWord(division, name string, gid uint32, word 
 	}
 	rt.cosDebuffs.mu.Lock()
 	defer rt.cosDebuffs.mu.Unlock()
-	key := cosAbnormalKey(division, name, gid)
+	key := cosAbnormalKeyFor(division, name, gid)
 	entry := rt.cosDebuffs.entries[key]
 	if entry == nil {
 		entry = &cosDebuffEntry{division: division, name: name, gid: gid}
 		if rt.cosDebuffs.entries == nil {
-			rt.cosDebuffs.entries = map[string]*cosDebuffEntry{}
+			rt.cosDebuffs.entries = map[cosAbnormalKey]*cosDebuffEntry{}
 		}
 		rt.cosDebuffs.entries[key] = entry
 	}
@@ -151,7 +151,7 @@ return the live tokens so the caller can retire them on the wire.
 func (rt *Runtime) clearCosDebuffWords(division, name string, gid uint32, now int64) []uint32 {
 	rt.cosDebuffs.mu.Lock()
 	defer rt.cosDebuffs.mu.Unlock()
-	key := cosAbnormalKey(division, name, gid)
+	key := cosAbnormalKeyFor(division, name, gid)
 	entry := rt.cosDebuffs.entries[key]
 	if entry == nil {
 		return nil
@@ -177,7 +177,7 @@ that were still live come back for the teardown frames.
 func (rt *Runtime) expireCosDebuffWords(division, name string, gid uint32, now int64) []uint32 {
 	rt.cosDebuffs.mu.Lock()
 	defer rt.cosDebuffs.mu.Unlock()
-	key := cosAbnormalKey(division, name, gid)
+	key := cosAbnormalKeyFor(division, name, gid)
 	entry := rt.cosDebuffs.entries[key]
 	if entry == nil || len(entry.words) == 0 {
 		return nil

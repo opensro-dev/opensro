@@ -47,6 +47,7 @@ MotionClip
 export type MotionClip = ( from: Pose, to: Pose, query: {
 	slide: boolean;
 	sourceOwner?: NavOwner;
+	sourceTerrainRetained?: boolean;
 	owner?: NavOwner;
 	status?: number;
 } ) => Pose | null;
@@ -57,7 +58,26 @@ RemoteSegment
 */
 type RemoteSegment = MovementSegment & {
 	walkingPath?: readonly Pose[];
-	presentationHistory?: { from: Pose; to: Pose; points?: readonly Pose[]; result: readonly Pose[]; };
+	// The presentation lookahead admitted for this segment
+	// (presentationPath, #3178): the segment corridor it was clipped
+	// for and the history extended over it. While the pose stays
+	// behind its point, the clip and extension are reused, not
+	// re-sampled per tick.
+	presentationHistory?: {
+		from: Pose;
+		to: Pose;
+		// The admitted span from from to to; the reused window
+		// scales by the span remaining (#3178).
+		span: number;
+		points?: readonly Pose[];
+		result: readonly Pose[];
+		// The sampled points result holds beyond the pose it was
+		// extended from; the published chain is the accepted path
+		// as it stands now plus this tail.
+		tail?: readonly Pose[];
+		segmentFrom: Pose;
+		segmentTo: Pose;
+	};
 	previous?: Pose;
 	at?: number;
 	vector?: readonly [number, number];
@@ -129,6 +149,10 @@ createEntityMotion
 */
 export function createEntityMotion( surface: SurfaceResolver = pose => pose, clip: MotionClip = () => null ) {
 	const cursors = new Map<number, SurfaceCursor>();
+	// Terrain retention beside each cursor's owner (#3006): true once a
+	// mover's accepted step stands it on terrain it walked to, cleared
+	// wherever its cursor is (a fresh reference, death, removal).
+	const retainedTerrain = new Map<number, boolean>();
 	/*
 ================
 resolve
@@ -201,6 +225,7 @@ advance
 		const query = {
 			slide: false,
 			sourceOwner: cursors.get( gid )?.owner,
+			sourceTerrainRetained: retainedTerrain.get( gid ) ?? false,
 			owner: undefined as NavOwner | undefined,
 			status: 0
 		};
@@ -216,6 +241,7 @@ advance
 			from: previous,
 			to: accepted,
 			sourceOwner: query.sourceOwner,
+			sourceTerrainRetained: query.sourceTerrainRetained,
 			clip
 		} );
 		const afterDx = segment.to.x - accepted.x +
@@ -230,6 +256,8 @@ advance
 		const cursor = cursors.get( gid ) ?? {};
 		cursor.owner = query.owner;
 		cursors.set( gid, cursor );
+		// An accepted step stands the mover where it now stands: retained.
+		retainedTerrain.set( gid, !query.owner );
 		return accepted;
 	}
 	/*
@@ -249,6 +277,25 @@ A changed terrain interpolation cannot authorize a new connection.
 			segment.presentationHistory = undefined;
 		}
 		return pose;
+	}
+	/*
+================
+admittedTail
+
+The part of an admitted extension worth caching (#3178): the sampled
+points beyond the pose it was extended from, toward the point it was
+extended to. A chain that never anchored at the pose (a degraded
+single point) has no tail; the split is geometric, so it holds whether
+the extension grew the accepted path or replaced it at its cap.
+================
+	*/
+	function admittedTail( chain: readonly Pose[], from: Pose, to: Pose ): readonly Pose[] | undefined {
+		const reach = poseDistance( from, to );
+		let split = -1;
+		for ( let index = 0; index < chain.length; index++ ) {
+			if ( poseDistance( chain[index]!, to ) >= reach - ENDPOINT_EPSILON ) split = index;
+		}
+		return split >= 0 ? chain.slice( split + 1 ) : undefined;
 	}
 	/*
 ================
@@ -272,8 +319,41 @@ does not move the actor or replace its actual-time collision result.
 				startedAtMs: segment.start
 			};
 		}
+		// The lookahead corridor is admitted once per segment (#3178):
+		// while the pose stays behind the point it was clipped to, the
+		// corridor ahead of it is the one already verified, so neither
+		// the clip nor the history extension runs again. A pose that
+		// outruns the lookahead (a stall, a long catch-up step) falls
+		// through and admits the next window.
+		const cache = segment.presentationHistory;
+		if (
+			cache && !segment.blocked && !segment.arrived &&
+			cache.segmentFrom === segment.from && cache.segmentTo === segment.to &&
+			poseDistance( pose, segment.to ) > poseDistance( cache.to, segment.to )
+		) {
+			return {
+				from: pose,
+				to: cache.to,
+				// The accepted path as it stands now plus the admitted
+				// tail; a re-anchored extension replaces it outright.
+				walkingPath: cache.tail && segment.walkingPath ?
+					[ ...segment.walkingPath, ...cache.tail ] :
+					cache.result,
+				// The presentation derives velocity from span over
+				// window: scale the window by the span remaining or
+				// its recovery budget decays as the pose closes in.
+				durationMs: cache.span > 0 ?
+					PRESENTATION_LOOKAHEAD_MS * poseDistance( pose, cache.to ) / cache.span :
+					PRESENTATION_LOOKAHEAD_MS
+			};
+		}
 		const desired = candidate( segment, pose, PRESENTATION_LOOKAHEAD_MS ).pose;
-		const query = { slide: false, sourceOwner: cursors.get( gid )?.owner, status: 0 };
+		const query = {
+			slide: false,
+			sourceOwner: cursors.get( gid )?.owner,
+			sourceTerrainRetained: retainedTerrain.get( gid ) ?? false,
+			status: 0
+		};
 		const checked = segment.blocked || segment.arrived ?
 			null :
 			clip( pose, desired, query );
@@ -294,9 +374,23 @@ does not move the actor or replace its actual-time collision result.
 					from: pose,
 					to,
 					sourceOwner: query.sourceOwner,
+					sourceTerrainRetained: query.sourceTerrainRetained,
 					clip
 				} );
-				segment.presentationHistory = { from: pose, to, points: segment.walkingPath, result: walkingPath };
+				segment.presentationHistory = {
+					from: pose,
+					to,
+					span: poseDistance( pose, to ),
+					points: segment.walkingPath,
+					result: walkingPath,
+					// The sampled points beyond this pose (#3178):
+					// they stay admitted while the pose stays behind
+					// them. An extension that never anchored at the
+					// pose (a degraded single point) caches nothing.
+					tail: admittedTail( walkingPath, pose, to ),
+					segmentFrom: segment.from,
+					segmentTo: segment.to
+				};
 			}
 		}
 		return {
@@ -329,6 +423,7 @@ authored displacements and disconnected navigation never inherit it.
 				from: reference,
 				to: resolved,
 				sourceOwner,
+				sourceTerrainRetained: retainedTerrain.get( entity.gid ) ?? false,
 				clip
 			} );
 		return { segment, resolved, walkingPath };
@@ -489,6 +584,7 @@ surfaceReference
 				segment.presentationHistory = undefined;
 			}
 			cursors.delete( entity.gid );
+			retainedTerrain.delete( entity.gid );
 		},
 		/*
 ================
@@ -543,6 +639,7 @@ receive
 					from: current,
 					to: from,
 					sourceOwner,
+					sourceTerrainRetained: retainedTerrain.get( entity.gid ) ?? false,
 					clip
 				} );
 			if ( decoded.kind === "direction" ) {
@@ -646,6 +743,7 @@ stopForDeath
 			if ( !displaced ) {
 				active.delete( entity.gid );
 				cursors.delete( entity.gid );
+				retainedTerrain.delete( entity.gid );
 			}
 			return update( entity.gid, pose, displaced && now < segment!.start + segment!.duration );
 		},
@@ -731,6 +829,7 @@ remove
 		remove( gid: number ) {
 			active.delete( gid );
 			cursors.delete( gid );
+			retainedTerrain.delete( gid );
 		},
 		/*
 ================
@@ -740,6 +839,7 @@ clear
 		clear() {
 			active.clear();
 			cursors.clear();
+			retainedTerrain.clear();
 		}
 	};
 }

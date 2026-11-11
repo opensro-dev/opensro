@@ -76,6 +76,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
+import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import {
 	budgetOffenders,
@@ -647,11 +648,16 @@ function commandOutput( command, args ) {
 goEnvironment
 
 The environment every Go step runs with, built on first use: when every
-step is up to date, no compiler lookup runs.
+step is up to date, no compiler or flag lookup runs. Every step compiles
+with -trimpath (goEnvironment.mjs), so this checkout reuses what any other
+checkout of the same sources already put in the build cache.
 ================
 */
 function goEnvironment() {
-	goEnvironmentValue ??= { ...compilerFirstEnvironment(), SRO_GAME_DATA_IDENTITY: gameIdentity };
+	goEnvironmentValue ??= {
+		...sharedCacheEnvironment( compilerFirstEnvironment() ),
+		SRO_GAME_DATA_IDENTITY: gameIdentity
+	};
 	return goEnvironmentValue;
 }
 

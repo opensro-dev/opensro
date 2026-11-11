@@ -16,6 +16,7 @@ Options:
   --thread LABEL      profile table for threads whose label contains LABEL
   --children FN       direct callees of functions whose key starts with FN
   --lines FN          self time by source line inside FN
+  --frames FN         how many frames run FN, and what a frame that runs it costs
   --compare TRACE[@A:B]  per-function ms/frame change against another trace
   --timeline          per-second fps, busy time and what grew
   --json              machine-readable output
@@ -29,7 +30,7 @@ by function. Main-thread costs are per frame; worker costs per second.
 */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadTrace, frameStarts, mainThread, forEachSample } from "../core/trace.mjs";
+import { loadTrace, frameStarts, mainThread, forEachSample, frameCosts } from "../core/trace.mjs";
 import { createSymbolizer } from "../core/symbols.mjs";
 import { parseOptions, table, createStackTotals } from "../core/report.mjs";
 
@@ -117,6 +118,39 @@ function lines( profile, window, symbolizer, gap, prefix ) {
 		sum += owned;
 	} );
 	return { by, sum };
+}
+
+/*
+================
+frameHits
+
+For functions whose key starts with prefix, on the main thread: how many
+frames of the window ran one, the inclusive ms of a frame that did (mean,
+median, 95th percentile, worst) and the mean over every frame. The mean
+alone cannot tell work done every frame from a large job done on some.
+================
+*/
+function frameHits( profile, starts, window, symbolizer, gap, prefix ) {
+	const key = keyer( symbolizer, profile );
+	const costs = frameCosts(
+		profile,
+		starts,
+		window[0],
+		window[1],
+		gap,
+		stack => stack.some( id => key( id ).startsWith( prefix ) )
+	);
+	const hit = [ ...costs ].filter( cost => cost > 0 ).map( cost => cost / US ).sort( ( a, b ) => a - b );
+	const sum = hit.reduce( ( a, b ) => a + b, 0 );
+	return {
+		frames: costs.length,
+		hit: hit.length,
+		meanHit: hit.length ? sum / hit.length : 0,
+		p50: percentile( hit, .5 ),
+		p95: percentile( hit, .95 ),
+		max: hit.at( -1 ) ?? 0,
+		meanAll: costs.length ? sum / costs.length : 0
+	};
 }
 
 /*
@@ -333,6 +367,28 @@ async function report( options ) {
 			out.push( table( result.by, { scale, top: options.top, unit } ) );
 		}
 	}
+	if ( options.frames && mainProfile ) {
+		const hits = frameHits(
+			mainProfile,
+			frameStarts( trace, main ),
+			window,
+			symbolizer,
+			options.gap,
+			options.frames
+		);
+		out.push( `
+## frames that run ${options.frames}` );
+		out.push(
+			`${hits.hit} of ${hits.frames} frames (${(hits.hit / Math.max( 1, hits.frames ) * 100).toFixed( 0 )}%, ${
+				(hits.hit / span).toFixed( 1 )
+			} a second)`
+		);
+		out.push(
+			`a frame that runs it: mean ${hits.meanHit.toFixed( 2 )} ms, p50 ${hits.p50.toFixed( 2 )}, p95 ${
+				hits.p95.toFixed( 2 )
+			}, max ${hits.max.toFixed( 2 )}; over every frame ${hits.meanAll.toFixed( 3 )} ms/f`
+		);
+	}
 	if ( options.compare && mainCost ) {
 		const [file, spec] = options.compare.split( "@" );
 		const b = await analyzeTrace( file, spec, options );
@@ -375,6 +431,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	thread: "",
 	children: "",
 	lines: "",
+	frames: "",
 	compare: "",
 	json: false,
 	timeline: false

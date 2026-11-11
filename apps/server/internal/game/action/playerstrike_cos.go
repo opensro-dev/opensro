@@ -138,14 +138,14 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffCOS(debuffCast{division: division, character: character, snapshot: snapshot,
-			skill: skill, target: target.gid, now: now}, target)
+			skill: skill, target: target.gid, now: now, doors: st.doors}, target)
 	}
 	// The player stage's dispatch order (pvpstrike.go), on the COS body:
 	// a periodic installs its linked pair, an area resolves around the
 	// COS as primary, anything else strikes it directly.
 	if skill.TimedEffect.Periodic.Pinned {
 		return rt.installPeriodicCast(periodicCast{division: division, character: character, snapshot: snapshot,
-			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
+			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release, doors: st.doors})
 	}
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)

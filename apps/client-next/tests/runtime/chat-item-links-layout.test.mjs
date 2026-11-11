@@ -88,10 +88,13 @@ test("the label is a hover region with the bag tooltip", () => {
 	assert.equal( hovered.quads.filter( q => q.texture === "" ).length, plain + 1 );
 });
 
-test("with the row off the label is plain", () => {
+test("with the row off the line draws unchanged", () => {
+	// Links off draws the line as it arrived (#3022): no label and no
+	// "<?>" stands in for the marker, and no link region exists.
 	const off = layoutWith( { chatItemLinks: false } );
 	assert.ok( !off.controls.some( c => c.id.startsWith( "chat-item:" ) ) );
-	assert.ok( off.controls.some( c => c.id.startsWith( "chat-line:" ) && c.label.includes( "<Blade +7>" ) ) );
+	assert.ok( off.controls.some( c => c.id.startsWith( "chat-line:" ) && c.label.includes( "wts " + M + " ok" ) ) );
+	assert.ok( !off.controls.some( c => c.label.includes( "<Blade" ) ) );
 });
 
 test("a label wrapped across two rows links both parts", () => {
@@ -120,5 +123,9 @@ test("the overhead bubble shows the label, never the marker", async () => {
 	const speech = createSpeech(), players = [ { gid: 2, name: "Berk" } ];
 	speech.step( [], players, 0 );
 	const said = { ...LINE, channel: 1, gid: 2, sequence: 6 };
-	assert.equal( speech.step( [ said ], players, 1 ).get( 2 )?.text, "wts <Blade +7> ok" );
+	assert.equal( speech.step( [ said ], players, 1, true ).get( 2 )?.text, "wts <Blade +7> ok" );
+	// With links off the board shows the line as it arrived (#3022).
+	const off = createSpeech();
+	off.step( [], players, 0 );
+	assert.equal( off.step( [ said ], players, 1, false ).get( 2 )?.text, "wts " + M + " ok" );
 });

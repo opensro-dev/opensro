@@ -255,7 +255,15 @@ No timers/goroutines: the existing pet tick expires stacks and howl grants.
 ================
 */
 func (rt *Runtime) advanceWolfKit(key petOwnerKey, now int64) []simulation.Frame {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	return rt.advanceWolfKitSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advanceWolfKitSession
+================
+*/
+func (rt *Runtime) advanceWolfKitSession(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
 	if state == nil {
 		return nil
 	}

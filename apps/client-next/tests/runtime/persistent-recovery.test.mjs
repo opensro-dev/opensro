@@ -240,7 +240,8 @@ function workerFixture( t, corrupt = false, expected = 1 ) {
 	} );
 	const loader = createLoader( message => {
 		if (
-			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability", "release-stale" ]
+				.includes( message.kind )
 		) {
 			messages.push( message );
 		}

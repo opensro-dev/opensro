@@ -53,8 +53,9 @@ const strings = {
 };
 const text = s => strings[s] ?? "";
 test( "published native catalogue admits every skill and rejects shifted columns", NATIVE_ONLY, () => {
-	// 27835 retail skills plus the 230 Qin-Shi tomb monster skills (#2024).
-	assert.equal( catalog.size, 28065 );
+	// 27835 retail skills plus the 238 Qin-Shi tomb monster skills (#2024;
+	// the eight generals' fourth skills joined in #2948).
+	assert.equal( catalog.size, 28073 );
 	assert.throws( () => decodeTooltipSkills( { ...source, columns: source.columns.slice( 1 ) } ), /catalogue/ );
 } );
 test("all published skill tooltips compose without unresolved prerequisite or parameter crashes", () => {
@@ -805,6 +806,20 @@ test("native tooltip lines the port dropped render from their parameters (#2273)
 		"Absorb Rate 30%",
 		"Absorb Rate 40%"
 	] );
+	// odar {kind, percent}: Guard Tambour (4) absorbs physical damage only,
+	// Mana Tambour (8) magical only; 12 and the basic/skill-only kinds both.
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 4, 23 ] ] ] ) ), [ "Physical damage 23% Absorption" ] );
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 8, 41 ] ] ] ) ), [ "Magical damage 41% Absorption" ] );
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 6, 10 ] ] ] ) ), [ "Physical damage 10% Absorption" ] );
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 15, 20 ] ] ] ) ), [
+		"Physical damage 20% Absorption",
+		"Magical damage 20% Absorption"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 3, 5 ] ] ] ) ), [
+		"Physical damage 5% Absorption",
+		"Magical damage 5% Absorption"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x44, [ 4, 0 ] ] ] ) ), [] );
 	// reqc glues its note onto the down-attack row with no separator, and
 	// only when that row prints.
 	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 130 ] ], [ 0x170, [ 1 ] ] ] ) ), [
@@ -812,6 +827,23 @@ test("native tooltip lines the port dropped render from their parameters (#2273)
 	] );
 	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 100 ] ], [ 0x170, [ 1 ] ] ] ) ), [] );
 	assert.deepEqual( direct( paramRow( [ [ 0x170, [ 1 ] ] ] ) ), [] );
+});
+test("Guard Tambour absorbs physical damage only and Mana Tambour magical only", () => {
+	// SKILL_EU_BARD_BATTLAA_GUARD_A_02 is odar 4 23, GUARD_B_07 odar 8 41.
+	for (
+		const [id, line] of [ [ 9747, "Physical damage 23% Absorption" ], [ 9763, "Magical damage 41% Absorption" ] ]
+	) {
+		const rows = skillTooltip(
+			{ id, catalog, learned: [ id ], progression: { level: 90, skillPoints: 0, masteries: [] } },
+			text,
+			String
+		);
+		const absorb = rows.filter( row =>
+			typeof row.value === "string" && row.value.endsWith( text( "PARAM_ABSORB" ) )
+		)
+			.map( row => row.value );
+		assert.deepEqual( absorb, [ line ], `skill ${id}` );
+	}
 });
 test("Ghost Walk shows its travel distance, the second tele argument, like the original", () => {
 	// Client 7FC6CE..7FC731 prints [edi+4] / 10 under the tele row; the first

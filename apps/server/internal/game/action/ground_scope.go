@@ -18,6 +18,9 @@ actor (register.go); this owner only settles what those routes miss.
 package action
 
 import (
+	"cmp"
+	"maps"
+	"slices"
 	"sort"
 	"sync"
 
@@ -36,11 +39,11 @@ import (
 ================
 placedDrop
 
-A drop with its message block, computed once per registry revision and
-shared by every viewer of its population. item points into the slice
-the drop was placed from (the division's cached copy), so a bucket row
-is a pointer and a block, not a copy of the item (#2031). Readers never
-mutate either.
+A drop with its message block, computed when the drop enters the
+division's cache and shared by every viewer of its population. item
+points into the slice the drop was placed from (the registry's copy or
+its delta), so a bucket row is a pointer and a block, not a copy of the
+item (#2031). Readers never mutate either.
 ================
 */
 type placedDrop struct {
@@ -74,72 +77,266 @@ func placeDrops(items []grounditem.Item) []placedDrop {
 
 /*
 ================
-groundDivisionDrops, groundDropCache
+groundDivisionDrops
 
-One division's drops as of one registry revision: the deep copy and, per
-population, its placement. The registry deep-copies on every read, so the
-per-tick pass paid that copy per population per tick (#1943); the cache
-pays it once per revision. The stamp is the division's own counter
-(Registry.DivisionRevision), so an entry is rebuilt only when its own
-division's drops moved - under the one global counter, a changed tick
-anywhere rebuilt every division's copy (#2030).
-
-The stamp is read BEFORE the copy: a mutation racing the copy raises the
-revision past the stamp, so the next pass rebuilds. The stamp is never
-newer than the content, so stale content is never served as current.
+One division's drops as of one registry revision, by population and
+message block. It is immutable once published and shared by every
+viewer of the division; a new revision is a new value, so its identity
+pins the drop set (groundScopeMark relies on that).
 ================
 */
 type groundDivisionDrops struct {
 	revision uint64
-	items    []grounditem.Item
 	buckets  map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop
+}
+
+// dropPlace is where a cached drop lies: its population and block.
+type dropPlace struct {
+	population grounditem.Population
+	block      worldgeom.InterestBlock
+}
+
+/*
+================
+groundDivisionState, groundDropCache
+
+The cache's own record of one division: the published view and, per
+gid, the place its row lies in. The index is the cache's working
+state, read and written only under groundDropCache.mu; readers get
+the view.
+
+The registry deep-copies on every read, so the per-tick pass paid
+that copy per population per tick (#1943), then once per revision of
+its own division (#2030). A revision is one drop landing or one
+pickup, and the copy was still of every drop: 6% of the live shard's
+allocation (#3164). The cache now asks the registry what changed
+since its revision (grounditem division_delta.go) and derives the
+next view from the last: the touched blocks' rows are copied, every
+other block's rows and every unchanged item are shared with the view
+before. When the registry cannot say - the first read, a reader
+further behind than its log, a Restore - the view is built whole,
+as before.
+
+Each read takes the revision and the content it belongs to under one
+registry lock, so a view is never stamped newer than its content.
+================
+*/
+type groundDivisionState struct {
+	view  *groundDivisionDrops
+	index map[uint32]dropPlace
 }
 
 type groundDropCache struct {
 	mu        sync.Mutex
-	divisions map[string]*groundDivisionDrops
+	divisions map[string]*groundDivisionState
 }
 
 /*
 ================
 groundDivisionLocked
 
-The division's cached drops, rebuilt under the cache lock when the
-registry revision moved. The caller holds groundDrops.mu.
+The division's current view: the cached one while the registry's
+revision stands, the next one derived from it when the registry can
+name what changed, a whole rebuild otherwise. A division with no
+drops retains no state, so a closed instance division leaves the
+cache with its last drop; its empty view is cheap to rebuild on
+demand. The caller holds groundDrops.mu.
 ================
 */
-func (rt *Runtime) groundDivisionLocked(division string, revision uint64) *groundDivisionDrops {
-	entry := rt.groundDrops.divisions[division]
-	if entry == nil || entry.revision != revision {
-		entry = &groundDivisionDrops{revision: revision, items: rt.Ground.All(division)}
-		if len(entry.items) == 0 {
-			// A division with no drops retains no entry, so a closed
-			// instance division leaves the cache with its last drop.
-			// The empty copy is cheap to rebuild on demand.
-			delete(rt.groundDrops.divisions, division)
-			return entry
+func (rt *Runtime) groundDivisionLocked(division string) *groundDivisionDrops {
+	state := rt.groundDrops.divisions[division]
+	if state != nil {
+		if delta, ok := rt.Ground.DivisionChangesSince(division, state.view.revision); ok {
+			if delta.Revision == state.view.revision {
+				return state.view
+			}
+			state.apply(delta)
+			if len(state.index) == 0 {
+				delete(rt.groundDrops.divisions, division)
+			}
+			return state.view
 		}
-		if rt.groundDrops.divisions == nil {
-			rt.groundDrops.divisions = make(map[string]*groundDivisionDrops)
-		}
-		rt.groundDrops.divisions[division] = entry
 	}
-	return entry
+	items, revision := rt.Ground.DivisionSnapshot(division)
+	state = newGroundDivisionState(items, revision)
+	if len(items) == 0 {
+		delete(rt.groundDrops.divisions, division)
+		return state.view
+	}
+	if rt.groundDrops.divisions == nil {
+		rt.groundDrops.divisions = make(map[string]*groundDivisionState)
+	}
+	rt.groundDrops.divisions[division] = state
+	return state.view
+}
+
+/*
+================
+newGroundDivisionState
+
+A division's state built whole from the registry's copy: every
+population bucketed, every gid indexed.
+================
+*/
+func newGroundDivisionState(items []grounditem.Item, revision uint64) *groundDivisionState {
+	state := &groundDivisionState{
+		view:  &groundDivisionDrops{revision: revision},
+		index: make(map[uint32]dropPlace, len(items)),
+	}
+	populations := make(map[grounditem.Population]struct{})
+	for i := range items {
+		item := &items[i]
+		state.index[item.Gid] = dropPlace{population: item.Population, block: dropBlock(item)}
+		populations[item.Population] = struct{}{}
+	}
+	if len(populations) == 0 {
+		return state
+	}
+	state.view.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop, len(populations))
+	for population := range populations {
+		state.view.buckets[population] = bucketDrops(items, func(item *grounditem.Item) bool {
+			return item.Population == population
+		})
+	}
+	return state
+}
+
+/*
+================
+groundDivisionState.apply
+
+Derive the next view from the current one and the registry's delta.
+The outer maps and the rows of each touched block are copied once
+(copy on write); everything else is shared with the view before,
+which stays exactly as its readers hold it. Rows keep gid order
+within a block, as a whole build lays them.
+================
+*/
+func (state *groundDivisionState) apply(delta grounditem.DivisionDelta) {
+	build := groundDeltaBuild{
+		buckets: maps.Clone(state.view.buckets),
+		blocks:  make(map[grounditem.Population]bool),
+		rows:    make(map[dropPlace]bool),
+	}
+	if build.buckets == nil {
+		build.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop)
+	}
+	for _, gid := range delta.Removed {
+		if place, held := state.index[gid]; held {
+			build.remove(place, gid)
+			delete(state.index, gid)
+		}
+	}
+	for i := range delta.Changed {
+		item := &delta.Changed[i]
+		if place, held := state.index[item.Gid]; held {
+			build.remove(place, item.Gid)
+		}
+		place := dropPlace{population: item.Population, block: dropBlock(item)}
+		build.insert(place, item)
+		state.index[item.Gid] = place
+	}
+	state.view = &groundDivisionDrops{revision: delta.Revision, buckets: build.buckets}
+}
+
+/*
+================
+groundDeltaBuild
+
+The next view's buckets while a delta is applied. blocks and rows
+say which block maps and which row slices this build already owns;
+anything else still belongs to the view before and is copied before
+its first write.
+================
+*/
+type groundDeltaBuild struct {
+	buckets map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop
+	blocks  map[grounditem.Population]bool
+	rows    map[dropPlace]bool
+}
+
+/*
+================
+groundDeltaBuild.own
+
+The place's rows, owned by this build: the population's block map and
+the block's rows are copied on their first write.
+================
+*/
+func (b *groundDeltaBuild) own(place dropPlace) []placedDrop {
+	blocks := b.buckets[place.population]
+	if blocks == nil || !b.blocks[place.population] {
+		blocks = maps.Clone(blocks)
+		if blocks == nil {
+			blocks = make(map[worldgeom.InterestBlock][]placedDrop)
+		}
+		b.buckets[place.population] = blocks
+		b.blocks[place.population] = true
+	}
+	rows := blocks[place.block]
+	if !b.rows[place] {
+		rows = slices.Clone(rows)
+		b.rows[place] = true
+	}
+	return rows
+}
+
+/*
+================
+groundDeltaBuild.put
+
+Store the place's rows; a block left empty leaves its map, and a
+population left empty leaves the view.
+================
+*/
+func (b *groundDeltaBuild) put(place dropPlace, rows []placedDrop) {
+	blocks := b.buckets[place.population]
+	if len(rows) != 0 {
+		blocks[place.block] = rows
+		return
+	}
+	delete(blocks, place.block)
+	if len(blocks) == 0 {
+		delete(b.buckets, place.population)
+	}
+}
+
+/*
+================
+groundDeltaBuild.remove, insert
+================
+*/
+func (b *groundDeltaBuild) remove(place dropPlace, gid uint32) {
+	rows := b.own(place)
+	at, found := slices.BinarySearchFunc(rows, gid, func(row placedDrop, gid uint32) int {
+		return cmp.Compare(row.item.Gid, gid)
+	})
+	if found {
+		rows = slices.Delete(rows, at, at+1)
+	}
+	b.put(place, rows)
+}
+
+func (b *groundDeltaBuild) insert(place dropPlace, item *grounditem.Item) {
+	rows := b.own(place)
+	at, _ := slices.BinarySearchFunc(rows, item.Gid, func(row placedDrop, gid uint32) int {
+		return cmp.Compare(row.item.Gid, gid)
+	})
+	b.put(place, slices.Insert(rows, at, placedDrop{item: item, block: place.block}))
 }
 
 /*
 ================
 groundDivisionSnapshot
 
-The division's cached drops. The returned entry is shared; callers read
-it and never mutate it.
+The division's current view. It is shared; callers read it and never
+mutate it.
 ================
 */
 func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops {
-	revision := rt.Ground.DivisionRevision(division)
 	rt.groundDrops.mu.Lock()
 	defer rt.groundDrops.mu.Unlock()
-	return rt.groundDivisionLocked(division, revision)
+	return rt.groundDivisionLocked(division)
 }
 
 /*
@@ -185,25 +382,14 @@ func bucketDrops(items []grounditem.Item, keep func(*grounditem.Item) bool) map[
 ================
 groundDropBuckets
 
-The population's drops by message block, from the division's cached
-copy: bucketed once per revision and shared by every viewer of the
-population.
+The population's drops by message block, from the division's current
+view: shared by every viewer of the population, read-only.
 ================
 */
 func (rt *Runtime) groundDropBuckets(division string, population grounditem.Population) map[worldgeom.InterestBlock][]placedDrop {
-	revision := rt.Ground.DivisionRevision(division)
 	rt.groundDrops.mu.Lock()
 	defer rt.groundDrops.mu.Unlock()
-	entry := rt.groundDivisionLocked(division, revision)
-	if buckets, ok := entry.buckets[population]; ok {
-		return buckets
-	}
-	buckets := bucketDrops(entry.items, func(item *grounditem.Item) bool { return item.Population == population })
-	if entry.buckets == nil {
-		entry.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop)
-	}
-	entry.buckets[population] = buckets
-	return buckets
+	return rt.groundDivisionLocked(division).buckets[population]
 }
 
 /*
@@ -376,31 +562,37 @@ AdvanceGroundScope
 The per-tick pass: every live scene gains the drops that came into its range
 and loses those that left it. scene resolves a tick session id to its
 transport session and scene revision. Each division's sessions are settled
-under that division's publication gate.
+under that division's publication gate, divisions in name order.
+
+The sessions are walked where they lie. Grouping them used to copy
+every session view into a per-division slice each tick - 82 KB a tick
+at 100 players, most of what this pass allocated (#3164). A shard has
+a handful of divisions, so one walk of the tick's sessions per
+division costs less than the copy did.
 ================
 */
 func (rt *Runtime) AdvanceGroundScope(nowMs int64, sessions []simulation.SessionView,
 	scene func(sessionID string) (*transport.Session, uint64, bool),
 ) {
-	byDivision := make(map[string][]simulation.SessionView)
-	for _, session := range sessions {
-		if session.PublishedObjects != nil {
-			byDivision[session.DivisionID] = append(byDivision[session.DivisionID], session)
+	var divisions []string
+	for i := range sessions {
+		if sessions[i].PublishedObjects != nil && !slices.Contains(divisions, sessions[i].DivisionID) {
+			divisions = append(divisions, sessions[i].DivisionID)
 		}
-	}
-	divisions := make([]string, 0, len(byDivision))
-	for division := range byDivision {
-		divisions = append(divisions, division)
 	}
 	sort.Strings(divisions)
 	for _, division := range divisions {
-		rt.advanceDivisionGroundScope(division, byDivision[division], nowMs, scene)
+		rt.advanceDivisionGroundScope(division, sessions, nowMs, scene)
 	}
+	rt.groundScopePrune(sessions)
 }
 
 /*
 ================
 advanceDivisionGroundScope
+
+One division's sessions out of the tick's: those of another division,
+and those with no published set yet, are passed over.
 ================
 */
 func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simulation.SessionView, nowMs int64,
@@ -409,20 +601,140 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
 	shown := make(map[uint32]struct{})
-	for _, session := range sessions {
-		population, ok := sessionGroundPopulation(session)
+	for i := range sessions {
+		session := &sessions[i]
+		if session.DivisionID != division || session.PublishedObjects == nil {
+			continue
+		}
+		population, ok := sessionGroundPopulation(*session)
 		if !ok {
 			continue
 		}
-		spawn, despawn := groundScope(rt.groundDropBuckets(division, population),
-			viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects, shown)
-		if len(spawn) == 0 && len(despawn) == 0 {
+		drops := rt.groundDivisionSnapshot(division)
+		buckets := rt.groundDropBuckets(division, population)
+		block := viewerBlock(session.World.LiveSpawnAt(nowMs))
+		if rt.groundScopeSettled(*session, division, population, drops, block) {
 			continue
 		}
+		spawn, despawn := groundScope(buckets, block, session.PublishedObjects, shown)
+		if len(spawn) == 0 && len(despawn) == 0 {
+			rt.groundScopeSettle(*session, division, population, drops, block)
+			continue
+		}
+		// Changes are outstanding until the scene admits them into
+		// the session's published set; the next pass recomputes
+		// rather than trusting a mark over unadmitted scope.
+		rt.groundScopeForget(session.SessionID)
 		s, revision, live := scene(session.SessionID)
 		if !live {
 			continue
 		}
 		rt.publishGroundScope(s, revision, spawn, despawn)
+	}
+}
+
+/*
+================
+groundScopeMark
+
+One viewer's settled ground scope (#3101): the division's cached
+drops entry it was computed from - the entry is rebuilt on every
+registry revision, so its identity pins the drop set - the viewer's
+division, identity, population and block, and the published set the
+pass settled on. groundScope is a pure function of the entry's
+buckets for the population, the block and the published set, so
+while they all stand its spawn/despawn diff is empty and the
+nine-block walk is skipped. The entry is read before the buckets:
+a drop write racing the two reads leaves the mark naming the older
+entry, and the next pass recomputes.
+================
+*/
+type groundScopeMark struct {
+	division    string
+	characterID int64
+	population  grounditem.Population
+	drops       *groundDivisionDrops
+	block       worldgeom.InterestBlock
+	published   []uint32
+}
+
+/*
+================
+groundScopeSettled
+
+Whether the viewer's last settled pass ran on exactly these inputs.
+================
+*/
+func (rt *Runtime) groundScopeSettled(session simulation.SessionView, division string, population grounditem.Population,
+	drops *groundDivisionDrops, block worldgeom.InterestBlock,
+) bool {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	mark, ok := rt.groundScopeMarks[session.SessionID]
+	return ok && mark.division == division && mark.characterID == session.CharacterID &&
+		mark.population == population && mark.drops == drops && mark.block == block &&
+		slices.Equal(mark.published, session.PublishedObjects)
+}
+
+/*
+================
+groundScopeSettle
+
+Record a pass whose diff was empty, keeping a copy of the published
+set it settled on.
+================
+*/
+func (rt *Runtime) groundScopeSettle(session simulation.SessionView, division string, population grounditem.Population,
+	drops *groundDivisionDrops, block worldgeom.InterestBlock,
+) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	if rt.groundScopeMarks == nil {
+		rt.groundScopeMarks = map[string]groundScopeMark{}
+	}
+	mark := rt.groundScopeMarks[session.SessionID]
+	mark.division, mark.characterID, mark.population = division, session.CharacterID, population
+	mark.drops, mark.block = drops, block
+	mark.published = append(mark.published[:0], session.PublishedObjects...)
+	rt.groundScopeMarks[session.SessionID] = mark
+}
+
+/*
+================
+groundScopeForget
+================
+*/
+func (rt *Runtime) groundScopeForget(sessionID string) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	delete(rt.groundScopeMarks, sessionID)
+}
+
+/*
+================
+groundScopePrune
+
+Drop the marks of sessions this pass did not see. It runs only when
+the table holds more marks than the tick has sessions: a mark is keyed
+by a session id that never returns, so a stale one costs memory and
+nothing else, and the table still never outgrows the session count.
+Every tick it used to build a set of all session ids to find none
+gone (#3164).
+================
+*/
+func (rt *Runtime) groundScopePrune(sessions []simulation.SessionView) {
+	rt.groundScopeMu.Lock()
+	defer rt.groundScopeMu.Unlock()
+	if len(rt.groundScopeMarks) <= len(sessions) {
+		return
+	}
+	seen := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		seen[session.SessionID] = true
+	}
+	for sessionID := range rt.groundScopeMarks {
+		if !seen[sessionID] {
+			delete(rt.groundScopeMarks, sessionID)
+		}
 	}
 }

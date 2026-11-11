@@ -55,6 +55,13 @@ MAGIC_GROUP_TABLE = "refmagicoptgroup.txt"
 MAGIC_OPTION_TABLE = "magicoption.txt"
 SET_GROUP_ID = 1
 SET_GROUP_CODE = 2
+SET_GROUP_NAME = 4
+# The interface symbols naming the two set options (389 reinforce, 390 resist all).
+# The set tooltip's option labels, and the degree 11 first seal tier ("Seal of Nova").
+SET_UI_SYMBOLS = ("PARAM_REINFORCE_ITEM_SET", "PARAM_RESIST_ALL_SET", "PARAM_RARE_FIRST2")
+# Sealed set weapons and shields: the family's seal particle follows the set (A moon, B sun).
+RARE_SET_A, RARE_SET_B = "_SET_A_RARE", "_SET_B_RARE"
+RARE_FAMILY_MOON = "_B_RARE"
 SET_LINK_FIRST = 6
 SET_LINK_LAST = 17
 MAGIC_GROUP_ID = 1
@@ -282,14 +289,94 @@ def set_catalogue(set_group_rows, magic_group_rows, option_rows, equipment):
 
 
 # ================
+# glow_rows
+#
+# Port-only inference. resinfo\\itemoption.txt names the reinforcement glow group
+# of each item, and the v1.150 file knows no imported piece of a set, so a
+# +8 weapon of a degree 11 set drew no glow at all (the v1.150 tier table
+# serves groups 1-4 to the items that are listed). The later client's file
+# lists them; their rows join the v1.150 file unchanged, for the imported
+# codenames only and only for a group the v1.150 tier table has. A code the
+# v1.150 file already lists keeps its own group (the two clients number their
+# groups differently, so native rows are never replaced). Returns the file
+# text and the codenames added.
+# ================
+def glow_rows(native_text, later_text, codenames, native_groups):
+	def parse(text):
+		rows = {}
+		for line in text.splitlines():
+			cells = line.split()
+			if len(cells) == 2 and not cells[0].startswith("//"):
+				rows[cells[0]] = int(cells[1])
+		return rows
+	native, later = parse(native_text), parse(later_text)
+	added = sorted(code for code in codenames if code in later and code not in native and later[code] in native_groups)
+	if not added:
+		return native_text, []
+	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
+	return native_text + tail + "".join(f"{code}\t{later[code]}\r\n" for code in added), added
+
+
+# ================
+# rare_rows
+#
+# Port-only inference. resinfo\\itemrare.txt names the seal particle of each
+# sealed weapon and shield (star, moon, sun by its step1 to step3 effect). The
+# v1.150 file knows no sealed set piece. Every sealed set piece takes the later
+# client's row (its scale and bone are tuned per family). The later file gives
+# set A the same sun effect as set B, but set A is the moon tier, so a set A
+# row takes its family's _B_RARE effect (the moon effect) in place of the
+# later one (the premise, that set A is the moon tier, is the owner's observation
+# of the official client; the later data alone shows both sets as the sun); with no family row the later row stands, and with no later row the
+# family row is used under the piece's own code. A code the v1.150 file lists
+# keeps its row. Returns the file text and the codenames added.
+# ================
+def rare_rows(native_text, later_text, codenames):
+	def parse(text):
+		rows = {}
+		for line in text.splitlines():
+			cells = line.split()
+			if len(cells) == 5 and not cells[0].startswith("//"):
+				rows[cells[0]] = cells
+		return rows
+	native, later = parse(native_text), parse(later_text)
+	added = []
+	for code in sorted(codenames):
+		if code in native:
+			continue
+		if code.endswith(RARE_SET_B):
+			source = later.get(code)
+		elif code.endswith(RARE_SET_A):
+			moon = code[:-len(RARE_SET_A)] + RARE_FAMILY_MOON
+			family = native.get(moon) or later.get(moon)
+			source = later.get(code)
+			if source and family:
+				source = [source[0], family[1]] + source[2:]
+			else:
+				source = source or family
+		else:
+			continue
+		if source:
+			added.append([code] + source[1:])
+	if not added:
+		return native_text, []
+	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
+	return native_text + tail + "".join("\t".join(row) + "\r\n" for row in added), [row[0] for row in added]
+
+
+# ================
 # merge_texts
 #
 # Later equip/skill translations use the same language order as the city's
 # object table. Native symbols win; every imported item must have a name.
 # ================
-def merge_texts(native_raw, later_rows, equipment):
+def merge_texts(native_raw, later_rows, equipment, extra=()):
 	known = {row[1] for row in tables.table_rows(native_raw) if len(row) > 1}
 	needed = {row[column] for row in equipment for column in (NAME_KEY, DESCRIPTION_KEY) if row[column] != UNUSED}
+	# Symbols the item rows do not name but the client draws (the set names). A symbol the later
+	# client has no text for is left out, never an error.
+	needed |= {symbol for symbol in extra if symbol and symbol != UNUSED}
+	extra_only = set(extra) - {row[column] for row in equipment for column in (NAME_KEY, DESCRIPTION_KEY)}
 	translations = {}
 	for row in later_rows:
 		if len(row) > 1 and row[1] in needed:
@@ -299,13 +386,32 @@ def merge_texts(native_raw, later_rows, equipment):
 			if row[1] in translations and translations[row[1]] != converted:
 				raise ValueError(f"conflicting translation: {row[1]}")
 			translations[row[1]] = converted
-	missing = needed - known - translations.keys()
+	missing = needed - known - translations.keys() - extra_only
 	missing_names = missing & {row[NAME_KEY] for row in equipment}
 	if missing_names:
 		raise ValueError(f"missing equipment names: {sorted(missing_names)}")
 	# Ordinary equipment description symbols are often absent in both clients.
 	# Retain that authored absence; never synthesize tooltip prose.
-	return text_tables.append_rows(native_raw, [translations[key] for key in sorted(needed - known - missing)]), sorted(missing)
+	return text_tables.append_rows(native_raw, [translations[key] for key in sorted(translations.keys() - known)]), sorted(missing)
+
+
+# ================
+# merge_ui_texts
+#
+# The interface strings the set tooltip draws ("Set enforcement", "Increase all resistance"):
+# the later client's rows for the given symbols join the v1.150 table unchanged in meaning,
+# in its row layout. A symbol the table already has keeps its row; one the later client lacks
+# is skipped. Returns the table and the symbols added.
+# ================
+def merge_ui_texts(native_raw, later_rows, symbols):
+	known = {row[1] for row in tables.table_rows(native_raw) if len(row) > 1}
+	found = {}
+	for row in later_rows:
+		if len(row) > 9 and row[1] in symbols and row[1] not in known:
+			found[row[1]] = native_text_row(row)
+	if not found:
+		return native_raw, []
+	return text_tables.append_rows(native_raw, [found[key] for key in sorted(found)]), sorted(found)
 
 
 # ================

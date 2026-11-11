@@ -8,6 +8,40 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
+/*
+================
+TestModifierWritesAnswersWithoutAnyOwner
+
+A registry holding no owner answers nil, and once one owner is
+installed the keyed path answers exactly as before: the installed owner
+reads its writes, every other owner reads none (#2033).
+================
+*/
+func TestModifierWritesAnswersWithoutAnyOwner(t *testing.T) {
+	r := NewRegistry()
+	if got := r.ModifierWrites("d", "c"); got != nil {
+		t.Fatal("empty registry answered", got)
+	}
+	m, err := NewModifiers([]paramkeeper.Write{{Parameter: 5, Value: 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := Effect{DivisionID: "d", CharacterName: "c", SkillID: 1, SkillGroup: 1, InstanceToken: 7, Modifiers: m}
+	if !r.Apply(e) {
+		t.Fatal("install")
+	}
+	if got := r.ModifierWrites("d", "other"); len(got) != 0 {
+		t.Fatal("stranger answered", got)
+	}
+	if got := r.ModifierWrites("d", "c"); len(got) != 1 || got[0].Value != 20 {
+		t.Fatal("installed owner answered", got)
+	}
+	r.Forget("d", "c")
+	if got := r.ModifierWrites("d", "c"); got != nil {
+		t.Fatal("emptied registry answered", got)
+	}
+}
+
 func TestModifierOwnershipThroughRetirement(t *testing.T) {
 	r := NewRegistry()
 	writes := []paramkeeper.Write{{Parameter: 5, Value: 20}, {Parameter: 6, Value: 30}}

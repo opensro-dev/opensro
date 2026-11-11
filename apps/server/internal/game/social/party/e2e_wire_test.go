@@ -188,9 +188,7 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.AdmissionTokenHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 
 	presence := presence.NewDirectory(srv.Hub)

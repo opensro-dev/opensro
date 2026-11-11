@@ -53,6 +53,10 @@ type metricsSnapshot struct {
 		HeapLiveBytes  uint64 `json:"heap_live_bytes"`
 	} `json:"runtime"`
 	TickZones map[string]zoneTotal `json:"tick_zones"`
+	// MonsterLeg is the monster_leg block (#3119): the leg census,
+	// cumulative since boot like the tick counters. Absent in
+	// captures from before the block existed.
+	MonsterLeg map[string]uint64 `json:"monster_leg"`
 }
 
 /*
@@ -72,6 +76,10 @@ type window struct {
 	SessionsTo     int
 	ZoneMsPerTick  map[string]float64
 	ZoneCounts     map[string]uint64
+	// LegDeltas is the window's monster_leg counter deltas (#3119):
+	// count/actors/steps/rechecked/cadence_arms/suspended, rest.<guard>,
+	// mode.<bucket>. Empty for pre-#3119 captures.
+	LegDeltas map[string]uint64
 }
 
 /*
@@ -122,8 +130,15 @@ func snapshotPaths(dir string) ([]string, error) {
 ================
 loadSnapshots
 
-Every decodable metrics snapshot in the directory, sorted by the
-cumulative tick counter so capture order survives any file naming.
+Every decodable metrics snapshot in the directory, in capture order:
+the file order snapshotPaths returns (metrics-1.json .. metrics-5.json,
+or a hand capture's m0.json / m1.json). The order is load-bearing -
+pickWindows pairs the profile and the trace by their bracketing
+snapshots - so snapshots are never re-sorted by tick counter and
+never deduplicated: two back-to-back pulls inside one tick share a
+counter (metrics-2 and metrics-3 of a capture sit either side of
+nothing), and dropping one for the tie would shift every pair after
+it onto the whole-capture window (#3103).
 ================
 */
 func loadSnapshots(dir string) ([]metricsSnapshot, error) {
@@ -139,19 +154,10 @@ func loadSnapshots(dir string) ([]metricsSnapshot, error) {
 		}
 		snaps = append(snaps, snap)
 	}
-	sort.Slice(snaps, func(i, j int) bool { return snaps[i].TickCount < snaps[j].TickCount })
-	// Two pulls inside one tick share a counter; keep the later file.
-	deduped := snaps[:0]
-	for i, snap := range snaps {
-		if i+1 < len(snaps) && snaps[i+1].TickCount == snap.TickCount {
-			continue
-		}
-		deduped = append(deduped, snap)
+	if len(snaps) < 2 {
+		return nil, fmt.Errorf("%s: need at least two metrics snapshots, found %d", dir, len(snaps))
 	}
-	if len(deduped) < 2 {
-		return nil, fmt.Errorf("%s: need at least two metrics snapshots with distinct tick_count, found %d", dir, len(deduped))
-	}
-	return deduped, nil
+	return snaps, nil
 }
 
 /*
@@ -190,6 +196,15 @@ func diffWindow(from, to metricsSnapshot) (window, error) {
 		w.ZoneMsPerTick[key] = deltaMs / float64(w.Ticks)
 		w.ZoneCounts[key] = to.TickZones[key].Count - from.TickZones[key].Count
 	}
+	w.LegDeltas = make(map[string]uint64)
+	for key, toValue := range to.MonsterLeg {
+		// Cumulative counters only grow within one boot; a key that
+		// somehow went backwards contributes nothing rather than a
+		// wrapped delta.
+		if delta := toValue - from.MonsterLeg[key]; toValue >= from.MonsterLeg[key] && delta != 0 {
+			w.LegDeltas[key] = delta
+		}
+	}
 	return w, nil
 }
 
@@ -197,10 +212,13 @@ func diffWindow(from, to metricsSnapshot) (window, error) {
 ================
 pickWindows
 
-Which snapshot pairs bracket the CPU profile and the trace. A capture
-directory holds five snapshots - profile between the first pair, trace
-between the second - while a hand capture holds one pair for
-everything; the zone table always spans the full first-to-last window.
+Which snapshot pairs bracket the CPU profile and the trace, in
+capture (file) order: a capture directory holds five snapshots - the
+profile between the first pair (metrics-1, metrics-2), the trace
+between the second (metrics-3, metrics-4) - so each source scales by
+its own bracketing pair, never by the whole capture (#3103). A hand
+capture holds one pair for everything; the zone table always spans
+the full first-to-last window.
 ================
 */
 func pickWindows(snaps []metricsSnapshot) (overall, cpuWin, traceWin window, err error) {

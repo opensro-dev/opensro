@@ -3,12 +3,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
@@ -50,6 +52,19 @@ func main() {
 		store.DirForShardFromEnv(ownedShard.ID),
 		".gameworld-process.lock",
 	)
+	// Canary standby handover (opensro-ops#281, port-only, not native):
+	// armed, construction probes the guard itself, because this process
+	// may be the live one's standby and nothing may serialize ahead of
+	// that probe. Unarmed, the guard is taken here first, exactly as
+	// the scanner comment above requires.
+	if standbyHandoverEnabled() {
+		ts, err := gameWorldTransportServer(ownedShard)
+		if err != nil {
+			log.Fatalf("transport: %v", err)
+		}
+		runGameWorld(signalContext, ts, ownedShard, standbyBoot{armed: true, guardPath: guardPath})
+		return
+	}
 	guard, err := processguard.Acquire(signalContext, guardPath)
 	if err != nil {
 		log.Fatalf("startup: shard %q process guard: %v", ownedShard.ID, err)
@@ -65,18 +80,75 @@ func main() {
 	if err != nil {
 		log.Fatalf("transport: %v", err)
 	}
-	application, err := newGameWorldApplication(
-		signalContext,
-		ts,
-		ownedShard,
-	)
+	runGameWorld(signalContext, ts, ownedShard, standbyBoot{})
+}
+
+/*
+================
+runGameWorld
+
+Construct the application and run it to shutdown. An interrupt during
+boot is an ordinary stop, not a failure (#3186): the cancelled open
+released its claim, and the process exits 0 without waiting out the
+kill timeout; the same holds for a standby stopped while it waited.
+================
+*/
+func runGameWorld(signalContext context.Context, ts *transport.Server, ownedShard shard.Definition, boot standbyBoot) {
+	application, err := newGameWorldApplication(signalContext, ts, ownedShard, boot)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			log.Info("startup: interrupted during boot; exiting")
+			return
+		}
 		log.Fatalf("startup: %v", err)
 	}
 	if err := application.Run(signalContext); err != nil {
 		log.Errorf("shutdown: %v", err)
 		os.Exit(1)
 	}
+}
+
+// The canary standby handover's environment (opensro-ops#281).
+const (
+	// EnvStandbyHandover arms the standby mode ("on", "1", "true").
+	// Unset is the native boot: the guard first, the listeners as today.
+	EnvStandbyHandover = "SRO_STANDBY_HANDOVER"
+	// EnvStandbyHealthAddr is the standby-health listener's bind
+	// address, assigned by the deployment (its health port). Unset
+	// binds a loopback dynamic port.
+	EnvStandbyHealthAddr = "SRO_GAMEWORLD_HEALTH_ADDR"
+)
+
+/*
+================
+standbyHandoverEnabled
+
+Port-only, not native (opensro-ops#281): whether this boot may stand
+by for the live process instead of only ever replacing it. The job
+names it; the code's own default is off.
+================
+*/
+func standbyHandoverEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvStandbyHandover))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+standbyHealthAddr
+
+Where the standby-health listener binds: the deployment's assigned
+health port, or a loopback dynamic port where none was assigned.
+================
+*/
+func standbyHealthAddr() string {
+	if addr := strings.TrimSpace(os.Getenv(EnvStandbyHealthAddr)); addr != "" {
+		return addr
+	}
+	return "127.0.0.1:0"
 }
 
 /*

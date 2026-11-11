@@ -84,7 +84,7 @@ refusal bytes for this reply are not pinned for v1.150 (see the 0xB69E
 note in item/wire/coscommand.go).
 ================
 */
-func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterworld.Character, cosGID, targetGID uint32, nowMs int64) OpResult {
+func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterworld.Character, cosGID, targetGID uint32, nowMs int64, doors characterDoors) OpResult {
 	refuse := func(reason string) OpResult {
 		rt.petDiagnostic(division, character.Name, cosGID, "order refused: "+reason, log.Fields{"target": targetGID})
 		return OpResult{DiagnosticRefusal: "pet attack: " + reason}
@@ -131,7 +131,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	// The native command retires the owner's event-bit-2 effects after the
 	// admitted order, including a repeated order for the existing target.
 	defer func() {
-		rt.deps.Update(character, "pet-attack-order", func() bool {
+		doors.update(character, "pet-attack-order", func() bool {
 			rt.retireEffectsOnEvent(division, character, effectEventSkillCast, nowMs)
 			return true
 		})
@@ -180,7 +180,8 @@ type petCombatStep struct {
 	state    *petSession
 	snapshot *enterworld.Character
 	// ownerWorld is the owner world a judged tick already read without
-	// seeding (WorldStore.SnapshotExisting, #2139); the formation lane
+	// seeding, refilled in the session's retained slot
+	// (WorldStore.SnapshotExistingInto, #2139); the formation lane
 	// uses it instead of seeding from snapshot. Nil on the copy path,
 	// which seeds exactly as before.
 	ownerWorld *simulation.WorldState

@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { buildAssetPacks } from "../../build/assetPacks.mjs";
+import { buildAssetPacks, unretiredBaselineLosses } from "../../build/assetPacks.mjs";
 import { baselinePacksOf, MAX_PACK_SLACK, packSlotOf, planPackLayout } from "../../build/assetPackLayout.mjs";
 
 const TARGET = 100;
@@ -218,4 +218,24 @@ test("a real rebuild after an insert keeps every unchanged pack's bytes and URL"
 	assert.equal( second.keptPackCount, 2 );
 	assert.equal( second.freshPackCount, 1 );
 	assert.equal( second.builtPackCount, 1, "only the new asset's pack is built" );
+});
+
+test("a baseline path no owner retired is a loss, a retired one is not", () => {
+	const baseline = { assets: [ { path: "/assets/a" }, { path: "/assets/b" }, { path: "/assets/c.json" } ] };
+	const claimed = new Set( [ "/assets/b", "/assets/c.json" ] );
+	assert.deepEqual( unretiredBaselineLosses( baseline, [ "/assets/a" ], claimed ), [
+		"/assets/b",
+		"/assets/c.json"
+	] );
+	assert.deepEqual(
+		unretiredBaselineLosses( baseline, [ "/assets/a" ], new Set() ),
+		[],
+		"a path no owner claims was retired"
+	);
+	assert.deepEqual( unretiredBaselineLosses( undefined, [ "/assets/a" ], claimed ), [] );
+	assert.deepEqual(
+		unretiredBaselineLosses( baseline, [ "/assets/a", "/assets/b", "/assets/c.json.gz" ], claimed ),
+		[],
+		"an index carrying the packed sidecar still publishes the path"
+	);
 });

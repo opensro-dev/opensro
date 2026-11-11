@@ -74,6 +74,41 @@ func petCopyTrace(t *testing.T, full bool) string {
 
 /*
 ================
+TestCharacterSnapshotCompanionAdmittedReadsOnTheGuard
+
+The companion-admitted snapshot answers as it did through the
+callback door: an admitted record yields its companion copy, a
+refused one no copy at all, and no predicate yields the copy -
+now read on the stack guard, so the per-tick door pass boxes no
+closure (#2033).
+================
+*/
+func TestCharacterSnapshotCompanionAdmittedReadsOnTheGuard(t *testing.T) {
+	c := testCharacter()
+	pet := &enterworld.CharacterCOS{GID: 60001, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 13, Summon: pet})
+	rt, _ := newTestRuntime(c, testCosSource(testItems()))
+
+	if snapshot := rt.characterSnapshotCompanionAdmitted(testDivision, c, nil); snapshot == nil || snapshot.CompanionByGID(60001) == nil {
+		t.Fatal("an unpredicated read lost the companion copy")
+	}
+	admitLive := func(live *enterworld.Character) bool {
+		found := live.CompanionByGID(60001)
+		return found != nil && found.Summoned
+	}
+	if snapshot := rt.characterSnapshotCompanionAdmitted(testDivision, c, admitLive); snapshot == nil {
+		t.Fatal("an admitted record yielded no copy")
+	}
+	if snapshot := rt.characterSnapshotCompanionAdmitted(testDivision, c, func(*enterworld.Character) bool { return false }); snapshot != nil {
+		t.Fatal("a refused record yielded a copy")
+	}
+	if snapshot := rt.characterSnapshotCompanionAdmitted(testDivision, nil, nil); snapshot != nil {
+		t.Fatal("a missing owner yielded a copy")
+	}
+}
+
+/*
+================
 TestPetPassReadsNothingOutsideTheCompanionCopy
 ================
 */

@@ -218,7 +218,10 @@ export type WorldEvent =
 	| VisualFeedback
 	| { readonly kind: "travel"; readonly travel: WorldTravel; }
 	| { readonly kind: "ui-sound"; readonly handle: UiSoundHandle; readonly at: number; }
-	| { readonly kind: "gameplay"; readonly state: GameplayState; }
+	// With delta, state names only the fields that changed since the
+	// publication before it (foundation/gameplay/gameplay-snapshot.ts); every
+	// reader goes through mergeGameplaySnapshots, never the bare state.
+	| { readonly kind: "gameplay"; readonly state: GameplayState; readonly delta?: true; }
 	| { readonly kind: "synchronized"; readonly epoch: number; }
 	| { readonly kind: "reset"; readonly epoch: number; readonly resync?: boolean; }
 	| { readonly kind: "item-sound"; readonly cue: ItemSoundRequest; readonly at: number; }

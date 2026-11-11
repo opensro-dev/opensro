@@ -393,6 +393,13 @@ type Ticker struct {
 	// Commit is the authority's per-tick batch (tick_commit.go).
 	Commit TickCommit
 	clock  tickClock
+	// flight is the rolling tick flight recorder (tick_flight.go,
+	// #3226): always on, it dumps its window to the log when a tick
+	// runs over budget.
+	flight tickFlightRecorder
+	// tickPlayers is how many sessions the running tick serves,
+	// stamped by prepareTick for the flight recorder.
+	tickPlayers int
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.

@@ -8,6 +8,7 @@ wiring_authority.go - wiring authority
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -118,37 +119,44 @@ func characterItems(items []enterworld.VisualItem) []agentapi.CharacterItem {
 
 /*
 ================
-openAuthorityPlane
+authorityTextdata
+
+What opening the authority needs of the game data, loaded without the
+save: the textdata catalogues (every env-gated transform applied) and
+the quest definitions loader. The standby handover loads this before
+it holds the shard guard (opensro-ops#281); any other boot loads it on
+its way to the store, in the same order.
 ================
 */
-func openAuthorityPlane(
-	ts *transport.Server,
-	ownedShard shard.Definition,
-	accountIDs []string,
-	ready *readiness.Gate,
-	devPaths enterworld.DevPaths,
-	characterRoster *enterworld.Roster,
-	sessionVerifier *auth.AgentSessionVerifier,
-	enterWorldSecret []byte,
-) (authorityPlane, error) {
+type authorityTextdata struct {
+	catalogs   *enterworld.TextdataCatalogs
+	loadQuests questDefinitionLoader
+}
+
+/*
+================
+loadAuthorityTextdata
+================
+*/
+func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, error) {
 	textdataDir := devPaths.TextdataDir
 	textdata, err := enterworld.LoadTextdataCatalogs(textdataDir)
 	if err != nil {
-		return authorityPlane{}, err
+		return authorityTextdata{}, err
 	}
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
-		return authorityPlane{}, err
+		return authorityTextdata{}, err
 	}
 	textdata.Items.ApplyAttackPetExpansion()
 	// Port-only, not native: raise configured stack caps before any owner
 	// reads a reference row. Unset keeps every itemdata cap.
 	stackSizes, err := enterworld.StackSizesFromEnv()
 	if err != nil {
-		return authorityPlane{}, err
+		return authorityTextdata{}, err
 	}
 	raised, err := textdata.Items.ApplyStackSizes(stackSizes)
 	if err != nil {
-		return authorityPlane{}, err
+		return authorityTextdata{}, err
 	}
 	if len(stackSizes) > 0 {
 		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
@@ -158,7 +166,7 @@ func openAuthorityPlane(
 	if action.TradeTiersFromEnv() {
 		scaled, err := textdata.Items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor)
 		if err != nil {
-			return authorityPlane{}, err
+			return authorityTextdata{}, err
 		}
 		log.Infof("trade: %s priced %d trade goods x%d (port-only, not native)", action.EnvTradeTiers, scaled, enterworld.TradeGoodsPriceFactor)
 	}
@@ -166,7 +174,7 @@ func openAuthorityPlane(
 	if enterworld.MallTransportSpeedFromEnv() {
 		scaled, err := textdata.Items.ApplyMallTransportSpeed()
 		if err != nil {
-			return authorityPlane{}, err
+			return authorityTextdata{}, err
 		}
 		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
 	}
@@ -175,7 +183,7 @@ func openAuthorityPlane(
 	if enterworld.JobTransportSpeedFromEnv() {
 		scaled, err := textdata.Items.ApplyJobTransportSpeed()
 		if err != nil {
-			return authorityPlane{}, err
+			return authorityTextdata{}, err
 		}
 		log.Infof("cos: %s scaled %d job transport(s) (port-only, not native)", enterworld.EnvJobTransportSpeed, scaled)
 	}
@@ -183,17 +191,49 @@ func openAuthorityPlane(
 	// (1.3 times by default, game/tunables).
 	rideFactor, rideOn, err := enterworld.MallRideSpeedFromEnv()
 	if err != nil {
-		return authorityPlane{}, err
+		return authorityTextdata{}, err
 	}
 	if rideOn {
 		scaled, err := textdata.Items.ApplyMallRideSpeed(rideFactor)
 		if err != nil {
-			return authorityPlane{}, err
+			return authorityTextdata{}, err
 		}
 		log.Infof("cos: %s=%v scaled %d mall vehicle and pet row(s) (port-only, not native)",
 			enterworld.EnvMallRideSpeed, rideFactor, scaled)
 	}
+	questCatalog := quest.NewCatalog(textdataDir)
+	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
+		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
+	})
+	return authorityTextdata{catalogs: textdata, loadQuests: loadQuests}, nil
+}
+
+/*
+================
+openAuthorityPlane
+================
+*/
+func openAuthorityPlane(
+	startupContext context.Context,
+	ts *transport.Server,
+	ownedShard shard.Definition,
+	accountIDs []string,
+	ready *readiness.Gate,
+	devPaths enterworld.DevPaths,
+	characterRoster *enterworld.Roster,
+	sessionVerifier *auth.AgentSessionVerifier,
+	enterWorldSecret []byte,
+	loaded authorityTextdata,
+) (authorityPlane, error) {
+	if err := startupContext.Err(); err != nil {
+		return authorityPlane{}, err
+	}
+	textdata := loaded.catalogs
 	options := store.OptionsFromEnv()
+	// The startup context reaches the store's open (#3186): a stop
+	// during the long load leaves within a second, and a cancelled
+	// open never quarantines or recovers on its way out.
+	options.Context = startupContext
 	// Port-only, not native (owner, 2026-11-07, #2769): new characters are
 	// created at the 2.5-page inventory base; the world entry raises the
 	// rest (wiring_gameplay.go publishes the same reading to the entry).
@@ -205,18 +245,15 @@ func openAuthorityPlane(
 		devPaths.EquipItemsEnabled,
 	)
 
-	questCatalog := quest.NewCatalog(textdataDir)
-	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
-		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
-	})
 	options.DefaultQuests = func(raceKey string) ([]enterworld.ActiveQuestRecord, error) {
-		definitions, err := loadQuests()
+		definitions, err := loaded.loadQuests()
 		if err != nil {
 			return nil, err
 		}
 		return quest.DefaultQuestSeeder(definitions)(raceKey)
 	}
 
+	ts.SetBootPhase(transport.BootPhaseOpeningStore)
 	authorityStore, err := store.Open(store.DirForShardFromEnv(ownedShard.ID), options)
 	if err != nil {
 		return authorityPlane{}, fmt.Errorf("store: %w", err)
@@ -320,7 +357,7 @@ func openAuthorityPlane(
 	return authorityPlane{
 		store:      authorityStore,
 		agentAPI:   api,
-		loadQuests: loadQuests,
+		loadQuests: loaded.loadQuests,
 		textdata:   textdata,
 		crests:     crests,
 	}, nil
@@ -388,6 +425,7 @@ func newBootstrapDependencies(
 	}
 	deps.ReadLock = func(string) { authorityStore.ReadLock() }
 	deps.ReadUnlock = func(string) { authorityStore.ReadUnlock() }
+	deps.CharacterWriteEpoch = authorityStore.CharacterWriteEpoch
 	deps.CanEnterWorldRegion = func(character *enterworld.Character, regionID uint16) bool {
 		return paths.AuthoredAreas.CanEnterRegion(regionID, character != nil && character.GMPrivilege)
 	}

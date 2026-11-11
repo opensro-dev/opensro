@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -140,12 +139,13 @@ type basicAttackIntent struct {
 	ActionReach    simulation.ActionReach
 	CooldownMs     int64
 	NextActionMs   int64
-	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
-	// latency budget (record+28, reset when the reference server releases the record) the
-	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
-	// grows only when a step outlasts the remaining budget.
-	ChainLatencyConsumedMs int64
-	ChainLatencyUsedMs     int64
+	// WaitUntilMs is the first tick at which the full evaluation may
+	// act again, stamped by the evaluation itself when it settles
+	// into the swing wait (#3101). The tick skips the intent while
+	// nowMs < WaitUntilMs instead of re-resolving its whole combat
+	// context to arrive at the same wait. Zero - every fresh,
+	// promoted or replaced intent - always evaluates.
+	WaitUntilMs int64
 
 	// ApproachTargetSample is the live target pose from which the most recent
 	// player movement goal was authored. It belongs to this attack intent; the
@@ -159,41 +159,12 @@ type basicAttackIntent struct {
 	ApproachMovementRevision uint64
 }
 
-// chainLatencyBudgetMs is the per-command allowance native chain steps take
-// out of their waits so client latency does not stretch the authored combo.
-const chainLatencyBudgetMs = 500
-
 // basicAttackSpreadBudget is the per-tick ceiling on advancing attack
 // intents: a burst of due intents drains over later ticks instead of
 // inside one (#2143). At least one intent always advances, so a single
 // expensive intent cannot stall the step either. A var so tests can
 // shrink it to zero and watch the spread happen.
 var basicAttackSpreadBudget = 4 * time.Millisecond
-
-/*
-==================
-spendChainLatency
-
-spendChainLatency returns how long a chain step holds before the next step
-may execute. Native EXECUTE waits the step's action
-duration (ref+78, column 13), NOT casting+duration, after first spending
-what remains of the 500 ms budget. The wait is measured from the step's
-own execution; KEEP_UP compares strictly, hence the caller's +1.
-==================
-*/
-func (intent *basicAttackIntent) spendChainLatency(durationMs int64) int64 {
-	budget := chainLatencyBudgetMs - intent.ChainLatencyConsumedMs
-	if budget <= 0 {
-		return durationMs
-	}
-	if durationMs > budget {
-		intent.ChainLatencyUsedMs += budget
-		intent.ChainLatencyConsumedMs = chainLatencyBudgetMs
-		return durationMs - budget
-	}
-	intent.ChainLatencyConsumedMs += durationMs
-	return 0
-}
 
 /*
 ================
@@ -252,11 +223,28 @@ func (rt *Runtime) combatIntentIsCurrent(intent basicAttackIntent) bool {
 combatIntentSnapshot
 
 Release the intent mutex before callers enter character or world authority.
+The result is the caller's own; readers that outlive a tick (the tests)
+take this form.
 ================
 */
 func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
+	return rt.fillCombatIntents(nil)
+}
+
+/*
+================
+fillCombatIntents
+
+The tick's snapshot of the intent map, refilled into dst and sorted in
+the order the advance pass serves: division, then the case-folded name.
+The tick passes its runtime scratch (basicAttackSnapshot) and consumes
+the result in line, so a steady tick grows nothing (#2033); the intent
+mutex is released before the caller enters character or world authority.
+================
+*/
+func (rt *Runtime) fillCombatIntents(dst []basicAttackIntent) []basicAttackIntent {
 	rt.basicAttackIntentsMu.Lock()
-	out := make([]basicAttackIntent, 0, len(rt.basicAttackIntents))
+	out := dst[:0]
 	for _, intent := range rt.basicAttackIntents {
 		out = append(out, intent)
 	}
@@ -265,9 +253,39 @@ func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
 		if out[i].DivisionID != out[j].DivisionID {
 			return out[i].DivisionID < out[j].DivisionID
 		}
-		return strings.ToLower(out[i].CharacterName) < strings.ToLower(out[j].CharacterName)
+		return foldedNameLess(out[i].CharacterName, out[j].CharacterName)
 	})
 	return out
+}
+
+/*
+================
+foldedNameLess
+
+Whether a sorts before b in the order strings.ToLower imposes, without
+building the lowered copies the sort used to allocate per comparison.
+ASCII folds byte-wise, which is exactly ToLower there; a name carrying
+non-ASCII bytes takes the ToLower comparison itself, so the order never
+moves.
+================
+*/
+func foldedNameLess(a, b string) bool {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 0x80 || cb >= 0x80 {
+			return strings.ToLower(a) < strings.ToLower(b)
+		}
+		if 'A' <= ca && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if 'A' <= cb && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			return ca < cb
+		}
+	}
+	return len(a) < len(b)
 }
 
 /*
@@ -280,12 +298,21 @@ Keep the root bracket open while another server-owned chain stage remains.
 func (rt *Runtime) liveChainOwners() map[string]struct{} {
 	rt.basicAttackIntentsMu.Lock()
 	defer rt.basicAttackIntentsMu.Unlock()
-	owners := make(map[string]struct{})
+	// The drain consumes the set in line and keeps nothing, so the
+	// runtime's scratch map serves every tick instead of a fresh one
+	// (#2033). It is only ever read by the drain that refilled it.
+	owners := rt.liveChainScratch
+	if owners == nil {
+		owners = make(map[string]struct{})
+	} else {
+		clear(owners)
+	}
 	for key, intent := range rt.basicAttackIntents {
 		if intent.ComboRootID != 0 && !intent.ResumeBasic {
 			owners[key] = struct{}{}
 		}
 	}
+	rt.liveChainScratch = owners
 	return owners
 }
 
@@ -430,6 +457,10 @@ Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
+	// An evaluation that runs has consumed the wait: every write-back
+	// below carries a cleared stamp, and only the two swing-wait
+	// gates stamp a new one (#3101).
+	intent.WaitUntilMs = 0
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
@@ -467,7 +498,17 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	var loadout combat.Loadout
 	var refusal string
 	if intent.ResumeBasic {
-		if nowMs <= intent.NextActionMs || rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+		if nowMs <= intent.NextActionMs {
+			// The resume is purely time-gated while no skill cast is
+			// open: stamp the wait so the tick skips to the first
+			// tick that can act (this gate fires past NextActionMs).
+			if !rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
+				intent.WaitUntilMs = intent.NextActionMs + 1
+				rt.setCombatIntent(intent)
+			}
+			return OpResult{}
+		}
+		if rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
 			return OpResult{}
 		}
 		// The reference server transfers the target to a new basic command. Resolve
@@ -480,7 +521,6 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		intent.SingleCast, intent.ResumeBasic = false, false
 		intent.ResumeNotified = false
 		intent.ComboRootID, intent.SkillID = 0, basic.ID
-		intent.ChainLatencyConsumedMs, intent.ChainLatencyUsedMs = 0, 0
 	}
 	if intent.SingleCast {
 		if intent.ComboRootID == 0 {
@@ -561,7 +601,22 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	// in state 0, holding basic attacks while a wall stands
 	// or a skill cast is open; its cast handler allows an in-range non-ao/pw
 	// skill to fire in place.
-	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
+	if nowMs < intent.NextActionMs {
+		// Settled into the swing wait and the transition published
+		// nothing: stamp the wait so the tick skips the resolution
+		// above until the first tick the swing can fire (this gate
+		// fires at NextActionMs). Admission blocks and the attack
+		// lock are re-judged by that evaluation, exactly as they
+		// were re-judged on every waiting tick before (#3101).
+		if len(combatTransition.Frames) == 0 && len(combatTransition.Broadcast) == 0 &&
+			len(combatTransition.ActorPrivate) == 0 && len(combatTransition.Recipients) == 0 &&
+			len(combatTransition.Around) == 0 {
+			intent.WaitUntilMs = intent.NextActionMs
+			rt.setCombatIntent(intent)
+		}
+		return combatTransition
+	}
+	if rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
 		return combatTransition
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
@@ -579,21 +634,36 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	intent.ActionReach = actionReach
 	if intent.SingleCast {
 		alive := rt.combatTargetExists(intent.DivisionID, snapshot, intent.TargetGid)
+		lifecycle, _ := skill.ActionLifecycleMs()
+		if intent.ComboRootID != 0 || skill.ChainNext != 0 {
+			// The root deco carries the chain's one authored clip, so the
+			// bracket closes only when the last performed stage's whole
+			// action (casting + duration) ends, not at its casting point.
+			rt.extendChainBracket(intent.DivisionID, intent.CharacterName, nowMs+int64(lifecycle))
+		}
 		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID
 			}
 			intent.SkillID = skill.ChainNext
-			intent.NextActionMs = nowMs + intent.spendChainLatency(int64(skill.ActionDurationMs)) + 1
+			// Native stage pacing: the client sends the next stage when
+			// this stage's motion completes (casting + duration) and the
+			// reference server executes it on arrival, linked to the
+			// previous stage's cast. The port drives
+			// the stages itself, so it waits the same full action time.
+			// The native 500 ms figure (the record's chain-latency
+			// fields) only tolerates a late client stage command; with
+			// no client command to tolerate it must not compress the
+			// schedule (#3152).
+			intent.NextActionMs = nowMs + int64(lifecycle)
 			rt.setCombatIntent(intent)
 			return prependOpResult(combatTransition, result)
 		}
 		if skill.ContinueBasicAttack && alive {
 			intent.ResumeBasic = true
-			lifetime, _ := skill.ActionLifecycleMs()
-			// The reference server: an authored basic-attack continuation also
-			// returns the chain latency the steps borrowed.
-			intent.NextActionMs = nowMs + int64(lifetime) + intent.ChainLatencyUsedMs
+			// An authored basic-attack continuation waits the stage's
+			// full action time, like every other stage boundary.
+			intent.NextActionMs = nowMs + int64(lifecycle)
 			rt.setCombatIntent(intent)
 		} else {
 			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -815,125 +885,4 @@ func prependOpResult(prefix, tail OpResult) OpResult {
 		Around:       append(append([]ObservedFrames{}, prefix.Around...), tail.Around...),
 		Pending:      tail.Pending,
 	}
-}
-
-/*
-================
-advanceBasicAttackIntents
-
-The simulation tick advances detached commands under their division lock,
-then routes their results after releasing authority locks.
-================
-*/
-func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
-	intents := rt.combatIntentSnapshot()
-	if len(intents) == 0 {
-		return nil
-	}
-	// The scan resumes past the intent the last call served last, so a
-	// burst draining over several ticks under the spread budget cannot
-	// starve the tail of the sorted snapshot (#2143). A cursor whose
-	// intent retired finds no match and the scan starts at the head.
-	start := 0
-	for i, intent := range intents {
-		if simulation.WorldKey(intent.DivisionID, intent.CharacterName) == rt.basicAttackCursor {
-			start = i + 1
-			break
-		}
-	}
-	if start == len(intents) {
-		start = 0
-	}
-	started := time.Now()
-	served := 0
-	for n := 0; n < len(intents); n++ {
-		intent := intents[(start+n)%len(intents)]
-		// A chain stage waits only on the casting instance; its root bracket
-		// is deliberately still open (see chainStageBlocked).
-		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]
-		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
-			continue
-		}
-		if served > 0 && time.Since(started) >= basicAttackSpreadBudget {
-			return out
-		}
-		character, result, ok := rt.advanceBasicAttackIntentInDivision(intent, nowMs)
-		served++
-		rt.basicAttackCursor = simulation.WorldKey(intent.DivisionID, intent.CharacterName)
-		if !ok {
-			continue
-		}
-		if result.DiagnosticRefusal != "" {
-			log.Debugf(
-				"action: 0x72CD continuation refused for %s: %s",
-				intent.CharacterName, result.DiagnosticRefusal,
-			)
-		}
-		if intent.SingleCast && len(result.Broadcast) == 0 {
-			if character != nil && len(result.Frames) > 0 {
-				private := simulation.DivisionFrames{DivisionID: intent.DivisionID, OnlyCharacterID: character.ID}
-				for _, frame := range result.Frames {
-					private.Frames = append(private.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
-				}
-				out = append(out, private)
-			}
-			continue
-		}
-		// A result that declares an actor-only tail has said what is public;
-		// only a result with neither portion publishes its whole burst.
-		frames := result.Broadcast
-		if len(frames) == 0 && len(result.ActorPrivate) == 0 {
-			frames = result.Frames
-		}
-		if len(frames) > 0 {
-			routed := simulation.DivisionFrames{DivisionID: intent.DivisionID, SourceGID: enterworld.ObjectIDForCharacter(character)}
-			for _, frame := range frames {
-				routed.Frames = append(routed.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
-			}
-			out = append(out, routed)
-		}
-		out = append(out, observedDivisionFrames(intent.DivisionID, result.Around)...)
-		out = append(out, recipientDivisionFrames(intent.DivisionID, result.Recipients)...)
-		if character != nil && len(result.ActorPrivate) > 0 {
-			private := simulation.DivisionFrames{
-				DivisionID:      intent.DivisionID,
-				OnlyCharacterID: character.ID,
-			}
-			for _, frame := range result.ActorPrivate {
-				private.Frames = append(private.Frames, simulation.Frame{
-					Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope,
-				})
-			}
-			out = append(out, private)
-		}
-	}
-	// The whole snapshot was served: no burst is draining, so the next
-	// tick starts at the head and keeps the sorted order.
-	rt.basicAttackCursor = ""
-	return out
-}
-
-/*
-================
-advanceBasicAttackIntentInDivision
-================
-*/
-func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, nowMs int64) (*enterworld.Character, OpResult, bool) {
-	// The wait for the division lane is named as its own slow step
-	// (basicAttackDivisionWait): a slow advanceBasicAttackIntents reading
-	// beside it is the lane holder's cost, not the intent's work (#2143).
-	// The wait still sits inside the enclosing step's time.
-	var unlock func()
-	rt.Steps.Time("basicAttackDivisionWait", func() {
-		unlock = rt.lockDivision(intent.DivisionID)
-	})
-	defer unlock()
-	// A request can cancel/replace an intent after the tick snapshots it but
-	// before this division lock is acquired. Never resurrect that stale cast.
-	if !rt.combatIntentIsCurrent(intent) {
-		return nil, OpResult{}, false
-	}
-	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
-	return character, rt.advanceBasicAttackIntent(character, intent, nowMs, rt.tickDoors()), true
 }

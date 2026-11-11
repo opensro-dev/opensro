@@ -27,23 +27,27 @@ func (s *MonsterState) prepareNavigation(division string, gid uint32) navigation
 
 // Geometry can run outside the population lock. Publish route, current leg
 // and packets together only if every authoritative input still matches.
-func (s *MonsterState) commitNavigation(division string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+// The second and third answers are the commit's landing: whether it
+// landed, and the mover row's generation after it - read here, under
+// the lock that wrote it, so callers rebase on it instead of reading
+// the row back through storage to witness the write.
+func (s *MonsterState) commitNavigation(division string, before navigationAdmission, next monster.MoverState, frames []Frame) ([]Frame, uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, before.instance.Gid)
 	current, exists := state.instances.lookup(before.instance.Gid)
 	unchanged := before.exists && exists && current == before.instance && state.movers.get(current.Gid) == before.mover
 	if !unchanged || !state.approachInputsMatch(before.approach) {
-		return nil
+		return nil, 0, false
 	}
 	// The retail server's move command refuses under freeze, sleep, root or stun; the
 	// tactics state is unchanged and retries on a later tick.
 	if current.MovementBlocked() {
-		return nil
+		return nil, 0, false
 	}
 	if !s.commitMoverLocked(state, current.Gid, next) {
-		return nil
+		return nil, 0, false
 	}
 	state.commitApproach(before.approach, current.Gid, next)
-	return frames
+	return frames, state.movers.generation(current.Gid), true
 }

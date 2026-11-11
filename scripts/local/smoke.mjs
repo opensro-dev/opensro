@@ -13,14 +13,17 @@ orphaned. Run it locally before merging a change to the local stack:
     node scripts/local/smoke.mjs
 
 It drives the real stack, so the game data must be built and the local
-ports free, exactly as `pnpm local --doctor` checks.
+ports free, exactly as `pnpm local --doctor` checks. The world it
+provisions is a scratch one (SRO_LOCAL_STATE_ROOT, removed afterwards):
+the shared local world is a person's, and a check never writes into it.
 
 ===========================================================================
 */
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,8 +102,11 @@ async function main() {
 	const account = setting( path.join( configDir, "dev-account.env" ), "SRO_DEV_ACCOUNT_ID", "" );
 	const password = setting( path.join( configDir, "dev-account.env" ), "SRO_DEV_ACCOUNT_PASSWORD", "" );
 
+	const scratchWorld = mkdtempSync( path.join( os.tmpdir(), "sro-local-smoke-" ) );
+	process.once( "exit", () => rmSync( scratchWorld, { recursive: true, force: true } ) );
 	const runner = spawn( process.execPath, [ path.join( repoRoot, "scripts", "local", "run.mjs" ) ], {
 		cwd: repoRoot,
+		env: { ...process.env, SRO_LOCAL_STATE_ROOT: scratchWorld },
 		stdio: [ "pipe", "pipe", "pipe" ]
 	} );
 	let output = "";

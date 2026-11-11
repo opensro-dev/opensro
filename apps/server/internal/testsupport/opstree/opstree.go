@@ -16,31 +16,27 @@ package opstree
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
-)
 
-// moduleLevels is how far this file sits below the module root
-// (internal/testsupport/opstree).
-const moduleLevels = 3
+	"opensro.online/server/internal/config"
+)
 
 /*
 ================
 Require
 
 The ops tree's directory inside the module, or a skip when this checkout
-has none. Every caller finds its files below the returned path.
+has none. Every caller finds its files below the returned path. The module
+is found from the test's working directory (config.FindModuleRoot), never
+from runtime.Caller: the gate compiles with -trimpath, which leaves no
+source folder in the binary (scripts/lib/goEnvironment.mjs).
 ================
 */
 func Require(t testing.TB) string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("opstree: cannot locate the module")
-	}
-	root := filepath.Dir(file)
-	for i := 0; i < moduleLevels; i++ {
-		root = filepath.Dir(root)
+	root, err := config.FindModuleRoot()
+	if err != nil {
+		t.Fatalf("opstree: cannot locate the module: %v", err)
 	}
 	dir := filepath.Join(root, "ops")
 	info, err := os.Stat(dir)

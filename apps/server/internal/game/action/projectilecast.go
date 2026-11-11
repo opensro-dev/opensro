@@ -293,7 +293,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	if valid {
 		if p.selfEffect {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptTimedSelfEffect(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptTimedSelfEffect(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.statusArea {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
@@ -301,15 +301,15 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 			}
 		} else if p.threatDecrease {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptMirage(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptMirage(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.trap {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptCombatTrap(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptCombatTrap(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.supportCast {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else {
 			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p, rt.tickDoors())
@@ -353,42 +353,33 @@ projectileWaitingValid
 
 The wait verdict of a prepared cast that is not due, judged without
 detaching the caster (#2139 item 2, castwait item 5): the release
-verdict's life, target and resource gates in the same order, on
-values read under one store read door. The resource leg's keeper
-stats come from the stats memo looked up on the live record - the
-memo compares its key bands in place and allocates nothing - so a
-steady waiting cast pays no record copy. judged is false only when
-the memo cannot serve (a cold or moved caster): the caller then
-judges on the cast copy exactly as before, and that build memoises
-for the next tick. The verdict stays the release verdict's twin: a
-cast is refused the moment its target dies or its resources run
-out, not when its timer ends.
+verdict's life, target and resource gates in the same order. The
+life and target gates read the live record and monster state on
+every tick, so a cast is still refused the moment its target dies.
+The resource gate prices the caster through the stats memo on
+every tick too: its basis - the derived maxima and the consumption
+rate - moves without the abnormal block changing (an equipment
+swap or a modifier write mid-charge), so no earlier tick's amounts
+may stand in for this one's (#3101 review). The timing this keeps
+is the charge's: B245 charges at release, and the wait's refusal
+still lands on the tick the resources actually run out, because
+the vitals are read live.
+judged is false only when the memo cannot serve (a cold or moved
+caster): the caller then judges on the cast copy exactly as before,
+and that build memoises for the next tick.
 ================
 */
 func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld.Character) (valid, judged bool) {
-	// The resource leg's installed contributions come from their
-	// lifecycle owners, never under the store door (#568), in the
-	// same order playerCombatStats reads them.
-	block := rt.playerAbnormal(p.divisionID, c.Name)
-	writes := rt.statModifierWrites(p.divisionID, c)
-	catalogs := rt.statCatalogs()
+	abnormalKey := playerAbnormalKey(p.divisionID, c.Name)
+	block := rt.playerAbnormalKeyed(abnormalKey)
 
 	var alive bool
 	var world uint32
-	var stats combat.Stats
-	var statsErr error
-	var statsHit bool
-	var maxHP, maxMP, currentHP, currentMP int64
+	var currentHP, currentMP int64
 	rt.deps.Read(p.divisionID, func() {
 		alive = !c.DeletePending && enterworld.CharacterAlive(c)
 		world = domain.CharacterWorldInstance(c)
-		stats, _, statsErr, statsHit = combat.LookupMemoizedPlayerStats(c, catalogs, writes, block)
-		if statsHit {
-			if statsErr == nil && block != nil {
-				stats.AbnormalMask = block.Mask
-			}
-			maxHP, maxMP, currentHP, currentMP = keeperVitalsFrom(c, stats, statsErr)
-		}
+		currentHP, currentMP = enterworld.CurrentHP(c), enterworld.CurrentMP(c)
 	})
 	if !alive {
 		return false, true
@@ -408,21 +399,43 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 	// A priced cast judges against its prepared snapshot; resolving
 	// the skill row again every waiting tick bought nothing, as the
 	// row is static data the preparation already read (#2139). An
-	// unpriced cast resolves its row exactly as before.
-	if p.verdictCost.Pinned {
-		if !statsHit {
-			return false, false
+	// unpriced cast resolves its row exactly as before. The resource
+	// leg's installed contributions come from their lifecycle
+	// owners, never under the store door (#568), in the same order
+	// playerCombatStats reads them.
+	var skill enterworld.SkillRow
+	consumption, group := p.verdictCost, p.verdictGroup
+	if !consumption.Pinned {
+		var exists bool
+		skill, exists = source.SkillByID(p.cast.ActionId)
+		if !exists {
+			return false, true
 		}
-		_, refusal := resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, p.verdictCost, p.verdictGroup)
-		return refusal == 0, true
+		consumption, group = skill.Consumption, skill.Group
 	}
-	skill, exists := source.SkillByID(p.cast.ActionId)
-	if !exists {
-		return false, true
-	}
+	writes := rt.statModifierWrites(p.divisionID, c)
+	catalogs := rt.statCatalogs()
+	var stats combat.Stats
+	var statsErr error
+	var statsHit bool
+	var maxHP, maxMP int64
+	rt.deps.Read(p.divisionID, func() {
+		stats, _, statsErr, statsHit = combat.LookupMemoizedPlayerStats(c, catalogs, writes, block)
+		if statsHit {
+			if statsErr == nil && block != nil {
+				stats.AbnormalMask = block.Mask
+			}
+			maxHP, maxMP, currentHP, currentMP = keeperVitalsFrom(c, stats, statsErr)
+		}
+	})
 	if !statsHit {
 		return false, false
 	}
-	_, refusal := resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, statsErr, skill)
+	var refusal uint16
+	if p.verdictCost.Pinned {
+		_, refusal = resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, consumption, group)
+	} else {
+		_, refusal = resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, statsErr, skill)
+	}
 	return refusal == 0, true
 }

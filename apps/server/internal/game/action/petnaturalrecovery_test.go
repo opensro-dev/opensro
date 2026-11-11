@@ -124,6 +124,33 @@ func TestPetNaturalRecoveryZombieGate(t *testing.T) {
 
 /*
 ================
+TestPetNaturalRecoveryReadsStoredBlockMaxima
+
+The pulse weighs its maxima off the pet's committed abnormal
+block where it sits: a stored flat MaxHP modifier raises both
+the pulse amount (1.6% of the effective maximum) and the ceiling
+the heal clamps to (#2033).
+================
+*/
+func TestPetNaturalRecoveryReadsStoredBlockMaxima(t *testing.T) {
+	rt, c, pet, key := petRecoveryRuntime(t)
+	block := &abnormal.Block{}
+	block.Slots[abnormal.Burn].Active = true
+	block.Modifiers[0] = abnormal.Modifier{Used: true, Param: abnormalMaxHPParam, Source: 5, Value: 500}
+	rt.storeCosAbnormal(testDivision, c.Name, pet.GID, block)
+	rt.advancePetNaturalRecovery(key, 1_004_000)
+	if pet.CurrentHP != 124 || pet.CurrentMP != 11 {
+		t.Fatalf("pulse off the stored maxima wrong: %d/%d, want 124/11", pet.CurrentHP, pet.CurrentMP)
+	}
+	pet.CurrentHP = 1490
+	rt.advancePetNaturalRecovery(key, 1_008_000)
+	if pet.CurrentHP != 1500 {
+		t.Fatalf("pulse must clamp at the stored effective maximum 1500, at %d", pet.CurrentHP)
+	}
+}
+
+/*
+================
 TestPetNaturalRecoveryMotionGate
 ================
 */

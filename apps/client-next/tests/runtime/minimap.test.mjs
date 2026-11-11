@@ -290,6 +290,41 @@ test("dungeon navigation owns floor identity, invalidates admission and clears q
 	assert.equal( m.state().navigationFloor, undefined );
 	assert.deepEqual( m.state().minimapFloors, {} );
 });
+test("an ownerless stand re-resolves floor and block within one navigation cell", () => {
+	// Two dungeon decks over one footprint at different heights. Without
+	// an owner the floor and block belong to the exact point (height
+	// included), so a second stand in the same 20-unit cell must not
+	// inherit the first stand's values (#3184 review).
+	const mesh = y => ({
+		vertices: Float32Array.from( [ 0, y, 0, 100, y, 0, 100, y, 100, 0, y, 100 ] ),
+		cells: Uint16Array.from( [ 0, 1, 2, 0, 2, 3 ] ),
+		edges: Uint32Array.from( [ 1, 2, 0, 65535, 3, 0, 0, 2, 0, 1, 4, 1 ] ),
+		bounds: [ 0, y, 0, 100, y, 100 ],
+		passThrough: false
+	});
+	const m = createMovement( () => {} );
+	m.seed( { regionId: 32769, x: 10, y: 10, z: 50, angle: 0 } );
+	m.navigation( 32769, {
+		regionId: 32769,
+		complete: true,
+		objects: [ { x: 0, y: 0, z: 0, yaw: 0, mesh: mesh( 10 ), block: 0, floor: 0 }, {
+			x: 0,
+			y: 0,
+			z: 0,
+			yaw: 0,
+			mesh: mesh( 100 ),
+			block: 1,
+			floor: 1
+		} ]
+	} );
+	const low = m.state();
+	assert.equal( low.navigationFloor, 0 );
+	assert.equal( low.navigationBlock, 0 );
+	m.seed( { regionId: 32769, x: 15, y: 100, z: 55, angle: 0 } );
+	const high = m.state();
+	assert.equal( high.navigationFloor, 1 );
+	assert.equal( high.navigationBlock, 1 );
+});
 test("a walking dungeon entity keeps its floor answer across the query round trip", () => {
 	const mesh = y => ({
 		vertices: Float32Array.from( [ 0, y, 0, 100, y, 0, 100, y, 100, 0, y, 100 ] ),

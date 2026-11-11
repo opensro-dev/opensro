@@ -52,8 +52,8 @@ func TestReadyzReflectsInjectedCheck(t *testing.T) {
 		t.Fatalf("websocket admission while not-ready = %d, want 503", code)
 	}
 	healthURL := fmt.Sprintf("http://%s%s", srv.WSAddr(), transport.PathHealth)
-	if code, body := httpGet(t, healthURL); code != http.StatusOK || body != "ok" {
-		t.Fatalf("healthz while not-ready = %d %q, want 200 ok (liveness is separate)", code, body)
+	if code, body := httpGet(t, healthURL); code != http.StatusOK || body != "ok "+transport.BootPhaseLoadingData {
+		t.Fatalf("healthz while not-ready = %d %q, want 200 with the boot phase (liveness is separate)", code, body)
 	}
 
 	// Recovery: clearing the check restores readiness.

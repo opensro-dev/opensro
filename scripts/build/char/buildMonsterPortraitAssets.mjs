@@ -8,6 +8,11 @@ asset family's content-addressed manifest: all monster references, including
 uniques and aliases, as 384px transparent PNGs. The production viewer owns
 framing, lighting, material selection and readiness; this family owns the
 cache and publication ledger. Licensed images never enter source control.
+
+A published still is named by its own PNG bytes, so an unchanged portrait
+keeps its name (and its pack) across builds whose other inputs moved
+(#3104). The renderer fingerprint below only decides whether a still must
+be drawn again; the drawn bytes live in a cache outside the public tree.
 The catalogue's switch to this manifest and retirement of its old publishing
 stage are a maintainer follow-up after this family lands.
 
@@ -15,11 +20,11 @@ stage are a maintainer follow-up after this family lands.
 */
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { launchProbeBrowser } from "../../lib/probeBrowser.mjs";
-import { publicRoot } from "../world/paths.mjs";
+import { generatedRoot, publicRoot } from "../world/paths.mjs";
 import { npcManifestModels } from "../shared/npcManifest.mjs";
 import { containedPublicFile } from "../shared/assetPaths.mjs";
 import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
@@ -30,6 +35,9 @@ import { clientBuildDefinitions } from "../../../apps/client-next/tools/build-me
 import { publishedAssets } from "../../../apps/client-next/tools/published-assets.mjs";
 
 const PREFIX = "/assets/npc/hunting-portraits/";
+// Drawn stills wait here between builds, outside the public tree: only the
+// content-named publication below is ever claimed or packed.
+const CACHE_ROOT = path.join( generatedRoot, "hunting-portrait-cache" );
 const CLIENT = path.resolve( import.meta.dirname, "../../../apps/client-next" );
 export const MONSTER_PORTRAIT_SIZE = 384;
 const STILL_TIMEOUT_MS = 45000;
@@ -67,6 +75,31 @@ export function monsterPortraitReferences( manifest ) {
 			glb: row.materialVariants?.[String( slot )] ?? row.glb
 		};
 	} );
+}
+
+/*
+================
+monsterPortraitCacheKey
+
+What decides a still is drawn again: the renderer fingerprint and the
+reference. The key names only the cache file, never a publication.
+================
+*/
+export function monsterPortraitCacheKey( fingerprint, refObjId ) {
+	return createHash( "sha256" ).update( fingerprint ).update( String( refObjId ) ).digest( "hex" );
+}
+
+/*
+================
+monsterPortraitPublishedPath
+
+The public name of a still: the SHA-256 of its PNG bytes. Same bytes,
+same name, whatever else the build changed; a redrawn still that comes
+out byte-identical keeps the name its players already hold (#3104).
+================
+*/
+export function monsterPortraitPublishedPath( bytes ) {
+	return PREFIX + createHash( "sha256" ).update( bytes ).digest( "hex" ) + ".png";
 }
 
 /*
@@ -234,17 +267,20 @@ export async function buildMonsterPortraitAssets() {
 			}
 			// Ref ids have their own presentation (rides, scale, effects). Never
 			// collapse them solely because they alias the same base GLB.
-			const hash = createHash( "sha256" ).update( fingerprint ).update( String( row.refObjId ) ).digest( "hex" );
-			const output = PREFIX + hash + ".png", target = path.join( publicRoot, output.slice( 1 ) );
-			const cached = await stat( target ).then( value => value.size > 100 ).catch( () => false );
-			if ( cached ) claimPublicFile( target );
-			else {
-				await writeIntoPublicTree(
-					target,
-					await renderMonsterPortrait( launched.page, base, row.refObjId, row )
-				);
+			const cacheFile = path.join( CACHE_ROOT, monsterPortraitCacheKey( fingerprint, row.refObjId ) + ".png" );
+			let bytes = await stat( cacheFile ).then( value => value.size > 100 ).catch( () => false ) ?
+				await readFile( cacheFile ) :
+				null;
+			if ( !bytes ) {
+				bytes = await renderMonsterPortrait( launched.page, base, row.refObjId, row );
+				await mkdir( CACHE_ROOT, { recursive: true } );
+				await writeFile( cacheFile, bytes );
 				rendered++;
 			}
+			const output = monsterPortraitPublishedPath( bytes ), target = path.join( publicRoot, output.slice( 1 ) );
+			if ( await stat( target ).then( value => value.size > 100 ).catch( () => false ) ) {
+				claimPublicFile( target );
+			} else await writeIntoPublicTree( target, bytes );
 			rows.push( [ row.refObjId, output ] );
 			files.push( output );
 		}

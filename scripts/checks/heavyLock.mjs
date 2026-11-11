@@ -165,29 +165,31 @@ export function parentPidOf( pid ) {
 	return parentMap().get( pid ) ?? 0;
 }
 
-const ancestorSets = new Map();
-
 /*
 ================
 ownAncestorPids
 
-This process and its ancestors, walked once per parent lookup and
-cached: the walk crosses to the OS per level, which is far too slow to
-repeat per acquisition on a loaded machine.
+This process and its ancestors, walked per acquisition over the cached
+process table (parentMap pays the OS read; the walk itself is map
+lookups). A chain that revisits a pid proves the table was poisoned by
+pid reuse (#3206): every parent is older than its child, so a live
+chain cannot cycle - what happened is an ancestor died and a younger
+process (in the worst case the lock's own holder, spawned under this
+process) took its pid. No pid from a cycling chain may be called an
+ancestor; the walk answers an empty set, uncached, so each acquisition
+judges the table it actually sees.
 ================
 */
 function ownAncestorPids( parentOf ) {
-	let set = ancestorSets.get( parentOf );
-	if ( set ) {
-		return set;
-	}
-	set = new Set();
+	const set = new Set();
 	let current = process.pid;
 	for ( let hops = 0; hops < MAX_ANCESTOR_HOPS && current > 0; hops++ ) {
+		if ( set.has( current ) ) {
+			return new Set();
+		}
 		set.add( current );
 		current = parentOf( current );
 	}
-	ancestorSets.set( parentOf, set );
 	return set;
 }
 
@@ -197,7 +199,8 @@ isAncestorPid
 
 True when pid is this process or one of its ancestors: the lock it holds
 already serializes this run (heavy.py ran the check), so taking the lock
-again would wait on ourselves forever.
+again would wait on ourselves forever. False whenever the chain cycles:
+a reused pid once let a waiter take a live holder's lock (#3206).
 ================
 */
 export function isAncestorPid( pid, parentOf = parentPidOf ) {

@@ -151,7 +151,7 @@ func (rt *Runtime) publishPenguinMagic(step petCombatStep) {
 		}
 	}
 	if step.pet.ArcaneMagicPercent != pct[0] {
-		rt.deps.Update(step.state.character, "penguin-magic", func() bool {
+		rt.deps.UpdateDeferred(step.state.character, "penguin-magic", func() bool {
 			if live := step.state.character.CompanionByGID(step.pet.GID); live != nil {
 				live.ArcaneMagicPercent = pct[0]
 			}
@@ -332,7 +332,15 @@ with a damage burst. Death, separation, unslot and logout discard the storms.
 ================
 */
 func (rt *Runtime) advancePenguin(key petOwnerKey, now int64) (output []simulation.Frame) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	return rt.advancePenguinSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advancePenguinSession
+================
+*/
+func (rt *Runtime) advancePenguinSession(key petOwnerKey, state *petSession, now int64) (output []simulation.Frame) {
 	if state == nil {
 		return
 	}

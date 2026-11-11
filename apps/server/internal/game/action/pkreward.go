@@ -163,6 +163,11 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 		changed := pk.RecordMurder(killer, levelByte(killer), levelByte(victim), rt.Now())
 		actor = append(actor, pkRecordFrames(killer, changed)...)
 		rt.notePKRecord(division, killer)
+		// Port-only, not native (#3151): the murder's shard notice, posted
+		// by postMurderNotice once the kill commits.
+		if notice, ok := murderNoticeOf(division, killer, victim, now); ok {
+			after.murders = append(after.murders, notice)
+		}
 		if before != killer.PVPState() {
 			public = append(public, playerPVPStateFrame(killer))
 		}
@@ -309,15 +314,16 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 jobKillPayout
 
 What a committed kill still owes after its door: the party's job shares,
-the port-only job-kill and Most Wanted notices (announce.go) and, with the
-transfer on, the port-only bounty taken from the victim (mostwanted.go).
-Nothing here runs when the kill's commit rolls back.
+the port-only job-kill, murder and Most Wanted notices (announce.go) and,
+with the transfer on, the port-only bounty taken from the victim
+(mostwanted.go). Nothing here runs when the kill's commit rolls back.
 ================
 */
 type jobKillPayout struct {
 	division string
 	shares   []jobKillShare
 	notices  []jobKillNotice
+	murders  []murderNotice
 	wanted   []mostWantedNotice
 	bounties []mostWantedBounty
 }
@@ -332,6 +338,7 @@ Gathers several kills' payouts (an area strike can kill several players).
 func (p *jobKillPayout) add(other jobKillPayout) {
 	p.shares = append(p.shares, other.shares...)
 	p.notices = append(p.notices, other.notices...)
+	p.murders = append(p.murders, other.murders...)
 	p.wanted = append(p.wanted, other.wanted...)
 	p.bounties = append(p.bounties, other.bounties...)
 }
@@ -341,7 +348,7 @@ func (p *jobKillPayout) add(other jobKillPayout) {
 payJobKillShares
 
 The job EXP distribution's party members other than the killer, each in its own door, then
-the kill's notice and its Most Wanted notices, then each bounty owed from a victim (port-only, its
+the kill's notice, its murder notice and its Most Wanted notices, then each bounty owed from a victim (port-only, its
 own door over both characters).
 ================
 */
@@ -349,13 +356,18 @@ func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 	for _, notice := range after.notices {
 		rt.postJobKillNotice(notice)
 	}
+	for _, notice := range after.murders {
+		rt.postMurderNotice(notice)
+	}
 	for _, notice := range after.wanted {
 		rt.postMostWantedNotice(notice)
 	}
 	var out []RecipientFrames
 	for _, share := range after.shares {
 		var frames []wire.Frame
-		rt.deps.Update(share.member, "job-kill-share", func() bool {
+		// Kill shares settle on the tick (strike and abnormal
+		// settlements): the commit joins the tick's batch.
+		rt.deps.UpdateDeferred(share.member, "job-kill-share", func() bool {
 			var ok bool
 			frames, ok = rt.addJobExperience(after.division, share.member, share.exp)
 			return ok

@@ -88,6 +88,36 @@ test("native early returns dominate party, PvP and fortress colors", () => {
 	assert.equal( color( { ...peer, kind: "monster", pvpState: 3, nameColor: 0xff123456 }, context ), 0xff123456 );
 	assert.deepEqual( nameColorRgba( 0xffffd87a ), [ 1, 216 / 255, 122 / 255, 1 ] );
 });
+test("local player matches the roster by board name in job mode (8675F0)", () => {
+	// Entering in job mode rewrites the local player's native name field
+	// with the job alias, so the roster test (858810/8229B0) matches the
+	// roster's alias row: own name turns party green while suited (#3214).
+	const suited = { ...local, name: "RealHero", boardName: "Alias77" };
+	assert.equal(
+		color( suited, {
+			...context,
+			social: { ...social, leader: 1, members: [ { name: "Alias77" }, { name: "Peer" } ] }
+		} ),
+		0xff62f5b1
+	);
+	// The roster never carries a suited member's real name, so a roster
+	// holding only it does not match: the reported white-name shape.
+	assert.equal(
+		color( suited, {
+			...context,
+			social: { ...social, leader: 1, members: [ { name: "RealHero" } ] }
+		} ),
+		0xffffffff
+	);
+	// Unsuited there is no board name and the real name matches as before.
+	assert.equal(
+		color( { ...local, name: "RealHero" }, {
+			...context,
+			social: { ...social, leader: 1, members: [ { name: "RealHero" } ] }
+		} ),
+		0xff62f5b1
+	);
+});
 test("fortress registration matrix and party priority match 8567F0", () => {
 	for (
 		const [registered, allies, want] of [

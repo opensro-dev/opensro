@@ -384,14 +384,30 @@ func npcPatrolPose(state PatrolState) wire.Position {
 	}
 }
 
+/*
+================
+npcPatrolFrame
+
+One built frame: the payload window the batch's shared backing
+buffer holds for it, capped so a later append elsewhere can
+never rewrite a delivered frame's bytes (#2033).
+================
+*/
+func npcPatrolFrame(opcode uint16, payload []byte, size int) Frame {
+	return Frame{Opcode: opcode, Payload: payload[len(payload)-size : len(payload) : len(payload)]}
+}
+
 // NpcMoveFrames is one 0x30E3 source move per roster NPC for the given tick
-// (the entity-tick payload the reference npc-tick pull seam served).
+// (the entity-tick payload the reference npc-tick pull seam served). Every
+// payload is encoded into one backing buffer (#2033); each frame keeps its
+// own capped window of it (npcPatrolFrame).
 func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 	patrols := npcPatrolCount(roster)
 	if patrols == 0 {
 		return nil
 	}
 	frames := make([]Frame, 0, patrols)
+	payload := make([]byte, 0, patrols*wire.ObjectMoveSize)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -404,7 +420,8 @@ func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 			Position: npcPatrolPose(state),
 			Gid:      roster[index].ObjectID,
 		}
-		frames = append(frames, Frame{Opcode: wire.OpObjectSourceMove, Payload: move.Encode()})
+		payload = move.AppendEncode(payload)
+		frames = append(frames, npcPatrolFrame(wire.OpObjectSourceMove, payload, wire.ObjectMoveSize))
 	}
 	return frames
 }
@@ -419,6 +436,7 @@ func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 		return nil
 	}
 	frames := make([]Frame, 0, patrols)
+	payload := make([]byte, 0, patrols*wire.ObjectMoveSize)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -431,7 +449,8 @@ func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 			Gid:      roster[index].ObjectID,
 			Position: npcPatrolPose(state),
 		}
-		frames = append(frames, Frame{Opcode: wire.OpObjectSourceCorrection, Payload: correction.Encode()})
+		payload = correction.AppendEncode(payload)
+		frames = append(frames, npcPatrolFrame(wire.OpObjectSourceCorrection, payload, wire.ObjectMoveSize))
 	}
 	return frames
 }
@@ -454,6 +473,7 @@ func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 		return nil
 	}
 	frames := make([]Frame, 0, patrols)
+	payload := make([]byte, 0, patrols*wire.ObjectStateRefreshSize)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -463,7 +483,8 @@ func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 			StateType: channel,
 			Value:     value,
 		}
-		frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: refresh.Encode()})
+		payload = refresh.AppendEncode(payload)
+		frames = append(frames, npcPatrolFrame(wire.OpObjectStateRefresh, payload, wire.ObjectStateRefreshSize))
 	}
 	return frames
 }
@@ -481,7 +502,9 @@ func NpcLifeStateFrames(roster []NpcDef, tick int64) []Frame {
 }
 
 func npcStateFrames(roster []NpcDef, channel, value uint8) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	frames := make([]Frame, 0, patrols)
+	payload := make([]byte, 0, patrols*wire.ObjectStateRefreshSize)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -491,7 +514,8 @@ func npcStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 			StateType: channel,
 			Value:     value,
 		}
-		frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: refresh.Encode()})
+		payload = refresh.AppendEncode(payload)
+		frames = append(frames, npcPatrolFrame(wire.OpObjectStateRefresh, payload, wire.ObjectStateRefreshSize))
 	}
 	return frames
 }
@@ -501,9 +525,11 @@ func npcStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 // caller's - session exit or out-of-range removal.
 func NpcDespawnFrames(roster []NpcDef) []Frame {
 	frames := make([]Frame, 0, len(roster))
+	payload := make([]byte, 0, len(roster)*wire.ObjectDespawnSize)
 	for index := range roster {
 		despawn := wire.ObjectDespawn{Gid: roster[index].ObjectID}
-		frames = append(frames, Frame{Opcode: wire.OpObjectDespawn, Payload: despawn.Encode()})
+		payload = despawn.AppendEncode(payload)
+		frames = append(frames, npcPatrolFrame(wire.OpObjectDespawn, payload, wire.ObjectDespawnSize))
 	}
 	return frames
 }

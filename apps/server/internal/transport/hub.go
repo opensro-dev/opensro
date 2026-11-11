@@ -81,6 +81,11 @@ type Hub struct {
 	accountSessions map[string]map[uint64]*Session
 	sessionAccount  map[uint64]string
 
+	// Account world seat: the account whose character stands in the
+	// world, and the claim that holds it (ClaimAccountWorld). One
+	// character of an account is in the world at a time.
+	accountWorld map[string]*AccountWorldClaim
+
 	// Division index: EFFECTIVE division -> live member sessions, so a
 	// division push touches only its members instead of scanning every
 	// session (O(sessions) per push was the scaling ceiling). sessionDiv
@@ -119,24 +124,9 @@ type Hub struct {
 	// Transport observability, including simulation-tick duration, has its own
 	// synchronization and lifecycle.
 	metrics hubMetrics
-	// navigationMetrics reads the world's monster navigation counters
-	// (SetNavigationMetrics); nil publishes no block.
-	navigationMetrics atomic.Pointer[func() map[string]uint64]
-	// economyMetrics reads the store's committed gold per reason
-	// (SetEconomyMetrics); nil publishes no block.
-	economyMetrics atomic.Pointer[func() map[string]uint64]
-	// petCombatMetrics reads the attack pets' ended-target counters
-	// (SetPetCombatMetrics); nil publishes no block.
-	petCombatMetrics atomic.Pointer[func() map[string]uint64]
-	// placementMetrics reads the placement guard's counters
-	// (SetPlacementMetrics); nil publishes no block.
-	placementMetrics atomic.Pointer[func() map[string]uint64]
-	// storeLockMetrics reads the authority lock's waits, holds and commit
-	// phases (SetStoreLockMetrics); nil publishes no block.
-	storeLockMetrics atomic.Pointer[func() any]
-	// tickZoneMetrics reads the simulation's exact per-zone tick totals
-	// (SetTickZoneMetrics, #2824); nil publishes no block.
-	tickZoneMetrics atomic.Pointer[func() map[string]TickZone]
+	// metricsProviders holds who supplies each published metrics block
+	// (metrics.go); embedded so the setters keep naming the provider.
+	metricsProviders
 }
 
 /*
@@ -157,6 +147,7 @@ func newHub(cfg Config) *Hub {
 		controls:        make(map[string]uint64),
 		accountSessions: make(map[string]map[uint64]*Session),
 		sessionAccount:  make(map[uint64]string),
+		accountWorld:    make(map[string]*AccountWorldClaim),
 		divisions:       make(map[string]map[uint64]*Session),
 		sessionDiv:      make(map[uint64]string),
 		restrictions:    make(map[string]*characterRestrictions),

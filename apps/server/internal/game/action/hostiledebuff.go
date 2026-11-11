@@ -42,6 +42,9 @@ type debuffCast struct {
 	target              uint32
 	player              *enterworld.Character
 	now                 int64
+	// doors is the strike lane's commit pair (the strike structs
+	// carry it from their own lane).
+	doors characterDoors
 }
 
 /*
@@ -53,7 +56,7 @@ The caster's half of the transaction, shared by both recipients.
 */
 func (rt *Runtime) chargeDebuff(c debuffCast) (OpResult, bool) {
 	var refusal uint16
-	if !rt.deps.Update(c.character, "skill-hostile-debuff", func() bool {
+	if !c.doors.update(c.character, "skill-hostile-debuff", func() bool {
 		if !enterworld.CharacterAlive(c.character) || !enterworld.SkillLearned(c.character, c.skill.ID) {
 			return false
 		}
@@ -153,7 +156,7 @@ func (rt *Runtime) debuffPlayer(c debuffCast) (OpResult, skillCastDecision) {
 	var private []RecipientFrames
 	var installed []wire.Frame
 	owner := rt.newPlayerAbnormalOwner(c.division, c.player, c.now)
-	if rt.deps.Update(c.player, "hostile-debuff-install", func() bool {
+	if c.doors.update(c.player, "hostile-debuff-install", func() bool {
 		if c.player.DeletePending || !enterworld.CharacterAlive(c.player) {
 			return false
 		}
@@ -169,7 +172,7 @@ func (rt *Runtime) debuffPlayer(c debuffCast) (OpResult, skillCastDecision) {
 		return ok
 	}) {
 		frames = append(frames, installed...)
-		rt.deps.Update(c.character, "hostile-debuff-hostility", func() bool {
+		c.doors.update(c.character, "hostile-debuff-hostility", func() bool {
 			frames = append(frames, rt.registerPlayerAttack(c.division, c.character, c.player, c.now)...)
 			return true
 		})
@@ -211,7 +214,7 @@ func (rt *Runtime) debuffCOS(c debuffCast, target combatTarget) (OpResult, skill
 	word := monster.SelfEffect{SkillID: c.skill.ID, Token: effectToken, Tag: tag, First: value,
 		StartedAtMs: c.now, UntilMs: c.now + int64(debuff.DurationMs)}
 	var attacked []wire.Frame
-	installed := rt.deps.Update(owner, "hostile-debuff-cos", func() bool {
+	installed := c.doors.update(owner, "hostile-debuff-cos", func() bool {
 		pet := owner.CompanionByGID(target.gid)
 		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || pet.SummonGeneration != target.cos.SummonGeneration {
 			return false
@@ -242,7 +245,7 @@ func (rt *Runtime) debuffCOS(c debuffCast, target combatTarget) (OpResult, skill
 	// cast lands and only the effect and hostility frames are skipped.
 	var attack, battle []wire.Frame
 	if installed {
-		rt.deps.Update(c.character, "hostile-debuff-cos-hostility", func() bool {
+		c.doors.update(c.character, "hostile-debuff-cos-hostility", func() bool {
 			attack = rt.registerPlayerAttack(c.division, c.character, owner, c.now)
 			battle = rt.enterBattleState(c.division, c.character, c.now)
 			return true

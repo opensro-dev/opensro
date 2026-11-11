@@ -32,6 +32,11 @@ const UI_TEXTURE_BUDGET_BYTES = 64 << 20;
 /*
 ================
 createUiResources
+
+bitmapPixels, when given, converts a bitmap to pixels the upload
+writes directly (the readback in foundation/rendering/pick-alpha, on
+the adapters adapterRoutesBitmapsViaPixels names); without it, and
+when it returns null, bitmaps upload by external-image copy as before.
 ================
 */
 export function createUiResources(
@@ -41,7 +46,8 @@ export function createUiResources(
 	// stage's scene format; the UI quads always render into the presented
 	// 8-bit frame.
 	sceneFormat: () => GPUTextureFormat,
-	retire: Retire = destroyNow
+	retire: Retire = destroyNow,
+	bitmapPixels?: ( image: ImageBitmap ) => ImageData | null
 ) {
 	const shader = device.createShaderModule( {
 		label: "ui-quads",
@@ -435,10 +441,20 @@ fs
 				image.height
 			] );
 		} else {
-			device.queue.copyExternalImageToTexture( { source: image, flipY: false }, { texture: slot.texture }, [
-				image.width,
-				image.height
-			] );
+			const pixels = bitmapPixels?.( image );
+			if ( pixels ) {
+				device.queue.writeTexture(
+					{ texture: slot.texture },
+					pixels.data,
+					{ bytesPerRow: pixels.width * 4 },
+					[ pixels.width, pixels.height ]
+				);
+			} else {
+				device.queue.copyExternalImageToTexture( { source: image, flipY: false }, { texture: slot.texture }, [
+					image.width,
+					image.height
+				] );
+			}
 		}
 	}
 	texture( "", { data: new Uint8ClampedArray( [ 255, 255, 255, 255 ] ), width: 1, height: 1, colorSpace: "srgb" } );

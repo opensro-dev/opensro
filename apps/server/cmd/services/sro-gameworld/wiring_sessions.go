@@ -118,6 +118,7 @@ func (game *gameplayPlane) worldBound(
 	game.parties.WorldBound(session, divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
+	guild.MemberWorldBound(game.deps, game.presence, divisionID, character)
 	game.unions.DropPendingInvite(divisionID, character.Name)
 	game.guildWars.DropPendingInvite(divisionID, character.Name)
 	game.items.AbandonExchange(divisionID, character.Name)
@@ -153,6 +154,7 @@ disconnect, so the port-only trader cargo rule skips it.
 */
 func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error, authorityStore *store.Store) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
+	guild.MemberSessionClosed(game.deps, game.presence, session)
 	if game.friends != nil {
 		game.friends.SessionClosed(session)
 	}

@@ -166,6 +166,16 @@ type GuildStore interface {
 	// Guild returns copies of the guild row and its member list in wire
 	// order; ok=false when no such guild is stored.
 	Guild(divisionID string, guildID int64) (GuildRecord, []GuildMemberRecord, bool)
+	// GuildRecord returns the guild row alone, for callers that need no
+	// member facts; ok=false when no such guild is stored. The full
+	// Guild door builds the whole member view per call, and a caller
+	// that discards it still pays for every member (#3126).
+	GuildRecord(divisionID string, guildID int64) (GuildRecord, bool)
+	// GuildMember returns ONE member's view - the stored row with its
+	// live level resolved from the character record, exactly as that
+	// member appears in Guild's list; ok=false when the guild or the
+	// member is not stored, or the member's character record is gone.
+	GuildMember(divisionID string, guildID int64, characterID int64) (GuildMemberRecord, bool)
 	// GuildOfCharacter answers the guild a character is a MEMBER of
 	// (resolved from the stored member sets, not from the character
 	// record's FK); ok=false when the character belongs to none.

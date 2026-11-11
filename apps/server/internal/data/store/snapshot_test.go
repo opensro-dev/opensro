@@ -31,7 +31,7 @@ func TestSnapshotCopiesTheCommittedGeneration(t *testing.T) {
 	if err := s.SnapshotTo(path); err != nil {
 		t.Fatal(err)
 	}
-	setGoldIn(s, c, "pickup-gold", 300)
+	setGoldIn(s, c, "npc-repair", 300)
 	copyDB, err := connectDB(path)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestDoorCommitsWhileASnapshotReads(t *testing.T) {
 	if err := tx.QueryRow("SELECT count(*) FROM economy_ledger").Scan(&held); err != nil {
 		t.Fatal(err)
 	}
-	setGoldIn(s, c, "pickup-gold", 25)
+	setGoldIn(s, c, "npc-repair", 25)
 	if health := s.Health(); health.FailedWrites != 0 {
 		t.Fatalf("the door failed to commit beside an open reader: %+v", health)
 	}

@@ -90,8 +90,9 @@ func (s *MonsterState) MoverAt(divisionID string, gid uint32, slot, monsterSlot 
 livePose
 
 livePose reads one actor's live pose without expanding or validating a
-whole mover value - the read vanishInSafeZone weighs once per advanced
-actor. A gid the mover storage cannot place reads through the same
+whole mover value - the storage read vanishInSafeZone falls back to
+when the step moved the actor off its snapshot mover. A gid the mover
+storage cannot place reads through the same
 synthesized spawn mover Mover would build, so the pose is Mover's.
 ================
 */
@@ -156,7 +157,7 @@ commitMoverLocked
 ================
 */
 func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32, mover monster.MoverState) bool {
-	return s.commitMoverChecked(state, gid, mover, 0, false)
+	return s.commitMoverChecked(state, gid, behaviorNoMoverSlot, mover, 0, false)
 }
 
 /*
@@ -170,45 +171,82 @@ lane's set advances the row, the stale commit drops, and the actor
 replans at its next due; nothing of the newer value is overwritten.
 Returns the row's generation after the attempt (the new generation
 on acceptance, the current one on a generation drop).
+
+The guards and the opponents bookkeeping read five scalars of the
+actor (motion state, max HP, current HP, the two opponent records)
+plus the previous row's retaliation revision and mode. A hot actor
+answers all of them off the resident rows, so the commit expands
+neither the Instance nor the previous MoverState (#3027); only a
+cold actor, or an opponents change on a hot one, pays lookup's
+expansion. The instance write-back the commit always ran rewrote
+the value the guards had just read whenever neither opponents
+branch moved a record, so it runs only on a change now, writing
+the same value it wrote before; a cold actor's write-back still
+always runs, keeping its wake into the hot tier.
 ================
 */
-func (s *MonsterState) commitMoverChecked(state *divisionMonsterState, gid uint32, mover monster.MoverState, baseGen uint64, guarded bool) bool {
+func (s *MonsterState) commitMoverChecked(state *divisionMonsterState, gid uint32, slot uint32, mover monster.MoverState, baseGen uint64, guarded bool) bool {
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	instance, ok := state.instances.lookup(gid)
-	if !ok || instance.Motion.StateAt(s.nowMillis()) != 0 || (instance.Ref.MaxHP > 0 && instance.CurrentHP == 0) {
-		return false
+	row, hot := state.instances.hotRow(gid)
+	var instance monster.Instance
+	var opponents [2]monster.Opponent
+	if hot {
+		if row.motion.StateAt(s.nowMillis()) != 0 || (row.ref.Value().MaxHP > 0 && row.currentHP == 0) {
+			return false
+		}
+		opponents = row.opponents
+	} else {
+		var ok bool
+		instance, ok = state.instances.lookup(gid)
+		if !ok || instance.Motion.StateAt(s.nowMillis()) != 0 || (instance.Ref.MaxHP > 0 && instance.CurrentHP == 0) {
+			return false
+		}
+		opponents = instance.Opponents
 	}
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)
 	}
-	if guarded && state.movers.generation(gid) != baseGen {
+	if guarded && state.movers.generationAt(slot, gid) != baseGen {
 		return false
 	}
 	// Packet-side damage can arm retaliation between a tick's snapshot read
 	// and commit. Reject only a plan from an older retaliation revision.
-	previous, hadPrevious := state.movers.lookup(gid)
-	if hadPrevious && previous.RetaliationRevision() > mover.RetaliationRevision() {
+	previousRev, previousMode, hadPrevious := state.movers.retaliationAt(slot, gid)
+	if hadPrevious && previousRev > mover.RetaliationRevision() {
 		return false
 	}
 	// Entry effects belong to the accepted transition, never its planner.
 	// A stale FOLLOW plan must not reset a timer while retaliation owns BATTLE.
-	if mover.Mode() == monster.MoverFollowing && (!hadPrevious || previous.Mode() != monster.MoverFollowing) {
+	if mover.Mode() == monster.MoverFollowing && (!hadPrevious || previousMode != monster.MoverFollowing) {
 		s.beginFollowCadenceLocked(state, gid)
 	}
 	state.movers.set(gid, mover)
 	state.syncApproachActor(gid, mover)
 	state.behavior.set(gid, 0)
+	opponentsChanged := false
 	if mover.TargetGID() == 0 && mover.Mode() != monster.MoverPending && mover.Mode() != monster.MoverWandering && mover.Mode() != monster.MoverFollowing {
 		// Releasing target ownership (the retail server's target-change message
 		// with a zero target) clears both records.
-		instance.Opponents = [2]monster.Opponent{}
-	} else if mover.TargetGID() != 0 && instance.Opponents[0].GID == 0 {
+		if opponents != ([2]monster.Opponent{}) {
+			opponents = [2]monster.Opponent{}
+			opponentsChanged = true
+		}
+	} else if mover.TargetGID() != 0 && opponents[0].GID == 0 {
 		// Local acquisition can establish a primary without a preceding hit.
-		instance.Opponents[0] = monster.Opponent{GID: mover.TargetGID(), LastHitMs: uint32(s.nowMillis())}
+		opponents[0] = monster.Opponent{GID: mover.TargetGID(), LastHitMs: uint32(s.nowMillis())}
+		opponentsChanged = true
 	}
-	state.instances.set(gid, instance)
+	if !hot {
+		instance.Opponents = opponents
+		state.instances.set(gid, instance)
+	} else if opponentsChanged {
+		if current, ok := state.instances.lookup(gid); ok {
+			current.Opponents = opponents
+			state.instances.set(gid, current)
+		}
+	}
 	return true
 }
 
@@ -240,6 +278,24 @@ commits while an intervening slower-lane set drops the next one.
 ================
 */
 func (s *MonsterState) CommitMoverGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64) (uint64, bool) {
+	return s.CommitMoverGenAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, mover, baseGen)
+}
+
+/*
+================
+CommitMoverGenAt
+
+CommitMoverGen through the slots the step's snapshot carried for
+the actor (#2133): the population resolve, the commit's guard
+reads and the generation answers go through the verified hints
+and fall back to the gid resolve whenever a hint no longer names
+the gid, so the commit and its returned generation are
+CommitMoverGen's either way. A mover commit runs per acting actor
+per leg; its gid probes were the store map walk this removes
+(#3027).
+================
+*/
+func (s *MonsterState) CommitMoverGenAt(divisionID string, gid uint32, slot, monsterSlot uint32, mover monster.MoverState, baseGen uint64) (uint64, bool) {
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
@@ -247,11 +303,11 @@ func (s *MonsterState) CommitMoverGen(divisionID string, gid uint32, mover monst
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
-	if !s.commitMoverChecked(state, gid, mover, baseGen, true) {
-		return state.movers.generation(gid), false
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
+	if !s.commitMoverChecked(state, gid, slot, mover, baseGen, true) {
+		return state.movers.generationAt(slot, gid), false
 	}
-	return state.movers.generation(gid), true
+	return state.movers.generationAt(slot, gid), true
 }
 
 /*
@@ -264,6 +320,21 @@ are released only for a commit that landed on its base generation.
 */
 func (s *MonsterState) CommitMoverFramesGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64, frames []Frame) []Frame {
 	if _, ok := s.CommitMoverGen(divisionID, gid, mover, baseGen); !ok {
+		return nil
+	}
+	return frames
+}
+
+/*
+================
+CommitMoverFramesGenAt
+
+CommitMoverFramesGen through the slots the step's snapshot
+carried, as CommitMoverGenAt.
+================
+*/
+func (s *MonsterState) CommitMoverFramesGenAt(divisionID string, gid uint32, slot, monsterSlot uint32, mover monster.MoverState, baseGen uint64, frames []Frame) []Frame {
+	if _, ok := s.CommitMoverGenAt(divisionID, gid, slot, monsterSlot, mover, baseGen); !ok {
 		return nil
 	}
 	return frames
@@ -320,6 +391,30 @@ func (s *MonsterState) MoverGenerationAt(divisionID string, gid uint32, slot, mo
 		panic(err)
 	}
 	return mover, state.movers.generationAt(slot, gid), true
+}
+
+/*
+================
+moverGenerationAt
+
+The mover row's commit generation alone, through the slots the
+behaviour batch carried for the actor (#2133): the witness
+vanishInSafeZone weighs to tell whether the step moved the actor
+off the mover it was snapshot at. A hint that no longer names the
+gid falls back to the gid's generation, and an actor the
+population no longer holds answers not-ok, so either doubt sends
+the caller to the stored pose.
+================
+*/
+func (s *MonsterState) moverGenerationAt(divisionID string, gid uint32, slot, monsterSlot uint32) (uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObjectAt(divisionID, gid, monsterSlot)
+	if !state.instances.containsAt(monsterSlot, gid) {
+		return 0, false
+	}
+	return state.movers.generationAt(slot, gid), true
 }
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.

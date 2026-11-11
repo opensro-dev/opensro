@@ -47,6 +47,13 @@ func groundDropTestItems() staticItemSource {
 		"ITEM_ETC_CAPSULE_KEPT": {
 			RefObjID: 5004, Codename: "ITEM_ETC_CAPSULE_KEPT", TypeIDs: [4]int64{3, 2, 2, 0},
 		},
+		// The shipped trade-good row shape (#3144): TID 3/3/8.1 with
+		// the authored CanDrop bit clear (itemdata column 20 = 0). The
+		// indisposable refusal answers: trade goods never reach the
+		// bag (costransfer.go), so no disposal exemption lives here.
+		"ITEM_ETC_TRADE_WC_04": {
+			RefObjID: 5005, Codename: "ITEM_ETC_TRADE_WC_04", TypeIDs: [4]int64{3, 3, 8, 1},
+		},
 	}
 }
 
@@ -85,6 +92,7 @@ func TestGroundDropNativeBars(t *testing.T) {
 		{"ITEM_COS_P_WOLF_SCROLL", true},
 		{"ITEM_ETC_TRANS_MONSTER", false},
 		{"ITEM_ETC_CAPSULE_KEPT", true},
+		{"ITEM_ETC_TRADE_WC_04", true},
 	} {
 		ref := items[row.codename]
 		c := groundDropCharacter(row.codename, ref.TypeIDs, 20)

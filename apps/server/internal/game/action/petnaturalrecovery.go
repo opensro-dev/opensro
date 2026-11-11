@@ -86,6 +86,15 @@ func (rt *Runtime) advancePetNaturalRecovery(key petOwnerKey, nowMs int64) []sim
 	rt.petMu.Lock()
 	petState := rt.petSessions[key]
 	rt.petMu.Unlock()
+	return rt.advancePetNaturalRecoverySession(key, petState, nowMs)
+}
+
+/*
+================
+advancePetNaturalRecoverySession
+================
+*/
+func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *petSession, nowMs int64) []simulation.Frame {
 	if petState == nil || petState.character == nil ||
 		petState.naturalRecoveryAtMs == 0 || nowMs < petState.naturalRecoveryAtMs {
 		return nil
@@ -103,15 +112,29 @@ func (rt *Runtime) advancePetNaturalRecovery(key petOwnerKey, nowMs int64) []sim
 			motion != simulation.MotionSitting {
 			return false
 		}
-		owner := rt.newCosAbnormalOwnerForPet(key.division, c, pet, nowMs)
-		if owner.block.Mask&abnormal.Zombie.Bit() != 0 {
+		// The pulse weighs five facts off the pet's abnormal
+		// state - the zombie bit, the two effective maxima and
+		// the recovery reductions - so it reads them where they
+		// sit instead of building the committing owner and its
+		// block copy for them: the stored block is immutable
+		// (storeCosAbnormal copies on publication) and
+		// cosParameter over it answers what the owner's copy
+		// answered, each maximum weighed once (#2033).
+		block := rt.cosAbnormal(key.division, c.Name, pet.GID)
+		if block != nil && block.Mask&abnormal.Zombie.Bit() != 0 {
 			return false
 		}
+		ref, valid := rt.cosReference(pet)
+		if !valid {
+			ref = nil
+		}
+		maxHP := int64(uint32(cosParameter(ref, pet, block, abnormalMaxHPParam)))
+		maxMP := int64(uint32(cosParameter(ref, pet, block, abnormalMaxMPParam)))
 		beforeHP, beforeMP := int64(pet.CurrentHP), int64(pet.CurrentMP)
-		pet.CurrentHP = uint32(combat.RecoverVital(beforeHP, int64(owner.MaxHP()),
-			petNaturalRecoveryAmount(int64(owner.MaxHP())), owner.Param(combat.HPRecoveryReductionParameter)))
-		pet.CurrentMP = uint32(combat.RecoverVital(beforeMP, int64(owner.MaxMP()),
-			petNaturalRecoveryAmount(int64(owner.MaxMP())), owner.Param(combat.MPRecoveryReductionParameter)))
+		pet.CurrentHP = uint32(combat.RecoverVital(beforeHP, maxHP,
+			petNaturalRecoveryAmount(maxHP), cosParameter(ref, pet, block, combat.HPRecoveryReductionParameter)))
+		pet.CurrentMP = uint32(combat.RecoverVital(beforeMP, maxMP,
+			petNaturalRecoveryAmount(maxMP), cosParameter(ref, pet, block, combat.MPRecoveryReductionParameter)))
 		if int64(pet.CurrentHP) == beforeHP && int64(pet.CurrentMP) == beforeMP {
 			return false
 		}

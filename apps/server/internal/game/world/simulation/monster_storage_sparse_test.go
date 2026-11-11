@@ -120,6 +120,49 @@ func TestSparseMaskMatchesUnmaskedJoin(t *testing.T) {
 
 /*
 ================
+TestHotFillClearsSparseFieldsOnAReusedSlot
+
+The leg snapshot fills straight into retained view slots (#2150), so
+the destination of a fill cannot be trusted to arrive zero: a slot
+that held an actor with every sparse projection, refilled after those
+projections are gone, must not keep the old ones standing. This pins
+hotFill's clearing assignments; the masked-join test above reads onto
+a fresh value each time and cannot see a stale field survive.
+================
+*/
+func TestHotFillClearsSparseFieldsOnAReusedSlot(t *testing.T) {
+	s := newMonsterStorage(nil)
+	withSparse := monster.Instance{Gid: 7, CurrentHP: 3, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1},
+		LinkedEffects: &monster.EffectSnapshot{}, Abnormal: &abnormal.Block{}}
+	withSparse.SelfEffects[0].Token = 5
+	withSparse.TargetEffects[0].Token = 6
+	s.set(7, withSparse)
+	r, ok := s.hotRow(7)
+	if !ok {
+		t.Fatal("the sparse actor is not hot")
+	}
+	var dst monster.Instance
+	s.hotFill(&dst, 7, &r)
+	if dst.LinkedEffects == nil || dst.Abnormal == nil || dst.SelfEffects[0].Token != 5 || dst.TargetEffects[0].Token != 6 {
+		t.Fatalf("the first fill did not carry the sparse fields: %+v", dst)
+	}
+	s.set(7, monster.Instance{Gid: 7, CurrentHP: 2, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	r, ok = s.hotRow(7)
+	if !ok {
+		t.Fatal("the cleared actor is not hot")
+	}
+	s.hotFill(&dst, 7, &r)
+	if dst.LinkedEffects != nil || dst.Abnormal != nil ||
+		dst.SelfEffects != (monster.SelfEffects{}) || dst.TargetEffects != (monster.TargetEffects{}) {
+		t.Fatalf("the reused slot kept the previous sparse fields: %+v", dst)
+	}
+	if dst.CurrentHP != 2 {
+		t.Fatalf("the reused slot kept the previous scalar state: %+v", dst)
+	}
+}
+
+/*
+================
 TestLocateObjectMatchesTwoStepSearch
 
 Get, GetInWorld and locateObject answer exactly what populationForObject
@@ -283,5 +326,97 @@ func TestGetInWorldFinishesExpiredSummonActionOnce(t *testing.T) {
 	}
 	if _, ok := s.GetInWorld(benchDivision, 2, 2); ok || reads != 2 {
 		t.Fatalf("foreign world read the clock or answered: ok %v reads %d", ok, reads)
+	}
+}
+
+/*
+================
+TestHotRowPtrReadsInPlace
+
+The scheduler's pointer read answers the row where it sits: the
+fields are the stored row's, a re-set is visible to the next read,
+a slot that no longer names the gid misses, and removeHot's swap
+leaves the moved row readable at its new slot while the removed
+gid misses (#3027).
+================
+*/
+func TestHotRowPtrReadsInPlace(t *testing.T) {
+	s := newMonsterStorage(nil)
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 30, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	s.set(3, monster.Instance{Gid: 3, CurrentHP: 7, Ref: monster.MonsterRef{MaxHP: 300, RefObjID: 3}})
+
+	row, ok := s.hotRowPtrAt(0, 1)
+	if !ok || row == nil || row.currentHP != 30 {
+		t.Fatalf("slot read = %+v (ok %v)", row, ok)
+	}
+	if _, ok := s.hotRowPtrAt(0, 3); ok {
+		t.Fatal("slot read answered for the wrong gid")
+	}
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 31, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	row, ok = s.hotRowPtr(1)
+	if !ok || row.currentHP != 31 {
+		t.Fatalf("re-set read = %+v (ok %v)", row, ok)
+	}
+	s.remove(1)
+	row, ok = s.hotRowPtr(3)
+	if !ok || row == nil || row.currentHP != 7 {
+		t.Fatalf("swapped read = %+v (ok %v)", row, ok)
+	}
+	if _, ok := s.hotRowPtr(1); ok {
+		t.Fatal("removed gid still reads hot")
+	}
+}
+
+/*
+================
+TestHotProbeReadsVerdictsWhereTheySit
+
+The batch build's probe answers the row's hit points, its cached
+reference max and its summon deadline without copying the row or
+the interned reference out: a re-set under a different reference
+moves the cached max, removeHot's swap keeps the moved row's
+probe with its row, and a removed, frozen or slot-stale gid
+misses (#3027).
+================
+*/
+func TestHotProbeReadsVerdictsWhereTheySit(t *testing.T) {
+	s := newMonsterStorage(nil)
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 30, SummonActionUntilMs: 500, Ref: monster.MonsterRef{MaxHP: 100, RefObjID: 1}})
+	s.set(2, monster.Instance{Gid: 2, CurrentHP: 0, Ref: monster.MonsterRef{MaxHP: 0, RefObjID: 2}})
+	s.set(3, monster.Instance{Gid: 3, CurrentHP: 7, Ref: monster.MonsterRef{MaxHP: 300, RefObjID: 3}})
+
+	hp, maxHP, summonUntil, ok := s.hotProbeAt(0, 1)
+	if !ok || hp != 30 || maxHP != 100 || summonUntil != 500 {
+		t.Fatalf("slot probe = %d/%d/%d (ok %v)", hp, maxHP, summonUntil, ok)
+	}
+	if _, _, _, ok := s.hotProbeAt(0, 2); ok {
+		t.Fatal("slot probe answered for the wrong gid")
+	}
+	slot, hp, maxHP, _, ok := s.hotProbe(3)
+	if !ok || slot != 2 || hp != 7 || maxHP != 300 {
+		t.Fatalf("gid probe = slot %d %d/%d (ok %v)", slot, hp, maxHP, ok)
+	}
+
+	// A re-set under a different reference moves the cached max.
+	s.set(1, monster.Instance{Gid: 1, CurrentHP: 31, Ref: monster.MonsterRef{MaxHP: 450, RefObjID: 9}})
+	if _, maxHP, _, ok := s.hotProbeAt(0, 1); !ok || maxHP != 450 {
+		t.Fatalf("re-set probe max = %d (ok %v)", maxHP, ok)
+	}
+
+	// removeHot swaps the last row into the hole; its probe
+	// answers at the new slot with its own max.
+	s.remove(1)
+	slot, _, maxHP, _, ok = s.hotProbe(3)
+	if !ok || slot != 0 || maxHP != 300 {
+		t.Fatalf("swapped probe = slot %d max %d (ok %v)", slot, maxHP, ok)
+	}
+	if _, _, _, _, ok := s.hotProbe(1); ok {
+		t.Fatal("removed gid still probes hot")
+	}
+	s.archive = &monsterArchive{}
+	s.freeze(3)
+	if _, _, _, _, ok := s.hotProbe(3); ok {
+		t.Fatal("frozen gid still probes hot")
+
 	}
 }

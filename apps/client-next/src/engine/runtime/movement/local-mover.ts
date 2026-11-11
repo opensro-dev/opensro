@@ -131,6 +131,9 @@ export interface LocalMoverWorld {
 	readonly inputSeq: number;
 	readonly navigationRequestId: number | undefined;
 	readonly navigationOwner: NavOwner | undefined;
+	// Terrain retention beside navigationOwner (#3006), as the worker
+	// publishes it (movement.ts navigationTerrainRetained).
+	readonly navigationTerrainRetained?: boolean;
 	readonly originMs: number | undefined;
 	readonly view: { readonly requestId: number; readonly navigation: NavigationView; } | null;
 }
@@ -230,6 +233,8 @@ interface Walker {
 	atMs: number;
 	segment: WalkStepSegment | null;
 	owner: NavOwner | undefined;
+	// Terrain retention beside owner (movement.ts terrainRetained).
+	terrainRetained: boolean;
 	cursor: SurfaceCursor;
 	// The arrow keys' turn: words a millisecond, and the unrounded facing it
 	// has reached (the worker rounds only what it applies, as here).
@@ -255,6 +260,7 @@ function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
 			poseAtMs: walker.atMs,
 			segment: walker.segment,
 			owner: walker.owner,
+			terrainRetained: walker.terrainRetained,
 			cursor: walker.cursor,
 			now,
 			clip: navigation.clip,
@@ -263,12 +269,14 @@ function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
 		if ( result.kind === "stepped" ) {
 			walker.pose = result.pose;
 			walker.owner = result.owner;
+			walker.terrainRetained = !result.owner;
 			walker.segment = result.segment;
 		} else if ( result.kind === "sampled" ) {
 			// A fixed segment is sampled on its own clock; it retires at
 			// its authored end, where the sampled pose is its destination.
 			walker.pose = result.pose;
 			walker.owner = result.owner;
+			walker.terrainRetained = !result.owner;
 			// Only a segment samples (a turn alone steps "idle"), so this holds one.
 			if ( walker.segment && now >= walker.segment.start + walker.segment.duration ) walker.segment = null;
 		} else if ( result.kind === "uncovered" ) {
@@ -405,6 +413,7 @@ export function createLocalMover() {
 				leg( world.pose!, world.aim, atMs, world.speed * world.speedFactor ) :
 				null,
 			owner: world.navigationOwner,
+			terrainRetained: world.navigationTerrainRetained ?? false,
 			cursor: {},
 			// The worker's own turn carries on past its publication.
 			turn: world.turnRate,
@@ -453,6 +462,7 @@ export function createLocalMover() {
 				// A turn keeps the walk it turns; any other aim starts its own.
 				segment: aim.kind === "turn" ? walk?.walker.segment ?? null : leg( from, aim, input.now, input.speed ),
 				owner: walk?.walker.owner ?? world.navigationOwner,
+				terrainRetained: walk?.walker.terrainRetained ?? world.navigationTerrainRetained ?? false,
 				cursor: walk?.walker.cursor ?? {},
 				turn: aim.kind === "turn" ? aim.rate : walk?.walker.turn ?? 0,
 				heading: aim.kind === "turn" || !walk ? from.angle : walk.walker.heading
@@ -592,12 +602,6 @@ export function createLocalMover() {
 			const navigation = viewFor( world );
 			if ( !navigation || world.navigationRequestId !== walk.requestId ) return end();
 			walk.inputs = walk.inputs.filter( input => input.seq > world.inputSeq );
-			// The cap follows the speed the worker walks at, a direction walk's
-			// drift factor included, or the body falls behind a faster drift.
-			// A fixed segment is exempt: it is drawn at its authored rate (a
-			// dash is not a correction to throttle to walking speed), so the
-			// speed the prediction started with stands while it runs.
-			if ( world.speed && !walk.walker.segment?.fixedTiming ) walk.speed = world.speed * world.speedFactor;
 			advance( walk.walker, now, navigation );
 			let snapped = false;
 			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
@@ -624,6 +628,16 @@ export function createLocalMover() {
 				}
 				walk.walker = rebuilt;
 			}
+			// The cap follows the speed the worker walks at, a direction walk's
+			// drift factor included, or the body falls behind a faster drift.
+			// A fixed segment is drawn at its authored rate: a dash is not a
+			// correction to throttle to walking speed. That holds as well when
+			// the rebuild adopted the dash over a walk already predicted (Ghost
+			// Walk cast while walking): kept at the walk's cap, the body trailed
+			// the dash and glided the rest of the way after the skill's motion.
+			const segment = walk.walker.segment;
+			if ( segment?.fixedTiming ) walk.speed = startWalking( segment ).walking?.speed ?? walk.speed;
+			else if ( world.speed ) walk.speed = world.speed * world.speedFactor;
 			// The drawn body heads for the prediction; the shared cap
 			// (drawn-step.ts) limits how far it moves this frame, so what a
 			// rebuild moved is given back within the margin, never in a jump.

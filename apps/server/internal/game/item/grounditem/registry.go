@@ -175,6 +175,20 @@ type Registry struct {
 	// changes stamps every gid a mutation touched, for the store's
 	// commit to persist only those rows (changes.go).
 	changes changeJournal
+	// divLogs notes the same stamps per division, in division
+	// revisions, for a reader that keeps a copy of one division and
+	// asks only for what moved (division_delta.go). divLogFloor is the
+	// revision of the last Restore: no log reaches behind it.
+	divLogs     map[string]*divisionLog
+	divLogFloor uint64
+	// ownerStamp is the earliest DroppedAt among owned (reserved)
+	// drops, held so the tick's owner-expiry peek answers in O(1)
+	// instead of walking the plane (#2033). Adds can only lower it;
+	// ownerStampStale says a removal, release, population retirement,
+	// clear or restore may have raised it, so the next peek pays one
+	// refresh walk and is exact again.
+	ownerStamp      time.Time
+	ownerStampStale bool
 }
 
 // Revision reports the mutation counter. Two equal reads with no
@@ -274,6 +288,7 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	r.division(divisionID)[item.Gid] = item
+	r.noteOwnerStampLocked(item)
 	r.stampLocked(divisionID, item.Gid)
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
@@ -360,6 +375,9 @@ func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 	delete(items, gid)
 	r.bumpLocked(divisionID)
 	r.stampLocked(divisionID, gid)
+	if item.OwnerJID != 0 {
+		r.ownerStampStale = true
+	}
 	return item, true
 }
 
@@ -418,6 +436,9 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 		r.bumpLocked(divisionID)
 		for _, item := range expired {
 			r.stampLocked(divisionID, item.Gid)
+			if item.OwnerJID != 0 {
+				r.ownerStampStale = true
+			}
 		}
 	}
 	sort.Slice(expired, func(a, b int) bool { return expired[a].Gid < expired[b].Gid })
@@ -447,6 +468,67 @@ func (r *Registry) HasExpired(divisionID string, now time.Time, lifetime time.Du
 	return false
 }
 
+/*
+================
+HasExpiredOwner
+
+The owner-expiry peek behind ReleaseExpiredOwners, across every
+division: some reserved drop sits at or past its owner lifetime.
+Answers from the cached earliest owned DroppedAt under the registry
+lock (#2033): adds lower it in O(1), and the only writes that can
+raise it - removals, owner releases, population retirements, clears
+and restores - mark it stale, so the next peek pays one refresh walk
+and every peek stays exact. The release pass still re-checks every
+row under the maintenance barrier.
+================
+*/
+func (r *Registry) HasExpiredOwner(now time.Time, lifetime time.Duration) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.ownerStampStale {
+		r.refreshOwnerStampLocked()
+	}
+	return !r.ownerStamp.IsZero() && now.Sub(r.ownerStamp) >= lifetime
+}
+
+/*
+================
+noteOwnerStampLocked
+
+Lower the cached earliest owned stamp for one stored row. An add can
+only move the earliest boundary earlier, never later, so this is the
+one owner write that needs no refresh walk. Caller holds r.mu.
+================
+*/
+func (r *Registry) noteOwnerStampLocked(item Item) {
+	if item.OwnerJID == 0 || item.DroppedAt.IsZero() {
+		return
+	}
+	if r.ownerStamp.IsZero() || item.DroppedAt.Before(r.ownerStamp) {
+		r.ownerStamp = item.DroppedAt
+	}
+}
+
+/*
+================
+refreshOwnerStampLocked
+
+Recompute the earliest owned stamp with one walk of the plane. Runs
+only when a mutation that can raise the minimum marked the cache
+stale, so idle ticks never pay it. Caller holds r.mu.
+================
+*/
+func (r *Registry) refreshOwnerStampLocked() {
+	r.ownerStamp = time.Time{}
+	for _, items := range r.byDivision {
+		for _, item := range items {
+			r.noteOwnerStampLocked(item)
+		}
+	}
+	r.ownerStampStale = false
+}
+
 // ReleaseExpiredOwners makes reserved drops public at the native 30-second
 // boundary without replacing their entity identity. The caller broadcasts
 // 0x31E2 for each returned row; subsequent calls return nothing.
@@ -473,6 +555,7 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 	}
 	if len(released) > 0 {
 		r.bumpLocked(divisionID)
+		r.ownerStampStale = true
 		for _, item := range released {
 			r.stampLocked(divisionID, item.Gid)
 		}
@@ -545,15 +628,7 @@ func (r *Registry) All(divisionID string) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	items := r.byDivision[divisionID]
-	out := make([]Item, 0, len(items))
-	for _, gid := range sortedGids(items) {
-		item := items[gid]
-		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
-		item.Summon = domain.CloneCOS(item.Summon)
-		out = append(out, item)
-	}
-	return out
+	return r.allLocked(divisionID)
 }
 
 /*
@@ -604,6 +679,9 @@ func (r *Registry) Clear(divisionID string) {
 		// Every gid of the vanished division is a delete.
 		for gid := range items {
 			r.stampLocked(divisionID, gid)
+			if items[gid].OwnerJID != 0 {
+				r.ownerStampStale = true
+			}
 		}
 	}
 	delete(r.byDivision, divisionID)

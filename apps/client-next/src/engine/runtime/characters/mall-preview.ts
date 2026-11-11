@@ -125,9 +125,13 @@ export function createMallPreview() {
 		step(
 			frame: MallPreviewFrame,
 			resources: { ready( path: string ): boolean; plan( paths: readonly string[] ): boolean; },
-			renderer: Pick<Renderer, "setCharacterAssembly">
+			renderer: Pick<Renderer, "setCharacterAssembly" | "enchantSparks">
 		): readonly CharacterActor[] {
 			if ( request === null ) return [];
+			// Port-only, not native: the Experimental enchant sparks, from
+			// the same renderer answer the world dresses by - the mannequin
+			// clones the player, weapon included (#3145).
+			const enchantSparks = renderer.enchantSparks?.() === true;
 			const prefix = bodyPrefix( frame.resource.codename );
 			if ( catalog !== frame.dress || body !== prefix ) {
 				const changedBody = body !== "" && body !== prefix;
@@ -160,7 +164,8 @@ export function createMallPreview() {
 				frame.equipment.filter( item => item.slot >= 0 && item.slot < APPEARANCE_EQUIPMENT_SLOTS ).map(
 					item => [ item.slot, item.refObjId, item.plus ]
 				),
-				[ ...avatars.values() ]
+				[ ...avatars.values() ],
+				Number( enchantSparks )
 			] );
 			if ( !planned || planned.signature !== signature ) {
 				const assembly = assembleEquipmentAppearance( {
@@ -176,7 +181,8 @@ export function createMallPreview() {
 					player: true,
 					ownerless: true,
 					committedWear: [],
-					freezeWear: false
+					freezeWear: false,
+					enchantSparks
 				} );
 				planned = {
 					signature,

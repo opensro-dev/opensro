@@ -22,6 +22,7 @@ export default {
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
 		"scripts/test/assets/entityCompoundParticles.test.mjs",
 		"scripts/test/assets/monsterPortraitError.test.mjs",
+		"scripts/test/assets/monsterPortraitNames.test.mjs",
 		"scripts/test/assets/skillEffectBinding.test.mjs",
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",
@@ -39,6 +40,7 @@ export default {
 		"scripts/test/assets/vatPipeline.test.mjs",
 		"scripts/test/assets/resourceBuildGraph.test.mjs",
 		"scripts/test/assets/laterDungeonMapStep.test.mjs",
+		"scripts/test/assets/laterWorldMapButtonsStep.test.mjs",
 		"scripts/test/assets/publishedAssetBoundary.test.mjs",
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",
@@ -81,6 +83,7 @@ export default {
 		"scripts/test/assets/missionDungeonMinimapCoverage.test.mjs",
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
 		"scripts/test/assets/terrainBlockTextures.test.mjs",
+		"scripts/test/assets/objectTextureLevels.test.mjs",
 		"scripts/test/assets/hdTextureVariants.test.mjs"
 	]
 };

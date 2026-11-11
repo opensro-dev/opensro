@@ -167,15 +167,27 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mov
 /*
 ================
 forgetDormant
+
+The bank restore has work to do only for an actor that actually
+slept: tryDormant registers the gid in dormant before it stores the
+bank away (storeAITimer), and this function is the only place that
+unregisters one, so a stored bank exists exactly while its gid is
+registered here. The schedulers call this for every due actor, and
+the awake majority used to pay the bank's two gid-map probes for a
+restore that could not fire (#2029: aiTimer was most of this
+function's cost in the seeded leg profile). Probe dormant first;
+the asleep path below is unchanged, restore before unregister.
 ================
 */
 func (state *divisionMonsterState) forgetDormant(gid uint32) {
+	region, ok := state.dormant[gid]
+	if !ok {
+		return
+	}
 	state.aiTimer(gid)
-	if region, ok := state.dormant[gid]; ok {
-		delete(state.dormant, gid)
-		delete(state.dormantRegions[region], gid)
-		if len(state.dormantRegions[region]) == 0 {
-			delete(state.dormantRegions, region)
-		}
+	delete(state.dormant, gid)
+	delete(state.dormantRegions[region], gid)
+	if len(state.dormantRegions[region]) == 0 {
+		delete(state.dormantRegions, region)
 	}
 }

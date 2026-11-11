@@ -39,7 +39,12 @@ Admit lines newer than the last admitted sequence and retire boards that
 expired or whose speaker left view.
 ================
 		*/
-		step( lines: readonly ChatLine[], players: readonly { gid: number; name?: string; }[], now: number ) {
+		step(
+			lines: readonly ChatLine[],
+			players: readonly { gid: number; name?: string; }[],
+			now: number,
+			linked = false
+		) {
 			const present = new Set( players.map( p => p.gid ) );
 			if ( observed === undefined ) {
 				observed = 0;
@@ -53,8 +58,10 @@ expired or whose speaker left view.
 				if ( line.history || !SPEECH_CHANNELS.includes( line.channel ) ) continue;
 				const gid = line.gid ?? players.find( p => p.name === line.name )?.gid;
 				if ( gid !== undefined && present.has( gid ) ) {
-					// Port-only item links: a marker shows as its item's label.
-					const text = chatLinkSpans( line.text, line.links, false ).text;
+					// Port-only item links: with links on a marker shows
+					// as its item's label (a board has no hover regions);
+					// with links off the line draws unchanged, as native.
+					const text = chatLinkSpans( line.text, line.links, linked ).text;
 					active.set( gid, { text, channel: line.channel, expires: now + SPEECH_MS } );
 				}
 			}

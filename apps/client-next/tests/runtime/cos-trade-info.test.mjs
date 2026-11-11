@@ -68,13 +68,36 @@ test("a sale left unanswered for 5000 ms ends the run", () => {
 
 test("the bag rows carry each item's published buy price", () => {
 	assert.deepEqual(
-		info.cosCargoRows( [ { slot: 2, quantity: 7, tooltip: { fields: { price: 348 } } }, {
+		info.cosCargoRows( [ { slot: 2, quantity: 7, tooltip: { fields: { price: 348, maxStack: 40 } } }, {
 			slot: 4,
 			quantity: 1
 		} ] ),
 		[
-			{ slot: 2, quantity: 7, price: 348 },
-			{ slot: 4, quantity: 1, price: 0 }
+			{ slot: 2, quantity: 7, price: 348, maxStack: 40 },
+			{ slot: 4, quantity: 1, price: 0, maxStack: 0 }
 		]
 	);
+});
+
+test("the progress line drives a load from 1 to 5 stars", () => {
+	// One stack of the goods in front of the player: 348 x 40. The
+	// published (stars, gap) pairs below are a 101-stack transport
+	// loading up: 20, 21, 41, 71, then 101 stacks aboard.
+	const stack = 348 * 40;
+	assert.equal( info.tradeProgressLine( { stars: 1, gap: 2784 }, stack ), "1 star; 1 more stack for 2" );
+	assert.equal( info.tradeProgressLine( { stars: 2, gap: 270048 }, stack ), "2 stars; 20 more stacks for 3" );
+	assert.equal( info.tradeProgressLine( { stars: 3, gap: 413424 }, stack ), "3 stars; 30 more stacks for 4" );
+	assert.equal( info.tradeProgressLine( { stars: 4, gap: 417600 }, stack ), "4 stars; 30 more stacks for 5" );
+	assert.equal( info.tradeProgressLine( { stars: 5, gap: 0 }, stack ), "5 stars" );
+	// The issue's own example shape.
+	assert.equal( info.tradeProgressLine( { stars: 3, gap: 12 * stack }, stack ), "3 stars; 12 more stacks for 4" );
+});
+
+test("the progress line is absent without an answer and bare without a priceable stack", () => {
+	assert.equal( info.tradeProgressLine( null, 100 ), "" );
+	assert.equal( info.tradeProgressLine( undefined, 100 ), "" );
+	assert.equal( info.tradeProgressLine( { stars: 0, gap: 1 }, 0 ), "0 stars" );
+	// An unmeasurable load (the server named no gap) reads as its stars.
+	assert.equal( info.tradeProgressLine( { stars: 1, gap: 0 }, 100 ), "1 star" );
+	assert.equal( info.tradeProgressLine( { stars: 3, gap: 50 }, 0 ), "3 stars" );
 });

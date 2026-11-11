@@ -558,6 +558,71 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 
 /*
 ================
+TestMurderNoticeFollowsTheJobKillControls
+
+#3151: an open-field murder (no suits, no legal enemy) posts
+"[<murderer>] murdered [<victim>] (Murderer Lv N)" - character names,
+the murderer's new PK level - on the job-kill channel, only once the
+kill's door has committed and only under the kill notices' flag; the
+pair stays quiet for the pair window and a repeat after it names the
+next level; the level reads MAX at its cap, and a kill of a legal enemy
+(a murderer) books no murder and posts nothing.
+================
+*/
+func TestMurderNoticeFollowsTheJobKillControls(t *testing.T) {
+	rt, _, killer, victim := newPvpPair(t)
+	kill := func(k, v *enterworld.Character, nowMs int64) jobKillPayout {
+		kill := playerKill{kind: rt.playerKillKind(testDivision, v, k)}.withVictim(k, v)
+		_, _, after := rt.payPlayerKillInDoor(testDivision, k, v, kill, nowMs)
+		return after
+	}
+	murdered := func(level string) string {
+		return "[" + killer.Name + "] murdered [" + victim.Name + "] (Murderer Lv " + level + ")"
+	}
+	// The flag gates the line, not the booking: the first murder is
+	// booked (level 1) and stays silent.
+	rt.payJobKillShares(kill(killer, victim, 0))
+	if got := drainedNotices(t, rt); len(got) != 0 {
+		t.Fatalf("flag off announced %q", got)
+	}
+	if killer.PK == nil || killer.PK.TotalCount != 1 {
+		t.Fatalf("the murder was not booked: %+v", killer.PK)
+	}
+	rt.Announce.JobKill = true
+	rt.payJobKillShares(kill(killer, victim, 0))
+	rt.payJobKillShares(kill(killer, victim, jobKillRepeatMs(tunables.Current())-1))
+	if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].text != murdered("2") ||
+		got[0].channel != wire.JobKillNoticeChannel {
+		t.Fatalf("notices %+v, want one murder line on the job-kill channel", got)
+	}
+	// The pair reopens after the window, at the level the bookings made.
+	rt.payJobKillShares(kill(killer, victim, jobKillRepeatMs(tunables.Current())))
+	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != murdered("4") {
+		t.Fatalf("reopened pair %q, want %q", got, murdered("4"))
+	}
+	// At the cap the level reads MAX.
+	rt, _, killer, victim = newPvpPair(t)
+	rt.Announce.JobKill = true
+	killer.PK = &domain.PKRecord{TotalCount: pk.MaxTotal - 1}
+	rt.payJobKillShares(kill(killer, victim, 0))
+	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != murdered("MAX") {
+		t.Fatalf("capped murder %q, want %q", got, murdered("MAX"))
+	}
+	// Killing a murderer is legal: no murder is booked, no line posts.
+	rt, _, killer, victim = newPvpPair(t)
+	rt.Announce.JobKill = true
+	victim.PK = &domain.PKRecord{Penalty: 500}
+	rt.payJobKillShares(kill(killer, victim, 0))
+	if got := drainedNotices(t, rt); len(got) != 0 {
+		t.Fatalf("a legal kill announced %q", got)
+	}
+	if killer.PK != nil && killer.PK.TotalCount != 0 {
+		t.Fatalf("a legal kill booked a murder: %+v", killer.PK)
+	}
+}
+
+/*
+================
 TestReinforceIntoPlusEightAnnounces
 
 Through HandleAlchemyReinforce: a success from +7 into +8 posts one notice

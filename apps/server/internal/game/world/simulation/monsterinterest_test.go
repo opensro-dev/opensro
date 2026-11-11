@@ -690,6 +690,17 @@ can flip movers across a block edge between legs.
 */
 func scopeBenchWorld(viewerCount int, spread bool) (*MonsterMoverOps, []SessionSnapshot, map[string]worldgeom.RegionXZ, map[string]bool, *divisionMonsterState) {
 	state := interestScanCrowd(3000, 300)
+	state.byRegion = make(map[uint16][]uint32)
+	// Six thousand static listings in far regions no viewer's ring
+	// reaches: a live division lists its whole map, while a leg only
+	// ever asks the rings its viewers stand in. The listings never
+	// enter an answer; they are what an eager statics rebuild probes
+	// on every roster move (#3027).
+	for gid := uint32(3001); gid <= 9000; gid++ {
+		region := uint16(interestScanRegion + 0x400 + gid%8)
+		state.instances.set(gid, monster.Instance{Gid: gid, CurrentHP: 1})
+		state.listRegionGid(region, gid)
+	}
 	registry := &MonsterState{
 		divs:  map[string]*divisionMonsterState{monsterTestDivision: state},
 		clock: func() time.Time { return time.UnixMilli(1_784_000_000_000) },
@@ -723,7 +734,10 @@ One runScopeVisibility leg over the seeded viewers of a 3000-mover
 crowd (#2134). Quiet: nothing moves between legs, so the
 unchanged-leg skip serves everyone. Roaming: eight movers straddle a
 block edge inside the clustered viewers' area, so their stamps move
-on every leg while far neighbourhoods stand still.
+on every leg while far neighbourhoods stand still. Churn shapes also
+remove and re-add a mover every leg: the roster move retires the
+statics stamp, so each leg re-reads statics as a live division's
+spawn and despawn traffic makes it (#3027).
 ================
 */
 func BenchmarkScopeVisibilityLeg(b *testing.B) {
@@ -732,12 +746,15 @@ func BenchmarkScopeVisibilityLeg(b *testing.B) {
 		viewers int
 		spread  bool
 		flips   int
+		churn   bool
 	}{
-		{"clustered/50viewers/quiet", 50, false, 0},
-		{"clustered/50viewers/roaming8", 50, false, 8},
-		{"clustered/200viewers/quiet", 200, false, 0},
-		{"clustered/200viewers/roaming8", 200, false, 8},
-		{"spread/200viewers/roaming8", 200, true, 8},
+		{"clustered/50viewers/quiet", 50, false, 0, false},
+		{"clustered/50viewers/roaming8", 50, false, 8, false},
+		{"clustered/200viewers/quiet", 200, false, 0, false},
+		{"clustered/200viewers/roaming8", 200, false, 8, false},
+		{"spread/200viewers/roaming8", 200, true, 8, false},
+		{"clustered/200viewers/roaming8+churn", 200, false, 8, true},
+		{"spread/200viewers/roaming8+churn", 200, true, 8, true},
 	}
 	for _, shape := range shapes {
 		b.Run(shape.name, func(b *testing.B) {
@@ -761,6 +778,12 @@ func BenchmarkScopeVisibilityLeg(b *testing.B) {
 						x = 990.0
 					}
 					state.movers.set(uint32(400+flip), monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion, X: x, Z: 960}})
+				}
+				if shape.churn {
+					gid := uint32(500 + i%8)
+					pose := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+					state.movers.remove(gid)
+					state.movers.set(gid, monster.MoverState{Pose: pose})
 				}
 				push.toSession = push.toSession[:0]
 				ops.runScopeVisibility(nowMs, sessions, viewerMap, live, push)

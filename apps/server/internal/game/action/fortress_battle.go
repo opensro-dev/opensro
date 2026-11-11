@@ -168,7 +168,12 @@ func (rt *Runtime) promoteFortressBattle(division string, c *enterworld.Characte
 	_, oldID, _ := fortress.BattleRank(previous)
 	var public, private []wire.Frame
 	applied := false
-	rt.deps.Update(c, "fortress-battle-rank", func() bool {
+	// Death credit settles only on tick lanes (advancePlayerAbnormals,
+	// the strike settlements), so the commit joins the tick batch like
+	// the other tick settlements (#3099). The verdict and the frames
+	// below are read from the callback's own writes, which a deferred
+	// door performs at call time exactly as the immediate one does.
+	rt.deps.UpdateDeferred(c, "fortress-battle-rank", func() bool {
 		public, private = rt.retireFortressRankInDoor(division, c, oldID, now)
 		token := atomic.AddUint32(&rt.castTokenCounter, 1)
 		if token == 0 {

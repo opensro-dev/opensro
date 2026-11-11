@@ -56,6 +56,7 @@ func BenchmarkBehaviorBatch(b *testing.B) {
 		if len(got) != 1 || len(got[0].actors) != 5000 {
 			b.Fatal("lost actors")
 		}
+		s.armBehaviorRemainders(got, int64(tick))
 		s.releaseBehaviorBatches(got)
 	}
 }
@@ -78,6 +79,8 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 	type due struct {
 		gid               uint32
 		slot, monsterSlot uint32
+		queueSlot         uint32
+		gen               uint64
 		before            monster.MoverState
 	}
 	dues := make([]due, 0, worlds*actors)
@@ -98,7 +101,8 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 			d.behavior.set(gid, 0)
 			slot, _ := d.movers.slotOf(gid)
 			monsterSlot, _ := d.instances.hotSlotOf(gid)
-			dues = append(dues, due{gid, slot, monsterSlot, row})
+			queueSlot, _ := d.behavior.byGID[gid]
+			dues = append(dues, due{gid, slot, monsterSlot, queueSlot, d.movers.generation(gid), row})
 		}
 	}
 	b.ReportAllocs()
@@ -109,8 +113,12 @@ func BenchmarkGateCommitInstanced(b *testing.B) {
 			now++
 			after := dues[i].before
 			after.Activity.LastCheck = uint32(now)
-			if !s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].before, after, now) {
+			committed, cadenceOnly := s.commitActivityAt(benchDivision, dues[i].gid, dues[i].slot, dues[i].monsterSlot, dues[i].queueSlot, dues[i].gen, dues[i].before, after, now)
+			if !committed {
 				b.Fatal("gate commit refused")
+			}
+			if !cadenceOnly {
+				dues[i].gen++
 			}
 			dues[i].before = after
 		}
@@ -124,7 +132,8 @@ TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity
 */
 func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) {
 	s, d := queueBenchmarkState(3)
-	batch := s.behaviorBatches(0)[0]
+	batches := s.behaviorBatches(0)
+	batch := batches[0]
 	for i, ref := range batch.actors {
 		if ref.gid != uint32(i+1) {
 			t.Fatal("non-deterministic dispatch order")
@@ -140,6 +149,9 @@ func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) 
 	if _, ok := s.behaviorActor(batch.key, 2); ok {
 		t.Fatal("retired actor dispatched")
 	}
+	// The leg arms the remainder once the batch is dispatched; the
+	// retired actor's arm is dropped by the next build's row check.
+	s.armBehaviorRemainders(batches, 0)
 	if next := s.behaviorBatches(0); len(next[0].actors) != 0 {
 		t.Fatal("same actor scheduled twice in a tick")
 	}
@@ -204,7 +216,11 @@ stranger's (#2135 item 2).
 func TestBehaviorActorMoverRecycledSlotFallsBack(t *testing.T) {
 	s, d := queueBenchmarkState(3)
 	s.clock = func() time.Time { return time.UnixMilli(5000) }
-	batch := s.behaviorBatches(0)[0]
+	batches := s.behaviorBatches(0)
+	// The remainder arm resolves the mover slot the drain's notes
+	// left open, as it does after every dispatched leg.
+	s.armBehaviorRemainders(batches, 0)
+	batch := batches[0]
 	ref := batch.actors[0]
 	if ref.gid != 1 || ref.slot == behaviorNoMoverSlot {
 		t.Fatal("batch carried no slot for a resident mover")

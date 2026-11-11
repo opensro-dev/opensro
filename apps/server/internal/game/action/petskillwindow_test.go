@@ -49,3 +49,58 @@ func TestWorldEntryTrackedPetSkillWindowRetiresOnTheSweep(t *testing.T) {
 		t.Fatalf("index = %v, want the empty character forgotten", keys)
 	}
 }
+
+/*
+================
+TestPetSkillWindowIndexKeysMemoTracksMembership
+
+The sweeps read the cached order between membership turns: a second
+read returns the same backing, re-tracking a live owner keeps it, a
+new owner rebuilds a fresh list without touching the one under its
+readers, and forget rebuilds only when it removed an owner.
+================
+*/
+func TestPetSkillWindowIndexKeysMemoTracksMembership(t *testing.T) {
+	index := &petSkillWindowIndex{}
+	if got := index.keys(); len(got) != 0 {
+		t.Fatalf("empty index keys = %v, want none", got)
+	}
+	index.track("div-b", "bravo")
+	index.track("div-a", "beta")
+	index.track("div-a", "alpha")
+	keys := index.keys()
+	want := []petOwnerKey{
+		{division: "div-a", name: "alpha"},
+		{division: "div-a", name: "beta"},
+		{division: "div-b", name: "bravo"},
+	}
+	if !reflect.DeepEqual(keys, want) {
+		t.Fatalf("keys = %v, want the sorted owners %v", keys, want)
+	}
+	if again := index.keys(); &again[0] != &keys[0] {
+		t.Fatal("second read rebuilt the cached list")
+	}
+	index.track("div-a", "alpha")
+	if again := index.keys(); &again[0] != &keys[0] {
+		t.Fatal("re-tracking a live owner dropped the cached list")
+	}
+	index.track("div-a", "aardvark")
+	grown := index.keys()
+	if len(grown) != 4 || grown[0].name != "aardvark" {
+		t.Fatalf("keys after track = %v, want the new owner first", grown)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("list under its readers changed: %v", keys)
+	}
+	index.forget(petOwnerKey{division: "div-a", name: "ghost"})
+	if again := index.keys(); &again[0] != &grown[0] {
+		t.Fatal("forgetting an absent owner dropped the cached list")
+	}
+	index.forget(petOwnerKey{division: "div-a", name: "aardvark"})
+	if shrunk := index.keys(); !reflect.DeepEqual(shrunk, want) {
+		t.Fatalf("keys after forget = %v, want %v", shrunk, want)
+	}
+	if len(grown) != 4 {
+		t.Fatalf("list under its readers changed: %v", grown)
+	}
+}

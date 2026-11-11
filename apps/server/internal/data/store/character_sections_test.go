@@ -387,8 +387,8 @@ func BenchmarkCharacterSectionsUnchanged(b *testing.B) {
 	committed := domain.CloneCharacter(c)
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if changed := characterSectionsChanged(c, committed); len(changed) != 0 {
-			b.Fatalf("unchanged records differ in sections %v", changed)
+		if characterChanged(c, committed) {
+			b.Fatal("unchanged records compared different")
 		}
 	}
 }
@@ -407,7 +407,7 @@ func BenchmarkCharacterSectionsChangedRow(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		c.Gold = int64Ptr(int64(i))
-		if changed := characterSectionsChanged(c, committed); len(changed) == 0 {
+		if !characterChanged(c, committed) {
 			b.Fatal("changed record compared equal")
 		}
 		committed = domain.CloneCharacter(c)
@@ -490,5 +490,26 @@ func TestDoorTransactionSkipsUnchangedRow(t *testing.T) {
 	}
 	if after := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name)); after != before {
 		t.Fatal("an unchanged door-transaction row was rewritten")
+	}
+}
+
+/*
+================
+BenchmarkCharacterSectionsMovedRow
+
+The commit's most common dirty row: a fat character that only moved.
+Its world section, searched first, convicts it; the rest of the row
+need not be walked.
+================
+*/
+func BenchmarkCharacterSectionsMovedRow(b *testing.B) {
+	c := fatCharacter()
+	committed := domain.CloneCharacter(c)
+	*c.World.MovementMode = *committed.World.MovementMode + 1
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !characterChanged(c, committed) {
+			b.Fatal("moved record compared equal")
+		}
 	}
 }

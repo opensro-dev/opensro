@@ -19,14 +19,20 @@ type activityWorld struct {
 	world      uint32
 	generation uint64
 }
-type activityBucket struct {
-	owner activityWorld
-	block worldgeom.MessageBlock
-}
 type monsterActivitySnapshot struct {
-	counts     map[activityBucket]uint16
+	// counts is the census kept by world, then block: the gate
+	// asks one world at a time (the world rotates per batch), so
+	// its probe hashes the small block key alone, never the whole
+	// bucket with its division string (#3027).
+	counts     map[activityWorld]map[worldgeom.MessageBlock]uint16
 	unresolved map[activityWorld]bool
 	world      activityWorld
+	// bound is the asked world's count map, bound by askWorld
+	// on rotation: per batch, not per due actor. Every write to
+	// a snapshot (capture, askWorld) happens on the leg
+	// goroutine before the leg-plan bins dispatch; the bins
+	// share the snapshot read-only, so countedHere never writes.
+	bound map[worldgeom.MessageBlock]uint16
 }
 
 func (ops *MonsterMoverOps) activityBlock(p Spawn) (worldgeom.MessageBlock, bool) {
@@ -39,7 +45,7 @@ func (ops *MonsterMoverOps) activityBlock(p Spawn) (worldgeom.MessageBlock, bool
 }
 
 func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int64) *monsterActivitySnapshot {
-	a := &monsterActivitySnapshot{counts: make(map[activityBucket]uint16), unresolved: make(map[activityWorld]bool)}
+	a := &monsterActivitySnapshot{counts: make(map[activityWorld]map[worldgeom.MessageBlock]uint16), unresolved: make(map[activityWorld]bool)}
 	type identity struct {
 		owner activityWorld
 		gid   uint32
@@ -62,11 +68,53 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 		}
 		// The retail server's spawn broadcast counts every admitted PC, including dead PCs. Counts live
 		// in that actor partition, not the combat-eligible player list.
+		inner := a.counts[owner]
+		if inner == nil {
+			// Sized for one NeighborsEach ring (3x3 blocks).
+			inner = make(map[worldgeom.MessageBlock]uint16, 16)
+			a.counts[owner] = inner
+		}
 		b.NeighborsEach(func(n worldgeom.MessageBlock) {
-			a.counts[activityBucket{owner, n}]++
+			inner[n]++
 		})
 	}
 	return a
+}
+
+/*
+================
+monsterActivitySnapshot.askWorld
+
+Stamp the world this snapshot is asked about for the next
+batch and bind its count map in the same write. The stamp is
+the one snapshot write the leg makes after capture, and it
+runs on the leg goroutine before the batch's plan bins
+dispatch, so the bins read a settled snapshot (#3027).
+================
+*/
+func (a *monsterActivitySnapshot) askWorld(world activityWorld) {
+	a.world = world
+	a.bound = a.counts[world]
+}
+
+/*
+================
+monsterActivitySnapshot.countedHere
+
+Whether the census counted any admitted PC into the snapshot's
+current world at block b - the gate's activity verdict. The
+census only ever increments, so a nonzero count is membership.
+The gate used to probe the census by the whole bucket key,
+hashing the division string into every due actor's probe. The
+nested census plus the per-rotation binding pays one small
+block hash per actor instead: the world-keyed lookup happens
+once per batch rotation, where the world is stamped (askWorld).
+A pure read: leg-plan bins share the snapshot concurrently
+(#3027).
+================
+*/
+func (a *monsterActivitySnapshot) countedHere(b worldgeom.MessageBlock) bool {
+	return a.bound[b] != 0
 }
 
 /*
@@ -92,17 +140,26 @@ activityBlockFor
 activityBlockFor is the gate's block resolution: memoized on the ops, so
 a settled actor pays the cave surface walk once instead of once per
 cadence. Shard-owned like resumePending; each ticker clone owns its map.
+The memos sit behind pointers: the gate probes the map per due actor,
+and a value memo made every probe copy the pose and block out of the
+bucket and spread the buckets wide; a moved actor's miss refreshes its
+memo in place instead (#3027).
 ================
 */
 func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.MessageBlock, bool) {
-	if memo, hit := ops.activityBlocks[gid]; hit && memo.pose == at {
+	memo, hit := ops.activityBlocks[gid]
+	if hit && memo.pose == at {
 		return memo.block, memo.ok
 	}
 	block, ok := ops.activityBlock(at)
-	if ops.activityBlocks == nil {
-		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+	if !hit {
+		if ops.activityBlocks == nil {
+			ops.activityBlocks = make(map[uint32]*activityBlockMemo)
+		}
+		ops.activityBlocks[gid] = &activityBlockMemo{pose: at, block: block, ok: ok}
+		return block, ok
 	}
-	ops.activityBlocks[gid] = activityBlockMemo{pose: at, block: block, ok: ok}
+	memo.pose, memo.block, memo.ok = at, block, ok
 	return block, ok
 }
 
@@ -134,7 +191,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 	if m.Activity.Due(uint32(now)) {
 		b, ok := ops.activityBlockFor(actor.Gid, poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
 		resolved := ok && !ops.activity.unresolved[ops.activity.world]
-		active := resolved && ops.activity.counts[activityBucket{ops.activity.world, b}] != 0
+		active := resolved && ops.activity.countedHere(b)
 		if pending && active {
 			mustMoverTransition(&m, monster.MoverEventActivityResumed, 0)
 			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), m, true, true
@@ -144,10 +201,11 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 			m.BehaviorDeadlineMs = 0
 			pending = true
 		}
-		if !ops.commitSteppedActivity(division, actor.Gid, before, m, now) {
+		committed, cadenceOnly := ops.commitSteppedActivity(division, actor.Gid, before, m, now)
+		if !committed {
 			return nil, m, true, false
 		}
-		generationAdvanced = !cadenceOnlyWrite(before, m)
+		generationAdvanced = !cadenceOnly
 	}
 	if !pending {
 		return nil, m, false, generationAdvanced
@@ -173,7 +231,8 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor *monster.Inst
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
-	return s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+	committed, _ := s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, behaviorNoQueueSlot, behaviorNoBaseGen, before, after, now)
+	return committed
 }
 
 /*
@@ -181,28 +240,55 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 commitActivityAt
 
 commitActivity through the slots the behaviour batch carried for
-the actor (#2133): the population, the guard read, the death check
-and the write go through the verified hints and fall back to the gid resolve
+the actor (#2133): the population, the guard read, the death check,
+the write and the reschedule's queue arm go through the verified
+hints and fall back to the gid resolve
 whenever a hint no longer names the gid, so the commit lands - or
 is refused - exactly as commitActivity's. The gate runs this once
 per due actor per tick, which is where the profile charged the
 storages' gid-to-slot maps. Validation rides only the full write:
 a cadence-only commit differs from the validated stored row in
 the stamp alone (#2029).
+
+The second answer is the write's cadence verdict: whether the pair
+differed only in the cadence stamp. The gate's chain-base rule
+(generationAdvanced) reads it from here, where the pair was just
+compared against the stored row, instead of re-comparing the two
+whole rows at the gate (#2029). The reschedule reads no row back
+either: the commit hands it the written row's schedule
+(scheduleBehaviorCommitted).
+
+baseGen is the commit generation of the row before was read
+from - the step snapshot's, or behaviorNoBaseGen when the
+caller holds none. The value guard is paid only when it can
+fail: while the stored row's generation is baseGen and its
+cadence is before's, the row is still before (a whole-value
+write bumps the generation, the only other writes stamp the
+cadence), so the expansion and whole-row compare are skipped;
+anything else expands the row and compares it whole, exactly
+as every commit did before (#3027).
 ================
 */
-func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, queueSlot uint32, baseGen uint64, before, after monster.MoverState, now int64) (bool, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObjectAt(division, gid, monsterSlot)
-	current, exists := state.movers.lookupAt(slot, gid)
-	if !exists {
-		current, exists = state.movers.lookup(gid)
+	current := before
+	if gen, activity, exists := state.movers.activityGuardAt(slot, gid); !exists || gen != baseGen || activity != before.Activity {
+		row, exists := state.movers.lookupAt(slot, gid)
+		if !exists {
+			row, exists = state.movers.lookup(gid)
+		}
+		if !exists || row != before {
+			return false, false
+		}
+		current = row
 	}
-	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
-		return false
+	if state.instances.isDeadAt(monsterSlot, gid) {
+		return false, false
 	}
-	if cadenceOnlyWrite(current, after) {
+	cadenceOnly := cadenceOnlyWrite(current, after)
+	if cadenceOnly {
 		// No Validate here: the pair differs only in the cadence
 		// stamp, and the stored row passed validation when its own
 		// commit wrote it, so the check would re-prove the row the
@@ -219,8 +305,8 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		// rides only this full write and the mover commits (#2136).
 		state.syncApproachActor(gid, after)
 	}
-	s.scheduleBehavior(state, gid, now)
-	return true
+	s.scheduleBehaviorCommitted(state, gid, scheduleOf(&after), monsterSlot, queueSlot, now)
+	return true, cadenceOnly
 }
 
 /*

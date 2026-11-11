@@ -120,6 +120,11 @@ func (s *Store) ReapMaturedDeletions() []string {
 		domain.SwapFriends(update.c, update.next)
 		delete(s.changes.characters, update.c)
 	}
+	// The reap rewrote survivors' friend lists outside a character
+	// door; every cached record copy is stale now.
+	if len(names) > 0 {
+		s.noteRosterWriteLocked()
+	}
 	s.recordWriteSuccessLocked()
 	log.Infof("store: REAPED %d matured deletion reservation(s): %s", len(names), strings.Join(names, ", "))
 	return names

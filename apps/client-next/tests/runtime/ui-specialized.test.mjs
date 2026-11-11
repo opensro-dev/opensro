@@ -153,16 +153,18 @@ test("native inventory tabs keep equipment and disable bag cells beyond capacity
 			const hud = hudControls( fixture, state );
 			fixture.ui.event( { kind: "key", code: "KeyI" } );
 			let controls = hud.draw().controls;
+			// Draw order is paint order: the selected tab (the first page
+			// here) paints last so it lies on top (bagTabRow, #2951).
 			assert.deepEqual(
 				controls.filter( control => control.id.startsWith( "inventory-page:" ) ).map( control => control.id ),
-				capacity === FIRST_PAGE_CAPACITY ? [ "inventory-page:0" ] : [ "inventory-page:0", "inventory-page:1" ]
+				capacity === FIRST_PAGE_CAPACITY ? [ "inventory-page:0" ] : [ "inventory-page:1", "inventory-page:0" ]
 			);
 			// Port-only, owner-approved 2026-10-15, always on: the tabs read their page number.
 			assert.deepEqual(
 				controls.filter( control => control.id.startsWith( "inventory-page:" ) ).map( control =>
 					control.label
 				),
-				capacity === FIRST_PAGE_CAPACITY ? [ "1" ] : [ "1", "2" ]
+				capacity === FIRST_PAGE_CAPACITY ? [ "1" ] : [ "2", "1" ]
 			);
 			assert.deepEqual(
 				slotIds( controls ),

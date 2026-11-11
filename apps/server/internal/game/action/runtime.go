@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/namefilter"
+	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
@@ -162,6 +163,14 @@ type Runtime struct {
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache
+	// groundScopeMarks is the ground pass's per-session settled marks
+	// (ground_scope.go, #3101).
+	groundScopeMu    sync.Mutex
+	groundScopeMarks map[string]groundScopeMark
+	// skillObjectScopeMarks is the skill-object pass's per-session
+	// settled marks (skillobjects.go, #3101).
+	skillObjectScopeMu    sync.Mutex
+	skillObjectScopeMarks map[string]skillObjectScopeMark
 	// staticRefs is the published static reference set
 	// (ground_references.go).
 	staticRefs staticRefCache
@@ -192,6 +201,10 @@ type Runtime struct {
 	// not use it; EntrySkills still builds a fresh projection per call.
 	entrySpawnMu    sync.Mutex
 	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
+
+	// tickSnaps shares one epoch-checked record copy per character
+	// and copy kind across a tick hook's steps (tick_snapshots.go).
+	tickSnaps tickSnapshots
 
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
@@ -310,11 +323,17 @@ type Runtime struct {
 	GachaCatalog *gacha.Catalog
 	// GachaPoolV2 says the catalog carries the port-only prize pool
 	// (EnvGachaPoolV2); rolls are logged so the pool's supply is visible.
-	GachaPoolV2   bool
-	Alchemy       *alchemy.Catalog
-	AlchemyRoll   alchemy.Roll
-	compoundMu    sync.Mutex
-	compoundJobs  map[compoundKey]compoundJob
+	GachaPoolV2  bool
+	Alchemy      *alchemy.Catalog
+	AlchemyRoll  alchemy.Roll
+	compoundMu   sync.Mutex
+	compoundJobs map[compoundKey]compoundJob
+	// compoundKeys is the advance pass's key scratch
+	// (alchemybatch.go): refilled under compoundMu on every tick step
+	// and consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is the only caller and nothing
+	// retains it (#2033).
+	compoundKeys  []compoundKey
 	Commerce      *commerce.Catalog
 	mallCatalog   *commerce.MallCatalog
 	mallAuthority domain.MallAuthority
@@ -327,6 +346,15 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// petSessionKeys is advancePets' sorted gid-bearing session
+	// list, cached under petMu and rebuilt only when a membership
+	// writer drops it (orderedPetSessionKeys, petai.go) (#2033).
+	petSessionKeys []petOwnerKey
+	// petSessionEntries is the same walk with the session pointer
+	// each key held at build time, so the sweep reads no map per
+	// pet (orderedPetSessions, petai.go) (#3126). It is rebuilt
+	// and dropped together with petSessionKeys, never on its own.
+	petSessionEntries []petSessionEntry
 	// mercenaryKeys is the cooldown pass's owner-key scratch
 	// (mercenary_clock.go): refilled under petMu on every pass and
 	// consumed in line by the same pass, so a steady tick grows
@@ -346,8 +374,18 @@ type Runtime struct {
 	walkInZones      sync.Map // simulation.WorldKey -> zone codename
 	recoveryMu       sync.Mutex
 	recoverySessions map[recoveryKey]*recoverySession
-	petSkillWindows  petSkillWindowIndex
-	paramJobOwners   petSkillWindowIndex
+	// recoveryKeys is the natural-recovery pass's due-key scratch
+	// (naturalrecovery.go): refilled under recoveryMu on every tick
+	// step and consumed in line by the same pass, so a steady tick
+	// grows nothing. Tick goroutine only (#2033).
+	recoveryKeys []recoveryKey
+	// recoveryWrites is the recovery pulse's modifier-write scratch
+	// (naturalrecovery.go): refilled and consumed inside one deferred
+	// character update, and the stats memo clones what it keeps, so a
+	// steady pulse grows nothing. Tick goroutine only (#2033).
+	recoveryWrites  []paramkeeper.Write
+	petSkillWindows petSkillWindowIndex
+	paramJobOwners  petSkillWindowIndex
 	// premiumSpend is the online premium clocks' uncommitted spend
 	// (premiumclock.go).
 	premiumSpend premiumSpendLedger
@@ -556,8 +594,9 @@ type Runtime struct {
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
 	// PremiumUpgrade lets a strictly higher-grade premium ticket of the
-	// same family replace the running lower one (premiumticket.go;
-	// port-only, not native). False is native: 0x1894 while one runs.
+	// same family replace the running lower one, and a full premium
+	// replace a running skill-only ticket (premiumticket.go; port-only,
+	// not native). False is native: 0x1894 while one runs.
 	PremiumUpgrade bool
 	// KillStats counts kills and EXP per online hour by level band
 	// (killstats.go; port-only, not native). False counts nothing.
@@ -902,6 +941,21 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// basicAttackSnapshot is the intent snapshot scratch
+	// (basicattack.go): refilled under basicAttackIntentsMu on every
+	// advance pass and consumed in line by the same pass, so a steady
+	// tick grows nothing. The tick step list is serial and nothing
+	// retains it (#2033).
+	basicAttackSnapshot []basicAttackIntent
+	// liveChainScratch is the live-chain owner set scratch
+	// (basicattack.go): cleared and refilled by every finalize drain
+	// and read only inside that drain. Tick goroutine only (#2033).
+	liveChainScratch map[string]struct{}
+	// openActionScratch is the tick-start action-owner snapshot
+	// scratch (skillfinalize.go): cleared and refilled by the
+	// openSkillCastOwnerSnapshot step and read by the same tick's
+	// basic-attack pass. Nothing retains it past the tick (#2033).
+	openActionScratch map[string]bool
 	// tickGateCuts counts the TickHooks cut running by a held publication
 	// gate (acquireTickGate). Tick goroutine only.
 	tickGateCuts int

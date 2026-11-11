@@ -29,7 +29,7 @@ usage
 func usage() {
 	fmt.Fprintf(os.Stderr, `sro-tickbudget - capture and reconcile a live tick budget (#2824)
 
-  sro-tickbudget capture --ssh USER@HOST [--pprof 127.0.0.1:8792] [--metrics 127.0.0.1:8788] --out DIR
+  sro-tickbudget capture --ssh USER@HOST [--ssh-identity KEY] [--pprof 127.0.0.1:8792] [--metrics 127.0.0.1:8788] --out DIR
       Pull metrics, a 30s CPU profile, a 5s execution trace and two heap
       pulls (60s apart) from a live GameWorld, bracketed by metrics
       snapshots. Runs in a private /tmp directory on the host, deleted
@@ -80,6 +80,7 @@ func captureCommand(args []string) error {
 	fs := flag.NewFlagSet("capture", flag.ContinueOnError)
 	var opts captureOptions
 	fs.StringVar(&opts.sshTarget, "ssh", "", "ssh target, USER@HOST")
+	fs.StringVar(&opts.sshIdentity, "ssh-identity", "", "ssh private key file (default: ssh's own choice)")
 	fs.StringVar(&opts.pprofAddr, "pprof", "127.0.0.1:8792", "host-local pprof address (loopback only)")
 	fs.StringVar(&opts.metricsAddr, "metrics", "127.0.0.1:8788", "host-local /transport/metrics address (loopback only)")
 	fs.StringVar(&opts.outDir, "out", "", "directory to write the capture into")

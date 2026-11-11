@@ -5,8 +5,9 @@ wal_checkpoint_test.go - slice 0: the checkpoint leaves the commit (#2142)
 
 The writer's handle must never auto-checkpoint (so no door's commit
 pays the copy again), the background cycle must copy what commits
-leave, wait out a reader that pins the WAL, stop with Close, and leave
-BackupTo working. The slow-commit line names its door here too.
+leave, chase a writer until the log can start over (#3143), wait out a
+reader that pins the WAL, stop with Close, and leave BackupTo working.
+The slow-commit line names its door here too.
 
 ===========================================================================
 */
@@ -16,14 +17,18 @@ package store
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/tier"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 const slowCommitTestDoor = "slow-door"
@@ -393,5 +398,310 @@ func TestWALResetNeverHoldsTheDoorBehindAReader(t *testing.T) {
 	if timing.CheckpointResets != 0 || timing.CheckpointResetBusy < 1 {
 		t.Fatalf("resets %d busy %d with a reader open, want 0 and at least 1",
 			timing.CheckpointResets, timing.CheckpointResetBusy)
+	}
+}
+
+/*
+================
+newChaseTest
+
+A store with one committed character and a checkpointer of the test's
+own on its database: the store's background lane sleeps through its
+first interval, so every pass here is the test's. create commits one
+more character each call.
+================
+*/
+func newChaseTest(t *testing.T) (s *Store, c *walCheckpointer, create func()) {
+	t.Helper()
+	s = openTest(t, t.TempDir(), newTestClock())
+	created := 0
+	create = func() {
+		t.Helper()
+		hero := &enterworld.Character{Name: fmt.Sprintf("tail%04d", created)}
+		if err := s.CreateCharacter(testDivision, fmt.Sprintf("tacc%04d", created), hero); err != nil {
+			t.Fatal(err)
+		}
+		created++
+	}
+	create()
+	return s, &walCheckpointer{dbPath: s.dbPath}, create
+}
+
+/*
+================
+TestWALCheckpointerChasesAWriterUntilTheLogRestarts
+
+A cycle does not stop at its first drained pass. A commit lands
+after that pass (and, the log being level there, starts it over): the
+second pass copies the commit, the third meets the same log at the
+same length and ends the chase. The cycle left the log level again, so
+the next commit restarts it in place - the header's sequence number
+moves - and the lane counts both restarts without a reset.
+================
+*/
+func TestWALCheckpointerChasesAWriterUntilTheLogRestarts(t *testing.T) {
+	s, c, create := newChaseTest(t)
+	passes := 0
+	c.afterPass = func(pass int) {
+		passes++
+		if pass == 0 {
+			create()
+		}
+	}
+	if starved := c.cycle(); starved {
+		t.Fatal("the cycle ended starved with no reader holding the WAL")
+	}
+	if passes != 3 || c.caughtUp.Load() != 1 {
+		t.Fatalf("passes %d caught up %d, want 3 passes (copy, the late commit, nothing new) and 1",
+			passes, c.caughtUp.Load())
+	}
+	before, ok := walRestartSequence(s.dbPath)
+	if !ok {
+		t.Fatal("the WAL has no header after two commits")
+	}
+
+	create()
+	after, ok := walRestartSequence(s.dbPath)
+	if !ok || after != before+1 {
+		t.Fatalf("WAL sequence %d -> %d (read %v), want one restart by the commit after a caught-up cycle",
+			before, after, ok)
+	}
+	c.afterPass = nil
+	c.cycle()
+	if restarts, resets := c.restarts.Load(), c.resets.Load(); restarts != 2 || resets != 0 {
+		t.Fatalf("restarts %d resets %d, want both restarts counted (the late commit's and the next) and no reset",
+			restarts, resets)
+	}
+}
+
+/*
+================
+TestWALCheckpointerGivesUpTheChaseAtThePassCap
+
+A writer that commits after every pass is never caught. The cycle
+stops at the pass cap, is not starved - every pass copied what it met -
+and claims no catch-up, so the log's growth toward the ceiling reads
+in the counters instead of hiding behind a clean cycle.
+================
+*/
+func TestWALCheckpointerGivesUpTheChaseAtThePassCap(t *testing.T) {
+	s, c, create := newChaseTest(t)
+	passes := 0
+	c.afterPass = func(int) {
+		passes++
+		create()
+	}
+	if starved := c.cycle(); starved {
+		t.Fatal("the cycle ended starved with no reader holding the WAL")
+	}
+	if passes != walCheckpointPassesPerCycle || c.caughtUp.Load() != 0 {
+		t.Fatalf("passes %d caught up %d, want the %d-pass cap and 0", passes, c.caughtUp.Load(),
+			walCheckpointPassesPerCycle)
+	}
+	// The commit after the last pass was never copied: the log is not
+	// level, so the next commit appends instead of starting it over.
+	before, _ := walRestartSequence(s.dbPath)
+	create()
+	if after, _ := walRestartSequence(s.dbPath); after != before {
+		t.Fatalf("WAL sequence %d -> %d, want no restart behind a writer the cycle never caught", before, after)
+	}
+}
+
+/*
+================
+TestWALStaysShortBesideASteadyWriter
+
+The #3143 measurement as a long-tier test: a writer commits about
+280 KB every 20 ms without a pause while a cycle runs after every 16
+of its commits (the writer's progress paces the cycles, never the
+wall clock). Before the chase the log never started over under this
+load (232 MB in 45 s) and only the reset at the ceiling took it back,
+with writers locked out. With it the log restarts under the writer,
+the file stays near journal_size_limit, and no reset runs.
+
+The verdict is driven by checkpoint results, not by how fast this
+box happens to chase (#3231): the writer may lead the completed
+cycles by one cycle of commits and no more, so the bytes written
+between two restarts are bounded whatever the machine's speed, and
+the cycles keep coming until the restarts land - maxCycles bounds a
+chase that truly never restarts, which is the failure this test
+exists for. Machine load stretches the soak; it cannot flip it.
+================
+*/
+func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
+	tier.Long(t, "the log restarts and stays near journal_size_limit beside a writer that never pauses")
+	const (
+		rows            = 2000
+		rowBytes        = 14000
+		rowsPerCommit   = 20
+		commitEvery     = 20 * time.Millisecond
+		commitsPerCycle = 16
+		// Bounds a wedged writer only: 16 commits take about a third
+		// of a second on a quiet box.
+		cycleWait = 30 * time.Second
+		// The soak runs at least minCycles cycles and ends once
+		// minRestarts restarts have landed. maxCycles also bounds the
+		// total written when they never do: 32 cycles stay under the
+		// reset ceiling, so a broken chase trips the assertions below
+		// instead of quietly resetting.
+		minCycles   = 12
+		maxCycles   = 32
+		minRestarts = 4
+		maxWALBytes = 2 * walJournalSizeLimitBytes
+	)
+	path := filepath.Join(t.TempDir(), DBFileName)
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec("CREATE TABLE soak (k INTEGER PRIMARY KEY, v BLOB)"); err != nil {
+		t.Fatal(err)
+	}
+	blob := make([]byte, rowBytes)
+	rng := rand.New(rand.NewSource(1))
+	fill, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k := 0; k < rows; k++ {
+		rng.Read(blob)
+		if _, err := fill.Exec("INSERT INTO soak (k, v) VALUES (?, ?)", k, blob); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := fill.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := make(chan struct{})
+	writerDone := make(chan error, 1)
+	// commits counts the writer's finished transactions; writerEnded
+	// says it stopped early, so a cycle never waits out a dead writer.
+	var commits atomic.Int64
+	var writerEnded atomic.Bool
+	// allowance caps the writer's finished commits: it may run one
+	// cycle of commits ahead of the cycles the test has completed,
+	// and no further, so a slow chase cannot let the log outgrow the
+	// bound between restarts however busy the box is (#3231).
+	var allowance atomic.Int64
+	allowance.Store(2 * commitsPerCycle)
+	// worstCommit is the writer's slowest begin-to-commit, in
+	// nanoseconds: reported, never asserted (a busy box may spike it;
+	// the absence of resets is the property this test holds).
+	var worstCommit atomic.Int64
+	go func() {
+		writerDone <- func() error {
+			defer writerEnded.Store(true)
+			ticker := time.NewTicker(commitEvery)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stop:
+					return nil
+				case <-ticker.C:
+				}
+				for commits.Load() >= allowance.Load() {
+					select {
+					case <-stop:
+						return nil
+					case <-time.After(time.Millisecond):
+					}
+				}
+				begun := time.Now()
+				tx, err := db.Begin()
+				if err != nil {
+					return err
+				}
+				for i := 0; i < rowsPerCommit; i++ {
+					rng.Read(blob[:64])
+					if _, err := tx.Exec("UPDATE soak SET v = ? WHERE k = ?", blob, rng.Intn(rows)); err != nil {
+						_ = tx.Rollback()
+						return err
+					}
+				}
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+				if took := int64(time.Since(begun)); took > worstCommit.Load() {
+					worstCommit.Store(took)
+				}
+				commits.Add(1)
+			}
+		}()
+	}()
+
+	c := &walCheckpointer{dbPath: path}
+	var peak int64
+	cycles := 0
+	for cycles < maxCycles {
+		allowance.Store(int64(cycles+2) * commitsPerCycle)
+		target := int64(cycles+1) * commitsPerCycle
+		wait.Eventually(t, cycleWait, "the writer's next commits before a cycle", func() bool {
+			return commits.Load() >= target || writerEnded.Load()
+		})
+		if writerEnded.Load() {
+			// The writer's own error, read below, is the failure.
+			break
+		}
+		c.cycle()
+		cycles++
+		if size := walFileBytes(path); size > peak {
+			peak = size
+		}
+		if cycles >= minCycles && c.restarts.Load() >= minRestarts {
+			break
+		}
+	}
+	close(stop)
+	if err := <-writerDone; err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d cycles: caught up %d, log restarts %d, resets %d, WAL peak %.1f MB, worst commit %.1f ms",
+		cycles, c.caughtUp.Load(), c.restarts.Load(), c.resets.Load(), float64(peak)/(1<<20),
+		float64(worstCommit.Load())/float64(time.Millisecond))
+	if restarts, resets := c.restarts.Load(), c.resets.Load(); restarts < minRestarts || resets != 0 {
+		t.Fatalf("restarts %d resets %d in %d cycles (caught up %d), want at least %d restarts and no reset",
+			restarts, resets, cycles, c.caughtUp.Load(), minRestarts)
+	}
+	if peak > maxWALBytes {
+		t.Fatalf("WAL peaked at %d bytes beside a steady writer, want at most %d", peak, int64(maxWALBytes))
+	}
+}
+
+/*
+================
+TestLockTimingCarriesTheChaseAndTheResetHold
+
+The store's own lane reports on /transport/metrics: a quiet cycle
+counts as caught up, and a reset records how long it kept writers out.
+================
+*/
+func TestLockTimingCarriesTheChaseAndTheResetHold(t *testing.T) {
+	s := openTest(t, t.TempDir(), newTestClock())
+	const ceiling = 256 << 10
+	s.checkpoints.ceiling.Store(ceiling)
+	s.checkpoints.cycle()
+	if caughtUp := s.LockTiming().CheckpointCaughtUp; caughtUp != 1 {
+		t.Fatalf("caught-up cycles %d after one quiet cycle, want 1", caughtUp)
+	}
+	for i := 0; walFileBytes(s.dbPath) <= ceiling && i < 1000; i++ {
+		hero := &enterworld.Character{Name: fmt.Sprintf("hold%04d", i)}
+		if err := s.CreateCharacter(testDivision, fmt.Sprintf("hacc%04d", i), hero); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.syncDBLocked()
+	s.checkpoints.cycle()
+	timing := s.LockTiming()
+	var holds uint64
+	for _, count := range timing.CheckpointResetHoldMs.Buckets {
+		holds += count
+	}
+	if timing.CheckpointResets != 1 || holds != 1 {
+		t.Fatalf("resets %d with %d hold(s) timed, want 1 and 1", timing.CheckpointResets, holds)
 	}
 }

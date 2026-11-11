@@ -96,9 +96,27 @@ Return the committed snapshot. Callers copy it before changing any slot.
 ================
 */
 func (rt *Runtime) playerAbnormal(division, name string) *abnormal.Block {
+	return rt.playerAbnormalKeyed(playerAbnormalKey(division, name))
+}
+
+/*
+================
+playerAbnormalKeyed
+
+playerAbnormal for a caller already holding the folded key
+(playerAbnormalKey): the recovery session folds once at bind, not per
+pulse (#2033).
+================
+*/
+func (rt *Runtime) playerAbnormalKeyed(key string) *abnormal.Block {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
-	return rt.playerAbnormals.blocks[playerAbnormalKey(division, name)].block
+	// The common read is a character with no block in a store holding
+	// none: answer it without folding a fresh key (#2033).
+	if len(rt.playerAbnormals.blocks) == 0 {
+		return nil
+	}
+	return rt.playerAbnormals.blocks[key].block
 }
 
 /*
@@ -794,7 +812,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 			if killer != nil {
 				var actor, public []wire.Frame
 				var after jobKillPayout
-				if !rt.deps.Update(killer, "player-abnormal-kill", func() bool {
+				if !rt.deps.UpdateDeferred(killer, "player-abnormal-kill", func() bool {
 					actor, public, after = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
 					// The pay is unconditional once the door holds the
 					// killer: its bookkeeping (a counted Most Wanted kill

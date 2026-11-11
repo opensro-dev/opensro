@@ -9,6 +9,7 @@ Draft selection remains with the HUD, and never sends a message by itself.
 */
 import { chatLineText, chatLineColor } from "./chat-presentation";
 import { chatLineTime } from "./chat-time";
+import { sealTier } from "../gameplay/item-seal";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
@@ -52,7 +53,7 @@ export function isSunDropChatLine( line: Pick<ChatLine, "channel" | "text" | "no
 	const fields = line.notice?.item?.tooltip?.fields;
 	if ( fields ) {
 		const itemClass = fields.itemClass ?? 0;
-		return fields.rarity === 2 && itemClass > 0 && (itemClass - 1) % 3 === 2;
+		return sealTier( fields.rarity, itemClass ) === 2;
 	}
 	return isSunDropNoticeText( line.text );
 }
@@ -138,6 +139,12 @@ export interface ChatLayoutInput {
 	offset?: number;
 	hidden?: boolean;
 	measure: ( value: string, style?: GlyphStyle ) => number;
+	// Port-only (#3176): the caller's kept wraps, one (text, width,
+	// fontStyle) per entry, so a rebuild wraps only the lines that are
+	// new. The HUD owns one beside its retained layouts; omitted, every
+	// line wraps on every rebuild. Entries are pure wraps of the input
+	// measure, so a cache must never be shared across measures.
+	wrapCache?: Map<string, readonly string[]>;
 	editState?: {
 		focused: boolean;
 		start: number;
@@ -149,6 +156,41 @@ export interface ChatLayoutInput {
 }
 // The kind prefix of an item-link span (chat-item-links.ts chatLinkSpans).
 const CHAT_ITEM_KIND = "chat-item:";
+// The wraps one cache holds at most (#3176): the log keeps 128 lines, so
+// this holds several widths' worth of the whole log before the oldest
+// wraps age out.
+const CHAT_WRAP_CACHE_MAX = 512;
+
+/*
+================
+chatWrappedLines
+
+One line's wrapped rows through the caller's wrap cache: a hit comes
+back as wrapped before (and is refreshed as most-recent), a miss wraps
+once and is kept. The key carries the style's fontStyle because the
+measure depends on the style only through it.
+================
+*/
+function chatWrappedLines(
+	cache: Map<string, readonly string[]> | undefined,
+	full: string,
+	width: number,
+	fontStyle: number,
+	wrap: () => readonly string[]
+): readonly string[] {
+	if ( !cache ) return wrap();
+	const key = fontStyle + ":" + width + ":" + full;
+	const kept = cache.get( key );
+	if ( kept ) {
+		cache.delete( key );
+		cache.set( key, kept );
+		return kept;
+	}
+	const wrapped = wrap();
+	if ( cache.size >= CHAT_WRAP_CACHE_MAX ) cache.delete( cache.keys().next().value! );
+	cache.set( key, wrapped );
+	return wrapped;
+}
 
 /*
 ================
@@ -300,7 +342,13 @@ button
 		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][activeTab];
 		const all = [
 			...(activeTab === 0 && lines.length < 128 ?
-				textLines( welcome, textWidth, measure, true ).map( value => ({
+				chatWrappedLines(
+					state.wrapCache,
+					welcome,
+					textWidth,
+					0,
+					() => textLines( welcome, textWidth, measure, true )
+				).map( value => ({
 					value,
 					color: gold,
 					style: undefined as GlyphStyle | undefined,
@@ -333,7 +381,13 @@ button
 							chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
 							null,
 						full = labelled?.text ?? raw,
-						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),
+						wrapped = chatWrappedLines(
+							state.wrapCache,
+							full,
+							textWidth,
+							style?.fontStyle ?? 0,
+							() => textLines( full, textWidth, value => measure( value, style ), true )
+						),
 						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined ),
 						itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
 					return wrapped.map( ( value, index ) => ({

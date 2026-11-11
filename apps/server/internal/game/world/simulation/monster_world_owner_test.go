@@ -33,6 +33,159 @@ func TestDefaultPopulationDoesNotOwnForeignWorldNests(t *testing.T) {
 
 /*
 ================
+TestDivisionStateMemoMatchesMap
+
+divisionState answers with the map's population for a name:
+alternating divisions (the memo swinging between two legs'
+doors) answers each name's own state, an unknown name answers
+nil, and a division registered after a missed read resolves on
+the next one. The memo repeats the map; it never guesses (#3027).
+================
+*/
+func TestDivisionStateMemoMatchesMap(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(nil, nil))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	s.StartDivision("a")
+	s.StartDivision("b")
+	for _, name := range []string{"a", "b", "a", "a", "b"} {
+		if got := s.divisionState(name); got != s.divs[name] {
+			t.Fatalf("divisionState(%q) answered a different population than the map", name)
+		}
+	}
+	if got := s.divisionState("missing"); got != nil {
+		t.Fatal("divisionState answered for an unregistered division")
+	}
+	s.StartDivision("c")
+	if got := s.divisionState("c"); got != s.divs["c"] {
+		t.Fatal("a division registered after a missed read did not resolve")
+	}
+}
+
+/*
+================
+TestPopulationKeysMemoTracksMembership
+
+populationKeys answers the sorted (division, lease) list from its
+cache: a repeated read returns the same backing, a registration or
+release rebuilds it (the earlier list is left untouched for the
+readers still ranging it), and a released lease is never listed
+again (#2033).
+================
+*/
+func TestPopulationKeysMemoTracksMembership(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(nil, nil))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	if got := s.populationKeys(); len(got) != 0 {
+		t.Fatalf("keys before any division: %+v", got)
+	}
+	s.StartDivision("b")
+	s.StartDivision("a")
+	keys := s.populationKeys()
+	if len(keys) == 0 {
+		t.Fatal("no keys for two open divisions")
+	}
+	for i := 1; i < len(keys); i++ {
+		prev, cur := keys[i-1], keys[i]
+		if prev.division > cur.division || prev.division == cur.division && prev.lease.Generation > cur.lease.Generation {
+			t.Fatalf("keys out of order at %d: %+v before %+v", i, prev, cur)
+		}
+	}
+	for _, name := range []string{"a", "b"} {
+		found := false
+		for _, key := range keys {
+			found = found || key.division == name && key.lease == s.divs[name].lease
+		}
+		if !found {
+			t.Fatalf("division %q default lease missing from %+v", name, keys)
+		}
+	}
+	if again := s.populationKeys(); &again[0] != &keys[0] {
+		t.Fatal("second read rebuilt the cached list")
+	}
+
+	lease, status := s.AllocatePopulation("a", instance.Pack(10, 1))
+	if status != instance.Success {
+		t.Fatal(status)
+	}
+	opened := s.populationKeys()
+	found := false
+	for _, key := range opened {
+		found = found || key.division == "a" && key.lease == lease
+	}
+	if !found {
+		t.Fatalf("allocated lease missing from %+v", opened)
+	}
+	if len(keys) >= len(opened) {
+		t.Fatal("the pre-allocation list changed under its readers")
+	}
+	for _, key := range keys {
+		if key.division == "a" && key.lease == lease {
+			t.Fatal("the pre-allocation list gained the new lease")
+		}
+	}
+
+	if !s.ReleasePopulation("a", lease) {
+		t.Fatal("release refused a live lease")
+	}
+	for _, key := range s.populationKeys() {
+		if key.division == "a" && key.lease == lease {
+			t.Fatalf("released lease still listed in %+v", s.populationKeys())
+		}
+	}
+}
+
+/*
+================
+TestFillScopeStampsRetainedCachesAnswerFresh
+
+fillScopeStamps keeps its phase caches on the state between
+phases (#3027): a second fill over an unchanged population
+answers the first fill's stamp, and a population released
+between phases stops answering even though its state pointer
+was the previous phase's fold key — the retained caches carry
+no answer across the clear at each fill's entry.
+================
+*/
+func TestFillScopeStampsRetainedCachesAnswerFresh(t *testing.T) {
+	nests := []monster.NestRow{
+		{WorldCode: "INS_DEFAULT", SpawnPoint: monster.SpawnPoint{RegionID: 1}},
+	}
+	s := NewMonsterState(monster.TemplateFromParts(nil, nests))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	s.StartDivision("a")
+	lease, status := s.AllocatePopulation("a", instance.Pack(10, 1))
+	if status != instance.Success {
+		t.Fatal(status)
+	}
+	sessions := []SessionSnapshot{{SessionID: "v", DivisionID: "a", Population: lease}}
+	block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: 1})
+
+	slots := []scopeViewerSlot{{block: block}}
+	s.fillScopeStamps(slots, sessions, 1)
+	if !slots[0].stampOK {
+		t.Fatal("first fill did not stamp a live population")
+	}
+	first := slots[0].stamp
+
+	// The dense slots are rebuilt per leg; the caches are not.
+	slots[0] = scopeViewerSlot{block: block}
+	s.fillScopeStamps(slots, sessions, 1)
+	if !slots[0].stampOK || slots[0].stamp != first {
+		t.Fatalf("second fill answered %+v (ok=%v), want the first fill's stamp", slots[0].stamp, slots[0].stampOK)
+	}
+
+	if !s.ReleasePopulation("a", lease) {
+		t.Fatal("release refused a live lease")
+	}
+	slots[0] = scopeViewerSlot{block: block}
+	s.fillScopeStamps(slots, sessions, 1)
+	if slots[0].stampOK {
+		t.Fatal("a fill after the release answered through the released population's retained state")
+	}
+}
+
+/*
+================
 TestDivisionOpensEveryPermanentWorld
 
 The retail shard manager opens layer 1 of every type-0 RefGameWorld at boot,

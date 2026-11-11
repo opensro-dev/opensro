@@ -128,6 +128,7 @@ import {
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { NATIVE_LEVEL_CAP, publishedLevelCap } from "@/engine/foundation/gameplay/level-cap";
+import { type EquipmentSet, publishedEquipmentSets } from "@/engine/foundation/gameplay/equipment-sets";
 import {
 	gmCatalog as decodeGmCatalog,
 	gmRequest,
@@ -340,6 +341,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -356,7 +358,7 @@ import {
 	inventorySignatures,
 	journalInventoryFrame
 } from "@/engine/foundation/gameplay/inventory-journal";
-import type { WireFrame } from "@/engine/contracts/network";
+import type { Degradation, WireFrame } from "@/engine/contracts/network";
 /*
 ================
 unlimitedItemIds
@@ -407,6 +409,9 @@ const REFERENCE_ANSWER_LIMIT_MS = 90000;
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
+// The social lane's pending degraded steps; the world reports each code
+// once per session, so a longer queue adds nothing.
+const MAX_SOCIAL_DEGRADATIONS = 16;
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
@@ -510,9 +515,14 @@ export function createGameplay(
 	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
+	// Whether the listing stood over a full party at the watcher's
+	// last look: the delete fires on the fill, once (634D30); while
+	// the fill stands no second delete is composed.
+	let partyMatchFullStanding = false;
 	// The shard's configured level cap, published at world entry (#1749);
 	// the native cap until a bootstrap says otherwise.
 	let levelCap = NATIVE_LEVEL_CAP;
+	let equipmentSets: readonly EquipmentSet[] = [];
 	let gmItems = gmItemReferences( {} );
 	// Port-only: the compact catalogues a GM's console helper filters. Built
 	// only for a GM entry; ordinary characters never pay for the list. The
@@ -590,6 +600,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
@@ -1103,9 +1114,12 @@ there, so the line goes out without that link.
 			case CHAT_LINK_SOURCE.storage:
 				return presentedStorage()?.items.find( item => item.slot === ref.slot );
 			case CHAT_LINK_SOURCE.pet:
-				return [ ...cosRecords.values() ].find( record => record.inventory )?.inventory?.find( item =>
-					item.slot === ref.slot
-				);
+				// The link names its pet (ref.pet): read that COS
+				// record's bag, the server's CompanionByGID read. A
+				// pet ref naming no pet reads nothing, as there.
+				return ref.pet === undefined ?
+					undefined :
+					cosRecords.get( ref.pet )?.inventory?.find( item => item.slot === ref.slot );
 		}
 		return undefined;
 	}
@@ -1209,6 +1223,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
+	// The social lane's skipped cosmetic steps until the world drains them
+	// (takeDegradations); bounded so an undrained owner cannot grow it.
+	const socialDegradations: Degradation[] = [];
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = {
 		country: () => undefined,
@@ -1592,6 +1609,7 @@ selected entities, cooldowns or world-entry state.
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
 		levelCap = NATIVE_LEVEL_CAP;
+		equipmentSets = [];
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
@@ -1607,6 +1625,7 @@ selected entities, cooldowns or world-entry state.
 		gmCatalogPending = false;
 		gmReplies = [];
 		tradeStars = 0;
+		tradeProgress.clear();
 		notices = [];
 		crestUploadInFlight = false;
 		guide = undefined;
@@ -1792,6 +1811,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			partyMatching = emptyPartyMatching();
 			partyMatchAutoSession = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
+			equipmentSets = publishedEquipmentSets( (value as { equipmentSets?: unknown; } | null)?.equipmentSets );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
@@ -1842,6 +1862,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			};
 			gmReplies = [];
 			tradeStars = 0;
+			tradeProgress.clear();
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {
@@ -4102,6 +4123,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( tradeProgress.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
 					dirty = true;
 					return true;
@@ -4659,17 +4684,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
-					// 755960: the owner's sale line, [buyer] bought item
-					// [name]; a network sale's commission line follows.
-					for ( const message of stallOutcome.messages ?? [] ) {
-						notices = [ ...notices.slice( -99 ), {
-							key: message.key,
-							value: 0,
-							arguments: message.args,
-							nativeType: 0,
-							sequence: ++noticeSequence
-						} ];
-					}
+					// The stall's state, sale, registration and commission lines
+					// (751A60, 755960) ride in the stall state's log and print in
+					// the stall window's chat module, not the HUD system messages.
 					if ( frame.opcode !== 0x33d1 ) return true;
 				}
 				// The exchange window (inventory owner) folds its frames first; its
@@ -4702,17 +4719,37 @@ Packet handling must not depend on which HUD panel is currently open.
 					for ( const flip of nextSocial.notices ?? [] ) {
 						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
 					}
+					if ( nextSocial.degradation && socialDegradations.length < MAX_SOCIAL_DEGRADATIONS ) {
+						socialDegradations.push( { ...nextSocial.degradation, frame } );
+					}
 					social = withMemberCountries(
-						nextSocial.notice || nextSocial.notices ?
-							{ ...nextSocial, notice: undefined, notices: undefined } :
+						nextSocial.notice || nextSocial.notices || nextSocial.degradation ?
+							{ ...nextSocial, notice: undefined, notices: undefined, degradation: undefined } :
 							nextSocial
 					);
-					// 634DC9: a party that fills while the player's
+					// 634D30: a party that fills while the player's
 					// listing stands arms the delete banner's
-					// COMPLETE2 form (the delete answer consumes it).
-					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) {
+					// COMPLETE2 form (the delete answer consumes it),
+					// and the watcher itself withdraws the listing:
+					// NetClient_Send7535 (6FE130) carries the own
+					// record's id, once per fill.
+					const fullStanding = !!(
+						partyMatching.own && partyIsFull( social.members.length, social.options )
+					);
+					if ( fullStanding ) {
 						partyMatchFullLatch = true;
+						if ( !partyMatchFullStanding && !partyMatching.pending ) {
+							const deletion = partyMatchRequest(
+								partyMatching,
+								{ kind: "party-match-delete" },
+								now,
+								levelCap
+							);
+							if ( deletion.frame ) sendWhenLive( deletion.frame );
+							partyMatching = deletion.state;
+						}
 					}
+					partyMatchFullStanding = fullStanding;
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
@@ -5941,9 +5978,9 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
-		// The inventory owner's skipped cosmetic steps, for the world's
-		// degraded reports (core takeDegradations drains both owners).
-		takeDegradations: () => inventory.takeDegradations(),
+		// The inventory and social lanes' skipped cosmetic steps, for the
+		// world's degraded reports (core takeDegradations drains both owners).
+		takeDegradations: () => [ ...inventory.takeDegradations(), ...socialDegradations.splice( 0 ) ],
 		/*
 ================
 cancelCast
@@ -6041,6 +6078,9 @@ The published plane when something changed since the last take, else null.
 				musicMode,
 				gmReplies,
 				tradeStars,
+				// Port-only (#3163): the cargo's distance to the next star,
+				// published under SRO_TRADE_TIERS (trade-progress.ts).
+				...(tradeProgress.state() ? { tradeProgress: tradeProgress.state()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),
 				autoPotion,
@@ -6048,6 +6088,7 @@ The published plane when something changed since the last take, else null.
 				notices,
 				partyMatching,
 				levelCap,
+				...(equipmentSets.length ? { equipmentSets } : {}),
 				academy,
 				pkStatus,
 				guide,

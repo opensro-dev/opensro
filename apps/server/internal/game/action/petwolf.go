@@ -192,25 +192,34 @@ arm; the zero key means nothing armed (the expansion off, the seam
 up, or no session yet), and every lane then walks as before. The
 capture itself is recycled across ticks (takeElementalFacts):
 arming and clearing stay the only doors, so a capture never outlives
-the tick that armed it.
+the tick that armed it. The capture reads on the stack read guard
+instead of the callback door: the callback boxed its closure and
+captures on every pet tick, and the guard holds the same store read
+lock the callback runs between (#2033).
 ================
 */
 func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
+	return rt.armElementalFactsSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+armElementalFactsSession
+================
+*/
+func (rt *Runtime) armElementalFactsSession(key petOwnerKey, state *petSession, now int64) petOwnerKey {
 	var none petOwnerKey
 	if !rt.AttackPetExpansion || rt.Monsters == nil || rt.companionCopy != nil || rt.Worlds == nil {
 		return none
 	}
-	state := rt.petSessionFor(key.division, key.name, key.gid)
 	if state == nil || state.character == nil {
 		return none
 	}
 	owner := state.character
 	facts := rt.takeElementalFacts(owner, now)
-	rt.deps.Read(key.division, func() {
-		facts.ownerViable = !owner.DeletePending && enterworld.CharacterAlive(owner)
-		if !facts.ownerViable {
-			return
-		}
+	guard := rt.deps.AcquireRead(key.division)
+	facts.ownerViable = !owner.DeletePending && enterworld.CharacterAlive(owner)
+	if facts.ownerViable {
 		owner.VisitCompanions(func(pet *domain.CharacterCOS) bool {
 			if pet.BroodStage == 0 && pet.Summoned && pet.CurrentHP != 0 {
 				facts.pets = append(facts.pets, elementalPetFacts{
@@ -225,7 +234,8 @@ func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
 		facts.expansionOK = len(facts.pets) > 0 && !rt.inFreeBattle(owner) &&
 			!wearsJobSuit(owner, rt.deps.ItemReferences()) &&
 			domain.CharacterWorldInstance(owner) == domain.DefaultWorldInstance
-	})
+	}
+	guard.Release()
 	if facts.ownerViable {
 		if ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(key.division, owner.Name)); ok {
 			facts.townJudged = true
@@ -494,7 +504,15 @@ Book changes, separation, death, unsummon and eligibility loss clear progress.
 ================
 */
 func (rt *Runtime) resetWolfExecution(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.resetWolfExecutionSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+resetWolfExecutionSession
+================
+*/
+func (rt *Runtime) resetWolfExecutionSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil {
 		return
 	}

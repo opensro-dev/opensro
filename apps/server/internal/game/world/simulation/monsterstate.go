@@ -61,8 +61,9 @@ type divisionMonsterState struct {
 	// mover crosses one of its own block's edges or the actors or
 	// static lists change.
 	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
-	// interestStatics is byRegion without the gids that have a mover,
-	// rebuilt when interestStaticsStamp stops matching.
+	// interestStatics holds, per region, the byRegion entries that have
+	// no mover; a region's row is built on its first read under the
+	// current interestStaticsStamp and dropped when the stamp moves.
 	interestStatics      map[uint16][]uint32
 	interestStaticsStamp interestStaticsStamp
 	// byRegionGeneration advances on every byRegion write
@@ -113,6 +114,11 @@ type MonsterState struct {
 	abnormalContext MonsterAbnormalContext
 	archive         *monsterArchive
 	regionDormancy  bool
+	// tacticsReplaced is set by a leg whose ops resolves tactics
+	// through a replacement (MonsterMoverOps.TacticsFor, fixtures
+	// only): the idle due then keeps its conservative cadence wake
+	// (idleBehaviorDue). Guarded by mu.
+	tacticsReplaced bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
 	players          func(string, int64) []PopulationPlayer
@@ -126,8 +132,20 @@ type MonsterState struct {
 	// populationForObject scan answered with. populationForObject
 	// verifies it against the registry and the population's own rows
 	// before believing it; see there (#2029).
-	popHintKey           populationKey
-	popHintState         *divisionMonsterState
+	popHintKey   populationKey
+	popHintState *divisionMonsterState
+	// divHint is the division name and population the last
+	// divisionState read answered with; division registers a
+	// division's population once and never replaces or removes
+	// it, so the remembered pair can only ever repeat the map's
+	// own answer. See divisionState (#3027).
+	divHintName  string
+	divHintState *divisionMonsterState
+	// popKeysMemo is populationKeys' sorted key list, rebuilt only
+	// when a membership writer (division, AllocatePopulation,
+	// OpenInstanceLayer, ReleasePopulation) drops it; see
+	// populationKeys (#2033).
+	popKeysMemo          []populationKey
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest
@@ -146,6 +164,14 @@ type MonsterState struct {
 	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
 	legViewMu sync.Mutex
 	legViews  []*legSnapshot
+	// scopePhase and scopeFolded are fillScopeStamps' per-phase
+	// caches, kept between phases and cleared at each fill's entry
+	// under s.mu (#3027): they live exactly one phase, and remaking
+	// them every leg was the scope phase's allocation bill. The
+	// clear is load-bearing — a population released between phases
+	// must never answer through a dead state pointer.
+	scopePhase  scopePopulations
+	scopeFolded map[scopeStampKey]interestMemoStamp
 }
 
 /*
@@ -368,6 +394,36 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 		panic("catalog has no default world")
 	}
 	s.divs[divisionID] = state
+	s.popKeysMemo = nil
+	return state
+}
+
+/*
+================
+divisionState
+
+s.divs[division] through the last answer's memo. The population
+doors (populationForObjectAt and the reads it feeds) resolve the
+same division back to back - a leg steps one division's actors
+through door after door - and every resolve paid the string map's
+hash to re-find the population it had just found (three quarters
+of populationForObjectAt in the seeded profile, #3027). division
+registers a division's population once and never replaces or
+removes it, so the remembered pair is the map's answer for that
+name for the life of the process: the memo repeats the map, it
+never guesses (popHint's discipline, without its scan to verify
+against, because there is no retirement to outlive). Callers hold
+s.mu, as the map already requires.
+================
+*/
+func (s *MonsterState) divisionState(division string) *divisionMonsterState {
+	if state := s.divHintState; state != nil && s.divHintName == division {
+		return state
+	}
+	state := s.divs[division]
+	if state != nil {
+		s.divHintName, s.divHintState = division, state
+	}
 	return state
 }
 

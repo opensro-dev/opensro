@@ -150,10 +150,17 @@ identical to the pre-change run; frames land on different legs
 because an idle actor's first timer check - which draws its
 acquisition interval from the state stream - now happens at its
 first due instead of the next tick, re-phasing later scans.
+
+Re-pinned for #3027 (an idle monster still gliding is due at its
+arrival): 14 of the run's 732 frames changed leg, all of them the
+0xB2F5 arrival settle of a wander that expired mid-flight, each one
+to seven legs earlier - on its arrival leg, where it used to wait
+for the next cadence wake. The frames are the same multiset and
+the final movers are identical to the pre-change run.
 ================
 */
 func TestSeededMonsterLegGolden(t *testing.T) {
-	const golden = "6e9220fa62c2f64aedc7b1c1b66cf6882473d09edc01a43a75c9a0da2c7c3fa9"
+	const golden = "1abc853ba2724789362820d66888aead6d52e7f6ac63b0ca66a95e1b134a7b8f"
 	ops, sessions, now := seededLegWorld(t, 240)
 	hash := sha256.New()
 	frameLines := 0
@@ -210,7 +217,7 @@ func TestActivityGateResolvesSettledBlockOnce(t *testing.T) {
 	// active and the actor stays settled in place between gates. The leg
 	// normally stamps the batch's world into the snapshot; do it here.
 	ops.activity = ops.captureActivity([]SessionSnapshot{playerSessionAt(1, 1000, 1000)}, now)
-	ops.activity.world = activityWorld{division: monsterTestDivision, world: 65537, generation: 1}
+	ops.activity.askWorld(activityWorld{division: monsterTestDivision, world: 65537, generation: 1})
 	settled := calls
 	for k := int64(1); k <= 5; k++ {
 		current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)

@@ -9,9 +9,11 @@ package action
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -563,4 +565,177 @@ func TestStallCreateLeavesAStandingHostAlone(t *testing.T) {
 	if out.Frames[0].Opcode != wire.OpStallCreateResult || len(out.Broadcast) != 0 {
 		t.Fatalf("create frames %+v broadcast %+v, want only the create answer", out.Frames, out.Broadcast)
 	}
+}
+
+/*
+================
+stallSilentRefusal
+
+One [2][code] refusal frame on the expected answer opcode.
+================
+*/
+func stallSilentRefusal(t *testing.T, out OpResult, opcode uint16, code uint8) {
+	t.Helper()
+	if len(out.Frames) != 1 || out.Frames[0].Opcode != opcode {
+		t.Fatalf("answered %+v, want one %#x answer", out.Frames, opcode)
+	}
+	if p := out.Frames[0].Payload; len(p) != 2 || p[0] != 2 || p[1] != code {
+		t.Fatalf("answered % X, want the silent refusal [2 %#x]", p, code)
+	}
+}
+
+/*
+================
+TestStallBadBagSlotRefusalKeepsTheNativeByte
+
+#2358: an offer drawn from an empty bag slot is refused with word
+0x06 (result 0x3C06). Packed address 0x0A06 names no row of the
+client's category 0x0A dispatch and no later source words it (the
+nearest rows, 0x05 invalid operation and 0x08 invalid price, name
+other refusals), so the refusal prints nothing, as it does
+natively; the byte is pinned so the silence is not "fixed" into a
+wrong line.
+================
+*/
+func TestStallBadBagSlotRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrBadBagSlot != 0x06 {
+		t.Fatalf("bad-bag-slot refusal byte %#x, want 0x06 (the native word)", wire.StallErrBadBagSlot)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 14, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
+	stallSilentRefusal(t, out, wire.OpStallEditResult, wire.StallErrBadBagSlot)
+}
+
+/*
+================
+TestStallBadCountRefusalKeepsTheNativeByte
+
+#2358: an offer count of zero (or above the bag stack) is refused
+with word 0x07 (result 0x3C07). Packed address 0x0A07 names no row
+of the client's category 0x0A dispatch and no later source words
+it - 0x12 inventory full is bag space, not a count - so the
+refusal prints nothing, as it does natively.
+================
+*/
+func TestStallBadCountRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrBadCount != 0x07 {
+		t.Fatalf("bad-count refusal byte %#x, want 0x07 (the native word)", wire.StallErrBadCount)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 0, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
+	stallSilentRefusal(t, out, wire.OpStallEditResult, wire.StallErrBadCount)
+}
+
+/*
+================
+TestStallNameLengthRefusalKeepsTheNativeByte
+
+#2358: a title longer than the stall text cap is refused with
+word 0x09 (result 0x3C09), on create and on the title edit.
+Packed address 0x0A09 names no row of the client's category 0x0A
+dispatch and no later source words it: 0x38 forbids characters in
+the name and the later client's NOT_INPUT_FMARKETNAME prompts for
+an empty name at its own window - neither is a length refusal,
+and the later client's 0x3Cxx switch has no 0x3C09 case. The
+refusal prints nothing, as it does natively.
+================
+*/
+func TestStallNameLengthRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrNameLength != 0x09 {
+		t.Fatalf("name-length refusal byte %#x, want 0x09 (the native word)", wire.StallErrNameLength)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	long := strings.Repeat("a", stall.TextLimit+1)
+	out := rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr(long).Payload())
+	stallSilentRefusal(t, out, wire.OpStallCreateResult, wire.StallErrNameLength)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	out = rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditTitle, wire.NewWriter(8).WStr(long).Payload()...))
+	stallSilentRefusal(t, out, wire.OpStallEditResult, wire.StallErrNameLength)
+}
+
+/*
+================
+TestStallGreetingRefusalKeepsTheNativeByte
+
+#2358: a greeting longer than the stall text cap is refused with
+word 0x0A (result 0x3C0A). Packed address 0x0A0A names no row of
+the client's category 0x0A dispatch and no later source words a
+refused greeting at all, so the refusal prints nothing, as it
+does natively.
+================
+*/
+func TestStallGreetingRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrGreeting != 0x0A {
+		t.Fatalf("greeting refusal byte %#x, want 0x0a (the native word)", wire.StallErrGreeting)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	long := strings.Repeat("a", stall.TextLimit+1)
+	out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditGreeting, wire.NewWriter(8).WStr(long).Payload()...))
+	stallSilentRefusal(t, out, wire.OpStallEditResult, wire.StallErrGreeting)
+}
+
+/*
+================
+TestStallNotVisitingRefusalKeepsTheNativeByte
+
+#2358: leaving (or buying) with no visit open is refused with
+word 0x0F (result 0x3C0F). Packed address 0x0A0F names no row of
+the client's category 0x0A dispatch and no later source words it
+- 0x15 host left tells a visitor the shop closed; it is not the
+visitor's own missing visit - so the refusal prints nothing, as
+it does natively.
+================
+*/
+func TestStallNotVisitingRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrNotVisiting != 0x0F {
+		t.Fatalf("not-visiting refusal byte %#x, want 0x0f (the native word)", wire.StallErrNotVisiting)
+	}
+	rt, _, buyer, _ := stallFixture(t)
+	out := rt.HandleStallLeave(testDivision, buyer, nil)
+	stallSilentRefusal(t, out, wire.OpStallLeaveResult, wire.StallErrNotVisiting)
+}
+
+/*
+================
+TestStallBadSlotRefusalKeepsTheNativeByte
+
+#2358: editing or buying an empty or out-of-range stall slot is
+refused with word 0x10 (result 0x3C10). Packed address 0x0A10
+names no row of the client's category 0x0A dispatch and no later
+source words it, so the refusal prints nothing, as it does
+natively.
+================
+*/
+func TestStallBadSlotRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrBadSlot != 0x10 {
+		t.Fatalf("bad-slot refusal byte %#x, want 0x10 (the native word)", wire.StallErrBadSlot)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	out := rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditRemove, 0, 0))
+	stallSilentRefusal(t, out, wire.OpStallEditResult, wire.StallErrBadSlot)
+}
+
+/*
+================
+TestStallHasStallRefusalKeepsTheNativeByte
+
+#2358: opening a stall while one is already kept is refused with
+word 0x14 (result 0x3C14). Packed address 0x0A14 names no row of
+the client's category 0x0A dispatch and no later source words
+it - 0x0E market closed speaks to visitors, not to a host opening
+twice - so the refusal prints nothing, as it does natively.
+================
+*/
+func TestStallHasStallRefusalKeepsTheNativeByte(t *testing.T) {
+	if wire.StallErrHasStall != 0x14 {
+		t.Fatalf("has-stall refusal byte %#x, want 0x14 (the native word)", wire.StallErrHasStall)
+	}
+	rt, owner, _, _ := stallFixture(t)
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	out := rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("More potions").Payload())
+	stallSilentRefusal(t, out, wire.OpStallCreateResult, wire.StallErrHasStall)
 }

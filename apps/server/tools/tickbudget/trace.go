@@ -14,7 +14,9 @@ Ticker.runScheduledTick or Ticker.runDivision.
 Goroutine states are integrated from state-transition events: the
 elapsed time between two transitions belongs to the state the first
 one entered. Running and syscall time both count as running (the
-state's own Executing definition); waiting counts as blocked.
+state's own Executing definition); waiting counts as blocked, except
+the tick machinery's own wait for its next unit of work, which is
+booked separately as idle (isInterTickWait, #3103).
 
 ===========================================================================
 */
@@ -61,6 +63,7 @@ type traceStats struct {
 	SyscallMs   float64
 	RunnableMs  float64
 	BlockedMs   float64
+	IdleMs      float64
 	topBlocking []stackCount
 	topRunnable []stackCount
 }
@@ -98,6 +101,64 @@ func stackText(stack trace.Stack, limit int) string {
 		}
 	}
 	return strings.Join(names, " <- ")
+}
+
+/*
+================
+traceStackFuncs
+
+Every function name on a trace stack, leaf first as the trace
+records them.
+================
+*/
+func traceStackFuncs(stack trace.Stack) []string {
+	var names []string
+	for frame := range stack.Frames() {
+		names = append(names, frame.Func)
+	}
+	return names
+}
+
+/*
+================
+isInterTickWait
+
+Whether a waiting stack is the tick machinery waiting for its next
+unit of work instead of tick work waiting on something: the
+coordinator parked in Ticker.run's select for the next scheduled
+tick, an idle shard worker parked in runShard's select for the next
+batch, or the coordinator parked on a batch's done channel inside
+runScheduledTick while the shards run it. Those spans are the wait
+between ticks - the shards' running time is already counted on
+their own goroutines - so reduceTrace books them as idle, never
+blocked (#3103). Any other wait (a lock, a sleep inside the tick, a
+channel a hook blocks on) stays blocked.
+================
+*/
+func isInterTickWait(funcs []string) bool {
+	if len(funcs) == 0 {
+		return false
+	}
+	leaf := funcs[0]
+	switch {
+	case strings.HasPrefix(leaf, "runtime.selectgo"):
+		// Only the machinery's own selects count (Ticker.run's clock
+		// select, runShard's inbox select), called straight from
+		// those frames: a select deeper in the tick's work, with the
+		// tick entries lower on the stack, is that work blocking.
+		if len(funcs) > 1 && (strings.HasSuffix(funcs[1], "(*Ticker).run") || strings.HasSuffix(funcs[1], "(*Ticker).runShard")) {
+			return true
+		}
+	case strings.HasPrefix(leaf, "runtime.chanrecv"):
+		// Only the coordinator's own receive counts (the batch done
+		// channel, called straight from runScheduledTick): a channel
+		// wait deeper in the tick's work, with the tick entry lower
+		// on the stack, is that work blocking and stays blocked.
+		if len(funcs) > 1 && strings.HasSuffix(funcs[1], "(*Ticker).runScheduledTick") {
+			return true
+		}
+	}
+	return false
 }
 
 /*
@@ -175,6 +236,10 @@ func reduceTrace(path string) (*traceStats, error) {
 		state trace.GoState
 		since trace.Time
 		known bool
+		// idle classifies the current waiting span (isInterTickWait on
+		// the stack that entered it): between-tick waits book apart
+		// from blocked time.
+		idle bool
 	}
 	clocks := make(map[trace.GoID]*goroutineClock)
 	blocking := make(map[string]int)
@@ -194,7 +259,11 @@ func reduceTrace(path string) (*traceStats, error) {
 		case trace.GoRunnable:
 			stats.RunnableMs += ms
 		case trace.GoWaiting:
-			stats.BlockedMs += ms
+			if clock.idle {
+				stats.IdleMs += ms
+			} else {
+				stats.BlockedMs += ms
+			}
 		}
 	}
 
@@ -222,11 +291,17 @@ func reduceTrace(path string) (*traceStats, error) {
 		clock := clocks[id]
 		if clock == nil {
 			clock = &goroutineClock{state: from, since: first, known: true}
+			if from == trace.GoWaiting {
+				clock.idle = isInterTickWait(traceStackFuncs(st.Stack))
+			}
 			clocks[id] = clock
 		}
 		credit(clock, ev.Time())
 		clock.state = to
 		clock.since = ev.Time()
+		if to == trace.GoWaiting {
+			clock.idle = isInterTickWait(traceStackFuncs(st.Stack))
+		}
 		switch to {
 		case trace.GoWaiting:
 			if text := stackText(st.Stack, 4); text != "" {

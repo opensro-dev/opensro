@@ -30,7 +30,7 @@ efr kind 1 recipients are installed after the caster's own door; the
 caster itself receives an instance only when its select word names it.
 ==================
 */
-func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	timed := skill.TimedEffect.Pinned && !skill.TimedEffect.Persistent && !skill.TimedEffect.Targeted
 	concealment := skill.Concealment.Pinned && !skill.Concealment.Persistent
 	if !timed && !concealment || skill.ChainSub || cast.HasTarget || cast.HasGroundTarget ||
@@ -48,7 +48,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	}
 	if pending == nil && skill.ActionCastingTimeMs > 0 {
 		var refusal uint16
-		if !rt.deps.Update(c, "prepare-timed-effect", func() bool {
+		if !doors.update(c, "prepare-timed-effect", func() bool {
 			if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 				return false
 			}
@@ -95,7 +95,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	self := !field && (!area.Present || area.Select&enterworld.SelectCaster != 0)
 	var effects []wire.Frame
 	var refusal uint16
-	if !rt.deps.Update(c, "release-timed-effect", func() bool {
+	if !doors.update(c, "release-timed-effect", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
 		}
@@ -133,7 +133,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 		return OpResult{DiagnosticRefusal: "timed-effect-release-commit-refused"}, skillCastRefused
 	}
 	if area.Present {
-		rt.installRecipientEffects(division, rt.concealmentRecipients(division, c, area, now), skill, rider, now)
+		rt.installRecipientEffectsThrough(doors.update, division, rt.concealmentRecipients(division, c, area, now), skill, rider, now)
 	}
 	if skill.TimedEffect.PulseArea.Present {
 		rt.trackPulseArea(division, c.Name)

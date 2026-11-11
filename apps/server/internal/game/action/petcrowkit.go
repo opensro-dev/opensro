@@ -183,7 +183,15 @@ Expire memory and withdraw departed recipients before another attack can read it
 ================
 */
 func (rt *Runtime) advanceCrowKit(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advanceCrowKitSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advanceCrowKitSession
+================
+*/
+func (rt *Runtime) advanceCrowKitSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil {
 		return
 	}

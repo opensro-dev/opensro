@@ -1,7 +1,14 @@
 # native-claims.yml - a pull request citing the client fills its claims table (#2219)
 #
 # Its own workflow because editing the body must re-run this check and nothing
-# else. The body reaches the script through the environment, never the shell.
+# else. The body is read live from the API inside the gate step, not from the
+# event payload: the payload carries the body the pull request had when the
+# event fired, so re-running a failed run judged the stale body and could
+# never pass after an edit (opensro#3113). The fetch is a command substitution
+# assigned to a variable and handed to the script as data: it is never
+# evaluated, and it never travels through the environment file, where a run
+# keeps its id across re-runs and a body line naming the delimiter could
+# have planted variables for the gate step itself (#3114 review).
 #
 # The script always comes from the BASE, never from the tree under test. A
 # branch older than the gate has no script to run (run 41547159997 died with
@@ -29,6 +36,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   native-claims:
@@ -55,9 +63,11 @@ jobs:
 
       - name: New client citations have a claims row
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           cp base-gate/scripts/checks/check_native_claims.mjs scripts/checks/check_native_claims.mjs
           PR_BASE_SHA=$(git -C base-gate rev-parse HEAD)
           git fetch --no-tags ./base-gate "$PR_BASE_SHA"
-          PR_BASE_SHA="$PR_BASE_SHA" node scripts/checks/check_native_claims.mjs
+          PR_BODY="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""')"
+          PR_BASE_SHA="$PR_BASE_SHA" PR_BODY="$PR_BODY" node scripts/checks/check_native_claims.mjs

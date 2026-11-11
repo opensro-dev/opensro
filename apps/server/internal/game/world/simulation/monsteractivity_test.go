@@ -1,8 +1,10 @@
 package simulation
 
 import (
-	"opensro.online/server/internal/game/world/monster"
 	"testing"
+
+	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 func activityFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, int64) {
@@ -383,5 +385,82 @@ func TestPendingResumePreservesIndependentOpponentLedger(t *testing.T) {
 	row, _ = ops.Monsters.Get(monsterTestDivision, actor.Gid)
 	if row.Opponents != ledger {
 		t.Fatal("WANDER resume cleared opponent memory without a release event")
+	}
+}
+
+/*
+================
+TestActivityBlockForMemoizesByPose
+
+The gate's block memo answers a standing pose from the memo, a
+moved actor resolves fresh and refreshes its one memo in place,
+and returning to the first pose re-resolves it - the pointer
+behind the map changes none of the pose guard's answers (#3027).
+================
+*/
+func TestActivityBlockForMemoizesByPose(t *testing.T) {
+	ops := &MonsterMoverOps{}
+	at := Spawn{RegionID: 1, X: 1000, Z: 1000}
+	block, ok := ops.activityBlockFor(7, at)
+	if !ok {
+		t.Fatal("outdoor pose did not resolve a block")
+	}
+	if again, _ := ops.activityBlockFor(7, at); again != block {
+		t.Fatal("standing pose resolved a different block")
+	}
+	moved := at
+	moved.X += 5000
+	fresh, _ := ops.activityBlockFor(7, moved)
+	if fresh == block {
+		t.Fatal("moved actor kept its old block")
+	}
+	if back, _ := ops.activityBlockFor(7, at); back != block {
+		t.Fatal("returned actor did not re-resolve its first block")
+	}
+	if len(ops.activityBlocks) != 1 {
+		t.Fatalf("memo holds %d actors, want the one refreshed memo", len(ops.activityBlocks))
+	}
+	if _, ok := ops.activityBlockFor(8, at); !ok || len(ops.activityBlocks) != 2 {
+		t.Fatal("a second actor did not get its own memo")
+	}
+}
+
+/*
+================
+TestActivitySnapshotCountedHereFollowsTheAskedWorld
+
+The gate's census verdict answers off the asked world's counts:
+a block counted under another world is inactive here, an
+uncounted block is inactive everywhere, and rotating the asked
+world (the snapshot's per-batch world) moves the answers with
+it (#3027).
+================
+*/
+func TestActivitySnapshotCountedHereFollowsTheAskedWorld(t *testing.T) {
+	here := activityWorld{division: "a", world: 1, generation: 1}
+	there := activityWorld{division: "a", world: 2, generation: 1}
+	counted := worldgeom.MessageBlock{X: 3, Z: 4}
+	foreign := worldgeom.MessageBlock{X: 9, Z: 9}
+	snap := &monsterActivitySnapshot{counts: map[activityWorld]map[worldgeom.MessageBlock]uint16{
+		here:  {counted: 2},
+		there: {foreign: 1},
+	}}
+	snap.askWorld(here)
+	if !snap.countedHere(counted) {
+		t.Fatal("counted block inactive in its own world")
+	}
+	if snap.countedHere(foreign) {
+		t.Fatal("another world's block active here")
+	}
+	if snap.countedHere(worldgeom.MessageBlock{X: 1}) {
+		t.Fatal("uncounted block active")
+	}
+	snap.askWorld(there)
+	if !snap.countedHere(foreign) || snap.countedHere(counted) {
+		t.Fatal("answers did not follow the asked world")
+	}
+	snap.askWorld(activityWorld{division: "a", world: 3, generation: 1})
+	if snap.countedHere(counted) || snap.countedHere(foreign) {
+		t.Fatal("uncounted world active")
 	}
 }
