@@ -19,6 +19,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/google/pprof/profile"
 )
@@ -186,6 +187,45 @@ totalMs
 */
 func (p *cpuProfile) totalMs() float64 {
 	return p.totalNs / 1e6
+}
+
+/*
+================
+tickMs
+
+The CPU of the samples taken on the tick goroutines: a stack through
+one of the tick entries (tickStackMarkers), the same membership the
+trace reduction uses. The process also runs the session read and write
+loops, the store's lanes and the collector; comparing their CPU with
+the tick goroutines' running time reported a blind spot on every
+healthy capture (live read of 2026-11-11: 68.9 ms/tick whole process,
+44.1 on the tick, 42.2 running in the trace).
+================
+*/
+func (p *cpuProfile) tickMs() float64 {
+	ns := 0.0
+	for _, sample := range p.prof.Sample {
+		if onTickStack(stackFuncs(sample)) {
+			ns += p.sampleCPU(sample)
+		}
+	}
+	return ns / 1e6
+}
+
+/*
+================
+onTickStack
+================
+*/
+func onTickStack(funcs []string) bool {
+	for _, name := range funcs {
+		for _, marker := range tickStackMarkers {
+			if strings.Contains(name, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 /*

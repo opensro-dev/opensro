@@ -99,9 +99,7 @@ func startFriendServer(t *testing.T, dir string, createCharacters bool) e2eServe
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 
 	// The presence facade and both friend hooks, wired like server.go:
