@@ -55,7 +55,9 @@ export function createCosHud() {
 		chooseItemTarget
 
 		567372 checks cursor A6: any occupied inventory or equipment slot opens
-		the type-1F confirmation (5673A7) and clears the cursor. Its Yes runs
+		the kind-0x1F confirmation (pushed at 5673A9) and clears the cursor.
+		Kind 0x1F asks UIIT_MSG_QUESTION_SILKMALL_ITEM_USE (53252D), the same
+		use question as the mall gate. Its Yes runs
 		CIFInventory_ExecuteItemAction(source, target, slot) (697B79), as a
 		drop on that slot does; the worker applies 6968BA's target checks.
 		================

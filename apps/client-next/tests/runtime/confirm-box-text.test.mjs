@@ -1,11 +1,14 @@
 /*
 ===========================================================================
 
-confirm-box-text.test.mjs - the item-target confirmation keeps its text inside
+confirm-box-text.test.mjs - the item-target confirmation asks to use, not cancel
 
-Grass of Life and the clock confirm through the fixed 308x148 native box
-(5C82D0). Its second line is wider than the box, so it wraps inside the
-frame; drawn as one row it ran past the window on both sides.
+Picking a target for Grass of Life opens kind 0x1F (pushed at 5673A9),
+whose body is UIIT_MSG_QUESTION_SILKMALL_ITEM_USE, "Will you use the
+selected item?" (53252D). The cancel pair belongs to kind 0x20, the
+buff-cancel confirm; drawn here it told a player starting a use that
+they were cancelling it (#3240). The line must also stay inside the
+fixed 308x148 native box (5C82D0).
 
 ===========================================================================
 */
@@ -48,7 +51,7 @@ function glyphsFor( fixture, value ) {
 	return found;
 }
 
-test("the item-target confirm keeps its two lines inside the 308x148 frame", () => {
+test("the item-target confirm asks the use question inside the 308x148 frame", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
 		Object.assign( f.state.gameplay, {
@@ -93,24 +96,25 @@ test("the item-target confirm keeps its two lines inside the 308x148 frame", () 
 		assert.ok( confirm, "the revive confirm is admitted" );
 		// guildProposalLayout: the buttons sit at (72, 99) inside 308x148.
 		const frame = [ confirm.rect[0] - 72, confirm.rect[1] - 99, 308, 148 ];
+		const runs = glyphsFor( f, "Will you use the selected item?" );
+		assert.ok( runs.length > 0, "the use question is drawn" );
+		for ( const run of runs ) {
+			for ( const glyph of run ) {
+				assert.ok(
+					glyph.rect[0] >= frame[0] && glyph.rect[0] + glyph.rect[2] <= frame[0] + frame[2] &&
+						glyph.rect[1] >= frame[1] && glyph.rect[1] + glyph.rect[3] <= frame[1] + frame[3],
+					`"Will you use the selected item?" stays inside the frame at ${glyph.rect}`
+				);
+			}
+		}
+		// The cancel pair is the buff-cancel confirm's text (kind 0x20); a
+		// use never asks it (#3240).
 		for (
 			const value of [
 				"Will you cancel the use of the selected item?",
 				"If you cancel the use of the selected item, its effect will be lost."
 			]
-		) {
-			const runs = glyphsFor( f, value );
-			assert.ok( runs.length > 0, "the line is drawn: " + value );
-			for ( const run of runs ) {
-				for ( const glyph of run ) {
-					assert.ok(
-						glyph.rect[0] >= frame[0] && glyph.rect[0] + glyph.rect[2] <= frame[0] + frame[2] &&
-							glyph.rect[1] >= frame[1] && glyph.rect[1] + glyph.rect[3] <= frame[1] + frame[3],
-						`"${value}" stays inside the frame at ${glyph.rect}`
-					);
-				}
-			}
-		}
+		) assert.equal( glyphsFor( f, value ).length, 0, "the cancel line is not drawn: " + value );
 		f.ui.event( { kind: "activate", id: "cos-revive-confirm" } );
 		assert.deepEqual(
 			sent.at( -1 ),
