@@ -188,7 +188,7 @@ the hour read 70 where it holds 100.
 ================
 */
 func TestMergeSurvivesAGrowingSlice(t *testing.T) {
-	entries := make([]rollupEntry, 2, 2)
+	entries := make([]rollupEntry, 2)
 	entries[0] = rollupEntry{t: 1000, division: "main", reason: "monster_gold", gain: true, sum: 70, min: 5, max: 40, count: 3}
 	entries[1] = rollupEntry{t: 2000, division: "main", reason: "monster_gold", gain: true, sum: 10, min: 10, max: 10, count: 1}
 	tail := []rollupEntry{
