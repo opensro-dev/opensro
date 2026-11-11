@@ -14,20 +14,50 @@ were already durable in the WAL at their commit; the checkpoint only
 copies pages into the main file, and a crash mid-checkpoint leaves the
 WAL whole for the next boot's replay.
 
-PASSIVE never shrinks the file, so a WAL that grows behind a reader
-keeps its high-water mark forever - observed live on 2026-11-05: the
-WAL peaked at 9.6 GB while checkpoints completed, and slow commits
-clustered behind it. When a cycle drains completely yet leaves the
-file past walCeilingBytes, the same lane escalates once to
+The log starts over only when a writer begins with every frame already
+copied, and one PASSIVE pass never leaves it so beside a busy writer:
+the pass copies up to the frame it met, the writer commits during the
+copy, and the pass returns without syncing the main file or marking
+the log done. So a cycle does not stop at its first drained pass. It
+chases the tail with further passes - each has only the frames of the
+previous pass's duration to copy - until one finds nothing new, which
+means the pass before it ended level with the writer: SQLite synced
+the main file on this lane's handle, and the writer's next transaction
+restarts the log by itself and trims the file to journal_size_limit.
+The passes never take the writer lock. A transaction that begins
+while a pass holds the wal-index locks it works under can still wait
+on them for a moment: beside the old single pass one begin waited
+63 ms, beside the chase the worst of 2,011 commits took 8 ms.
+
+Before the chase (#3143, live 2026-11-11) the log never restarted: it
+grew 2.9 MB/s to the ceiling every 90 s, and the reset there holds the
+writer lock while it copies the last frames and syncs the main file.
+A commit that met the lock slept on SQLite's busy ladder (1, 2, 5, 10,
+15, 20, 25, 25 ms and on): 127 of that day's 138 slow commits sat
+nearest the ladder's sums 103 and 128 ms, a median 1.5 ms above the
+sum. How the hold itself divides between copy and sync was not
+measured on the server. A scratch run
+beside a writer committing every 20 ms showed the same without the
+chase: the file reached 232 MB in 45 s, and with the ceiling lowered
+to 32 MB a reset held a commit 108 ms. With the chase,
+TestWALStaysShortBesideASteadyWriter (long tier) holds what that load
+must show - the log restarts, no reset runs, the file stays near
+journal_size_limit - and reports the writer's worst commit.
+
+The reset remains for what the chase cannot do. PASSIVE never shrinks
+the file, and a log that grew behind a reader (2026-11-05: 9.6 GB) or
+beside a writer that never pauses keeps growing. When a drained cycle
+leaves the file past walCeilingBytes, the lane escalates once to
 wal_checkpoint(TRUNCATE) - the reset Close already performs at
-shutdown - so the file returns to the limit the next commits reuse.
-The ceiling keeps an ordinary backup pin from ever reaching it, and a
-cycle that ends starved never truncates: no door ever waits on this.
+shutdown. The ceiling keeps an ordinary backup pin from ever reaching
+it, a cycle that ends starved never truncates, and a reset that meets
+a reader or a writer gives up at once.
 
 The counters land on /transport/metrics inside store_lock
 (lock_timing.go), so a checkpoint starved by a long-lived reader (a
 backup, say) reads as a growing WAL and a busy streak, not as a boot
-that mysteriously replays for minutes.
+that mysteriously replays for minutes; log restarts, cycles that
+caught up, and how long each reset kept writers out read there too.
 
 ===========================================================================
 */
@@ -37,21 +67,28 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/platform/latency"
 )
 
 const (
 	// walCheckpointInterval is how often the background cycle runs.
 	walCheckpointInterval = 5 * time.Second
 	// walCheckpointPassesPerCycle caps one cycle's PASSIVE calls: a
-	// cycle keeps copying until SQLite reports nothing left, but never
-	// loops forever against a reader that keeps the WAL pinned.
-	walCheckpointPassesPerCycle = 4
+	// cycle keeps copying until it is level with the writer, but never
+	// loops forever against a reader that keeps the WAL pinned or a
+	// writer that never pauses. A quiet store ends in two passes; the
+	// measured writer (TestWALStaysShortBesideASteadyWriter) was caught
+	// in 9 to 12 of 12 cycles, and a cycle that is not leaves its tail
+	// to the next.
+	walCheckpointPassesPerCycle = 8
 	// walCheckpointStopTimeout bounds Close's wait for the goroutine.
 	// A cycle is a handful of bounded SQLite calls; passing this means
 	// something below the store is wedged, and Close proceeds anyway -
@@ -78,6 +115,16 @@ const (
 	// walStarvationLogInterval rate-limits the starvation line while
 	// the condition holds.
 	walStarvationLogInterval = time.Minute
+	// walSlowResetThreshold is the reset time that names itself in the
+	// log: writers were locked out that long, so a slow commit beside
+	// the line has its cause. Half the slow-commit line, because the
+	// waiting commit adds its own busy-ladder sleep on top.
+	walSlowResetThreshold = 50 * time.Millisecond
+	// The WAL file header (SQLite file format, section 4.1): 32 bytes,
+	// with the checkpoint sequence number big-endian at offset 12.
+	// SQLite adds one each time the log starts over.
+	walHeaderBytes          = 32
+	walHeaderSequenceOffset = 12
 )
 
 /*
@@ -107,6 +154,21 @@ type walCheckpointer struct {
 	resetBusy   atomic.Int64
 	walBytes    atomic.Int64
 	walBytesMax atomic.Int64
+
+	// caughtUp counts the cycles that ended level with the writer and
+	// restarts the times the log started over (noteRestarts);
+	// lastSequence is the WAL header's sequence number plus one as last
+	// read, zero before the first read. resetHold is how long each
+	// reset kept writers out.
+	caughtUp     atomic.Int64
+	restarts     atomic.Int64
+	lastSequence atomic.Int64
+	resetHold    latency.Live
+
+	// afterPass, when set, runs after each drained pass with its
+	// index: the tests commit there, between two passes, where a live
+	// writer commits whenever it likes. Production leaves it nil.
+	afterPass func(pass int)
 
 	lastStarvationLogMs atomic.Int64
 }
@@ -178,15 +240,18 @@ func (c *walCheckpointer) stop() {
 ================
 walCheckpointer.cycle
 
-One checkpoint cycle: PASSIVE passes until every frame is
-checkpointed or the pass cap runs out, and returns whether the cycle
-ended starved. PASSIVE's own busy flag only says the checkpoint could
-not run at all; the quieter starvation - frames it could not move
-past the oldest reader, expected under a backup - reads in the
-result's last two columns. Either way it counts toward the
-starvation line; it is never an error worth failing on. A drained
-cycle whose file still stands past the ceiling resets it in place
-(resetWAL) before the size lands on the counters.
+One checkpoint cycle: PASSIVE passes until one drains the log, then
+the chase - further passes until one meets the log where the pass
+before it drained it (walPosition), so nothing was committed in
+between and the log is level with the writer (the file banner says
+why that matters) - or until the pass cap runs out. Returns whether
+the cycle ended starved: no pass drained. PASSIVE's own busy flag only
+says the checkpoint could not run at all; the quieter starvation -
+frames it could not move past the oldest reader, expected under a
+backup - reads in the result's last two columns. Either way it counts
+toward the starvation line; it is never an error worth failing on. A
+drained cycle whose file still stands past the ceiling resets it in
+place (resetWAL) before the size lands on the counters.
 ================
 */
 func (c *walCheckpointer) cycle() (starved bool) {
@@ -198,17 +263,33 @@ func (c *walCheckpointer) cycle() (starved bool) {
 	defer db.Close()
 	c.cycles.Add(1)
 
-	for pass := 0; pass < walCheckpointPassesPerCycle; pass++ {
-		var busyFlag, walPages, checkpointedPages int
-		if err := db.QueryRow("PRAGMA wal_checkpoint(PASSIVE)").Scan(&busyFlag, &walPages, &checkpointedPages); err != nil {
+	drained, caughtUp := false, false
+	var drainedAt walPosition
+	for pass := 0; pass < walCheckpointPassesPerCycle && !caughtUp; pass++ {
+		at := walPosition{generation: c.noteRestarts()}
+		var busyFlag, checkpointedFrames int
+		if err := db.QueryRow("PRAGMA wal_checkpoint(PASSIVE)").Scan(&busyFlag, &at.frames, &checkpointedFrames); err != nil {
 			log.Warnf("store: wal_checkpoint(PASSIVE) failed: %v", err)
 			return false
 		}
-		if busyFlag == 0 && checkpointedPages >= walPages {
-			starved = false
-			break
+		if busyFlag != 0 || checkpointedFrames < at.frames {
+			if drained {
+				// The chase met a transaction that began after the
+				// drained pass. The cycle copied what it came for;
+				// the next one chases again.
+				break
+			}
+			continue
 		}
-		starved = true
+		caughtUp = drained && at == drainedAt
+		drained, drainedAt = true, at
+		if c.afterPass != nil {
+			c.afterPass(pass)
+		}
+	}
+	starved = !drained
+	if caughtUp {
+		c.caughtUp.Add(1)
 	}
 
 	size := walFileBytes(c.dbPath)
@@ -234,6 +315,76 @@ func (c *walCheckpointer) cycle() (starved bool) {
 		c.logStarved(size)
 	}
 	return starved
+}
+
+/*
+================
+walPosition
+
+Where a pass met the log: which log (the header's sequence number
+plus one, zero when the file has no header) and how many frames long.
+Two drained passes at one position had no commit between them. The
+length alone cannot say that: a log that started over and took a
+commit of the same size reads the same.
+================
+*/
+type walPosition struct {
+	generation int64
+	frames     int
+}
+
+/*
+================
+walCheckpointer.noteRestarts
+
+Reads the WAL header's sequence number, which SQLite raises by one
+each time the log starts over - after a pass that ended level with the
+writer, or after a reset - counts the restarts since the last read,
+and returns the log's generation for walPosition. A file with no
+header (just reset, nothing written since) is generation zero and
+counts nothing; the next read picks the count up.
+================
+*/
+func (c *walCheckpointer) noteRestarts() (generation int64) {
+	sequence, ok := walRestartSequence(c.dbPath)
+	if !ok {
+		return 0
+	}
+	generation = int64(sequence) + 1
+	previous := c.lastSequence.Swap(generation)
+	switch {
+	case previous == 0:
+	case generation > previous:
+		c.restarts.Add(generation - previous)
+	case generation < previous:
+		// A recreated file counts from zero again: one restart.
+		c.restarts.Add(1)
+	}
+	return generation
+}
+
+/*
+================
+walRestartSequence
+
+The checkpoint sequence number in the WAL file's header, and whether
+the file has one. Reading the WAL through a second descriptor is safe
+where reading the database file is not: SQLite keeps its POSIX locks
+on the database and the shared-memory file, and closing any descriptor
+of a locked file drops the process's locks on it.
+================
+*/
+func walRestartSequence(dbPath string) (uint32, bool) {
+	file, err := os.Open(dbPath + "-wal")
+	if err != nil {
+		return 0, false
+	}
+	defer file.Close()
+	var header [walHeaderBytes]byte
+	if _, err := io.ReadFull(file, header[:]); err != nil {
+		return 0, false
+	}
+	return binary.BigEndian.Uint32(header[walHeaderSequenceOffset:]), true
 }
 
 /*
@@ -268,6 +419,11 @@ Under the handle's busy_timeout (5 s) one live read would stall every
 door commit behind this lane for up to that long. The reset therefore
 runs on a pinned connection with busy_timeout=0: a writer or reader in
 the way makes it busy at once, which counts and retries next cycle.
+
+A reset that runs keeps writers out while it copies the last frames
+and syncs the main file - every page the passes copied since the last
+sync, when no cycle caught up in between. That time lands on resetHold,
+and past walSlowResetThreshold it names itself in the log.
 Returns whether the file was reset.
 ================
 */
@@ -284,7 +440,9 @@ func (c *walCheckpointer) resetWAL(db *sql.DB) bool {
 		return false
 	}
 	var busyFlag, walPages, checkpointedPages int
+	started := time.Now()
 	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busyFlag, &walPages, &checkpointedPages)
+	held := time.Since(started)
 	if isBusy(err) {
 		c.resetBusy.Add(1)
 		return false
@@ -298,6 +456,11 @@ func (c *walCheckpointer) resetWAL(db *sql.DB) bool {
 		return false
 	}
 	c.resets.Add(1)
+	c.resetHold.Add(held)
+	if held > walSlowResetThreshold {
+		log.Warnf("store: wal reset kept writers out %.1f ms; a slow commit beside this line waited on it",
+			float64(held)/float64(time.Millisecond))
+	}
 	return true
 }
 
