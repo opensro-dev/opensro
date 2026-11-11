@@ -128,3 +128,52 @@ func TestOrderedPetSessionKeysTrackMembership(t *testing.T) {
 		t.Fatalf("walk list after forget %v, want [%v]", keys, late)
 	}
 }
+
+/*
+================
+TestAdvancePetInDivisionJudgesTheLiveSession
+
+The sweep captures a pet's session before the division lock, and a
+forget with a rebind in that gap moves the entry to a fresh session.
+The division step must judge the session the map holds once the lock
+lands, never the captured generation: a forgotten entry answers 0,
+and a rebound entry is the one judged.
+================
+*/
+func TestAdvancePetInDivisionJudgesTheLiveSession(t *testing.T) {
+	rig := func(t *testing.T) (*Runtime, *fakeClock, petOwnerKey, *petSession) {
+		rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+		makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+		pet := c.ActiveCOS
+		key := petOwnerKey{division: testDivision, name: c.Name, gid: pet.GID}
+		captured := rt.petSessionFor(testDivision, c.Name, pet.GID)
+		if captured == nil {
+			t.Fatal("missing session")
+		}
+		return rt, clock, key, captured
+	}
+
+	// Forgotten between capture and lock: nothing is judged.
+	rt, clock, key, captured := rig(t)
+	rt.petMu.Lock()
+	delete(rt.petSessions, key)
+	rt.petMu.Unlock()
+	if characterID, _, _, _, _, _, _ := rt.advancePetInDivision(key, captured, clock.NowMs()); characterID != 0 {
+		t.Fatalf("forgotten session judged as character %d, want 0", characterID)
+	}
+
+	// Rebound between capture and lock: the fresh session is judged.
+	// Its owner record carries a different id, and the step answers
+	// with the id of the session it actually judged.
+	rt, clock, key, captured = rig(t)
+	owner := *captured.character
+	owner.ID = captured.character.ID + 777
+	live := *captured
+	live.character = &owner
+	rt.petMu.Lock()
+	rt.petSessions[key] = &live
+	rt.petMu.Unlock()
+	if characterID, _, _, _, _, _, _ := rt.advancePetInDivision(key, captured, clock.NowMs()); characterID != owner.ID {
+		t.Fatalf("judged character %d, want the rebound session's owner %d", characterID, owner.ID)
+	}
+}

@@ -361,13 +361,22 @@ pointer instead of re-hashing the owner's string key through
 petSessionFor. The entry under key cannot move while this runs - the
 division lock is held and every session bind/forget takes it too -
 and lanes only ever bind or retire child sessions, never this one.
-The key-only lane names stay for direct callers (tests): each fetches
-the session exactly as every lane once did for itself.
+The sweep captured its pointer before this lock, though, so a forget
+and rebind in that gap still moves the entry: the capture is
+revalidated against the map once the lock is held, with the raw key
+(no fold, one map read). The key-only lane names stay for direct
+callers (tests): each fetches the session exactly as every lane once
+did for itself.
 ================
 */
 func (rt *Runtime) advancePetInDivision(key petOwnerKey, state *petSession, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
+	rt.petMu.Lock()
+	if current := rt.petSessions[key]; current != state {
+		state = current
+	}
+	rt.petMu.Unlock()
 	frames := rt.advanceCrowBroodSession(key, state, nowMs)
 	frames = append(frames, rt.advancePenguinSession(key, state, nowMs)...)
 	rt.advancePetGearFieldsSession(key, state, nowMs)
