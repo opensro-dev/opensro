@@ -1,3 +1,18 @@
+/*
+===========================================================================
+
+nomad.go - sro-nomad's Nomad client: parse, plan, register, wait, stop
+
+Every call sro-nomad makes against a Nomad cluster goes through here:
+the fleet lock, parsing the job templates with their variables, the
+validate-and-plan gate the release rehearsal runs, registering a job
+and waiting for its deployment and allocations, stopping jobs, and the
+status read. A plan that cannot place a group fails with the
+scheduler's own reason (placement.go).
+
+===========================================================================
+*/
+
 package main
 
 import (
@@ -26,11 +41,21 @@ const (
 	defaultNomadNamespace     = "default"
 )
 
+/*
+================
+nomadClient
+================
+*/
 type nomadClient struct {
 	api       *nomad.Client
 	namespace string
 }
 
+/*
+================
+newNomadClient
+================
+*/
 func newNomadClient(namespace string, stack devStack) (*nomadClient, error) {
 	config := nomad.DefaultConfig()
 	// NOMAD_ADDR names any cluster; without it the client talks to this
@@ -49,10 +74,20 @@ func newNomadClient(namespace string, stack devStack) (*nomadClient, error) {
 	}, nil
 }
 
+/*
+================
+close
+================
+*/
 func (client *nomadClient) close() {
 	client.api.Close()
 }
 
+/*
+================
+withFleetLock
+================
+*/
 func (client *nomadClient) withFleetLock(
 	ctx context.Context,
 	purpose string,
@@ -99,6 +134,11 @@ func (client *nomadClient) withFleetLock(
 	)
 }
 
+/*
+================
+validateJobs
+================
+*/
 func (deployment *deployment) validateJobs(
 	ctx context.Context,
 	client *nomadClient,
@@ -115,6 +155,11 @@ func (deployment *deployment) validateJobs(
 	return nil
 }
 
+/*
+================
+parseJobs
+================
+*/
 func (deployment *deployment) parseJobs(
 	ctx context.Context,
 	client *nomadClient,
@@ -161,6 +206,11 @@ func (deployment *deployment) parseJobs(
 	return jobs, nil
 }
 
+/*
+================
+parseJob
+================
+*/
 func (client *nomadClient) parseJob(
 	ctx context.Context,
 	template []byte,
@@ -184,6 +234,11 @@ func (client *nomadClient) parseJob(
 	return job, nil
 }
 
+/*
+================
+jobVariablesJSON
+================
+*/
 func jobVariablesJSON(values map[string]any) (string, error) {
 	payload, err := json.Marshal(values)
 	if err != nil {
@@ -192,6 +247,11 @@ func jobVariablesJSON(values map[string]any) (string, error) {
 	return string(payload), nil
 }
 
+/*
+================
+validateAndPlan
+================
+*/
 func (client *nomadClient) validateAndPlan(
 	ctx context.Context,
 	job *nomad.Job,
@@ -214,15 +274,12 @@ func (client *nomadClient) validateAndPlan(
 		return fmt.Errorf("plan Nomad job %s: %w", *job.ID, err)
 	}
 	if len(plan.FailedTGAllocs) != 0 {
-		groups := make([]string, 0, len(plan.FailedTGAllocs))
-		for group := range plan.FailedTGAllocs {
-			groups = append(groups, group)
-		}
-		sort.Strings(groups)
+		// The scheduler's reason rides along (placement.go): a bare
+		// group name left the 2026-11-11 rehearsal refusal unexplained.
 		return fmt.Errorf(
 			"plan Nomad job %s cannot place task groups: %s",
 			*job.ID,
-			strings.Join(groups, ", "),
+			placementFailures(plan.FailedTGAllocs),
 		)
 	}
 	if strings.TrimSpace(plan.Warnings) != "" {
@@ -231,6 +288,11 @@ func (client *nomadClient) validateAndPlan(
 	return nil
 }
 
+/*
+================
+deploy
+================
+*/
 func (deployment *deployment) deploy(
 	ctx context.Context,
 	client *nomadClient,
@@ -269,6 +331,11 @@ func (deployment *deployment) deploy(
 	return worlds.Wait()
 }
 
+/*
+================
+pruneReleases
+================
+*/
 func (client *nomadClient) pruneReleases(
 	ctx context.Context,
 	deployment *deployment,
@@ -307,6 +374,11 @@ func (client *nomadClient) pruneReleases(
 	return deployment.pruneReleases(retained)
 }
 
+/*
+================
+jobReleaseIDs
+================
+*/
 func jobReleaseIDs(versions []*nomad.Job) map[string]struct{} {
 	releases := make(map[string]struct{})
 	for _, job := range versions {
@@ -323,6 +395,11 @@ func jobReleaseIDs(versions []*nomad.Job) map[string]struct{} {
 	return releases
 }
 
+/*
+================
+registerJob
+================
+*/
 func (client *nomadClient) registerJob(
 	parent context.Context,
 	job *nomad.Job,
@@ -346,9 +423,10 @@ func (client *nomadClient) registerJob(
 	}
 	if len(plan.FailedTGAllocs) != 0 {
 		return fmt.Errorf(
-			"plan Nomad job %s has %d unplaceable task group(s)",
+			"plan Nomad job %s has %d unplaceable task group(s): %s",
 			*job.ID,
 			len(plan.FailedTGAllocs),
+			placementFailures(plan.FailedTGAllocs),
 		)
 	}
 	var previousVersion *uint64
@@ -423,6 +501,11 @@ func (client *nomadClient) registerJob(
 	)
 }
 
+/*
+================
+waitForDeployment
+================
+*/
 func (client *nomadClient) waitForDeployment(
 	ctx context.Context,
 	job *nomad.Job,
@@ -517,6 +600,11 @@ func (client *nomadClient) waitForDeployment(
 	}
 }
 
+/*
+================
+deploymentForJobVersion
+================
+*/
 func deploymentForJobVersion(
 	deployments []*nomad.Deployment,
 	jobCreateIndex uint64,
@@ -541,6 +629,11 @@ func deploymentForJobVersion(
 	return selected, newerVersion
 }
 
+/*
+================
+waitForJobAllocations
+================
+*/
 func (client *nomadClient) waitForJobAllocations(
 	ctx context.Context,
 	job *nomad.Job,
@@ -619,6 +712,11 @@ func (client *nomadClient) waitForJobAllocations(
 	}
 }
 
+/*
+================
+reconciliationTimeout
+================
+*/
 func reconciliationTimeout(job *nomad.Job) (time.Duration, error) {
 	if job == nil || job.ID == nil || strings.TrimSpace(*job.ID) == "" {
 		return 0, fmt.Errorf("nomad job identity is incomplete")
@@ -634,6 +732,11 @@ func reconciliationTimeout(job *nomad.Job) (time.Duration, error) {
 	return *job.Update.ProgressDeadline + reconciliationMargin, nil
 }
 
+/*
+================
+desiredAllocationCount
+================
+*/
 func desiredAllocationCount(job *nomad.Job) int {
 	count := 0
 	if job == nil {
@@ -647,6 +750,11 @@ func desiredAllocationCount(job *nomad.Job) int {
 	return count
 }
 
+/*
+================
+reconcileDisabledShards
+================
+*/
 func (client *nomadClient) reconcileDisabledShards(
 	ctx context.Context,
 	deployment *deployment,
@@ -678,6 +786,11 @@ func (client *nomadClient) reconcileDisabledShards(
 	return client.deleteDisabledGameWorldVariables(ctx, enabled)
 }
 
+/*
+================
+stop
+================
+*/
 func (deployment *deployment) stop(
 	ctx context.Context,
 	client *nomadClient,
@@ -704,6 +817,11 @@ func (deployment *deployment) stop(
 	return client.stopJob(ctx, agentJobName)
 }
 
+/*
+================
+stopJob
+================
+*/
 func (client *nomadClient) stopJob(
 	parent context.Context,
 	jobID string,
@@ -758,6 +876,11 @@ func (client *nomadClient) stopJob(
 	return nil
 }
 
+/*
+================
+waitForAllocationTerminal
+================
+*/
 func (client *nomadClient) waitForAllocationTerminal(
 	ctx context.Context,
 	allocationID string,
@@ -786,6 +909,11 @@ func (client *nomadClient) waitForAllocationTerminal(
 	}
 }
 
+/*
+================
+status
+================
+*/
 func (deployment *deployment) status(
 	ctx context.Context,
 	client *nomadClient,
@@ -869,6 +997,11 @@ func (deployment *deployment) status(
 	return nil
 }
 
+/*
+================
+jobExists
+================
+*/
 func (client *nomadClient) jobExists(
 	ctx context.Context,
 	jobID string,
@@ -886,6 +1019,11 @@ func (client *nomadClient) jobExists(
 	return true, nil
 }
 
+/*
+================
+isNotFound
+================
+*/
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
