@@ -632,6 +632,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
+	# The Sky Temple fields are their own switch and their own source (the
+	# v1.696 client), layered on the same variant after the populations
+	# whose identity space they share.
+	from skytemple_import import add_skytemple
+	sky_temple = add_skytemple(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -641,6 +646,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
+		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
