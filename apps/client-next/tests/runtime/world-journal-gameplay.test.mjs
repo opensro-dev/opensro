@@ -248,7 +248,9 @@ function deltaEvent( /** @type {any} */ state ) {
 }
 
 test("a delta keeps the fields it omits by identity and removes the ones it names undefined", () => {
-	const chat = Object.freeze( { lines: [ { channel: 1, name: "a", text: "hi", outgoing: false } ] } );
+	// Opaque here: only its identity is checked.
+	const chat =
+		/** @type {any} */ (Object.freeze( { lines: [ { channel: 1, name: "a", text: "hi", outgoing: false } ] } ));
 	const previous = snapshot( {
 		chat,
 		castPrediction: { token: 1, caster: 1, skill: 2, target: 7, damage: 0, fatal: false }
@@ -300,8 +302,8 @@ test("samePlainData compares content and never calls a Map or a class instance e
 });
 
 test("queued deltas coalesce to the state the unmerged sequence presents, and a whole one makes the merge whole", () => {
-	const chat = Object.freeze( { lines: [] } );
-	const whole = gameplayEvent( snapshot( { chat, skillCatalog: CATALOG, shop: SHOP } ) );
+	const chat = /** @type {any} */ (Object.freeze( { lines: [] } ));
+	const whole = gameplayEvent( snapshot( { chat, skillCatalog: /** @type {any} */ (CATALOG), shop: SHOP } ) );
 	const deltas = [ deltaEvent( { revision: 2, pose: { x: 1 } } ), deltaEvent( { revision: 3, shop: undefined } ) ];
 	// Delivered first, then two deltas queued together.
 	const entities = createEntities(), presentation = createPresentation(), sequential = createPresentation();
