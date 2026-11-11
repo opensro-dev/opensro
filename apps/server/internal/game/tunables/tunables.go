@@ -84,6 +84,7 @@ const (
 	TradeFiveStarThiefPercent       = "trade_five_star_thief_percent"
 	TradeFiveStarHunterPercent      = "trade_five_star_hunter_percent"
 	TradeFiveStarBountyPercent      = "trade_five_star_bounty_percent"
+	TradeFiveStarBountyFloorPercent = "trade_five_star_bounty_floor_percent"
 	TradeRouteDonwhangPercent       = "trade_route_donwhang_percent"
 	TradeRouteHotanPercent          = "trade_route_hotan_percent"
 	TradeRouteSamarkandPercent      = "trade_route_samarkand_percent"
@@ -194,7 +195,10 @@ var Registry = []Setting{
 		Help: "Extra gold share each hunter earns on a trader's 5-star sale under SRO_TRADE_TIERS."},
 	{Key: TradeFiveStarBountyPercent, Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", Kind: Int, Default: 50, Min: 0,
 		Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star caravan bounty bonus", Unit: "percent",
-		Help: "Extra job EXP a hunter earns for killing a thief who attacked a 5-star caravan under SRO_TRADE_TIERS."},
+		Help: "Extra job EXP a hunter earns for killing a thief who attacked a 5-star caravan under SRO_TRADE_TIERS, scaled by the caravan's cargo against the largest ordinary full load (#3162)."},
+	{Key: TradeFiveStarBountyFloorPercent, Env: "SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT", Kind: Int, Default: 10,
+		Min: 0, Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star caravan bounty floor", Unit: "percent",
+		Help: "The least bounty bonus a 5-star caravan mark pays under SRO_TRADE_TIERS, however small the caravan: the scaled bonus (cargo over the largest ordinary full load) never drops below this percent, and never pays at all when the bounty percent itself is 0."},
 	{Key: TradeRouteDonwhangPercent, Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", Kind: Int, Default: 50, Min: 0,
 		Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Donwhang profit bonus", Unit: "percent",
 		Help: "Extra profit on goods sold between Jangan and Donwhang, both ways, under SRO_TRADE_TIERS."},

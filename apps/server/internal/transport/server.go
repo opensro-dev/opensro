@@ -30,6 +30,16 @@ const (
 	PathReady    = "/transport/readyz"
 	PathMetrics  = "/transport/metrics"
 
+	// Boot phases answered on PathHealth while the process starts
+	// (#3186): the liveness check must measure liveness, not boot time,
+	// so healthz serves from the first listener (StartHealth) and names
+	// the phase the boot is in. The wording is the issue's.
+	BootPhaseLoadingData  = "loading data"
+	BootPhaseOpeningStore = "opening store"
+	BootPhaseWiring       = "wiring"
+	BootPhaseFilling      = "filling"
+	BootPhaseReady        = "ready"
+
 	httpReadHeaderTimeout = 5 * time.Second
 	httpReadTimeout       = 15 * time.Second
 	httpWriteTimeout      = 30 * time.Second
@@ -63,11 +73,21 @@ type Server struct {
 	pprofServer *http.Server
 	pprofAddr   string
 
-	mu      sync.Mutex
-	udpConn *net.UDPConn
-	tcpLn   net.Listener
-	started bool
-	closed  bool
+	mu        sync.Mutex
+	udpConn   *net.UDPConn
+	tcpLn     net.Listener
+	httpBound bool
+	started   bool
+	closed    bool
+
+	// The boot phase healthz answers with (SetBootPhase) and the
+	// finished phases' durations, served on PathMetrics as the last
+	// boot's timings (#3186). bootStart opens the first phase.
+	bootMu    sync.Mutex
+	bootStart time.Time
+	bootPhase string
+	bootSince time.Time
+	bootDone  []BootPhaseTiming
 
 	// wtServeDone closes when the WebTransport Serve goroutine has fully
 	// returned. Shutdown MUST wait on it before calling wtServer.Close():
@@ -87,6 +107,88 @@ type Server struct {
 	publicReferences http.Handler
 
 	errCh chan error
+}
+
+/*
+================
+BootPhaseTiming
+
+One finished boot phase and how long it took.
+================
+*/
+type BootPhaseTiming struct {
+	Name string `json:"name"`
+	Ms   int64  `json:"ms"`
+}
+
+/*
+================
+BootStatus
+
+The boot as healthz and metrics report it: the phase in progress, the
+finished phases with their durations, and the running phase's age.
+================
+*/
+type BootStatus struct {
+	Phase     string            `json:"phase"`
+	Phases    []BootPhaseTiming `json:"phases"`
+	ElapsedMs int64             `json:"elapsed_ms"`
+}
+
+/*
+================
+SetBootPhase
+
+Close the running boot phase (one log line with its duration, kept for
+the metrics' last-boot timings) and open the next. Called by the wiring
+as construction crosses each boundary; the transport itself only ever
+reports. Repeating the running phase is a no-op.
+================
+*/
+func (s *Server) SetBootPhase(name string) {
+	s.bootMu.Lock()
+	defer s.bootMu.Unlock()
+	if name == s.bootPhase {
+		return
+	}
+	now := time.Now()
+	s.bootDone = append(s.bootDone, BootPhaseTiming{Name: s.bootPhase, Ms: now.Sub(s.bootSince).Milliseconds()})
+	log.Infof("boot: %s in %s", s.bootPhase, now.Sub(s.bootSince).Round(time.Millisecond))
+	s.bootPhase = name
+	s.bootSince = now
+	if name == BootPhaseReady {
+		log.Infof("boot: ready in %s", now.Sub(s.bootStart).Round(time.Millisecond))
+	}
+}
+
+/*
+================
+BootPhase
+
+The phase the boot is in.
+================
+*/
+func (s *Server) BootPhase() string {
+	s.bootMu.Lock()
+	defer s.bootMu.Unlock()
+	return s.bootPhase
+}
+
+/*
+================
+BootStatus
+
+The boot's report for the metrics document.
+================
+*/
+func (s *Server) BootStatus() BootStatus {
+	s.bootMu.Lock()
+	defer s.bootMu.Unlock()
+	return BootStatus{
+		Phase:     s.bootPhase,
+		Phases:    append([]BootPhaseTiming(nil), s.bootDone...),
+		ElapsedMs: time.Since(s.bootSince).Milliseconds(),
+	}
 }
 
 // SetReadyCheck injects the external readiness source consulted by
@@ -255,7 +357,10 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg:        cfg,
 		errCh:      make(chan error, 2),
 		wtDisabled: wtDisabled,
+		bootStart:  time.Now(),
+		bootPhase:  BootPhaseLoadingData,
 	}
+	s.bootSince = s.bootStart
 
 	checkOrigin := s.originChecker()
 
@@ -304,7 +409,9 @@ func NewServer(cfg Config) (*Server, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("ok"))
+		// Liveness only, but it names the boot phase so an operator (or
+		// the orchestrator's logs) can tell a slow boot from a hang.
+		_, _ = w.Write([]byte("ok " + s.BootPhase()))
 	})
 	tcpMux.HandleFunc(PathReady, s.handleReadyz)
 	tcpMux.HandleFunc(PathMetrics, func(w http.ResponseWriter, r *http.Request) {
@@ -320,9 +427,12 @@ func NewServer(cfg Config) (*Server, error) {
 			// WebTransportDisabled is why this run serves no WebTransport
 			// (the pair failed at boot); empty while it serves.
 			WebTransportDisabled string `json:"webtransport_disabled,omitempty"`
+			// Boot is the last boot's phase timings (#3186).
+			Boot BootStatus `json:"boot"`
 		}{
 			Metrics:              s.Hub.Metrics(),
 			WebTransportDisabled: s.wtDisabled,
+			Boot:                 s.BootStatus(),
 		}
 		if s.Cert != nil {
 			remaining := max(time.Until(s.Cert.Leaf.NotAfter), 0)
@@ -500,6 +610,57 @@ func (s *Server) handleCertHash(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(doc)
 }
 
+/*
+================
+StartHealth
+
+Bind the TCP listener and serve its HTTP endpoints before the game
+exists (#3186): healthz answers with the boot phase from here on, so
+the orchestrator's liveness check measures liveness, not boot time,
+and an operator can watch the phases. Game connections still refuse
+(readiness reports not-up until Start), readyz stays refused, and the
+WebTransport listener stays closed; Start binds the rest.
+================
+*/
+func (s *Server) StartHealth() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("transport: server is shut down")
+	}
+	if s.httpBound {
+		return fmt.Errorf("transport: health listener already started")
+	}
+	tcpLn, err := net.Listen("tcp", s.cfg.WSAddr)
+	if err != nil {
+		return fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err)
+	}
+	s.serveHTTP(tcpLn)
+	log.Infof("transport: health listener up at http://%s%s (boot phase %q)", s.tcpLn.Addr(), PathHealth, s.BootPhase())
+	return nil
+}
+
+/*
+================
+serveHTTP
+
+Own the bound TCP listener and its serve goroutine. The caller holds
+s.mu; Start and StartHealth share the launch so the goroutine and its
+done channel exist exactly once.
+================
+*/
+func (s *Server) serveHTTP(tcpLn net.Listener) {
+	s.tcpLn = tcpLn
+	s.httpBound = true
+	s.httpServeDone = make(chan struct{})
+	go func() {
+		defer close(s.httpServeDone)
+		if err := s.httpServer.Serve(tcpLn); err != nil && err != http.ErrServerClosed {
+			s.errCh <- fmt.Errorf("transport: websocket listener: %w", err)
+		}
+	}()
+}
+
 // Start binds the UDP and TCP listeners and begins serving. It returns
 // immediately; fatal listener errors surface on Err.
 func (s *Server) Start() error {
@@ -540,11 +701,17 @@ func (s *Server) Start() error {
 		bound = append(bound, pprofLn)
 		s.pprofServer = server
 	}
-	tcpLn, err := net.Listen("tcp", s.cfg.WSAddr)
-	if err != nil {
-		return fail(fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err))
+	// StartHealth may already own the TCP listener (#3186); bind it here
+	// only when it does not.
+	tcpLn := s.tcpLn
+	if !s.httpBound {
+		var err error
+		tcpLn, err = net.Listen("tcp", s.cfg.WSAddr)
+		if err != nil {
+			return fail(fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err))
+		}
+		bound = append(bound, tcpLn)
 	}
-	bound = append(bound, tcpLn)
 	// With WebTransport disabled at boot (NewServer), no UDP socket is bound:
 	// udpConn stays nil, which Shutdown and WTAddr already read as "no WT".
 	var udpConn *net.UDPConn
@@ -557,10 +724,11 @@ func (s *Server) Start() error {
 			return fail(fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err))
 		}
 	}
-	s.tcpLn = tcpLn
 	s.udpConn = udpConn
 	s.started = true
-	s.httpServeDone = make(chan struct{})
+	if !s.httpBound {
+		s.serveHTTP(tcpLn)
+	}
 	if udpConn != nil {
 		s.wtServeDone = make(chan struct{})
 	}
@@ -574,12 +742,6 @@ func (s *Server) Start() error {
 		s.pprofAddr = pprofLn.Addr().String()
 		log.WithField("addr", s.pprofAddr).Info("transport: pprof enabled on its loopback listener (/debug/pprof/)")
 	}
-	go func() {
-		defer close(s.httpServeDone)
-		if err := s.httpServer.Serve(tcpLn); err != nil && err != http.ErrServerClosed {
-			s.errCh <- fmt.Errorf("transport: websocket listener: %w", err)
-		}
-	}()
 	webtransportField := "disabled: " + s.wtDisabled
 	if udpConn != nil {
 		go func() {

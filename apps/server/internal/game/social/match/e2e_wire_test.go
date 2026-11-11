@@ -145,9 +145,7 @@ func startMatchServer(t *testing.T, dir string, seeds []*enterworld.Character) e
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 	runtime := match.NewRuntime(deps, presence.NewDirectory(srv.Hub))
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {

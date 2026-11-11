@@ -166,6 +166,17 @@ node --max-old-space-size=12000 tools/perf/analyze/trace.mjs TRACE.json --timeli
 node --max-old-space-size=12000 tools/perf/analyze/trace.mjs TRACE.json --window 1:3 --compare TRACE.json@4:8
 ```
 
+A per-frame mean hides work that runs only on some frames. `--frames FN`
+says how many frames ran a function and what one of those frames paid:
+
+```
+node --max-old-space-size=12000 tools/perf/analyze/trace.mjs TRACE.json --window 4:7.4 --frames "chatLayout "
+```
+
+It prints, for example, `104 of 219 frames (47%, 30.6 a second)` and
+`a frame that runs it: mean 7.62 ms ...; over every frame 3.620 ms/f`:
+a layout that should rebuild on change was rebuilding on half the frames.
+
 A DevTools allocation timeline (`.heaptimeline`): churn and what stayed
 alive, by allocating stack:
 

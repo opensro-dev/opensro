@@ -210,3 +210,30 @@ export function forEachSample( profile, from, to, maxGap, visit ) {
 	}
 	return gaps;
 }
+
+/*
+================
+frameCosts
+
+Inclusive time (µs) per animation frame of the samples that match: one
+entry per frame of starts that begins inside [from, to), a frame being
+the span from its start to the next one (the last runs to `to`).
+matches( stack ) decides whether a sample belongs. A per-frame mean
+hides the two shapes that matter most - work that runs on every frame,
+and work that runs on some frames and is large when it does (a layout
+rebuilt on half the frames at 7.6 ms each reads 3.7 ms/frame) - so the
+caller reports how many frames paid and what a paying frame cost.
+================
+*/
+export function frameCosts( profile, starts, from, to, maxGap, matches ) {
+	const frames = starts.filter( t => t >= from && t < to );
+	const costs = new Float64Array( frames.length );
+	let frame = 0;
+	forEachSample( profile, from, to, maxGap, ( i, owned, stack ) => {
+		const at = profile.times[i];
+		if ( !frames.length || at < frames[0] ) return;
+		while ( frame + 1 < frames.length && frames[frame + 1] <= at ) frame++;
+		if ( matches( stack ) ) costs[frame] += owned;
+	} );
+	return costs;
+}

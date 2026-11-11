@@ -15,6 +15,12 @@ export const TRACE_ACTION_ID = 1003;
 export const HELPER_ACTION_ID = 1011;
 // Port-only pet actions reuse persisted action bindings, outside native action IDs.
 export const PET_SKILL_SHORTCUT_BASE = 0xf00000;
+// The highest COS command id a command-bar drag can bind (COS_COMMAND_INFO..
+// COS_COMMAND_STANCE in foundation/ui/cos-command.ts). Kind 0x25 stores the
+// id untransformed: 572770's case 0 (57291C) reads it back through
+// CIFControl_GetLinkedParam5C0 and hands it to CGInterface_DispatchCosAction
+// (6F2520), which runs CICCos_ExecuteActionCommand (6A2350).
+const COS_COMMAND_LAST = 6;
 const HOTBAR_PAGE_COUNT = 4;
 const HOTBAR_PAGE_SLOTS = 10;
 const EQUIPMENT_SLOT_COUNT = 13;
@@ -231,6 +237,12 @@ export function extendedSlot( index: number ): number {
 /*
 ================
 quickSlotDrag
+
+The drag sources that mint a binding. A pet command dragged from the COS
+command bar binds kind 0x25 with the bare command id; pressing the slot
+runs it through the command bar's owner (executeCosCommand in the UI), so
+quickSlotCommand stays null for 0x25, as the native dispatch runs through
+the COS control's own dispatcher (6F2520).
 ================
 */
 export function quickSlotDrag(
@@ -252,6 +264,12 @@ export function quickSlotDrag(
 				skill.id === id && skill.action && skill.live && skill.level > 0
 			) ?
 			quickSlot( { slot, kind: 0x4a, payload: PET_SKILL_SHORTCUT_BASE + id } ) :
+			null;
+	}
+	if ( source.startsWith( "cos-command:" ) ) {
+		const id = Number( source.slice( 12 ) );
+		return source.length > 12 && Number.isInteger( id ) && id >= 0 && id <= COS_COMMAND_LAST ?
+			quickSlot( { slot, kind: 0x25, payload: id } ) :
 			null;
 	}
 	if ( source.startsWith( "action:" ) ) {

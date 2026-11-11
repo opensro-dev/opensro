@@ -112,6 +112,42 @@ test("compact wrapping retains sender identity and scrolls by displayed rows", (
 	assert.equal( older.controls.filter( c => c.id.startsWith( "chat-line:" ) ).length, 4 );
 });
 
+test("kept wraps rebuild identically while measuring only the new line (#3176)", () => {
+	const lines = Array.from( { length: 128 }, ( _, i ) => ({
+		channel: 6,
+		name: "Peer" + (i % 7),
+		text: ("silk road caravan talk " + i + " ").repeat( 3 ).trim(),
+		outgoing: false
+	}) );
+	const wrapCache = new Map();
+	let measured = 0;
+	const counting = value => {
+		measured += value.length;
+		return value.length * 7;
+	};
+	const first = chatLayout( input( { lines, welcome: "", wrapCache, measure: counting } ) );
+	const firstCost = measured;
+	const grown = [ ...lines.slice( 1 ), {
+		channel: 6,
+		name: "Peer1",
+		text: "one fresh line over the road",
+		outgoing: false
+	} ];
+	const second = chatLayout( input( { lines: grown, welcome: "", wrapCache, measure: counting } ) );
+	// The rebuild wrapped only the fresh line: nowhere near the whole
+	// log's glyphs again (the eight displayed rows still measure their
+	// hover widths, one new line's worth beside).
+	assert.ok(
+		measured - firstCost < firstCost / 4,
+		`rebuild measured ${measured - firstCost} of ${firstCost} glyphs`
+	);
+	// And what it shows is the uncached layout, row for row.
+	const plain = chatLayout( input( { lines: grown, welcome: "" } ) );
+	assert.deepEqual( second.controls, plain.controls );
+	assert.deepEqual( second.quads, plain.quads );
+	assert.ok( first.controls.length > 0 );
+});
+
 test("compact landscape limits row groups by height without changing the requested size", () => {
 	const state = input( { width: 667, height: 375, rows: 6, compact: { bottom: 140, maxRows: 6 } } );
 	const result = chatLayout( state );

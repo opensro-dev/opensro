@@ -94,12 +94,22 @@ cloneCharacterCast
 
 cloneCharacter for the skill-press readers (#1943): the mission
 inventory keeps its equipment rows, the whole avatar inventory, and
-every bag row carrying a companion, each detached exactly as
-cloneInventoryRows detaches it. Companion resolution walks the
+every bag row carrying a companion. Companion resolution walks the
 bag-row Summon records, and the press flow resolves the caster's
 companions through its copy (the crow lane), so the kept bag rows
 keep that resolution identical to the full copy's; the plain bag
 rows it drops are read by no press reader.
+
+The companions ride as the pet-owner view's copies (#3164): every
+record without its rentals and, the active one excepted, its
+container; the active cargo rides as values (cloneCOSCompanionActive).
+The audit of the press readers (#3164): every container read reachable
+from this copy goes through the active companion (caravanCargoValue,
+cargoGoldValue, cargoGoodsCount, loadedTransport), the container lanes
+(ownedCOSContainer and its callers) read door copies, and nothing in
+the action lanes reads rentals. A new reader of a summoner row's
+container or of rentals through this copy would see nil: widen the
+copy with it.
 ================
 */
 func cloneCharacterCast(source *Character) *Character {
@@ -167,7 +177,43 @@ func cloneCharacterCompanion(source *Character) *Character {
 	for i, pet := range source.Brood {
 		clone.Brood[i] = cloneCOSCompanion(pet)
 	}
+	pinCloneActiveSeat(clone, source)
 	return clone
+}
+
+/*
+================
+pinCloneActiveSeat
+
+One record seated in the source's active slot and a summoner row alike
+is one companion (#3129); a clone walk copies each seat, so re-point
+every copied row naming the active record's GID at the copied active
+record, or the copy reads the one companion as two duplicated
+identities and every lookup by GID refuses it. The staged full walk
+shares rows with its previous copy only when their values are
+unchanged, and then the seat already points at the shared active
+record, so the pin writes nothing.
+================
+*/
+func pinCloneActiveSeat(clone, source *Character) {
+	if clone == nil || source == nil || source.ActiveCOS == nil || clone.ActiveCOS == nil {
+		return
+	}
+	seated := false
+	for i := range source.MissionInventory {
+		if source.MissionInventory[i].Summon == source.ActiveCOS {
+			seated = true
+			break
+		}
+	}
+	if !seated {
+		return
+	}
+	for i := range clone.MissionInventory {
+		if summon := clone.MissionInventory[i].Summon; summon != nil && summon != clone.ActiveCOS && summon.GID == source.ActiveCOS.GID {
+			clone.MissionInventory[i].Summon = clone.ActiveCOS
+		}
+	}
 }
 
 // cloneRows names which inventory rows one clone walk detaches.
@@ -259,7 +305,14 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	}
 	clone.Buyback = stagedChild(source.Buyback, previousChild.Buyback, cloneBuybackRows)
 	clone.World = stagedChild(source.World, previousChild.World, cloneCharacterWorld)
-	clone.ActiveCOS = stagedChild(source.ActiveCOS, previousChild.ActiveCOS, CloneCOS)
+	if rows == rowsCast {
+		// The press readers' companion copy (#3164): the caravan and
+		// trade-tier verdicts weigh the active cargo as values, and no
+		// press reader reads rentals or a cargo row's children.
+		clone.ActiveCOS = cloneCOSCompanionActive(source.ActiveCOS)
+	} else {
+		clone.ActiveCOS = stagedChild(source.ActiveCOS, previousChild.ActiveCOS, CloneCOS)
+	}
 	clone.Mercenaries = stagedChild(source.Mercenaries, previousChild.Mercenaries, cloneCOSSet)
 	clone.CapturedCOS = stagedChild(source.CapturedCOS, previousChild.CapturedCOS, CloneCOS)
 	clone.Brood = stagedChild(source.Brood, previousChild.Brood, cloneCOSSet)
@@ -292,6 +345,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	clone.EnterEventGroupIds = stagedChild(source.EnterEventGroupIds, previousChild.EnterEventGroupIds, cloneSlice)
 	clone.BlockedWhisperers = stagedChild(source.BlockedWhisperers, previousChild.BlockedWhisperers, cloneSlice)
 	clone.Friends = stagedChild(source.Friends, previousChild.Friends, cloneSlice)
+	pinCloneActiveSeat(&clone, source)
 
 	return &clone
 }
@@ -460,11 +514,14 @@ func cloneEquipmentRows(source []InventoryRow) []InventoryRow {
 cloneCastRows
 
 The press half of cloneInventoryRows: the equipment rows plus every
-bag row carrying a companion, deep-copied in source order exactly as
-cloneInventoryRows copies them; plain bag rows are dropped, and a nil
-inventory stays nil so absence keeps its meaning. Keeping the kept
-rows in source order keeps Companions over this copy visiting exactly
-the full copy's companions.
+bag row carrying a companion, copied in source order; plain bag rows
+are dropped, and a nil inventory stays nil so absence keeps its
+meaning. Keeping the kept rows in source order keeps Companions over
+this copy visiting exactly the full copy's companions. A row's
+companion rides as the pet-owner view's record copy
+(cloneCOSCompanion), without its rentals and container: no press
+reader reads either through a summoner row (#3164 audit), and copying
+a transport's cargo into every press copy was the view's bulk.
 ================
 */
 func cloneCastRows(source []InventoryRow) []InventoryRow {
@@ -480,7 +537,7 @@ func cloneCastRows(source []InventoryRow) []InventoryRow {
 	clone := make([]InventoryRow, 0, kept)
 	for _, row := range source {
 		if row.Slot >= 0 && row.Slot < EquipmentSlotEnd || row.Summon != nil {
-			row.Summon = CloneCOS(row.Summon)
+			row.Summon = cloneCOSCompanion(row.Summon)
 			row.MagicOptions = cloneSlice(row.MagicOptions)
 			clone = append(clone, row)
 		}

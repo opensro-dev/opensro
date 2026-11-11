@@ -15,6 +15,7 @@ const CLIP = [ 100, 50, 300, 300 ];
 const PAGE = {
 	regionId: 0x8006,
 	floorIndex: 0,
+	layer: 2,
 	floorLabel: "QT_A01_FLOOR02",
 	columns: 22,
 	rows: 10,

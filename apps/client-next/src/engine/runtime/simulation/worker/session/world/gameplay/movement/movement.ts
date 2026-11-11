@@ -58,6 +58,9 @@ import {
 } from "@/engine/foundation/gameplay/direction-movement";
 const ENDPOINT_EPSILON = .01;
 const PRESENTATION_LOOKAHEAD_MS = 100;
+// The navigation grid's cell (clipper.ts): floor, room and block are
+// read once per cell the pose stands in, not once per publication.
+const NAVIGATION_CELL_SIZE = 20;
 // The navigation step's status bits live with the step (walk-step.ts).
 const NAVIGATION_STOP = WALK_NAVIGATION_STOP;
 const NAVIGATION_REJECT = WALK_NAVIGATION_REJECT;
@@ -214,6 +217,21 @@ export function createMovement(
 				admitted?: boolean;
 				admittedFrom?: Pose;
 				admittedTo?: Pose;
+				// The presentation lookahead this segment's clip admitted
+				// (presentationPath, #3178): while the pose stays behind
+				// it, the admitted extension is reused, not recomputed
+				// per tick. presentationTail holds the sampled points
+				// beyond the accepted history's end at admit time; the
+				// published chain is the history as it stands now plus
+				// this tail.
+				presentationTo?: Pose;
+				presentationTail?: readonly Pose[];
+				// The admitted span and its window at admit time: the
+				// presentation derives velocity from span over window,
+				// so a reused corridor must scale the window by the
+				// span remaining or its recovery budget decays (#3178).
+				presentationSpan?: number;
+				presentationWindowMs?: number;
 				history?: readonly Pose[];
 				presentationHistory?: readonly Pose[];
 				walking?: { direction: readonly [number, number]; speed: number; };
@@ -228,6 +246,16 @@ export function createMovement(
 	let navigationRequestId: number | undefined;
 	let navigationFailure: { region: number; requestId?: number; error: string; } | undefined;
 	let navigationRegion: number | undefined, owner: NavOwner | undefined;
+	// The dungeon cell the last state() read resolved (#3178): with an
+	// owner, floor, room and block are the owner's values, resolved
+	// once per cell (and owner), not per publication. An ownerless
+	// stand retains nothing (retainedCell).
+	let navigationCellKey: string | undefined;
+	let navigationCell: {
+		floor: number | undefined;
+		room: number | undefined;
+		block: number | undefined;
+	} | undefined;
 	// Terrain retention beside owner: true when the stand is terrain the
 	// mover walked to (the server's retained TerrainOwner), false at a
 	// fresh point (seed, teleport, a correction's resolve-cell) where
@@ -351,6 +379,10 @@ the tiny connector alone cannot prove the last actually displayed position.
 		if ( segment ) {
 			segment.history = walkingPath;
 			segment.presentationHistory = undefined;
+			segment.presentationTo = undefined;
+			segment.presentationTail = undefined;
+			segment.presentationSpan = undefined;
+			segment.presentationWindowMs = undefined;
 		}
 	}
 	/*
@@ -729,6 +761,10 @@ bindOwners
 			admittedFrom: value.from,
 			walking: undefined,
 			presentationHistory: undefined,
+			presentationTo: undefined,
+			presentationTail: undefined,
+			presentationSpan: undefined,
+			presentationWindowMs: undefined,
 			admitted,
 			owners: admitted ? query.owners : undefined
 		};
@@ -891,7 +927,7 @@ every high-latency acknowledgement and skill press.
 				terrainRetained = !owner;
 				surfaceCursor = {};
 				if ( result.segment ) {
-					segment = { ...result.segment, admittedFrom, history, presentationHistory: undefined };
+					segment = { ...result.segment, admittedFrom, history };
 				} else {
 					segment = null;
 					walk = null;
@@ -902,12 +938,81 @@ every high-latency acknowledgement and skill press.
 	}
 
 	/*
-	================
-	presentationPath
+================
+retainedCell
 
-	The goal is intent. Only a separately checked short corridor authorizes
-	cosmetic extrapolation; a blocked future step is never simulated here.
-	================
+The pose's dungeon floor, room and block (#3178). With an owner the
+three are the owner's own values - the clipper reads them from
+objects[placement] - so they cannot change while the owner (and the
+cell) lasts, and are resolved once per navigation cell, not per
+publication. Without an owner they are not cell values: the clipper
+resolves the dungeon owner from the exact point, height included,
+and owner volumes are not the navigation grid, so one cell can
+straddle two owners or two heights. The ownerless path therefore
+resolves on every publication; the clipper memoizes that per exact
+pose itself.
+================
+	*/
+	function retainedCell() {
+		if ( !pose ) {
+			navigationCellKey = undefined;
+			navigationCell = undefined;
+			return undefined;
+		}
+		if ( !owner ) {
+			navigationCellKey = undefined;
+			navigationCell = undefined;
+			return {
+				floor: navigation.floor( pose, owner ),
+				room: navigation.room( pose, owner ),
+				block: navigation.block( pose, owner )
+			};
+		}
+		const key = [
+			pose.regionId,
+			Math.floor( pose.x / NAVIGATION_CELL_SIZE ),
+			Math.floor( pose.z / NAVIGATION_CELL_SIZE ),
+			owner.placement,
+			owner.cell
+		].join( ":" );
+		if ( key !== navigationCellKey ) {
+			navigationCellKey = key;
+			navigationCell = {
+				floor: navigation.floor( pose, owner ),
+				room: navigation.room( pose, owner ),
+				block: navigation.block( pose, owner )
+			};
+		}
+		return navigationCell;
+	}
+
+	/*
+================
+admittedTail
+
+The part of an admitted extension worth caching (#3178): the sampled
+points beyond the pose it was extended from, toward the point it was
+extended to. A chain that never anchored at the pose (a degraded
+single point) has no tail; the split is geometric, so it holds whether
+the extension grew the accepted history or replaced it at its cap.
+================
+	*/
+	function admittedTail( chain: readonly Pose[], from: Pose, to: Pose ): readonly Pose[] | undefined {
+		const reach = poseDistance( from, to );
+		let split = -1;
+		for ( let index = 0; index < chain.length; index++ ) {
+			if ( poseDistance( chain[index]!, to ) >= reach - ENDPOINT_EPSILON ) split = index;
+		}
+		return split >= 0 ? chain.slice( split + 1 ) : undefined;
+	}
+
+	/*
+================
+presentationPath
+
+The goal is intent. Only a separately checked short corridor authorizes
+cosmetic extrapolation; a blocked future step is never simulated here.
+================
 	*/
 	function presentationPath() {
 		if ( !segment || !pose ) return undefined;
@@ -918,6 +1023,36 @@ every high-latency acknowledgement and skill press.
 				durationMs: segment.duration,
 				displacement: true,
 				startedAtMs: segment.start
+			};
+		}
+		// The lookahead corridor is admitted once per window (#3178):
+		// while the pose stays behind the point it was clipped to, the
+		// admitted tail still covers the ground ahead, so the clip and
+		// the sampled extension do not run again; the published chain
+		// is the accepted history as it stands now plus that tail. A
+		// pose that outruns the lookahead (a stall, a long catch-up
+		// step) falls through and admits the next window.
+		if (
+			segment.admitted && segment.presentationTo && segment.presentationTail &&
+			poseDistance( pose, segment.to ) > poseDistance( segment.presentationTo, segment.to )
+		) {
+			const walkingPath = { from: segment.admittedFrom ?? pose, to: segment.presentationTo };
+			segment.presentationHistory = segment.history ?
+				[ ...segment.history, ...segment.presentationTail ] :
+				segment.presentationTail;
+			transition = {
+				...transition,
+				walkingPath: segment.presentationHistory,
+				turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
+			};
+			const span = segment.presentationSpan ?? 0;
+			const remaining = poseDistance( pose, segment.presentationTo );
+			return {
+				from: pose,
+				to: segment.presentationTo,
+				durationMs: span > 0 && segment.presentationWindowMs !== undefined ?
+					segment.presentationWindowMs * remaining / span :
+					Math.min( PRESENTATION_LOOKAHEAD_MS, segment.duration )
 			};
 		}
 		const desired = sampleMovement( segment, segment.start + PRESENTATION_LOOKAHEAD_MS );
@@ -933,6 +1068,14 @@ every high-latency acknowledgement and skill press.
 		segment.admitted = admitted;
 		if ( admitted ) {
 			segment.admittedTo = resolved!;
+			segment.presentationTo = resolved!;
+			segment.presentationSpan = poseDistance( pose, resolved! );
+			segment.presentationWindowMs = Math.min( PRESENTATION_LOOKAHEAD_MS, segment.duration );
+		} else {
+			segment.presentationTo = undefined;
+			segment.presentationTail = undefined;
+			segment.presentationSpan = undefined;
+			segment.presentationWindowMs = undefined;
 		}
 		segment.admittedFrom ??= pose;
 		// Keep the accepted past even when the next lookahead hits a wall.
@@ -940,16 +1083,24 @@ every high-latency acknowledgement and skill press.
 		// publication; the displayed pose still belongs to this admitted walk.
 		if ( segment.admittedFrom ) {
 			const walkingPath = { from: segment.admittedFrom, to: admitted ? resolved! : pose };
-			segment.presentationHistory ??= admitted ?
+			const history = segment.history;
+			const extended = admitted ?
 				extendWalkingHistory( {
-					points: segment.history,
+					points: history,
 					from: pose,
 					to: resolved!,
 					sourceOwner: owner,
 					sourceTerrainRetained: terrainRetained,
 					clip: navigation.clip
 				} ) :
-				segment.history;
+				undefined;
+			segment.presentationHistory = extended ?? history;
+			// Cache the sampled points beyond this pose (#3178): they
+			// stay admitted while the pose stays behind them, and the
+			// published chain is the accepted history as it stands
+			// then plus this tail. An extension that never anchored
+			// at the pose (a degraded single point) caches nothing.
+			segment.presentationTail = extended ? admittedTail( extended, pose, resolved! ) : undefined;
 			transition = {
 				...transition,
 				walkingPath: segment.presentationHistory,
@@ -1367,6 +1518,8 @@ navigation
 				return;
 			}
 			navigationRegion = region;
+			navigationCellKey = undefined;
+			navigationCell = undefined;
 			transition = { ...transition, walkingPath: undefined };
 			surfaceCursor = {};
 			owner = navigation.relocate( kept );
@@ -1380,6 +1533,10 @@ navigation
 					admitted: false,
 					admittedFrom: undefined,
 					admittedTo: undefined,
+					presentationTo: undefined,
+					presentationTail: undefined,
+					presentationSpan: undefined,
+					presentationWindowMs: undefined,
 					history: undefined,
 					presentationHistory: undefined
 				};
@@ -2079,6 +2236,7 @@ state
 ================
 		*/
 		state() {
+			const cell = retainedCell();
 			return {
 				navigationRequestId,
 				navigationFailure,
@@ -2096,13 +2254,13 @@ state
 				movementSpeedFactor: segment?.direction && walk ? walk.factor : 1,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
-				navigationFloor: navigation.floor( pose, owner ),
-				navigationRoom: navigation.room( pose, owner ),
+				navigationFloor: cell?.floor,
+				navigationRoom: cell?.room,
 				minimapFloors: Object.fromEntries(
 					minimapQueries.map( p => [ minimapPoseKey( p ), navigation.floor( p ) ] )
 				),
 				navigationRegion,
-				navigationBlock: navigation.block( pose, owner ),
+				navigationBlock: cell?.block,
 				navigationOwner: owner ? { ...owner } : undefined,
 				navigationTerrainRetained: terrainRetained,
 				moving: !!segment && segment.duration > 0,
@@ -2145,6 +2303,8 @@ clear
 			error = null;
 			navigation.clear();
 			navigationRegion = undefined;
+			navigationCellKey = undefined;
+			navigationCell = undefined;
 			navigationRequestId = undefined;
 			navigationFailure = undefined;
 		}

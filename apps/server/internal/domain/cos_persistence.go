@@ -156,6 +156,11 @@ combat and abnormal tick for every character a division walk touches, and
 the slice cost an allocation per call plus a walk of the whole bag (#1820).
 Read-door admission checks use it for the same reason (#2032).
 The order is the one canonical order: Companions is built from it.
+
+One record is visited once. A restore adoption (cosrestore.go) can leave
+the active record seated in its summoner row as well; the row is then
+skipped, or every walker would see the one companion twice - an area
+query listed such a transport as two targets (#3129).
 ================
 */
 func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
@@ -166,7 +171,11 @@ func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
 		return
 	}
 	for i := range c.MissionInventory {
-		if pet := c.MissionInventory[i].Summon; pet != nil && !visit(pet) {
+		pet := c.MissionInventory[i].Summon
+		if pet == nil || pet == c.ActiveCOS {
+			continue
+		}
+		if !visit(pet) {
 			return
 		}
 	}
@@ -191,6 +200,11 @@ CompanionByGID
 
 Duplicate identities cannot select the first record and silently authorize a
 second companion. Dormant records retain data but do not own a world GID.
+
+One record seated in two slots is one identity, not a duplicate: the active
+record and its summoner row can hold the same record after a restore
+adoption (cosrestore.go), and counting it twice made the companion
+unfindable, so every lookup lane judged a live pet ownerless (#3129).
 ================
 */
 func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
@@ -201,6 +215,9 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 	duplicate := false
 	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		if pet.Summoned && pet.GID == gid {
+			if pet == found {
+				return true
+			}
 			if found != nil {
 				duplicate = true
 				return false

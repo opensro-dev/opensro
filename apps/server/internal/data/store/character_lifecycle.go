@@ -387,10 +387,14 @@ included.
 ================
 */
 func (s *Store) Health() Health {
+	health := Health{}
 	if view := s.healthView.Load(); view != nil {
-		return *view
+		health = *view
 	}
-	return Health{}
+	if message := s.integrityError.Load(); message != nil {
+		health.IntegrityError = *message
+	}
+	return health
 }
 
 /*

@@ -76,6 +76,19 @@ func isMallTransport(ref *CharacterRef) bool {
 
 /*
 ================
+IsMallTransport
+
+Whether a character row is an Item Mall trade transport (the families
+MALL_PET_D_CART sells). The trade tier measures those against the
+largest ordinary transport's bag instead of their own (#3142).
+================
+*/
+func IsMallTransport(ref *CharacterRef) bool {
+	return isMallTransport(ref)
+}
+
+/*
+================
 ApplyMallTransportSpeed
 
 Scales every mall transport reference's walk and run speeds, before any
