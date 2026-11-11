@@ -147,6 +147,12 @@ type changeSet struct {
 	camps          map[campKey]bool
 	dissolvedGuild map[guildKey]bool
 	dissolvedCamp  map[campKey]bool
+	// The meta planes the commit rewrites whole: true when a door
+	// touched the plane since the last commit, so the commit
+	// re-derives only the planes that can have moved (#3164).
+	tradeRewards   bool
+	jobRankings    bool
+	halloweenBoxes bool
 }
 
 func newChangeSet() changeSet {
@@ -171,7 +177,10 @@ func (changes changeSet) empty() bool {
 		len(changes.guilds) == 0 &&
 		len(changes.camps) == 0 &&
 		len(changes.dissolvedGuild) == 0 &&
-		len(changes.dissolvedCamp) == 0
+		len(changes.dissolvedCamp) == 0 &&
+		!changes.tradeRewards &&
+		!changes.jobRankings &&
+		!changes.halloweenBoxes
 }
 
 // groundState owns the boundary between the live gameplay registry and its
