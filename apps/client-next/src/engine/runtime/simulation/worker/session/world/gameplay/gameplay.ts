@@ -507,6 +507,10 @@ export function createGameplay(
 	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
+	// Whether the listing stood over a full party at the watcher's
+	// last look: the delete fires on the fill, once (634D30); while
+	// the fill stands no second delete is composed.
+	let partyMatchFullStanding = false;
 	// The shard's configured level cap, published at world entry (#1749);
 	// the native cap until a bootstrap says otherwise.
 	let levelCap = NATIVE_LEVEL_CAP;
@@ -4709,12 +4713,29 @@ Packet handling must not depend on which HUD panel is currently open.
 							{ ...nextSocial, notice: undefined, notices: undefined } :
 							nextSocial
 					);
-					// 634DC9: a party that fills while the player's
+					// 634D30: a party that fills while the player's
 					// listing stands arms the delete banner's
-					// COMPLETE2 form (the delete answer consumes it).
-					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) {
+					// COMPLETE2 form (the delete answer consumes it),
+					// and the watcher itself withdraws the listing:
+					// NetClient_Send7535 (6FE130) carries the own
+					// record's id, once per fill.
+					const fullStanding = !!(
+						partyMatching.own && partyIsFull( social.members.length, social.options )
+					);
+					if ( fullStanding ) {
 						partyMatchFullLatch = true;
+						if ( !partyMatchFullStanding && !partyMatching.pending ) {
+							const deletion = partyMatchRequest(
+								partyMatching,
+								{ kind: "party-match-delete" },
+								now,
+								levelCap
+							);
+							if ( deletion.frame ) sendWhenLive( deletion.frame );
+							partyMatching = deletion.state;
+						}
 					}
+					partyMatchFullStanding = fullStanding;
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||

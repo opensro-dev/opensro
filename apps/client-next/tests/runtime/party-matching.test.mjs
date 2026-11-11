@@ -541,6 +541,27 @@ test("the delete banner keeps the COMPLETE2 latch across a relog until a delete 
 	g.dispose();
 });
 
+test("a party that fills under a standing listing withdraws it once (634D30)", () => {
+	// 634D30: the roster watcher that arms the COMPLETE2 latch also
+	// sends the listing's delete (0x7535, the own record's id) on
+	// the fill. A party short of full sends none, and while the
+	// fill stands no second delete follows (#3225).
+	const sent = [], g = createGameplay( frame => sent.push( frame ) );
+	g.bootstrap( { character: { name: "Owner" } } );
+	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0 } );
+	g.worldReady();
+	g.receive( ack( 0xb6ff ), 0 );
+	const deletes = () => sent.filter( frame => frame.opcode === 0x7535 );
+	for ( let i = 0; i < 3; i++ ) g.receive( partyJoinFrame( 100 + i, `Peer${i}` ), 0 );
+	assert.equal( deletes().length, 0, "a party short of full withdrew its listing" );
+	g.receive( partyJoinFrame( 103, "Peer3" ), 0 );
+	assert.equal( deletes().length, 1, "the fill sent no delete" );
+	assert.deepEqual( [ ...deletes()[0].payload ], [ 42, 0, 0, 0 ] );
+	g.receive( partyJoinFrame( 104, "Peer4" ), 0 );
+	assert.equal( deletes().length, 1, "the standing fill withdrew twice" );
+	g.dispose();
+});
+
 test("party fullness follows the native cap for the share option (818820)", () => {
 	// Without EXP share the roster caps at four: the register guard's
 	// last arm and the delete latch both read this, not a constant 8.
