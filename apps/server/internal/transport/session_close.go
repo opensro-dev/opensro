@@ -83,11 +83,7 @@ func (h *Hub) retireSession(s *Session, cause error) (bool, error) {
 			delete(h.accountSessions, account)
 		}
 	}
-	for account, claim := range h.accountWorld {
-		if claim.session == s {
-			delete(h.accountWorld, account)
-		}
-	}
+	h.releaseAccountWorldOfLocked(s)
 	h.mu.Unlock()
 
 	h.metrics.sessClosed.Add(1)

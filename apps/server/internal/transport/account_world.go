@@ -6,9 +6,9 @@ account_world.go - one account, one character in the world
 The world seat: an account holds at most one character in the world.
 EnterWorld claims the seat before admission (ClaimAccountWorld), so a
 second session of the account entering a different character is
-refused instead of joining the first in the world. The seat ends when
-its session retires or loses its gameplay context; a claim whose
-entry fails is released back to the holder it replaced.
+refused instead of joining the first in the world. However a claim
+ends - its entry fails, its session retires, or it loses its gameplay
+context - the seat returns to a live holder the claim replaced.
 
 ===========================================================================
 */
@@ -27,8 +27,9 @@ holds the seat claims it at EnterWorld, before admission, so a second
 session of the account entering a different character is refused
 instead of joining the first in the world - the gateway's
 already-connected refusal. previous is the same-key claim this one
-replaced, kept so a failed entry hands the seat back to the holder it
-displaced (a replacement bind whose build then fails).
+replaced, kept so an entry that ends before it publishes hands the
+seat back to the holder it displaced; publishing cuts the link
+(AccountWorldClaimBound).
 ================
 */
 type AccountWorldClaim struct {
@@ -108,6 +109,28 @@ func (h *Hub) ClaimAccountWorld(s *Session, divisionID, characterName string) (*
 
 /*
 ================
+AccountWorldClaimBound
+
+Marks a claim's entry as published: the seat is the claim's
+outright, and however the claim later ends it frees the seat instead
+of handing it back to the holder it replaced (that holder's world
+was displaced by the bind). A claim that never publishes keeps its
+hand-back. A claim the seat has already moved past is untouched.
+================
+*/
+func (h *Hub) AccountWorldClaimBound(claim *AccountWorldClaim) {
+	if claim == nil {
+		return
+	}
+	h.mu.Lock()
+	if h.accountWorld[claim.account] == claim {
+		claim.previous = nil
+	}
+	h.mu.Unlock()
+}
+
+/*
+================
 ReleaseAccountWorld
 
 Ends a claim taken by ClaimAccountWorld: the seat returns to the
@@ -125,7 +148,28 @@ func (h *Hub) ReleaseAccountWorld(claim *AccountWorldClaim) {
 	if h.accountWorld[claim.account] != claim {
 		return
 	}
-	if previous := claim.previous; previous != nil && previous.session != nil && !sessionClosed(previous.session) {
+	h.settleAccountWorldClaimLocked(claim, nil)
+}
+
+/*
+================
+settleAccountWorldClaimLocked
+
+(h.mu held.) Settles the seat one claim holds: the seat returns to
+the holder the claim replaced when that session still stands in the
+world, and is freed otherwise. Still standing means live, not
+closed, and not evicted: a completed takeover latches the loser
+evicted at bind (BindExclusive), so its seat is gone even while its
+teardown drains; a replacement that dies before its bind evicted
+nobody, and the first holder's seat is still its. notTo, when
+non-nil, is a session the seat must never return to: a teardown
+hands the seat back to a displaced holder, never to the session
+going away.
+================
+*/
+func (h *Hub) settleAccountWorldClaimLocked(claim *AccountWorldClaim, notTo *Session) {
+	if previous := claim.previous; previous != nil && previous.session != nil &&
+		previous.session != notTo && !previous.session.Evicted() && !sessionClosed(previous.session) {
 		h.accountWorld[claim.account] = previous
 		return
 	}
@@ -136,18 +180,32 @@ func (h *Hub) ReleaseAccountWorld(claim *AccountWorldClaim) {
 ================
 releaseAccountWorldOf
 
-Drops every world seat the session holds (its teardown, or the loss
-of its gameplay context). Never touches another session's seat.
+Settles every world seat the session holds (its teardown, or the
+loss of its gameplay context): handed back to a live holder the
+claim replaced, freed otherwise. Never touches another session's
+seat.
 ================
 */
 func (h *Hub) releaseAccountWorldOf(s *Session) {
 	h.mu.Lock()
-	for account, claim := range h.accountWorld {
+	h.releaseAccountWorldOfLocked(s)
+	h.mu.Unlock()
+}
+
+/*
+================
+releaseAccountWorldOfLocked
+
+(h.mu held.) The locked half of releaseAccountWorldOf, for the
+teardown that already holds the hub lock.
+================
+*/
+func (h *Hub) releaseAccountWorldOfLocked(s *Session) {
+	for _, claim := range h.accountWorld {
 		if claim.session == s {
-			delete(h.accountWorld, account)
+			h.settleAccountWorldClaimLocked(claim, s)
 		}
 	}
-	h.mu.Unlock()
 }
 
 /*

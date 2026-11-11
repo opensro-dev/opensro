@@ -484,6 +484,11 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			}).Warn("bootstrap: atomic admission delivery failed")
 		} else {
 			published = outcome.OK
+			if published {
+				// The entry is in the world: the seat is this
+				// claim's outright, with no hand-back left.
+				hub.AccountWorldClaimBound(worldClaim)
+			}
 			// The scene has its answer on the wire (bootstrap or
 			// refusal): the transport's unenqueued-window watchdog
 			// stands down for this admission.
