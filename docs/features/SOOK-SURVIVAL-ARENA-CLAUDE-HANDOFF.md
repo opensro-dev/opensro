@@ -213,3 +213,16 @@ capability/execution checks and the new UI regression pass. Test-type debt is
 unchanged. The broad UI behavior suite has 43 unrelated failures reproducible
 on the unchanged parent (plus the new regression failing there); they remain
 outside this fix. Live death-return verification is pending deployment.
+
+## Main integration and death confirmation (2026-11-11)
+
+The owner confirmed the corrected arena death return works in game. Main
+through 9a5909e4 is merged: projectile waiting verdicts retain main's external
+stat-modifier reads and the arena mana adjustment; arena returns explicitly
+use handler commit doors to preserve their synchronous payout/return ordering.
+Post-merge action/arena tests, vet, lint (zero issues), client typecheck,
+ownership/capability/execution checks, targeted arena/effect/death-dialog
+tests, test-type gate, encoding, formatting and source-size checks pass.
+PR #3189 targets opensro-dev/opensro main. CI/race verdicts remain pending.
+The live local game was left on the verified pre-merge build/source to avoid
+interrupting play; use the merged worktree for the next deployment.
