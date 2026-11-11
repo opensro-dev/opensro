@@ -613,3 +613,24 @@ func TestAnalyzeMissingZonesSkipsNotFails(t *testing.T) {
 		t.Fatalf("zone-less capture not read as a 50-tick window with SKIP checks:\n%s", out.String())
 	}
 }
+
+/*
+================
+TestCaptureSSHArgumentsCarryTheIdentity
+
+--ssh-identity reaches ssh as -i with IdentitiesOnly, ahead of the
+target; without it the command line is the one the tool always ran.
+================
+*/
+func TestCaptureSSHArgumentsCarryTheIdentity(t *testing.T) {
+	plain := sshArguments(captureOptions{sshTarget: "user@host"})
+	want := []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "user@host", "sh -s"}
+	if strings.Join(plain, "|") != strings.Join(want, "|") {
+		t.Fatalf("plain arguments = %v, want %v", plain, want)
+	}
+	keyed := sshArguments(captureOptions{sshTarget: "user@host", sshIdentity: "/keys/deploy"})
+	want = []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-i", "/keys/deploy", "-o", "IdentitiesOnly=yes", "user@host", "sh -s"}
+	if strings.Join(keyed, "|") != strings.Join(want, "|") {
+		t.Fatalf("keyed arguments = %v, want %v", keyed, want)
+	}
+}
