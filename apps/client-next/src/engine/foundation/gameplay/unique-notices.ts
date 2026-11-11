@@ -99,11 +99,13 @@ eventNotice
 
 7508C0's other kinds: outside 5..10, and 8, 9 and 10 inside it, the
 category 0x11 notice of that code prints on the centre banner (751155).
-Kind 10 (751114) is the specialty sell-end: natively the banner gives
-way to a silent NPC-shop close only while the specialty-goods page is
-open (75113D, closed at 751150). The port's shop state carries no
-specialty-page marker, so that case cannot arise here and the banner
-always prints. Kind 7 has its own branch.
+Kind 10 (751114) is the specialty sell-end: the specialty-page test
+(75113D) closes an open specialty-goods page (751150) and control
+falls through to the banner print (751155) either way, so the banner
+always prints and the page close rides along. The port's shop state
+carries no specialty-page marker, so the close half cannot arise
+here; the banner always prints, as natively. Kind 7 has its own
+branch.
 ================
 */
 function eventNotice( kind: number ): SystemNotice | null {
