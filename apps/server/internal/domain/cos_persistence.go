@@ -191,6 +191,11 @@ CompanionByGID
 
 Duplicate identities cannot select the first record and silently authorize a
 second companion. Dormant records retain data but do not own a world GID.
+
+One record seated in two slots is one identity, not a duplicate: the active
+record and its summoner row can hold the same record after a restore
+adoption (cosrestore.go), and counting it twice made the companion
+unfindable, so every lookup lane judged a live pet ownerless (#3129).
 ================
 */
 func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
@@ -201,6 +206,9 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 	duplicate := false
 	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		if pet.Summoned && pet.GID == gid {
+			if pet == found {
+				return true
+			}
 			if found != nil {
 				duplicate = true
 				return false

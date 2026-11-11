@@ -83,6 +83,30 @@ func TestPlayerBasicAttackStrikesAnotherPlayersCOS(t *testing.T) {
 
 /*
 ================
+TestPlayerBasicAttackStrikesARowBackedTransport
+
+#3129: a transport whose one record is seated in the active slot and its
+summoner row alike read as a duplicated identity, so the target lookup
+found no owner and the press earned only the action-state reply - no
+swing, no refusal, ever. The record is one companion; the swing lands.
+================
+*/
+func TestPlayerBasicAttackStrikesARowBackedTransport(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	ref := equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	owner.MissionInventory = append(owner.MissionInventory, enterworld.InventoryRow{Slot: 40, Summon: cos})
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: cos.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if cos.CurrentHP >= ref.MaxHP {
+		t.Fatalf("transport HP %d, want below %d", cos.CurrentHP, ref.MaxHP)
+	}
+}
+
+/*
+================
 TestCOSTargetIsJudgedThroughItsOwner
 
 The reference server's attack checks on the owner: an attacker in body mode 2, a target COS in
