@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { createShownGameplay } from "../helpers/shown-gameplay.mjs";
 
 /*
 ================
@@ -2763,25 +2764,27 @@ test("complete entry waits for slow presentation without reconnecting or republi
 
 test("between-tick commands use arrival time and overdue steps cannot rewind it", async t => {
 	const { world, socket } = await admitWaitingWorld( t, true, { ...bootstrap, simulationProtocolVersion: 1 } );
-	flush( world );
+	const { mergeGameplaySnapshots } = await import( "../../src/engine/foundation/gameplay/gameplay-snapshot.ts" );
+	// A publication names only what changed, so an unmoved poseAtMs is
+	// read from the state shown after the batch, not from the last event.
+	const shown = createShownGameplay( mergeGameplaySnapshots );
+	const present = () => shown( flush( world )?.events );
+	present();
 	socket.receive( 0x32a6, Uint8Array.of( 7, 0, 0, 0, 0, 0, 0, 0 ) );
 	world.step( 5 );
 	world.ready();
-	flush( world );
+	present();
 	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 100 } }, 12 );
 	world.step( 8 );
-	const first = flush( world ).events.find( event => event.kind === "gameplay" ).state;
-	assert.equal( first.poseAtMs, 12, "a command must not be backdated to the previous fixed tick" );
+	assert.equal( present().poseAtMs, 12, "a command must not be backdated to the previous fixed tick" );
 	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 120 } }, 9 );
 	world.step( 10 );
-	const second = flush( world ).events.find( event => event.kind === "gameplay" ).state;
-	assert.equal( second.poseAtMs, 12, "a stale command and overdue tick cannot move time backward" );
+	assert.equal( present().poseAtMs, 12, "a stale command and overdue tick cannot move time backward" );
 	world.step( 20 );
-	flush( world );
+	present();
 	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 140 } }, 24 );
 	world.step( 25 );
-	const third = flush( world ).events.find( event => event.kind === "gameplay" ).state;
-	assert.equal( third.poseAtMs, 24, "later commands resume advancing normally" );
+	assert.equal( present().poseAtMs, 24, "later commands resume advancing normally" );
 });
 
 test("incomplete native entry still times out while presentation is pending", async t => {

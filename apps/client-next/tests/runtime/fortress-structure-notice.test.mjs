@@ -13,8 +13,13 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
+import { createShownGameplay } from "../helpers/shown-gameplay.mjs";
 
 const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
+const { mergeGameplaySnapshots } = await import( "../../src/engine/foundation/gameplay/gameplay-snapshot.ts" );
+// The gameplay state shown after each flushed batch, per world core: a
+// publication names only what changed since the one before it.
+const folds = new WeakMap(), shownAfter = new WeakMap();
 const { fortressBootstrap, fortressStructureNotice } = await import(
 	"../../src/engine/foundation/gameplay/fortress.ts"
 );
@@ -114,7 +119,10 @@ function flush( core ) {
 	core.step( 0, false );
 	const batch = core.take();
 	if ( batch ) core.ack( batch.sequence );
-	return batch?.events ?? [];
+	const events = batch?.events ?? [];
+	if ( !folds.has( core ) ) folds.set( core, createShownGameplay( mergeGameplaySnapshots ) );
+	shownAfter.set( events, folds.get( core )( events ) );
+	return events;
 }
 
 /*
@@ -125,7 +133,7 @@ gameplay
 function gameplay( events ) {
 	const event = events.find( row => row.kind === "gameplay" );
 	assert.ok( event?.kind === "gameplay", "the world publishes gameplay" );
-	return event.state;
+	return shownAfter.get( events ) ?? event.state;
 }
 
 /*

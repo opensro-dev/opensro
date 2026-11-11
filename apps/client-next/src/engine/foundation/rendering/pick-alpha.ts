@@ -85,3 +85,23 @@ export function bitmapPickAlpha( image: ImageBitmap ): PickAlpha {
 	context.drawImage( image, 0, 0 );
 	return rgbaPickAlpha( image.width, image.height, context.getImageData( 0, 0, image.width, image.height ).data );
 }
+
+/*
+================
+bitmapPixels
+
+A decoded bitmap's RGBA pixels, read back through the same 2D canvas:
+the byte-upload form of a bitmap for a device whose external-image
+texture copy is unreliable (#3147). Null when no 2D context is
+available; the caller keeps the copy.
+================
+*/
+export function bitmapPixels( image: ImageBitmap ): ImageData | null {
+	const canvas = new OffscreenCanvas( image.width, image.height ),
+		context = canvas.getContext( "2d", { willReadFrequently: true } );
+	if ( !context ) {
+		return null;
+	}
+	context.drawImage( image, 0, 0 );
+	return context.getImageData( 0, 0, image.width, image.height );
+}

@@ -58,6 +58,23 @@ export function reportedDegradedPipelines(): readonly string[] {
 
 /*
 ================
+adapterRoutesBitmapsViaPixels
+
+Whether UI bitmaps reach the GPU as read-back pixels instead of an
+external-image copy on this adapter. The Kepler-generation NVIDIA
+sessions of #3147 came up with the copied bitmaps broken - the font
+atlas read as rows of dots and large window plates transparent -
+while every byte-uploaded texture on the same device (the world, the
+native UI tiles) rendered. The pixel route is the byte upload those
+textures took; every other adapter keeps the copy.
+================
+*/
+export function adapterRoutesBitmapsViaPixels( facts: GpuFacts ): boolean {
+	return facts.vendor === "nvidia" && facts.architecture === "kepler";
+}
+
+/*
+================
 isGpuToken
 
 Whether value has the shape of an adapter's vendor or architecture token
