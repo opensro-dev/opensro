@@ -372,15 +372,18 @@ func reconcile(m *measurements) []check {
 		checks = append(checks, skip(name, "needs both an execution trace and tick_zones in the window"))
 	}
 
-	// (c) profile CPU vs trace running.
+	// (c) profile CPU vs trace running: both sides are the tick
+	// goroutines. The rest of the process (session loops, store lanes,
+	// the collector) is reported beside it, never compared.
 	name = "profile CPU vs trace running"
 	if m.cpu != nil && m.trace != nil && m.cpuTicks > 0 && m.traceTick > 0 {
-		cpuPerTick := m.cpu.totalMs() / float64(m.cpuTicks)
+		cpuPerTick := m.cpu.tickMs() / float64(m.cpuTicks)
+		offTick := (m.cpu.totalMs() - m.cpu.tickMs()) / float64(m.cpuTicks)
 		tracePerTick := m.trace.runningMs() / float64(m.traceTick)
 		if within(cpuPerTick, tracePerTick, crossTolerance) {
-			checks = append(checks, pass(name, "CPU profile %.3f ms/tick vs trace running %.3f ms/tick (within %.0f%%)", cpuPerTick, tracePerTick, crossTolerance*100))
+			checks = append(checks, pass(name, "CPU profile on the tick goroutines %.3f ms/tick vs trace running %.3f ms/tick (within %.0f%%); the rest of the process used %.3f ms/tick", cpuPerTick, tracePerTick, crossTolerance*100, offTick))
 		} else {
-			checks = append(checks, fail(name, "CPU profile measured %.3f ms/tick of CPU but the execution trace ran the tick goroutines %.3f ms/tick (tolerance %.0f%%) - one of the two is being misread", cpuPerTick, tracePerTick, crossTolerance*100))
+			checks = append(checks, fail(name, "CPU profile measured %.3f ms/tick of CPU on the tick goroutines but the execution trace ran them %.3f ms/tick (tolerance %.0f%%) - one of the two is being misread", cpuPerTick, tracePerTick, crossTolerance*100))
 		}
 	} else {
 		checks = append(checks, skip(name, "needs both a CPU profile and an execution trace"))
@@ -551,7 +554,8 @@ func analyzeDir(dir, targetsPath string, w io.Writer) (int, error) {
 	printLegCensus(w, m.overall)
 
 	if m.cpu != nil {
-		fmt.Fprintf(w, "cpu profile: %.1f ms over %d samples = %.3f ms/tick (cpu window)\n", m.cpu.totalMs(), m.cpu.samples, m.cpu.totalMs()/float64(m.cpuTicks))
+		fmt.Fprintf(w, "cpu profile: %.1f ms over %d samples = %.3f ms/tick whole process, %.3f ms/tick on the tick goroutines (cpu window)\n",
+			m.cpu.totalMs(), m.cpu.samples, m.cpu.totalMs()/float64(m.cpuTicks), m.cpu.tickMs()/float64(m.cpuTicks))
 		fmt.Fprintln(w, "top cumulative functions (no node dropping):")
 		for _, ft := range m.cpu.topFuncs(topFuncsOverall) {
 			fmt.Fprintf(w, "  %9.3f ms/tick  %s\n", ft.Ms/float64(m.cpuTicks), ft.Func)
