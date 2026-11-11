@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
@@ -210,6 +211,24 @@ presentShop
 			};
 		}
 		return shopPresentation;
+	}
+	/*
+================
+specialtyShopPage
+
+5B694C: while the store page is built, a package whose first item is
+a trade good writes the store's specialty-page field (+0x25F4), the
+field the sell-end test (75113D) reads. The port builds one page per
+shop from its catalogue, so the marker is the shop's: its goods are
+trade goods throughout. A package classifies by its first content,
+as natively; a good with no reference row never marks the page.
+================
+	*/
+	function specialtyShopPage(
+		offers: readonly import("@/engine/foundation/gameplay/commerce").ShopOffer[]
+	): boolean {
+		return offers.length > 0 &&
+			offers.every( offer => isTradeGoods( refs.get( offer.contents?.[0]?.refObjId ?? offer.refObjId ) ?? 0 ) );
 	}
 	// The presented bag (bag()). Every writer of slots clears it: the next
 	// read builds a new array, which is how gameplay's journal sees a change.
@@ -1542,6 +1561,21 @@ openShop
 		},
 		/*
 ================
+closeSpecialtyShop
+
+751114..751150: the specialty sell-end hides the shop when the open
+page is the specialty-goods page (75113D), before the banner. Any
+other open shop stays. Returns whether a shop closed.
+================
+		*/
+		closeSpecialtyShop() {
+			if ( !shop?.specialty ) return false;
+			shop = undefined;
+			shopCompletionRevision++;
+			return true;
+		},
+		/*
+================
 trade
 ================
 		*/
@@ -1979,7 +2013,8 @@ receive
 						buyback: parsed.buyback?.map( row => ({
 							...row,
 							item: row.preview ? preview( row.preview ) : undefined
-						}) )
+						}) ),
+						specialty: specialtyShopPage( parsed.offers )
 					};
 				if ( pending?.opcode !== 11 || pending.npc !== next.npc ) return true;
 				shop = next;

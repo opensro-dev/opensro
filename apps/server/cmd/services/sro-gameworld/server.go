@@ -189,6 +189,13 @@ func gameWorldTransportServer(ownedShard shard.Definition) (*transport.Server, e
 		log.Infof("transport: at most %d live sessions per client address (%s, port-only, not native)",
 			transportConfig.MaxSessionsPerClient, transport.EnvMaxSessionsPerClient)
 	}
+	// Port-only, not native: the closed beta's several characters of one
+	// account in the world, one per tab; off is the native one seat.
+	transportConfig.AccountMultiWorld = transport.AccountMultiWorldEnabled()
+	if transportConfig.AccountMultiWorld {
+		log.Infof("transport: several characters of one account may stand in the world (%s, port-only, not native)",
+			transport.EnvAccountMultiWorld)
+	}
 	transportConfig.MaxSessions = ownedShard.Capacity
 	warnTransportCatalogMismatch(ownedShard, transportConfig)
 	return transport.NewServer(transportConfig)

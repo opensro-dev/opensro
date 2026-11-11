@@ -50,16 +50,18 @@ func (s *Store) CloseJobWeek(division string, week int64, label string) bool {
 		}
 	}
 	if len(members) == 0 {
-		// Nothing to close; the week rides along with the next commit, as
-		// every commit writes the metadata.
+		// Nothing to close; the week rides along with the next commit:
+		// the plane flag is what that commit re-derives it from.
 		previous.Week = week
 		s.meta.JobRankings[division] = previous
+		s.changes.jobRankings = true
 		return true
 	}
 	return s.updateCharactersLocked(members, label, func() bool {
 		if previous.Week == 0 {
 			previous.Week = week
 			s.meta.JobRankings[division] = previous
+			s.changes.jobRankings = true
 			return true
 		}
 		pool := s.meta.TradeRewards[division]
@@ -68,7 +70,9 @@ func (s *Store) CloseJobWeek(division string, week int64, label string) bool {
 			s.meta.TradeRewards = map[string]domain.TradeRewardPool{}
 		}
 		s.meta.TradeRewards[division] = pool
+		s.changes.tradeRewards = true
 		s.meta.JobRankings[division] = next
+		s.changes.jobRankings = true
 		return true
 	}, false)
 }

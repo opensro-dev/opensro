@@ -40,6 +40,11 @@ so it stays capped like any other.
 ================
 */
 func (s *Store) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
+	// Every touch marks the plane for the next commit: the record's
+	// fields mutate through the returned pointer where the commit
+	// cannot see them, so the touch is its only signal (#3164). A
+	// read-only touch costs one marshal the digest then skips.
+	s.changes.halloweenBoxes = true
 	if s.meta.HalloweenBoxes == nil {
 		s.meta.HalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
 	}

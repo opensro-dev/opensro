@@ -389,3 +389,15 @@ Client quick checks, 54 focused client tests, 21 asset/build tests and the
 full sookarena/action/GameWorld Go packages pass. Encoding, formatting and
 source-size checks pass. The running game and its databases were untouched.
 The separate visual-fix branch remains unchanged with passing CI.
+
+## Main merge and PR readiness follow-up (2026-11-11)
+
+Main advanced to 9b3e5c2 while CI waited in GitHub's queue. Resolved the new
+UI-census conflict by regeneration and the public-rules import conflict by
+retaining both the arena's os import and main's transport rule import.
+Client quick checks, census/chest/correction regressions (11 tests), the
+arena/action/GameWorld Go packages, source encoding and formatting pass.
+No additional gameplay, protocol or schema changes were introduced.
+The standalone casting-visual PR's only blocker was draft status; it is now
+ready for independent review with its existing passing CI and unchanged code.
+The running local game and its characters/gear remain untouched.

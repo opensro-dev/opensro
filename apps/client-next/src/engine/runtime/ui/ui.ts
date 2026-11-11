@@ -25385,27 +25385,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
-				// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
+				// The item-target pick (cursor A6 at 567372, kind 0x1F pushed at
+				// 5673A9) asks UIIT_MSG_QUESTION_SILKMALL_ITEM_USE (53252D) -
+				// the CANCLE pair is kind 0x20, the buff-cancel confirm below.
 				const layout = guildProposalLayout( w, h ),
 					targeted = cosHud.targetUse() !== null,
 					// 5C82D0 keeps the confirm box 308x148 whatever its text; the
-					// two lines wrap inside that frame. The text board wraps them,
-					// centred, so a long line folds instead of running past the
-					// window frame.
+					// text board wraps its lines centred inside that frame.
 					message = text.guide(
 						guideTokens(
-							"<center>" +
-								hudCopy(
-									targeted ?
-										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
-										"UIIT_MSG_COS_CLEAN_CONFIRM1"
-								) +
+							targeted ?
+								"<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" :
+								"<center>" +
+								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM1" ) +
 								"<br>" +
-								hudCopy(
-									targeted ?
-										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
-										"UIIT_MSG_COS_CLEAN_CONFIRM2"
-								) +
+								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM2" ) +
 								"</center>"
 						),
 						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
@@ -25524,8 +25518,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				);
 			}
 			if ( worldVisible && buffDismiss ) {
-				// The same fixed 308x148 confirm frame as the COS box above; its
-				// two CANCLE lines wrap inside it instead of running past it.
+				// Kind 0x20, opened at 6E2C45 when the skill record demands a
+				// confirm before its cancel: the same fixed 308x148 frame as the
+				// COS box above; its two CANCLE lines wrap inside it.
 				const layout = guildProposalLayout( w, h ),
 					message = text.guide(
 						guideTokens(

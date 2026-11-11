@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/platform/jsonscratch"
 )
@@ -122,6 +123,46 @@ func BenchmarkTickUnchangedBurst(b *testing.B) {
 			c := chars[j%len(chars)]
 			s.MutateCharacterDeferred(c, "bench", func() {})
 		}
+		if stats := s.FlushTickBatch(); stats.Err != nil {
+			b.Fatal(stats.Err)
+		}
+	}
+}
+
+/*
+================
+BenchmarkCommitUntouchedPlanes
+
+One tick-batch flush that changes one character while the metadata
+planes stand populated and untouched: 2,000 halloween accounts (the
+plane grows by an entry per account that ever minted), a closed job
+week with full ranking lists, and a trade pool. What the flush pays
+beside the one character row is the planes it re-derives (#3164).
+================
+*/
+func BenchmarkCommitUntouchedPlanes(b *testing.B) {
+	s, chars := benchBurstFixture(b)
+	for i := 0; i < 2000; i++ {
+		s.HalloweenAccount(fmt.Sprintf("bench-account-%d", i)).Count = 1
+	}
+	ranks := domain.JobRankings{Week: 100}
+	for job := range ranks.Lists {
+		for kind := range ranks.Lists[job] {
+			for r := 0; r < domain.JobRankRows; r++ {
+				ranks.Lists[job][kind] = append(ranks.Lists[job][kind],
+					domain.JobRankRow{Alias: fmt.Sprintf("jobber-%d-%d-%02d", job, kind, r), Grade: 3, Value: uint32(r)})
+			}
+		}
+	}
+	s.meta.JobRankings = map[string]domain.JobRankings{testDivision: ranks}
+	s.meta.TradeRewards = map[string]domain.TradeRewardPool{testDivision: {Hunters: 3}}
+	s.MutateCharacter(chars[0], "settle", func() {})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.BeginTickBatch()
+		s.MutateCharacterDeferred(chars[0], "bench", func() {})
 		if stats := s.FlushTickBatch(); stats.Err != nil {
 			b.Fatal(stats.Err)
 		}

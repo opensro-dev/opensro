@@ -100,7 +100,7 @@ import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
-import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
+import { isSpecialtySellEnd, uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
@@ -4472,6 +4472,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ];
 					dirty = true;
 					return false;
+				}
+				// 751114..751150: the specialty sell-end closes an open
+				// specialty-goods shop before its banner (751155) prints
+				// below; any other shop page stays open.
+				if ( isSpecialtySellEnd( frame.opcode, frame.payload ) && inventory.closeSpecialtyShop() ) {
+					dirty = true;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??

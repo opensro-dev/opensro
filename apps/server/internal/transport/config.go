@@ -127,6 +127,13 @@ type Config struct {
 	// behind the same NAT. 0 is no cap, the native posture; the
 	// composition sets it from SRO_MAX_SESSIONS_PER_CLIENT.
 	MaxSessionsPerClient int
+	// AccountMultiWorld lets several characters of one account stand in
+	// the world at once, one per session (port-only, not native: the
+	// closed beta's one account in several tabs). false is native: an
+	// account holds one world seat (account_world.go, #3137) and a second
+	// character is refused with the already-connected answer. The
+	// composition sets it from SRO_BETA_MULTI_CHARACTER.
+	AccountMultiWorld bool
 	// MaxPendingHandshakes caps connections concurrently waiting for HELLO.
 	// Excess connections are rejected immediately instead of consuming a
 	// goroutine for the full HelloTimeout. 0 takes the default.
@@ -183,6 +190,28 @@ value fails closed rather than half-enabling a public endpoint.
 */
 func WebTransportPublicEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWebTransportPublic))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+// EnvAccountMultiWorld is the closed beta's switch for several characters
+// of one account in the world at once (port-only, not native); see
+// Config.AccountMultiWorld.
+const EnvAccountMultiWorld = "SRO_BETA_MULTI_CHARACTER"
+
+/*
+================
+AccountMultiWorldEnabled
+
+The composition's read of EnvAccountMultiWorld: on/1/true (any case)
+enable, everything else - unset included - is off, the native one
+world seat per account.
+================
+*/
+func AccountMultiWorldEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvAccountMultiWorld))) {
 	case "on", "1", "true":
 		return true
 	}
