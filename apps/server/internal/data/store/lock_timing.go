@@ -291,6 +291,15 @@ type LockTiming struct {
 	CheckpointBusyStreak int64 `json:"checkpoint_busy_streak"`
 	CheckpointResets     int64 `json:"checkpoint_resets"`
 	CheckpointResetBusy  int64 `json:"checkpoint_reset_busy"`
+	// CheckpointCaughtUp counts the cycles that ended level with the
+	// writer and CheckpointLogRestarts the times the log started over
+	// (resets included). A healthy store shows both rising with the
+	// cycles and no resets; restarts standing still under load is the
+	// log growing toward its ceiling. CheckpointResetHoldMs is how long
+	// each reset kept writers out.
+	CheckpointCaughtUp    int64             `json:"checkpoint_caught_up"`
+	CheckpointLogRestarts int64             `json:"checkpoint_log_restarts"`
+	CheckpointResetHoldMs latency.Histogram `json:"checkpoint_reset_hold_ms"`
 }
 
 /*
@@ -325,6 +334,9 @@ func (s *Store) LockTiming() LockTiming {
 		out.CheckpointBusyStreak = c.busyStreak.Load()
 		out.CheckpointResets = c.resets.Load()
 		out.CheckpointResetBusy = c.resetBusy.Load()
+		out.CheckpointCaughtUp = c.caughtUp.Load()
+		out.CheckpointLogRestarts = c.restarts.Load()
+		out.CheckpointResetHoldMs = c.resetHold.Snapshot()
 	}
 	return out
 }
