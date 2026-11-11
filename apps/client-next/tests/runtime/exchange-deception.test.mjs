@@ -86,6 +86,7 @@ A world in an open exchange with the partner entity standing beside the
 local player, under the given relation rosters.
 ================
 */
+/** @param {{ partner?: { guildId?: number }, friends?: { jid: number, name: string, modelRefId: number, online: boolean }[], guild?: { id: number, name: string, level: number, gp: number, subject: string, contents: string, members: object[] } | null, alliances?: { id: number, name: string, level: number, master: string, model: number, flags: number }[], locked?: boolean }} [options] */
 function fixture( { partner = {}, friends = [], guild = null, alliances = [], locked = false } = {} ) {
 	const f = uiFixture();
 	Object.assign( f.state.gameplay, {
@@ -122,6 +123,7 @@ function fixture( { partner = {}, friends = [], guild = null, alliances = [], lo
 		heading: 0,
 		kind: "player",
 		name: "Partner",
+		mountedOn: 0,
 		...partner
 	} );
 	return f;
