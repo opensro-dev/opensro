@@ -140,6 +140,20 @@ class SelectionTests(unittest.TestCase):
 		self.assertEqual(chars, [])
 		self.assertEqual(report["existing"], ["COS_P_DOG"])
 
+	def test_reserved_identity_is_not_handed_out(self):
+		# Identities already placed in the staging tree by an earlier
+		# source or another importer are taken even though the native
+		# tables never held them.
+		chars, item_rows, _ = self.select(
+			[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
+		plain = (chars[0][importer.CHAR_ID], item_rows[0][items.IDENTITY])
+		chars, item_rows, _ = importer.select_pets(
+			*native_wolf(), set(), [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")],
+			reserved_ids={9001, 9002})
+		self.assertNotEqual((chars[0][importer.CHAR_ID], item_rows[0][items.IDENTITY]), plain)
+		self.assertNotIn(int(chars[0][importer.CHAR_ID]), (9001, 9002))
+		self.assertNotIn(int(item_rows[0][items.IDENTITY]), (9001, 9002))
+
 	def test_taken_identity_gets_a_fresh_one_and_previous_is_retained(self):
 		native = ([char_row("COS_P_WOLF_001", 9001)], [])
 		chars, _, _ = self.select([char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], native=native)
@@ -188,6 +202,67 @@ class ArchiveTests(unittest.TestCase):
 				removed = importer.add_archive_pets(native, output)
 			self.assertFalse(removed["enabled"])
 			self.assertFalse((text_root / importer.ARCHIVE_SOURCE["char_shard"]).exists())
+
+	def _zip(self, path, chars, item_rows, texts=()):
+		text = importer.TEXT_ROOT.as_posix()
+		with zipfile.ZipFile(path, "w") as archive:
+			archive.writestr(f"{text}/characterdata.txt", importer._encode([["characterdata_5000.txt"]]))
+			archive.writestr(f"{text}/characterdata_5000.txt", importer._encode(chars))
+			archive.writestr(f"{text}/itemdata.txt", importer._encode([["itemdata_5000.txt"]]))
+			archive.writestr(f"{text}/itemdata_5000.txt", importer._encode(item_rows))
+			if texts:
+				archive.writestr(f"{text}/textdata_object.txt", importer._encode(texts))
+			archive.writestr("Data_extracted/res/cos/newpet.bsr", b"bsr")
+
+	def test_shard_identity_used_by_an_earlier_import_is_reserved(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			text_root = output / importer.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			# An earlier import already placed identity 9001 in the tree.
+			(text_root / "characterdata_7777.txt").write_bytes(importer._encode([char_row("COS_P_CAT", 9001)]))
+			zip_path = base / "opensro_pets.zip"
+			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
+			with unittest.mock.patch.dict(os.environ, {importer.ARCHIVE_ENV: str(zip_path)}, clear=True):
+				importer.add_archive_pets(native, output)
+			marker = json.loads((output / importer.ARCHIVE_SOURCE["report"]).read_text(encoding="utf-8"))
+			self.assertNotEqual(marker["idMap"]["COS_P_DOG"]["target"], 9001)
+
+	def test_scroll_name_text_is_merged_with_the_kind_name(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			zip_path = base / "opensro_pets.zip"
+			texts = [["1", "SN_COS_P_DOG", "k", "", "", "Dog", "Dog", "a", "b", "c"],
+				["1", "SN_ITEM_PET_DOG", "k", "", "", "Dog scroll", "Dog scroll", "a", "b", "c"]]
+			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], texts)
+			with unittest.mock.patch.dict(os.environ, {importer.ARCHIVE_ENV: str(zip_path)}, clear=True):
+				report = importer.add_archive_pets(native, output)
+			self.assertEqual(report["missingNameText"], [])
+			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
+			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in name_rows if len(row) > 1})
+
+	def test_a_pass_that_selects_nothing_drops_its_manifest_lines(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			zip_path = base / "opensro_pets.zip"
+			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
+			env = {importer.ARCHIVE_ENV: str(zip_path)}
+			with unittest.mock.patch.dict(os.environ, env, clear=True):
+				importer.add_archive_pets(native, output)
+				self._zip(zip_path, [], [])
+				importer.add_archive_pets(native, output)
+			text_root = output / importer.TEXT_ROOT
+			for manifest_name, shard in (("characterdata.txt", importer.ARCHIVE_SOURCE["char_shard"]),
+					("itemdata.txt", importer.ARCHIVE_SOURCE["item_shard"])):
+				names = [row[0] for row in importer.tables.table_rows((text_root / manifest_name).read_bytes()) if row]
+				self.assertNotIn(shard, names)
+				self.assertFalse((text_root / shard).exists())
 
 
 if __name__ == "__main__":

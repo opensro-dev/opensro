@@ -156,10 +156,14 @@ def previous_targets(prior):
 # of its rows); a kind without one cannot be obtained and is skipped.
 # Returns (char_rows, item_rows, report) with identities applied.
 # ================
-def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: []):
+def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=()):
 	native_codes = {row[CHAR_CODE] for row in native_chars if len(row) > CHAR_CODE}
 	taken_ids = {int(row[CHAR_ID]) for row in native_chars if len(row) > CHAR_ID and row[CHAR_ID].isdigit()}
 	taken_ids |= {int(row[items.IDENTITY]) for row in native_items if len(row) > items.IDENTITY and row[items.IDENTITY].isdigit()}
+	# Identities other importers already placed in the staging tree are
+	# taken too: character and item rows share one built identity space,
+	# so a source id that is free in the native tables may still be used.
+	taken_ids |= {int(value) for value in reserved_ids}
 	previous = previous or {}
 	families = collections.defaultdict(list)
 	for row in later_chars:
@@ -281,6 +285,28 @@ def later_tables_from_zip(zip_path):
 			read("textdata_object.txt"))
 
 
+# ================
+# output_reserved_ids
+#
+# The identities the staging tree already carries outside this source's
+# own shards: earlier pet sources wrote theirs there, and so did every
+# other importer sharing the build. This source's own shard is left out
+# because the pass rewrites it whole and the marker retains its rows.
+# ================
+def output_reserved_ids(output, source):
+	text_root = Path(output) / TEXT_ROOT
+	own = {source["char_shard"].lower(), source["item_shard"].lower()}
+	reserved = set()
+	for pattern, column in (("characterdata_*.txt", CHAR_ID), ("itemdata_*.txt", items.IDENTITY)):
+		for path in text_root.glob(pattern):
+			if path.name.lower() in own:
+				continue
+			for row in tables.table_rows(path.read_bytes()):
+				if len(row) > column and row[column].isdigit():
+					reserved.add(int(row[column]))
+	return reserved
+
+
 def native_tables(native):
 	text_root = Path(native) / TEXT_ROOT
 	chars = [row for path in sorted(text_root.glob("characterdata_*.txt")) for row in tables.table_rows(path.read_bytes())]
@@ -308,13 +334,17 @@ def _encode(rows):
 # A source's off path: its shards leave the manifests and the tree, and
 # its marker goes, leaving every other source's rows untouched.
 # ================
+def _drop_manifest_line(output, manifest_name, shard):
+	manifest = Path(output) / TEXT_ROOT / manifest_name
+	if manifest.exists():
+		kept = [row for row in tables.table_rows(manifest.read_bytes()) if not row or row[0].lower() != shard]
+		write_atomically(manifest, _encode(kept))
+
+
 def remove_import(output, source):
 	text_root = Path(output) / TEXT_ROOT
 	for manifest_name, shard in (("characterdata.txt", source["char_shard"]), ("itemdata.txt", source["item_shard"])):
-		manifest = text_root / manifest_name
-		if manifest.exists():
-			kept = [row for row in tables.table_rows(manifest.read_bytes()) if not row or row[0].lower() != shard]
-			write_atomically(manifest, _encode(kept))
+		_drop_manifest_line(output, manifest_name, shard)
 		(text_root / shard).unlink(missing_ok=True)
 	(Path(output) / source["report"]).unlink(missing_ok=True)
 
@@ -335,11 +365,12 @@ def _manifest_with(output, manifest_name, shard):
 # the native one lacks them. Missing keys are reported, not fatal (a
 # kind whose name never arrived is still listed for the follow-up).
 # ================
-def _merge_name_text(output, char_rows, later_text, report):
+def _merge_name_text(output, char_rows, item_rows, later_text, report):
 	name_path = safe_target(Path(output) / TEXT_ROOT, "textdataname.txt")
 	base = name_path.read_bytes() if name_path.exists() else b""
 	known = {row[1] for row in characters.translation_rows(base) if len(row) > 1}
-	wanted = {row[CHAR_NAME_KEY] for row in char_rows} - known
+	wanted = ({row[CHAR_NAME_KEY] for row in char_rows if len(row) > CHAR_NAME_KEY}
+		| {row[items.NAME_KEY] for row in item_rows if len(row) > items.NAME_KEY}) - known
 	texts = [[row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""]
 		for row in characters.translation_rows(later_text) if len(row) >= 10 and row[1] in wanted]
 	if texts:
@@ -353,11 +384,15 @@ def _write_pass(output, source, char_rows, item_rows, report):
 		write_atomically(safe_target(text_root, source["char_shard"]), _encode(sorted(char_rows, key=lambda row: int(row[CHAR_ID]))))
 		_manifest_with(output, "characterdata.txt", source["char_shard"])
 	else:
+		# No shard file, so no manifest line either: a listed but
+		# missing shard fails the table assembly that reads it.
+		_drop_manifest_line(output, "characterdata.txt", source["char_shard"])
 		(text_root / source["char_shard"]).unlink(missing_ok=True)
 	if item_rows:
 		write_atomically(safe_target(text_root, source["item_shard"]), _encode(sorted(item_rows, key=lambda row: int(row[items.IDENTITY]))))
 		_manifest_with(output, "itemdata.txt", source["item_shard"])
 	else:
+		_drop_manifest_line(output, "itemdata.txt", source["item_shard"])
 		(text_root / source["item_shard"]).unlink(missing_ok=True)
 	report["enabled"] = True
 	report["source"] = source["name"]
@@ -408,9 +443,10 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 		prior = read_marker(output, source)
 		char_rows, item_rows, report = select_pets(
 			native_chars, native_items, set(earlier_codes), later_chars, later_items,
-			previous=previous_targets(prior), missing=missing)
+			previous=previous_targets(prior), missing=missing,
+			reserved_ids=output_reserved_ids(output, source))
 	if char_rows:
-		_merge_name_text(output, char_rows, later_text, report)
+		_merge_name_text(output, char_rows, item_rows, later_text, report)
 	return _write_pass(output, source, char_rows, item_rows, report)
 
 
@@ -444,9 +480,10 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 		prior = read_marker(output, ARCHIVE_SOURCE)
 		char_rows, item_rows, report = select_pets(
 			native_chars, native_items, set(earlier_codes), later_chars, later_items,
-			previous=previous_targets(prior), missing=missing)
+			previous=previous_targets(prior), missing=missing,
+			reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE))
 	if char_rows:
-		_merge_name_text(output, char_rows, later_text, report)
+		_merge_name_text(output, char_rows, item_rows, later_text, report)
 		# The zip's resources join the staging tree at their archive
 		# paths, so the model builder reads one tree for every source.
 		with zipfile.ZipFile(zip_path) as archive:
