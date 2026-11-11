@@ -412,7 +412,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var honorCost uint64
 	label, cargoCapacity := commerceDoorLabel(snapshot, q, isCOS)
 	if cargoCapacity >= 0 {
-		label = rt.tradeDoorLabel(label, cargoCapacity, c)
+		// The stars are read off the snapshot, as the door word was: the
+		// live character is only read behind a door.
+		label = rt.tradeDoorLabel(label, cargoCapacity, snapshot)
 	} else if q.MovementType == wire.MoveTypeShopBuy && isCOS {
 		// A trade-goods load names its own door (#3162); the offer is
 		// resolved here from the same catalogue the door will read.
