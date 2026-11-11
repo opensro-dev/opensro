@@ -67,7 +67,7 @@ const BetaSilkHourlyDefault = 50
 const betaSilkBankCap = 1500
 
 // betaSilkStarter is the silk a new account's wallet starts with.
-const betaSilkStarter = 300
+const betaSilkStarter = 700
 
 // betaSilkHourMs is the in-world time one credit takes.
 const betaSilkHourMs = 60 * 60 * 1000
