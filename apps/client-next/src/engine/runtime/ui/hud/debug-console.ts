@@ -192,7 +192,11 @@ createDebugConsole
 ================
 */
 export function createDebugConsole( ports: DebugConsolePorts ) {
-	const { sendGameplay, useInventorySlot, extensions } = ports;
+	// Plain property reads, as createUi takes its ports: the execution-flow
+	// analyzer follows these, not destructuring.
+	const sendGameplay = ports.sendGameplay,
+		useInventorySlot = ports.useInventorySlot,
+		extensions = ports.extensions;
 	const state: DebugConsoleState = {
 		consoleRows: [],
 		debugMessages: false,
