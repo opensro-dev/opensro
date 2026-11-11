@@ -197,7 +197,10 @@ export function socialPacket(
 		}
 	} );
 	if ( guildNext ) {
-		next = guildNext;
+		// The lane records skipped steps without the frame; it rides here.
+		next = guildNext.degradations?.length ?
+			{ ...guildNext, degradations: guildNext.degradations.map( d => ({ ...d, frame }) ) } :
+			guildNext;
 	} else if ( op === 0x3393 ) {
 		const type = u8();
 		if (

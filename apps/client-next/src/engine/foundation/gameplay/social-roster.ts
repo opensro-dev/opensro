@@ -1,3 +1,4 @@
+import type { Degradation } from "@/engine/contracts/network";
 import type { GuildWarTerms } from "./guild-war";
 
 /*
@@ -229,6 +230,9 @@ export interface SocialState {
 	// The member-delta arm can announce several members in one frame
 	// (5F3340 prints per flipped row); drained alongside notice.
 	readonly notices?: readonly import("./system-notices").SystemNotice[];
+	// Skipped cosmetic steps (AGENTS.md "Degraded reports"), recorded by
+	// the guild lane and drained by the gameplay owner alongside notice.
+	readonly degradations?: readonly Degradation[];
 	// Diagnostic state, not player-facing invented text. These native bodies
 	// require a formatted message/modal owner beyond the constant dispatcher.
 	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };

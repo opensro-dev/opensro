@@ -333,6 +333,47 @@ test("the 0x16 batch prints one line per flipped member", () => {
 	);
 });
 
+test("a member delta for an unknown member reads its legs, skips it and degrades (#3211)", () => {
+	// Mask 0x7f carries all seven legs (level, offline, grade, donated,
+	// permissions, name, role); they are read by mask, not by member, so
+	// the frame parses whole and only the row is skipped.
+	const state = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 99 ).u8( 0x7f ).u8( 9 ).u8( 0 ).u8( 4 ).u32( 123 ).u32( 7 ).str( "Ghost" ).u8( 2 )
+			.frame( 0x3b29 )
+	);
+	assert.equal( state.guild?.members.length, 3 );
+	assert.equal( state.guild?.members.some( m => m.id === 99 ), false );
+	assert.equal( state.notices, undefined );
+	assert.equal( state.degradations?.length, 1 );
+	assert.equal( state.degradations?.[0]?.code, "guild-member-delta-unknown" );
+	assert.equal( state.degradations?.[0]?.frame?.opcode, 0x3b29 );
+});
+
+test("a 0x16 batch skips an unknown member and still applies the known row", () => {
+	const state = socialPacketOf(
+		rosterState,
+		writer().u8( 0x16 ).u8( 2 ).u8( 0x7f )
+			.u32( 99 ).u8( 9 ).u8( 0 ).u8( 4 ).u32( 123 ).u32( 7 ).str( "Ghost" ).u8( 2 )
+			.u32( 2 ).u8( 5 ).u8( 0 ).u8( 6 ).u32( 50 ).u32( 1 ).str( "BravoTwo" ).u8( 1 )
+			.frame( 0x3b29 )
+	);
+	const bravo = state.guild?.members.find( m => m.id === 2 );
+	assert.equal( bravo?.name, "BravoTwo" );
+	assert.equal( bravo?.level, 5 );
+	assert.equal( state.degradations?.length, 1 );
+	assert.equal( state.degradations?.[0]?.code, "guild-member-delta-unknown" );
+});
+
+test("an unknown mask bit stays fatal, for known and unknown members", () => {
+	for ( const id of [ 2, 99 ] ) {
+		assert.throws(
+			() => social.socialPacket( rosterState, writer().u8( 6 ).u32( id ).u8( 0x80 ).frame( 0x3b29 ) ),
+			/Unsupported guild member delta/
+		);
+	}
+});
+
 test("member removal prints by kind (762040 slot 3)", () => {
 	const left = socialPacketOf( rosterState, writer().u8( 3 ).u32( 1 ).u8( 1 ).frame( 0x3b29 ) );
 	assert.equal( left.notice?.key, "UIIT_MSG_GUILD_EXIT_RESULT" );

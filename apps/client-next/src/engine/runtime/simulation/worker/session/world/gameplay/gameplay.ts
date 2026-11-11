@@ -358,7 +358,7 @@ import {
 	inventorySignatures,
 	journalInventoryFrame
 } from "@/engine/foundation/gameplay/inventory-journal";
-import type { WireFrame } from "@/engine/contracts/network";
+import type { Degradation, WireFrame } from "@/engine/contracts/network";
 /*
 ================
 unlimitedItemIds
@@ -1211,6 +1211,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
+	// The social lane's skipped cosmetic steps (#3211), drained by
+	// takeDegradations below; bounded like the other owners' queues.
+	let socialDegradations: Degradation[] = [];
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = {
 		country: () => undefined,
@@ -4704,9 +4707,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					for ( const flip of nextSocial.notices ?? [] ) {
 						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
 					}
+					for ( const degradation of nextSocial.degradations ?? [] ) {
+						if ( socialDegradations.length < 64 ) socialDegradations.push( degradation );
+					}
 					social = withMemberCountries(
 						nextSocial.notice || nextSocial.notices ?
-							{ ...nextSocial, notice: undefined, notices: undefined } :
+							{ ...nextSocial, notice: undefined, notices: undefined, degradations: undefined } :
+							nextSocial.degradations ?
+							{ ...nextSocial, degradations: undefined } :
 							nextSocial
 					);
 					// 634DC9: a party that fills while the player's
@@ -5943,9 +5951,14 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
-		// The inventory owner's skipped cosmetic steps, for the world's
-		// degraded reports (core takeDegradations drains both owners).
-		takeDegradations: () => inventory.takeDegradations(),
+		// The inventory and social owners' skipped cosmetic steps, for
+		// the world's degraded reports (core takeDegradations drains
+		// both owners).
+		takeDegradations: () => {
+			const socialPending = socialDegradations;
+			socialDegradations = [];
+			return [ ...inventory.takeDegradations(), ...socialPending ];
+		},
 		/*
 ================
 cancelCast

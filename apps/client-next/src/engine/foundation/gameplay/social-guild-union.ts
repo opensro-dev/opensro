@@ -13,6 +13,7 @@ on the arms are the handlers the printers follow.
 
 ===========================================================================
 */
+import type { Degradation } from "@/engine/contracts/network";
 import { MASTER_RELEASE_VOTE } from "./guild-manager";
 import { guildWarProposalReply } from "./guild-war";
 import { withVoteBallot, withVoteCandidates } from "./guild-vote";
@@ -593,9 +594,13 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 			} else if ( type === 6 || type === 0x16 ) {
 				const count = type === 6 ? 1 : u8(), commonMask = type === 6 ? undefined : u8();
 				const flips: SystemNotice[] = [];
+				const degradations: Degradation[] = [];
 				for ( let i = 0; i < count; i++ ) {
 					const id = u32(), mask = commonMask ?? u8(), old = guild.members.find( m => m.id === id );
-					if ( !old || mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
+					// An unknown mask bit stays fatal: the legs it would
+					// name cannot be read, so the rest of the frame is
+					// unreadable.
+					if ( mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
 					// 5E9D20 @5e9d90: the applicator order is &1 level (+0x24),
 					// &2 offline (+0x26), &4 grade (+0x25), then donated,
 					// permissions, name, role. (The &1/&2 legs stood swapped
@@ -610,6 +615,21 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 						...(mask & 32 ? { name: str() } : {}),
 						...(mask & 64 ? { role: u8() } : {})
 					};
+					if ( !old ) {
+						// #3211: the roster can miss a member whose join
+						// row the baseline gate skipped (the 0x32C4 block
+						// was encoded before they joined). The legs are
+						// read by mask, not by member, so the frame still
+						// parses: skip the row and report it degraded
+						// instead of ending the session.
+						degradations.push( {
+							code: "guild-member-delta-unknown",
+							message: `Guild member delta for unknown member ${id} skipped (mask 0x${
+								mask.toString( 16 )
+							}); the roster does not hold that member`
+						} );
+						continue;
+					}
 					// 5F3340: the announcement block is gated on the offline
 					// leg (mask &2 @5f3392) and prints only on an actual
 					// flip; the native row latch (+0x374, set @5f36d1 and
@@ -653,6 +673,7 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 					guild = { ...guild, members: guild.members.map( m => m.id === id ? { ...m, ...patch } : m ) };
 				}
 				if ( flips.length ) next = { ...next, notices: flips };
+				if ( degradations.length ) next = { ...next, degradations };
 			} else {
 				throw Error( "Unsupported guild update" );
 			}
