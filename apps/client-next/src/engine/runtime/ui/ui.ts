@@ -337,6 +337,7 @@ import {
 	crestRegisterKind,
 	type CrestRegisterKind
 } from "@/engine/foundation/gameplay/crest-register";
+import { exchangePartnerIsStranger } from "@/engine/foundation/gameplay/exchange";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -20063,6 +20064,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const state = game?.exchange, root = hudData?.root.GDR_EXCHANGE, page = hudData?.windows.ifexchange;
 					if ( !state?.open || !root || !page ) {
 						exchangeHud.reset();
+						exchangeHud.warnings( false, null, false );
 						if ( goldDialog === "exchange" ) {
 							goldDialog = false;
 							focus = drawFrame.focus = null;
@@ -20082,6 +20084,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] ),
 						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
 						partner = next.entities.find( e => e.gid === state.partner );
+					// #3135: the anti-fraud lines (inference; the judgement is
+					// exchangePartnerIsStranger's). The compare edge waits
+					// until the partner's name resolves.
+					const stranger = partner?.name ?
+						exchangePartnerIsStranger( partner.name, partner.guildId, {
+							friendNames: game?.friends?.rows.map( row => row.name ) ?? [],
+							guildMemberNames: game?.social?.guild?.members.map( member => member.name ) ?? [],
+							ownGuildId: game?.social?.guild?.id ?? 0,
+							allianceGuildIds: game?.social?.alliances?.map( guild => guild.id ) ?? []
+						} ) :
+						null;
+					for (
+						const key of exchangeHud.warnings(
+							true,
+							stranger,
+							state.ownLocked && state.theirLocked
+						)
+					) {
+						hudMessages.append( hudCopy( key ), 0xffff7070 );
+					}
 					nativeFrame(
 						root,
 						px,

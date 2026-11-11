@@ -233,6 +233,68 @@ export function exchangeRequest( state: ExchangeState, command: ExchangeCommand 
 }
 
 /*
+============================================================================
+
+The anti-fraud warning lines (#3135)
+
+============================================================================
+*/
+
+export const EXCHANGE_DECEPTION_COMPARE_KEY = "UIIT_MSG_EXCHANGE_DECEPTION_COMPARE";
+export const EXCHANGE_DECEPTION_REAFFIRM_KEY = "UIIT_MSG_EXCHANGE_DECEPTION_REAFFIRM";
+
+/*
+================
+ExchangePartnerRelations
+
+The rosters the stranger judgement reads: friend names, guild member
+names, the own guild's id (0 while guildless) and the alliance's guild
+ids.
+================
+*/
+export interface ExchangePartnerRelations {
+	readonly friendNames: readonly string[];
+	readonly guildMemberNames: readonly string[];
+	readonly ownGuildId: number;
+	readonly allianceGuildIds: readonly number[];
+}
+
+/*
+================
+exchangePartnerIsStranger
+
+Inference (#3135): the v1.150 client holds no display path for either
+anti-fraud line - no UIIT_MSG_EXCHANGE_DECEPTION_* literal (nor the
+fragments DECEPTION / REAFFIRM) occurs in SRO_Client.exe, the
+resinfo\ifexchange.txt layout has no control for them, and every
+CIFExchange method is accounted for without touching them. The rows
+ship only as text (the anti-fraud section of the text table), so the
+original's rule is taken from the COMPARE row's own wording: the
+partner stands outside the player's friends, guild and union.
+
+Only a positive match clears the partner: the name on the friend
+roster or the guild roster, or the partner's guild standing in the
+local alliance (the own guild included). An input the client has not
+resolved - no name yet, no guild - matches nothing and never clears.
+================
+*/
+export function exchangePartnerIsStranger(
+	partnerName: string | undefined,
+	partnerGuildId: number | undefined,
+	relations: ExchangePartnerRelations
+): boolean {
+	if ( partnerName !== undefined ) {
+		if ( relations.friendNames.includes( partnerName ) ) return false;
+		if ( relations.guildMemberNames.includes( partnerName ) ) return false;
+	}
+	if ( partnerGuildId !== undefined && partnerGuildId !== 0 ) {
+		if ( partnerGuildId === relations.ownGuildId ) return false;
+		if ( relations.allianceGuildIds.includes( partnerGuildId ) ) return false;
+	}
+	return true;
+}
+
+/*
 ================
 applyExchangeSwap
 
