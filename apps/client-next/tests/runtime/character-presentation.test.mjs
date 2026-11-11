@@ -167,7 +167,7 @@ test("BSR particles cross real manifest admission for drops and NPCs and follow 
 	}
 });
 
-test("spawned characters fade in over two seconds and NPCs appear at once", () => {
+test("spawned monsters fade in over two seconds; players, COS and NPCs appear at once", () => {
 	const f = fixture();
 	f.warm();
 	const alpha = ( kind, at ) => {
@@ -185,6 +185,17 @@ test("spawned characters fade in over two seconds and NPCs appear at once", () =
 	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: entity( 1, { kind: "npc" } ) } ] );
 	// 86EE85 clears the NPC's spawn-fade flag.
 	assert.equal( alpha( "npc", 4 ), 1 );
+	// The factory clears the same flag for CHAR_ and COS_ creations
+	// (CICharactor_SetSpawnFadeEnabled(result, 0), 0x4CD624): a peer or a
+	// COS is opaque on the first frame it is drawn, so the spawn/despawn
+	// churn of interest range around a moving viewer never ghosts it
+	// (#3217).
+	for ( const [kind, at] of [ [ "player", 5 ], [ "cos", 6 ] ] ) {
+		f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+		f.step( [], at - .5 );
+		f.presentation.receiveLifecycle( [ { kind: "spawn", entity: entity( 1, { kind } ) } ] );
+		assert.equal( alpha( kind, at ), 1, kind + " is opaque on its first drawn frame" );
+	}
 	f.dispose();
 });
 
@@ -3154,7 +3165,8 @@ test("held native blind masks players and monsters without retiring presentation
 	const f = fixture();
 	f.warm();
 	const local = entity( 1, { kind: "player" } );
-	// Let CIDecoAppear (spawn-fade.ts) finish: this test pins the blind mask.
+	// Settle the local player: players carry no CIDecoAppear (spawn-fade.ts),
+	// so this only pins the blind mask below.
 	for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local ], null, 1 + i / 10 );
 	f.presentation.step(
 		[ local ],
@@ -3181,8 +3193,18 @@ test("held native blind masks players and monsters without retiring presentation
 		assert.equal( actor.opacity ?? 1, hidden ? 0 : 1, kind );
 		if ( hidden ) assert.equal( actor.pickable, false );
 		assert.equal( f.presentation.ready( 1 ), true );
+		// The release frame still composes the CIDecoAppear ramp for kinds
+		// that carry one: a monster masked since t=4 resumes its 2 s ramp
+		// (it was 1 s in when the blind landed at t=5), while kinds without
+		// a ramp are opaque again at once.
 		f.presentation.step( [ body ], null, 5 );
-		assert.equal( f.actors.find( a => a.gid === 1 ).opacity ?? 1, 1, kind + " restores on release" );
+		assert.equal(
+			f.actors.find( a => a.gid === 1 ).opacity ?? 1,
+			kind === "monster" ? 127 / 255 : 1,
+			kind + " restores on release"
+		);
+		f.presentation.step( [ body ], null, 7 );
+		assert.equal( f.actors.find( a => a.gid === 1 ).opacity ?? 1, 1, kind + " is opaque once its ramp ends" );
 	}
 	f.dispose();
 });
