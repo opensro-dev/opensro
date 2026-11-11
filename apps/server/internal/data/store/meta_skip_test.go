@@ -4,12 +4,16 @@
 meta_skip_test.go - the commit does not rewrite a meta plane whose
 bytes did not change
 
-commitTxLocked marshals the trade-reward and job-ranking planes whole
-on every commit, changed or not, beside the two version stamps. These
-tests pin the digest skip (#1943 W2, the character rows' discipline of
-commit_skip_test.go against the meta keys): a same-value commit writes
-no meta row, a changed plane is written, and a failed commit retains
-no digest that would make a later commit skip a row the disk lacks.
+The commit marshals a meta plane (trade rewards, job rankings,
+halloween accounts) only when a door touched it since the last commit
+(#3164); a touched plane whose bytes still match its last committed
+digest is not rewritten either (#1943 W2, the character rows'
+discipline of commit_skip_test.go against the meta keys). These tests
+pin both skips: an untouched commit derives no plane bytes, a changed
+plane is written, and a failed commit retains no digest that would
+make a later commit skip a row the disk lacks. The planes are seeded
+through their doors (UpdateTrade, CloseJobWeek): a bare assignment to
+s.meta is not a write the commit can see anymore.
 
 ===========================================================================
 */
@@ -31,23 +35,27 @@ func TestCommitSkipsUnchangedMetaPlanes(t *testing.T) {
 	t.Parallel()
 
 	s, c := commitSkipFixture(t)
-	s.meta.TradeRewards = map[string]domain.TradeRewardPool{testDivision: {Hunters: 3}}
-	s.meta.JobRankings = map[string]domain.JobRankings{testDivision: {}}
 
-	// The first commit writes both planes (the version stamps were
-	// already retained by the fixture's create commit and skip).
+	// Seed both planes through their doors: the pool assignment (its
+	// own commit writes the pool plane) and the week's first sighting
+	// (which only marks the plane; the settle commit writes it).
+	if !s.UpdateTrade([]*domain.Character{c}, "seed pool", func(pool *domain.TradeRewardPool) bool {
+		*pool = domain.TradeRewardPool{Hunters: 3}
+		return true
+	}) {
+		t.Fatal("seed pool refused")
+	}
+	if !s.CloseJobWeek(testDivision, 100, "seed week") {
+		t.Fatal("seed week refused")
+	}
+	s.MutateCharacter(c, "settle", func() {})
+
+	// A commit that changes nothing writes no meta row at all: both
+	// planes skip untouched (never marshaled) and both stamps skip
+	// against their retained digests.
 	before := s.LockTiming()
 	s.MutateCharacter(c, "noop touch", func() {})
 	after := s.LockTiming()
-	if got := after.MetaRowsWritten - before.MetaRowsWritten; got != 2 {
-		t.Fatalf("first meta commit wrote %d rows, want the 2 planes (skipped %d)", got, after.MetaRowsSkipped-before.MetaRowsSkipped)
-	}
-
-	// A commit that changes nothing writes no meta row at all: both
-	// planes and both stamps skip against their retained digests.
-	before = after
-	s.MutateCharacter(c, "noop touch again", func() {})
-	after = s.LockTiming()
 	if got := after.MetaRowsWritten - before.MetaRowsWritten; got != 0 {
 		t.Fatalf("unchanged commit wrote %d meta rows, want 0", got)
 	}
@@ -93,12 +101,13 @@ func TestFailedCommitRetainsNoMetaDigest(t *testing.T) {
 	t.Parallel()
 
 	s, c := commitSkipFixture(t)
-	s.meta.TradeRewards = map[string]domain.TradeRewardPool{testDivision: {Hunters: 7}}
 
 	s.beforeSQLiteCommit = func() { panic("injected commit failure") }
 	func() {
 		defer func() { _ = recover() }()
-		s.MutateCharacter(c, "doomed pool", func() {})
+		s.UpdateTrade([]*domain.Character{c}, "doomed pool", func(pool *domain.TradeRewardPool) bool {
+			return pool.Credit(domain.JobThief, 7)
+		})
 	}()
 	s.beforeSQLiteCommit = nil
 

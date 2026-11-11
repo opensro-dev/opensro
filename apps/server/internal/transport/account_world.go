@@ -64,6 +64,13 @@ way, so the two never stand in the world together.
 ================
 */
 func (h *Hub) ClaimAccountWorld(s *Session, divisionID, characterName string) (*AccountWorldClaim, bool) {
+	// Port-only, not native: with the closed beta's multi-character
+	// switch an account has no single seat, so nothing is claimed or
+	// refused. The same character entered twice is still one: its bind
+	// key evicts the older session (BindExclusive).
+	if h.cfg.AccountMultiWorld {
+		return nil, false
+	}
 	account, _, ok := s.AdmissionIdentity()
 	if !ok {
 		return nil, false
