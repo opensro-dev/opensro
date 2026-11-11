@@ -33,6 +33,7 @@ nothing to fold.
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -75,6 +76,12 @@ const (
 	// economyFoldPace is the sleep between delete batches, so doors
 	// always win the lock back between two batches.
 	economyFoldPace = 250 * time.Millisecond
+	// economyFoldBusyShare: the store is busy when more than one in
+	// this many of its recent write holds reached the bound.
+	// economyFoldBusyPaces: how many paces the deletes wait for a
+	// quieter window before the next batch runs regardless.
+	economyFoldBusyShare = 2
+	economyFoldBusyPaces = 8
 	// economyVacuumFreelistShare: the boot VACUUM of
 	// vacuumIfFreelistDominates fires when the freelist is more than
 	// this share of the file's pages.
@@ -113,11 +120,14 @@ type economyFoldLane struct {
 	// windowRows is the current fold window (foldOneWindow), moved
 	// by adaptWindow between passes of this lane's single loop.
 	windowRows int64
-	hold       latency.Live
-	batches    atomic.Int64
-	foldSeq    atomic.Int64
-	delSeq     atomic.Int64
-	fin        atomic.Bool
+	// holdsSeen is the store's write-hold histogram as the lane last
+	// read it (storeBusy): the next read judges only the holds since.
+	holdsSeen latency.Histogram
+	hold      latency.Live
+	batches   atomic.Int64
+	foldSeq   atomic.Int64
+	delSeq    atomic.Int64
+	fin       atomic.Bool
 }
 
 /*
@@ -244,7 +254,7 @@ func (l *economyFoldLane) pass() error {
 		if n == 0 {
 			break
 		}
-		if !l.pace() || l.tickOverBudget() {
+		if !l.pace() || !l.waitForQuiet() {
 			return nil
 		}
 	}
@@ -271,14 +281,62 @@ func (l *economyFoldLane) pace() bool {
 
 /*
 ================
-tickOverBudget
+holdsOver
 
-Whether the tick's own recent write holds are already at the fold's
-bound: the pass waits for a quieter window rather than add jitter.
+How many samples of h lie in buckets wholly at or above boundMs, and
+how many samples it holds in all.
 ================
 */
-func (l *economyFoldLane) tickOverBudget() bool {
-	return l.store.mu.writeHold.Snapshot().MaxMs >= economyFoldMaxHoldMs
+func holdsOver(h latency.Histogram, boundMs float64) (over, all uint64) {
+	for i, n := range h.Buckets {
+		all += n
+		if i > 0 && h.BoundsMs[i-1] >= boundMs {
+			over += n
+		}
+	}
+	return over, all
+}
+
+/*
+================
+storeBusy
+
+Whether the store's write holds since the lane last looked were
+mostly at or over the fold's bound. It reads the difference of two
+snapshots: the histogram's own maximum and totals are since process
+start, and one slow commit an hour ago says nothing about now (read
+whole, the first hold past the bound would stop the deletes for the
+life of the process). The lane's own batches are among the holds
+counted; a batch at the bound is a reason to wait too.
+================
+*/
+func (l *economyFoldLane) storeBusy() bool {
+	now := l.store.mu.writeHold.Snapshot()
+	overNow, allNow := holdsOver(now, economyFoldMaxHoldMs)
+	overSeen, allSeen := holdsOver(l.holdsSeen, economyFoldMaxHoldMs)
+	l.holdsSeen = now
+	recent := allNow - allSeen
+	return recent > 0 && (overNow-overSeen)*economyFoldBusyShare > recent
+}
+
+/*
+================
+waitForQuiet
+
+After a batch: while the store is busy, wait a pace at a time for a
+quieter window rather than add jitter, at most economyFoldBusyPaces
+of them. Then the next batch runs whatever the holds say, so a store
+that is always slow still drains its history, slowly. False when the
+lane is stopping.
+================
+*/
+func (l *economyFoldLane) waitForQuiet() bool {
+	for waited := 0; waited < economyFoldBusyPaces && l.storeBusy(); waited++ {
+		if !l.pace() {
+			return false
+		}
+	}
+	return true
 }
 
 /*
@@ -548,8 +606,10 @@ WHERE reason IN ('monster_gold', 'npc_sale') AND seq > ?`, foldSeq).Scan(&remain
 applyWrite
 
 Runs one small write transaction of the lane under the store lock,
-through the store's own handle, and records how long the lock was
-held: the lane's batches read in the store lock snapshot beside the
+through the store's synchronous handle (syncDBLocked: with the
+asynchronous commit writer on, its queue is drained first, so the
+lane never waits on SQLite's one writer while it holds the lock),
+and records how long the lock was held: the lane's batches read in the store lock snapshot beside the
 doors' holds (lock_timing.go), a hold past the bound is logged, and
 the hold itself goes back to the caller (the fold sizes its next
 window by it).
@@ -563,7 +623,7 @@ func (l *economyFoldLane) applyWrite(write func(tx *sql.Tx) error) (time.Duratio
 		return 0, fmt.Errorf("no database open")
 	}
 	begun := s.mu.now()
-	tx, err := s.db.Begin()
+	tx, err := s.syncDBLocked().Begin()
 	if err != nil {
 		return 0, err
 	}
@@ -592,22 +652,34 @@ store serves, when the freelist is most of the file, one in-place
 VACUUM rewrites the live content only. It runs on the live file, so
 no commit can be lost to it, and once it has run the freelist is
 near zero and the condition never fires again.
+
+It returns nothing on purpose. The caller's ladder reads any error
+from the open as a damaged database and quarantines the file; a
+shrink that could not run (no room for the rewrite, a busy file, a
+stop that arrived) found nothing damaged. It says why at Warn and
+the next boot tries again. The context is the open's: a stop ends
+the rewrite, and SQLite leaves the file as it was.
 ================
 */
-func vacuumIfFreelistDominates(db *sql.DB) error {
+func vacuumIfFreelistDominates(ctx context.Context, db *sql.DB) {
 	var pages, freelist int64
-	if err := db.QueryRow("PRAGMA page_count").Scan(&pages); err != nil {
-		return err
+	if err := db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		log.Warnf("economy shrink: reading the page count failed: %v", err)
+		return
 	}
-	if err := db.QueryRow("PRAGMA freelist_count").Scan(&freelist); err != nil {
-		return err
+	if err := db.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&freelist); err != nil {
+		log.Warnf("economy shrink: reading the freelist failed: %v", err)
+		return
 	}
 	if pages == 0 || freelist*economyVacuumFreelistShare <= pages {
-		return nil
+		return
 	}
-	if _, err := db.Exec("VACUUM"); err != nil {
-		return fmt.Errorf("economy shrink: %w", err)
+	started := time.Now()
+	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
+		log.Warnf("economy shrink: VACUUM failed after %s (freelist %d of %d pages); the file stays as it is and the next boot tries again: %v",
+			time.Since(started).Round(time.Millisecond), freelist, pages, err)
+		return
 	}
-	log.Infof("economy shrink: vacuumed the authority (freelist was %d of %d pages)", freelist, pages)
-	return nil
+	log.Infof("economy shrink: vacuumed the authority in %s (freelist was %d of %d pages)",
+		time.Since(started).Round(time.Millisecond), freelist, pages)
 }

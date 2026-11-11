@@ -305,6 +305,11 @@ func TestTradeSettlementNamesSellerAndShares(t *testing.T) {
 	if got := pay("thief-sale"); got[seller.ID] != "thief_den_sale" || got[share.ID] != "trade_party_share" || len(got) != 2 {
 		t.Fatalf("thief sale reasons %v", got)
 	}
+	// The caravan's size-and-stars stamp (#3162) rides the stored door
+	// word and splits the same way.
+	if got := pay("trade-sale-101s5"); got[seller.ID] != "trade_sale_credit" || got[share.ID] != "trade_party_share" || len(got) != 2 {
+		t.Fatalf("stamped trade sale reasons %v", got)
+	}
 }
 
 /*

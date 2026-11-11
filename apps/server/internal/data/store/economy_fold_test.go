@@ -15,9 +15,12 @@ without losing the commit that landed after the last batch.
 package store
 
 import (
+	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 /*
@@ -261,5 +264,133 @@ func TestEconomyCharacterHoursAnswers(t *testing.T) {
 	}
 	if len(hours) != 1 || hours[0].Reason != "monster_gold" || hours[0].Total != 160 || hours[0].N != 2 {
 		t.Fatalf("char hours %+v", hours)
+	}
+}
+
+/*
+================
+TestAShrinkThatCannotRunLeavesAHealthyFile
+
+The ladder reads any error from the open as a damaged database and
+quarantines the file. A shrink that cannot run found nothing damaged:
+it must report and return, the file must stay as it was, and the
+handle must go on working. Here another connection holds the write
+lock, so the VACUUM is refused.
+================
+*/
+func TestAShrinkThatCannotRunLeavesAHealthyFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "shrink.db")
+	db, err := connectDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{
+		"CREATE TABLE kept (id INTEGER PRIMARY KEY, body TEXT)",
+		"INSERT INTO kept VALUES (1, 'survives')",
+		"CREATE TABLE filler (body BLOB)",
+		"INSERT INTO filler VALUES (zeroblob(400000))",
+		"DROP TABLE filler",
+		"PRAGMA busy_timeout=50",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	var before, freelist int64
+	if err := db.QueryRow("PRAGMA page_count").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("PRAGMA freelist_count").Scan(&freelist); err != nil {
+		t.Fatal(err)
+	}
+	if freelist*economyVacuumFreelistShare <= before {
+		t.Fatalf("the fixture's freelist (%d of %d pages) would not trigger the shrink", freelist, before)
+	}
+
+	blocker, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	held, err := blocker.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	if _, err := held.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	vacuumIfFreelistDominates(context.Background(), db)
+	if _, err := held.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+
+	var after int64
+	var body string
+	if err := db.QueryRow("PRAGMA page_count").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT body FROM kept WHERE id = 1").Scan(&body); err != nil || body != "survives" {
+		t.Fatalf("the handle stopped answering after a refused shrink: %q, %v", body, err)
+	}
+	if after != before {
+		t.Fatalf("a refused shrink changed the file: %d pages, was %d", after, before)
+	}
+	// With the lock free the same call shrinks the file.
+	vacuumIfFreelistDominates(context.Background(), db)
+	if err := db.QueryRow("PRAGMA page_count").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after >= before {
+		t.Fatalf("the shrink left %d pages of %d with the lock free", after, before)
+	}
+}
+
+/*
+================
+TestOneSlowHoldDoesNotStallTheDeletes
+
+The busy test judges the write holds since the lane last looked. One
+slow commit is busy once; after it, a run of quick holds is quiet
+again, although the histogram's maximum never comes down. Read as an
+all-time maximum, the first hold past the bound stopped the deletes
+for the life of the process.
+================
+*/
+func TestOneSlowHoldDoesNotStallTheDeletes(t *testing.T) {
+	t.Parallel()
+	s := openTest(t, t.TempDir(), newTestClock())
+	lane := testFoldLane(s)
+	lane.storeBusy()
+
+	s.mu.writeHold.Add(80 * time.Millisecond)
+	if !lane.storeBusy() {
+		t.Fatal("a hold of 80 ms since the last look is busy")
+	}
+	if lane.storeBusy() {
+		t.Fatal("with no hold since the last look the store is quiet, whatever its all-time maximum")
+	}
+	for range 20 {
+		s.mu.writeHold.Add(time.Millisecond)
+	}
+	if lane.storeBusy() {
+		t.Fatal("twenty quick holds since the last look are quiet; the old slow one is history")
+	}
+	for range 3 {
+		s.mu.writeHold.Add(40 * time.Millisecond)
+	}
+	s.mu.writeHold.Add(time.Millisecond)
+	if !lane.storeBusy() {
+		t.Fatal("three slow holds of four since the last look are busy")
+	}
+	// A quiet store never makes the deletes wait.
+	started := time.Now()
+	if !lane.waitForQuiet() {
+		t.Fatal("waitForQuiet reported a stop on a running lane")
+	}
+	if waited := time.Since(started); waited > economyFoldPace {
+		t.Fatalf("a quiet store made the deletes wait %s", waited)
 	}
 }

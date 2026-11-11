@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -71,6 +72,13 @@ func main() {
 		ownedShard,
 	)
 	if err != nil {
+		// An interrupt during boot is an ordinary stop, not a failure
+		// (#3186): the cancelled open released its claim, and the
+		// process exits 0 without waiting out the kill timeout.
+		if errors.Is(err, context.Canceled) {
+			log.Info("startup: interrupted during boot; exiting")
+			return
+		}
 		log.Fatalf("startup: %v", err)
 	}
 	if err := application.Run(signalContext); err != nil {

@@ -491,6 +491,13 @@ func (s *Store) Close() {
 		s.checkpoints.stop()
 		s.checkpoints = nil
 	}
+	// The boot verifier is interrupted next: it reads through its own
+	// connection and takes no store door either, and a stop must not
+	// wait for a whole-file check or copy to finish.
+	if s.verifier != nil {
+		s.verifier.stop()
+		s.verifier = nil
+	}
 	if s.db != nil {
 		// A graceful stop never drops a tick: rows a deferred door left
 		// (tickbatch.go) are written before the final checkpoint.

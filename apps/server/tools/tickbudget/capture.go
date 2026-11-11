@@ -39,9 +39,29 @@ captureOptions
 */
 type captureOptions struct {
 	sshTarget   string
+	sshIdentity string
 	pprofAddr   string
 	metricsAddr string
 	outDir      string
+}
+
+/*
+================
+sshArguments
+
+The ssh command line of a capture. --ssh-identity names the key file
+for an operator whose key is not ssh's default (the deploy key of the
+runbook): it is passed as -i with IdentitiesOnly, so ssh offers that
+key and no other. Without it ssh chooses, as before. The target and
+the remote command come last.
+================
+*/
+func sshArguments(opts captureOptions) []string {
+	args := []string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=15"}
+	if opts.sshIdentity != "" {
+		args = append(args, "-i", opts.sshIdentity, "-o", "IdentitiesOnly=yes")
+	}
+	return append(args, opts.sshTarget, "sh -s")
 }
 
 /*
@@ -172,7 +192,7 @@ func runCapture(opts captureOptions) error {
 		return err
 	}
 	script := remoteScript(opts.pprofAddr, opts.metricsAddr)
-	cmd := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", opts.sshTarget, "sh -s")
+	cmd := exec.Command("ssh", sshArguments(opts)...)
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()
