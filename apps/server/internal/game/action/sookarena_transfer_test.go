@@ -96,10 +96,10 @@ func TestSookTransferLimitsExpiryAndIsolation(t *testing.T) {
 
 /*
 ================
-TestSookStageResumeClearsOldEggs
+TestSookCheckpointClearsEggsSpawnedWhileClearing
 ================
 */
-func TestSookStageResumeClearsOldEggs(t *testing.T) {
+func TestSookCheckpointClearsEggsSpawnedWhileClearing(t *testing.T) {
 	c := instanceWorldTestCharacter(11, "OldEggs")
 	rt, clock := sookFixture(t, c)
 	rt.enterSookArena(testDivision, c)
@@ -108,9 +108,14 @@ func TestSookStageResumeClearsOldEggs(t *testing.T) {
 	run.props = map[uint32]int64{item.Gid: clock.Now().UnixMilli() + 40000}
 	now := clock.Now().UnixMilli()
 	run.program.StageStarted = now - 300000
+	run.program.ClearingAt = now - 1000
+	run.powerupsOwed = 1
 	rt.advanceSookArena(now)
-	if c.SookChest == nil {
+	if c.SookChest == nil || !c.SookChest.Checkpoint || run.program.PausedAt == 0 {
 		t.Fatal("checkpoint")
+	}
+	if len(run.props) != 0 || run.powerupsOwed != 0 {
+		t.Fatal("checkpoint retained ground props or deferred eggs")
 	}
 	if _, ok := rt.characterGround(testDivision, c, item.Gid); ok {
 		t.Fatal("egg not removed at stage END")
@@ -248,5 +253,30 @@ func TestSookMissingGroundRowStillDespawnsEgg(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("stale client egg was not despawned")
+	}
+}
+
+/*
+================
+TestSookBoostedEggShares
+================
+*/
+func TestSookBoostedEggShares(t *testing.T) {
+	counts := map[uint8]int{}
+	for roll := uint32(0); roll < 32768; roll++ {
+		counts[sookPowerupKind(roll)]++
+	}
+	if len(counts) != 11 {
+		t.Fatalf("egg kinds=%d", len(counts))
+	}
+	for kind, count := range counts {
+		weight := 28
+		if kind == sookDamage || kind == sookTransfer {
+			weight = 39
+		}
+		delta := count*330 - weight*32768
+		if delta < -330 || delta > 330 {
+			t.Fatalf("kind %d count %d exceeds one-sample rounding", kind, count)
+		}
 	}
 }

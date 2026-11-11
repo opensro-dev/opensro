@@ -131,8 +131,8 @@ func TestFastClearsFinishAllStagesBeforeFiveMinutes(t *testing.T) {
 	now := int64(1000)
 	for stage := 0; stage < StageCount; stage++ {
 		start := r.StageStarted
-		if r.WaveLimit() != 19 {
-			t.Fatal("five-minute budget should have nineteen waves")
+		if r.WaveLimit() != 15 {
+			t.Fatal("stage budget should have fifteen waves")
 		}
 		waves, bosses := r.Waves, 0
 		for r.PausedAt == 0 && now < start+300000 {
@@ -153,7 +153,7 @@ func TestFastClearsFinishAllStagesBeforeFiveMinutes(t *testing.T) {
 			}
 			now += 100
 		}
-		if r.PausedAt == 0 || r.Completed != stage+1 || waves != 19 || bosses != 1 {
+		if r.PausedAt == 0 || r.Completed != stage+1 || waves != 15 || bosses != 1 {
 			t.Fatalf("stage %d: waves=%d boss=%d run=%+v", stage+1, waves, bosses, r)
 		}
 		if now-start >= 300000 {
@@ -212,5 +212,23 @@ func TestCappedPendingWaveDoesNotSpendBudget(t *testing.T) {
 	// An ambush can fill the last slot during the Pandora windup.
 	if step := r.Advance(21000, MaxAlive, false); step.Wave || step.Count != 0 || r.Waves != 0 {
 		t.Fatal("full arena spent an empty wave")
+	}
+}
+
+/*
+================
+TestStageWaveCapRespectsShortenedTimers
+================
+*/
+func TestStageWaveCapRespectsShortenedTimers(t *testing.T) {
+	r := New(1000)
+	for _, tc := range []struct {
+		ms    int64
+		waves int
+	}{{30000, 2}, {300000, 15}, {600000, 15}} {
+		r.CheckpointInterval = tc.ms
+		if r.WaveLimit() != tc.waves {
+			t.Fatalf("timer=%d waves=%d want=%d", tc.ms, r.WaveLimit(), tc.waves)
+		}
 	}
 }

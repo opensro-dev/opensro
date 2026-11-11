@@ -329,6 +329,8 @@ func (rt *Runtime) advanceSookArena(now int64) {
 			return true
 		}
 		if step.Checkpoint || run.program.PausedAt != 0 && c.SookChest != nil && c.SookChest.Stage < run.program.Completed {
+			rt.expireSookProps(run, math.MaxInt64)
+			run.powerupsOwed = 0
 			if !rt.saveSookCheckpoint(run, c, run.program.Completed) {
 				return true
 			}

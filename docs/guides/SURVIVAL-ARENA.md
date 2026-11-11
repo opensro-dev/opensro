@@ -16,7 +16,7 @@ players have separate runs and cannot take your monsters or eggs.
 
 ## Fighting the stages
 
-Kill the monsters to advance through each stage's waves. Clearing a wave quickly
+Each stage has **15 waves**. Kill the monsters to advance through them. Clearing a wave quickly
 brings the next one sooner; leaving monsters alive still brings timed
 reinforcements. Spawning lasts at most **five minutes per stage**, and may end
 earlier when you clear its wave budget. Then defeat every remaining monster.
@@ -104,3 +104,9 @@ make space during combat.
 
 For hosting and configuration, see the separate
 [operator guide](../features/SOOK-SURVIVAL-ARENA.md).
+
+Egg selection favors **Chain Reaction** and **Damage Surge**: each has about
+11.82% of egg rolls, 30% more likely than the former equal 9.09% share. The
+overall egg cadence is unchanged. Eggs spawned during the remaining-monster
+cleanup are removed immediately when the last monster dies, before the reward
+window opens; no old eggs remain during the decision or next-stage countdown.

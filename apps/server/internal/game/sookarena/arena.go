@@ -28,6 +28,7 @@ const (
 	WaveIntervalMs     int64 = 15000
 	MaxAlive                 = 200
 	StageCount               = 5
+	StageWaveLimit           = 15
 	DecisionMs         int64 = 300000
 	ReadyMs            int64 = 15000
 )
@@ -292,9 +293,9 @@ func WaveSize(stage, wave int) int {
 
 /*
 ================
-WaveLimit - retain the timed stage's wave budget when clears accelerate it.
+WaveLimit - fifteen waves, or fewer when the operator shortens the stage timer.
 ================
 */
 func (r *Run) WaveLimit() int {
-	return 1 + int(max(int64(0), r.CheckpointInterval-1)/(WaveIntervalMs+PandoraWindupMs))
+	return min(StageWaveLimit, 1+int(max(int64(0), r.CheckpointInterval-1)/(WaveIntervalMs+PandoraWindupMs)))
 }

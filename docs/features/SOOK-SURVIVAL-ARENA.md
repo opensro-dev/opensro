@@ -12,8 +12,8 @@ stall/exchange/storage interaction or another event return anchor.
 
 ## Five stages
 
-Each stage has a wave budget matching its spawning timer: 19 waves with the
-standard five-minute setting. Clearing a wave starts the next Pandora
+Each stage has a budget of **15 waves** with the standard five-minute setting.
+Shortened operator timers may reduce that budget further. Clearing a wave starts the next Pandora
 immediately, so clearing the budget finishes the stage sooner. If monsters
 remain, timed reinforcements still arrive. Five minutes remains the spawning
 cutoff; survivors must then be cleared. Decisions can extend the total event.
@@ -133,3 +133,8 @@ multiplier. Optional difficulty modifiers and endless stages are not included.
 
 See [map import](SURVIVAL-ARENA-MAP.md) and
 [Claude handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md) for evidence/deployment.
+Egg selection favors **Chain Reaction** and **Damage Surge**: each has about
+11.82% of egg rolls, 30% more likely than the former equal 9.09% share. The
+overall egg cadence is unchanged. Eggs spawned during the remaining-monster
+cleanup are removed immediately when the last monster dies, before the reward
+window opens; no old eggs remain during the decision or next-stage countdown.

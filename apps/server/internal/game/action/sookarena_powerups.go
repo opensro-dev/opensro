@@ -140,16 +140,40 @@ func (rt *Runtime) spawnSookBox(run *sookArenaRun, c *enterworld.Character, now 
 
 /*
 ================
+sookPowerupKind - Chain Reaction and Damage Surge are 30% more likely.
+================
+*/
+func sookPowerupKind(roll uint32) uint8 {
+	kinds := [...]uint8{sookDamage, sookBomb, sookUnstoppable, sookInvincible, sookMana, sookFirePit, sookReflect, sookAlarm, sookAmbush, sookTransfer, sookSpeed}
+	// Each boosted kind gets 13/110, or 1.3 times its former 1/11 share.
+	const ordinaryWeight, boostedWeight = 28, 39
+	const totalWeight = 9*ordinaryWeight + 2*boostedWeight
+	const samples = 1 << 15
+	ticket := int(roll%samples) * totalWeight / samples
+	for _, kind := range kinds {
+		weight := ordinaryWeight
+		if kind == sookDamage || kind == sookTransfer {
+			weight = boostedWeight
+		}
+		if ticket < weight {
+			return kind
+		}
+		ticket -= weight
+	}
+	return sookSpeed
+}
+
+/*
+================
 spawnSookPowerup
 ================
 */
 func (rt *Runtime) spawnSookPowerup(run *sookArenaRun, c *enterworld.Character, now int64) {
-	kinds := [...]uint8{sookDamage, sookBomb, sookUnstoppable, sookInvincible, sookMana, sookFirePit, sookReflect, sookAlarm, sookAmbush, sookTransfer, sookSpeed}
 	roll, err := rt.CombatRoll()
 	if err != nil {
 		return
 	}
-	rt.spawnSookProp(run, c, sookEgg, kinds[int(roll)%len(kinds)], now)
+	rt.spawnSookProp(run, c, sookEgg, sookPowerupKind(roll), now)
 }
 
 /*

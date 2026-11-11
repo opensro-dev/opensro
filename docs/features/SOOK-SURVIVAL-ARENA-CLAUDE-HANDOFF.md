@@ -25,7 +25,7 @@ Disabling the event does not downgrade the authority schema.
 ## Current mechanics
 
 See [player/operator guide](SOOK-SURVIVAL-ARENA.md) for all numbers. Five stages,
-private leases, three entries per UTC day. Default 19-wave budget; fast clears
+private leases, three entries per UTC day. Default 15-wave budget; fast clears
 accelerate Pandoras and finish sooner. Surviving monsters receive timed waves;
 spawning stops after five minutes or when the budget is spent. 200 living cap.
 After spawning ends, survivors hunt every 10s after one minute. Eggs continue
@@ -157,3 +157,20 @@ space rather than biased modulo-10000 sampling. Exhaustive tests pin every seal
 count; reward tests cover fresh replacement even with a previously full chest,
 contiguous slots, idempotence and failed-save preservation. UI/player guide
 explain that the next cleared stage replaces the preview.
+
+## Egg weights and checkpoint cleanup (2026-11-11)
+
+Damage Surge and Chain Reaction each receive 39/330 of native 15-bit egg
+selection samples (approximately 11.82%, a 30% relative increase over 1/11).
+Other kinds each receive 28/330; the eight-second egg cadence is unchanged.
+Checkpoint entry now purges remaining ground props and cancels owed eggs,
+including eggs spawned after the initial spawning cutoff while clearing.
+Tests exhaust all 32768 selector values and exercise cleanup at checkpoint
+without relying on the earlier StageEnd or next-stage Resume purge.
+
+Stages now cap at 15 waves (shorter operator test timers can reduce that cap).
+The five-minute spawning ceiling, immediate-next-wave clears, 15-second between-
+stage preparation and 200-live-monster limit are unchanged. Tests verify all
+five fast-cleared stages deliver exactly 15 waves and shortened timers still
+bound their budget. Personal LabWarrior blue grants are test-authority data
+only, backed up and recorded under ignored local state, never product seeds.
