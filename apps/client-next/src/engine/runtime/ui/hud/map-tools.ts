@@ -628,10 +628,11 @@ export function createMapToolsHud( options: {
 					} );
 				}
 				// The page foot (issue #3238): the level-filter note in
-				// the later client's own wording - its "6 level" is the
-				// later client's line, painted as authored; the port's
-				// own filter span (#3167) still drives the directory
-				// and the tooltip. The filter's checkbox sits at the
+				// the later client's own wording, with the span the
+				// filter really applies: the later line says 6, but
+				// the port's filter (#3167) shows MONSTER_LEVEL_FILTER_SPAN
+				// levels, and a note that names another number than the
+				// directory uses would mislead. The filter's checkbox sits at the
 				// strip's right end. One switch drives both pages:
 				// this box and the world strip's toggle are the same state.
 				const footY = input.window[1] + input.window[3] - 24;
@@ -644,7 +645,8 @@ export function createMapToolsHud( options: {
 				} );
 				quads.push(
 					...text.quads(
-						"Will show monsters, which level is up to 6 level higher from current characters level",
+						"Will show monsters, which level is up to " + MONSTER_LEVEL_FILTER_SPAN +
+							" level higher from current characters level",
 						[ mx + 12, footY + 2, mw - 52, 16 ],
 						input.full,
 						WHITE,
