@@ -108,7 +108,6 @@ var catalogueExempt = map[string]string{
 	"SRO_JOB_SUIT_HIDES_ARMOR":                 "how a worn suit is drawn; the catalogue publishes no rendering",
 	"SRO_JOB_SUIT_TIERS":                       "stats a worn suit grants at runtime; items.json publishes the suits either way",
 	"SRO_JOB_DRESS_TOWN_SPAWN":                 "where a finished dress reloads the wearer at runtime; no catalogue file carries it",
-	"SRO_JOB_NO_RESCUE_SCROLLS":                "an item-use refusal while suited; no catalogue file carries it",
 	"SRO_MOONLIT_THIEF_SUIT":                   "a worn suit's look; the catalogue publishes no rendering",
 	"SRO_DEN_NO_TRANSPORT_SUMMON":              "a summon refusal during a countdown; no catalogue file carries it",
 	"SRO_GACHA_POOL_V2":                        "the Magic Pop prize pool; the catalogue publishes no Magic Pop pool",

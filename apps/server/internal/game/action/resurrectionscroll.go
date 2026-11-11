@@ -140,9 +140,6 @@ func (rt *Runtime) resurrectWithScroll(division string, character *enterworld.Ch
 		*result = itemUseFailure(errCodeOnlyDeadResurrect)
 		return revivedWhereDead{}, false
 	}
-	if rt.jobRefusesRescueScroll(character, result) {
-		return revivedWhereDead{}, false
-	}
 	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, character)
 	hp, mp := resurrectionScrollVitals(
 		itemParamUint(ref, "itemParam1_29c"),
