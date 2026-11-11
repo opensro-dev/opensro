@@ -6,16 +6,16 @@ memberstatus.go - a member's login and logout reach the guild roster
 The 0x32C4 block carries each member's offline byte as read at encode
 time, so without a later push the roster freezes at the moment the block
 was built. The client keeps it live through the 0x3B29 subOp-6 member
-delta's &0x02 leg (client CIFGuildMember_OnMemberUpdated 5E9D20: &1
-level, &2 offline at member +0x26), and its announcement block (5F3340,
-gated on &2 @5f3392) prints UIIT_MSG_GUILD_CONNECT for another member and
-the guild notice for the reader's own row when the byte flips to 0.
+delta's &0x02 leg: &1 level, then &2 offline at member +0x26 (client
+5E9D20). The client's announcement block (client 5F3340, gated on &2 at
+client 5F3392) prints UIIT_MSG_GUILD_CONNECT for another member and the
+guild notice for the reader's own row when the byte flips to 0.
 
 The entry seed is built before the world bind publishes the character in
 the presence directory, so the entering member reads its own row offline
 in the seed; the world-bound push below flips it, which is the flip the
-self arm of 5F3340 announces. Native shows no other emitter for the
-client's connect texts, so the inference is that SR_GameServer sends this
+self arm of that client block announces. Inference: no other emitter
+reaches the client's connect texts, so the reference server sends this
 delta to every online member, the subject included, on login and on
 logout.
 
