@@ -35,8 +35,9 @@ import (
 
 // EnvPremiumUpgrade turns the port-only premium upgrade on ("on", "1",
 // "true"): using a strictly higher-grade premium of the same family
-// replaces the running lower one instead of the native 0x1894 refusal.
-// Default off is native (#1624, owner-requested gameplay tuning).
+// replaces the running lower one, and a full premium replaces a
+// running skill-only ticket (#3146), instead of the native 0x1894
+// refusal. Default off is native (#1624, owner-requested gameplay tuning).
 const EnvPremiumUpgrade = "SRO_PREMIUM_UPGRADE"
 
 /*
@@ -193,7 +194,8 @@ premiumUpgradePlan
 
 With the port-only upgrade on, whether using next retires the running
 premium: the running ticket it replaces, or nil when the native refusal
-stands (flag off, another family, or no strictly higher grade).
+stands (flag off, an unreadable grade, the skill ticket used over a
+full premium, or no strictly higher grade within the family).
 ================
 */
 func (rt *Runtime) premiumUpgradePlan(c *enterworld.Character, nowMs int64, next *enterworld.ItemRef, nextSkillOnly bool) *enterworld.ItemRef {
@@ -201,12 +203,26 @@ func (rt *Runtime) premiumUpgradePlan(c *enterworld.Character, nowMs int64, next
 		return nil
 	}
 	runningRef, runningSkillOnly, running := rt.runningPremium(c, nowMs)
-	if !running || runningSkillOnly != nextSkillOnly {
+	if !running {
 		return nil
 	}
 	nextGrade, okNext := premiumGradeOf(next)
 	runningGrade, okRunning := premiumGradeOf(runningRef)
-	if !okNext || !okRunning || !premiumGradeHigher(nextGrade, runningGrade) {
+	if !okNext || !okRunning {
+		return nil
+	}
+	if runningSkillOnly != nextSkillOnly {
+		// Port-only, not native (#3146): across families only the way
+		// up in coverage replaces - a full premium used over a running
+		// skill-only ticket, at any grade (the wrong-ticket buyer is
+		// freed even by a shorter premium). The reverse would retire
+		// the EXP keeper, so it keeps the native refusal.
+		if runningSkillOnly && !nextSkillOnly {
+			return runningRef
+		}
+		return nil
+	}
+	if !premiumGradeHigher(nextGrade, runningGrade) {
 		return nil
 	}
 	return runningRef
@@ -315,7 +331,8 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 		return false
 	}
 	// Port-only, not native (SRO_PREMIUM_UPGRADE): a strictly higher
-	// grade of the same family replaces the running premium and the
+	// grade of the same family replaces the running premium, and a
+	// full premium replaces a running skill-only ticket (#3146); the
 	// replaced ticket's remaining time moves the new end later
 	// (#1624, owner decision). Off: any running premium refuses
 	// (0x1894).
