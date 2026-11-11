@@ -138,6 +138,8 @@ export interface Bundle {
 		placements: {
 			dungeonBlock?: number;
 			lodGroupIndex?: number;
+			// The seasonal world layer the placement belongs to (worldLayers.mjs).
+			layer?: number;
 			blockX?: number;
 			blockZ?: number;
 			sourceSector?: { sectorId: string; };
