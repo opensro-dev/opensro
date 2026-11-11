@@ -11,6 +11,10 @@ stdin close announces itself. The upgrade tool is Go's and has its own
 suite; here the tool is the injected `run` seam over a fixture
 authority directory.
 
+The world's home is covered too: a run from a git worktree resolves the
+main checkout's world, never a second one of its own, and
+SRO_LOCAL_STATE_ROOT names a scratch world instead.
+
 ===========================================================================
 */
 import assert from "node:assert/strict";
@@ -18,7 +22,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import {
 	authorityDirFor,
 	authorityIsCurrent,
@@ -26,8 +29,12 @@ import {
 	upgradeLocalAuthority
 } from "../../local/preboot.mjs";
 import { stopAnnouncement } from "../../local/run.mjs";
-
-const REPO_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
+import {
+	countWorldCharacters,
+	describeWorld,
+	LOCAL_WORLD_ROOT_ENV,
+	resolveLocalWorldRoot
+} from "../../local/worldRoot.mjs";
 
 // The two verdicts the offline upgrader prints
 // (cmd/tools/sro-authority-upgrade), and one refusal.
@@ -109,17 +116,89 @@ test("the local authority directory resolves like the server's", t => {
 	} );
 	const settings = { env: new Map() };
 
+	const worldRoot = path.join( os.tmpdir(), "a-world" );
+
 	delete process.env.SRO_AUTHORITY_STATE_DIR;
 	assert.equal(
-		authorityDirFor( settings, "global-official" ),
-		path.join( REPO_ROOT, "apps", "server", ".state", "shards", "global-official", "authority" )
+		authorityDirFor( settings, "global-official", worldRoot ),
+		path.join( worldRoot, "shards", "global-official", "authority" )
 	);
 
 	process.env.SRO_AUTHORITY_STATE_DIR = path.join( os.tmpdir(), "from-process" );
-	assert.equal( authorityDirFor( settings, "global-official" ), path.join( os.tmpdir(), "from-process" ) );
+	assert.equal(
+		authorityDirFor( settings, "global-official", worldRoot ),
+		path.join( os.tmpdir(), "from-process" )
+	);
 
 	settings.env.set( "SRO_AUTHORITY_STATE_DIR", path.join( os.tmpdir(), "from-settings" ) );
-	assert.equal( authorityDirFor( settings, "global-official" ), path.join( os.tmpdir(), "from-settings" ) );
+	assert.equal(
+		authorityDirFor( settings, "global-official", worldRoot ),
+		path.join( os.tmpdir(), "from-settings" )
+	);
+});
+
+/*
+================
+TestWorldRootIsTheMainCheckouts
+
+The regression this owner exists for: a linked worktree resolves the
+main checkout's world, so a run from it finds the same characters.
+================
+*/
+test("a worktree resolves the main checkout's world, not one of its own", t => {
+	const root = mkdtempSync( path.join( os.tmpdir(), "sro-world-root-" ) );
+	t.after( () => rmSync( root, { recursive: true, force: true } ) );
+	const main = path.join( root, "main" );
+	const worktree = path.join( root, "worktrees", "feature" );
+	mkdirSync( path.join( main, ".git", "worktrees", "feature" ), { recursive: true } );
+	mkdirSync( worktree, { recursive: true } );
+	writeFileSync(
+		path.join( worktree, ".git" ),
+		`gitdir: ${path.join( main, ".git", "worktrees", "feature" )}
+`
+	);
+
+	const expected = path.join( main, "apps", "server", ".state" );
+	assert.equal( resolveLocalWorldRoot( main, {} ), expected );
+	assert.equal( resolveLocalWorldRoot( worktree, {} ), expected );
+});
+
+/*
+================
+TestWorldRootOverride
+================
+*/
+test("SRO_LOCAL_STATE_ROOT names a scratch world, and only an absolute one", () => {
+	const scratch = path.join( os.tmpdir(), "scratch-world" );
+	assert.equal( resolveLocalWorldRoot( os.tmpdir(), { [LOCAL_WORLD_ROOT_ENV]: ` ${scratch} ` } ), scratch );
+	assert.throws(
+		() => resolveLocalWorldRoot( os.tmpdir(), { [LOCAL_WORLD_ROOT_ENV]: "relative/world" } ),
+		/must be an absolute path/
+	);
+});
+
+/*
+================
+TestWorldLine
+
+The line a run prints about its world says an empty or missing one in
+words, and marks a world another checkout owns.
+================
+*/
+test("the world line names an empty world and a shared one", async t => {
+	const root = mkdtempSync( path.join( os.tmpdir(), "sro-world-line-" ) );
+	t.after( () => rmSync( root, { recursive: true, force: true } ) );
+	assert.equal( await countWorldCharacters( path.join( root, "no-authority" ) ), null );
+
+	const own = path.join( root, ".state" );
+	assert.equal( describeWorld( own, own, 4 ), `Local world: ${own} - 4 characters` );
+	assert.equal( describeWorld( own, own, 1 ), `Local world: ${own} - 1 character` );
+	assert.match( describeWorld( own, own, 0 ), /0 characters: an empty world$/ );
+	assert.match( describeWorld( own, own, null ), /no world yet: a new, empty one is created now$/ );
+	assert.match(
+		describeWorld( own, path.join( root, "other" ), 4 ),
+		/\(shared, not this checkout's\) - 4 characters$/
+	);
 });
 
 /*

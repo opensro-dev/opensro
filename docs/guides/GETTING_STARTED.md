@@ -140,10 +140,19 @@ runs exactly those checks without starting anything.
 Two flags change the run:
 
 - `pnpm local --doctor` - the prerequisite checks only, each with its fix.
-- `pnpm local --reset` - asks, then moves the local world (accounts,
-  characters, cluster state under `apps/server/.state`) to
-  `apps/server/.state/backups/local-reset-<timestamp>` and starts fresh.
-  It never deletes; delete the backup yourself once the new world is good.
+- `pnpm local --reset` - names the world and how many characters it
+  holds, asks you to type `reset`, then moves the local world (accounts,
+  characters, cluster state) to `backups/local-reset-<timestamp>` beside
+  it and starts fresh. It never deletes; delete the backup yourself once
+  the new world is good.
+
+The local world has one home, whichever checkout you start from: the
+main checkout's `apps/server/.state`. A run from a git worktree plays
+the same accounts and characters, and every run prints a `Local world:`
+line saying where the world is and how many characters it holds, so an
+empty world is named at the start. To run against a separate, throwaway
+world (a test, a load tool, an experiment), set `SRO_LOCAL_STATE_ROOT`
+to an absolute directory; `node scripts/local/smoke.mjs` does so itself.
 
 Settings for the run live in the checked-in
 `apps/server/config/local.env`: `LOCAL_SHARD_ID` picks the shard,
@@ -214,5 +223,6 @@ generator, so Windows and macOS builds never share entries.
 | A `MISS` line from `pnpm local` | It names the prerequisite and its fix; `pnpm local --doctor` reruns the same checks without starting anything. |
 | Port 5180, 8787, 8788 or 8791 already in use | Another `pnpm local` (or a leftover from a crashed one) is running. Stop it; on Windows `Get-NetTCPConnection -State Listen -LocalPort 5180` names the owning process. |
 | Missing game-data or asset file | Run `pnpm assets doctor`, then rerun `pnpm assets build full` and `pnpm task build server-game-data`, and clear any `SRO_SERVER_GAME_DATA_*` environment overrides. |
+| The character select is empty | Read the run's `Local world:` line. `0 characters` or `no world yet` means this run is on an empty world: an `SRO_LOCAL_STATE_ROOT` left set, or a `--reset`. Earlier worlds are kept under the world's `backups/`; stop the run and move one back. |
 | `INVALID_CREDENTIALS` at login | Use the account in `apps/server/config/dev-account.env` (default `tester` / `123123`). If you changed that file after provisioning, reset the local world (`pnpm local --reset`). |
 | A process exits early during a run | The runner prints its last output lines after the failure and stops the rest. Antivirus scanning a freshly built server binary is the usual cause on Windows; rerun and give it a few minutes. |
