@@ -6878,6 +6878,29 @@ test("showing a stall switches the main popup to Inventory once", () => {
 	}
 });
 
+test("Escape closes the stall network window instead of opening the System menu", () => {
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: {
+				...emptyStall(),
+				network: { open: true, rows: [], pages: 0, page: 0, category: 0, buying: null }
+			}
+		};
+		for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, 1000 + i );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual(
+			commands.filter( c => c.kind === "stall-network-open" ),
+			[ { kind: "stall-network-open", open: false } ],
+			"Escape closes the search window the way its close control does"
+		);
+		assert.equal( f.ui.stats().panel, "", "and does not open the System menu over it" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a stall beside a separate window keeps that window open", () => {
 	const f = uiFixture();
 	try {

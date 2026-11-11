@@ -308,3 +308,12 @@ Tests pin every stage total, the first/final patterns, the five-wave budget
 and real initial spawn counts. Focused arena/action tests and vet pass.
 This is committed source only; the currently running game has not restarted
 to activate this spawn-count change. Monster level bands remain unchanged.
+
+## CI wave-count assertions corrected (2026-11-11)
+
+CI caught two arena tests omitted by the earlier focused name filter. Their
+opening and follow-up wave assertions now expect three monsters, matching
+the requested stage-I increase. The entire sookarena and action packages pass
+locally, not just filtered stage tests. Merged main through c85e47bd and
+regenerated the UI census. Client quick checks and focused arena/census tests
+also pass. No runtime behavior or running-game deployment was changed.

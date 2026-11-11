@@ -100,7 +100,7 @@ func TestClearingArenaStartsOnePandoraWithoutWaiting(t *testing.T) {
 		t.Fatal("empty initial arena skipped its opening delay")
 	}
 	r.Advance(19800, 0, false)
-	if wave := r.Advance(21000, 0, false); wave.Count != 2 {
+	if wave := r.Advance(21000, 0, false); wave.Count != 3 {
 		t.Fatal("opening wave missing")
 	}
 	for range 3 {
@@ -112,7 +112,7 @@ func TestClearingArenaStartsOnePandoraWithoutWaiting(t *testing.T) {
 	if step := r.Advance(21101, 0, false); step.Box || step.Wave {
 		t.Fatal("clear queued duplicate Pandoras or skipped the windup")
 	}
-	if step := r.Advance(22300, 0, false); !step.Wave || step.Count != 2 {
+	if step := r.Advance(22300, 0, false); !step.Wave || step.Count != 3 {
 		t.Fatal("next wave did not follow the Pandora windup")
 	}
 	if r.Advance(22301, 3, false).Box {
@@ -134,7 +134,7 @@ func TestRewardAndKillProgression(t *testing.T) {
 		r := New(1000)
 		r.Kills = kills
 		r.Advance(19800, 0, false)
-		if step := r.Advance(21000, 0, false); step.Count != 2 {
+		if step := r.Advance(21000, 0, false); step.Count != 3 {
 			t.Fatalf("kills=%d wave=%+v", kills, step)
 		}
 	}
