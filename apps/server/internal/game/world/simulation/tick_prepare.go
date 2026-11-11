@@ -130,6 +130,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 	t.tickIndex++
 
 	sessions := t.Source.SnapshotSessions()
+	t.tickPlayers = len(sessions)
 
 	// The resume registry drains once per tick, before any leg runs, so a
 	// mark can never be served twice or leak into a later tick. A drained
