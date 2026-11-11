@@ -173,6 +173,98 @@ for ( const fit of [ true, false ] ) {
 	});
 }
 
+/*
+================
+bandText
+
+The text drawn inside a window-relative band, read back glyph by glyph
+from the atlas UVs: one string per baseline cluster, spaces dropped (the
+space glyph draws nothing). Proves a label reads in full, not ellipsized.
+================
+*/
+function bandText( scene, px, py, x0, x1, y0, y1 ) {
+	const glyphs = fontAtlas.fonts["0"].glyphs, byUv = new Map();
+	for ( const [cp, g] of Object.entries( glyphs ) ) {
+		byUv.set( `${g.x},${g.y},${g.width},${g.height}`, String.fromCodePoint( Number( cp ) ) );
+	}
+	const quads = scene.quads.filter( q =>
+		q.texture === fontAtlas.image &&
+		q.rect[0] >= px + x0 && q.rect[0] < px + x1 && q.rect[1] >= py + y0 && q.rect[1] < py + y1
+	).sort( ( a, b ) => a.rect[1] - b.rect[1] || a.rect[0] - b.rect[0] );
+	const lines = [];
+	for ( const q of quads ) {
+		const line = lines.find( l => Math.abs( l.y - q.rect[1] ) <= 6 );
+		if ( line ) line.quads.push( q );
+		else lines.push( { y: q.rect[1], quads: [ q ] } );
+	}
+	return lines.map( l =>
+		l.quads.sort( ( a, b ) => a.rect[0] - b.rect[0] ).map( q =>
+			byUv.get(
+				`${Math.round( q.uv[0] * fontAtlas.atlasWidth )},${Math.round( q.uv[1] * fontAtlas.atlasHeight )},${
+					q.rect[2]
+				},${q.rect[3]}`
+			) ?? "?"
+		).join( "" ).replaceAll( " ", "" )
+	);
+}
+
+for ( const fit of [ true, false ] ) {
+	test(`Stall Network's filter and gold labels ${fit ? "read in full" : "stay native with the row off"}`, () => {
+		const fixture = uiFixture();
+		try {
+			let time = 0, published;
+			const draw = () => {
+				for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+				assert.equal( fixture.ui.stats().error, null );
+				return defined( published );
+			};
+			fixture.ui.event(
+				/** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } })
+			);
+			fixture.state.gameplay.stall = /** @type {any} */ ({
+				network: { open: true, rows: [], page: 0, pages: 1 }
+			});
+			const output = draw();
+			const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
+			// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; the labels
+			// 44/45/46 sit left of the three combos, 53 left of the gold value.
+			const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
+			const scene = defined( fixture.scenes.at( -1 ) );
+			const bands = [
+				[ -10, 80, 60, 110, "Largecategory" ],
+				[ 195, 260, 60, 110, "Mediumcategory" ],
+				[ 355, 425, 60, 110, "Smallcategory" ],
+				[ -40, 80, 560, 660, "Amountofgold" ]
+			];
+			for ( const [x0, x1, y0, y1, full] of bands ) {
+				const read = bandText(
+					scene,
+					px,
+					py,
+					/** @type {number} */ (x0),
+					/** @type {number} */ (x1),
+					/** @type {number} */ (y0),
+					/** @type {number} */ (y1)
+				).join( "" );
+				if ( fit ) assert.equal( read, full, `${full} reads in full` );
+				else if ( full === "Mediumcategory" || full === "Smallcategory" ) {
+					assert.notEqual( read, full, `${full} keeps its native ellipsis with the row off` );
+				} else assert.equal( read, full, `${full} natively overflows in full with the row off` );
+			}
+			const gold = scene.quads.filter( q =>
+				q.texture === fontAtlas.image && q.rect[1] >= py + 560 && q.rect[1] < py + 660 &&
+				q.rect[0] >= px - 10 && q.rect[0] < px + 80
+			);
+			assert.ok( gold.length > 0, "the gold label is drawn" );
+			const goldMinX = Math.min( ...gold.map( q => q.rect[0] ) );
+			if ( fit ) assert.ok( goldMinX >= px + 6, "the gold label stays inside the window border" );
+			else assert.ok( goldMinX < px, "the gold label natively runs past the window's left edge" );
+		} finally {
+			fixture.dispose();
+		}
+	});
+}
+
 test("captionWords keeps the leading words that fit", () => {
 	const measure = value => value.length * 7;
 	assert.equal( captionWords( "Close", 68, measure ), "Close", "a caption that fits is unchanged" );
