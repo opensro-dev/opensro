@@ -16,6 +16,7 @@ stop must never wait for the verifier's copy.
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"os"
@@ -228,7 +229,7 @@ func TestBootGateChecksTheFreelist(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer probe.Close()
-	if err := quickCheckState(probe); err == nil {
+	if err := quickCheckState(context.Background(), probe); err == nil {
 		t.Fatal("the gate passed a database whose freelist is garbage")
 	}
 }
@@ -263,7 +264,7 @@ func TestAStopNeverWaitsForTheSpareCopy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := quickCheckState(probe); err != nil {
+		if err := quickCheckState(context.Background(), probe); err != nil {
 			t.Fatalf("the spare copy does not pass the gate after an interrupted refresh: %v", err)
 		}
 		probe.Close()

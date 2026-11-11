@@ -90,13 +90,19 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"guild-war-compensation":    {gain: "guild_war_compensation"},
 	"mercenary-attribute":       {loss: "guild_fee"},
 	"operator-grant-items":      {gain: "gm_grant", loss: "gm_grant"},
+	// Loading a transport at a specialty shop (action/commerce.go): the
+	// caravan outcome the trade-sale doors complete, told apart from an
+	// ordinary purchase so a run's start is on the ledger too (#3162).
+	"trade-load": {loss: "trade_goods_cost"},
 }
 
 // economyMemberReasons maps a settlement door whose label names its subject
 // ("trade-sale 42") to the subject's reason and every other member's. A
 // trade-goods sale pays the seller and the party's shares in one commit
 // (action/commerce.go commerceDoorLabel); a thief's sale at the den is told
-// apart from a trader's by its door.
+// apart from a trader's by its door. The trade doors carry the caravan's
+// "-<slots>s<stars>" suffix on the door word (#3162), which
+// economyDoorBase strips before this table is read.
 var economyMemberReasons = map[string]struct{ subject, member string }{
 	"trade-sale": {subject: "trade_sale_credit", member: "trade_party_share"},
 	"thief-sale": {subject: "thief_den_sale", member: "trade_party_share"},
@@ -117,13 +123,44 @@ func EconomyDoor(label string) string {
 
 /*
 ================
+economyDoorBase
+
+A door word without its caravan cargo suffix. The trade doors record
+the caravan they moved gold for as "-<slots>s<stars>" on the door word
+(action/commerce.go, #3162: the transport bag the goods rode in and
+the seller's star rating), so one sale's rows read "trade-sale-32s5"
+in the ledger while the reason tables stay keyed by the bare door.
+Only that exact digit shape strips, so a door whose name merely ends
+in dashes and letters keeps its whole name.
+================
+*/
+func economyDoorBase(door string) string {
+	dash := strings.LastIndex(door, "-")
+	if dash <= 0 {
+		return door
+	}
+	suffix := door[dash+1:]
+	star := strings.IndexByte(suffix, 's')
+	if star <= 0 || star == len(suffix)-1 {
+		return door
+	}
+	for _, r := range suffix[:star] + suffix[star+1:] {
+		if r < '0' || r > '9' {
+			return door
+		}
+	}
+	return door[:dash]
+}
+
+/*
+================
 EconomyReason
 
 The reason of a gold change of the given sign committed by the door.
 ================
 */
 func EconomyReason(door string, gain bool) string {
-	reasons := economyDoorReasons[door]
+	reasons := economyDoorReasons[economyDoorBase(door)]
 	name := reasons.loss
 	if gain {
 		name = reasons.gain
@@ -146,7 +183,7 @@ EconomyReason.
 */
 func EconomyRowReason(label string, charID int64, gain bool) string {
 	door, rest, _ := strings.Cut(strings.TrimSpace(label), " ")
-	reasons, settlement := economyMemberReasons[door]
+	reasons, settlement := economyMemberReasons[economyDoorBase(door)]
 	if !settlement || !gain {
 		return EconomyReason(door, gain)
 	}
@@ -189,6 +226,7 @@ var economyReasonKinds = map[string]string{
 	"starting_gold":          EconomyKindMint,
 	"gm_grant":               EconomyKindMint,
 	"shop_buy":               EconomyKindBurn,
+	"trade_goods_cost":       EconomyKindBurn,
 	"buyback":                EconomyKindBurn,
 	"gold_drop":              EconomyKindBurn,
 	"repair":                 EconomyKindBurn,

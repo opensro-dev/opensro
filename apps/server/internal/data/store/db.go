@@ -9,6 +9,7 @@ db.go - the SQLite authority store: open, layout version, quarantine
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -245,15 +246,17 @@ func ensureSchema(db *sql.DB) error {
 }
 
 // quickCheck runs SQLite's integrity probe; any answer but "ok" is
-// corruption.
+// corruption. The context bounds it (#3186): this is the one boot step
+// that scales with the database's history, and an interrupt must end
+// it, not wait for it.
 /*
 ================
 quickCheck
 ================
 */
-func quickCheck(db *sql.DB) error {
+func quickCheck(ctx context.Context, db *sql.DB) error {
 	var verdict string
-	if err := db.QueryRow("PRAGMA quick_check(1)").Scan(&verdict); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA quick_check(1)").Scan(&verdict); err != nil {
 		return err
 	}
 	if verdict != "ok" {

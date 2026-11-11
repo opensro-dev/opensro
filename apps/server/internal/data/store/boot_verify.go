@@ -62,13 +62,14 @@ quickCheckState
 SQLite's integrity probe over the schema, the freelist and every table
 the boot loads, one table and its indexes at a time (PRAGMA
 quick_check(TABLE), SQLite 3.33). Any answer but "ok" is corruption of
-the state, and the caller's ladder quarantines the file. What a partial
+the state, and the caller's ladder quarantines the file. The open
+context bounds it (#3186). What a partial
 check cannot see - one page claimed by two tables, pages no table owns -
 is left to the verifier's whole-file check.
 ================
 */
-func quickCheckState(db *sql.DB) error {
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+func quickCheckState(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
 		return err
 	}
@@ -100,7 +101,7 @@ func quickCheckState(db *sql.DB) error {
 		}
 		var verdict string
 		pragma := "PRAGMA quick_check('" + strings.ReplaceAll(name, "'", "''") + "')"
-		if err := db.QueryRow(pragma).Scan(&verdict); err != nil {
+		if err := db.QueryRowContext(ctx, pragma).Scan(&verdict); err != nil {
 			return fmt.Errorf("quick_check %s: %w", name, err)
 		}
 		if verdict != "ok" {
@@ -147,7 +148,10 @@ func (s *Store) startBootVerifier() {
 		}
 		defer db.Close()
 		started := time.Now()
-		if err := fullQuickCheck(ctx, db); err != nil {
+		// The whole-file probe holds one read snapshot for its length:
+		// the writer is never blocked, and the WAL cannot start over
+		// until it ends, which the checkpointer's ceiling absorbs.
+		if err := quickCheck(ctx, db); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
@@ -202,26 +206,6 @@ func (s *Store) waitBootVerified() {
 	if verifier != nil {
 		<-verifier.stopped
 	}
-}
-
-/*
-================
-fullQuickCheck
-
-The whole-file integrity probe on the verifier's own connection. It
-holds a read snapshot, so the writer is never blocked; the WAL cannot
-start over while it runs, which the checkpointer's ceiling absorbs.
-================
-*/
-func fullQuickCheck(ctx context.Context, db *sql.DB) error {
-	var verdict string
-	if err := db.QueryRowContext(ctx, "PRAGMA quick_check(1)").Scan(&verdict); err != nil {
-		return fmt.Errorf("quick_check: %w", err)
-	}
-	if verdict != "ok" {
-		return fmt.Errorf("quick_check: %s", verdict)
-	}
-	return nil
 }
 
 /*
