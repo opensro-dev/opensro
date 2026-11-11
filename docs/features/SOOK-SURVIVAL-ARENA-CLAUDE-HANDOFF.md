@@ -265,3 +265,25 @@ verified. Its new catalogue exemptions are preserved alongside the arena
 exemption, and the generated UI census was rebuilt. Arena silk redemption now
 uses main's betaSilkStarterSilk helper rather than the removed starter constant.
 These changes are isolated from the running local game.
+
+## Full v1.150-based build and launch verified (2026-11-11)
+
+Built all 2,124 outdoor regions and the full client resource/pack pipeline
+from the original v1.150 extraction plus the checked-in Colosseum inputs.
+No newer PK2 or external asset bundle was used. The resulting browser asset
+manifest contains 42,518 files; publication-ledger verification reports zero
+unclaimed packed assets. The matching server projection contains 3,935 files
+(379,277,663 bytes), with an 84,840,523-byte archive. Its manifest digest is
+`sha256:672f85bfaf1bd7c7f869acc45c73f3b89ebcfe60398b1450a10f96fdfb42362e`.
+
+The matched Agent/GameWorld binaries and local browser client were started
+from the b09deaed source snapshot. Both backend readiness endpoints returned
+HTTP 200. The served client pack manifest was verified byte-for-byte against
+the fresh build, and the browser reached the world. All seven test characters
+retained their inventories/pet gear, skills, stats, gold and quickslots; two
+arena test-character entry counters were reset after backup. Local backup,
+launch and deployment details remain in ignored state, not product defaults.
+
+This verifies the complete local asset/server-data build and successful world
+entry. User arena testing is pending; no additional full-stage playability or
+production beta packaging/deployment result is claimed.
