@@ -239,7 +239,7 @@ def import_layers(map_data, map_index, out):
 					taken.setdefault(region, set()).add(uid)
 
 	object_ids, uids, resources = {}, {}, set()
-	files, placements, absent = {}, set(), set()
+	files, placements, absent, added_objects = {}, set(), set(), 0
 	for later_key, entry in sorted(region_files(map_index).items()):
 		inserted = []
 		later_groups = read_o2(sro_pk2.payload(map_data, entry), entry.path)
@@ -260,7 +260,11 @@ def import_layers(map_data, map_index, out):
 						known = max(rows) + 1
 						rows[known] = variant.with_id(later_rows[object_id], known)
 						paths[path.lower()] = known
-						resources.add(("Data", normalized_path(path)))
+						added_objects += 1
+					# Every member's resources, new row or not: a catalog row
+					# another import already wrote does not prove its files
+					# are in this tree. Native files win in the closure.
+					resources.add(("Data", normalized_path(path)))
 					object_ids[object_id] = known
 				if key not in uids:
 					uids[key] = allocate_uid(taken, key[0], key[1])
@@ -290,7 +294,8 @@ def import_layers(map_data, map_index, out):
 		"placements": len(placements),
 		"records": sum(len(keys) for keys in files.values()),
 		"regionFiles": len(files),
-		"objectsAdded": len(resources),
+		"objectsAdded": added_objects,
+		"objectsUsed": len(resources),
 		"regionsAbsent": sorted(absent),
 		"meshRowsLeftOut": mesh_rows
 	}
