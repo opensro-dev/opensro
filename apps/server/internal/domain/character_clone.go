@@ -297,7 +297,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 
 	switch rows {
 	case rowsAll:
-		clone.MissionInventory = stagedChild(source.MissionInventory, previousChild.MissionInventory, cloneInventoryRows)
+		clone.MissionInventory = stagedInventoryRows(source.MissionInventory, previousChild.MissionInventory)
 	case rowsCast:
 		clone.MissionInventory = cloneCastRows(source.MissionInventory)
 	default:
@@ -326,7 +326,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	if rows == rowsEquipment {
 		clone.AvatarInventory = nil
 	} else {
-		clone.AvatarInventory = stagedChild(source.AvatarInventory, previousChild.AvatarInventory, cloneAvatarInventory)
+		clone.AvatarInventory = stagedAvatarInventory(source.AvatarInventory, previousChild.AvatarInventory)
 	}
 	clone.Masteries = stagedChild(source.Masteries, previousChild.Masteries, cloneSlice)
 	clone.Skills = stagedChild(source.Skills, previousChild.Skills, cloneSlice)
@@ -482,6 +482,67 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 			cloneSlice(source[index].MagicOptions)
 	}
 	return clone
+}
+
+/*
+================
+stagedInventoryRows
+
+The staged copy's inventory, shared row by row with the previous staged
+copy: a row the door did not touch keeps the previous copy's row (its
+summon and magic options already detached there), a touched row is
+cloned whole from the live one. stagedChild shares the slice only when
+nothing in it moved, and in play something almost always moved (a
+potion drunk, a drop picked up), so the slice-level share rarely fired
+and every stage re-cloned every row's children (#3164: inventory rows
+were 0.23 TB of the live clone bytes). Rows match by position, the
+order the slice-level share already required. With no previous copy
+every row is cloned, as cloneInventoryRows does.
+================
+*/
+func stagedInventoryRows(source, previous []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	clone := make([]InventoryRow, len(source))
+	shared := len(source) == len(previous)
+	for index := range source {
+		if index < len(previous) && reflect.DeepEqual(source[index], previous[index]) {
+			clone[index] = previous[index]
+			continue
+		}
+		shared = false
+		clone[index] = source[index]
+		clone[index].Summon = CloneCOS(source[index].Summon)
+		clone[index].MagicOptions = cloneSlice(source[index].MagicOptions)
+	}
+	if shared {
+		// Nothing moved: the previous slice itself, as stagedChild
+		// handed it back before (no new slice at all).
+		return previous
+	}
+	return clone
+}
+
+/*
+================
+stagedAvatarInventory
+
+The avatar bag under the same row-by-row share as the mission bag.
+================
+*/
+func stagedAvatarInventory(source, previous *AvatarInventory) *AvatarInventory {
+	if source == nil {
+		return nil
+	}
+	var previousRows []InventoryRow
+	if previous != nil {
+		previousRows = previous.Rows
+	}
+	return &AvatarInventory{
+		Capacity: source.Capacity,
+		Rows:     stagedInventoryRows(source.Rows, previousRows),
+	}
 }
 
 /*
