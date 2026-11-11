@@ -178,7 +178,8 @@ export function createMapToolsHud( options: {
 	regionName
 
 	A region's shown name: the zone text by sector key, else the
-	regioncode key's first suffixed entry, else the key itself.
+	regioncode's zone text (or the key itself when no zone text
+	names it), else a plain "Region <id>".
 	================
 	*/
 	function regionName( region: number, zones: MapToolsPaint["zones"] ): string {
