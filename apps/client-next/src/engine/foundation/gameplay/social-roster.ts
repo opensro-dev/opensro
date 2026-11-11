@@ -229,6 +229,10 @@ export interface SocialState {
 	// The member-delta arm can announce several members in one frame
 	// (5F3340 prints per flipped row); drained alongside notice.
 	readonly notices?: readonly import("./system-notices").SystemNotice[];
+	// A cosmetic step the frame skipped (a member delta naming a member
+	// this roster does not hold); the gameplay owner drains it into the
+	// world's degraded reports, alongside notice.
+	readonly degradation?: { readonly code: string; readonly message: string; };
 	// Diagnostic state, not player-facing invented text. These native bodies
 	// require a formatted message/modal owner beyond the constant dispatcher.
 	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };

@@ -332,6 +332,43 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/debug-console.ts",
+			"functions": [
+				"createDebugConsole",
+				"appendConsoleLine",
+				"runDebugCommand"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/debug-console.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"sendGameplay",
+				"useInventorySlot",
+				"worldClock",
+				"quickslotTime"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/debug-console.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"setCameraZoomRail",
+				"setFreeCamera",
+				"setCameraCollision",
+				"setCameraWaypoints",
+				"setCameraPlaying",
+				"saveCameraWaypoints",
+				"setCursorVisible",
+				"setFreeCameraSpeed",
+				"setDamageNumbers",
+				"setRenderMode",
+				"setWorldFieldOfView",
+				"playSoundByName"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
 			"provider": "src/engine/runtime/ui/hud/quest-info.ts",
 			"functions": [
 				"closeWindow",

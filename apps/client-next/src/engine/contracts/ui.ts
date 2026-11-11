@@ -7,6 +7,9 @@ The DOM bridge reports gestures without executing gameplay. The HUD owns
 control metadata and resolves those gestures against the current view.
 ===========================================================================
 */
+import type { BugReportControl } from "./bug-report";
+import type { ExperimentalOptions } from "../foundation/ui/experimental-options";
+import type { WindowPositions } from "../foundation/ui/window-positions";
 import type { SessionState } from "./session";
 import type { GameplayState } from "./gameplay";
 import type { EntityState } from "./world";
@@ -291,4 +294,44 @@ export interface UiView {
 	readonly width: number;
 	readonly height: number;
 	readonly worldReady: boolean;
+}
+
+/*
+================
+UiExtensions
+
+Browser-only integrations are grouped separately from native preferences.
+Sinks added after the positional list (window positions) live here too,
+rather than as another createUi parameter.
+================
+*/
+export interface UiExtensions {
+	bugReport?: BugReportControl | null;
+	setRenderMode?: ( mode: number, enabled: boolean ) => void;
+	setWorldFieldOfView?: ( degrees: number ) => void;
+	setCameraZoomRail?: ( capped: boolean ) => void;
+	setFreeCamera?: ( free: boolean ) => void;
+	setFreeCameraSpeed?: ( speed: number ) => void;
+	setCameraCollision?: ( collision: boolean ) => void;
+	setCameraWaypoints?: (
+		keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
+	) => void;
+	setCameraPlaying?: ( playing: boolean ) => void;
+	setCursorVisible?: ( visible: boolean ) => void;
+	// The /id byte for the character owner's hit damage numbers (8D5856).
+	setDamageNumbers?: ( shown: boolean ) => void;
+	saveCameraWaypoints?: ( text: string ) => void;
+	// The crest register's image picker (owner's 2026-11-07 contract,
+	// #2282): resolves the picked file's bytes, or null on cancel. The
+	// page leaves it out where no picker exists; the register then
+	// prints its fail line, as a native read failure does.
+	pickCrestImage?: () => Promise<Uint8Array | null>;
+	playSoundByName?: ( name: string ) => void;
+	saveExperimental?: ( value: ExperimentalOptions ) => void;
+	saveWindowPositions?: ( value: WindowPositions ) => void;
+	// Where the Item Mall notice's closes are remembered (mall-notice-memory.ts)
+	// and the release they belong to. The page leaves both out: localStorage
+	// and the build's stamped revision are used.
+	mallNoticeStorage?: Pick<Storage, "getItem" | "setItem"> | null;
+	clientRevision?: string;
 }

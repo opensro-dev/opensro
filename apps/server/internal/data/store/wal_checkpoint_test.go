@@ -512,12 +512,20 @@ func TestWALCheckpointerGivesUpTheChaseAtThePassCap(t *testing.T) {
 TestWALStaysShortBesideASteadyWriter
 
 The #3143 measurement as a long-tier test: a writer commits about
-280 KB every 20 ms without a pause while a cycle runs after every 25
-of its commits (about twice a second; the writer's progress paces the
-cycles, never the wall clock). Before the chase the log never started over under this load (232 MB in
-45 s) and only the reset at the ceiling took it back, with writers
-locked out. With it the log restarts in most cycles, the file stays
-near journal_size_limit, and no reset runs.
+280 KB every 20 ms without a pause while a cycle runs after every 16
+of its commits (the writer's progress paces the cycles, never the
+wall clock). Before the chase the log never started over under this
+load (232 MB in 45 s) and only the reset at the ceiling took it back,
+with writers locked out. With it the log restarts under the writer,
+the file stays near journal_size_limit, and no reset runs.
+
+The verdict is driven by checkpoint results, not by how fast this
+box happens to chase (#3231): the writer may lead the completed
+cycles by one cycle of commits and no more, so the bytes written
+between two restarts are bounded whatever the machine's speed, and
+the cycles keep coming until the restarts land - maxCycles bounds a
+chase that truly never restarts, which is the failure this test
+exists for. Machine load stretches the soak; it cannot flip it.
 ================
 */
 func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
@@ -527,11 +535,18 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 		rowBytes        = 14000
 		rowsPerCommit   = 20
 		commitEvery     = 20 * time.Millisecond
-		commitsPerCycle = 25
-		// Bounds a wedged writer only: 25 commits take about half a second.
-		cycleWait   = 10 * time.Second
-		cycles      = 12
-		minRestarts = cycles / 3
+		commitsPerCycle = 16
+		// Bounds a wedged writer only: 16 commits take about a third
+		// of a second on a quiet box.
+		cycleWait = 30 * time.Second
+		// The soak runs at least minCycles cycles and ends once
+		// minRestarts restarts have landed. maxCycles also bounds the
+		// total written when they never do: 32 cycles stay under the
+		// reset ceiling, so a broken chase trips the assertions below
+		// instead of quietly resetting.
+		minCycles   = 12
+		maxCycles   = 32
+		minRestarts = 4
 		maxWALBytes = 2 * walJournalSizeLimitBytes
 	)
 	path := filepath.Join(t.TempDir(), DBFileName)
@@ -568,6 +583,12 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 	// says it stopped early, so a cycle never waits out a dead writer.
 	var commits atomic.Int64
 	var writerEnded atomic.Bool
+	// allowance caps the writer's finished commits: it may run one
+	// cycle of commits ahead of the cycles the test has completed,
+	// and no further, so a slow chase cannot let the log outgrow the
+	// bound between restarts however busy the box is (#3231).
+	var allowance atomic.Int64
+	allowance.Store(2 * commitsPerCycle)
 	// worstCommit is the writer's slowest begin-to-commit, in
 	// nanoseconds: reported, never asserted (a busy box may spike it;
 	// the absence of resets is the property this test holds).
@@ -582,6 +603,13 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 				case <-stop:
 					return nil
 				case <-ticker.C:
+				}
+				for commits.Load() >= allowance.Load() {
+					select {
+					case <-stop:
+						return nil
+					case <-time.After(time.Millisecond):
+					}
 				}
 				begun := time.Now()
 				tx, err := db.Begin()
@@ -608,8 +636,10 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 
 	c := &walCheckpointer{dbPath: path}
 	var peak int64
-	for i := 0; i < cycles; i++ {
-		target := int64(i+1) * commitsPerCycle
+	cycles := 0
+	for cycles < maxCycles {
+		allowance.Store(int64(cycles+2) * commitsPerCycle)
+		target := int64(cycles+1) * commitsPerCycle
 		wait.Eventually(t, cycleWait, "the writer's next commits before a cycle", func() bool {
 			return commits.Load() >= target || writerEnded.Load()
 		})
@@ -618,8 +648,12 @@ func TestWALStaysShortBesideASteadyWriter(t *testing.T) {
 			break
 		}
 		c.cycle()
+		cycles++
 		if size := walFileBytes(path); size > peak {
 			peak = size
+		}
+		if cycles >= minCycles && c.restarts.Load() >= minRestarts {
+			break
 		}
 	}
 	close(stop)

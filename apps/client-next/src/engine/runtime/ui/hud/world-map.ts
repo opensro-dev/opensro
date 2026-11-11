@@ -335,7 +335,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			// 575E90 flips AUTO MOVE only; keep the last automatic centre.
-			if ( id === "map-follow" ) {
+			// The map's own follow pin (issue #3210) lands here too.
+			if ( id === "map-follow" || id === "map-pin" ) {
 				mapTools.clearView();
 				mapFollow = !mapFollow;
 				mapCenter = heldCenter( pose );
@@ -343,7 +344,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			// 57F410 selects the world and Manual Movement State.
-			if ( id === "map-world" ) {
+			// The dungeon page's big globe (issue #3210) lands here too.
+			if ( id === "map-world" || id === "map-globe" ) {
 				mapTools.clearView();
 				mapPage = 0;
 				mapFollow = false;
@@ -911,6 +913,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				const tools = mapTools.present( {
 					open: true,
 					cave: caveMap !== null,
+					followed: mapFollow,
 					floors: caveMap && input.caveMaps && cavePage ?
 						caveDungeonFloors( input.caveMaps, cavePage.regionId ) :
 						[],

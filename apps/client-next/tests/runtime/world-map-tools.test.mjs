@@ -183,6 +183,7 @@ function paint( hud, over = {} ) {
 	return hud.present( {
 		open: true,
 		cave: false,
+		followed: false,
 		floors: [],
 		floor: undefined,
 		window: [ 100, 100, 800, 600 ],
@@ -299,6 +300,51 @@ test("floor picks hold per dungeon and a viewed dungeon opens on its first floor
 	hud.clearView();
 	assert.equal( hud.viewingDungeon(), false );
 	assert.equal( hud.cavePage( CAVE, outside ), undefined );
+	hud.dispose();
+});
+
+test("the dungeon page wears the later client's chrome and its arrows walk the floors", () => {
+	const hud = tools();
+	const floors = caveDungeonFloors( CAVE, 32769 );
+	const outside = { regionId: 250, x: 0, y: 0, z: 0, angle: 0 };
+	const shown = () => defined( hud.cavePage( CAVE, outside ) ).page;
+	hud.activate( "map-dungeon:1", undefined, undefined );
+	assert.equal( shown().floorIndex, 0, "viewing opens on the first floor" );
+	// The pin stands on the world too, without the globe.
+	let view = paint( hud );
+	defined( control( view, "map-pin" ) );
+	assert.equal( control( view, "map-globe" ), undefined );
+	assert.equal( view.quads.some( quad => quad.texture.endsWith( "wmap_button_passivity.png" ) ), true );
+	view = paint( hud, { followed: true } );
+	assert.equal( defined( control( view, "map-pin" ) ).selected, true );
+	assert.equal( view.quads.some( quad => quad.texture.endsWith( "wmap_button_automatic.png" ) ), true );
+	// On the dungeon page: globe, pin and the selector at the first floor.
+	view = paint( hud, { cave: true, floors, floor: shown() } );
+	defined( control( view, "map-globe" ) );
+	defined( control( view, "map-pin" ) );
+	assert.equal( view.controls.some( row => row.id.startsWith( "map-floor:" ) ), false, "the floor strip is gone" );
+	assert.equal( defined( control( view, "map-floor-down" ) ).disabled, true );
+	assert.equal( defined( control( view, "map-floor-up" ) ).disabled, false );
+	hud.activate( "map-floor-down", undefined, undefined, false );
+	assert.equal( shown().floorIndex, 0, "the down end holds" );
+	hud.activate( "map-floor-up", undefined, undefined, false );
+	assert.equal( shown().floorIndex, 1 );
+	view = paint( hud, { cave: true, floors, floor: shown() } );
+	assert.equal( defined( control( view, "map-floor-down" ) ).disabled, false );
+	hud.activate( "map-floor-up", undefined, undefined, false );
+	paint( hud, { cave: true, floors, floor: shown() } );
+	hud.activate( "map-floor-up", undefined, undefined, false );
+	assert.equal( shown().floorIndex, 3 );
+	view = paint( hud, { cave: true, floors, floor: shown() } );
+	assert.equal( defined( control( view, "map-floor-up" ) ).disabled, true );
+	hud.activate( "map-floor-up", undefined, undefined, false );
+	assert.equal( shown().floorIndex, 3, "the up end holds" );
+	hud.activate( "map-floor-down", undefined, undefined, false );
+	assert.equal( shown().floorIndex, 2 );
+	// The entrance's own icon opens its dungeon, as its label does.
+	hud.clearView();
+	hud.activate( "map-dungeon-icon:2", undefined, undefined );
+	assert.equal( defined( hud.cavePage( CAVE, outside ) ).page.regionId, 32775 );
 	hud.dispose();
 });
 
@@ -441,29 +487,62 @@ test("the map opens with the filter and list on, and the drawer honours the filt
 	}
 });
 
+/*
+================
+pageShown
+
+The cave page image the last frame painted, by its published name.
+================
+*/
+function pageShown( f, image ) {
+	return f.scenes.at( -1 )?.quads.some( quad => quad.texture.endsWith( image ) ) ?? false;
+}
+
 test("dungeon entrances open their map and a dungeon starts on the player's floor", () => {
 	const f = fixture();
 	try {
 		f.activate( "open-window:Map" );
+		defined( control( f.step(), "map-pin" ), "the follow pin stands on the world map" );
 		// Stand at the Donwhang cave mouth the world map itself names.
 		f.moveTo( defined( worldMapDungeonPose( 0x8001 ), "the cave mouth pose" ) );
 		let view = f.step();
 		defined( control( view, "map-dungeon:1" ), "the cave entrance is offered" );
-		view = f.activate( "map-dungeon:1" );
-		for ( const floor of [ 0, 1, 2, 3 ] ) defined( control( view, "map-floor:32769:" + floor ) );
-		assert.equal( defined( control( view, "map-floor:32769:0" ) ).selected, true, "the first floor opens" );
-		view = f.activate( "map-floor:32769:2" );
-		assert.equal( defined( control( view, "map-floor:32769:2" ) ).selected, true );
+		// The entrance's own icon takes the click too (issue #3210).
+		const icon = defined( control( view, "map-dungeon-icon:1" ) );
+		assert.deepEqual( [ icon.rect[2], icon.rect[3] ], [ 16, 16 ], "the icon control is the marker itself" );
+		view = f.activate( "map-dungeon-icon:1" );
+		// The dungeon page wears the later client's chrome: globe and
+		// pin at the top right, the floor selector down the right edge.
+		defined( control( view, "map-globe" ), "the globe back to the world" );
+		defined( control( view, "map-pin" ) );
+		assert.equal( control( view, "map-floor:32769:0" ), undefined, "the floor strip is gone" );
+		assert.equal(
+			defined( control( view, "map-floor-down" ) ).disabled,
+			true,
+			"viewing opens on the first floor"
+		);
+		assert.equal( pageShown( f, "map_world_donf01.png" ), true, "the first floor opens" );
+		view = f.activate( "map-floor-up" );
+		assert.equal( defined( control( view, "map-floor-down" ) ).disabled, false );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), true );
+		// The globe is the way back.
+		view = f.activate( "map-globe" );
+		defined( control( view, "map-level-filter" ), "the world tools are back" );
+		assert.equal( control( view, "map-floor-up" ), undefined );
 		// Inside on the second floor, the selector starts there.
 		view = f.moveTo( { regionId: 32769, x: 100, y: 0, z: 100, angle: 0 }, { navigationFloor: 1 } );
-		assert.equal( control( view, "map-level-filter" ), undefined, "the cave strip replaces the world tools" );
+		assert.equal( control( view, "map-level-filter" ), undefined, "the cave page replaces the world tools" );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), true, "the player's own floor is shown" );
+		assert.equal( defined( control( view, "map-floor-down" ) ).disabled, false );
+		view = f.activate( "map-floor-up" );
+		assert.equal( pageShown( f, "map_world_donf03.png" ), true );
+		view = f.activate( "map-floor-up" );
+		assert.equal( pageShown( f, "map_world_donf04.png" ), true );
 		assert.equal(
-			defined( control( view, "map-floor:32769:1" ) ).selected,
+			defined( control( view, "map-floor-up" ) ).disabled,
 			true,
-			"the player's own floor is selected"
+			"the last floor has no floor below"
 		);
-		view = f.activate( "map-floor:32769:3" );
-		assert.equal( defined( control( view, "map-floor:32769:3" ) ).selected, true );
 	} finally {
 		f.dispose();
 	}

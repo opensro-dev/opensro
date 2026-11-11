@@ -359,7 +359,7 @@ import {
 	inventorySignatures,
 	journalInventoryFrame
 } from "@/engine/foundation/gameplay/inventory-journal";
-import type { WireFrame } from "@/engine/contracts/network";
+import type { Degradation, WireFrame } from "@/engine/contracts/network";
 /*
 ================
 unlimitedItemIds
@@ -410,6 +410,9 @@ const REFERENCE_ANSWER_LIMIT_MS = 90000;
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
+// The social lane's pending degraded steps; the world reports each code
+// once per session, so a longer queue adds nothing.
+const MAX_SOCIAL_DEGRADATIONS = 16;
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
@@ -508,6 +511,10 @@ export function createGameplay(
 	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
+	// Whether the listing stood over a full party at the watcher's
+	// last look: the delete fires on the fill, once (634D30); while
+	// the fill stands no second delete is composed.
+	let partyMatchFullStanding = false;
 	// The shard's configured level cap, published at world entry (#1749);
 	// the native cap until a bootstrap says otherwise.
 	let levelCap = NATIVE_LEVEL_CAP;
@@ -1212,6 +1219,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
+	// The social lane's skipped cosmetic steps until the world drains them
+	// (takeDegradations); bounded so an undrained owner cannot grow it.
+	const socialDegradations: Degradation[] = [];
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = {
 		country: () => undefined,
@@ -4718,17 +4728,37 @@ Packet handling must not depend on which HUD panel is currently open.
 					for ( const flip of nextSocial.notices ?? [] ) {
 						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
 					}
+					if ( nextSocial.degradation && socialDegradations.length < MAX_SOCIAL_DEGRADATIONS ) {
+						socialDegradations.push( { ...nextSocial.degradation, frame } );
+					}
 					social = withMemberCountries(
-						nextSocial.notice || nextSocial.notices ?
-							{ ...nextSocial, notice: undefined, notices: undefined } :
+						nextSocial.notice || nextSocial.notices || nextSocial.degradation ?
+							{ ...nextSocial, notice: undefined, notices: undefined, degradation: undefined } :
 							nextSocial
 					);
-					// 634DC9: a party that fills while the player's
+					// 634D30: a party that fills while the player's
 					// listing stands arms the delete banner's
-					// COMPLETE2 form (the delete answer consumes it).
-					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) {
+					// COMPLETE2 form (the delete answer consumes it),
+					// and the watcher itself withdraws the listing:
+					// NetClient_Send7535 (6FE130) carries the own
+					// record's id, once per fill.
+					const fullStanding = !!(
+						partyMatching.own && partyIsFull( social.members.length, social.options )
+					);
+					if ( fullStanding ) {
 						partyMatchFullLatch = true;
+						if ( !partyMatchFullStanding && !partyMatching.pending ) {
+							const deletion = partyMatchRequest(
+								partyMatching,
+								{ kind: "party-match-delete" },
+								now,
+								levelCap
+							);
+							if ( deletion.frame ) sendWhenLive( deletion.frame );
+							partyMatching = deletion.state;
+						}
 					}
+					partyMatchFullStanding = fullStanding;
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
@@ -5965,9 +5995,9 @@ die
 		},
 		takeDisplacements: combat.takeDisplacements,
 		takeCancellations: combat.takeCancellations,
-		// The inventory owner's skipped cosmetic steps, for the world's
-		// degraded reports (core takeDegradations drains both owners).
-		takeDegradations: () => inventory.takeDegradations(),
+		// The inventory and social lanes' skipped cosmetic steps, for the
+		// world's degraded reports (core takeDegradations drains both owners).
+		takeDegradations: () => [ ...inventory.takeDegradations(), ...socialDegradations.splice( 0 ) ],
 		/*
 ================
 cancelCast

@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-spawn-fades.ts - the CIDecoAppear spawn ramps of drawn characters
+spawn-fades.ts - the CIDecoAppear spawn ramps of drawn monsters
 
-Every spawned player, monster and COS fades in over its first drawable
-frames (spawn-fade.ts holds the native curve). This owner keeps the armed
-ramps between frames: one per spawned entity, plus one for a monster's
-linked ride, which natively gets its own CIDecoAppear (861EE2).
+Every spawned monster fades in over its first drawable frames
+(spawn-fade.ts holds the native curve and the rule that keeps players,
+COS and NPCs out of it). This owner keeps the armed ramps between frames:
+one per spawned monster, plus one for a monster's linked ride, which
+natively gets its own CIDecoAppear (861EE2).
 
 The ride gids belong to the auxiliary presentation; this owner only reads
 them. characters.ts calls apply from finalization, at the point where the
@@ -50,7 +51,7 @@ createSpawnFades
 ================
 */
 export function createSpawnFades( linkedRides: ReadonlyMap<number, number> ) {
-	// CIDecoAppear (spawn-fade.ts): each spawned character's ramp start, null
+	// CIDecoAppear (spawn-fade.ts): each spawned monster's ramp start, null
 	// while armed and waiting for its first drawable frame. fadeSeen holds the
 	// gids already armed, so one present the whole time fades only once.
 	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();

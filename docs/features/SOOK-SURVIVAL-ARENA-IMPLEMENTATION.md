@@ -373,3 +373,19 @@ matched 379,277,663-byte server projection. Both services reached readiness;
 all seven existing characters retained inventory/pet gear, skills, stats,
 gold and quickslots. This review work uses a separate checkout and does not
 change that running deployment. No new full arena playthrough is claimed.
+
+## Approved review and main-conflict follow-up (2026-11-11)
+
+The new opensro4 review approved the prior corrections at 55e5053; no new
+code findings were reported, and the standalone visual-fix PR had no review
+comments. Main then advanced through 00b41e2, causing only a generated UI
+census conflict. Regenerated it from the merged source. The merged debug
+console lacked an ownership entry and imported its owner's UiExtensions
+type, violating the ownership boundary. Registered the module and moved that
+unchanged type into the existing shared UI contract; no runtime behavior,
+protocol or store version changed in this correction.
+
+Client quick checks, 54 focused client tests, 21 asset/build tests and the
+full sookarena/action/GameWorld Go packages pass. Encoding, formatting and
+source-size checks pass. The running game and its databases were untouched.
+The separate visual-fix branch remains unchanged with passing CI.
