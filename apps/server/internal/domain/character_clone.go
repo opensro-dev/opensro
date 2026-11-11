@@ -504,6 +504,14 @@ func stagedInventoryRows(source, previous []InventoryRow) []InventoryRow {
 	if source == nil {
 		return nil
 	}
+	if len(source) == 0 {
+		// An empty bag stays empty, never the previous copy's nil:
+		// the persisted record distinguishes the two (a nil slice
+		// and an empty one encode differently), and the staged copy
+		// must claim exactly what the record holds or the commit
+		// path's section comparison can skip a write restart needs.
+		return []InventoryRow{}
+	}
 	clone := make([]InventoryRow, len(source))
 	shared := len(source) == len(previous)
 	for index := range source {
@@ -679,23 +687,6 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	clone.MovementMode = clonePointer(source.MovementMode)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
-}
-
-/*
-================
-cloneAvatarInventory
-
-Avatar rows carry the same nested item options as ordinary inventory.
-================
-*/
-func cloneAvatarInventory(source *AvatarInventory) *AvatarInventory {
-	if source == nil {
-		return nil
-	}
-	return &AvatarInventory{
-		Capacity: source.Capacity,
-		Rows:     cloneInventoryRows(source.Rows),
-	}
 }
 
 /*
