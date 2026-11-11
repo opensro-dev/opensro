@@ -25,6 +25,8 @@ import path from "node:path";
 import { resolveMainCheckout } from "../lib/generatedRoot.mjs";
 
 export const LOCAL_WORLD_ROOT_ENV = "SRO_LOCAL_STATE_ROOT";
+// countWorldCharacters' answer for a world that exists but was not counted.
+export const WORLD_UNCOUNTED = "uncounted";
 
 /*
 ================
@@ -52,11 +54,14 @@ export function resolveLocalWorldRoot( checkout, env = process.env ) {
 ================
 countWorldCharacters
 
-How many characters the authority in authorityDir holds, or null when
-that cannot be read (no authority yet, or a Node without node:sqlite).
-The runner prints it before anything opens the store, so an empty world
-is named at the start instead of discovered at the character select.
-The read is read-only and happens before any child starts.
+How many characters the authority in authorityDir holds: a number, null
+when there is no authority yet, or WORLD_UNCOUNTED when one exists but
+cannot be counted here (a Node without node:sqlite, a store this read
+cannot open). The two are never confused: "no world yet" is said only
+when no store file exists. The runner prints the result before anything
+opens the store, so an empty world is named at the start instead of
+discovered at the character select. The read is read-only and happens
+before any child starts.
 ================
 */
 export async function countWorldCharacters( authorityDir ) {
@@ -77,7 +82,7 @@ export async function countWorldCharacters( authorityDir ) {
 			store.close();
 		}
 	} catch {
-		return null;
+		return WORLD_UNCOUNTED;
 	} finally {
 		process.emitWarning = emitWarning;
 	}
@@ -97,6 +102,8 @@ export function describeWorld( worldRoot, checkoutStateDir, characters ) {
 		" (shared, not this checkout's)";
 	const holds = characters === null ?
 		"no world yet: a new, empty one is created now" :
+		characters === WORLD_UNCOUNTED ?
+		"an existing world (its characters were not counted)" :
 		characters === 0 ?
 		"0 characters: an empty world" :
 		`${characters} character${characters === 1 ? "" : "s"}`;

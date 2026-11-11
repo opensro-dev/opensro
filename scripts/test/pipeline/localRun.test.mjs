@@ -33,7 +33,8 @@ import {
 	countWorldCharacters,
 	describeWorld,
 	LOCAL_WORLD_ROOT_ENV,
-	resolveLocalWorldRoot
+	resolveLocalWorldRoot,
+	WORLD_UNCOUNTED
 } from "../../local/worldRoot.mjs";
 
 // The two verdicts the offline upgrader prints
@@ -189,12 +190,21 @@ test("the world line names an empty world and a shared one", async t => {
 	const root = mkdtempSync( path.join( os.tmpdir(), "sro-world-line-" ) );
 	t.after( () => rmSync( root, { recursive: true, force: true } ) );
 	assert.equal( await countWorldCharacters( path.join( root, "no-authority" ) ), null );
+	// A store that exists but cannot be counted is never called "no world".
+	const unreadable = path.join( root, "unreadable" );
+	mkdirSync( unreadable );
+	writeFileSync( path.join( unreadable, "state.db" ), "not a database" );
+	assert.equal( await countWorldCharacters( unreadable ), WORLD_UNCOUNTED );
 
 	const own = path.join( root, ".state" );
 	assert.equal( describeWorld( own, own, 4 ), `Local world: ${own} - 4 characters` );
 	assert.equal( describeWorld( own, own, 1 ), `Local world: ${own} - 1 character` );
 	assert.match( describeWorld( own, own, 0 ), /0 characters: an empty world$/ );
 	assert.match( describeWorld( own, own, null ), /no world yet: a new, empty one is created now$/ );
+	assert.match(
+		describeWorld( own, own, WORLD_UNCOUNTED ),
+		/an existing world \(its characters were not counted\)$/
+	);
 	assert.match(
 		describeWorld( own, path.join( root, "other" ), 4 ),
 		/\(shared, not this checkout's\) - 4 characters$/
