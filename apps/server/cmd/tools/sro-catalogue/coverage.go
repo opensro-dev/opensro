@@ -142,6 +142,7 @@ var catalogueExempt = map[string]string{
 	"SRO_TRADE_FIVE_STAR_THIEF_PERCENT":       "the numbers of the 5-star caravan stakes: they depend on a caravan's stars at sale or kill time, stated on the rules page",
 	"SRO_TRADE_FIVE_STAR_HUNTER_PERCENT":      "the numbers of the 5-star caravan stakes: they depend on a caravan's stars at sale or kill time, stated on the rules page",
 	"SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT":      "the numbers of the 5-star caravan stakes: they depend on a caravan's stars at sale or kill time, stated on the rules page",
+	"SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT": "the numbers of the 5-star caravan stakes: they depend on a caravan's stars at sale or kill time, stated on the rules page",
 	"SRO_RAISED_GOLD_CAPS":                    "stall and warehouse gold limits at runtime; monsters.json publishes heap sizes, not wallet caps",
 	"SRO_REVERSE_RETURN_MAP":                  "destinations the reverse return scroll offers at runtime; no catalogue file publishes return destinations",
 	"SRO_HUNTING_GUIDE":                       "hunting areas drawn on the world map from the monster data at runtime; monsters.json publishes the same monsters either way",

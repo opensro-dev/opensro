@@ -70,6 +70,7 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_FIVE_STAR_THIEF_PERCENT":       "shown in the trade tiers rule",
 	"SRO_TRADE_FIVE_STAR_HUNTER_PERCENT":      "shown in the trade tiers rule",
 	"SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT":      "shown in the trade tiers rule",
+	"SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT": "shown in the trade tiers rule",
 	"SRO_THIEF_PARTY_PERCENT_EACH":            "shown in the thief party bonus rule",
 	"SRO_THIEF_PARTY_PERCENT_CAP":             "shown in the thief party bonus rule",
 	"SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER": "shown in the trade job bonus rule",
@@ -419,10 +420,11 @@ func publicRules() publicstats.RulesResponse {
 					fmt.Sprintf("Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +%d%%, Hotan +%d%%, Samarkand +%d%%, Constantinople +%d%%.",
 						settings.Int(tunables.TradeRouteDonwhangPercent), settings.Int(tunables.TradeRouteHotanPercent),
 						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)) +
-					fmt.Sprintf(" A 5-star caravan is a target: everyone nearby sees its stars over the transport. A thief who sells a 5-star load earns +%d%% more gold, "+
-						"hunters escorting a trader's 5-star sale earn +%d%% more gold, and a hunter who kills a thief caught attacking a 5-star caravan earns +%d%% more job experience.",
-						settings.Int(tunables.TradeFiveStarThiefPercent), settings.Int(tunables.TradeFiveStarHunterPercent),
-						settings.Int(tunables.TradeFiveStarBountyPercent)),
+				fmt.Sprintf(" A 5-star caravan is a target: everyone nearby sees its stars over the transport. A thief who sells a 5-star load earns +%d%% more gold, "+
+					"hunters escorting a trader's 5-star sale earn +%d%% more gold, and a hunter who kills a thief caught attacking a 5-star caravan earns up to +%d%% more job experience: "+
+					"the bounty scales with the robbed cargo against the largest ordinary full load, and never pays less than +%d%%.",
+					settings.Int(tunables.TradeFiveStarThiefPercent), settings.Int(tunables.TradeFiveStarHunterPercent),
+					settings.Int(tunables.TradeFiveStarBountyPercent), settings.Int(tunables.TradeFiveStarBountyFloorPercent)),
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
 			{Flag: action.EnvTeleportGrace, On: action.TeleportGraceFromEnv(),
 				Native: "Only a revival makes you briefly untouchable; a scroll, gate or move arrives as attackable as you left.",

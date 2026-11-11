@@ -227,6 +227,7 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_FIVE_STAR_THIEF_PERCENT", NomadVar: "trade_five_star_thief_percent", Default: "50"},
 	{Env: "SRO_TRADE_FIVE_STAR_HUNTER_PERCENT", NomadVar: "trade_five_star_hunter_percent", Default: "50"},
 	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", NomadVar: "trade_five_star_bounty_percent", Default: "50"},
+	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT", NomadVar: "trade_five_star_bounty_floor_percent", Default: "10"},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
