@@ -17,6 +17,13 @@ absent from both the later archives and the native tree, or whose name text
 is missing, is skipped and reported, never half imported (the Nasrun mounts
 are the known case).
 
+A third source (owner ask #3254) reads the v2.355 export's avatars from
+one optional pinned archive named by SRO_AVATARS_ZIP, packed by
+pack_avatars.py and never committed: the game builds byte-identically
+without it. Its rows take any codename (that client brands its sets), are
+listed on authored mall boards instead of that client's own tabs, and the
+archive's sha256 is pinned in avatars_archive_pins.json.
+
 Rows keep their later-client identity when it is free in the native tables
 and the character data; the few that clash take a fresh one above every
 known identity, remembered in the marker so a rebuild never moves an item.
@@ -38,6 +45,7 @@ from pathlib import Path
 import re
 
 import alexandria_npcs as text_tables
+import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
@@ -61,7 +69,16 @@ V1696_PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 V1696_ENV = "SRO_V1696_ROOT"
 V1696_SOURCE = {"name": "v1696", "shard": "itemdata_100001.txt", "report": ".opensro-mall-avatars-v1696.json",
 	"pins": V1696_PIN_FILE}
-SOURCES = (VSRO_SOURCE, V1696_SOURCE)
+# The v2.355 export's avatars (owner ask #3254): one pinned archive the
+# packer wrote outside the repository, named by SRO_AVATARS_ZIP. Unset or
+# absent removes this source's import and changes nothing else. Its rows
+# are listed on authored boards (below), not on a later client's tabs.
+AVATARS_PIN_FILE = Path(__file__).with_name("avatars_archive_pins.json")
+AVATARS_ENV = "SRO_AVATARS_ZIP"
+AVATARS_PIN_FORMAT = avatar_archive.PIN_FORMAT
+AVATARS_SOURCE = {"name": "avatars", "shard": "itemdata_100002.txt", "report": ".opensro-mall-avatars-archive.json",
+	"pins": AVATARS_PIN_FILE, "zip": True, "boards": True}
+SOURCES = (VSRO_SOURCE, V1696_SOURCE, AVATARS_SOURCE)
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 FOLDERS = shared.FOLDERS
 TEXT_ROOT = shared.TEXT_ROOT
@@ -117,6 +134,17 @@ SCRAP_ZERO_COLUMNS = 16
 SCRAP_SERIAL = 28
 # A goods row's slot is one byte on the wire (mallcatalog.go MallAddress.Slot).
 MALL_SLOTS = 256
+# Port-only, not native (design comment on #3254): the archive source's
+# avatars list on two authored boards in the avatar shop's group - custom
+# sets, and event sets under their own board - one generated refshoptab
+# row per page of MALL_SLOTS goods, page two and onward suffixed _2, _3.
+# The client groups the pages by board code; without the archive neither
+# board exists and the mall is exactly the native one.
+BOARD_GROUP = "MALL_AVATAR_GROUP1"
+BOARD_TABS = {"cu": "MALL_AVATAR_BOARD_CU", "ev": "MALL_AVATAR_BOARD_EV"}
+BOARD_LABELS = {"cu": "UIIT_STT_SILKMALL_AVATAR_BOARD_CU", "ev": "UIIT_STT_SILKMALL_AVATAR_BOARD_EV"}
+BOARD_LABEL_TEXT = {"cu": "Custom avatars", "ev": "Event avatars"}
+EVENT_WORD = "EVENT"
 
 
 # ================
@@ -137,12 +165,15 @@ def enabled(env=os.environ, flag=FLAG):
 
 # ================
 # candidate
+#
+# A later client's avatar row. The board source takes any codename: the
+# v2.355 export brands its sets instead of using ITEM_MALL_AVATAR_*.
 # ================
-def candidate(row):
+def candidate(row, any_prefix=False):
 	code = row[items.CODENAME]
 	return (
 		row[items.SERVICE] == SERVICE_ON and row[items.TYPE_FIRST:items.TYPE_THIRD + 1] == AVATAR_TYPES
-		and code.startswith(CODE_PREFIX) and not any(word in code for word in EXCLUDED_WORDS)
+		and (any_prefix or code.startswith(CODE_PREFIX)) and not any(word in code for word in EXCLUDED_WORDS)
 	)
 
 
@@ -165,13 +196,14 @@ def previous_targets(prior):
 # missing(row) returns the names of a row's absent resources. Identities:
 # a retained one first, else the later one when free, else a fresh one.
 # ================
-def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, missing=lambda row: [], texts=None):
+def select_avatars(native_rows, later_rows, reserved_ids=(), previous=None, missing=lambda row: [], texts=None,
+		any_prefix=False):
 	native, later = items.index_items(native_rows), items.index_items(later_rows)
 	taken = {int(row[items.IDENTITY]) for row in native_rows} | set(reserved_ids)
 	previous = previous or {}
 	chosen, skipped, existing = [], [], []
 	for code, row in sorted(later.items()):
-		if not candidate(row):
+		if not candidate(row, any_prefix):
 			continue
 		if code in native:
 			existing.append(code)
@@ -265,7 +297,7 @@ def avatar_kind(code):
 # tab's present slots. Avatars with no package, no sale or no price stay
 # unlisted and are reported.
 # ================
-def mall_rows(later, avatars, current, native_package_ids, list_all=False):
+def mall_rows(later, avatars, current, native_package_ids, list_all=False, ignore_packages=frozenset()):
 	scrap_of = {row[3]: row[2] for row in later["refscrapofpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 20}
 	package_row = {row[3]: row for row in later["refpackageitem.txt"] if row[0] == SERVICE_ON and len(row) >= 9}
 	sale = {row[3]: (row[2], int(row[4])) for row in later["refshopgoods.txt"] if row[0] == SERVICE_ON and len(row) >= 5}
@@ -273,9 +305,13 @@ def mall_rows(later, avatars, current, native_package_ids, list_all=False):
 	for row in later["refpricepolicyofitem.txt"]:
 		if row[0] == SERVICE_ON and len(row) > MALL_PRICE_AMOUNT:
 			prices[row[2]].append(row)
+	# Slots follow the present goods, but a later source's stale goods
+	# do not count: that source strips and re-lists them after this
+	# pass, so appending past them walks the tab upward a rebuild at a
+	# time until the one-byte slot overflows.
 	next_slot = collections.Counter()
 	for row in current["refshopgoods.txt"]:
-		if len(row) >= 5 and row[2] in MALL_TAB_FOR.values():
+		if len(row) >= 5 and row[2] in MALL_TAB_FOR.values() and row[3] not in ignore_packages:
 			next_slot[row[2]] = max(next_slot[row[2]], int(row[4]) + 1)
 	rows = {name: [] for name, _ in MALL_TABLES}
 	packages, unlisted, authored = [], [], []
@@ -440,6 +476,100 @@ def author_package(rows, row, ids):
 
 
 # ================
+# board_of
+#
+# The board an archive avatar lists on: event sets keep a board of their
+# own, every other set is a custom set (design comment on #3254).
+# ================
+def board_of(code):
+	parts = code.split("_")
+	return "ev" if len(parts) > 1 and parts[1] == EVENT_WORD else "cu"
+
+
+# ================
+# board_rows
+#
+# The mall rows listing the archive avatars on their boards: every avatar
+# gets an authored package at the native silk tier for its kind, and the
+# goods fill one board page of MALL_SLOTS at a time in codename order, so
+# no tab ever passes the wire's one-byte slot. Returns the rows, the
+# marker summary and the (board, tab code) pages in listing order.
+# ================
+def board_rows(avatars, current, native_package_ids):
+	rows = {name: [] for name, _ in MALL_TABLES}
+	ids = AuthoredIds({name: [] for name, _ in MALL_TABLES}, current, native_package_ids)
+	per_board = collections.defaultdict(list)
+	for row in sorted(avatars, key=lambda row: row[items.CODENAME]):
+		per_board[board_of(row[items.CODENAME])].append(row)
+	packages, pages = [], []
+	for board in sorted(per_board):
+		members = per_board[board]
+		for page, start in enumerate(range(0, len(members), MALL_SLOTS)):
+			tab = BOARD_TABS[board] if page == 0 else f"{BOARD_TABS[board]}_{page + 1}"
+			pages.append((board, tab))
+			for slot, row in enumerate(members[start:start + MALL_SLOTS]):
+				package = author_package(rows, row, ids)
+				rows["refshopgoods.txt"].append(["1", NATIVE_SOURCE, tab, package, str(slot)] + ["-1", items.UNUSED] * 4)
+				packages.append(package)
+	summary = {
+		"packages": packages, "listed": len(packages),
+		"authored": [row[items.CODENAME] for row in avatars], "unlisted": [],
+		"tabs": [tab for _, tab in pages],
+	}
+	return rows, summary, pages
+
+
+# ================
+# board_tab_rows
+#
+# One refshoptab row per board page, in the avatar shop's group (the
+# dress tab's own group), identities past every taken one. Appended
+# last, the pages shift no other tab's index.
+# ================
+def board_tab_rows(current, pages):
+	group = next((row[4] for row in current if len(row) > 4 and row[SHOP_TAB_CODE] == "MALL_AVATAR_DRESS"), BOARD_GROUP)
+	taken = {int(cells[2]) for cells in current if len(cells) > 2 and cells[2].isdigit()}
+	identity = max(taken, default=0) + 1
+	rows = []
+	for board, code in pages:
+		rows.append(["1", NATIVE_SOURCE, str(identity), code, group, BOARD_LABELS[board]])
+		identity += 1
+	return rows
+
+
+# ================
+# board_label_rows
+#
+# The textuisystem rows naming the board tabs, one per board (its pages
+# share the label). Cells without a translation take the English text,
+# as the VSRO client authors its own rows.
+# ================
+def board_label_rows(boards):
+	return [
+		["1", BOARD_LABELS[board], BOARD_LABEL_TEXT[board], "", "", BOARD_LABEL_TEXT[board], BOARD_LABEL_TEXT[board],
+			BOARD_LABEL_TEXT[board], BOARD_LABEL_TEXT[board], BOARD_LABEL_TEXT[board]]
+		for board in boards
+	]
+
+
+# ================
+# strip_text_rows
+#
+# Drops the textuisystem rows a previous run added, by key.
+# ================
+def strip_text_rows(output, keys):
+	if not keys:
+		return
+	path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
+	if not path.exists():
+		return
+	lines = tables.decode_table(path.read_bytes()).splitlines()
+	kept = [line for line in lines if not (len(line.split("\t")) > 1 and line.split("\t")[1] in keys)]
+	if len(kept) != len(lines):
+		write_atomically(path, b"\xff\xfe" + ("\r\n".join(kept) + "\r\n").encode("utf-16-le"))
+
+
+# ================
 # remove_import
 #
 # Off (or a rebuild) drops the shard, its manifest line and its mall rows,
@@ -450,6 +580,7 @@ def remove_import(output, marker, shard, manifest):
 		mall = json.loads(marker.read_text(encoding="utf-8")).get("mall", {})
 		strip_mall(output, set(mall.get("packages", [])))
 		strip_tabs(output, set(mall.get("tabs", [])))
+		strip_text_rows(output, set(mall.get("tabLabels", [])))
 	if shard.exists():
 		shard.unlink()
 	if manifest.exists():
@@ -570,16 +701,11 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 	if not enabled():
 		remove_import(output, marker, shard, manifest)
 		return {"enabled": False, "added": 0}
-	if vsro_root is None or not all((Path(vsro_root) / f"{name}.pk2").is_file() for name in FOLDERS):
+	if not source_present(vsro_root, source):
 		remove_import(output, marker, shard, manifest)
 		return {"enabled": False, "added": 0, "skipped": "no later client found"}
 	with ExitStack() as stack:
-		archives, identities = {}, {}
-		for name in FOLDERS:
-			handle = stack.enter_context(open(Path(vsro_root) / f"{name}.pk2", "rb"))
-			data = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
-			archives[name] = (data, {shared.normalized_path(entry.path): entry for entry in sro_pk2.read_directory(data)})
-			identities[name] = tables.sha256_of(data)
+		archives, identities = open_archives(stack, vsro_root, source)
 		media, index = archives["Media"]
 		# ================
 		# read_later
@@ -607,7 +733,7 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		# An earlier source's avatars are already in the game: this source
 		# skips their codenames as it skips native ones, and keeps clear of
 		# their identities.
-		for earlier in SOURCES[:SOURCES.index(source)]:
+		for earlier in SOURCES[:source_index(source)]:
 			earlier_shard = output / TEXT_ROOT / earlier["shard"]
 			if earlier_shard.exists():
 				earlier_rows = tables.table_rows(earlier_shard.read_bytes())
@@ -629,22 +755,50 @@ def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 		avatars, summary = select_avatars(
 			native_rows, later_rows, reserved, previous_targets(prior),
 			resource_check(archives, native_paths), known_text,
+			any_prefix=bool(source.get("boards")),
 		)
 		merged_text, missing_descriptions = items.merge_texts(base_text, later_texts, avatars)
 		assets = shared.copy_asset_closure(avatars, native, output, archives)
 		strip_mall(output, set(prior.get("mall", {}).get("packages", [])))
 		strip_tabs(output, set(prior.get("mall", {}).get("tabs", [])))
+		strip_text_rows(output, set(prior.get("mall", {}).get("tabLabels", [])))
 		mall_files = {name: safe_target(output / TEXT_ROOT, name) for name, _ in MALL_TABLES}
 		mall_summary = {"packages": [], "listed": 0, "unlisted": [], "note": "no mall tables in the later client or native tree"}
-		if all(sro_pk2.fold_ascii(name) in base_paths and tables.TEXTDATA + name in index for name, _ in MALL_TABLES):
+		if source.get("boards"):
+			current = {
+				name: tables.table_rows(mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name))
+				for name, _ in MALL_TABLES
+			}
+			mall, mall_summary, pages = board_rows(
+				avatars, current, {int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2},
+			)
+			for name, _ in MALL_TABLES:
+				raw = mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name)
+				write_atomically(mall_files[name], text_tables.append_rows(raw, mall[name]))
+			tab_path = safe_target(output / TEXT_ROOT, SHOP_TAB_TABLE)
+			raw_tabs = tab_path.read_bytes() if tab_path.exists() else read_native(SHOP_TAB_TABLE)
+			write_atomically(tab_path, text_tables.append_rows(raw_tabs, board_tab_rows(tables.table_rows(raw_tabs), pages)))
+			boards = sorted({board for board, _ in pages})
+			mall_summary["tabLabels"] = [BOARD_LABELS[board] for board in boards]
+			ui_path = safe_target(output / TEXT_ROOT, "textuisystem.txt")
+			raw_ui = ui_path.read_bytes() if ui_path.exists() else read_native("textuisystem.txt")
+			write_atomically(ui_path, text_tables.append_rows(raw_ui, board_label_rows(boards)))
+		elif all(sro_pk2.fold_ascii(name) in base_paths and tables.TEXTDATA + name in index for name, _ in MALL_TABLES):
 			current = {
 				name: tables.table_rows(mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name))
 				for name, _ in MALL_TABLES
 			}
 			later_mall = {name: later_table_rows(media, index, name) for name, _ in MALL_TABLES}
+			# Goods a later source listed in a previous build are stale:
+			# that source strips and re-lists them after this pass.
+			stale_packages = set()
+			for later_source in SOURCES[source_index(source) + 1:]:
+				later_marker = output / later_source["report"]
+				if later_marker.exists():
+					stale_packages |= set(json.loads(later_marker.read_text(encoding="utf-8")).get("mall", {}).get("packages", []))
 			mall, mall_summary = mall_rows(
 				later_mall, avatars, current, {int(row[2]) for row in current["refpackageitem.txt"] if len(row) > 2},
-				enabled(flag=LIST_ALL_FLAG),
+				enabled(flag=LIST_ALL_FLAG), stale_packages,
 			)
 			for name, _ in MALL_TABLES:
 				raw = mall_files[name].read_bytes() if mall_files[name].exists() else read_native(name)
@@ -698,14 +852,61 @@ def source_pins(source):
 
 
 # ================
+# source_index
+#
+# A source's place in import order, found by its shard: each source owns
+# exactly one shard, so a caller may pass an adjusted copy of a source.
+# ================
+def source_index(source):
+	for index, known in enumerate(SOURCES):
+		if known["shard"] == source["shard"]:
+			return index
+	raise ValueError(f"unknown avatar source shard: {source['shard']}")
+
+
+# ================
+# source_present
+#
+# A pk2 source is present when its client folder holds every archive;
+# the pinned-archive source when the archive file itself is there.
+# ================
+def source_present(root, source):
+	if root is None:
+		return False
+	if source.get("zip"):
+		return Path(root).is_file()
+	return all((Path(root) / f"{name}.pk2").is_file() for name in FOLDERS)
+
+
+# ================
+# open_archives
+#
+# One source's archives as (data, index) pairs plus the identities the
+# marker records: pk2 sources mmap their client archives, the pinned
+# archive comes from avatar_archive.
+# ================
+def open_archives(stack, root, source):
+	if source.get("zip"):
+		return avatar_archive.open_archive(root, source["pins"])
+	archives, identities = {}, {}
+	for name in FOLDERS:
+		handle = stack.enter_context(open(Path(root) / f"{name}.pk2", "rb"))
+		data = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
+		archives[name] = (data, {shared.normalized_path(entry.path): entry for entry in sro_pk2.read_directory(data)})
+		identities[name] = tables.sha256_of(data)
+	return archives, identities
+
+
+# ================
 # add_source
 #
 # One source's pass: its archives are verified against its pins when the
 # import is on and the client is present, then imported; an absent
-# client removes the source's previous import.
+# client removes the source's previous import. The pinned archive is
+# verified as it is opened (avatar_archive), before any entry is read.
 # ================
 def add_source(root, native, output, source):
-	if root is not None and enabled() and all((Path(root) / f"{name}.pk2").is_file() for name in FOLDERS):
+	if root is not None and enabled() and source_present(root, source) and not source.get("zip"):
 		tables.require_vsro_pin(root, tuple(FOLDERS), source_pins(source))
 	return add_avatars(root, native, output, source)
 
@@ -721,16 +922,28 @@ def v1696_root(env=os.environ):
 
 
 # ================
+# avatars_zip
+#
+# The pinned avatar archive from SRO_AVATARS_ZIP, or None when unset.
+# The game builds without it; the archive is never committed.
+# ================
+def avatars_zip(env=os.environ):
+	value = env.get(AVATARS_ENV, "").strip()
+	return Path(value) if value else None
+
+
+# ================
 # main
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--vsro-root", type=Path, required=True)
 	parser.add_argument("--v1696-root", type=Path, default=v1696_root(), help=f"the v1.696 client (else {V1696_ENV})")
+	parser.add_argument("--avatars-zip", type=Path, default=avatars_zip(), help=f"the pinned avatar archive (else {AVATARS_ENV})")
 	parser.add_argument("--native-extracted", type=Path, default=EXTRACTED_ROOT)
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "mall-avatars" / "extracted")
 	args = parser.parse_args()
-	for source, root in ((VSRO_SOURCE, args.vsro_root), (V1696_SOURCE, args.v1696_root)):
+	for source, root in ((VSRO_SOURCE, args.vsro_root), (V1696_SOURCE, args.v1696_root), (AVATARS_SOURCE, args.avatars_zip)):
 		summary = add_source(root, args.native_extracted, args.output_extracted, source)
 		print(f"[{source['name']}] Avatars: {summary['added']}; enabled: {summary['enabled']}")
 		if summary["enabled"]:
