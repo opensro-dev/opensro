@@ -42,6 +42,9 @@ export interface SpecialtyDealOpen {
 	readonly unitBuy: number;
 	// The most one request moves: a shop stack, or the sold slot's count.
 	readonly stack: number;
+	// One full stack of the goods (the item's published max stack):
+	// what the progress line prices a stack at (#3163).
+	readonly maxStack: number;
 	readonly count: number;
 }
 

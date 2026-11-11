@@ -835,6 +835,9 @@ export interface GameplayState extends MoverPublication {
 		readonly (import("@/engine/foundation/gameplay/gm-command").GmReply & { readonly sequence: number; })[];
 	// 0x352D: the transport bag's trade level (cos-trade-info.ts).
 	readonly tradeStars?: number;
+	// Port-only (#3163): the cargo's stars and the gold short of the
+	// next star, published with the star answer under SRO_TRADE_TIERS.
+	readonly tradeProgress?: { readonly stars: number; readonly gap: number; };
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	// Port-only: a GM's compact console catalogues, resent until the UI

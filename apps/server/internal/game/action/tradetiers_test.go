@@ -49,6 +49,32 @@ func TestTradeTierForLoad(t *testing.T) {
 
 /*
 ================
+TestTradeGoldGap
+
+#3163: the gold still missing from the next star, at the same marks
+TradeTierForLoad reads (1/5, 2/5, 7/10 and all of a 1000-full bag).
+================
+*/
+func TestTradeGoldGap(t *testing.T) {
+	for value, want := range map[uint64]uint64{
+		0: 1, 1: 199, 199: 1, 200: 200, 399: 1, 400: 300, 699: 1, 700: 300, 999: 1, 1000: 0, 900_000: 0,
+	} {
+		if got := TradeGoldGap(value, 1000); got != want {
+			t.Fatalf("%d of 1000: gap %d, want %d", value, got, want)
+		}
+	}
+	// An unmeasurable bag names no gap; an empty one is the first
+	// gold of goods short of its first star.
+	if got := TradeGoldGap(5, 0); got != 0 {
+		t.Fatalf("cargo, no bag: gap %d, want 0", got)
+	}
+	if got := TradeGoldGap(0, 0); got != 1 {
+		t.Fatalf("empty: gap %d, want 1", got)
+	}
+}
+
+/*
+================
 TestEveryFullTransportReachesFiveStars
 
 The owner's rule (#2791, measured per transport #3142) as a property

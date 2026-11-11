@@ -26,7 +26,7 @@ The production geometry owner on a device whose buffers keep their bytes
 arrays the world's selection wrote.
 ================
 */
-function geometryOwner() {
+function geometryOwner( writes ) {
 	const retirement = createRetirement();
 	const device = {
 		limits: { maxBufferSize: 256 * 1024 * 1024 },
@@ -49,7 +49,9 @@ function geometryOwner() {
 			return {};
 		},
 		queue: {
-			writeBuffer() {},
+			writeBuffer( buffer, offset, data ) {
+				if ( writes ) writes.push( data.byteLength ?? data.length ?? 0 );
+			},
 			writeTexture() {},
 			submit() {}
 		},
@@ -203,6 +205,67 @@ test("the terrain choice keys on cell and view (native A2D1B0 parity)", () => {
 	assert.ok(
 		counts[0] < 9 * 512 && counts[0] >= 3 * 512,
 		`The facing view submits its column, not the grid (${counts[0]} of 4608)`
+	);
+	world.dispose();
+});
+
+test("a moving camera re-uploads terrain indices only when the culled set changes", () => {
+	const world = createWorldRenderer();
+	const writes = [];
+	const owner = geometryOwner( writes ), geometry = owner.commands;
+	const textures = { upload: () => ({}), release() {} };
+	const scene = {
+		id: "terrain-frustum-moving",
+		originRegion: 257,
+		warnings: [],
+		environment: {
+			startTimeOfDay: .5,
+			ratePerSecond: 0,
+			tracks: {
+				color0xf0: [ { t: 0, r: 1, g: 1, b: 1 } ],
+				color0x124: [ { t: 0, r: .55, g: .55, b: .55 } ]
+			}
+		},
+		groups: [ terrainGroup() ]
+	};
+	world.scene( scene );
+	// A riding-speed pan: the eye crosses no cell boundary and the frustum
+	// keeps the same cells for three frames, then the view drops to a
+	// smaller set, pans inside it, and returns. An index upload is any
+	// writeBuffer at index-buffer size (uniform writes here are a few
+	// hundred bytes).
+	const path = [
+		{ eye: [ 480, 60, 480 ], target: [ 480, 0, 160 ] },
+		{ eye: [ 482, 60, 480 ], target: [ 482, 0, 160 ] },
+		{ eye: [ 484, 60, 480 ], target: [ 484, 0, 160 ] },
+		{ eye: [ 486, 60, 480 ], target: [ 486, 0, 160 ] },
+		{ eye: [ 486, 60, 480 ], target: [ 486, 0, 478.5 ] },
+		{ eye: [ 488, 60, 480 ], target: [ 488, 0, 478.5 ] },
+		{ eye: [ 480, 60, 480 ], target: [ 480, 0, 160 ] }
+	];
+	const triangles = [], uploads = [];
+	path.forEach( ( camera, frame ) => {
+		world.camera( { ...camera, originRegion: 257, fov: .4, near: 1, far: 5000 } );
+		const at = writes.length;
+		const prepared = world.prepare( geometry, textures, 1.6, frame / 60, 192, 120, 3500, false, false );
+		triangles.push( prepared.draws[0] ? prepared.draws[0].indexCount / 3 : 0 );
+		uploads.push( writes.slice( at ).filter( size => size >= 4096 ).length );
+	} );
+	// The draw list is the same one a from-scratch choice makes at every
+	// stop of the path: pans inside a set change nothing, the drop and the
+	// return land on their own counts.
+	assert.deepEqual(
+		triangles,
+		[ triangles[0], triangles[0], triangles[0], triangles[0], triangles[4], triangles[4], triangles[0] ],
+		`The moving path draws the stationary choices: ${triangles.join( ", " )}`
+	);
+	assert.ok( triangles[0] > 0 && triangles[4] > 0 && triangles[4] !== triangles[0] );
+	// Uploads happen on the first frame and on the two frames the culled
+	// set changes - never on a pan inside an unchanged set.
+	assert.deepEqual(
+		uploads.map( count => count > 0 ),
+		[ true, false, false, false, true, false, true ],
+		`Index uploads follow set changes only: ${uploads.join( ", " )}`
 	);
 	world.dispose();
 });

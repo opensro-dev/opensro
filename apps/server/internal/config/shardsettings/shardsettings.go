@@ -480,6 +480,9 @@ var NotSettings = map[string]string{
 	"SRO_PUBLIC_API_ADDR":                  "the public API listener, per shard",
 	"SRO_TRANSPORT_TLS_ID":                 "transport certificate identity",
 	"SRO_RELEASE_ID":                       "release identity",
+	// The store's write path (#2802, port-only): it moves the SQLite
+	// commit off the store lock; what a player plays is unchanged.
+	"SRO_STORE_ASYNC_COMMIT": "store write path: the asynchronous commit writer",
 	// The bug-report set (opensro-ops #213): the GameWorld hosts /report
 	// beside the Agent and reads the same operator values; they shape report
 	// delivery, not the game a player plays.
