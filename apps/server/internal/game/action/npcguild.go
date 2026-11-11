@@ -249,7 +249,7 @@ func (rt *Runtime) HandleGuildCompensation(division string, c *enterworld.Charac
 		return guildNpcAnswer(opGuildCompensationDue, guildNpcRefused)
 	}
 	guildID, member := store.GuildOfCharacter(division, c.ID)
-	record, _, found := store.Guild(division, guildID)
+	record, found := store.GuildRecord(division, guildID)
 	if !member || !found {
 		return guildNpcAnswer(opGuildCompensationDue, guild.GuildErrNotMember)
 	}

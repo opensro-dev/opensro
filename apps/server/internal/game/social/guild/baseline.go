@@ -166,7 +166,7 @@ func EntryGuild(guilds domain.GuildStore, divisionID string, character *domain.C
 	if guilds == nil || character == nil || character.GuildID == nil {
 		return 0
 	}
-	if _, _, ok := guilds.Guild(divisionID, *character.GuildID); !ok {
+	if _, ok := guilds.GuildRecord(divisionID, *character.GuildID); !ok {
 		return 0
 	}
 	return *character.GuildID

@@ -220,7 +220,7 @@ func (rt *Runtime) conquestFrames(division string, fortressID uint32, guild int6
 	row := siege.FortressRow{FortressID: fortressID}
 	row.Discarded[0] = uint32(guild)
 	if rt.Guilds != nil {
-		if record, _, ok := rt.Guilds.Guild(division, guild); ok {
+		if record, ok := rt.Guilds.GuildRecord(division, guild); ok {
 			row.OwnerName = record.Name
 		}
 	}

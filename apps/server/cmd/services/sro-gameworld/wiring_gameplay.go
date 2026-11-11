@@ -477,7 +477,7 @@ func newGameplayPlane(
 		Division:   ownedShard.ID,
 		Fortresses: items.Fortresses,
 		GuildName: func(guildID int64) string {
-			guild, _, ok := deps.Guilds.Guild(ownedShard.ID, guildID)
+			guild, ok := deps.Guilds.GuildRecord(ownedShard.ID, guildID)
 			if !ok {
 				return ""
 			}

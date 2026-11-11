@@ -199,7 +199,7 @@ func (rt *Runtime) HandleGuildVoteParticipate(division string, c *enterworld.Cha
 	if !ok {
 		return guildNpcAnswer(opGuildVoteJoinDone, ballotErrNoVote)
 	}
-	record, _, ok := store.Guild(division, guildID)
+	record, ok := store.GuildRecord(division, guildID)
 	if !ok || record.Vote == nil || record.Vote.ID != voteID || record.Vote.EndsAtUnixMs <= now {
 		return guildNpcAnswer(opGuildVoteJoinDone, ballotErrNoVote)
 	}

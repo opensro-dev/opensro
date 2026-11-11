@@ -651,23 +651,26 @@ func resolvePeerGuildBase(guilds enterworld.GuildStore, divisionID string, captu
 	if guilds == nil || !captured.hasGuild {
 		return half, false
 	}
-	record, members, ok := guilds.Guild(divisionID, captured.guildID)
+	// The record door plus this member's own view (#3126): the full
+	// door built every member's view per peer appearance, and this
+	// walk scanned the fresh slice for the one row it keeps.
+	record, ok := guilds.GuildRecord(divisionID, captured.guildID)
 	if !ok {
 		return half, false
 	}
 	half.name = record.Name
 	half.id = uint32(record.ID)
 	half.crest = record.CrestParam
-	for _, member := range members {
-		if member.CharID == captured.charID {
-			half.grant = member.GrantName
-			// The member row's fortress-war role byte rides the
-			// spawn guild sub-block's trailing team byte (client
-			// CICPlayer_DeserializeSpawnData @0x0086a1b2 -> CICPlayer+0x7e0) - the
-			// same persisted byte the 0x32C4 member loop encodes.
-			half.fortRole = member.FortressRole
-			break
-		}
+	// A member row the set does not hold (a dangling FK) binds the
+	// guild face with no grant, exactly as the old scan's fall-through
+	// did; only a missing guild leaves the leg unreached.
+	if member, ok := guilds.GuildMember(divisionID, captured.guildID, captured.charID); ok {
+		half.grant = member.GrantName
+		// The member row's fortress-war role byte rides the
+		// spawn guild sub-block's trailing team byte (client
+		// CICPlayer_DeserializeSpawnData @0x0086a1b2 -> CICPlayer+0x7e0) - the
+		// same persisted byte the 0x32C4 member loop encodes.
+		half.fortRole = member.FortressRole
 	}
 	return half, true
 }

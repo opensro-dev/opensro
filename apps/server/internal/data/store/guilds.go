@@ -108,6 +108,60 @@ func (door storeGuildDoor) Guild(divisionID string, guildID int64) (domain.Guild
 	return guild, members, true
 }
 
+/*
+================
+GuildRecord
+
+The guild row alone (#3126): the full door's member view is the cost
+of a lookup, and record-only callers (the guild name a fortress or a
+mercenary presentation resolves, an admission existence check) paid
+it per call for a slice they discard.
+================
+*/
+func (door storeGuildDoor) GuildRecord(divisionID string, guildID int64) (domain.GuildRecord, bool) {
+	door.s.mu.RLock()
+	defer door.s.mu.RUnlock()
+	guild, ok := door.s.guilds[divisionID][guildID]
+	if !ok {
+		return domain.GuildRecord{}, false
+	}
+	return guild, true
+}
+
+/*
+================
+GuildMember
+
+One member's view (#3126): the same row Guild's list carries for that
+member, live level included, without building the other members'
+views. The appearance path resolves one peer per lookup and scanned
+the fresh slice for it. A member whose character record is gone
+answers not-ok, the coherence the full view demands; the store's own
+doors never leave one behind (the deletion reaper refuses a character
+that still belongs to a guild), so per-member coherence answers the
+same as the whole set on every reachable state.
+================
+*/
+func (door storeGuildDoor) GuildMember(divisionID string, guildID int64, characterID int64) (domain.GuildMemberRecord, bool) {
+	door.s.mu.RLock()
+	defer door.s.mu.RUnlock()
+	if _, ok := door.s.guilds[divisionID][guildID]; !ok {
+		return domain.GuildMemberRecord{}, false
+	}
+	for _, member := range door.s.guildMembers[divisionID][guildID] {
+		if member.CharID != characterID {
+			continue
+		}
+		character := door.s.characterByIDLocked(divisionID, member.CharID)
+		if character == nil {
+			return domain.GuildMemberRecord{}, false
+		}
+		member.Level = guildMemberLevel(character)
+		return member, true
+	}
+	return domain.GuildMemberRecord{}, false
+}
+
 // GuildOfCharacter answers the guild a character is a MEMBER of, resolved
 // from the stored member sets (the honest source: the character record's
 // GuildID FK points here, never the other way around).

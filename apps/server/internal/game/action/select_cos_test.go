@@ -151,6 +151,20 @@ func (g *companionGuildReadGuard) Guild(division string, id int64) (domain.Guild
 
 /*
 ================
+companionGuildReadGuard.GuildRecord
+================
+*/
+func (g *companionGuildReadGuard) GuildRecord(division string, id int64) (domain.GuildRecord, bool) {
+	g.t.Helper()
+	if g.depth != 0 {
+		g.t.Fatal("GuildRecord called inside character read door: production reenters Store.mu")
+	}
+	g.guildReads++
+	return g.GuildStore.GuildRecord(division, id)
+}
+
+/*
+================
 TestGuildedCompanionDoesNotReenterStore
 
 Selection needs only the companion's live pose and health; public mercenary

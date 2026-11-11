@@ -249,7 +249,7 @@ func (r *WarRuntime) handleWarDeclare(s *transport.Session, _ uint16, payload []
 		return
 	}
 	r.pending[inviteKey(division, target.Name)] = proposal
-	guild, _, _ := r.deps.GuildAuthority().Guild(division, proposal.guilds[0])
+	guild, _ := r.deps.GuildAuthority().GuildRecord(division, proposal.guilds[0])
 	w := wire.NewWriter(32).U8(warProposalKind).U32(enterworld.ObjectIDForCharacter(actor)).Str(guild.Name)
 	w.U8(terms.Type).U32(terms.Period).U8(terms.ScoreIndex).U32(terms.Stake)
 	_ = session.Send(OpInvitationProposal, w.Payload())
