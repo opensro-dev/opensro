@@ -148,3 +148,39 @@ func TestQuestMarkerDerivationForget(t *testing.T) {
 		t.Fatalf("live session lost its derivation: calls=%d", derive.calls)
 	}
 }
+
+/*
+================
+TestQuestMarkerGenerationFollowsContent
+
+A key move whose derive returns the same rows (a step moved the write
+epoch) keeps the generation, so the tick skips the publication diff;
+different rows advance it, and every session's generation is its own.
+================
+*/
+func TestQuestMarkerGenerationFollowsContent(t *testing.T) {
+	character := &enterworld.Character{}
+	derived := &questMarkerDerivations{}
+	derive := &countedDerivation{rows: map[uint32][18]byte{7: markerRow(1)}}
+
+	derived.rows(42, character, 5, true, 20, derive.derive)
+	first := derived.gen(42)
+	if first == 0 {
+		t.Fatal("a derived row set has no generation")
+	}
+	// The epoch moves, the content does not: a fresh map, same rows.
+	derive.rows = map[uint32][18]byte{7: markerRow(1)}
+	derived.rows(42, character, 6, true, 20, derive.derive)
+	if derive.calls != 2 || derived.gen(42) != first {
+		t.Fatalf("same content: calls=%d gen=%d, want 2 and %d", derive.calls, derived.gen(42), first)
+	}
+	// Different rows advance it.
+	derive.rows = map[uint32][18]byte{7: markerRow(2)}
+	derived.rows(42, character, 7, true, 20, derive.derive)
+	if derived.gen(42) == first {
+		t.Fatal("changed rows kept the generation")
+	}
+	if derived.gen(43) != 0 {
+		t.Fatal("an unseen session has a generation")
+	}
+}

@@ -43,6 +43,10 @@ type questMarkerRows struct {
 	epoch     uint64
 	hour      int
 	rows      map[uint32][18]byte
+	// gen names this row set's content: it changes only when a derive
+	// returns different rows, so a publication already at gen has
+	// nothing to send (the tick skips its diff entirely).
+	gen uint64
 }
 
 /*
@@ -72,6 +76,7 @@ closure; sessions that leave drop out with their publications.
 */
 type questMarkerDerivations struct {
 	bySession map[uint64]*questMarkerRows
+	nextGen   uint64
 }
 
 /*
@@ -91,8 +96,47 @@ func (d *questMarkerDerivations) rows(sessionID uint64, character *enterworld.Ch
 	if d.bySession == nil {
 		d.bySession = make(map[uint64]*questMarkerRows)
 	}
-	d.bySession[sessionID] = &questMarkerRows{character: character, epoch: epoch, hour: hour, rows: rows}
+	previous := d.bySession[sessionID]
+	if previous != nil && previous.character == character && sameMarkerRows(previous.rows, rows) {
+		// A write that moved the epoch but not the markers (a step, a
+		// vitals tick) keeps the row set and its gen: same content.
+		previous.epoch, previous.hour = epoch, hour
+		return previous.rows
+	}
+	d.nextGen++
+	d.bySession[sessionID] = &questMarkerRows{character: character, epoch: epoch, hour: hour, rows: rows, gen: d.nextGen}
 	return rows
+}
+
+/*
+================
+gen
+
+The content generation of the session's current rows (0: none yet).
+================
+*/
+func (d *questMarkerDerivations) gen(sessionID uint64) uint64 {
+	if entry := d.bySession[sessionID]; entry != nil {
+		return entry.gen
+	}
+	return 0
+}
+
+/*
+================
+sameMarkerRows
+================
+*/
+func sameMarkerRows(a, b map[uint32][18]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id, row := range a {
+		if other, ok := b[id]; !ok || other != row {
+			return false
+		}
+	}
+	return true
 }
 
 /*
@@ -143,6 +187,10 @@ array.
 */
 func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 	publications := make(map[uint64]*quest.MarkerPublication)
+	// published is the row generation each publication last diffed:
+	// an unchanged generation since then has an empty diff by
+	// construction, so Update (its slices, map and sort) is skipped.
+	published := make(map[uint64]uint64)
 	// entered is each session's last seen scene revision.
 	entered := make(map[uint64]uint64)
 	derived := &questMarkerDerivations{}
@@ -194,10 +242,17 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 			if revision, active := session.SceneRevision(); active && entered[session.ID] != revision {
 				entered[session.ID] = revision
 				publication.Reset()
+				delete(published, session.ID)
 			}
+			gen := derived.gen(session.ID)
+			if last, ok := published[session.ID]; ok && last == gen {
+				continue
+			}
+			published[session.ID] = gen
 			for _, frame := range publication.Update(rows) {
 				if err := session.Send(frame.Opcode, frame.Payload); err != nil {
 					delete(publications, session.ID)
+					delete(published, session.ID)
 					log.Debugf("quest marker publication failed for session %d: %v", session.ID, err)
 					break
 				}
@@ -206,6 +261,7 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 		for id := range publications {
 			if !live[id] {
 				delete(publications, id)
+				delete(published, id)
 				delete(entered, id)
 			}
 		}
