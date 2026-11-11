@@ -25,6 +25,7 @@ func TestBetaSettingValidationKinds(t *testing.T) {
 	want := map[string]ValueValidation{
 		"SRO_BETA_STARTER_KIT":       ValueSwitch,
 		"SRO_BETA_PLAYER_MAP":        ValueSwitch,
+		"SRO_BETA_MULTI_CHARACTER":   ValueSwitch,
 		"SRO_BETA_MASTERY":           ValueSwitch,
 		"SRO_BETA_SILK":              ValueBetaSilk,
 		"SRO_BETA_SILK_ACTIVE_ONLY":  ValueSwitch,
