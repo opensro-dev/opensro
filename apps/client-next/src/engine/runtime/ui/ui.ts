@@ -24610,8 +24610,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && crestRegisterAsk ) {
 				// 52F460 types 0x15/0x18 (#2282): the register box's own
 				// title and its USER_CREST/FILE/FOLDER instruction lines.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				const registerKeys = crestRegisterKeys( crestRegisterAsk.kind );
 				simpleMessageBox( {
 					title: hudCopy( registerKeys.title ),
