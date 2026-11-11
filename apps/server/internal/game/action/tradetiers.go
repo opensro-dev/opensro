@@ -354,6 +354,37 @@ func TradeTierForLoad(value, full uint64) uint8 {
 
 /*
 ================
+TradeGoldGap
+
+Port-only, not native (#3163): the cargo gold still missing from the
+next star under TradeTierForLoad - the same full-load fractions the
+tier reads, so the published distance cannot disagree with the star
+it belongs to. Zero at five stars, and zero when the load cannot be
+measured (full is 0): no honest gap exists there. An empty transport
+is one gold of goods short of its first star.
+================
+*/
+func TradeGoldGap(value, full uint64) uint64 {
+	switch TradeTierForLoad(value, full) {
+	case 5:
+		return 0
+	case 4:
+		return full - value
+	case 3:
+		return (full*7+9)/10 - value
+	case 2:
+		return (full*2+4)/5 - value
+	case 1:
+		if full == 0 {
+			return 0
+		}
+		return (full+4)/5 - value
+	}
+	return 1
+}
+
+/*
+================
 caravanFullValue
 
 The brim-full value of the character's transport: its bag's slots

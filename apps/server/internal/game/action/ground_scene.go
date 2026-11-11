@@ -77,4 +77,11 @@ func (rt *Runtime) ReconcileScene(s *transport.Session, divisionID string, c *en
 	if err := s.Send(frame.Opcode, frame.Payload); err != nil {
 		log.Debugf("action: trade level for session %d failed: %v", s.ID, err)
 	}
+	// #3163: the port-only progress answer repeats with the level
+	// under SRO_TRADE_TIERS, from the same detached snapshot.
+	if progress, ok := rt.tradeProgressFrame(c); ok {
+		if err := s.Send(progress.Opcode, progress.Payload); err != nil {
+			log.Debugf("action: trade progress for session %d failed: %v", s.ID, err)
+		}
+	}
 }
