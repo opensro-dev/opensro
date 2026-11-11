@@ -68,8 +68,8 @@ const (
 
 	// Category 1 notices (v1.188 0x18xx low bytes).
 	jobWearErrBagFull uint8 = 0x07
-	// jobDressErrCancelled answers a cancelled suit move: 75AA1D prints
-	// category 1 code 2 as nothing, so the held answer closes silently
+	// jobDressErrCancelled answers a cancelled suit move. Client 75AA1D
+	// prints category 1 code 2 as nothing, so the answer closes silently
 	// and the 0x3514 line is the only text the player sees.
 	jobDressErrCancelled uint8 = 0x02
 	jobWearErrSwap       uint8 = 0x46
@@ -435,8 +435,8 @@ with the silent refusal, so the client's inventory lane closes and the
 suit stays where it was.
 
 INFERENCE: the reference server's move-event path was not traced to the
-state changer case 0xE. The v1.150 client carries the cancel (0x3514,
-75D1E0, "Item unequip cancelled") for exactly this bar, and the native
+state changer case 0xE. The v1.150 client carries the cancel for exactly
+this bar (0x3514, client 75D1E0, "Item unequip cancelled"), and the native
 state changers of the same family (the return scroll's cast) end when the
 caster walks; the dress is taken to end the same way. The caller holds
 the division lock.
