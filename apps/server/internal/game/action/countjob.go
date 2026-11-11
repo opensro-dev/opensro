@@ -218,6 +218,9 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 		if choice != reverseReturnLastRecall && choice != reverseReturnLastDeath {
 			return false
 		}
+		if rt.jobRefusesRescueScroll(c, result) {
+			return false
+		}
 		duration, ok := returnScrollDuration(ref)
 		if !ok || !rt.returnScrollAdmission(division, c, result) {
 			return false

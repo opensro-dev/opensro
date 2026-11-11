@@ -578,6 +578,10 @@ type Runtime struct {
 	// spawn instead of in place (jobdresstown.go; port-only, not native).
 	// False is native.
 	JobDressTownSpawn bool
+	// JobNoRescueScrolls refuses resurrection and reverse return scrolls
+	// while a job suit is worn (jobscrolls.go; port-only, not native).
+	// False is native.
+	JobNoRescueScrolls bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field

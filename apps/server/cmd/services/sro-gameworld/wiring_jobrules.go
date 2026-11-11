@@ -43,6 +43,11 @@ func (game *gameplayPlane) wireJobRules() error {
 	if game.items.JobDressTownSpawn {
 		log.Infof("job: a finished dress reloads at the nearest town spawn ON (%s)", action.EnvJobDressTownSpawn)
 	}
+	// Port-only, not native: no resurrection or reverse return scroll in a suit.
+	game.items.JobNoRescueScrolls = action.JobNoRescueScrollsFromEnv()
+	if game.items.JobNoRescueScrolls {
+		log.Infof("job: resurrection and reverse return scrolls refused while suited ON (%s)", action.EnvJobNoRescueScrolls)
+	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
 	step, err := action.MostWantedTestStreakStepFromEnv()
