@@ -33,7 +33,9 @@ Regular Qin-Shi Tomb creatures can appear when their levels fit your stage.
 Their natural levels range from 81 to 100; a level-90 character meets only
 those within the stage bands above.
 
-Later stages bring substantially more monsters, up to **200 living monsters**
+Wave density increases evenly through stages 1–5: approximately **1.8, 4.95,
+8.1, 11.25 and 14.4 monsters per wave**, carrying fractions across waves.
+There can be up to **200 living monsters**
 in your arena. Some attack immediately; others notice you as you approach.
 After spawning stops, remaining monsters start hunting you after one minute,
 with their pursuit refreshed every ten seconds. The last ten monsters are
@@ -107,6 +109,7 @@ For hosting and configuration, see the separate
 
 Egg selection favors **Chain Reaction** and **Damage Surge**: each has about
 11.82% of egg rolls, 30% more likely than the former equal 9.09% share. The
-overall egg cadence is unchanged. Eggs spawned during the remaining-monster
+overall egg cadence is unchanged. KABUM has about 11.03% of egg rolls
+(+30% relative to its previous share); Ambush has about 5.94% (−30%). Eggs spawned during the remaining-monster
 cleanup are removed immediately when the last monster dies, before the reward
 window opens; no old eggs remain during the decision or next-stage countdown.

@@ -270,12 +270,16 @@ func TestSookBoostedEggShares(t *testing.T) {
 		t.Fatalf("egg kinds=%d", len(counts))
 	}
 	for kind, count := range counts {
-		weight := 28
+		weight := 280
 		if kind == sookDamage || kind == sookTransfer {
-			weight = 39
+			weight = 390
+		} else if kind == sookBomb {
+			weight = 364
+		} else if kind == sookAmbush {
+			weight = 196
 		}
-		delta := count*330 - weight*32768
-		if delta < -330 || delta > 330 {
+		delta := count*3300 - weight*32768
+		if delta < -3300 || delta > 3300 {
 			t.Fatalf("kind %d count %d exceeds one-sample rounding", kind, count)
 		}
 	}

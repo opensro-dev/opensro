@@ -33,7 +33,7 @@ func TestCheckpointClearingAndResume(t *testing.T) {
 	if s := r.Advance(r.ResumeAt-1, 0, false); s.Resume {
 		t.Fatal("early continuation")
 	}
-	if s := r.Advance(r.ResumeAt, 0, false); !s.Resume || s.Count != 4 || r.DamageUntil != paused+10000+ReadyMs {
+	if s := r.Advance(r.ResumeAt, 0, false); !s.Resume || s.Count != 5 || r.DamageUntil != paused+10000+ReadyMs {
 		t.Fatal("resume count or power deadline")
 	}
 }
@@ -77,7 +77,7 @@ func TestStagePacingAndRepeatedHunt(t *testing.T) {
 		for wave := 0; wave < 5; wave++ {
 			total += WaveSize(stage, wave)
 		}
-		if total != 9<<stage {
+		if total != [5]int{9, 25, 41, 57, 72}[stage] {
 			t.Fatalf("stage %d five-wave budget %d", stage+1, total)
 		}
 	}
@@ -229,6 +229,31 @@ func TestStageWaveCapRespectsShortenedTimers(t *testing.T) {
 		r.CheckpointInterval = tc.ms
 		if r.WaveLimit() != tc.waves {
 			t.Fatalf("timer=%d waves=%d want=%d", tc.ms, r.WaveLimit(), tc.waves)
+		}
+	}
+}
+
+/*
+================
+TestLinearStageDensityAndFinalStageCeiling
+================
+*/
+func TestLinearStageDensityAndFinalStageCeiling(t *testing.T) {
+	for stage, want := range []int{27, 75, 122, 169, 216} {
+		total := 0
+		for wave := range StageWaveLimit {
+			total += WaveSize(stage, wave)
+		}
+		if total != want {
+			t.Fatalf("stage %d monsters=%d want=%d", stage+1, total, want)
+		}
+	}
+	for wave := range StageWaveLimit {
+		if WaveSize(0, wave) != [5]int{2, 2, 2, 2, 1}[wave%5] {
+			t.Fatal("stage one changed")
+		}
+		if WaveSize(4, wave) != [5]int{15, 14, 15, 14, 14}[wave%5] {
+			t.Fatal("final stage differs from former stage four")
 		}
 	}
 }

@@ -140,20 +140,24 @@ func (rt *Runtime) spawnSookBox(run *sookArenaRun, c *enterworld.Character, now 
 
 /*
 ================
-sookPowerupKind - Chain Reaction and Damage Surge are 30% more likely.
+sookPowerupKind - boosted helpful eggs and fewer ambushes, at unchanged cadence.
 ================
 */
 func sookPowerupKind(roll uint32) uint8 {
 	kinds := [...]uint8{sookDamage, sookBomb, sookUnstoppable, sookInvincible, sookMana, sookFirePit, sookReflect, sookAlarm, sookAmbush, sookTransfer, sookSpeed}
-	// Each boosted kind gets 13/110, or 1.3 times its former 1/11 share.
-	const ordinaryWeight, boostedWeight = 28, 39
-	const totalWeight = 9*ordinaryWeight + 2*boostedWeight
+	// Bomb +30% and Ambush -30% cancel, preserving every other kind's share.
+	const ordinaryWeight, boostedWeight, bombWeight, ambushWeight = 280, 390, 364, 196
+	const totalWeight = 7*ordinaryWeight + 2*boostedWeight + bombWeight + ambushWeight
 	const samples = 1 << 15
 	ticket := int(roll%samples) * totalWeight / samples
 	for _, kind := range kinds {
 		weight := ordinaryWeight
 		if kind == sookDamage || kind == sookTransfer {
 			weight = boostedWeight
+		} else if kind == sookBomb {
+			weight = bombWeight
+		} else if kind == sookAmbush {
+			weight = ambushWeight
 		}
 		if ticket < weight {
 			return kind

@@ -21,17 +21,17 @@ cutoff; survivors must then be cleared. Decisions can extend the total event.
 | Stage | Monster levels relative to player | Average monsters per Pandora | Total chest items |
 | --- | --- | ---: | ---: |
 | 1 | −6 to −3 | 1.8 | 3–7 |
-| 2 | −4 to −1 | 3.6 | 8–15 |
-| 3 | −1 to +2 | 7.2 | 18–28 |
-| 4 | +1 to +4 | 14.4 | 32–45 |
-| 5 | +3 to +6 | 28.8 | 50–70 |
+| 2 | −4 to −1 | 4.95 | 8–15 |
+| 3 | −1 to +2 | 8.1 | 18–28 |
+| 4 | +1 to +4 | 11.25 | 32–45 |
+| 5 | +3 to +6 | 14.4 | 50–70 |
 
 Level 1 is the floor. References, including uniques, must fit their stage's
 band; an unavailable unique is skipped. The safety cap is 200 living
 monsters per private arena. Waves reinforce survivors every 15 seconds;
 clearing a wave early starts the next Pandora without waiting. Its windup
-is 1.2 seconds. Wave budgets are 40% smaller than the former 3/6/12/24/48
-schedule, with fractional monsters carried between waves (stage I: 2/2/2/2/1).
+is 1.2 seconds. Density rises linearly from stage I to the former stage-IV ceiling, carrying
+fractional monsters between waves (stage I: 2/2/2/2/1; V: 15/14/15/14/14).
 The opening has a visible **20-second countdown**. Three in
 ten normal spawns immediately aggro; the others keep native sight aggression.
 
@@ -135,6 +135,7 @@ See [map import](SURVIVAL-ARENA-MAP.md) and
 [Claude handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md) for evidence/deployment.
 Egg selection favors **Chain Reaction** and **Damage Surge**: each has about
 11.82% of egg rolls, 30% more likely than the former equal 9.09% share. The
-overall egg cadence is unchanged. Eggs spawned during the remaining-monster
+overall egg cadence is unchanged. KABUM has about 11.03% of egg rolls
+(+30% relative to its previous share); Ambush has about 5.94% (−30%). Eggs spawned during the remaining-monster
 cleanup are removed immediately when the last monster dies, before the reward
 window opens; no old eggs remain during the decision or next-stage countdown.

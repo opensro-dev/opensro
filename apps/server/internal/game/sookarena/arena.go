@@ -283,12 +283,13 @@ func Fivefold(value int64) int64 {
 
 /*
 ================
-WaveSize - retain three fifths of each stage's original wave budget.
+WaveSize - linear density from stage I to the former stage IV, with carried fractions.
 ================
 */
 func WaveSize(stage, wave int) int {
-	base := 3 << stage
-	return ((wave+1)*base*3+4)/5 - (wave*base*3+4)/5
+	// Quarter-sized bases: 3, 8.25, 13.5, 18.75, 24, retaining the 60% density.
+	baseQuarters := 12 + 21*max(0, min(StageCount-1, stage))
+	return ((wave+1)*baseQuarters*3+19)/20 - (wave*baseQuarters*3+19)/20
 }
 
 /*

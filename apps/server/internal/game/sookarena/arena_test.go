@@ -162,7 +162,7 @@ func TestUltraBoundaryCadenceAndTwentyMinuteFinish(t *testing.T) {
 			r.ResumeAt = now + 60001 + ReadyMs
 			step := r.Advance(r.ResumeAt, 0, false)
 			if !step.Resume || !step.Wave || step.Count != WaveSize(stage+1, 0) {
-				t.Fatal("next stage did not double wave count")
+				t.Fatal("next stage did not use its scheduled wave size")
 			}
 		}
 	}
