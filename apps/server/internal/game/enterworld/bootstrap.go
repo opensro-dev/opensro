@@ -430,7 +430,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	}
 	mercenaryGuildName := ""
 	if character.GuildID != nil && deps.Guilds != nil {
-		if guild, _, found := deps.Guilds.Guild(divisionID, *character.GuildID); found {
+		if guild, found := deps.Guilds.GuildRecord(divisionID, *character.GuildID); found {
 			mercenaryGuildName = guild.Name
 		}
 	}

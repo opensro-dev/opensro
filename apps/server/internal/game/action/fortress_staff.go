@@ -55,7 +55,7 @@ func (rt *Runtime) FortressHolderFrames(division string, c *enterworld.Character
 	if !ok || record.Holder() != *c.GuildID {
 		return nil
 	}
-	if _, _, ok := rt.Guilds.Guild(division, record.Holder()); !ok {
+	if _, ok := rt.Guilds.GuildRecord(division, record.Holder()); !ok {
 		return nil
 	}
 	return []wire.Frame{fortressHolderFlags(id, record.StaffFlags)}

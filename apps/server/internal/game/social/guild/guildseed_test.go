@@ -41,6 +41,28 @@ func (s staticGuildStore) Guild(divisionID string, guildID int64) (enterworld.Gu
 	return s.guild, members, true
 }
 
+// GuildRecord and GuildMember serve the fake's one seeded guild
+// (#3126): the record alone, and one stored member row as-is - this
+// fake keeps no character records, so no live level is resolved.
+func (s staticGuildStore) GuildRecord(divisionID string, guildID int64) (enterworld.GuildRecord, bool) {
+	if divisionID != s.division || guildID != s.guildID {
+		return enterworld.GuildRecord{}, false
+	}
+	return s.guild, true
+}
+
+func (s staticGuildStore) GuildMember(divisionID string, guildID int64, characterID int64) (enterworld.GuildMemberRecord, bool) {
+	if divisionID != s.division || guildID != s.guildID {
+		return enterworld.GuildMemberRecord{}, false
+	}
+	for _, member := range s.members {
+		if member.CharID == characterID {
+			return member, true
+		}
+	}
+	return enterworld.GuildMemberRecord{}, false
+}
+
 func (s staticGuildStore) GuildOfCharacter(divisionID string, characterID int64) (int64, bool) {
 	if divisionID != s.division {
 		return 0, false

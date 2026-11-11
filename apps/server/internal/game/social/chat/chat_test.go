@@ -113,6 +113,35 @@ func (g stubGuilds) Guild(_ string, guildID int64) (enterworld.GuildRecord, []en
 
 /*
 ================
+GuildRecord
+================
+*/
+func (g stubGuilds) GuildRecord(_ string, guildID int64) (enterworld.GuildRecord, bool) {
+	if guildID != g.guildID {
+		return enterworld.GuildRecord{}, false
+	}
+	return enterworld.GuildRecord{}, true
+}
+
+/*
+================
+GuildMember
+================
+*/
+func (g stubGuilds) GuildMember(_ string, guildID int64, characterID int64) (enterworld.GuildMemberRecord, bool) {
+	if guildID != g.guildID {
+		return enterworld.GuildMemberRecord{}, false
+	}
+	for _, member := range g.members {
+		if member.CharID == characterID {
+			return member, true
+		}
+	}
+	return enterworld.GuildMemberRecord{}, false
+}
+
+/*
+================
 GuildOfCharacter
 ================
 */

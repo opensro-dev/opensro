@@ -725,7 +725,7 @@ func (rt *Runtime) companionPresentations(division, name string) []*simulation.P
 	guildName := ""
 	if guildID != 0 {
 		if store := rt.deps.GuildAuthority(); store != nil {
-			if guild, _, found := store.Guild(division, guildID); found {
+			if guild, found := store.GuildRecord(division, guildID); found {
 				guildName = guild.Name
 			}
 		}
