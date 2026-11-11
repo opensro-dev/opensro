@@ -296,6 +296,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue qinshi population: %w", err)
 	}
+	template, err = monster.AppendSkytemple(template, dir, monster.SkytempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue skytemple population: %w", err)
+	}
 	if monster.QinShiTombFromEnv() {
 		template, err = template.WithQinShiTomb(dir)
 		if err != nil {
