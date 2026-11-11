@@ -42,6 +42,7 @@ export interface CaveMapSign {
 export interface CaveMapPage {
 	readonly regionId: number;
 	readonly floorIndex: number;
+	readonly layer: number;
 	readonly floorLabel: string;
 	readonly columns: number;
 	readonly rows: number;
@@ -75,7 +76,8 @@ export function caveMapCatalog( value: unknown ): CaveMapCatalog {
 	) throw Error( "Invalid dungeon map catalog" );
 	for ( const map of data.maps ) {
 		if (
-			!Number.isInteger( map.regionId ) || !Number.isInteger( map.floorIndex ) || !(map.columns > 0) ||
+			!Number.isInteger( map.regionId ) || !Number.isInteger( map.floorIndex ) ||
+			!Number.isInteger( map.layer ) || !(map.columns > 0) ||
 			!(map.rows > 0) || !(map.width > 0) || !(map.height > 0) || typeof map.image !== "string" ||
 			!Array.isArray( map.labels ) || !Array.isArray( map.signs )
 		) throw Error( "Invalid dungeon map page" );
@@ -92,6 +94,57 @@ The page of a floor, or undefined when the client has none.
 */
 export function caveMapPage( catalog: CaveMapCatalog | undefined, regionId: number, floor: number | undefined ) {
 	return catalog?.maps.find( map => map.regionId === regionId && map.floorIndex === floor );
+}
+
+/*
+================
+caveDungeonFloors
+
+The pages of the dungeon a region belongs to, in floor order (issue
+#3167's floor selector): Donwhang's cave is one region whose pages
+differ by floorIndex; Ch'in Tomb spreads its floors over regions
+2..7 of the dungeon mask, ordered by their authored layer. A region
+in no known dungeon floors with its own pages alone.
+================
+*/
+export function caveDungeonFloors(
+	catalog: CaveMapCatalog | undefined,
+	regionId: number
+): readonly CaveMapPage[] {
+	if ( !catalog ) return [];
+	const dungeon = regionId & 0x7fff;
+	if ( regionId & 0x8000 && dungeon === 1 ) {
+		return catalog.maps
+			.filter( map => map.regionId === regionId )
+			.sort( ( a, b ) => a.floorIndex - b.floorIndex );
+	}
+	if ( regionId & 0x8000 && dungeon >= 2 && dungeon <= 7 ) {
+		return catalog.maps
+			.filter( map => (map.regionId & 0x7fff) >= 2 && (map.regionId & 0x7fff) <= 7 )
+			.sort( ( a, b ) => a.layer - b.layer );
+	}
+	return catalog.maps
+		.filter( map => map.regionId === regionId )
+		.sort( ( a, b ) => a.floorIndex - b.floorIndex );
+}
+
+/*
+================
+cavePageCenter
+
+The world position a page's centre shows, for viewing a dungeon the
+player is not standing in (issue #3167): the inverse of caveMapView's
+projection at the page's middle tile.
+================
+*/
+export function cavePageCenter( page: CaveMapPage ): Pose {
+	return {
+		regionId: page.regionId,
+		x: (page.left - CAVE_TILE_ORIGIN + page.columns / 2) * REGION_SIZE,
+		y: 0,
+		z: (page.top + 1 - CAVE_TILE_ORIGIN - page.rows / 2) * REGION_SIZE,
+		angle: 0
+	};
 }
 
 /*
