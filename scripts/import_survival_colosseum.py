@@ -5,6 +5,7 @@ import_survival_colosseum.py - stage the owned Survival Colosseum for the world 
 
 Port-only, not native. Requires SRO_SURVIVAL_COLOSSEUM=on. Makes a separate
 game root using the Alexandria pipeline's safe linking/catalog operations.
+The default source is the checked-in Colosseum inputs, not a newer PK2.
 Archives and the native extraction remain read-only. Model dependencies are
 walked with the same BSR/BMT/BMS parsers the world publisher uses.
 
@@ -30,6 +31,8 @@ PIN_FILE = Path(__file__).with_name("survival_archive_pins.json")
 MANIFEST = ".opensro-survival-colosseum.json"
 SAFEZONE_PREFIX = "STRUCTURE_POS_COLOSSEUM_SAFEZONE_"
 SCRIPT_ROOT = Path(__file__).resolve().parent
+ASSET_ROOT = SCRIPT_ROOT.parent / "docs/features/assets/survival/colosseum"
+ASSET_MANIFEST = "manifest.json"
 ARENA_REF_BASE = 5100000
 DEPENDENCIES = """
 import fs from 'node:fs';
@@ -155,6 +158,22 @@ def arena_character_rows(rows):
 
 
 # ================
+# read_asset_input
+# ================
+def read_asset_input(root, manifest, archive, name):
+	"""Read a pinned repository input through the same importer as a PK2 entry."""
+	key = archive + "/" + sro_pk2.fold_ascii(name.replace("\\", "/"))
+	target = safe_target(root, key)
+	expected = manifest["files"].get(key)
+	if expected is None:
+		raise ValueError(f"Missing Colosseum dependency: {key}")
+	content = target.read_bytes()
+	if hashlib.sha256(content).hexdigest() != expected:
+		raise ValueError(f"Colosseum input differs from its source pin: {key}")
+	return content
+
+
+# ================
 # build_variant
 # ================
 def build_variant(client, native_root, output):
@@ -169,9 +188,14 @@ def build_variant(client, native_root, output):
 		previous = json.loads((output / MANIFEST).read_text(encoding="utf8"))
 		if previous.get("format") != identity["format"] or previous.get("nativeRoot") != identity["nativeRoot"] or any(pins.get(key) != value for key, value in previous.get("archives", {}).items()):
 			raise ValueError("Variant manifest belongs to different input assets")
+	inputs = None
+	if (client / ASSET_MANIFEST).is_file():
+		inputs = json.loads((client / ASSET_MANIFEST).read_text(encoding="utf8"))
+		if inputs.get("format") != "opensro-survival-colosseum-inputs-v1" or inputs.get("archives") != pins or not isinstance(inputs.get("files"), dict):
+			raise ValueError("Colosseum asset manifest does not match the inspected source")
 	with ExitStack() as stack:
 		archives, indexes = {}, {}
-		for name, expected in pins.items():
+		for name, expected in (() if inputs is not None else pins.items()):
 			handle = stack.enter_context((client / f"{name}.pk2").open("rb"))
 			data = stack.enter_context(mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ))
 			if source.sha256_of(data) != expected:
@@ -183,6 +207,8 @@ def build_variant(client, native_root, output):
 		# read
 		# ================
 		def read(archive, name):
+			if inputs is not None:
+				return read_asset_input(client, inputs, archive, name)
 			key = sro_pk2.fold_ascii(name.replace("\\", "/"))
 			entry = indexes[archive].get(key)
 			if entry is None:
@@ -288,7 +314,7 @@ def build_variant(client, native_root, output):
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--client-root", type=Path, required=True)
+	parser.add_argument("--client-root", type=Path, default=ASSET_ROOT, help="Colosseum inputs (default: repository assets); original pinned archives remain supported")
 	parser.add_argument("--native-root", type=Path, required=True)
 	parser.add_argument("--variant-root", type=Path, required=True)
 	args = parser.parse_args()

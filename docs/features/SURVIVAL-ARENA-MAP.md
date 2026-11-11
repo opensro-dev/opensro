@@ -10,9 +10,13 @@ provides the venue reference, not the gameplay specification for this feature.
 
 The baseline v1.150 asset set lacks sector236/99. Constantinople's older
 colosseum world prop is not this arena. Do not enable a teleport into a missing
-sector. The importer reads separately supplied, legally owned newer-client
-Map/Media/Data/Particles PK2 files. It never runs a retail executable or edits
-those archives. Expected SHA256 pins are in `scripts/survival_archive_pins.json`.
+sector. The missing Colosseum inputs are included under
+`docs/features/assets/survival/colosseum/`. The default importer uses those
+inputs plus the original v1.150 extraction, with no newer PK2 or download.
+It never runs a retail executable or edits the original archives. The asset
+manifest pins each included file; `scripts/survival_archive_pins.json` records
+its source provenance. An explicit `--client-root` still supports the original
+pinned-archive import for reproduction.
 
 `scripts/import_survival_colosseum.py` creates a separate variant root using
 the existing guarded Alexandria import helpers. It imports the sector terrain,
@@ -34,7 +38,7 @@ built native baseline. All roots below are explicit operator-provided paths.
 ```powershell
 $env:SRO_SURVIVAL_COLOSSEUM = 'on'
 $env:SRO_SOOK_SURVIVAL_ARENA = 'on'
-python scripts/import_survival_colosseum.py --client-root <owned-newer-client> --native-root <owned-v150-root> --variant-root <separate-output-root>
+python scripts/import_survival_colosseum.py --native-root <owned-v150-root> --variant-root <separate-output-root>
 $env:SRO_GAME_ROOT = '<separate-output-root>'
 $env:SRO_GENERATED_ROOT = '<absolute-generated-root-for-this-variant>'
 pnpm assets build world-outdoor -- --region=0x63ec --force --jobs=1
@@ -68,5 +72,5 @@ world entry; they do not replace a fresh full-stage regression of each merged
 build. See [implementation handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md).
 
 Generated client/server bundles, PK2 files, local databases, executable builds
-and recordings remain untracked. No proprietary archive contents are part of
-this PR.
+and recordings remain untracked. Only the missing arena build inputs are
+included; native v1.150 assets and complete archives are not copied into Git.

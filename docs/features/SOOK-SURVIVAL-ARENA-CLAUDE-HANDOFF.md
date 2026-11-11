@@ -237,3 +237,23 @@ architecture test, arena client tests, arena Go tests, formatting and encoding
 checks pass. Previous CI server tests/static/lint/race/policy and source checks
 passed. New CI results must be checked on the pushed head. The running game
 was neither reloaded nor restarted.
+
+## Repository Colosseum inputs; v1.150-only base (2026-11-11)
+
+At the owner's request, the 113 missing Colosseum source inputs (5,725,252
+bytes) are included under docs/features/assets/survival/colosseum, with a
+per-file SHA-256 manifest and byte-preserving Git attributes. No PK2,
+executable, downloadable bundle or generated runtime output is included.
+The existing importer defaults to these repository inputs, then uses the
+existing Alexandria catalog merges and normal world/model/image converters.
+The original v1.150 extraction remains the base and stays read-only.
+
+A fresh import using only that base and the repository inputs matched the
+inspected archive-source import exactly, including all 114 nonshared staged
+files. Five importer/integrity/path-safety tests pass; all staged input bytes
+match the manifest. The standard outdoor build converted region 0x63ec
+successfully (18,250 images, zero failures; world objects 1587 BSR/5880 BMS).
+Only this region was built in the isolated test tree: its global routing was
+correctly not published with 2123 other region bundles absent. A production
+release still needs the documented full build, server projection and normal
+pack/release gates. The running game and its data were left untouched.

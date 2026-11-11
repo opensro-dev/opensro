@@ -139,3 +139,33 @@ overall egg cadence is unchanged. KABUM has about 11.03% of egg rolls
 (+30% relative to its previous share); Ambush has about 5.94% (−30%). Eggs spawned during the remaining-monster
 cleanup are removed immediately when the last monster dies, before the reward
 window opens; no old eggs remain during the decision or next-stage countdown.
+
+## Asset build from the original v1.150 client
+
+The additional Colosseum inputs are included in
+`docs/features/assets/survival/colosseum/`. No newer PK2, separate download,
+or external asset bundle is required. The original v1.150 extraction remains
+the base; the importer stages a separate game root using the existing safe
+link/catalog merge operations. The normal world/model/texture/server-data
+converters produce the runtime assets and standard packs.
+
+After preparing the original v1.150 extraction, run from the repository root
+(the environment examples below use PowerShell):
+
+```powershell
+$env:SRO_SURVIVAL_COLOSSEUM = "on"
+python scripts/import_survival_colosseum.py --native-root "C:/SRO-v150" --variant-root "C:/SRO-survival-build"
+$env:SRO_GAME_ROOT = "C:/SRO-survival-build"
+$env:SRO_SOOK_SURVIVAL_ARENA = "on"
+pnpm assets build full
+pnpm task build server-game-data
+pnpm assets ledger
+```
+
+Use the project's Python environment and standard extraction preparation.
+The generated tree follows the usual shared-root resolver; operators can use
+its documented `SRO_GENERATED_ROOT` override for an isolated build. Package and
+publish the result through the normal release workflow. Deploy the matching
+server projection and client packs together. Merely compiling the server does
+not rebuild or publish data. `--client-root` is optional legacy input for the
+pinned source archives; the default reads the checked-in arena inputs.

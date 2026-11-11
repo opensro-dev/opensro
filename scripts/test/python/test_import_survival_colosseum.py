@@ -9,6 +9,9 @@ model dependency with the production publisher's parsers.
 ===========================================================================
 """
 import sys
+import hashlib
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +23,37 @@ import import_survival_colosseum as arena
 # ColosseumImportTests
 # ================
 class ColosseumImportTests(unittest.TestCase):
+
+	# ================
+	# test_repository_assets_have_complete_pinned_inputs
+	# ================
+	def test_repository_assets_have_complete_pinned_inputs(self):
+		manifest = json.loads((arena.ASSET_ROOT / arena.ASSET_MANIFEST).read_text(encoding="utf8"))
+		self.assertEqual(manifest["region"], 25580)
+		self.assertEqual(manifest["archives"], json.loads(arena.PIN_FILE.read_text(encoding="utf8")))
+		self.assertGreater(len(manifest["files"]), 0)
+		for key in manifest["files"]:
+			archive, name = key.split("/", 1)
+			self.assertNotEqual(Path(name).suffix.lower(), ".pk2")
+			arena.read_asset_input(arena.ASSET_ROOT, manifest, archive, name)
+
+	# ================
+	# test_repository_input_refuses_corruption_and_traversal
+	# ================
+	def test_repository_input_refuses_corruption_and_traversal(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root = Path(folder)
+			(root / "Map").mkdir()
+			(root / "Map/terrain.m").write_bytes(b"terrain")
+			manifest = {"files": {"Map/terrain.m": hashlib.sha256(b"terrain").hexdigest()}}
+			self.assertEqual(arena.read_asset_input(root, manifest, "Map", "TERRAIN.M"), b"terrain")
+			(root / "Map/terrain.m").write_bytes(b"changed")
+			with self.assertRaises(ValueError):
+				arena.read_asset_input(root, manifest, "Map", "terrain.m")
+			with self.assertRaises(ValueError):
+				arena.read_asset_input(root, manifest, "Map", "absent.m")
+			with self.assertRaises(ValueError):
+				arena.read_asset_input(root, manifest, "Map", "../../outside.m")
 
 	# ================
 	# test_higher_level_rows_reuse_native_models_and_skills
