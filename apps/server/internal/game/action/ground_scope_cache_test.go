@@ -15,6 +15,7 @@ package action
 
 import (
 	"math/rand"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -331,8 +332,8 @@ func TestGroundCacheIgnoresOtherDivisionsWrites(t *testing.T) {
 	if after == before {
 		t.Fatal("the quiet division's own write did not rebuild its cached drops")
 	}
-	if len(after.items) != 2 {
-		t.Fatalf("rebuilt cache holds %d drops, want 2", len(after.items))
+	if gids := placedGidsOf(after.buckets[grounditem.Population{}]); len(gids) != 2 {
+		t.Fatalf("the next view places %v, want 2 drops", gids)
 	}
 }
 
@@ -383,5 +384,141 @@ func TestHasExpiredOwnerReadsTheCachedDrops(t *testing.T) {
 		DroppedAt: now.Add(-grounditem.OwnerLifetime), Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
 	if !rt.hasExpiredOwner(now) {
 		t.Fatal("the cached sweep missed the expired owner")
+	}
+}
+
+/*
+================
+viewRows
+
+A view flattened for comparison: per population and block, the rows'
+items by value, in the view's own order.
+================
+*/
+func viewRows(buckets map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop) map[dropPlace][]grounditem.Item {
+	out := make(map[dropPlace][]grounditem.Item)
+	for population, blocks := range buckets {
+		for block, rows := range blocks {
+			place := dropPlace{population: population, block: block}
+			if len(rows) == 0 {
+				out[place] = nil
+			}
+			for _, row := range rows {
+				if row.block != block {
+					out[dropPlace{population: population, block: row.block}] = nil
+				}
+				out[place] = append(out[place], *row.item)
+			}
+		}
+	}
+	return out
+}
+
+/*
+================
+TestGroundCacheDeltasMatchAWholeRebuild
+
+The cache derives each view from the one before and the registry's
+delta (#3164). After every one of 1,500 random registry writes, in two
+populations, the derived view must equal a view built whole from the
+registry: the same populations, the same blocks, the same rows in the
+same order. A view handed out earlier must still read as it did when
+it was handed out, because viewers hold it across later writes.
+================
+*/
+func TestGroundCacheDeltasMatchAWholeRebuild(t *testing.T) {
+	random := rand.New(rand.NewSource(3164))
+	rt := &Runtime{Ground: grounditem.NewRegistry()}
+	instance := grounditem.Population{World: 9, Generation: 2}
+	clock := time.Unix(1_800_000_000, 0)
+	var live []uint32
+	var held *groundDivisionDrops
+	var heldRows map[dropPlace][]grounditem.Item
+	wholeBuilds := 0
+	for step := 0; step < 1500; step++ {
+		clock = clock.Add(time.Second)
+		switch choice := random.Intn(100); {
+		case choice < 45 || len(live) == 0:
+			item := grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, DroppedAt: clock,
+				MagicOptions: []uint64{uint64(step)},
+				Position:     grounditem.Point{RegionID: 0x6a9a, X: float32(random.Intn(1900)), Z: float32(random.Intn(1900))}}
+			if random.Intn(3) == 0 {
+				item.Population = instance
+			}
+			if random.Intn(3) == 0 {
+				item.OwnerJID = uint32(1 + random.Intn(9))
+			}
+			live = append(live, rt.Ground.Add("main", item).Gid)
+		case choice < 78:
+			at := random.Intn(len(live))
+			rt.Ground.Remove("main", live[at])
+			live = slices.Delete(live, at, at+1)
+		case choice < 90:
+			rt.Ground.SetStackCount("main", live[random.Intn(len(live))], uint16(1+random.Intn(900)))
+		case choice < 95:
+			rt.Ground.ReleaseExpiredOwners("main", clock, 30*time.Second)
+		case choice < 98:
+			for _, gone := range rt.Ground.ExpireItems("main", clock, 90*time.Second) {
+				live = slices.DeleteFunc(live, func(gid uint32) bool { return gid == gone.Gid })
+			}
+		default:
+			for _, gone := range rt.Ground.RemovePopulation("main", instance) {
+				live = slices.DeleteFunc(live, func(gid uint32) bool { return gid == gone.Gid })
+			}
+		}
+		// Some steps are not read at all, so a delta spans several writes.
+		if random.Intn(4) == 0 {
+			continue
+		}
+		view := rt.groundDivisionSnapshot("main")
+		items, revision := rt.Ground.DivisionSnapshot("main")
+		whole := newGroundDivisionState(items, revision).view
+		if view.revision != whole.revision {
+			t.Fatalf("step %d: the view is at revision %d, the registry at %d", step, view.revision, whole.revision)
+		}
+		if got, want := viewRows(view.buckets), viewRows(whole.buckets); !reflect.DeepEqual(got, want) {
+			t.Fatalf("step %d: the derived view differs from a whole rebuild (%d places against %d)", step, len(got), len(want))
+		}
+		if _, cached := rt.groundDrops.divisions["main"]; !cached {
+			wholeBuilds++
+		}
+		if held != nil && !reflect.DeepEqual(viewRows(held.buckets), heldRows) {
+			t.Fatalf("step %d: a view handed out earlier changed under its readers", step)
+		}
+		if step%50 == 0 {
+			held, heldRows = view, viewRows(view.buckets)
+		}
+	}
+	if len(live) == 0 {
+		t.Fatal("the run ended on an empty division; it proves less than it should")
+	}
+	t.Logf("%d drops live at the end; %d reads found the division empty", len(live), wholeBuilds)
+}
+
+/*
+================
+TestGroundCacheFallsBackWhenTheRegistryCannotSay
+
+A reader further behind than the registry's log, or one that read
+before a Restore, takes the whole copy again and is right.
+================
+*/
+func TestGroundCacheFallsBackWhenTheRegistryCannotSay(t *testing.T) {
+	rt := &Runtime{Ground: grounditem.NewRegistry()}
+	first := rt.Ground.Add("main", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
+	rt.groundDivisionSnapshot("main")
+	// More writes than the log keeps, none of them read.
+	for i := 0; i < 700; i++ {
+		rt.Ground.Add("main", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+			Position: grounditem.Point{RegionID: 0x6a9a, X: float32(20 + i), Z: 10}})
+	}
+	rt.Ground.Remove("main", first.Gid)
+	if gids := placedGidsOf(rt.groundDropBuckets("main", grounditem.Population{})); len(gids) != 700 || slices.Contains(gids, first.Gid) {
+		t.Fatalf("after a gap past the log the cache places %d drops, want the 700 that are live", len(gids))
+	}
+	rt.Ground.Restore(domain.GroundSnapshot{})
+	if gids := placedGidsOf(rt.groundDropBuckets("main", grounditem.Population{})); len(gids) != 0 {
+		t.Fatalf("after a Restore to an empty plane the cache still places %d drops", len(gids))
 	}
 }
