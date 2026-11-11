@@ -31,6 +31,7 @@ import {
 } from "@/engine/foundation/gameplay/player-attack";
 import { resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import { partyInviteTarget, partyProposalPendingNotice } from "@/engine/foundation/gameplay/party-invite";
+import { gameplayDelta, samePlainData } from "@/engine/foundation/gameplay/gameplay-snapshot";
 import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
@@ -220,6 +221,12 @@ items). Only PvP capes own a team value; keep strict validation for them.
 		retainedGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
 		seenGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
 		publishedSocial: import("@/engine/contracts/gameplay").GameplayState["social"];
+	// The dynamic gameplay fields as last published (gameplay-snapshot.ts
+	// gameplayDelta), and the world epoch they were published into. Null, or
+	// an epoch behind the journal's, makes the next publication whole: a
+	// reset emptied the reader's gameplay state, so a delta would leave it
+	// with only the fields that happened to change.
+	let publishedDynamic: Map<string, unknown> | null = null, publishedEpoch = -1;
 	/*
 ================
 invalidateProjection
@@ -232,6 +239,7 @@ fields (shop, skill catalog, GM catalog, social).
 		publishedCatalog = undefined;
 		publishedGmCatalog = undefined;
 		publishedSocial = undefined;
+		publishedDynamic = null;
 	}
 	/*
 	================
@@ -250,7 +258,7 @@ fields (shop, skill catalog, GM catalog, social).
 		const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
 		const catalog = skillCatalog === seenCatalog ?
 			retainedCatalog ?? skillCatalog :
-			retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
+			retainedCatalog && samePlainData( skillCatalog, retainedCatalog ) ?
 			retainedCatalog :
 			skillCatalog;
 		seenCatalog = skillCatalog;
@@ -260,53 +268,40 @@ fields (shop, skill catalog, GM catalog, social).
 			undefined :
 			gmCatalog === seenGmCatalog ?
 			retainedGmCatalog ?? gmCatalog :
-			retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
+			retainedGmCatalog && samePlainData( gmCatalog, retainedGmCatalog ) ?
 			retainedGmCatalog :
 			gmCatalog;
 		if ( gmCatalog ) seenGmCatalog = gmCatalog;
 		if ( gm ) retainedGmCatalog = gm;
 		const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
-		const event: Extract<WorldEvent, { kind: "gameplay"; }> = {
-			kind: "gameplay",
-			state: {
-				...dynamic,
-				...(shop !== publishedShop ? { shop } : {}),
-				...(catalogChanged ? { skillCatalog: catalog } : {}),
-				...(gmChanged && gm ? { gmCatalog: gm } : {}),
-				...(social !== publishedSocial ? { social } : {})
-			}
-		};
+		// The dynamic fields ride whole behind a reset or an invalidation, and
+		// as a delta otherwise: only what changed since the last publication.
+		// The own pose changes on every tick of a walk; the bag, the chat log
+		// and the storage beside it do not, and must not be cloned with it.
+		const whole = !publishedDynamic || publishedEpoch !== entities.epoch();
+		let fields: Record<string, unknown>;
+		if ( whole ) {
+			publishedDynamic = new Map( Object.entries( dynamic ) );
+			publishedEpoch = entities.epoch();
+			fields = dynamic;
+		} else fields = gameplayDelta( publishedDynamic!, dynamic );
+		// A delta is a GameplayState by contract only through the merge
+		// (contracts/world.ts): the fields it omits are the reader's.
+		const publication = {
+			...fields,
+			...(shop !== publishedShop ? { shop } : {}),
+			...(catalogChanged ? { skillCatalog: catalog } : {}),
+			...(gmChanged && gm ? { gmCatalog: gm } : {}),
+			...(social !== publishedSocial ? { social } : {})
+		} as import("@/engine/contracts/gameplay").GameplayState;
+		const event: Extract<WorldEvent, { kind: "gameplay"; }> = whole ?
+			{ kind: "gameplay", state: publication } :
+			{ kind: "gameplay", state: publication, delta: true };
 		publishedShop = shop;
 		if ( catalogChanged ) publishedCatalog = catalog;
 		if ( gmChanged ) publishedGmCatalog = gm;
 		publishedSocial = social;
 		return event;
-	}
-	/*
-================
-sameSkillCatalog
-
-A bootstrap rebuilds the skill catalogue from the same reference
-snapshot: new objects, the same rows. Content equality is what
-"unchanged" means for the projection, so a portal entry does not
-resend the catalogue beside the destination's spawn burst (F11-DC1).
-The catalogue is plain data; the walk short-circuits on the first
-row that differs.
-================
-	*/
-	function sameSkillCatalog( a: unknown, b: unknown ): boolean {
-		if ( a === b ) return true;
-		if ( Array.isArray( a ) && Array.isArray( b ) ) {
-			return a.length === b.length && a.every( ( row, i ) => sameSkillCatalog( row, b[i] ) );
-		}
-		if ( a && b && typeof a === "object" && typeof b === "object" ) {
-			const aKeys = Object.keys( a ), bKeys = Object.keys( b );
-			return aKeys.length === bKeys.length &&
-				aKeys.every( key =>
-					sameSkillCatalog( (a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key] )
-				);
-		}
-		return false;
 	}
 	/*
 ================

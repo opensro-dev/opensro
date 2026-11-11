@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
+import { createShownGameplay } from "../helpers/shown-gameplay.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -331,11 +332,14 @@ test("local entry effects cross the entity lifecycle once and preserve remaining
 				spawnSkills: [ { id: 7, token: 99, remaining: 4000, status: 1 } ]
 			}
 		};
+	const { mergeGameplaySnapshots } = await load( "foundation/gameplay/gameplay-snapshot.ts" );
+	// The state shown after each batch: a publication names only what changed.
+	const shown = createShownGameplay( mergeGameplaySnapshots );
 	const drain = () => {
 		core.step( 0, false );
 		const b = core.take();
 		if ( b ) core.ack( b.sequence );
-		return b?.events.findLast( e => e.kind === "gameplay" )?.state;
+		return shown( b?.events );
 	};
 	core.bootstrap( base );
 	drain();

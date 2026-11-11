@@ -135,7 +135,7 @@ func TestFiveStarBountyPaysOnce(t *testing.T) {
 	if got := rt.fiveStarBountyPercent(hunter, thief, now); got != 0 {
 		t.Fatalf("unmarked bounty = %d, want 0", got)
 	}
-	rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now})
+	rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now, cargoScale: 1000})
 	want := tunables.Current().Int(tunables.TradeFiveStarBountyPercent)
 	if got := rt.fiveStarBountyPercent(hunter, thief, now); got != want {
 		t.Fatalf("marked bounty = %d, want %d", got, want)
@@ -144,7 +144,7 @@ func TestFiveStarBountyPaysOnce(t *testing.T) {
 		t.Fatalf("bounty paid twice: %d", got)
 	}
 	// The flag off pays nothing (the mark survives; it is never paid).
-	rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now})
+	rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now, cargoScale: 1000})
 	rt.TradeTiers = false
 	if got := rt.fiveStarBountyPercent(hunter, thief, now); got != 0 {
 		t.Fatalf("flag-off bounty = %d, want 0", got)
@@ -154,7 +154,7 @@ func TestFiveStarBountyPaysOnce(t *testing.T) {
 	rt2.TradeTiers = true
 	dressForJob(rt2, trader, 9405, "ITEM_CH_M_TRADE_TRADER_04", 1)
 	dressForJob(rt2, thief2, 9406, "ITEM_CH_M_TRADE_THIEF_04", 2)
-	rt2.caravanThiefMarks.Store(thief2.ID, caravanThiefMark{at: now})
+	rt2.caravanThiefMarks.Store(thief2.ID, caravanThiefMark{at: now, cargoScale: 1000})
 	if got := rt2.fiveStarBountyPercent(trader, thief2, now); got != 0 {
 		t.Fatalf("trader bounty = %d, want 0", got)
 	}
@@ -187,7 +187,7 @@ func TestFiveStarBountyRaisesTheJobKillPayoff(t *testing.T) {
 		}
 		now := clock.NowMs()
 		if marked {
-			rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now})
+			rt.caravanThiefMarks.Store(thief.ID, caravanThiefMark{at: now, cargoScale: 1000})
 		}
 		kill := playerKill{kind: pk.DeathJob}.withVictim(hunter, thief)
 		_, _, after := rt.payPlayerKillInDoor(testDivision, hunter, thief, kill, now)
@@ -204,6 +204,110 @@ func TestFiveStarBountyRaisesTheJobKillPayoff(t *testing.T) {
 	}
 	if got := pay(true, false); got != native {
 		t.Fatalf("flag-off marked kill paid %d, want native %d", got, native)
+	}
+}
+
+/*
+================
+TestScaledBountyPercent
+
+The bounty bonus follows the robbed cargo (#3162): the full configured
+percent at the largest ordinary full load, half at half that cargo,
+the Trade group's floor under a small load - and nothing at all when
+the bounty percent itself is configured to 0, floor or not.
+================
+*/
+func TestScaledBountyPercent(t *testing.T) {
+	settings := tradeSettings(t, nil)
+	for scale, want := range map[int64]int64{1000: 50, 500: 25, 317: 15, 100: 10, 0: 10} {
+		if got := scaledBountyPercent(scale, settings); got != want {
+			t.Fatalf("scale %d: %d%%, want %d%%", scale, got, want)
+		}
+	}
+	off := tradeSettings(t, map[string]string{"SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT": "0"})
+	if got := scaledBountyPercent(1000, off); got != 0 {
+		t.Fatalf("disabled bounty paid %d%%", got)
+	}
+	noFloor := tradeSettings(t, map[string]string{"SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT": "0"})
+	if got := scaledBountyPercent(100, noFloor); got != 5 {
+		t.Fatalf("floorless small bounty = %d%%, want 5%%", got)
+	}
+}
+
+/*
+================
+TestFiveStarBountyPerGoldAtRisk
+
+The #3162 collusion cycle, played through the mark: a thief attacks a
+brim-full 32-slot caravan and a brim-full 101-slot one, a hunter kills
+the thief after each. Both caravans are 5 stars, but the small one's
+mark carries 32/101 of the largest load, so its bounty bonus per gold
+at risk is no larger than the big caravan's - where the pre-#3162 flat
+percent paid the small cycle 101/32 times the big one's rate.
+================
+*/
+func TestFiveStarBountyPerGoldAtRisk(t *testing.T) {
+	rt, _ := traderFixture(t, false)
+	rt.TradeTiers = true
+	good, found := rt.deps.ItemReferences().ItemRefByCodename("ITEM_ETC_TRADE_WC_01")
+	if !found {
+		t.Fatal("fixture good missing")
+	}
+	owner := func(id int64, slots int64) *enterworld.Character {
+		o := testCharacter()
+		o.ID, o.Name = id, "Owner"
+		o.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Owner"}
+		o.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot,
+			TypeFlags: wire.PackTypeFlags(3, 1, 7, 1), StackCount: 1}}
+		rows := make([]domain.InventoryRow, 0, slots)
+		for slot := int64(0); slot < slots; slot++ {
+			rows = append(rows, domain.InventoryRow{Slot: slot, RefObjID: good.RefObjID,
+				Codename: good.Codename, TypeFlags: good.TypeFlags(), StackCount: 40})
+		}
+		o.ActiveCOS = &domain.CharacterCOS{GID: uint32(6000 + id), RefObjID: 3914, Codename: "COS_T_DHORSE3",
+			Summoned: true, Container: &domain.COSContainer{Capacity: uint8(slots), Rows: rows}}
+		return o
+	}
+	dressed := func(id int64, tid4 uint8) *enterworld.Character {
+		c := testCharacter()
+		c.ID, c.Name = id, "Dressed"
+		c.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot,
+			TypeFlags: wire.PackTypeFlags(3, 1, 7, tid4), StackCount: 1}}
+		return c
+	}
+	thief, hunter := dressed(9001, 2), dressed(9002, 3)
+	now := int64(100_000)
+	bounty := func(o *enterworld.Character) (int64, int64) {
+		rt.noteCaravanAttack(thief, o, now)
+		mark, marked := rt.caravanThiefMarkOf(thief, now)
+		if !marked {
+			t.Fatalf("attack on a full %d-slot caravan left no mark", o.ActiveCOS.Container.Capacity)
+		}
+		return rt.fiveStarBountyPercent(hunter, thief, now), mark.cargoScale
+	}
+	smallPercent, smallScale := bounty(owner(101, 32))
+	largePercent, largeScale := bounty(owner(102, 101))
+	if smallScale != 32000/101 || largeScale != 1000 {
+		t.Fatalf("scales %d and %d, want %d and 1000", smallScale, largeScale, 32000/101)
+	}
+	if smallPercent != 15 || largePercent != 50 {
+		t.Fatalf("bounties %d%% and %d%%, want the scaled 15%% and the full 50%%", smallPercent, largePercent)
+	}
+	// Per gold at risk (32 and 101 identical stacks of the same good):
+	// the small cycle must not pay the higher rate.
+	smallGold := rt.cargoGoldValue(owner(103, 32))
+	largeGold := rt.cargoGoldValue(owner(104, 101))
+	if smallPercent*int64(largeGold) > largePercent*int64(smallGold) {
+		t.Fatalf("bounty per gold at risk: small %d%% of %d gold beats large %d%% of %d",
+			smallPercent, smallGold, largePercent, largeGold)
+	}
+	// A caravan short of five stars marks nothing, however full the
+	// thief's pockets: a fifth of the big bag is two stars.
+	light := owner(105, 101)
+	light.ActiveCOS.Container.Rows = light.ActiveCOS.Container.Rows[:21]
+	rt.noteCaravanAttack(thief, light, now)
+	if _, marked := rt.caravanThiefMarkOf(thief, now); marked {
+		t.Fatal("attack on a 2-star caravan left a mark")
 	}
 }
 

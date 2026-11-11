@@ -1685,6 +1685,10 @@ export function createUi( ports: UiPorts ) {
 		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
 	const chatLayoutCache = createRetainedLayout<ReturnType<typeof chatLayout>>(),
 		statusLayoutCache = createRetainedLayout<ReturnType<typeof systemMessageLayout>>();
+	// The chat wraps kept across rebuilds (#3176): the retained layout
+	// above reuses a whole product; this keeps the per-line wraps for
+	// the rebuilds a new line (or a blinking caret) still forces.
+	const chatWrapCache = new Map<string, readonly string[]>();
 	/*
 	================
 	HudSection
@@ -13104,6 +13108,7 @@ export function createUi( ports: UiPorts ) {
 								offset: chatScroll.offset(),
 								hidden: chatHidden,
 								measure: ( value, style ) => text.run( value, style?.fontStyle ?? 0 ).width,
+								wrapCache: chatWrapCache,
 								editState: {
 									caretVisible,
 									caretHeight: text.height() + 2,

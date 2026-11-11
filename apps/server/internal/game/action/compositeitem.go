@@ -212,8 +212,10 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 			}
 			if premiumRunning(character, nowMs) {
 				// Port-only, not native (SRO_PREMIUM_UPGRADE): the
-				// package's ticket replaces a strictly lower grade of
-				// its family, or the refusal stands.
+				// package's ticket replaces what premiumUpgradePlan
+				// allows - a strictly lower grade of its family, or a
+				// running skill-only ticket under a full premium
+				// (#3146) - or the refusal stands.
 				retired := rt.premiumUpgradePlan(character, nowMs, internal, family == itemUseSkillTimeTicket)
 				if retired == nil {
 					return plan, errCodePremiumActive, ""

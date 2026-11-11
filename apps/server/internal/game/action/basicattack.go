@@ -146,12 +146,6 @@ type basicAttackIntent struct {
 	// context to arrive at the same wait. Zero - every fresh,
 	// promoted or replaced intent - always evaluates.
 	WaitUntilMs int64
-	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
-	// latency budget (record+28, reset when the reference server releases the record) the
-	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
-	// grows only when a step outlasts the remaining budget.
-	ChainLatencyConsumedMs int64
-	ChainLatencyUsedMs     int64
 
 	// ApproachTargetSample is the live target pose from which the most recent
 	// player movement goal was authored. It belongs to this attack intent; the
@@ -165,41 +159,12 @@ type basicAttackIntent struct {
 	ApproachMovementRevision uint64
 }
 
-// chainLatencyBudgetMs is the per-command allowance native chain steps take
-// out of their waits so client latency does not stretch the authored combo.
-const chainLatencyBudgetMs = 500
-
 // basicAttackSpreadBudget is the per-tick ceiling on advancing attack
 // intents: a burst of due intents drains over later ticks instead of
 // inside one (#2143). At least one intent always advances, so a single
 // expensive intent cannot stall the step either. A var so tests can
 // shrink it to zero and watch the spread happen.
 var basicAttackSpreadBudget = 4 * time.Millisecond
-
-/*
-==================
-spendChainLatency
-
-spendChainLatency returns how long a chain step holds before the next step
-may execute. Native EXECUTE waits the step's action
-duration (ref+78, column 13), NOT casting+duration, after first spending
-what remains of the 500 ms budget. The wait is measured from the step's
-own execution; KEEP_UP compares strictly, hence the caller's +1.
-==================
-*/
-func (intent *basicAttackIntent) spendChainLatency(durationMs int64) int64 {
-	budget := chainLatencyBudgetMs - intent.ChainLatencyConsumedMs
-	if budget <= 0 {
-		return durationMs
-	}
-	if durationMs > budget {
-		intent.ChainLatencyUsedMs += budget
-		intent.ChainLatencyConsumedMs = chainLatencyBudgetMs
-		return durationMs - budget
-	}
-	intent.ChainLatencyConsumedMs += durationMs
-	return 0
-}
 
 /*
 ================
@@ -556,7 +521,6 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		intent.SingleCast, intent.ResumeBasic = false, false
 		intent.ResumeNotified = false
 		intent.ComboRootID, intent.SkillID = 0, basic.ID
-		intent.ChainLatencyConsumedMs, intent.ChainLatencyUsedMs = 0, 0
 	}
 	if intent.SingleCast {
 		if intent.ComboRootID == 0 {
@@ -670,21 +634,36 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	intent.ActionReach = actionReach
 	if intent.SingleCast {
 		alive := rt.combatTargetExists(intent.DivisionID, snapshot, intent.TargetGid)
+		lifecycle, _ := skill.ActionLifecycleMs()
+		if intent.ComboRootID != 0 || skill.ChainNext != 0 {
+			// The root deco carries the chain's one authored clip, so the
+			// bracket closes only when the last performed stage's whole
+			// action (casting + duration) ends, not at its casting point.
+			rt.extendChainBracket(intent.DivisionID, intent.CharacterName, nowMs+int64(lifecycle))
+		}
 		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID
 			}
 			intent.SkillID = skill.ChainNext
-			intent.NextActionMs = nowMs + intent.spendChainLatency(int64(skill.ActionDurationMs)) + 1
+			// Native stage pacing: the client sends the next stage when
+			// this stage's motion completes (casting + duration) and the
+			// reference server executes it on arrival, linked to the
+			// previous stage's cast. The port drives
+			// the stages itself, so it waits the same full action time.
+			// The native 500 ms figure (the record's chain-latency
+			// fields) only tolerates a late client stage command; with
+			// no client command to tolerate it must not compress the
+			// schedule (#3152).
+			intent.NextActionMs = nowMs + int64(lifecycle)
 			rt.setCombatIntent(intent)
 			return prependOpResult(combatTransition, result)
 		}
 		if skill.ContinueBasicAttack && alive {
 			intent.ResumeBasic = true
-			lifetime, _ := skill.ActionLifecycleMs()
-			// The reference server: an authored basic-attack continuation also
-			// returns the chain latency the steps borrowed.
-			intent.NextActionMs = nowMs + int64(lifetime) + intent.ChainLatencyUsedMs
+			// An authored basic-attack continuation waits the stage's
+			// full action time, like every other stage boundary.
+			intent.NextActionMs = nowMs + int64(lifecycle)
 			rt.setCombatIntent(intent)
 		} else {
 			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
