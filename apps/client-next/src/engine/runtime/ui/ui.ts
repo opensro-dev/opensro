@@ -2677,7 +2677,9 @@ export function createUi( ports: UiPorts ) {
 	An equip onto a class that is already worn is refused with the native
 	notice, never swapped and never silent: CIFEquipment_
 	DispatchItemDropAction @594980 checks the class slot control's occupied
-	byte and posts UIIT_MSG_STRGERR_EQUIPITEM as a system message.
+	byte and posts UIIT_MSG_STRGERR_EQUIPITEM as a system message. An
+	attachment (class 3) with no dress (class 2) worn is refused the same
+	way one branch down (594BC7, UIIT_STT_AVATAR_MAIL_ONLY_WEAR).
 	================
 	*/
 	function moveAvatar( equip: boolean, source: number, destination?: number ) {
@@ -2692,7 +2694,13 @@ export function createUi( ports: UiPorts ) {
 				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
 				return;
 			}
-			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) return;
+			// 594BC7: an attachment (class 3) with no dress (class 2) worn
+			// refuses with this line (ChatSystemMessage type 5, as the
+			// class refusal above); no move is sent.
+			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) {
+				hudMessages.append( hudCopy( "UIIT_STT_AVATAR_MAIL_ONLY_WEAR" ), 0xffff7070 );
+				return;
+			}
 			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
