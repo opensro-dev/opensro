@@ -27,6 +27,7 @@ const (
 	PathWS       = "/transport/ws"
 	PathCertHash = "/transport/cert-hash"
 	PathHealth   = "/transport/healthz"
+	PathStandby  = "/transport/standbyz"
 	PathReady    = "/transport/readyz"
 	PathMetrics  = "/transport/metrics"
 
@@ -39,6 +40,11 @@ const (
 	BootPhaseWiring       = "wiring"
 	BootPhaseFilling      = "filling"
 	BootPhaseReady        = "ready"
+	// BootPhaseStandby is the canary handover's waiting phase
+	// (opensro-ops#281): the save-free load is done and the process
+	// waits for the shard guard before it opens the store. It sits
+	// between loading data and opening store in a standby boot.
+	BootPhaseStandby = "standby"
 
 	httpReadHeaderTimeout = 5 * time.Second
 	httpReadTimeout       = 15 * time.Second
@@ -97,6 +103,14 @@ type Server struct {
 	wtServeDone chan struct{}
 	// httpServeDone joins the TCP serve goroutine during shutdown.
 	httpServeDone chan struct{}
+
+	// The standby-health listener (opensro-ops#281): healthz and
+	// standbyz on the deployment-assigned health port, bound by
+	// StartStandbyHealth before any public port exists and closed by
+	// Shutdown with the rest. standbyDone joins its serve goroutine.
+	standbyLn     net.Listener
+	standbyServer *http.Server
+	standbyDone   chan struct{}
 
 	// readyCheck is the injectable half of /transport/readyz: the
 	// authority store lives in a package the transport does not import,
@@ -239,6 +253,52 @@ func (s *Server) readinessError() error {
 		}
 	}
 	return nil
+}
+
+/*
+================
+Server.handleHealthz
+
+Liveness only, but it names the boot phase so an operator (or the
+orchestrator's logs) can tell a slow boot from a hang. Served by every
+listener the process binds: the public TCP one and the standby-health
+one.
+================
+*/
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if !allowReadMethod(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("ok " + s.BootPhase()))
+}
+
+/*
+================
+Server.handleStandbyz
+
+The canary handover's deployment gate (opensro-ops#281): 200 once the
+boot's save-free load is done - the standby phase and every phase after
+it, so the answer never flaps while the process takes over or serves -
+and 503 while that load runs (or before any phase was named). Nomad
+promotes the canary on this answer, so it must be up in standby and in
+service alike; the standby-health listener serves it before any public
+port exists.
+================
+*/
+func (s *Server) handleStandbyz(w http.ResponseWriter, r *http.Request) {
+	if !allowReadMethod(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	phase := s.BootPhase()
+	if phase == "" || phase == BootPhaseLoadingData {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("not standby: " + phase))
+		return
+	}
+	_, _ = w.Write([]byte("ok " + phase))
 }
 
 func (s *Server) requireReadyConnection(
@@ -404,15 +464,8 @@ func NewServer(cfg Config) (*Server, error) {
 		go s.Hub.AcceptConn(conn)
 	})
 	tcpMux.HandleFunc(PathCertHash, s.handleCertHash)
-	tcpMux.HandleFunc(PathHealth, func(w http.ResponseWriter, r *http.Request) {
-		if !allowReadMethod(w, r) {
-			return
-		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		// Liveness only, but it names the boot phase so an operator (or
-		// the orchestrator's logs) can tell a slow boot from a hang.
-		_, _ = w.Write([]byte("ok " + s.BootPhase()))
-	})
+	tcpMux.HandleFunc(PathHealth, s.handleHealthz)
+	tcpMux.HandleFunc(PathStandby, s.handleStandbyz)
 	tcpMux.HandleFunc(PathReady, s.handleReadyz)
 	tcpMux.HandleFunc(PathMetrics, func(w http.ResponseWriter, r *http.Request) {
 		if !allowReadMethod(w, r) {
@@ -642,6 +695,73 @@ func (s *Server) StartHealth() error {
 
 /*
 ================
+StartStandbyHealth
+
+Bind the standby-health listener (opensro-ops#281): healthz and
+standbyz, and nothing a player could use, at the address the caller
+names - in deployment the Nomad-assigned health port, so a standby and
+the live allocation never collide while the public transport port
+stays unbound until the guard holder's Start. The listener serves for
+the process's whole life, because the deployment's standby check must
+keep passing while the allocation serves, and Shutdown closes it with
+the rest.
+================
+*/
+func (s *Server) StartStandbyHealth(addr string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("transport: server is shut down")
+	}
+	if s.standbyLn != nil {
+		return fmt.Errorf("transport: standby health listener already started")
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("transport: binding standby health %s: %w", addr, err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc(PathHealth, s.handleHealthz)
+	mux.HandleFunc(PathStandby, s.handleStandbyz)
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		ReadTimeout:       httpReadTimeout,
+		WriteTimeout:      httpWriteTimeout,
+		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    httpMaxHeaderBytes,
+	}
+	s.standbyLn = ln
+	s.standbyServer = server
+	s.standbyDone = make(chan struct{})
+	go func() {
+		defer close(s.standbyDone)
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
+			s.errCh <- fmt.Errorf("transport: standby health listener: %w", err)
+		}
+	}()
+	log.Infof("transport: standby health listener up at http://%s%s (boot phase %q)", ln.Addr(), PathHealth, s.BootPhase())
+	return nil
+}
+
+/*
+================
+StandbyHealthAddr
+
+The standby-health listener's bound address, or "" before it starts.
+================
+*/
+func (s *Server) StandbyHealthAddr() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.standbyLn == nil {
+		return ""
+	}
+	return s.standbyLn.Addr().String()
+}
+
+/*
+================
 serveHTTP
 
 Own the bound TCP listener and its serve goroutine. The caller holds
@@ -823,6 +943,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	udpConn := s.udpConn
 	wtServeDone := s.wtServeDone
 	httpServeDone := s.httpServeDone
+	standbyServer := s.standbyServer
+	standbyDone := s.standbyDone
 	s.mu.Unlock()
 
 	s.Hub.shutdown(ctx)
@@ -857,6 +979,16 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if httpServeDone != nil {
 		select {
 		case <-httpServeDone:
+		case <-ctx.Done():
+			if err == nil {
+				err = ctx.Err()
+			}
+		}
+	}
+	if standbyServer != nil {
+		_ = standbyServer.Close()
+		select {
+		case <-standbyDone:
 		case <-ctx.Done():
 			if err == nil {
 				err = ctx.Err()
