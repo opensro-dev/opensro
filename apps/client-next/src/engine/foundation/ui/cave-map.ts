@@ -23,6 +23,9 @@ const CATALOG_VERSION = 1;
 const CAVE_TILE_ORIGIN = 128;
 const CAVE_MARKER_SIZE = 16;
 const COLOR_RANGE = 255;
+// The picked species' sign on a dungeon page, the minimap's monster
+// sign the hunting guide uses outdoors.
+const CAVE_MONSTER_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_monster.png";
 
 export interface CaveMapLabel {
 	readonly text: string;
@@ -179,18 +182,50 @@ export interface CaveMapInput {
 	readonly catalog: CaveMapCatalog;
 	readonly clip: UiRect;
 	readonly pan: readonly [number, number];
+	// Whether the pose stands on this page's floor (cavePageLocal):
+	// the player's sign is a "you are here" only there (issue #3239).
+	readonly local: boolean;
+	// A picked species' anchor on this page, in region-local
+	// coordinates; drawn as the monster sign (issue #3239).
+	readonly mark?: { readonly x: number; readonly z: number; } | null;
+}
+
+/*
+================
+cavePageLocal
+
+Whether the page shown is the floor the pose stands on (issue
+#3239): the pose's region must be a floor region of the page's
+dungeon, and in Donwhang's one shared region the resolved floor
+must be the page's own. A dungeon viewed from above ground is
+never local, so its page carries no "you are here" sign.
+================
+*/
+export function cavePageLocal(
+	catalog: CaveMapCatalog | undefined,
+	page: CaveMapPage,
+	pose: Pose,
+	navigationFloor: number | undefined
+): boolean {
+	const floors = caveDungeonFloors( catalog, page.regionId );
+	if ( !floors.some( floor => floor.regionId === pose.regionId ) ) return false;
+	if ( planeKindOf( pose.regionId ) === "cave" && (pose.regionId & 0x7fff) === 1 ) {
+		return navigationFloor === page.floorIndex;
+	}
+	return pose.regionId === page.regionId;
 }
 
 /*
 ================
 caveMapView
 
-The page image, gate signs and the player's sign in paint order, its room
-names at screen positions, and the pan after clamping.
+The page image, gate signs, a picked species' sign and the player's
+sign (only on their own floor) in paint order, its room names at
+screen positions, and the pan after clamping.
 ================
 */
 export function caveMapView( input: CaveMapInput ) {
-	const { pose, center, page, catalog, clip, pan } = input;
+	const { pose, center, page, catalog, clip, pan, local, mark } = input;
 	const unitX = page.width / page.columns, unitY = page.height / page.rows;
 	const mapX = ( x: number ) => (x / REGION_SIZE + CAVE_TILE_ORIGIN - page.left) * unitX,
 		mapY = ( z: number ) => (page.top + 1 - CAVE_TILE_ORIGIN - z / REGION_SIZE) * unitY;
@@ -219,19 +254,38 @@ export function caveMapView( input: CaveMapInput ) {
 			clip
 		} );
 	}
-	quads.push( {
-		texture: MAP_LOCAL_MARKER,
-		rect: [
-			left + mapX( pose.x ) - CAVE_MARKER_SIZE / 2,
-			top + mapY( pose.z ) - CAVE_MARKER_SIZE / 2,
-			CAVE_MARKER_SIZE,
-			CAVE_MARKER_SIZE
-		],
-		uv: [ 0, 0, 1, 1 ],
-		color: white,
-		clip,
-		rotation: minimapRotation( pose.angle )
-	} );
+	if ( mark ) {
+		quads.push( {
+			texture: CAVE_MONSTER_MARKER,
+			rect: [
+				left + mapX( mark.x ) - CAVE_MARKER_SIZE / 2,
+				top + mapY( mark.z ) - CAVE_MARKER_SIZE / 2,
+				CAVE_MARKER_SIZE,
+				CAVE_MARKER_SIZE
+			],
+			uv: [ 0, 0, 1, 1 ],
+			color: white,
+			clip
+		} );
+	}
+	// The player's sign only on the floor they stand on (issue
+	// #3239): a page viewed from outside the dungeon is a chart,
+	// not a "you are here".
+	if ( local ) {
+		quads.push( {
+			texture: MAP_LOCAL_MARKER,
+			rect: [
+				left + mapX( pose.x ) - CAVE_MARKER_SIZE / 2,
+				top + mapY( pose.z ) - CAVE_MARKER_SIZE / 2,
+				CAVE_MARKER_SIZE,
+				CAVE_MARKER_SIZE
+			],
+			uv: [ 0, 0, 1, 1 ],
+			color: white,
+			clip,
+			rotation: minimapRotation( pose.angle )
+		} );
+	}
 	const labels = page.labels.map( label => ({
 		text: label.text,
 		x: left + label.x,

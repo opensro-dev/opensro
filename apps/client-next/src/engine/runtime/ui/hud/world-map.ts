@@ -24,7 +24,8 @@ import {
 	caveDungeonFloors,
 	caveMapImage,
 	caveMapPage,
-	caveMapView
+	caveMapView,
+	cavePageLocal
 } from "@/engine/foundation/ui/cave-map";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
@@ -564,6 +565,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				undefined;
 			const toolsPage = mapTools.cavePage( input.caveMaps, pose );
 			const cavePage = toolsPage?.page ?? indoorPage;
+			const caveMark = mapTools.mark();
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -572,7 +574,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					page: cavePage,
 					catalog: input.caveMaps,
 					clip: mapClip,
-					pan: mapFollow ? [ 0, 0 ] : mapPan
+					pan: mapFollow ? [ 0, 0 ] : mapPan,
+					// The "you are here" sign stands only on the floor
+					// the player is on (issue #3239).
+					local: cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ),
+					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null
 				} ) :
 				null;
 			mapCaveShown = caveMap !== null;
