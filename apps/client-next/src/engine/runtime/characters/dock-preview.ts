@@ -130,6 +130,11 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 				// Dock and creation actors are dressed through the item catalog
 				// (roster.json, manifest 0); none exists before it is resident.
 				// The gecko needs no catalog and is admitted meanwhile.
+				// Port-only, not native: the Experimental enchant sparks,
+				// read from the same renderer answer the world dresses by
+				// (actor-appearance) - a roster character wears exactly
+				// what it wears in the world (#3145).
+				const enchantSparks = renderer.enchantSparks?.() === true;
 				const catalogResident = published.manifest > 0;
 				const rows = !catalogResident ? [] : preview ?
 					[ {
@@ -163,7 +168,8 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 							player: true,
 							ownerless: true,
 							committedWear: oldWear?.resource === resource ? oldWear.keys : [],
-							freezeWear: freeze
+							freezeWear: freeze,
+							enchantSparks
 						} );
 						const parts = assembly.parts, wear = assembly.defaultWear;
 						if ( !resource.previewGlb || !resource.previewClips ) {
@@ -175,7 +181,8 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 						if ( !paths.map( path => resources.ready( path ) ).every( Boolean ) ) continue;
 						const { heightScale, volumeScale, ...assemblyLoadout } = row.visualLoadout;
 						const model = (preview ? "creation:" : "dock:") + row.id + ":" +
-							JSON.stringify( assemblyLoadout ) + (wear.length ? ":" + JSON.stringify( wear ) : "");
+							JSON.stringify( assemblyLoadout ) + (wear.length ? ":" + JSON.stringify( wear ) : "") +
+							":" + Number( enchantSparks );
 						// Each frame assembles a new array, and a new array restarts its
 						// emitters: an unchanged outfit keeps the one it began with.
 						const particles = oldWear?.model === model ? oldWear.particles : assembly.particles;
