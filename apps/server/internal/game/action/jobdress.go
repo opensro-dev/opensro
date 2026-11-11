@@ -480,6 +480,11 @@ the restore after 1.0 s, which this reuses.
 func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now int64, result *OpResult) {
 	key := simulation.WorldKey(division, c.Name)
 	here := travelPoint{spawn: rt.liveSpawn(key, c, now), world: instance.ID(domain.CharacterWorldInstance(c))}
+	// Port-only, not native: SRO_JOB_DRESS_TOWN_SPAWN reloads at the
+	// nearest town's spawn instead (jobdresstown.go).
+	if rt.JobDressTownSpawn {
+		here = rt.jobDressTownPoint(division, c, here)
+	}
 	var reload OpResult
 	if !rt.deps.UpdateDeferred(c, "job-dress-reload", func() bool {
 		return rt.startReturnCast(returnCast{division: division, character: c, row: -1, duration: skinReloadMs,

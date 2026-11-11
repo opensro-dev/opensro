@@ -446,6 +446,10 @@ func publicRules() publicstats.RulesResponse {
 					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
 					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
 				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
+			{Flag: action.EnvJobDressTownSpawn, On: action.JobDressTownSpawnFromEnv(),
+				Native: "Putting a job suit on or taking it off leaves you where you stand.",
+				Now:    "Once the suit is on or off, you reappear at the spawn point of the nearest town.",
+				Why:    "Requested so a rival job player who watched you change cannot follow you; the original returns with one setting."},
 			{Flag: action.EnvMoonlitThiefSuit, On: action.MoonlitThiefSuitFromEnv(),
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",

@@ -603,6 +603,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.JobSuitTiers {
 		log.Infof("job: suit tiers by job level ON (%s)", action.EnvJobSuitTiers)
 	}
+	// Port-only, not native: a finished dress reloads at the town spawn.
+	game.items.JobDressTownSpawn = action.JobDressTownSpawnFromEnv()
+	if game.items.JobDressTownSpawn {
+		log.Infof("job: a finished dress reloads at the nearest town spawn ON (%s)", action.EnvJobDressTownSpawn)
+	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
 	step, err := action.MostWantedTestStreakStepFromEnv()
