@@ -23,6 +23,12 @@ Port-only, not native (owner-approved 2026-10-13): word wrap for chat lines
 natively wraps per character), tooltips and prose. Measure with the same
 bitmap glyph advances used for rendering. Long tokens still break at a glyph
 (chat links and names, translated tips need not contain spaces).
+
+The wrap walks glyph advances, never string prefixes (#3176): the renderer's
+measure is a sum of per-glyph advances, so a line's width accumulates as
+its glyphs land and each glyph is measured once. Re-measuring the growing
+line per character re-walked every prefix - and thrashed the whole-string
+width memo - which made one chat layout rebuild cost milliseconds.
 ================
 */
 export function textLines(
@@ -34,20 +40,27 @@ export function textLines(
 	const lines: string[] = [];
 	for ( const paragraph of value.split( "\n" ) ) {
 		const leading = preserveLeadingSpaces ? /^[ \t]*/.exec( paragraph )![0] : "";
-		let line = leading;
+		let line = leading, advance = 0;
+		for ( const char of leading ) advance += measure( char );
 		for ( const token of paragraph.slice( leading.length ).split( /(\s+)/ ) ) {
 			if ( !token ) continue;
-			if ( line.trim() && measure( line + token ) > width ) {
+			const glyphs = [ ...token ].map( char => ({ char, advance: measure( char ) }) );
+			let tokenAdvance = 0;
+			for ( const glyph of glyphs ) tokenAdvance += glyph.advance;
+			if ( line.trim() && advance + tokenAdvance > width ) {
 				lines.push( line.trimEnd() );
 				line = "";
+				advance = 0;
 			}
 			if ( !line && !token.trim() ) continue;
-			for ( const char of token ) {
-				if ( line && measure( line + char ) > width ) {
+			for ( const glyph of glyphs ) {
+				if ( line && advance + glyph.advance > width ) {
 					lines.push( line );
 					line = "";
+					advance = 0;
 				}
-				line += char;
+				line += glyph.char;
+				advance += glyph.advance;
 			}
 		}
 		lines.push( line.trimEnd() );
