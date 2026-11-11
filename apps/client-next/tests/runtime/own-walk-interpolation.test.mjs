@@ -17,6 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
 const { createPosePresentation } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
+const { movementHeading } = await import( "../../src/engine/foundation/gameplay/native-movement.ts" );
 
 const GID = 7, REGION = 24998, SPEED = 100, STEP_MS = 16;
 // Frame intervals from the recording (ms), cycled.
@@ -309,6 +310,60 @@ test("a correction while walking never draws a frame faster than the walk (A5's 
 	assert.ok( peak <= SPEED * 1.05, `peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
 	// The offset still drains: within the 120 frames (about 2.7 s).
 	assert.ok( settledAt !== undefined, "the sideways offset settled" );
+});
+
+/*
+================
+arcDistance
+
+The smaller distance between two headings on the 65536 circle.
+================
+*/
+function arcDistance( a, b ) {
+	const d = Math.abs( a - b ) % 65536;
+	return d > 32768 ? 65536 - d : d;
+}
+
+test("a corrected run turns onto the corrected line instead of sliding sideways to it (#3148)", () => {
+	const { frame, leg } = straight();
+	let ms = 36, previous = frame( ms );
+	for ( ms += 16; ms < 600; ms += 16 ) previous = frame( ms );
+	// The server moves the running walk 5 units sideways and walks on
+	// from there: the report's correction range (BR-261110-0255-3F01).
+	const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+	const from = { ...legAt( leg, 0, tick ), z: legAt( leg, 0, tick ).z + 5 };
+	const moved = { from, to: { ...from, x: from.x + 1000 } };
+	let peak = 0, peakTurn = 0, peakSlide = 0, settled;
+	// The first frames after the correction still stand where the body
+	// stood (continuity) and the nose is mid-turn: the slide bar counts
+	// from the fifth frame on.
+	for ( let i = 0; i < 120; i++, ms += FRAMES[i % FRAMES.length] ) {
+		const now = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+		const drawn = frame( ms, {
+			input: { atMs: now, revision: 2, from: moved.from, to: moved.to, durationMs: 10_000 },
+			pose: legAt( moved, tick, now )
+		} );
+		const dt = FRAMES[i % FRAMES.length] / 1000;
+		const step = Math.hypot( drawn.x - previous.x, drawn.z - previous.z );
+		if ( i ) peak = Math.max( peak, step / dt );
+		if ( step > 1e-6 ) {
+			// The sideways share of the drawn step: how fast the body
+			// travels across the direction its nose points.
+			const slide = step / dt *
+				Math.sin( arcDistance( drawn.angle, movementHeading( previous, drawn ) ) / 65536 * Math.PI * 2 );
+			if ( i >= 4 ) peakSlide = Math.max( peakSlide, slide );
+		}
+		peakTurn = Math.max( peakTurn, arcDistance( drawn.angle, 0 ) );
+		if ( settled === undefined && Math.abs( drawn.z - from.z ) < 1e-3 ) settled = drawn;
+		previous = drawn;
+	}
+	assert.ok( peak <= SPEED * 1.05, `peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
+	// The body turns toward the corrected line (10 degrees or more)
+	// instead of holding its nose on the old bearing while it crosses.
+	assert.ok( peakTurn > 65536 * 10 / 360, `the nose turned ${peakTurn} words toward the line` );
+	assert.ok( peakSlide <= SPEED * .3, `sideways slide peaked at ${peakSlide.toFixed( 1 )} u/s against ${SPEED}` );
+	assert.ok( settled, "the body reached the corrected line" );
+	assert.ok( arcDistance( previous.angle, 0 ) < 65536 * 2 / 360, "the nose settles back on the line's bearing" );
 });
 
 test("the main-thread mover's walk is drawn while it predicts and handed back without a jump (#1440)", () => {
