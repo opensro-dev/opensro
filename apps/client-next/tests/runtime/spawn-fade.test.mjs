@@ -31,11 +31,13 @@ test("the spawn ramp truncates the alpha byte and finishes at two seconds", () =
 	assert.equal( spawnFadeAlpha( 9 ), 1 );
 });
 
-test("players, monsters and COS fade in; NPCs and objects appear at once", () => {
-	for ( const kind of [ "player", "local-player", "monster", "cos" ] ) {
-		assert.equal( spawnFadeKind( kind ), true, kind );
-	}
-	for ( const kind of [ "npc", "ground-item", "teleport", "script-object" ] ) {
+test("monsters fade in; players, COS, NPCs and objects appear at once", () => {
+	// CIGIDObject_CreateByCodename clears the spawn-fade flag (+0x74C) on
+	// every CHAR_/NPC_/COS_ object it creates (call site 0x4CD624), so
+	// CICharactor_OnSpawnInitialize (85FDB0) installs no CIDecoAppear for
+	// them; only CICMonster_DeserializeSpawnPacket (861B00) installs one.
+	assert.equal( spawnFadeKind( "monster" ), true );
+	for ( const kind of [ "player", "local-player", "cos", "npc", "ground-item", "teleport", "script-object" ] ) {
 		assert.equal( spawnFadeKind( kind ), false, kind );
 	}
 });
