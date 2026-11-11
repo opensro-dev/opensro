@@ -74,6 +74,7 @@ function fixture() {
 		}
 	};
 	const assemblies = [];
+	let sparksOn = true;
 	const renderer = {
 		/*
 		================
@@ -82,9 +83,22 @@ function fixture() {
 		*/
 		setCharacterAssembly( name, base, parts ) {
 			assemblies.push( { name, base, parts } );
+		},
+		enchantSparks: () => sparksOn
+	};
+	return {
+		owner: createMallPreview(),
+		frame,
+		resources,
+		renderer,
+		assemblies,
+		blocked,
+		admitted,
+		retained,
+		setSparks( value ) {
+			sparksOn = value;
 		}
 	};
-	return { owner: createMallPreview(), frame, resources, renderer, assemblies, blocked, admitted, retained };
 }
 
 test("mannequin replaces one avatar family without mutating equipment and retains auxiliary skeletons", () => {
@@ -107,6 +121,63 @@ test("mannequin replaces one avatar family without mutating equipment and retain
 	f.owner.request( [] );
 	assert.equal( f.owner.step( f.frame, f.resources, f.renderer ).length, 1 );
 	assert.ok( f.assemblies.at( -1 ).parts.some( p => p.model === "garment-1" ) );
+});
+
+test("the mannequin carries the world's enchant sparks answer, on and off (#3145)", () => {
+	// The mannequin clones the player (gameplay.inventory), so the
+	// player's own weapon must wear the same glow tier and sparks as
+	// in the world: enhanced with the Experimental option on, the
+	// native rows alone with it off.
+	const f = fixture();
+	f.frame.dress.equipment[900] = {
+		slot: 6,
+		armorClass: 0,
+		thiefSuit: false,
+		visualMask: 1 << 6,
+		visualPriority: 0,
+		model: "res/item/china/weapon/sword_01.bsr",
+		source: null,
+		bodies: {
+			CH_M: {
+				glb: "sword",
+				parts: [ "EQ0" ],
+				branches: [ { part: "EQ0", nodes: [ { name: "ai_end" } ] } ]
+			}
+		}
+	};
+	f.frame.dress.enchantSparks = {
+		900: [ {
+			effectPath: "system/system_enchantspark_step1.efp",
+			bone: "ai_end",
+			scale: 1,
+			offset: [ 0, 0, 0 ],
+			root: false,
+			threshold: 0
+		} ]
+	};
+	f.frame.equipment = [ { slot: 6, refObjId: 900, plus: 9 } ];
+	f.owner.request( [] );
+	f.owner.step( f.frame, f.resources, f.renderer );
+	assert.equal(
+		f.assemblies.at( -1 ).parts.find( part => part.equipment?.refObjId === 900 )?.equipment.enhanced,
+		true,
+		"the weapon part carries the enhanced tier with the option on"
+	);
+	assert.ok(
+		f.owner.glow()?.particles.some( particle => particle.effectPath === "system/system_enchantspark_step1.efp" ),
+		"the spark rides the mannequin's glow with the option on"
+	);
+	f.setSparks( false );
+	f.owner.step( f.frame, f.resources, f.renderer );
+	assert.equal(
+		f.assemblies.at( -1 ).parts.find( part => part.equipment?.refObjId === 900 )?.equipment.enhanced,
+		false,
+		"the weapon part stays on the native tier with the option off"
+	);
+	assert.ok(
+		!f.owner.glow()?.particles.some( particle => particle.effectPath === "system/system_enchantspark_step1.efp" ),
+		"no spark with the option off"
+	);
 });
 
 test("cold try-on keeps the last complete body and admits every required source", () => {

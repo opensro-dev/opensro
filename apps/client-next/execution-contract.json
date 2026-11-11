@@ -3062,6 +3062,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Port-only, not native: the dock phase reads the renderer's Experimental enchant-sparks setting so a roster character wears what it wears in the world (#3145)."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
 			"expression": "renderer.scenery",
 			"function": "step",
 			"kind": "callback",
@@ -3472,6 +3479,13 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "The mall preview receives the existing parent renderer assembly capability through finalization."
+		},
+		{
+			"file": "src/engine/runtime/characters/mall-preview.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Port-only, not native: the mall preview reads the renderer's Experimental enchant-sparks setting so the mannequin's cloned weapon wears what it wears in the world (#3145)."
 		},
 		{
 			"file": "src/engine/foundation/animation/animation-emission.ts",
