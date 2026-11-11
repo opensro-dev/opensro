@@ -326,6 +326,12 @@ test("a member delta for an unheld member degrades instead of ending the session
 	);
 	assert.equal( batch.degradation?.code, "guild-member-delta-unknown" );
 	assert.equal( batch.guild?.members.find( m => m.id === 2 )?.offline, 0 );
+	// Every unheld member of a batch is named, not only the last.
+	const twoUnheld = socialPacketOf(
+		rosterState,
+		writer().u8( 0x16 ).u8( 2 ).u8( 2 ).u32( 98 ).u8( 0 ).u32( 99 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.match( twoUnheld.degradation?.message ?? "", /98, 99$/ );
 	// The next frame starts clean: the step is transient, like notice.
 	const after = socialPacketOf( batch, writer().u8( 6 ).u32( 2 ).u8( 1 ).u8( 8 ).frame( 0x3b29 ) );
 	assert.equal( after.degradation, undefined );

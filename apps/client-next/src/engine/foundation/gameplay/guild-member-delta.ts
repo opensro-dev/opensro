@@ -59,9 +59,9 @@ Reads a subOp 6 or 0x16 body after its subOp byte and applies it.
 */
 export function readGuildMemberDelta( input: GuildMemberDeltaInput ): GuildMemberDeltaResult {
 	const u8 = input.u8, u32 = input.u32, str = input.str, localName = input.localName;
-	let guild = input.guild, degradation: GuildMemberDeltaResult["degradation"];
+	let guild = input.guild;
 	const count = input.batch ? u8() : 1, commonMask = input.batch ? u8() : undefined;
-	const flips: SystemNotice[] = [];
+	const flips: SystemNotice[] = [], unheld: number[] = [];
 	for ( let i = 0; i < count; i++ ) {
 		const id = u32(), mask = commonMask ?? u8(), old = guild.members.find( m => m.id === id );
 		if ( mask & ~MEMBER_DELTA_LEGS ) throw Error( "Unsupported guild member delta" );
@@ -86,10 +86,7 @@ export function readGuildMemberDelta( input: GuildMemberDeltaInput ): GuildMembe
 		// applicator (5E9D20) finds the member by jid before writing, so a
 		// missing row has nothing to write; no trace of the miss arm.
 		if ( !old ) {
-			degradation = {
-				code: "guild-member-delta-unknown",
-				message: "Guild member delta for unheld member " + id
-			};
+			unheld.push( id );
 			continue;
 		}
 		// 5F3340: the announcement block is gated on the offline
@@ -134,5 +131,12 @@ export function readGuildMemberDelta( input: GuildMemberDeltaInput ): GuildMembe
 		}
 		guild = { ...guild, members: guild.members.map( m => m.id === id ? { ...m, ...patch } : m ) };
 	}
+	// One step per frame names every unheld member of a batch.
+	const degradation = unheld.length ?
+		{
+			code: "guild-member-delta-unknown",
+			message: "Guild member delta for unheld member(s) " + unheld.join( ", " )
+		} :
+		undefined;
 	return { guild, notices: flips, degradation };
 }
