@@ -58,7 +58,26 @@ RemoteSegment
 */
 type RemoteSegment = MovementSegment & {
 	walkingPath?: readonly Pose[];
-	presentationHistory?: { from: Pose; to: Pose; points?: readonly Pose[]; result: readonly Pose[]; };
+	// The presentation lookahead admitted for this segment
+	// (presentationPath, #3178): the segment corridor it was clipped
+	// for and the history extended over it. While the pose stays
+	// behind its point, the clip and extension are reused, not
+	// re-sampled per tick.
+	presentationHistory?: {
+		from: Pose;
+		to: Pose;
+		// The admitted span from from to to; the reused window
+		// scales by the span remaining (#3178).
+		span: number;
+		points?: readonly Pose[];
+		result: readonly Pose[];
+		// The sampled points result holds beyond the pose it was
+		// extended from; the published chain is the accepted path
+		// as it stands now plus this tail.
+		tail?: readonly Pose[];
+		segmentFrom: Pose;
+		segmentTo: Pose;
+	};
 	previous?: Pose;
 	at?: number;
 	vector?: readonly [number, number];
@@ -261,6 +280,25 @@ A changed terrain interpolation cannot authorize a new connection.
 	}
 	/*
 ================
+admittedTail
+
+The part of an admitted extension worth caching (#3178): the sampled
+points beyond the pose it was extended from, toward the point it was
+extended to. A chain that never anchored at the pose (a degraded
+single point) has no tail; the split is geometric, so it holds whether
+the extension grew the accepted path or replaced it at its cap.
+================
+	*/
+	function admittedTail( chain: readonly Pose[], from: Pose, to: Pose ): readonly Pose[] | undefined {
+		const reach = poseDistance( from, to );
+		let split = -1;
+		for ( let index = 0; index < chain.length; index++ ) {
+			if ( poseDistance( chain[index]!, to ) >= reach - ENDPOINT_EPSILON ) split = index;
+		}
+		return split >= 0 ? chain.slice( split + 1 ) : undefined;
+	}
+	/*
+================
 presentationPath
 
 Only a fully admitted short corridor permits extrapolation. Failed lookahead
@@ -279,6 +317,34 @@ does not move the actor or replace its actual-time collision result.
 				durationMs: segment.duration,
 				displacement: true,
 				startedAtMs: segment.start
+			};
+		}
+		// The lookahead corridor is admitted once per segment (#3178):
+		// while the pose stays behind the point it was clipped to, the
+		// corridor ahead of it is the one already verified, so neither
+		// the clip nor the history extension runs again. A pose that
+		// outruns the lookahead (a stall, a long catch-up step) falls
+		// through and admits the next window.
+		const cache = segment.presentationHistory;
+		if (
+			cache && !segment.blocked && !segment.arrived &&
+			cache.segmentFrom === segment.from && cache.segmentTo === segment.to &&
+			poseDistance( pose, segment.to ) > poseDistance( cache.to, segment.to )
+		) {
+			return {
+				from: pose,
+				to: cache.to,
+				// The accepted path as it stands now plus the admitted
+				// tail; a re-anchored extension replaces it outright.
+				walkingPath: cache.tail && segment.walkingPath ?
+					[ ...segment.walkingPath, ...cache.tail ] :
+					cache.result,
+				// The presentation derives velocity from span over
+				// window: scale the window by the span remaining or
+				// its recovery budget decays as the pose closes in.
+				durationMs: cache.span > 0 ?
+					PRESENTATION_LOOKAHEAD_MS * poseDistance( pose, cache.to ) / cache.span :
+					PRESENTATION_LOOKAHEAD_MS
 			};
 		}
 		const desired = candidate( segment, pose, PRESENTATION_LOOKAHEAD_MS ).pose;
@@ -311,7 +377,20 @@ does not move the actor or replace its actual-time collision result.
 					sourceTerrainRetained: query.sourceTerrainRetained,
 					clip
 				} );
-				segment.presentationHistory = { from: pose, to, points: segment.walkingPath, result: walkingPath };
+				segment.presentationHistory = {
+					from: pose,
+					to,
+					span: poseDistance( pose, to ),
+					points: segment.walkingPath,
+					result: walkingPath,
+					// The sampled points beyond this pose (#3178):
+					// they stay admitted while the pose stays behind
+					// them. An extension that never anchored at the
+					// pose (a degraded single point) caches nothing.
+					tail: admittedTail( walkingPath, pose, to ),
+					segmentFrom: segment.from,
+					segmentTo: segment.to
+				};
 			}
 		}
 		return {

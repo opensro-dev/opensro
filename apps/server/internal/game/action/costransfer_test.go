@@ -80,6 +80,50 @@ func TestPlayerCOSTransferRejectsWithoutMutation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCosToPlayerRefusesTradeGoods
+
+#3144: a trade good dragged out of a companion's cargo into the
+personal bag could never leave it again (the specialty shop buys
+from the transport, and the row's authored CanDrop bit bars the
+ground), so the transfer refuses it and neither side moves. The
+event food under the same TID3 is an ordinary bag item and still
+crosses.
+================
+*/
+func TestCosToPlayerRefusesTradeGoods(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	items["ITEM_ETC_TRADE_WC_04"] = &enterworld.ItemRef{RefObjID: 5005, Codename: "ITEM_ETC_TRADE_WC_04", TypeIDs: [4]int64{3, 3, 8, 1}}
+	items["ITEM_ETC_E050314_CANDY_01"] = &enterworld.ItemRef{RefObjID: 5006, Codename: "ITEM_ETC_E050314_CANDY_01", TypeIDs: [4]int64{3, 3, 8, 0}}
+	rt, _ := newTestRuntime(c, testCosSource(items))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, Container: &domain.COSContainer{Capacity: 2, Rows: []domain.InventoryRow{
+		{Slot: 0, RefObjID: 5005, Codename: "ITEM_ETC_TRADE_WC_04", TypeFlags: wire.PackTypeFlags(3, 3, 8, 1), StackCount: 40},
+		{Slot: 1, RefObjID: 5006, Codename: "ITEM_ETC_E050314_CANDY_01", TypeFlags: wire.PackTypeFlags(3, 3, 8, 0), StackCount: 1},
+	}}}
+
+	before := c.Snapshot()
+	p, err := (wire.ItemMoveRequest{MovementType: wire.MoveTypeCosToPlayer, CosGID: gid, SourceSlot: 0, DestSlot: 13}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) != 1 || r.Frames[0].Payload[0] != 2 || !reflect.DeepEqual(before, c.Snapshot()) {
+		t.Fatalf("trade goods crossed into the bag or the refusal moved state: %+v", r)
+	}
+
+	p, err = (wire.ItemMoveRequest{MovementType: wire.MoveTypeCosToPlayer, CosGID: gid, SourceSlot: 1, DestSlot: 13}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) < 1 || r.Frames[0].Payload[0] != 1 || bagCount(c, "ITEM_ETC_E050314_CANDY_01") != 1 {
+		t.Fatalf("event food no longer crosses to the bag: %+v", r)
+	}
+}
+
 func TestPlayerCOSOccupiedEquipmentSwapPreservesBothBodies(t *testing.T) {
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, testCosSource(testItems()))

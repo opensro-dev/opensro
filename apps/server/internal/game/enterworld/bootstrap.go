@@ -35,6 +35,9 @@ const (
 	nativeResultSuccess       = 0x01
 	nativeErrorInvalidRequest = 0x02
 	nativeErrorCharacter      = 0x10
+	// UIO_MSG_ERROR_OVERLAP: the account already has a character in the
+	// world (the gateway's already-connected refusal).
+	nativeErrorOverlap = 0x11
 
 	// Earlier _AddNewChar body in the research backup @0x53f22d0 seeds
 	// 45 inventory slots, zero gold/SP and level 1. The newer customized

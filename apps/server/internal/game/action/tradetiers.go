@@ -44,6 +44,21 @@ bounty, in pkreward.go). The three percents are live tunables (game/
 tunables, the Trade group). The caravan's star itself shows on the
 transport's nameplate, client side.
 
+Stake scaling (#3162, audited against #3142's fullness stars). The two
+sale shares are percents of the sale itself, and the 1-star trader EXP
+rate multiplies the sale's profit, so all three already pay in
+proportion to the cargo at risk. The bounty did not: its base is the
+job-kill EXP of the two players' levels, the same for a 9.4M and a
+41M caravan, so the mark now carries the robbed cargo's permille of
+the largest ordinary full load and scaledBountyPercent scales the
+bonus by it, floored by the Trade group's bounty floor percent. The
+bandit count needs no scaling: it is a threat, not a payout, and a
+brim-full smallest transport (32 slots, first ridden at level 20)
+already draws 10-22 bandits natively at that level - more than the
+flag's 5-star 5-12 (pinned in tradetiers_test.go from the shipped
+data) - so the fifth star never threatens a small caravan beyond
+what the same load draws with the flag off.
+
 Off, the default here, every tier and price is native; the GameWorld's
 Nomad job turns it on.
 
@@ -246,9 +261,20 @@ func (rt *Runtime) cargoGoldValue(c *enterworld.Character) uint64 {
 	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
 		return 0
 	}
+	return rt.cargoRowsValue(c.ActiveCOS.Container.Rows)
+}
+
+/*
+================
+cargoRowsValue
+
+The trade goods in rows valued at their reference prices.
+================
+*/
+func (rt *Runtime) cargoRowsValue(rows []domain.InventoryRow) uint64 {
 	items := rt.deps.ItemReferences()
 	total := uint64(0)
-	for _, row := range c.ActiveCOS.Container.Rows {
+	for _, row := range rows {
 		if row.StackCount <= 0 || !inventory.IsTradeGoods(row.TypeFlags) {
 			continue
 		}
@@ -263,6 +289,38 @@ func (rt *Runtime) cargoGoldValue(c *enterworld.Character) uint64 {
 		total += uint64(price) * uint64(row.StackCount)
 	}
 	return total
+}
+
+/*
+================
+cargoRowsStackValue
+
+One full stack's value of the best trade good in rows (price x stack
+cap): the shipped goods share one price and cap, so any of them
+measures a bag. Zero when no trade goods are carried.
+================
+*/
+func (rt *Runtime) cargoRowsStackValue(rows []domain.InventoryRow) uint64 {
+	items := rt.deps.ItemReferences()
+	stackValue := uint64(0)
+	for _, row := range rows {
+		if row.StackCount <= 0 || !inventory.IsTradeGoods(row.TypeFlags) {
+			continue
+		}
+		ref, found := items.ItemRefByCodename(row.Codename)
+		if !found || ref == nil {
+			continue
+		}
+		price, present := ref.NativeFields.Lookup("price")
+		stack, stackPresent := ref.NativeFields.Lookup("maxStack")
+		if !present || !stackPresent || price < 1 || stack < 1 {
+			continue
+		}
+		if value := uint64(price) * uint64(stack); value > stackValue {
+			stackValue = value
+		}
+	}
+	return stackValue
 }
 
 /*
@@ -343,25 +401,7 @@ func (rt *Runtime) caravanFullValue(c *enterworld.Character) uint64 {
 	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
 		return 0
 	}
-	items := rt.deps.ItemReferences()
-	stackValue := uint64(0)
-	for _, row := range c.ActiveCOS.Container.Rows {
-		if row.StackCount <= 0 || !inventory.IsTradeGoods(row.TypeFlags) {
-			continue
-		}
-		ref, found := items.ItemRefByCodename(row.Codename)
-		if !found || ref == nil {
-			continue
-		}
-		price, present := ref.NativeFields.Lookup("price")
-		stack, stackPresent := ref.NativeFields.Lookup("maxStack")
-		if !present || !stackPresent || price < 1 || stack < 1 {
-			continue
-		}
-		if value := uint64(price) * uint64(stack); value > stackValue {
-			stackValue = value
-		}
-	}
+	stackValue := rt.cargoRowsStackValue(c.ActiveCOS.Container.Rows)
 	if stackValue == 0 {
 		return 0
 	}
@@ -370,6 +410,24 @@ func (rt *Runtime) caravanFullValue(c *enterworld.Character) uint64 {
 		slots = mallTierReferenceSlots
 	}
 	return slots * stackValue
+}
+
+/*
+================
+caravanLargestLoadValue
+
+The largest ordinary full load (#3162): the 101-slot reference bag
+brim-full of the goods this caravan hauls. The fifth star's flat
+stakes are measured against it, so a star earned on a small transport
+pays for the cargo actually at risk, not for the star alone. Zero
+when no trade goods are carried.
+================
+*/
+func (rt *Runtime) caravanLargestLoadValue(c *enterworld.Character) uint64 {
+	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
+		return 0
+	}
+	return mallTierReferenceSlots * rt.cargoRowsStackValue(c.ActiveCOS.Container.Rows)
 }
 
 /*
@@ -398,8 +456,13 @@ const caravanRobWindowMs = 120_000
 // caravanThiefMark is one thief's last attack on a 5-star caravan
 // (runtime.go's caravanThiefMarks; session only, like the aggression
 // indexes - a relog clears it and the thief simply robs again).
+// cargoScale is the robbed caravan's cargo gold in permille of the
+// largest ordinary full load (caravanLargestLoadValue), capped at
+// 1000: the bounty scales with it (#3162), so the mark must remember
+// the cargo, not only the star - by the kill, the goods are gone.
 type caravanThiefMark struct {
-	at int64
+	at         int64
+	cargoScale int64
 }
 
 /*
@@ -410,7 +473,10 @@ Port-only, not native (#2958): a dressed thief's landed hit on a 5-star
 caravan - its transport or its owner - marks the thief for the hunter
 bounty. Called from the two strike doors once the hit is in, so refused
 or whiffed casts never mark. The tier is the owner's own caravan tier at
-the hit; with SRO_TRADE_TIERS off nothing is ever marked.
+the hit; with SRO_TRADE_TIERS off nothing is ever marked. The mark
+carries the cargo's scale at the hit (#3162): the goods may be sold,
+dropped or gone by the kill, but the bounty still pays for the load
+that was actually attacked.
 ================
 */
 func (rt *Runtime) noteCaravanAttack(attacker, owner *enterworld.Character, now int64) {
@@ -423,7 +489,29 @@ func (rt *Runtime) noteCaravanAttack(attacker, owner *enterworld.Character, now 
 	if tier, _ := rt.caravanTier(owner); tier != 5 {
 		return
 	}
-	rt.caravanThiefMarks.Store(attacker.ID, caravanThiefMark{at: now})
+	rt.caravanThiefMarks.Store(attacker.ID, caravanThiefMark{at: now, cargoScale: rt.caravanCargoScale(owner)})
+}
+
+/*
+================
+caravanCargoScale
+
+The caravan's cargo gold in permille of the largest ordinary full
+load of the same goods, capped at 1000 (a mall transport's extra
+slots past the reference bag are profit, never a bigger stake,
+#3142). Zero when the load cannot be measured.
+================
+*/
+func (rt *Runtime) caravanCargoScale(c *enterworld.Character) int64 {
+	largest := rt.caravanLargestLoadValue(c)
+	if largest == 0 {
+		return 0
+	}
+	scale := int64(rt.cargoGoldValue(c) * 1000 / largest)
+	if scale > 1000 {
+		scale = 1000
+	}
+	return scale
 }
 
 /*
@@ -435,19 +523,31 @@ dropped on read so the map holds only live quarrels.
 ================
 */
 func (rt *Runtime) caravanThiefMarked(thief *enterworld.Character, now int64) bool {
+	_, marked := rt.caravanThiefMarkOf(thief, now)
+	return marked
+}
+
+/*
+================
+caravanThiefMarkOf
+
+The thief's live 5-star mark, if any.
+================
+*/
+func (rt *Runtime) caravanThiefMarkOf(thief *enterworld.Character, now int64) (caravanThiefMark, bool) {
 	if thief == nil {
-		return false
+		return caravanThiefMark{}, false
 	}
 	stamp, ok := rt.caravanThiefMarks.Load(thief.ID)
 	if !ok {
-		return false
+		return caravanThiefMark{}, false
 	}
 	mark := stamp.(caravanThiefMark)
 	if now < mark.at || now-mark.at > caravanRobWindowMs {
 		rt.caravanThiefMarks.Delete(thief.ID)
-		return false
+		return caravanThiefMark{}, false
 	}
-	return true
+	return mark, true
 }
 
 /*
@@ -455,18 +555,51 @@ func (rt *Runtime) caravanThiefMarked(thief *enterworld.Character, now int64) bo
 fiveStarBountyPercent
 
 Port-only, not native (#2958): the bounty percent on a hunter's job-kill
-EXP for killing a marked thief (pkreward.go), or 0. A paid bounty is
-consumed: the thief must attack a 5-star caravan again to be worth it
-twice.
+EXP for killing a marked thief (pkreward.go), or 0 - the configured
+percent scaled by the robbed cargo (scaledBountyPercent, #3162). A paid
+bounty is consumed: the thief must attack a 5-star caravan again to be
+worth it twice.
 ================
 */
 func (rt *Runtime) fiveStarBountyPercent(killer, victim *enterworld.Character, now int64) int64 {
 	if !rt.TradeTiers || enterworld.DressedJob(killer) != domain.JobHunter ||
-		enterworld.DressedJob(victim) != domain.JobThief || !rt.caravanThiefMarked(victim, now) {
+		enterworld.DressedJob(victim) != domain.JobThief {
+		return 0
+	}
+	mark, marked := rt.caravanThiefMarkOf(victim, now)
+	if !marked {
 		return 0
 	}
 	rt.caravanThiefMarks.Delete(victim.ID)
-	return tunables.Current().Int(tunables.TradeFiveStarBountyPercent)
+	return scaledBountyPercent(mark.cargoScale, tunables.Current())
+}
+
+/*
+================
+scaledBountyPercent
+
+Port-only, not native (#3162): the bounty percent for one mark - the
+configured percent scaled by the robbed cargo's permille of the
+largest ordinary full load, so the bonus EXP per gold at risk is the
+same on a brim-full 32-slot transport as on a brim-full 101-slot one.
+The Trade group's floor percent is the least a mark pays, however
+small the caravan; a configured percent of 0 disables the bounty
+outright and the floor never resurrects it.
+================
+*/
+func scaledBountyPercent(cargoScale int64, s *tunables.Settings) int64 {
+	percent := s.Int(tunables.TradeFiveStarBountyPercent)
+	if percent <= 0 {
+		return 0
+	}
+	scaled := percent * cargoScale / 1000
+	if floor := s.Int(tunables.TradeFiveStarBountyFloorPercent); scaled < floor {
+		scaled = floor
+	}
+	if scaled > percent {
+		scaled = percent
+	}
+	return scaled
 }
 
 /*

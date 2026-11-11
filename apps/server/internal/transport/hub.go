@@ -81,6 +81,11 @@ type Hub struct {
 	accountSessions map[string]map[uint64]*Session
 	sessionAccount  map[uint64]string
 
+	// Account world seat: the account whose character stands in the
+	// world, and the claim that holds it (ClaimAccountWorld). One
+	// character of an account is in the world at a time.
+	accountWorld map[string]*AccountWorldClaim
+
 	// Division index: EFFECTIVE division -> live member sessions, so a
 	// division push touches only its members instead of scanning every
 	// session (O(sessions) per push was the scaling ceiling). sessionDiv
@@ -142,6 +147,7 @@ func newHub(cfg Config) *Hub {
 		controls:        make(map[string]uint64),
 		accountSessions: make(map[string]map[uint64]*Session),
 		sessionAccount:  make(map[uint64]string),
+		accountWorld:    make(map[string]*AccountWorldClaim),
 		divisions:       make(map[string]map[uint64]*Session),
 		sessionDiv:      make(map[uint64]string),
 		restrictions:    make(map[string]*characterRestrictions),

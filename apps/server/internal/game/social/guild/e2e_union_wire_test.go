@@ -77,9 +77,7 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Hub.SetHelloAuth(func([]byte) (transport.AdmissionIdentity, error) {
-		return transport.AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil
-	})
+	srv.Hub.SetHelloAuth(entryauth.UniqueAccountHelloAuth())
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 	directory := presence.NewDirectory(srv.Hub)
 	unions := union.New()
