@@ -18,9 +18,9 @@ import { cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectAssetPackGroups } from "../build/assetPackGroups.mjs";
+import { resolveLocalWorldRoot } from "./worldRoot.mjs";
 
 const repoRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
-const stateDir = path.join( repoRoot, "apps", "server", ".state" );
 
 /*
 ================
@@ -40,18 +40,19 @@ export function backupStamp( now ) {
 ================
 authorityDirFor
 
-The authority directory the local GameWorld opens, resolved exactly as
-the server resolves it (internal/data/store: SRO_AUTHORITY_STATE_DIR
-wins, else .state/shards/<shard>/authority under its working
-directory, which is apps/server). The settings file's environment
-reaches the children over the process environment, so it wins here
-too.
+The authority directory the local GameWorld opens. The server's own
+order holds (internal/data/store: SRO_AUTHORITY_STATE_DIR wins, the
+settings file's environment before the process's, since it reaches the
+children over the process environment); with neither set it is
+shards/<shard>/authority under the local world root (worldRoot.mjs),
+which the runner then hands the GameWorld explicitly - the server's
+own fallback is relative to its working directory, a checkout.
 ================
 */
-export function authorityDirFor( settings, shardID ) {
+export function authorityDirFor( settings, shardID, worldRoot = resolveLocalWorldRoot( repoRoot ) ) {
 	const fromSettings = settings.env.get( "SRO_AUTHORITY_STATE_DIR" )?.trim();
 	const fromProcess = process.env.SRO_AUTHORITY_STATE_DIR?.trim();
-	return fromSettings || fromProcess || path.join( stateDir, "shards", shardID, "authority" );
+	return fromSettings || fromProcess || path.join( worldRoot, "shards", shardID, "authority" );
 }
 
 /*
@@ -89,7 +90,7 @@ upgradeLocalAuthority
 
 Bring a local authority left behind by a schema bump to the current
 schema before anything opens it: validate with the offline upgrader,
-copy the authority aside under .state/backups, then commit. A schema
+copy the authority aside under the world's backups, then commit. A schema
 the validator refuses (newer than the binary, too old to convert,
 corrupt) is never touched - the tool's own error stops the run.
 Returns what happened: "absent" (no authority yet; provisioning
