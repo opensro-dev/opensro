@@ -4121,6 +4121,75 @@ test("avatar equip onto a worn class refuses with the native notice on every ges
 	}
 });
 
+test("avatar attachment with no dress worn refuses with the native notice on every gesture", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			// 0x1eac: the avatar mask (0x6ac) with class 3 in the top bits.
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0x1eac, quantity: 1 } ],
+			avatarInventory: []
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), false );
+		// Right-click (double-activate): 594BC7 refuses with
+		// UIIT_STT_AVATAR_MAIL_ONLY_WEAR and sends no move.
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		for ( let k = 0; k < 6; k++ ) f.ui.step( state, now += 100 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), true );
+		// The avatar button: select the bag slot, then press the class button.
+		f.ui.event( { kind: "activate", id: "equipment-view" } );
+		const scene = f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "avatar:3" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		// The drag: carry the bag attachment onto the avatar panel.
+		const dest = scene.controls.find( c => c.id === "avatar:3" ).rect;
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 36, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x: dest[0] + 16, y: dest[1] + 16 } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, 0 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), true );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("avatar attachment equips once a dress is worn", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0x1eac, quantity: 1 } ],
+			// 0x16ac: the avatar mask with class 2 (the dress) in slot 0.
+			avatarInventory: [ { slot: 0, refObjId: 2, typeFlags: 0x16ac, quantity: 1 } ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		for ( ; now < 1200; now += 100 ) f.ui.step( state, now );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.filter( c => c?.kind === "avatar-move" ).length, 1 );
+		assert.equal( f.hasText( "Can only be equipped when avatar dress is worn." ), false );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("ground names are hover or hold-only, use gold amount, and invalidate retained UI on release", () => {
 	const f = uiFixture();
 	try {
