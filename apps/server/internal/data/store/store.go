@@ -120,6 +120,10 @@ type Health struct {
 	FailedWrites  int
 	LastCommitAt  time.Time
 	LoadedFromBak bool
+	// IntegrityError is the background full check's verdict when it is
+	// not "ok" (boot_verify.go); empty while the check runs and when it
+	// passed.
+	IntegrityError string
 	// Commits counts the successful transactions since Open.
 	Commits uint64
 }
@@ -196,6 +200,11 @@ type Store struct {
 	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
 	// whenever no database was adopted.
 	checkpoints *walCheckpointer
+	// The boot verifier (boot_verify.go): the full integrity check and
+	// the spare copy, after the store is adopted. integrityError is its
+	// one result, read by Health without a lock.
+	verifier       *bootVerifier
+	integrityError atomic.Pointer[string]
 	// writer is the asynchronous SQLite writer (commit_writer.go,
 	// SRO_STORE_ASYNC_COMMIT, port-only): started by adoptDB when the
 	// flag is on, stopped by Close, nil whenever commits apply in place.
@@ -496,14 +505,13 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 	db, loaded, err := s.openAndLoadDB(s.dbPath)
 	if err == nil {
 		s.adoptDB(db, loaded)
-		// Refresh the single bak generation from the database just
-		// proven good - once per boot, never while running. A stop
-		// that already arrived skips the refresh (#3186): the boot is
-		// leaving, and the previous bak is still a good generation.
+		// The state tables proved good above. The full check and the
+		// single bak generation follow off the serving path, once per
+		// boot (boot_verify.go). A stop that already arrived starts
+		// neither (#3186): the boot is leaving, and the previous bak is
+		// still a good generation.
 		if s.openCtx.Err() == nil {
-			if bakErr := refreshDBBak(s.openCtx, db, s.dbBakPath); bakErr != nil {
-				log.Warnf("store: refreshing %s failed: %v", DBBakFileName, bakErr)
-			}
+			s.startBootVerifier()
 		}
 		return nil
 	}
@@ -530,19 +538,22 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 // openAndLoadDB opens one database file and loads it fully; the handle
 // is closed on any failure. The open context stands over the whole
 // load (#3186): a cancellation closes the handle, which aborts
-// whichever step is running - including the quick check, the one boot
-// step that scales with the database's history.
+// whichever step is running. The check before serving covers the state
+// tables only (boot_verify.go), so no step here scales with the
+// database's history.
 func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 	db, err := connectDB(path)
 	if err != nil {
 		return nil, nil, err
 	}
+	started := time.Now()
 	stopCancelWatch := context.AfterFunc(s.openCtx, func() { _ = db.Close() })
 	defer stopCancelWatch()
-	if err := quickCheck(s.openCtx, db); err != nil {
+	if err := quickCheckState(s.openCtx, db); err != nil {
 		db.Close()
 		return nil, nil, err
 	}
+	checked := time.Since(started)
 	if err := s.openStep("load database"); err != nil {
 		db.Close()
 		return nil, nil, err
@@ -560,6 +571,8 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	log.Infof("store: %s opened: state tables checked in %s, loaded in %s", filepath.Base(path),
+		checked.Round(time.Millisecond), (time.Since(started) - checked).Round(time.Millisecond))
 	return db, loaded, nil
 }
 
