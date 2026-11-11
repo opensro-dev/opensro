@@ -199,11 +199,19 @@ lock the callback runs between (#2033).
 ================
 */
 func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
+	return rt.armElementalFactsSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+armElementalFactsSession
+================
+*/
+func (rt *Runtime) armElementalFactsSession(key petOwnerKey, state *petSession, now int64) petOwnerKey {
 	var none petOwnerKey
 	if !rt.AttackPetExpansion || rt.Monsters == nil || rt.companionCopy != nil || rt.Worlds == nil {
 		return none
 	}
-	state := rt.petSessionFor(key.division, key.name, key.gid)
 	if state == nil || state.character == nil {
 		return none
 	}
@@ -496,7 +504,15 @@ Book changes, separation, death, unsummon and eligibility loss clear progress.
 ================
 */
 func (rt *Runtime) resetWolfExecution(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.resetWolfExecutionSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+resetWolfExecutionSession
+================
+*/
+func (rt *Runtime) resetWolfExecutionSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil {
 		return
 	}

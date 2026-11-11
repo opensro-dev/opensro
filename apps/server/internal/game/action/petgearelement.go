@@ -66,7 +66,15 @@ Late ticks issue one pulse and schedule from now, never a damage backlog.
 ================
 */
 func (rt *Runtime) advancePetGearPoison(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advancePetGearPoisonSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advancePetGearPoisonSession
+================
+*/
+func (rt *Runtime) advancePetGearPoisonSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil || len(state.trained.poison) == 0 {
 		return
 	}

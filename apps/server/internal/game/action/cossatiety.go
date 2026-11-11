@@ -18,16 +18,13 @@ import (
 
 /*
 ================
-advancePetSatiety
+advancePetSatietySession
 
 The caller holds the division operation lock. Do not retain a detached pet
 copy across the transaction; feeding and death update the same durable HGP.
 ================
 */
-func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.Frame {
-	rt.petMu.Lock()
-	state := rt.petSessions[key]
-	rt.petMu.Unlock()
+func (rt *Runtime) advancePetSatietySession(key petOwnerKey, state *petSession, nowMs int64) []simulation.Frame {
 	if state == nil {
 		return nil
 	}
