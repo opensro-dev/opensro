@@ -1032,10 +1032,16 @@ export function createUiBridge(
 				const input = document.createElement( "input" );
 				input.type = "file";
 				input.accept = ".bmp,.png,.jpg,.jpeg,image/bmp,image/png,image/jpeg";
+				// A detached input's click is ignored by some engines;
+				// attach it hidden so the picker actually opens, and drop
+				// it again the moment the pick settles either way.
+				input.style.display = "none";
+				document.body.appendChild( input );
 				let settled = false;
 				const settle = ( value: Uint8Array | null ) => {
 					if ( settled ) return;
 					settled = true;
+					input.remove();
 					resolve( value );
 				};
 				input.addEventListener( "change", () => {
