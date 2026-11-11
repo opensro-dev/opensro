@@ -141,6 +141,7 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
+	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
 	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad

@@ -76,6 +76,7 @@ var catalogueExempt = map[string]string{
 	"SRO_MALL_AVATARS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_HALLOWEEN_HELMET_SEAL":               "the seal restricts trading the event helmets at runtime; items.json publishes the helmets either way",
 	"SRO_BETA_SILK":                           "an hourly silk grant to accounts; the catalogue publishes no account state",
+	"SRO_MALL_STARTER_SILK":                   "the silk a new account's wallet starts with; the catalogue publishes no account state",
 	"SRO_BETA_SILK_ACTIVE_ONLY":               "which hours count for the silk grant; the catalogue publishes no account state",
 	"SRO_MAINTENANCE_MESSAGE":                 "the refusal shown during a release window; no catalogue file carries it",
 	"SRO_PET_PACING":                          "pet movement speed at runtime; the catalogue publishes no movement speeds",
