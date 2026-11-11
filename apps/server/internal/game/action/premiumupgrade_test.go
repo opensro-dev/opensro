@@ -6,8 +6,10 @@ premiumupgrade_test.go - the port-only premium upgrade (SRO_PREMIUM_UPGRADE)
 With the flag on, a strictly higher-grade premium of the same family
 replaces the running lower one; the old ticket's remaining time moves
 the new ticket's end later (#1624, owner decision), its board row
-ends, the new clock restarts today's grant. Off (default), equal and
-lower grades, and the other family keep the native 0x1894 refusal.
+ends, the new clock restarts today's grant. Off (default) and equal
+and lower grades within a family keep the native 0x1894 refusal; a
+full premium also replaces a running skill-only ticket (#3146),
+never the reverse.
 
 ===========================================================================
 */
@@ -221,19 +223,19 @@ func TestPremiumUpgradeDailyAllotmentOutranksDuration(t *testing.T) {
 ================
 TestPremiumUpgradeStaysInFamily
 
-The skill family upgrades inside itself; across families the refusal
-stands even for a higher grade.
+The skill family still upgrades inside itself, and a skill ticket
+used over a running full premium keeps the native refusal even at a
+higher grade: the crossing runs only from skill-only up to full
+(#3146).
 ================
 */
 func TestPremiumUpgradeStaysInFamily(t *testing.T) {
-	rt, c, _ := premiumUpgradeRuntime(t, true, skill1D, skill4W, gold4W)
+	rt, c, _ := premiumUpgradeRuntime(t, true, skill1D, skill4W)
 	holdTicket(c, 25, skill1D)
 	holdTicket(c, 26, skill4W)
-	holdTicket(c, 27, gold4W)
 	if out := useTicket(t, rt, c, 25, skill1D); out.Frames[0].Payload[0] != wire.ResultSuccess {
 		t.Fatalf("skill ticket = %+v", out.Frames)
 	}
-	assertItemUseRefusedUnchanged(t, rt, c, premiumUsePayload(27, gold4W), errCodePremiumActive)
 	if out := useTicket(t, rt, c, 26, skill4W); out.Frames[0].Payload[0] != wire.ResultSuccess {
 		t.Fatalf("skill upgrade = %+v / %q", out.Frames, out.DiagnosticRefusal)
 	}
@@ -244,6 +246,77 @@ func TestPremiumUpgradeStaysInFamily(t *testing.T) {
 		t.Fatalf("gold ticket = %+v", out.Frames)
 	}
 	assertItemUseRefusedUnchanged(t, rt, c, premiumUsePayload(26, skillPlus), errCodePremiumActive)
+}
+
+/*
+================
+TestPremiumUpgradeCrossesFromSkillToFullPremium
+
+The #3146 crossing: with the flag on, a full premium used over a
+running skill-only ticket replaces it on the #1624 terms (remaining
+time credited, clock restarts in full) at any grade, so even a 1-day
+premium frees the 4-week skill ticket's owner; with the flag off the
+native 0x1894 refusal stands.
+================
+*/
+func TestPremiumUpgradeCrossesFromSkillToFullPremium(t *testing.T) {
+	rt, c, clock := premiumUpgradeRuntime(t, true, skill4W, gold4W, gold1D)
+	holdTicket(c, 25, skill4W)
+	holdTicket(c, 26, gold4W)
+	holdTicket(c, 27, gold1D)
+	if out := useTicket(t, rt, c, 25, skill4W); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("skill ticket = %+v", out.Frames)
+	}
+	out := useTicket(t, rt, c, 26, gold4W)
+	if out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("crossing = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	if !hasFrame(out.Frames, wire.OpParamJobEnd) || !hasFrame(out.Frames, wire.OpParamJobStart) {
+		t.Fatalf("crossing frames lack the old row's end or the new row's start: %+v", out.Frames)
+	}
+	now := clock.NowMs()
+	for _, job := range c.ParamJobs {
+		if job.ItemRefObjID != gold4W.RefObjID {
+			t.Fatalf("job after crossing = %+v, want only the full premium's", job)
+		}
+		if job.EndUnixMs != now+(2419200+2419200)*1000 {
+			t.Fatalf("job end = %d, want %d (the new course plus the replaced skill ticket's full remaining course, credited at the same instant)", job.EndUnixMs, now+(2419200+2419200)*1000)
+		}
+	}
+	if c.PremiumClock == nil || c.PremiumClock.ItemRefObjID != gold4W.RefObjID ||
+		c.PremiumClock.StartUnixMs != now || c.PremiumClock.TodayMs != c.PremiumClock.DailyAllotmentMs ||
+		c.PremiumClock.CarriedMs != 0 {
+		t.Fatalf("clock after crossing = %+v", c.PremiumClock)
+	}
+	if exp, _ := paramJobRewardBonus(c, 1000, 0, now); exp != 2000 {
+		t.Fatalf("bonus after crossing = %d, want doubled", exp)
+	}
+	// Within the full family the grade gate still applies after a crossing.
+	assertItemUseRefusedUnchanged(t, rt, c, premiumUsePayload(27, gold1D), errCodePremiumActive)
+
+	// A lower-grade full premium frees a longer skill ticket too.
+	rt, c, _ = premiumUpgradeRuntime(t, true, skill4W, gold1D)
+	holdTicket(c, 25, skill4W)
+	holdTicket(c, 26, gold1D)
+	if out := useTicket(t, rt, c, 25, skill4W); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("skill ticket = %+v", out.Frames)
+	}
+	if out := useTicket(t, rt, c, 26, gold1D); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("short premium over skill ticket = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+
+	// Flag off, the same use keeps the native refusal and the skill
+	// ticket keeps running.
+	rt, c, clock = premiumUpgradeRuntime(t, false, skill4W, gold4W)
+	holdTicket(c, 25, skill4W)
+	holdTicket(c, 26, gold4W)
+	if out := useTicket(t, rt, c, 25, skill4W); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("skill ticket = %+v", out.Frames)
+	}
+	assertItemUseRefusedUnchanged(t, rt, c, premiumUsePayload(26, gold4W), errCodePremiumActive)
+	if c.PremiumClock == nil || c.PremiumClock.ItemRefObjID != skill4W.RefObjID || !premiumRunning(c, clock.NowMs()) {
+		t.Fatalf("the flag-off refusal moved the running skill ticket: %+v", c.PremiumClock)
+	}
 }
 
 /*
