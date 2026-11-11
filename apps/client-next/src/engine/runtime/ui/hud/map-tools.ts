@@ -4,13 +4,16 @@
 map-tools.ts - the world map's own tools (issue #3167)
 
 Port-only presentation the owner asked for, on by default: a monster
-level filter, a region and monster drawer, clickable dungeon
-entrances and a dungeon floor selector, all in the map window's top
-strip and right edge. One owner for that state; the map HUD keeps the
-window, the pages and the cave view itself. Monster levels and
-anchors come from the hunting catalogue the session publishes;
-dungeon pages from the cave catalogue; region names from the
-published regioncode table read through the zone text.
+level filter and a region and monster drawer in the map window's top
+strip and right edge, clickable dungeon entrances, and the later
+client's dungeon page chrome (issue #3210): the globe back to the
+world and the follow pin at the map's top right corner, the floor
+selector down its right edge, in art the build imports from the later
+client. One owner for that state; the map HUD keeps the window, the
+pages and the cave view itself. Monster levels and anchors come from
+the hunting catalogue the session publishes; dungeon pages from the
+cave catalogue; region names from the published regioncode table
+read through the zone text.
 
 ===========================================================================
 */
@@ -36,6 +39,19 @@ import { featuresAt } from "@/engine/foundation/world/plane";
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
 const CHECK_OFF = ROOT + "interface/ifcommon/com_checkbutton_off.png";
+// The later client's dungeon-page chrome (issue #3210), published by
+// import_vsro_worldmap_buttons.py beside the v1.150 worldmap art.
+const WMAP = ROOT + "interface/worldmap/";
+const GLOBE = WMAP + "wmap_big_button_world.png";
+const PIN_AUTO = WMAP + "wmap_button_automatic.png";
+const PIN_PASSIVE = WMAP + "wmap_button_passivity.png";
+const FLOOR_UP = WMAP + "wmap_up_button.png";
+const FLOOR_UP_OFF = WMAP + "wmap_up_button_disable.png";
+const FLOOR_DOWN = WMAP + "wmap_down_button.png";
+const FLOOR_DOWN_OFF = WMAP + "wmap_down_button_disable.png";
+const FLOOR_BOX = WMAP + "wmap_floor_box.png";
+const FLOOR_CHOICE_BOX = WMAP + "wmap_floor_choice_box.png";
+const FLOOR_TRACK = WMAP + "wmap_floor_big_box.png";
 const REGIONCODE_PATH = "/assets/text/regioncode.json";
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const GOLD = [ .96, .83, .55, 1 ] as const;
@@ -67,6 +83,7 @@ The frame inputs the tools draw with, borrowed for this call.
 interface MapToolsPaint {
 	open: boolean;
 	cave: boolean;
+	followed: boolean;
 	floors: readonly CaveMapPage[];
 	floor: CaveMapPage | undefined;
 	window: UiRect;
@@ -81,6 +98,42 @@ interface MapToolsPaint {
 	center: Pose | null;
 	layout?: WorldMapLayout;
 	huntingVisible: boolean;
+}
+
+/*
+================
+followPin
+
+The follow pin at the map's top right corner, on the world and on a
+dungeon page alike (issue #3210). The later client keeps the captioned
+AUTO_MOVE button of the window layout and draws this one big button
+over the map itself: the art names its two faces for the captioned
+modes, wmap_button_automatic while the map follows the character and
+wmap_button_passivity while it stands where it was put, and the
+screenshots show the passive face in town and in the tomb alike. The
+press lands on the map HUD's own follow state, the same state the
+title bar's captioned button flips; the pin only shows it at the map.
+================
+*/
+function followPin( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ) {
+	const rect: UiRect = [ input.clip[0] + input.clip[2] - 40, input.clip[1] + 4, 36, 36 ];
+	quads.push( {
+		texture: input.followed ? PIN_AUTO : PIN_PASSIVE,
+		rect,
+		uv: [ 0, 0, 1, 1 ],
+		color: WHITE,
+		clip: input.clip
+	} );
+	controls.push( {
+		id: "map-pin",
+		kind: "button",
+		label: input.followed ? "Auto move" : "Manual move",
+		helpText: input.followed ?
+			"The map follows you; press for manual move" :
+			"The map stands where you put it; press for auto move",
+		rect,
+		selected: input.followed
+	} );
 }
 
 /*
@@ -133,6 +186,10 @@ export function createMapToolsHud( options: {
 	// floor picked at the entrance (issue #3167).
 	let choiceFromView = false;
 	let choiceDungeon = 0;
+	// The floors of the dungeon page last presented, and the page it
+	// showed: the floor selector's arrows step from what is on screen.
+	let shownFloors: readonly CaveMapPage[] = [];
+	let shownFloor: CaveMapPage | undefined;
 	let regionLoad: RegionNamesLoad = { kind: "idle" };
 	let directoryFor: {
 		catalogue: HuntingCatalogue;
@@ -171,6 +228,26 @@ export function createMapToolsHud( options: {
 			directoryFor = { catalogue, cap, regions: monsterDirectory( catalogue, cap ) };
 		}
 		return directoryFor.regions;
+	}
+
+	/*
+	================
+	stepFloor
+
+	Shows the floor one step from the one on screen (issue #3210):
+	the selector's up arrow is the next floor down, its down arrow the
+	one before, and the ends hold. The pick belongs to the side it was
+	made on, as a named floor pick does.
+	================
+	*/
+	function stepFloor( step: number, indoors: boolean ) {
+		const current = shownFloors.findIndex(
+			floor => floor.regionId === shownFloor?.regionId && floor.floorIndex === shownFloor?.floorIndex
+		);
+		const next = current < 0 ? undefined : shownFloors[current + step];
+		if ( !next ) return;
+		floorChoice = { regionId: next.regionId, floorIndex: next.floorIndex };
+		choiceFromView = !indoors;
 	}
 
 	/*
@@ -404,13 +481,20 @@ export function createMapToolsHud( options: {
 				}
 				return null;
 			}
-			if ( id.startsWith( "map-dungeon:" ) ) {
-				const dungeon = Number( id.slice( "map-dungeon:".length ) );
+			if ( id.startsWith( "map-dungeon:" ) || id.startsWith( "map-dungeon-icon:" ) ) {
+				// The label and the entrance's own icon carry the id in
+				// two shapes (map-dungeon:N, map-dungeon-icon:N); the
+				// dungeon is the number after the last colon either way.
+				const dungeon = Number( id.slice( id.lastIndexOf( ":" ) + 1 ) );
 				if ( dungeon === 1 || dungeon === 2 ) {
 					dungeonView = dungeon;
 					floorChoice = null;
 					choiceDungeon = dungeon;
 				}
+				return null;
+			}
+			if ( id === "map-floor-up" || id === "map-floor-down" ) {
+				stepFloor( id === "map-floor-up" ? 1 : -1, indoors );
 				return null;
 			}
 			if ( id.startsWith( "map-floor:" ) ) {
@@ -427,9 +511,10 @@ export function createMapToolsHud( options: {
 		================
 		present
 
-		The strip (level filter and list toggles on the world, one
-		button per floor in a dungeon), the dungeon entrances on the
-		world, and the drawer when it is open.
+		The strip (level filter and list toggles on the world), the
+		dungeon entrances and the follow pin on the world, the dungeon
+		page's globe, pin and floor selector in a cave, and the drawer
+		when it is open.
 		================
 		*/
 		present( input: MapToolsPaint ): { quads: UiQuad[]; controls: UiControl[]; paths: string[]; } {
@@ -439,27 +524,100 @@ export function createMapToolsHud( options: {
 			const text = input.text;
 			let stripX = mx + (input.huntingVisible && !input.cave ? 88 : 8);
 			if ( input.cave ) {
-				// One button per floor of the dungeon on screen.
-				for ( const floor of input.floors ) {
-					const label = input.zones?.[floor.floorLabel] ?? String( floor.layer );
-					const width = text.run( label, 0, 0 ).width + 14;
+				// The later client's dungeon chrome (issue #3210): the
+				// big globe back to the world beside the follow pin at
+				// the map's top right, and the floor selector down its
+				// right edge - up arrow, the floor box, down arrow over
+				// their track. The up arrow takes the next floor down:
+				// on the first floor the later client greys the down
+				// arrow, not the up one, and the ends hold.
+				shownFloors = input.floors;
+				shownFloor = input.floor;
+				paths.push(
+					GLOBE,
+					PIN_AUTO,
+					PIN_PASSIVE,
+					FLOOR_UP,
+					FLOOR_UP_OFF,
+					FLOOR_DOWN,
+					FLOOR_DOWN_OFF,
+					FLOOR_BOX,
+					FLOOR_CHOICE_BOX,
+					FLOOR_TRACK
+				);
+				const clip = input.clip, right = clip[0] + clip[2];
+				quads.push( {
+					texture: GLOBE,
+					rect: [ right - 84, clip[1] + 4, 36, 36 ],
+					uv: [ 0, 0, 1, 1 ],
+					color: WHITE,
+					clip
+				} );
+				controls.push( {
+					id: "map-globe",
+					kind: "button",
+					label: "World map",
+					helpText: "Back to the world map",
+					rect: [ right - 84, clip[1] + 4, 36, 36 ]
+				} );
+				followPin( input, quads, controls );
+				const index = input.floors.findIndex( floor => floor === input.floor );
+				if ( input.floor && index >= 0 && clip[3] >= 140 ) {
+					const sx = right - 32, sy = clip[1] + 48;
+					const upOff = index >= input.floors.length - 1, downOff = index <= 0;
+					quads.push( {
+						texture: FLOOR_TRACK,
+						rect: [ sx, sy, 28, Math.min( 228, clip[1] + clip[3] - sy - 4 ) ],
+						uv: [ 0, 0, 1, 1 ],
+						color: WHITE,
+						clip
+					} );
+					quads.push( {
+						texture: upOff ? FLOOR_UP_OFF : FLOOR_UP,
+						rect: [ sx, sy + 6, 28, 12 ],
+						uv: [ 0, 0, 1, 1 ],
+						color: WHITE,
+						clip
+					} );
 					controls.push( {
-						id: "map-floor:" + floor.regionId + ":" + floor.floorIndex,
+						id: "map-floor-up",
 						kind: "button",
-						label: "Floor " + label,
-						rect: [ stripX, my + 7, width, 20 ],
-						selected: floor === input.floor
+						label: "Next floor",
+						helpText: "Show the next floor down",
+						rect: [ sx, sy + 6, 28, 12 ],
+						disabled: upOff
+					} );
+					quads.push( {
+						texture: floorChoice ? FLOOR_CHOICE_BOX : FLOOR_BOX,
+						rect: [ sx + 2, sy + 20, 24, 20 ],
+						uv: [ 0, 0, 1, 1 ],
+						color: WHITE,
+						clip
 					} );
 					quads.push(
 						...text.quads(
-							label,
-							[ stripX, my + 7, width, 20 ],
-							input.full,
-							floor === input.floor ? GOLD : WHITE,
+							"B" + input.floor.layer,
+							[ sx + 2, sy + 20, 24, 20 ],
+							clip,
+							WHITE,
 							{ hAlign: 1, vAlign: 1 }
 						)
 					);
-					stripX += width + 4;
+					quads.push( {
+						texture: downOff ? FLOOR_DOWN_OFF : FLOOR_DOWN,
+						rect: [ sx, sy + 42, 28, 12 ],
+						uv: [ 0, 0, 1, 1 ],
+						color: WHITE,
+						clip
+					} );
+					controls.push( {
+						id: "map-floor-down",
+						kind: "button",
+						label: "Previous floor",
+						helpText: "Show the floor before",
+						rect: [ sx, sy + 42, 28, 12 ],
+						disabled: downOff
+					} );
 				}
 				return { quads, controls, paths };
 			}
@@ -498,6 +656,10 @@ export function createMapToolsHud( options: {
 				rect: [ stripX, my + 7, 68, 20 ],
 				selected: drawerOpen
 			} );
+			// The follow pin at the map's own corner, as the later
+			// client draws it on the world too (issue #3210).
+			paths.push( PIN_AUTO, PIN_PASSIVE );
+			followPin( input, quads, controls );
 			// The dungeon entrances: their authored map points, named.
 			const anchors = !input.center ? [] : [ 1, 2 ]
 				.map( dungeon => ({ dungeon, pose: worldMapDungeonPose( dungeon === 1 ? 0x8001 : 0x8002 ) }) )
@@ -530,6 +692,15 @@ export function createMapToolsHud( options: {
 					label: label,
 					helpText: "Open the " + label + " map",
 					rect: [ left, top, width, 20 ]
+				} );
+				// The entrance's own icon opens it too (issue #3210):
+				// the name alone took the click before.
+				controls.push( {
+					id: "map-dungeon-icon:" + anchor.dungeon,
+					kind: "button",
+					label: label,
+					helpText: "Open the " + label + " map",
+					rect
 				} );
 			}
 			if ( drawerOpen ) {

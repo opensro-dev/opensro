@@ -167,6 +167,11 @@ for ( const laneCount of [ 1, 8 ] ) {
 			position( events, "end:importLaterDungeonMaps" ) < tail,
 			"the dungeon map import finishes before the final pack tail"
 		);
+		// The dungeon pages' buttons likewise (issue #3210).
+		assert.ok(
+			position( events, "end:importLaterWorldMapButtons" ) < tail,
+			"the world map button import finishes before the final pack tail"
+		);
 		assert.deepEqual(
 			events.slice( -2 ),
 			[ "start:packTree", "end:packTree" ],
@@ -242,7 +247,8 @@ test("a failed source-image conversion stops the build before any lane", async (
 // the HD variants upscale the world textures the same way, and the HD pack
 // step packs that set behind its own index before the final pack tail, whose
 // stamp certifies what this build published (#2812). The dungeon map import
-// publishes its loose files into the completed tree for the same tail (#2956).
+// publishes its loose files into the completed tree for the same tail (#2956),
+// and the dungeon pages' own buttons ride the same rule (issue #3210).
 const AFTER_FAMILIES = [
 	"buildTextureVariants",
 	"buildHdTextureVariants",
@@ -250,7 +256,8 @@ const AFTER_FAMILIES = [
 	"buildBackgroundInstallAsset",
 	"packTree",
 	"buildHdTexturePacks",
-	"importLaterDungeonMaps"
+	"importLaterDungeonMaps",
+	"importLaterWorldMapButtons"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {
