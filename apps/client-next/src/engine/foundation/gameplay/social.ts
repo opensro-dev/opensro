@@ -179,7 +179,7 @@ export function socialPacket(
 		o = decoded.end;
 		return decoded.member;
 	}
-	let next: SocialState = { ...state, error: null, notice: undefined, notices: undefined };
+	let next: SocialState = { ...state, error: null, notice: undefined, notices: undefined, degradation: undefined };
 	// Guild, union and guild-war opcodes decode in the guild lane
 	// (social-guild-union) through this frame cursor; it returns null
 	// for the party and invitation opcodes below.
