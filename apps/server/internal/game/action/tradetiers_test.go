@@ -25,15 +25,24 @@ import (
 
 /*
 ================
-TestTradeTierForGold
+TestTradeTierForLoad
 ================
 */
-func TestTradeTierForGold(t *testing.T) {
-	for value, want := range map[uint64]uint8{0: 0, 1: 1, 1_870_847: 1, 1_870_848: 2, 3_741_695: 2,
-		3_741_696: 3, 6_547_967: 3, 6_547_968: 4, 9_354_239: 4, 9_354_240: 5, 900_000_000: 5} {
-		if got := TradeTierForGold(value); got != want {
-			t.Fatalf("%d: tier %d, want %d", value, got, want)
+func TestTradeTierForLoad(t *testing.T) {
+	// Marks at 1/5, 2/5, 7/10 and all of a 1000-full bag, on both
+	// sides of each mark.
+	for value, want := range map[uint64]uint8{0: 0, 1: 1, 199: 1, 200: 2, 399: 2,
+		400: 3, 699: 3, 700: 4, 999: 4, 1000: 5, 900_000: 5} {
+		if got := TradeTierForLoad(value, 1000); got != want {
+			t.Fatalf("%d of 1000: tier %d, want %d", value, got, want)
 		}
+	}
+	// An unmeasurable bag: nothing is 0, anything is 1.
+	if got := TradeTierForLoad(0, 0); got != 0 {
+		t.Fatalf("no cargo, no bag: tier %d, want 0", got)
+	}
+	if got := TradeTierForLoad(5, 0); got != 1 {
+		t.Fatalf("cargo, no bag: tier %d, want 1", got)
 	}
 }
 
@@ -41,14 +50,15 @@ func TestTradeTierForGold(t *testing.T) {
 ================
 TestEveryFullTransportReachesFiveStars
 
-The owner's rule (#2791) as a property of the shipped data, not of one
-hand-picked case (#3142): walking every transport row in characterdata
-against every good stocked at the five towns' specialty shops, a
-brim-full load of 40-stacks at the flag's scaled prices reads 5 stars.
-The smallest bag walked must be the ladder's own calibration - its full
-load is exactly the 5-star mark - so the marks and the authored data
-cannot drift apart silently. With the flag off the tier is the native
-one; that side is pinned by TestCaravanTierFollowsCargoGold.
+The owner's rule (#2791, measured per transport #3142) as a property
+of the shipped data, not of one hand-picked case: walking every
+transport row in characterdata against every good stocked at the five
+towns' specialty shops, an ordinary transport reads 2, 3, 4 and 5
+stars at 1/5, 2/5, 7/10 and all of its own brim-full load, and a mall
+transport reads 5 stars at the 101-slot reference load. A big
+transport filled only to the smallest bag's full load is not 5 stars.
+With the flag off the tier is the native one; that side is pinned by
+TestCaravanTierFollowsCargoGold.
 ================
 */
 func TestEveryFullTransportReachesFiveStars(t *testing.T) {
@@ -82,16 +92,27 @@ func TestEveryFullTransportReachesFiveStars(t *testing.T) {
 	if len(goods) == 0 {
 		t.Fatal("no town stocks any trade good")
 	}
-	transports := 0
-	smallest := uint64(0)
+	transports, malls := 0, 0
+	smallest, largest, horseSlots := uint64(0), uint64(0), uint64(0)
 	for _, ref := range items.SummonableCharacterRefs() {
 		if !isVehicleCOS(ref.TidWord) {
 			continue
 		}
-		transports++
 		slots := uint64(ref.InventoryCapacity)
-		if smallest == 0 || slots < smallest {
-			smallest = slots
+		if ref.Codename == "COS_T_DHORSE3" {
+			horseSlots = slots
+		}
+		mall := enterworld.IsMallTransport(&ref)
+		if mall {
+			malls++
+		} else {
+			transports++
+			if smallest == 0 || slots < smallest {
+				smallest = slots
+			}
+			if slots > largest {
+				largest = slots
+			}
 		}
 		for _, good := range goods {
 			if !enterworld.IsTradeGoods(good.TypeIDs) {
@@ -99,17 +120,53 @@ func TestEveryFullTransportReachesFiveStars(t *testing.T) {
 			}
 			price := good.NativeFields.Get("price")
 			stack := good.NativeFields.Get("maxStack")
-			full := slots * uint64(stack) * uint64(price)
-			if got := TradeTierForGold(full); got != 5 {
-				t.Fatalf("%s brim-full of %s: value %d reads %d stars, want 5", ref.Codename, good.Codename, full, got)
+			stackValue := uint64(stack) * uint64(price)
+			full := slots * stackValue
+			if mall {
+				// Measured against its own bag capped at the
+				// 101-slot reference: a bigger mall transport
+				// crowns at the reference load and its own larger
+				// load is never more; a smaller one is full at
+				// its own brim.
+				measure := slots
+				if measure > mallTierReferenceSlots {
+					measure = mallTierReferenceSlots
+				}
+				reference := measure * stackValue
+				if got := TradeTierForLoad(reference, reference); got != 5 {
+					t.Fatalf("%s at its measured full load of %s reads %d stars, want 5", ref.Codename, good.Codename, got)
+				}
+				if got := TradeTierForLoad(full, reference); got != 5 {
+					t.Fatalf("%s brim-full of %s reads %d stars, want 5", ref.Codename, good.Codename, got)
+				}
+				continue
+			}
+			for _, mark := range []struct {
+				value uint64
+				want  uint8
+			}{{full / 5, 2}, {full * 2 / 5, 3}, {full * 7 / 10, 4}, {full, 5}} {
+				if got := TradeTierForLoad(mark.value, full); got != mark.want {
+					t.Fatalf("%s with %d of %s (full %d) reads %d stars, want %d", ref.Codename, mark.value, good.Codename, full, got, mark.want)
+				}
 			}
 		}
 	}
-	if transports < 35 || smallest == 0 {
-		t.Fatalf("walked %d transports (smallest %d slots), want the shipped fleet", transports, smallest)
+	if transports+malls < 35 || malls == 0 || smallest == 0 {
+		t.Fatalf("walked %d ordinary and %d mall transports (smallest ordinary %d slots), want the shipped fleet", transports, malls, smallest)
 	}
-	if full := smallest * 40 * 348 * enterworld.TradeGoodsPriceFactor; full != tradeTierGold[len(tradeTierGold)-1] {
-		t.Fatalf("the smallest full bag is %d, the 5-star mark is %d", full, tradeTierGold[len(tradeTierGold)-1])
+	// The mall reference is the #2791 ruling's full ordinary transport,
+	// so the constant and the authored data cannot drift apart silently.
+	if horseSlots != mallTierReferenceSlots {
+		t.Fatalf("COS_T_DHORSE3 has %d slots, the mall reference is %d", horseSlots, mallTierReferenceSlots)
+	}
+	// A big transport filled only to the smallest bag's full load is
+	// nowhere near its own fifth star.
+	for _, good := range goods {
+		stackValue := uint64(good.NativeFields.Get("maxStack")) * uint64(good.NativeFields.Get("price"))
+		if got := TradeTierForLoad(smallest*stackValue, largest*stackValue); got == 5 {
+			t.Fatalf("a %d-slot transport filled to a %d-slot load reads 5 stars", largest, smallest)
+		}
+		break
 	}
 }
 
@@ -202,9 +259,11 @@ func TestJanganRouteRaisesTheSaleProfit(t *testing.T) {
 ================
 TestCaravanTierFollowsCargoGold
 
-A full horse (101 stacks of 40 goods) at the shipped reference price 348 is
-about 1.4M, one star; at SRO_TRADE_TIERS' scaled 7,308 it is 29,524,320 -
-the brim-full ordinary transport, five stars (#2791). Off, the native
+Under SRO_TRADE_TIERS the stars measure how full the bag stands: the
+brim-full horse (101 stacks in its 101-slot bag) is five stars at the
+reference price and at the scaled one alike - the price cancels, only
+the fill counts - and a fifth of the load aboard is two stars. The
+cargo value itself is still count x reference price. Off, the native
 units rule applies.
 ================
 */
@@ -213,6 +272,7 @@ func TestCaravanTierFollowsCargoGold(t *testing.T) {
 	ref, _ := rt.deps.ItemReferences().ItemRefByCodename("ITEM_ETC_TRADE_WC_01")
 	full := func(price float64) {
 		ref.NativeFields = enterworld.NewNativeFields(map[string]float64{"price": price, "maxStack": 40})
+		c.ActiveCOS.Container.Capacity = 101
 		c.ActiveCOS.Container.Rows = nil
 		for slot := int64(0); slot < 101; slot++ {
 			c.ActiveCOS.Container.Rows = append(c.ActiveCOS.Container.Rows, domain.InventoryRow{Slot: slot, RefObjID: ref.RefObjID,
@@ -231,8 +291,13 @@ func TestCaravanTierFollowsCargoGold(t *testing.T) {
 		t.Fatalf("off: tier %d stars %d", nativeTier, nativeStars)
 	}
 	rt.TradeTiers = true
-	if tier, stars := rt.caravanTier(c); tier != 1 || stars != 1 || rt.cargoGoldValue(c) != 101*40*348 {
-		t.Fatalf("on, unscaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
+	if tier, stars := rt.caravanTier(c); tier != 5 || stars != 5 || rt.cargoGoldValue(c) != 101*40*348 {
+		t.Fatalf("on, full: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
+	}
+	// A fifth of the load aboard (21 of 101 stacks) is two stars.
+	c.ActiveCOS.Container.Rows = c.ActiveCOS.Container.Rows[:21]
+	if tier, _ := rt.caravanTier(c); tier != 2 {
+		t.Fatalf("on, a fifth full: tier %d, want 2", tier)
 	}
 	full(348 * enterworld.TradeGoodsPriceFactor)
 	if tier, stars := rt.caravanTier(c); tier != 5 || stars != 5 || rt.cargoGoldValue(c) != 101*40*348*enterworld.TradeGoodsPriceFactor {
