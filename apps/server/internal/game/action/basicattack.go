@@ -648,13 +648,13 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			intent.SkillID = skill.ChainNext
 			// Native stage pacing: the client sends the next stage when
 			// this stage's motion completes (casting + duration) and the
-			// server executes it on arrival (SkillAction_Instant
-			// 0x586700; the previous cast is linked at initiation,
-			// CSkillManager_InitiateSkillCast 0x59B480). The port drives
+			// reference server executes it on arrival, linked to the
+			// previous stage's cast. The port drives
 			// the stages itself, so it waits the same full action time.
-			// The native 500 ms figure (record+28/+2C) only tolerates a
-			// late client stage command; with no client command to
-			// tolerate it must not compress the schedule (#3152).
+			// The native 500 ms figure (the record's chain-latency
+			// fields) only tolerates a late client stage command; with
+			// no client command to tolerate it must not compress the
+			// schedule (#3152).
 			intent.NextActionMs = nowMs + int64(lifecycle)
 			rt.setCombatIntent(intent)
 			return prependOpResult(combatTransition, result)

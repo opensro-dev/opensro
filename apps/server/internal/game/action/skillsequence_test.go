@@ -79,8 +79,8 @@ TestHeavenChainStrikesLandInsideTheCastWindow
 Heaven Chain (SKILL_CH_SWORD_CHAIN_E, the chain named in #3152) is five
 authored stages: casting/duration 1218/210, 0/717, 0/456, 0/375, 0/1624.
 Natively the client sends each stage when the previous stage's motion
-(casting + duration) completes and the server executes it on arrival
-(SkillAction_Instant 0x586700: damage at start + casting), so strikes
+(casting + duration) completes and the reference server executes it on
+arrival (damage lands at stage start + casting), so strikes
 land at 1218, 1428, 2145, 2601, 2976 ms and the cast bracket closes at
 4600 ms. The port drives the stages itself; it must reproduce that
 schedule instead of compressing it, and the root bracket must outlive
