@@ -173,8 +173,9 @@ func (s *Store) startBootVerifier() {
 bootVerifier.stop
 
 Interrupts the verifier and waits for it, bounded by
-bootVerifierStopTimeout. An interrupted spare copy leaves only its
-partial file, which the next boot's stray cleanup removes.
+bootVerifierStopTimeout. An interrupted spare copy removes its partial
+file on the way out; one that a crash left behind is removed by the
+next refresh before it writes (refreshSpare).
 ================
 */
 func (v *bootVerifier) stop() {
