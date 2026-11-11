@@ -9541,6 +9541,17 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
+					// The stall network window is game state, not a panel, so
+					// the panel tail below never saw it and Escape opened the
+					// System menu over it (#3150). Close it the way its own
+					// close control does; a stall prompt above it has already
+					// taken Escape by here, and the drawn body stays the
+					// shared close every window gets (53D480).
+					if ( view?.gameplay?.stall?.network.open ) {
+						sendGameplay( { kind: "stall-network-open", open: false } );
+						dirty = true;
+						return;
+					}
 					confirmDrop = "";
 					closeServer();
 					confirmAbandon = false;
