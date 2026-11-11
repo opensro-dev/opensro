@@ -7,7 +7,7 @@ Native silk is what the account's mall wallet holds. For the closed beta
 (SRO_BETA_SILK) testers EARN silk by playing: every full hour a character
 spends in the world credits the hourly rate to the account's real wallet
 (mall_accounts.silk), until the wallet holds betaSilkBankCap. A first world
-entry also creates the wallet with betaSilkStarter, once per account (the
+entry also creates the wallet with the BetaSilkStarter tunable (700 by default), once per account (the
 wallet row is the persisted marker).
 
 Credited silk is REAL: it survives restarts and deploys, and switching the
@@ -47,6 +47,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -66,8 +67,20 @@ const BetaSilkHourlyDefault = 50
 // betaSilkBankCap pauses earning once the wallet holds this much silk.
 const betaSilkBankCap = 1500
 
-// betaSilkStarter is the silk a new account's wallet starts with.
-const betaSilkStarter = 300
+/*
+================
+betaSilkStarterSilk
+
+The silk a new account's wallet starts with: the BetaSilkStarter tunable
+read now, so a staff change reaches the next wallet created without a
+restart. It is only ever an argument to GrantBetaSilkStarter, which grants
+once, when the account has no wallet row; an existing wallet is never
+topped up whatever this returns.
+================
+*/
+func betaSilkStarterSilk() uint32 {
+	return uint32(tunables.Current().Int(tunables.BetaSilkStarter))
+}
 
 // betaSilkHourMs is the in-world time one credit takes.
 const betaSilkHourMs = 60 * 60 * 1000
@@ -240,7 +253,7 @@ func (b *BetaSilk) Starter(character *domain.Character) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarter); err != nil {
+	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarterSilk()); err != nil {
 		log.WithError(err).WithField("character", character.Name).Warn("beta silk: starter grant failed")
 	}
 }
@@ -286,7 +299,7 @@ func (b *BetaSilk) MallBalance(character *domain.Character) (domain.MallBalance,
 	if character == nil {
 		return domain.MallBalance{}, fmt.Errorf("beta silk: missing character")
 	}
-	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarter); err != nil {
+	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarterSilk()); err != nil {
 		return domain.MallBalance{}, err
 	}
 	balance, err := b.wallet.MallBalance(character)
@@ -310,7 +323,7 @@ func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBal
 	if character == nil {
 		return domain.MallBalance{}, fmt.Errorf("beta silk: missing character")
 	}
-	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarter); err != nil {
+	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarterSilk()); err != nil {
 		return domain.MallBalance{}, err
 	}
 	balance, err := b.wallet.PurchaseMall(character, cost, grant)
@@ -364,7 +377,7 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 			if nowMs < clock.retryAtMs {
 				continue
 			}
-			if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarter); err != nil {
+			if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarterSilk()); err != nil {
 				clock.retryAtMs = nowMs + betaSilkMaxStepMs
 				log.WithError(err).Warn("beta silk: starter retry failed")
 				continue

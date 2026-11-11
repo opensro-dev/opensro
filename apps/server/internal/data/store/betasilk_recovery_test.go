@@ -18,11 +18,22 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
 const betaSilkRecoveryAccount = "beta-recovery"
 const betaSilkRecoveryFailure = "starter temporarily unavailable"
+
+// hourlySilk is the rate these tests run the beta owner at; purchaseSilk is
+// the price of the one mall purchase they make.
+const (
+	hourlySilk   = 50
+	purchaseSilk = 25
+)
+
+// starterSilk is the starter the beta grants at the tunable's default.
+var starterSilk = uint32(tunables.Current().Int(tunables.BetaSilkStarter))
 
 /*
 ================
@@ -89,7 +100,7 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 	if err := s.CreateCharacter(testDivision, betaSilkRecoveryAccount, character); err != nil {
 		t.Fatal(err)
 	}
-	beta := action.NewBetaSilk(s, 50)
+	beta := action.NewBetaSilk(s, hourlySilk)
 	if beta == nil {
 		t.Fatal("enabled beta owner missing")
 	}
@@ -113,21 +124,21 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 	unblockBetaSilkStarter(t, s)
 	const recoveredMs = startedMs + 2*minuteMs
 	beta.Tick(recoveredMs, online, lookup)
-	assertBetaSilkWallet(t, s, 300, true)
+	assertBetaSilkWallet(t, s, starterSilk, true)
 	for minute := int64(1); minute < 60; minute++ {
 		if frames := beta.Tick(recoveredMs+minute*minuteMs, online, lookup); len(frames) != 0 {
 			t.Fatalf("credited before a full recovered hour at minute %d: %+v", minute, frames)
 		}
 	}
-	assertBetaSilkWallet(t, s, 300, true)
+	assertBetaSilkWallet(t, s, starterSilk, true)
 	frames := beta.Tick(recoveredMs+60*minuteMs, online, lookup)
-	assertBetaSilkWallet(t, s, 350, true)
+	assertBetaSilkWallet(t, s, starterSilk+hourlySilk, true)
 	if len(frames) != 1 || frames[0].DivisionID != testDivision || frames[0].OnlyCharacterID != character.ID || len(frames[0].Frames) != 1 {
 		t.Fatalf("hourly balance push=%+v", frames)
 	}
 	var pushed domain.MallBalance
 	frame := frames[0].Frames[0]
-	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: 350}) {
+	if err := json.Unmarshal(frame.Payload, &pushed); err != nil || frame.Opcode != 17 || pushed != (domain.MallBalance{Silk: starterSilk + hourlySilk}) {
 		t.Fatalf("hourly frame=%+v balance=%+v err=%v", frame, pushed, err)
 	}
 	s.Close()
@@ -136,10 +147,10 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 	if len(characters) != 1 {
 		t.Fatalf("reopened characters=%d, want 1", len(characters))
 	}
-	resumed := action.NewBetaSilk(reopened, 50)
+	resumed := action.NewBetaSilk(reopened, hourlySilk)
 	resumed.Starter(characters[0])
 	resumed.Starter(characters[0])
-	assertBetaSilkWallet(t, reopened, 350, true)
+	assertBetaSilkWallet(t, reopened, starterSilk+hourlySilk, true)
 }
 
 /*
@@ -162,7 +173,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 			if err := s.CreateCharacter(testDivision, betaSilkRecoveryAccount, character); err != nil {
 				t.Fatal(err)
 			}
-			beta := action.NewBetaSilk(s, 50)
+			beta := action.NewBetaSilk(s, hourlySilk)
 			if beta == nil {
 				t.Fatal("enabled beta owner missing")
 			}
@@ -172,7 +183,7 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 				rows[0].StackCount++
 				return rows, nil
 			}
-			cost := domain.MallBalance{Silk: 25}
+			cost := domain.MallBalance{Silk: purchaseSilk}
 			blockBetaSilkStarter(t, s)
 			beta.Starter(character)
 			var err error
@@ -191,27 +202,27 @@ func TestBetaSilkStarterRecoveryBeforeMallUse(t *testing.T) {
 			unblockBetaSilkStarter(t, s)
 			if firstUse == "balance" {
 				balance, err := beta.MallBalance(character)
-				if err != nil || balance != (domain.MallBalance{Silk: 300}) {
+				if err != nil || balance != (domain.MallBalance{Silk: starterSilk}) {
 					t.Fatalf("recovered mall balance=%+v err=%v", balance, err)
 				}
 			}
 			balance, err := beta.PurchaseMall(character, cost, grant)
-			if err != nil || balance != (domain.MallBalance{Silk: 275}) || grants != 1 || character.MissionInventory[0].StackCount != 2 {
+			if err != nil || balance != (domain.MallBalance{Silk: starterSilk - purchaseSilk}) || grants != 1 || character.MissionInventory[0].StackCount != 2 {
 				t.Fatalf("recovered purchase balance=%+v err=%v grants=%d inventory=%+v", balance, err, grants, character.MissionInventory)
 			}
 			balance, err = beta.MallBalance(character)
-			if err != nil || balance != (domain.MallBalance{Silk: 275}) {
+			if err != nil || balance != (domain.MallBalance{Silk: starterSilk - purchaseSilk}) {
 				t.Fatalf("repeat mall read regranted starter: balance=%+v err=%v", balance, err)
 			}
-			assertBetaSilkWallet(t, s, 275, true)
+			assertBetaSilkWallet(t, s, starterSilk-purchaseSilk, true)
 			s.Close()
 			reopened := openTest(t, dir, newTestClock())
 			characters := reopened.Characters().CharactersForDivision(testDivision)
 			if len(characters) != 1 || characters[0].MissionInventory[0].StackCount != 2 {
 				t.Fatalf("purchase inventory not durable: %+v", characters)
 			}
-			action.NewBetaSilk(reopened, 50).Starter(characters[0])
-			assertBetaSilkWallet(t, reopened, 275, true)
+			action.NewBetaSilk(reopened, hourlySilk).Starter(characters[0])
+			assertBetaSilkWallet(t, reopened, starterSilk-purchaseSilk, true)
 		})
 	}
 }

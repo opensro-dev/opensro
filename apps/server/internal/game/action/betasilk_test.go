@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -105,7 +106,7 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	}
 	beta.Starter(character)
 	beta.Starter(character)
-	if wallet.starters != 1 || wallet.silk != betaSilkStarter {
+	if wallet.starters != 1 || wallet.silk != betaSilkStarterSilk() {
 		t.Fatalf("starter: %d grants, silk %d", wallet.starters, wallet.silk)
 	}
 	online := []simulation.SessionView{{DivisionID: "d", CharacterID: character.ID}}
@@ -119,11 +120,11 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	for range 59 {
 		pushed = append(pushed, tick()...)
 	}
-	if wallet.silk != betaSilkStarter || len(pushed) != 0 {
+	if wallet.silk != betaSilkStarterSilk() || len(pushed) != 0 {
 		t.Fatalf("59 minutes credited: silk %d, %d pushes", wallet.silk, len(pushed))
 	}
 	pushed = tick()
-	if wallet.silk != betaSilkStarter+50 || len(pushed) != 1 || pushed[0].OnlyCharacterID != character.ID {
+	if wallet.silk != betaSilkStarterSilk()+50 || len(pushed) != 1 || pushed[0].OnlyCharacterID != character.ID {
 		t.Fatalf("hour 1: silk %d, pushes %+v", wallet.silk, pushed)
 	}
 	var balance domain.MallBalance
@@ -135,7 +136,7 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	now += 5 * betaSilkHourMs
 	beta.Tick(now, nil, lookup)
 	beta.Tick(now, online, lookup)
-	if wallet.silk != betaSilkStarter+50 {
+	if wallet.silk != betaSilkStarterSilk()+50 {
 		t.Fatalf("away time credited: silk %d", wallet.silk)
 	}
 
@@ -448,5 +449,60 @@ func TestParseBetaSilkActiveOnly(t *testing.T) {
 		if (err != nil) != value.bad || got != value.want {
 			t.Errorf("ParseBetaSilkActiveOnly(%q) = %t, %v; want %t", value.raw, got, err, value.want)
 		}
+	}
+}
+
+/*
+================
+TestBetaSilkStarterFollowsItsTunable
+
+A new account's wallet starts with the tunable's value read at that moment:
+700 at the default, 400 after a live change, with no restart.
+================
+*/
+func TestBetaSilkStarterFollowsItsTunable(t *testing.T) {
+	const defaultStarter = 700
+	const changedStarter = 400
+	character := &domain.Character{ID: 7, Name: "Tester", AccountID: "acct"}
+	wallet := &fakeSilkWallet{}
+	NewBetaSilk(wallet, 50).Starter(character)
+	if wallet.silk != defaultStarter || wallet.starters != 1 {
+		t.Fatalf("default starter: silk %d, %d grants, want %d", wallet.silk, wallet.starters, defaultStarter)
+	}
+	restore := tunables.Swap(tunables.Current())
+	t.Cleanup(restore)
+	if applied, err := tunables.Apply(tunables.BetaSilkStarter, "400"); err != nil || !applied {
+		t.Fatalf("live apply: applied=%v err=%v", applied, err)
+	}
+	other := &fakeSilkWallet{}
+	NewBetaSilk(other, 50).Starter(character)
+	if other.silk != changedStarter || other.starters != 1 {
+		t.Fatalf("changed starter: silk %d, %d grants, want %d", other.silk, other.starters, changedStarter)
+	}
+}
+
+/*
+================
+TestBetaSilkStarterNeverTopsUpAnExistingWallet
+
+An account that already has a wallet keeps its balance when the starter
+runs again or the setting changes: the starter only creates a missing wallet.
+================
+*/
+func TestBetaSilkStarterNeverTopsUpAnExistingWallet(t *testing.T) {
+	const existingSilk = 120
+	character := &domain.Character{ID: 7, Name: "Tester", AccountID: "acct"}
+	wallet := &fakeSilkWallet{exists: true, silk: existingSilk}
+	beta := NewBetaSilk(wallet, 50)
+	beta.Starter(character)
+	swapTunables(t, map[string]string{"SRO_MALL_STARTER_SILK": "1500"})
+	beta.Starter(character)
+	if wallet.silk != existingSilk || wallet.starters != 0 {
+		t.Fatalf("existing wallet: silk %d, %d grants, want %d and none", wallet.silk, wallet.starters, existingSilk)
+	}
+	swapTunables(t, map[string]string{"SRO_MALL_STARTER_SILK": "0"})
+	beta.Starter(character)
+	if wallet.silk != existingSilk || wallet.starters != 0 {
+		t.Fatalf("after change: silk %d, %d grants", wallet.silk, wallet.starters)
 	}
 }
