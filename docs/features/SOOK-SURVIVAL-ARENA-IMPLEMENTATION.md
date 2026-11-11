@@ -401,3 +401,13 @@ No additional gameplay, protocol or schema changes were introduced.
 The standalone casting-visual PR's only blocker was draft status; it is now
 ready for independent review with its existing passing CI and unchanged code.
 The running local game and its characters/gear remain untouched.
+
+## Inherited UI citation provenance
+
+The UI contract move carries the existing setDamageNumbers comment citing
+0x8D5856 from runtime/ui/ui.ts into contracts/ui.ts. Exact comparison of the
+UiExtensions interface against main 9b3e5c2 confirms identical text, including
+the citation and every property type. No binary trace was rerun and no new
+native behavior is asserted. The PR Native claims table records this
+mechanical relocation explicitly; the native-claims gate passes with that
+provenance row. The native citation remains in source.
