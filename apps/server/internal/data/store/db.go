@@ -52,7 +52,7 @@ import (
 const (
 	// DBFileName is the authority database.
 	DBFileName = "state.db"
-	// DBBakFileName is the previous-generation copy (VACUUM INTO at boot,
+	// DBBakFileName is the previous-generation copy (VACUUM INTO after boot,
 	// once per successful main-file load, following one-generation retention).
 	DBBakFileName = DBFileName + ".bak"
 
@@ -307,23 +307,6 @@ func removeDBSidecars(path string) {
 	for _, sidecar := range dbSidecars(path) {
 		os.Remove(sidecar)
 	}
-}
-
-/*
-==================
-refreshDBBak
-
-refreshDBBak writes the one-generation previous copy with VACUUM INTO
-(a transactionally consistent, checkpointed, compact image). Once per
-boot, only after the MAIN file proved good - never while running.
-==================
-*/
-func refreshDBBak(db *sql.DB, bakPath string) error {
-	if err := os.Remove(bakPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	_, err := db.Exec("VACUUM INTO ?", bakPath)
-	return err
 }
 
 // loadedDB is the in-memory result of a validated current-schema read.

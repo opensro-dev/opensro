@@ -111,6 +111,10 @@ type Health struct {
 	FailedWrites  int
 	LastCommitAt  time.Time
 	LoadedFromBak bool
+	// IntegrityError is the background full check's verdict when it is
+	// not "ok" (boot_verify.go); empty while the check runs and when it
+	// passed.
+	IntegrityError string
 	// Commits counts the successful transactions since Open.
 	Commits uint64
 }
@@ -187,6 +191,11 @@ type Store struct {
 	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
 	// whenever no database was adopted.
 	checkpoints *walCheckpointer
+	// The boot verifier (boot_verify.go): the full integrity check and
+	// the spare copy, after the store is adopted. integrityError is its
+	// one result, read by Health without a lock.
+	verifier       *bootVerifier
+	integrityError atomic.Pointer[string]
 	// writer is the asynchronous SQLite writer (commit_writer.go,
 	// SRO_STORE_ASYNC_COMMIT, port-only): started by adoptDB when the
 	// flag is on, stopped by Close, nil whenever commits apply in place.
@@ -445,11 +454,10 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 	db, loaded, err := s.openAndLoadDB(s.dbPath)
 	if err == nil {
 		s.adoptDB(db, loaded)
-		// Refresh the single bak generation from the database just
-		// proven good - once per boot, never while running.
-		if bakErr := refreshDBBak(db, s.dbBakPath); bakErr != nil {
-			log.Warnf("store: refreshing %s failed: %v", DBBakFileName, bakErr)
-		}
+		// The state tables proved good above. The full check and the
+		// single bak generation follow off the serving path, once per
+		// boot (boot_verify.go).
+		s.startBootVerifier()
 		return nil
 	}
 	if isVersionMismatch(err) {
@@ -474,10 +482,12 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := quickCheck(db); err != nil {
+	started := time.Now()
+	if err := quickCheckState(db); err != nil {
 		db.Close()
 		return nil, nil, err
 	}
+	checked := time.Since(started)
 	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion)
 	if err != nil {
 		db.Close()
@@ -487,6 +497,8 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	log.Infof("store: %s opened: state tables checked in %s, loaded in %s", filepath.Base(path),
+		checked.Round(time.Millisecond), (time.Since(started) - checked).Round(time.Millisecond))
 	return db, loaded, nil
 }
 

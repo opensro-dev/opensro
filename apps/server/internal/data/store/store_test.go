@@ -94,6 +94,10 @@ func openTestCommit(t testing.TB, dir string, clock *testClock, async bool) *Sto
 	// Windows cannot delete an open database file; TempDir cleanup needs
 	// every handle released.
 	t.Cleanup(s.Close)
+	// The spare copy is written after boot (boot_verify.go); the suite
+	// reads it right after an open, so the helper waits for it. A server
+	// never does.
+	s.waitBootVerified()
 	return s
 }
 
