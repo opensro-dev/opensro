@@ -35,10 +35,13 @@ func BenchmarkTimedRWMutexRead(b *testing.B) {
 	b.Run("parallel", func(b *testing.B) {
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
+			sum := 0
 			for pb.Next() {
 				m.RLock()
+				sum++
 				m.RUnlock()
 			}
+			timedMutexSink = sum
 		})
 	})
 }
