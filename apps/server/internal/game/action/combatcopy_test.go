@@ -9,7 +9,8 @@ pass, the attacking hawk's strike tick, the timed target's view of
 its ally, the heal-over-time pulse's
 retained caster view, the targeted recovery cast's recipient view,
 the lowest-party-heal candidate copies, the party-resurrection
-member copies, the recovery effect's recipient copies, the Scream Mask's member snapshot and attacker view,
+member copies, the recovery effect's recipient copies, the damage
+return's two defender copies, the Scream Mask's member snapshot and attacker view,
 and the support-cast walker's tick and completion copies take the
 narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
@@ -910,5 +911,138 @@ func TestSnapshotCombatKeepsEquipmentAndAvatarOnly(t *testing.T) {
 	}
 	if len(copy.MissionInventory) != equipped {
 		t.Fatalf("combat copy has %d rows, the character wears %d", len(copy.MissionInventory), equipped)
+	}
+}
+
+/*
+================
+teachTwoHandReturn
+
+The defender learns the two-hand return tuned to fire on every hit at
+half physical in range, the way TestTwoHandReturnStrikesTheAttacker's
+fixture teaches it.
+================
+*/
+func teachTwoHandReturn(t *testing.T, rt *Runtime, c *enterworld.Character) {
+	t.Helper()
+	row := shippedOffense(t, "SKILL_EU_WARRIOR_TWOHANDP_RETURN_A_01")
+	row.Reqi = enterworld.SkillReqi{}
+	row.PassiveParameters.DamageReturn = enterworld.SkillDamageReturn{Present: true, Chance: 100, Physical: 50, Range: 1000}
+	rt.deps.SkillData().(staticSkillSource)[row.ID] = row
+	c.Skills = append(c.Skills, row.ID)
+}
+
+/*
+================
+damageReturnMonsterRun
+
+One monster strike on the returning defender holding the combat bag.
+The trace is the monster's HP transition, the strike's whole outcome
+and the defender's rows; copiedDefender says whether the combat seam
+copied the defender, landed whether the return reached the monster.
+================
+*/
+func damageReturnMonsterRun(t *testing.T, full bool) (string, bool, bool) {
+	t.Helper()
+	rt, clock, c, mob := newCombatTestRuntime(t, 5000)
+	mob.Ref.DefaultSkillIDs[0] = 2
+	c.CurrentHP = testInt64(100000)
+	skills := rt.deps.SkillData().(staticSkillSource)
+	strike := skills[2]
+	strike.Attack.Min, strike.Attack.Max, strike.Attack.Percent = 100, 100, 100
+	skills[2] = strike
+	loadCombatBag(c)
+	teachTwoHandReturn(t, rt, c)
+
+	copiedDefender := false
+	if full {
+		forceFullCombatCopy(rt)
+	} else {
+		rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			if character == c {
+				copiedDefender = true
+			}
+			return character.SnapshotCombat()
+		}
+	}
+	before, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	result := rt.MonsterBasicAttack(testDivision, mob, enterworld.ObjectIDForCharacter(c), 2, clock.NowMs())
+	if !result.Accepted {
+		t.Fatal("monster attack refused")
+	}
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	trace := fmt.Sprintf("mob %d->%d\n%+v\nrows %s", before.CurrentHP, after.CurrentHP, result, combatRowsView(c))
+	return trace, copiedDefender, after.CurrentHP < before.CurrentHP
+}
+
+/*
+================
+damageReturnPlayerRun
+
+One player's basic attack on the returning defender holding the combat
+bag. The trace is the attacker's HP transition, the attack's whole
+outcome and the defender's rows; copiedDefender and landed as in the
+monster run.
+================
+*/
+func damageReturnPlayerRun(t *testing.T, full bool) (string, bool, bool) {
+	t.Helper()
+	rt, _, a, v := newPvpPair(t)
+	loadCombatBag(v)
+	teachTwoHandReturn(t, rt, v)
+
+	copiedDefender := false
+	if full {
+		forceFullCombatCopy(rt)
+	} else {
+		rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			if character == v {
+				copiedDefender = true
+			}
+			return character.SnapshotCombat()
+		}
+	}
+	before := *a.CurrentHP
+	out := rt.HandleTargetInteract(testDivision, a, wire.BasicAttackEngage{TargetGid: enterworld.ObjectIDForCharacter(v)}.Encode())
+	trace := fmt.Sprintf("attacker %d->%d\n%+v\nrows %s", before, *a.CurrentHP, out, combatRowsView(v))
+	return trace, copiedDefender, *a.CurrentHP < before
+}
+
+/*
+================
+TestDamageReturnTakesTheCombatCopy
+
+Both damage-return branches re-read the defender through the combat
+copy (#3164). Each branch runs twice on the combat bag - once on the
+narrow copy, once forced onto the whole record - and every frame, HP
+transition and row must agree; the return must land in both runs (the
+comparison would otherwise agree vacuously), and the narrow run's
+combat seam must have copied the defender, which a branch that falls
+back to the whole record never reaches.
+================
+*/
+func TestDamageReturnTakesTheCombatCopy(t *testing.T) {
+	monsterNarrow, monsterCopied, monsterLanded := damageReturnMonsterRun(t, false)
+	monsterFull, _, monsterFullLanded := damageReturnMonsterRun(t, true)
+	if monsterNarrow != monsterFull {
+		t.Fatalf("monster-branch damage return diverged on the combat copy:\nnarrow:\n%s\nfull:\n%s", monsterNarrow, monsterFull)
+	}
+	if !monsterLanded || !monsterFullLanded {
+		t.Fatal("the return did not reach the monster; the comparison would agree vacuously")
+	}
+	if !monsterCopied {
+		t.Fatal("the monster branch never took the defender's combat copy")
+	}
+
+	playerNarrow, playerCopied, playerLanded := damageReturnPlayerRun(t, false)
+	playerFull, _, playerFullLanded := damageReturnPlayerRun(t, true)
+	if playerNarrow != playerFull {
+		t.Fatalf("player-branch damage return diverged on the combat copy:\nnarrow:\n%s\nfull:\n%s", playerNarrow, playerFull)
+	}
+	if !playerLanded || !playerFullLanded {
+		t.Fatal("the return did not reach the attacking player; the comparison would agree vacuously")
+	}
+	if !playerCopied {
+		t.Fatal("the player branch never took the defender's combat copy")
 	}
 }
