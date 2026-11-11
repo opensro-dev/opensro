@@ -56,6 +56,36 @@ func Acquire(ctx context.Context, path string) (*Guard, error) {
 	}
 }
 
+/*
+================
+TryAcquire
+
+One attempt at the guard, for a caller that has somewhere to be while a
+sibling holds it (the standby handover, opensro-ops#281): held reports
+whether this process won the lock. A contended lock is not an error.
+================
+*/
+func TryAcquire(path string) (guard *Guard, held bool, err error) {
+	if path == "" {
+		return nil, false, fmt.Errorf("process guard path is required")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, false, fmt.Errorf("create process guard directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, false, fmt.Errorf("open process guard: %w", err)
+	}
+	if err := tryLock(file); err != nil {
+		_ = file.Close()
+		if lockContended(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("acquire process guard: %w", err)
+	}
+	return &Guard{file: file}, true, nil
+}
+
 // Close releases the guard. The operating system also releases it on any
 // process death, so no stale sentinel can block a later Nomad allocation.
 func (guard *Guard) Close() error {

@@ -476,6 +476,7 @@ var NotSettings = map[string]string{
 	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",
 	"SRO_MOVE_CLIENT_CLIP":                 "movement enforcement mode, operational",
 	"SRO_MAINTENANCE_GATE_PATH":            "release path: the maintenance gate file",
+	"SRO_STANDBY_HANDOVER":                 "release machinery: the canary standby handover posture (opensro-ops#281), operational",
 	"SRO_PUBLIC_API_ADDR":                  "the public API listener, per shard",
 	"SRO_TRANSPORT_TLS_ID":                 "transport certificate identity",
 	"SRO_RELEASE_ID":                       "release identity",

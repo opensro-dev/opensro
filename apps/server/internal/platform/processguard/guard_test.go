@@ -50,3 +50,34 @@ func TestAcquireSerializesAndRecoversAfterRelease(t *testing.T) {
 		t.Fatal("second guard did not acquire after release")
 	}
 }
+
+/*
+================
+TestTryAcquireReportsHeldAndFree
+================
+*/
+func TestTryAcquireReportsHeldAndFree(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "service.lock")
+	guard, held, err := TryAcquire(path)
+	if err != nil || !held {
+		t.Fatalf("a free guard = held %v, err %v, want the lock", held, err)
+	}
+	// A second fd in this same process still loses: the lock is the
+	// file's, not the process's.
+	if _, held, err := TryAcquire(path); err != nil || held {
+		t.Fatalf("a live guard = held %v, err %v, want a clean miss", held, err)
+	}
+	if err := guard.Close(); err != nil {
+		t.Fatal(err)
+	}
+	guard, held, err = TryAcquire(path)
+	if err != nil || !held {
+		t.Fatalf("a released guard = held %v, err %v, want the lock", held, err)
+	}
+	if err := guard.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := TryAcquire(""); err == nil {
+		t.Fatal("an empty path must refuse, not lock something")
+	}
+}
