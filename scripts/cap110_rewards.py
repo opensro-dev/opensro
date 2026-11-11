@@ -16,7 +16,9 @@ does, and a rule the server cannot represent refuses exactly as the field
 family's does. The supplied exports are data, never executable input.
 
 The rules are written as cap110-rewards.txt, which the server reads at startup
-(loot/cap110.go). The imported items go in their own item shard.
+(loot/cap110.go). The imported items go in their own item shard. With no
+database export named, a client-only build (#3246) carries no database
+rewards: no file is written and the server keeps its native consumables.
 
 ===========================================================================
 """
@@ -231,14 +233,30 @@ def add_rewards(vsro_root, native, output, source_root=None):
 	if shard.exists():
 		if not marker.exists():
 			raise ValueError("output already owns an unmarked reward item shard")
-		if sro_pk2.digest(shard.read_bytes()) != prior["shardSha256"]:
+		if sro_pk2.digest(shard.read_bytes()) != prior.get("shardSha256"):
 			raise ValueError("refusing to replace a locally changed reward item shard")
 	if os.environ.get(monsters.FLAG, "").lower() not in tables.FLAG_ON:
 		if marker.exists():
 			remove_owned(text_root, prior)
 			marker.unlink()
 		return {"enabled": False}
-	source_root = Path(source_root or os.environ[monsters.SOURCE_ENV])
+	named = source_root or os.environ.get(monsters.SOURCE_ENV, "")
+	if not named:
+		# Client-only build (#3246): no database rewards exist to carry,
+		# so this step imports no items and writes no rewards file; the
+		# server keeps its native consumables while the file is absent
+		# (loot/cap110.go). What an export build owned here leaves with
+		# it, and the population check is the export path's own order.
+		population = population_codes(text_root)
+		if not population:
+			raise ValueError("no installed Alexandria monster population to reward")
+		remove_owned(text_root, prior)
+		summary = {"enabled": True, "format": "opensro-cap110-rewards-v1", "portOnly": True,
+			"source": "client", "fixed": 0, "random": 0, "groups": 0,
+			"monsters": sorted(population), "imported": 0, "nameSymbols": []}
+		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode("utf-8"))
+		return summary
+	source_root = Path(named)
 	monsters.require_pinned_export(source_root)
 	# ================
 	# read
@@ -313,7 +331,8 @@ def main():
 	parser.add_argument("--vsro-root", required=True)
 	parser.add_argument("--native-extracted", required=True)
 	parser.add_argument("--output", required=True)
-	parser.add_argument("--source-root", required=True)
+	parser.add_argument("--source-root",
+		help=f"the monster database export (else {monsters.SOURCE_ENV}, else the client alone)")
 	args = parser.parse_args()
 	# Off, add_rewards only removes its owned outputs and reads no archive.
 	if os.environ.get(monsters.FLAG, "").lower() in tables.FLAG_ON:

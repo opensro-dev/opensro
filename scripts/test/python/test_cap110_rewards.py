@@ -178,6 +178,51 @@ class RewardsTest(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			rewards.convert_rows(selected, {61}, {"ITEM_A": 61})
 
+	# ================
+	# test_client_only_rewards_keep_the_native_posture
+	#
+	# #3246: with no database export named there are no database
+	# rewards to carry, so the step writes no rewards file and imports
+	# no items; the monsters keep the native tables and the marker
+	# records the posture.
+	# ================
+	def test_client_only_rewards_keep_the_native_posture(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			native, output = base / "native", base / "output"
+			native.mkdir()
+			text_root = output / rewards.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			(text_root / monsters.POPULATION_FILE).write_text(
+				json.dumps({"Version": 2, "Rows": [{"Codename": "MOB_SD_FIELD"}]}), encoding="utf-8")
+			with mock.patch.dict(os.environ, {"SRO_CAP110_MONSTERS": "on"}):
+				os.environ.pop(monsters.SOURCE_ENV, None)
+				summary = rewards.add_rewards(base / "vsro", native, output)
+			self.assertEqual(summary["source"], "client")
+			self.assertEqual(summary["monsters"], ["MOB_SD_FIELD"])
+			self.assertFalse((text_root / rewards.REWARDS_FILE).exists())
+			self.assertFalse((text_root / rewards.OUTPUT_SHARD).exists())
+			marker = json.loads((output / rewards.MARKER).read_text(encoding="utf-8"))
+			self.assertEqual(marker["source"], "client")
+
+	# ================
+	# test_client_only_rewards_refuse_without_a_population
+	# ================
+	def test_client_only_rewards_refuse_without_a_population(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			native, output = base / "native", base / "output"
+			native.mkdir()
+			(output / rewards.TEXT_ROOT).mkdir(parents=True)
+			with mock.patch.dict(os.environ, {"SRO_CAP110_MONSTERS": "on"}):
+				os.environ.pop(monsters.SOURCE_ENV, None)
+				with self.assertRaisesRegex(ValueError, "no installed Alexandria monster population"):
+					rewards.add_rewards(base / "vsro", native, output)
+
 
 if __name__ == "__main__":
 	unittest.main()
