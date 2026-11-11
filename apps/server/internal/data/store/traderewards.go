@@ -52,6 +52,7 @@ func (s *Store) UpdateTrade(cs []*domain.Character, label string, update func(*d
 			s.meta.TradeRewards = map[string]domain.TradeRewardPool{}
 		}
 		s.meta.TradeRewards[division] = pool
+		s.changes.tradeRewards = true
 		return true
 	}, false)
 }

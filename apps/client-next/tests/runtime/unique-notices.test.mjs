@@ -18,7 +18,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 import path from "node:path";
 import { serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
-const { uniqueNotice, uniqueReferences } = await import( "../../src/engine/foundation/gameplay/unique-notices.ts" );
+const { isSpecialtySellEnd, uniqueNotice, uniqueReferences } = await import(
+	"../../src/engine/foundation/gameplay/unique-notices.ts"
+);
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -131,6 +133,15 @@ test("banner waits for assets, replaces rather than queues, fades and resets acr
 	assert.equal( b.value( x => x ), "" );
 	b.step( [ n ], 24000, true );
 	assert.equal( b.alpha(), 1 );
+});
+test("kind 10 alone is the specialty sell-end that closes the shop", () => {
+	assert.equal( isSpecialtySellEnd( 0x3058, Uint8Array.of( 10 ) ), true );
+	assert.equal( isSpecialtySellEnd( 0x3058, Uint8Array.of( 10, 9, 9 ) ), true );
+	for ( const kind of [ 1, 5, 6, 7, 8, 9, 11 ] ) {
+		assert.equal( isSpecialtySellEnd( 0x3058, Uint8Array.of( kind ) ), false );
+	}
+	assert.equal( isSpecialtySellEnd( 0x3059, Uint8Array.of( 10 ) ), false );
+	assert.equal( isSpecialtySellEnd( 0x3058, new Uint8Array( 0 ) ), false );
 });
 test("other 0x3058 kinds show their category 0x11 notice, kind 10 included", () => {
 	// 7508C0: kind 1 is the thief's stolen-goods rule (#721).

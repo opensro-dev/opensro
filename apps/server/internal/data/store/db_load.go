@@ -151,9 +151,13 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	// An authority that predates the account count has no halloweenBoxes
 	// row: seed the plane from the legacy per-character counts the
 	// characters just loaded with (#2547). Once any commit writes the
-	// row, this derivation never runs again.
+	// row, this derivation never runs again, so a non-empty seed joins
+	// the first commit (adoptDB flags it): left unwritten, the next
+	// boot would re-derive it from the surviving characters, and a
+	// character deleted in between would shrink the account's boxes.
 	if !halloweenBoxesPresent {
 		out.meta.HalloweenBoxes = seedHalloweenBoxes(out.characters)
+		out.halloweenSeeded = len(out.meta.HalloweenBoxes) > 0
 	}
 
 	delRows, err := db.Query("SELECT division, record FROM deleted_characters ORDER BY division, seq")

@@ -36,6 +36,7 @@ import (
 	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
+	"opensro.online/server/internal/transport"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
@@ -340,6 +341,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The world map shows only your own position.",
 				Now:    "The world map also shows other players.",
 				Why:    "Helps testers find each other on a small shard."},
+			{Flag: transport.EnvAccountMultiWorld, On: transport.AccountMultiWorldEnabled(),
+				Native: "An account has one character in the world at a time; a second login is refused.",
+				Now:    "Each browser tab can play a different character of the same account at once.",
+				Why:    "Closed beta (owner, 2026-11-11): testers play several of their characters together."},
 			{Flag: enterworld.EnvStackSizes, On: len(stackSizes) > 0,
 				Native: "Retail stack sizes.",
 				Now:    "Larger stacks for some item kinds.",
