@@ -13,6 +13,13 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
 	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
+	                       and (#3151) "[<murderer>] murdered [<victim>]
+	                       (Murderer Lv N)" for an open-field murder: character
+	                       names (neither side wears a suit to alias), N the
+	                       murderer's new PK level - the total the client
+	                       calls the PK level (0x3647) - written MAX at its
+	                       cap; same flag, channel, cap and pair window as
+	                       the job-kill line.
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED Lv <N>" on a new wanted level, and
 	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED Lv <N>"
 	SRO_ALCHEMY_BREAK_NOTICE  "<alias> broke <item>" when a reinforcement destroys the
@@ -58,6 +65,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
@@ -784,6 +792,77 @@ func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
 		return
 	}
 	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", wire.NoticeLink{}, 0, n.nowMs)
+}
+
+/*
+================
+murderNotice
+
+An open-field murder's notice facts (#3151), read inside the kill's door
+where the murder was booked: the pair's character names key the repeat
+window and are what the notice shows (neither side wears a suit, so no
+job alias exists to show), and level is the murderer's new PK level.
+================
+*/
+type murderNotice struct {
+	division, killer, victim string
+	level                    int
+	nowMs                    int64
+}
+
+/*
+================
+murderNoticeOf
+
+An open-field murder (pk.DeathPlayer) whose booking just counted. Read
+in payPlayerKillInDoor after pk.RecordMurder, so the level is the one
+this murder made; posted by postMurderNotice once the kill commits.
+================
+*/
+func murderNoticeOf(division string, killer, victim *enterworld.Character, nowMs int64) (murderNotice, bool) {
+	if killer.PK == nil {
+		return murderNotice{}, false
+	}
+	return murderNotice{division, killer.Name, victim.Name, int(killer.PK.TotalCount), nowMs}, true
+}
+
+/*
+================
+murderNoticeText
+
+#3151's line on the job-kill notice's pattern: "[<murderer>] murdered
+[<victim>] (Murderer Lv N)", with MAX at the PK level's cap (pk.MaxTotal,
+the total the client calls the PK level on 0x3647).
+================
+*/
+func murderNoticeText(n murderNotice) string {
+	level := "MAX"
+	if n.level < pk.MaxTotal {
+		level = strconv.Itoa(n.level)
+	}
+	return fmt.Sprintf("[%s] murdered [%s] (Murderer Lv %s)", n.killer, n.victim, level)
+}
+
+/*
+================
+Runtime.postMurderNotice
+
+#3151 (port-only, not native): queues a committed open-field murder's
+notice under the same controls as the job-kill notices - the
+SRO_ANNOUNCE_JOB_KILL flag, the job-kill channel and per-minute cap, and
+the pair's quiet window unless the repeat rule lifts it. A companion's
+kill books the murder on its owner but posts nothing, as the job-kill
+notice does (payCOSKillInDoor collects no murder notice).
+================
+*/
+func (rt *Runtime) postMurderNotice(n murderNotice) {
+	if !rt.Announce.JobKill {
+		return
+	}
+	if !rt.Announce.JobKillRepeat && !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
+		return
+	}
+	rt.announce(n.division, announceJobKill, murderNoticeText(n), wire.NoticeLink{}, 0, n.nowMs)
 }
 
 /*
