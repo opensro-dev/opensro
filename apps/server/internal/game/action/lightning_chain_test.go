@@ -43,9 +43,10 @@ The v1.150 client appends every linked stage to the ROOT deco (85CB60),
 whose one ANI_SKILL_25 clip carries all six SHOT events. The root bracket
 therefore has to stay open until the last stage's action ends; closing it
 at the root's own duration left the caster idle while stages 2..6 kept
-landing as result-only temporaries. Step waits are native ref+78 minus the
-500 ms command latency budget, gated only by the casting
-instance.
+landing as result-only temporaries. Step waits are the previous stage's
+full authored action time (casting + duration), the pace the native
+client sends stage commands at; the casting instance gates a stage
+only while a positive-time step has not released.
 ==================
 */
 func TestLightningChainRootBracketSpansEveryStage(t *testing.T) {
@@ -102,9 +103,9 @@ func TestLightningChainRootBracketSpansEveryStage(t *testing.T) {
 	if len(closes) != 1 {
 		t.Fatalf("stages must not open or close brackets of their own: %v", closes)
 	}
-	// Root: 340 of the 500 budget -> no wait, held only by its 256 ms casting
-	// instance. Stage 2: 1188-160. Stages 3..5 wait their full duration.
-	waits := []int64{int64(root.ActionCastingTimeMs), int64(stages[1].ActionDurationMs) - 160,
+	// Each stage follows the previous stage's full action time
+	// (casting + duration): the root's 256+340, then 1188, 464, 396, 788.
+	waits := []int64{int64(root.ActionCastingTimeMs + root.ActionDurationMs), int64(stages[1].ActionDurationMs),
 		int64(stages[2].ActionDurationMs), int64(stages[3].ActionDurationMs), int64(stages[4].ActionDurationMs)}
 	for i := 1; i < 6; i++ {
 		gap := stageAt[stages[i].ID] - stageAt[stages[i-1].ID]
