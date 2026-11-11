@@ -2189,11 +2189,11 @@ test("crow recovery uses red rising glow and blue inward wisps, with soft transp
 
 /*
 ================
-Cold arena and recovery effects retain their visible lifetime.
+Cold arena effects retain their visible lifetime.
 ================
 */
-test("cold one-shot models do not consume the effect before admission, and failed loads expire", () => {
-	for ( const cue of [ 0, 1, 4, 9 ] ) {
+test("cold arena models do not consume the effect before admission, and failed loads expire", () => {
+	for ( const cue of [ 9 ] ) {
 		const effects = roarEffects();
 		let resident = false;
 		effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, cue, 1 );
@@ -2215,5 +2215,20 @@ test("cold one-shot models do not consume the effect before admission, and faile
 			"failed loads cannot replay stale effects"
 		);
 		failed.dispose();
+	}
+});
+
+/*
+================
+Arena-only admission must not change ordinary crow effect timing.
+================
+*/
+test("ordinary crow cues retain their pre-arena lifetime when models are cold", () => {
+	for ( const cue of [ 0, 1, 4 ] ) {
+		const effects = roarEffects();
+		effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, cue, 1 );
+		effects.step( [], null, 0, () => false, () => 1, [] );
+		assert.equal( effects.step( [], null, 2, () => true, () => 1, [] ).length, 0 );
+		effects.dispose();
 	}
 });

@@ -45,7 +45,6 @@ function movingTargetEffect( action, options = {} ) {
 							"1": {
 								clips: [ "attack1" ],
 								stages: [ {
-									phase: options.phase ?? "SHOT",
 									resource: options.resource ?? "hit.efp",
 									damageEvent: false,
 									startEvent: 1,
@@ -109,15 +108,7 @@ function movingTargetEffect( action, options = {} ) {
 		z: 30,
 		heading: options.targetHeading ?? 0
 	};
-	const cast = {
-		token: 1,
-		caster: 1,
-		target: 2,
-		skill: 1,
-		damage: 0,
-		fatal: false,
-		...(options.shotAtMs === undefined ? {} : { shotAtMs: options.shotAtMs })
-	};
+	const cast = { token: 1, caster: 1, target: 2, skill: 1, damage: 0, fatal: false };
 	const gameplay = {
 		casts: [ cast ],
 		localGid: 1,
@@ -136,7 +127,7 @@ function movingTargetEffect( action, options = {} ) {
 	for ( const time of [ 0, 0.1, 0.2, 0.3 ] ) {
 		const born = effect.step( [ caster, target ], gameplay, time, () => true, () => 0.5, [ {
 			cast,
-			phase: options.phase ?? "SHOT",
+			phase: "SHOT",
 			event: 1,
 			at: time
 		} ] );
@@ -149,7 +140,7 @@ function movingTargetEffect( action, options = {} ) {
 	target.x = 80;
 	if ( options.close ) gameplay.casts = [];
 	const entities = options.removeTarget ? [ caster ] : [ caster, target ];
-	const actors = effect.step( entities, gameplay, options.lastTime ?? 0.4, () => true, () => 0.5, [] );
+	const actors = effect.step( entities, gameplay, 0.4, () => true, () => 0.5, [] );
 	assert.equal( effect.error(), null );
 	const result = actors;
 
@@ -231,18 +222,4 @@ test("native AT_TARGET at start speed 0 is a static effect facing the caster's y
 		// 8DE67A: [caster+0x88], the caster's model yaw, not the target's.
 		assert.equal( effect.pose.yaw, (16384 / 65535 * 2 * Math.PI + Math.PI / 2) % (2 * Math.PI), move );
 	}
-});
-
-test("a retained buff cast releases its READY and WAIT loops after shooting", () => {
-	for ( const phase of [ "READY", "WAIT" ] ) {
-		assert.equal( movingTargetEffect( "AT_LOOP", { phase, shotAtMs: 250, lastTime: 2 } ).length, 0 );
-	}
-});
-
-test("charging loops survive while waiting for the shot", () => {
-	assert.equal( movingTargetEffect( "AT_LOOP", { phase: "READY", lastTime: 2 } ).length, 1 );
-});
-
-test("SHOT loops keep the existing cast-owned lifetime", () => {
-	assert.equal( movingTargetEffect( "AT_LOOP", { shotAtMs: 250, lastTime: 2 } ).length, 1 );
 });

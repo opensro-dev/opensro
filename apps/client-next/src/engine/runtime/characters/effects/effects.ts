@@ -2114,8 +2114,7 @@ export function createCharacterEffects(
 											{
 												slot: stage.native?.slot ?? 0,
 												fade: (stage.native?.fadeInMs ?? 0) / 1000,
-												loop: stage.action === "AT_LOOP",
-												windup: stage.phase === "READY" || stage.phase === "WAIT"
+												loop: stage.action === "AT_LOOP"
 											} :
 											undefined,
 										family: route ?
@@ -2213,20 +2212,13 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
-					burst.queuedAt ??= now;
-					// One-shots must not spend their whole lifetime waiting for an evicted/cold model.
-					if ( burst.started === undefined && burst.cue !== 10 ) {
-						const paths = burst.cue === 9 ?
-							[ "/assets/effects/challenging-roar-aura", "/assets/effects/challenging-roar-shockwave" ] :
-							[
-								burst.cue === 0 ?
-									"/assets/effects/crow-wind-burst" :
-									burst.cue === 1 ?
-									"/assets/effects/crow-heal-wisp" :
-									burst.cue === 4 ?
-									"/assets/effects/crow-mana-wisp" :
-									"/assets/effects/crow-feather"
-							];
+					// Port-only arena one-shots wait for their own models; other crow cues retain existing timing.
+					if ( burst.started === undefined && burst.cue === 9 ) {
+						burst.queuedAt ??= now;
+						const paths = [
+							"/assets/effects/challenging-roar-aura",
+							"/assets/effects/challenging-roar-shockwave"
+						];
 						let admitted = true;
 						for ( const path of paths ) if ( !ready( path ) ) admitted = false;
 						if ( !admitted ) {
@@ -3241,12 +3233,9 @@ export function createCharacterEffects(
 					let flightPose: import("@/engine/contracts/character").CharacterActor["pose"] | undefined;
 					const command = visual.command;
 					if ( command ) {
-						const cast = castStates.get( visual.token );
-						// Inferred: a retained buff token must not keep its completed windup alive.
 						if (
 							!current.has( visual.token ) ||
-							cast?.cancelledAtMs !== undefined || !entity ||
-							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs
+							castStates.get( visual.token )?.cancelledAtMs !== undefined || !entity
 						) releaseCommand( command, now );
 						stepRelease( command, now );
 					}

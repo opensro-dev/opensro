@@ -4,6 +4,31 @@ Port-only, off by default: `SRO_SOOK_SURVIVAL_ARENA=on`. Uses the imported
 Colosseum in an isolated layer for each entrant. No PK2 changes. This release
 requires matched Agent/GameWorld/client protocol **17**, store **42**, layout 12.
 
+## Release and deployment requirement
+
+Land this feature with the next coordinated protocol/store release, not as an
+independent patch to a protocol-16/store-41 deployment. The **protocol 17 and
+store 42 requirements apply to every upgraded shard, even with the arena
+flag off**. The flag controls gameplay, not release compatibility or migration.
+Old browser tabs must reload. Do not relax the version checks to avoid this.
+
+The release coordinator must:
+
+1. Back up the authority/account databases and stop their writers before the
+   schema-41 to schema-42 upgrade. Migration is one-way for the old binary;
+   rollback requires the pre-upgrade backup and matched previous binaries,
+   and cannot retain writes made after migration.
+2. Deploy matched Agent, GameWorld and client plus matching asset/server-data
+   bundles. Keep the arena off until this deployment is healthy.
+3. For a shard opting in, build assets with `SRO_SOOK_SURVIVAL_ARENA=on` and
+   the pinned Colosseum import described below, then enable the GameWorld's
+   `SRO_SOOK_SURVIVAL_ARENA` (ops Nomad var `sook_survival_arena`). Production
+   activation is an ops change, not something this PR enables automatically.
+
+The independent retained-self-buff visual fix is excluded from this feature
+and is reviewed separately. Ordinary crow-effect lifetimes are unchanged;
+only the arena's own one-shot cues use its cold-model admission policy.
+
 Talk to Event So-ok and choose **Survival Arena (5 stages, EXP/SP x5)**. There are
 three entries per character per UTC day. The same off-by-default server flag
 gates entry, eggs/modifiers, chest claims and silk redemption; saved items remain
@@ -133,13 +158,36 @@ come from the existing pet-affix DB settings. There is no 10× arena floor-loot
 multiplier. Optional difficulty modifiers and endless stages are not included.
 
 See [map import](SURVIVAL-ARENA-MAP.md) and
-[Claude handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md) for evidence/deployment.
+[implementation notes](SOOK-SURVIVAL-ARENA-IMPLEMENTATION.md) for evidence/deployment.
 Egg selection favors **Chain Reaction** and **Damage Surge**: each has about
 11.82% of egg rolls, 30% more likely than the former equal 9.09% share. The
 overall egg cadence is unchanged. KABUM has about 11.03% of egg rolls
 (+30% relative to its previous share); Ambush has about 5.94% (−30%). Eggs spawned during the remaining-monster
 cleanup are removed immediately when the last monster dies, before the reward
 window opens; no old eggs remain during the decision or next-stage countdown.
+
+## Cave asset scope
+
+Arena encounters intentionally reuse Qin-Shi cave actors and combat skills.
+An arena-enabled bake therefore includes the committed tomb combat overlays
+and their degree-9 compound-branch stand-ins, even when `SRO_QINSHI_TOMB=off`.
+This is an asset-resolution choice for those encounters, not permission to
+open the cave world. The tomb's teleport links still follow its own flag.
+
+| Tomb flag | Arena flag | Tomb combat assets / branch fallback | Tomb teleport links |
+| --- | --- | --- | --- |
+| off | off | off | off |
+| off | on | on, for arena encounters | off |
+| on | off | on | on |
+| on | on | on | on |
+
+## Troubleshooting assets
+
+The eight buff PNGs are original, nonempty source artwork and are copied by
+one normal publisher; they do not prove the Colosseum is installed. Verify
+the importer completed, region `0x63ec` was published, and client/server data
+match. Missing venue/navigation data refuses admission. No retail arena
+models or textures are shipped in this repository.
 
 ## Asset build from the original v1.150 client
 

@@ -77,7 +77,7 @@ Importer unit tests cover safezone identification and conflicting object
 references. The feature's actor, private-world and pickup tests cover server
 isolation. Earlier local engine tests demonstrated imported geometry and
 world entry; they do not replace a fresh full-stage regression of each merged
-build. See [implementation handoff](SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md).
+build. See [implementation handoff](SOOK-SURVIVAL-ARENA-IMPLEMENTATION.md).
 
 Generated client/server bundles, PK2 files, local databases, executable builds
 and recordings remain untracked. Retail arena inputs are not included; only

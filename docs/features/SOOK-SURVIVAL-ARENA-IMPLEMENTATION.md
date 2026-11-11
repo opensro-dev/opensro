@@ -354,3 +354,22 @@ GameWorld wiring packages pass against the existing matched test data. The
 rewrite preserves the final source tree and removes the retail-input path
 from every feature commit; a force-with-lease push updates only this PR's
 feature branch. The running game continues on its prior deployed snapshot.
+
+## Review scope and release coordination (2026-11-11)
+
+The shared retained-buff casting fix is split into its own client-fix branch;
+it no longer changes ordinary casting through this event PR. Cold-model
+one-shot admission is restricted to the arena cue, preserving existing crow
+recovery timing. The eight real 64px PNGs are the source of truth; the duplicate
+Python art generator was retired, and source-art validation now rejects empty
+or incorrectly sized PNG source inputs. Operator docs spell out the unconditional protocol
+17/store 42 migration, matched rollout and backup-dependent rollback, plus
+the intentional combat-only cave asset dependency and its independent world
+gate. The implementation notes now have a contributor-neutral filename.
+
+A clean archive-only v1.150 + pinned-v1.696 build passed locally before this
+review follow-up: 42,534 browser assets, zero unclaimed packed assets and a
+matched 379,277,663-byte server projection. Both services reached readiness;
+all seven existing characters retained inventory/pet gear, skills, stats,
+gold and quickslots. This review work uses a separate checkout and does not
+change that running deployment. No new full arena playthrough is claimed.

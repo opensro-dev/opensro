@@ -2,7 +2,7 @@
 
 Historical design: the implemented rules and current operator settings are in [SOOK-SURVIVAL-ARENA.md](SOOK-SURVIVAL-ARENA.md).
 
-Status: historical initial proposal, superseded by the five-stage changes requested later on 2026-11-09. Current rules: SOOK-SURVIVAL-ARENA.md. Current evidence: SOOK-SURVIVAL-ARENA-CLAUDE-HANDOFF.md.
+Status: historical initial proposal, superseded by the five-stage changes requested later on 2026-11-09. Current rules: SOOK-SURVIVAL-ARENA.md. Current evidence: SOOK-SURVIVAL-ARENA-IMPLEMENTATION.md.
 
 ## Reference and goal
 

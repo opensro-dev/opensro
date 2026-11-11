@@ -12,6 +12,7 @@ and retires sidecars only after every producer has finished.
 */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { buildSroResources, RESOURCE_BUILD_STEPS } from "../../build/resourceBuild.mjs";
 
 // Prerequisites that run before the source-image conversion.
@@ -317,4 +318,31 @@ test("a failed early pack publication stops the families and final tree consumer
 	assert.equal( calls.produceAllFamilies, undefined );
 	assert.equal( calls.buildTextureVariants, undefined );
 	assert.equal( calls.buildBackgroundInstallAsset, undefined );
+});
+
+/*
+================
+Survival icons are authored PNG inputs, never empty placeholders.
+================
+*/
+test("the survival publisher has eight real 64px PNG source icons", () => {
+	for (
+		const name of [
+			"damage-surge",
+			"unstoppable",
+			"unkillable",
+			"arcane-spring",
+			"fire-pit",
+			"mirror-shell",
+			"chain-reaction",
+			"fleetfoot"
+		]
+	) {
+		const bytes = readFileSync( new URL( `../../../docs/features/assets/survival/${name}.png`, import.meta.url ) );
+		assert.ok( bytes.length > 33, name );
+		assert.equal( bytes.subarray( 0, 8 ).toString( "hex" ), "89504e470d0a1a0a", name );
+		assert.equal( bytes.toString( "ascii", 12, 16 ), "IHDR", name );
+		assert.equal( bytes.readUInt32BE( 16 ), 64, name );
+		assert.equal( bytes.readUInt32BE( 20 ), 64, name );
+	}
 });
