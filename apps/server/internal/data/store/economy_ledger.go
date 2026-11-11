@@ -637,6 +637,10 @@ WHERE type = 'table' AND name IN ('economy_ledger_hours', 'economy_ledger_char_h
 		if err != nil {
 			return err
 		}
+		if err := shapeRows.Err(); err != nil {
+			shapeRows.Close()
+			return err
+		}
 		if err := shapeRows.Close(); err != nil {
 			return err
 		}
