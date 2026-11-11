@@ -177,6 +177,12 @@ type Registry struct {
 	// changes stamps every gid a mutation touched, for the store's
 	// commit to persist only those rows (changes.go).
 	changes changeJournal
+	// divLogs notes the same stamps per division, in division
+	// revisions, for a reader that keeps a copy of one division and
+	// asks only for what moved (division_delta.go). divLogFloor is the
+	// revision of the last Restore: no log reaches behind it.
+	divLogs     map[string]*divisionLog
+	divLogFloor uint64
 	// ownerStamp is the earliest DroppedAt among owned (reserved)
 	// drops, held so the tick's owner-expiry peek answers in O(1)
 	// instead of walking the plane (#2033). Adds can only lower it;
@@ -624,15 +630,7 @@ func (r *Registry) All(divisionID string) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	items := r.byDivision[divisionID]
-	out := make([]Item, 0, len(items))
-	for _, gid := range sortedGids(items) {
-		item := items[gid]
-		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
-		item.Summon = domain.CloneCOS(item.Summon)
-		out = append(out, item)
-	}
-	return out
+	return r.allLocked(divisionID)
 }
 
 /*

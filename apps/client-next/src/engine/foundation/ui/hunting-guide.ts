@@ -47,6 +47,100 @@ export interface HuntingCatalogue {
 	readonly regions: ReadonlyMap<number, readonly HuntingPoint[]>;
 	readonly sections: readonly HuntingSection[];
 }
+// The level filter's span (issue #3167): with the filter on, the map
+// shows the monsters at most this many levels above the character.
+export const MONSTER_LEVEL_FILTER_SPAN = 10;
+
+/*
+================
+MonsterDirectoryMonster
+
+One species in one region of the directory, at the first of its
+anchors there: the point picking the species marks on the map.
+================
+*/
+export interface MonsterDirectoryMonster {
+	readonly monster: HuntingMonster;
+	readonly region: number;
+	readonly x: number;
+	readonly z: number;
+}
+
+/*
+================
+MonsterDirectoryRegion
+
+A region of the monster directory: its species sorted by level, and
+the level range they span.
+================
+*/
+export interface MonsterDirectoryRegion {
+	readonly region: number;
+	readonly minLevel: number;
+	readonly maxLevel: number;
+	readonly monsters: readonly MonsterDirectoryMonster[];
+}
+
+/*
+================
+monsterDirectory
+
+The region and monster list (issue #3167), grouped from the
+catalogue's anchors: one row per species per region at its first
+anchor there, species sorted by level then name, regions sorted by
+their lowest level. maxLevel, when given, is the level filter's cap:
+species above it, and regions it empties, are hidden.
+================
+*/
+export function monsterDirectory(
+	catalogue: HuntingCatalogue,
+	maxLevel?: number
+): readonly MonsterDirectoryRegion[] {
+	const regions: MonsterDirectoryRegion[] = [];
+	for ( const [region, points] of catalogue.regions ) {
+		const byId = new Map<number, MonsterDirectoryMonster>();
+		for ( const point of points ) {
+			if ( maxLevel !== undefined && point.monster.level > maxLevel ) continue;
+			if ( !byId.has( point.monster.refObjId ) ) {
+				byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
+			}
+		}
+		if ( byId.size === 0 ) continue;
+		const monsters = [ ...byId.values() ].sort(
+			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+		);
+		regions.push( {
+			region,
+			minLevel: monsters[0]!.monster.level,
+			maxLevel: monsters[monsters.length - 1]!.monster.level,
+			monsters
+		} );
+	}
+	return regions.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
+}
+
+/*
+================
+filterHuntingGuide
+
+The catalogue as the level filter shows it: species above maxLevel
+are out, and the sections are rebuilt from the surviving anchors so
+an emptied area leaves the map with its species.
+================
+*/
+export function filterHuntingGuide( catalogue: HuntingCatalogue, maxLevel: number ): HuntingCatalogue {
+	const regions = new Map<number, readonly HuntingPoint[]>();
+	for ( const [region, points] of catalogue.regions ) {
+		const kept = points.filter( point => point.monster.level <= maxLevel );
+		if ( kept.length > 0 ) regions.set( region, kept );
+	}
+	return {
+		monsters: catalogue.monsters.filter( monster => monster.level <= maxLevel ),
+		regions,
+		sections: buildHuntingSections( regions )
+	};
+}
+
 /*
 ================
 decodeHuntingGuide

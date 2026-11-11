@@ -231,7 +231,7 @@ func TestTraderPartySettlementFiltersRecipientsAndCommitsTogether(t *testing.T) 
 	calls := 0
 	deps.UpdateCharacters = func(members []*enterworld.Character, label string, update func() bool) bool {
 		calls++
-		if len(members) != 3 || label != fmt.Sprintf("trade-sale %d", c.ID) {
+		if len(members) != 3 || label != fmt.Sprintf("trade-sale-0s0 %d", c.ID) {
 			t.Fatalf("transaction roster %+v %q", members, label)
 		}
 		return update()
@@ -445,30 +445,31 @@ func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 		Summon: &enterworld.CharacterCOS{GID: petGID, Summoned: true, Container: &domain.COSContainer{
 			Capacity: 4, Rows: []enterworld.InventoryRow{{Slot: 0, TypeFlags: potion, StackCount: 5}}}}})
 	cases := []struct {
-		name    string
-		move    uint8
-		slot    uint8
-		cos     uint32
-		fromCOS bool
-		want    string
+		name     string
+		move     uint8
+		slot     uint8
+		cos      uint32
+		fromCOS  bool
+		want     string
+		wantSize int
 	}{
-		{"goods from the bag", wire.MoveTypeShopSell, 13, 0, false, sale},
-		{"potion from the bag", wire.MoveTypeShopSell, 14, 0, false, "shop-transaction"},
-		{"goods from the transport", wire.MoveTypeShopSell, 0, transportGID, true, sale},
-		{"potion from a pickup pet", wire.MoveTypeShopSell, 0, petGID, true, "shop-transaction"},
-		{"a purchase", wire.MoveTypeShopBuy, 13, 0, false, "shop-transaction"},
+		{"goods from the bag", wire.MoveTypeShopSell, 13, 0, false, sale, 0},
+		{"potion from the bag", wire.MoveTypeShopSell, 14, 0, false, "shop-transaction", -1},
+		{"goods from the transport", wire.MoveTypeShopSell, 0, transportGID, true, sale, 4},
+		{"potion from a pickup pet", wire.MoveTypeShopSell, 0, petGID, true, "shop-transaction", -1},
+		{"a purchase", wire.MoveTypeShopBuy, 13, 0, false, "shop-transaction", -1},
 	}
 	for _, tc := range cases {
 		q := wire.ItemMoveRequest{MovementType: tc.move, SourceSlot: tc.slot, CosGID: tc.cos}
-		if got := commerceDoorLabel(c, q, tc.fromCOS); got != tc.want {
-			t.Fatalf("%s = %q, want %q", tc.name, got, tc.want)
+		if got, size := commerceDoorLabel(c, q, tc.fromCOS); got != tc.want || size != tc.wantSize {
+			t.Fatalf("%s = %q/%d, want %q/%d", tc.name, got, size, tc.want, tc.wantSize)
 		}
 	}
 	// A thief's goods sale names its own door; the seller is still named.
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: enterworld.JobSuitSlot,
 		TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobThief), StackCount: 1})
 	q := wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, SourceSlot: 13}
-	if got, want := commerceDoorLabel(c, q, false), fmt.Sprintf("thief-sale %d", c.ID); got != want {
-		t.Fatalf("thief goods sale = %q, want %q", got, want)
+	if got, _ := commerceDoorLabel(c, q, false); got != fmt.Sprintf("thief-sale %d", c.ID) {
+		t.Fatalf("thief goods sale = %q, want %q", got, fmt.Sprintf("thief-sale %d", c.ID))
 	}
 }

@@ -62,7 +62,7 @@ func (b *BetaSilk) RedeemArenaSilk(c *domain.Character, slot uint8) (domain.Mall
 	if c == nil {
 		return domain.MallBalance{}, fmt.Errorf("voucher owner unavailable")
 	}
-	if _, err := b.wallet.GrantBetaSilkStarter(c.AccountID, betaSilkStarter); err != nil {
+	if _, err := b.wallet.GrantBetaSilkStarter(c.AccountID, betaSilkStarterSilk()); err != nil {
 		return domain.MallBalance{}, err
 	}
 	a, ok := b.wallet.(arenaSilkRedeemer)

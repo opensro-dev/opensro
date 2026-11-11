@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 // Browser extensions, not retail opcodes. Prices and item identities never
@@ -272,17 +273,26 @@ or a pickup pet's) pays out under "trade-sale <seller id>", or under
 id lets the ledger tell the seller's credit from the party's shares. Every
 other purchase or sale stays "shop-transaction". The snapshot is read
 before the door; the door's own admission still decides.
+
+A cargo sale also returns the bag the goods sat in - its slot count, 0
+for the personal bag, -1 when the sale is no cargo sale - so the caller
+can stamp the caravan's size and stars on the door (#3162,
+tradeDoorLabel): the ledger then shows caravan outcomes by transport
+size and stars (started at the trade-load door below, sold here, robbed
+at the thief's den sale), which the star stakes are tuned from.
 ================
 */
-func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, fromCOS bool) string {
+func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, fromCOS bool) (string, int) {
 	if q.MovementType != wire.MoveTypeShopSell {
-		return "shop-transaction"
+		return "shop-transaction", -1
 	}
 	rows := snapshot.MissionInventory
+	capacity := 0
 	if fromCOS {
 		rows = nil
 		if cos := snapshot.CompanionByGID(q.CosGID); cos != nil && cos.Container != nil {
 			rows = cos.Container.Rows
+			capacity = int(cos.Container.Capacity)
 		}
 	}
 	for _, row := range rows {
@@ -290,11 +300,80 @@ func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, f
 			continue
 		}
 		if enterworld.DressedJob(snapshot) == domain.JobThief {
-			return fmt.Sprintf("thief-sale %d", snapshot.ID)
+			return fmt.Sprintf("thief-sale %d", snapshot.ID), capacity
 		}
-		return fmt.Sprintf("trade-sale %d", snapshot.ID)
+		return fmt.Sprintf("trade-sale %d", snapshot.ID), capacity
 	}
-	return "shop-transaction"
+	return "shop-transaction", -1
+}
+
+/*
+================
+tradeDoorLabel
+
+Port-only, not native (#3162): a cargo door stamped with the caravan it
+moved gold for - the bag's slot count and the seller's star rating at
+the sale - as "trade-sale-32s5 42". The store keeps the door word, so
+the ledger's caravan outcomes group by transport size and stars while
+the reason vocabulary (domain/economy.go) is untouched. The stars are
+the caravan tier the bandits and sales read (tradetiers.go): the gold
+tier under SRO_TRADE_TIERS, the native rating with it off.
+================
+*/
+func (rt *Runtime) tradeDoorLabel(label string, capacity int, seller *enterworld.Character) string {
+	_, stars := rt.caravanTier(seller)
+	door, rest, _ := strings.Cut(label, " ")
+	return fmt.Sprintf("%s-%ds%d %s", door, capacity, stars, rest)
+}
+
+/*
+================
+tradeLoadDoorLabel
+
+Port-only, not native (#3162): the door a trade-goods purchase into a
+transport commits under, "trade-load-32s5" - a caravan run's start on
+the economy ledger, stamped like the sale doors with the transport's
+size and the load's stars once this purchase is aboard. Any other
+purchase stays "shop-transaction". The offer is the shop row the buy
+names, resolved by the caller from the same catalogue the door reads.
+================
+*/
+func (rt *Runtime) tradeLoadDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, offer *commerce.Offer) string {
+	if offer == nil || offer.Ref == nil || !inventory.IsTradeGoods(offer.Ref.TypeFlags()) {
+		return "shop-transaction"
+	}
+	cos := snapshot.CompanionByGID(q.CosGID)
+	if cos == nil || cos.Container == nil {
+		return "shop-transaction"
+	}
+	_, stars := rt.caravanTierAfterLoad(snapshot, cos, offer.Ref, int64(q.Quantity))
+	return fmt.Sprintf("trade-load-%ds%d", cos.Container.Capacity, stars)
+}
+
+/*
+================
+caravanTierAfterLoad
+
+The star rating of the caravan once one more purchase is aboard: the
+tier of a copy of the owner whose named transport carries the bought
+goods on top of its present rows, so the trade-load door records the
+load the run actually starts with. A purchase into a companion that is
+not the active transport (a pickup pet's bag) reads the owner's
+present tier - the pet's rows never made the caravan's stars.
+================
+*/
+func (rt *Runtime) caravanTierAfterLoad(snapshot *enterworld.Character, cos *enterworld.CharacterCOS, ref *enterworld.ItemRef, quantity int64) (uint8, uint32) {
+	if snapshot.ActiveCOS == nil || snapshot.ActiveCOS.GID != cos.GID || snapshot.ActiveCOS.Container == nil {
+		return rt.caravanTier(snapshot)
+	}
+	adjusted := *snapshot
+	active := *snapshot.ActiveCOS
+	container := *active.Container
+	container.Rows = append(append([]domain.InventoryRow{}, container.Rows...), domain.InventoryRow{
+		Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: quantity})
+	active.Container = &container
+	adjusted.ActiveCOS = &active
+	return rt.caravanTier(&adjusted)
 }
 
 /*
@@ -331,7 +410,24 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var collected int64
 	var guildPointCost uint64
 	var honorCost uint64
-	committed := rt.deps.SettleTrade(roster.members, commerceDoorLabel(snapshot, q, isCOS), func(pool *domain.TradeRewardPool) bool {
+	label, cargoCapacity := commerceDoorLabel(snapshot, q, isCOS)
+	if cargoCapacity >= 0 {
+		// The stars are read off the snapshot, as the door word was: the
+		// live character is only read behind a door.
+		label = rt.tradeDoorLabel(label, cargoCapacity, snapshot)
+	} else if q.MovementType == wire.MoveTypeShopBuy && isCOS {
+		// A trade-goods load names its own door (#3162); the offer is
+		// resolved here from the same catalogue the door will read.
+		var offer *commerce.Offer
+		rt.eachShopOffer(npc, func(tab uint8, o commerce.Offer) {
+			if tab == q.ShopTab && o.Slot == q.ShopSlot {
+				resolved := o
+				offer = &resolved
+			}
+		})
+		label = rt.tradeLoadDoorLabel(snapshot, q, offer)
+	}
+	committed := rt.deps.SettleTrade(roster.members, label, func(pool *domain.TradeRewardPool) bool {
 		if c.DeletePending {
 			return false
 		}

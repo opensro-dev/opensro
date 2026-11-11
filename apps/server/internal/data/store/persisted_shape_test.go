@@ -148,7 +148,11 @@ func TestRecordFieldsBelongToTheCurrentSchema(t *testing.T) {
 }
 
 // tableOnlySchemaSteps are the schema versions whose record fields equal the
-// previous version's, each with the table its layout adds.
+// previous version's, each with the table its layout adds. The stamp is for a
+// store an older binary cannot read: a purely additive table that no older
+// binary reads, created at open, takes no stamp at all (the economy hourly
+// buckets of #3187, economy_ledger.go - an older binary on the same file
+// ignores them and writes rows again).
 var tableOnlySchemaSteps = map[int]string{
 	25: "layout 10 adds economy_ledger (economy_ledger.go)",
 	39: "layout 12 adds silk_history (silkhistory.go)",

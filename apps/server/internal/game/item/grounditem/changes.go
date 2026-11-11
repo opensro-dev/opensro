@@ -55,8 +55,10 @@ type changeJournal struct {
 ================
 stampLocked
 
-Records that gid changed at the registry's current revision. Every
-mutator calls it after bumping the revision. Caller holds r.mu.
+Records that gid changed at the registry's current revision, for the
+store's commit and, in division revisions, for a reader of that one
+division (division_delta.go). Every mutator calls it after bumping the
+revision. Caller holds r.mu.
 ================
 */
 func (r *Registry) stampLocked(divisionID string, gid uint32) {
@@ -69,6 +71,7 @@ func (r *Registry) stampLocked(divisionID string, gid uint32) {
 		r.changes.stamps[divisionID] = division
 	}
 	division[gid] = r.revision
+	r.noteDivisionChangeLocked(divisionID, gid)
 }
 
 /*

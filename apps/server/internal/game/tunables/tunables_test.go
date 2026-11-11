@@ -39,7 +39,7 @@ func TestUnsetEnvironmentKeepsTodaysValues(t *testing.T) {
 	}
 	for key, want := range map[string]int64{
 		MostWantedTestKills: 5, MostWantedTestBounty: 1_000_000, JobKillNoticesPerMinute: 6,
-		MostWantedNoticesPerMinute: 6, JobKillRepeatMinutes: 10, SoxNoticeMinDegree: 6,
+		MostWantedNoticesPerMinute: 6, JobKillRepeatMinutes: 10, SoxNoticeMinDegree: 6, BetaSilkStarter: 700,
 	} {
 		if got := s.Int(key); got != want || s.Value(key).Source != "default" {
 			t.Fatalf("%s = %d (%s), want %d (default)", key, got, s.Value(key).Source, want)
@@ -180,5 +180,29 @@ func TestChatItemLinksPerMessage(t *testing.T) {
 	}
 	if setting, ok := Lookup(ChatItemLinksPerMessage); !ok || setting.Class != Restart {
 		t.Fatalf("class %+v", setting)
+	}
+}
+
+/*
+================
+TestBetaSilkStarterBounds
+
+The starter accepts 0 (no starter) up to the 1500 bank cap, is live, and
+refuses a value beyond the cap or a fraction instead of clamping.
+================
+*/
+func TestBetaSilkStarterBounds(t *testing.T) {
+	for _, raw := range []string{"0", "400", "1500"} {
+		if _, err := Validate(BetaSilkStarter, raw); err != nil {
+			t.Fatalf("%q refused: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{"-1", "1501", "12.5", "lots"} {
+		if _, err := Validate(BetaSilkStarter, raw); err == nil {
+			t.Fatalf("%q accepted", raw)
+		}
+	}
+	if row, ok := Lookup(BetaSilkStarter); !ok || row.Class != Live || row.Env != "SRO_MALL_STARTER_SILK" {
+		t.Fatalf("row %+v", row)
 	}
 }

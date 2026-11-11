@@ -257,3 +257,11 @@ Only this region was built in the isolated test tree: its global routing was
 correctly not published with 2123 other region bundles absent. A production
 release still needs the documented full build, server projection and normal
 pack/release gates. The running game and its data were left untouched.
+
+## Asset handoff merge follow-up (2026-11-11)
+
+Main advanced through 8a6e98de while the repo-only arena build was being
+verified. Its new catalogue exemptions are preserved alongside the arena
+exemption, and the generated UI census was rebuilt. Arena silk redemption now
+uses main's betaSilkStarterSilk helper rather than the removed starter constant.
+These changes are isolated from the running local game.

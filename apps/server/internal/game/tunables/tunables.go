@@ -84,10 +84,14 @@ const (
 	TradeFiveStarThiefPercent       = "trade_five_star_thief_percent"
 	TradeFiveStarHunterPercent      = "trade_five_star_hunter_percent"
 	TradeFiveStarBountyPercent      = "trade_five_star_bounty_percent"
+	TradeFiveStarBountyFloorPercent = "trade_five_star_bounty_floor_percent"
 	TradeRouteDonwhangPercent       = "trade_route_donwhang_percent"
 	TradeRouteHotanPercent          = "trade_route_hotan_percent"
 	TradeRouteSamarkandPercent      = "trade_route_samarkand_percent"
 	TradeRouteConstantinoplePercent = "trade_route_constantinople_percent"
+	// BetaSilkStarter is the silk a new account's wallet starts with
+	// (SRO_BETA_SILK; game/action betasilk.go).
+	BetaSilkStarter = "mall_starter_silk"
 )
 
 /*
@@ -191,7 +195,10 @@ var Registry = []Setting{
 		Help: "Extra gold share each hunter earns on a trader's 5-star sale under SRO_TRADE_TIERS."},
 	{Key: TradeFiveStarBountyPercent, Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", Kind: Int, Default: 50, Min: 0,
 		Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star caravan bounty bonus", Unit: "percent",
-		Help: "Extra job EXP a hunter earns for killing a thief who attacked a 5-star caravan under SRO_TRADE_TIERS."},
+		Help: "Extra job EXP a hunter earns for killing a thief who attacked a 5-star caravan under SRO_TRADE_TIERS, scaled by the caravan's cargo against the largest ordinary full load (#3162)."},
+	{Key: TradeFiveStarBountyFloorPercent, Env: "SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT", Kind: Int, Default: 10,
+		Min: 0, Max: 500, Step: 5, Class: Live, Group: "Trade", Label: "5-star caravan bounty floor", Unit: "percent",
+		Help: "The least bounty bonus a 5-star caravan mark pays under SRO_TRADE_TIERS, however small the caravan: the scaled bonus (cargo over the largest ordinary full load) never drops below this percent, and never pays at all when the bounty percent itself is 0."},
 	{Key: TradeRouteDonwhangPercent, Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", Kind: Int, Default: 50, Min: 0,
 		Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Donwhang profit bonus", Unit: "percent",
 		Help: "Extra profit on goods sold between Jangan and Donwhang, both ways, under SRO_TRADE_TIERS."},
@@ -205,6 +212,12 @@ var Registry = []Setting{
 		Min: 0, Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Constantinople profit bonus",
 		Unit: "percent",
 		Help: "Extra profit on goods sold between Jangan and Constantinople, both ways, under SRO_TRADE_TIERS."},
+	// The beta's starter silk, read when a wallet is first created. 700 is
+	// the shipped value; 1500 is the beta's bank cap (action betaSilkBankCap),
+	// so a starter can never begin a wallet above the cap.
+	{Key: BetaSilkStarter, Env: "SRO_MALL_STARTER_SILK", Kind: Int, Default: 700, Min: 0, Max: 1500, Step: 50,
+		Class: Live, Group: "Mall", Label: "Beta starter silk", Unit: "silk",
+		Help: "The Item Mall silk a new account's wallet starts with under SRO_BETA_SILK, granted once, only when the account has no wallet yet; existing wallets are never topped up."},
 }
 
 /*

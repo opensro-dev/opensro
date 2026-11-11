@@ -48,6 +48,12 @@ import (
 const (
 	networkDrainTimeout = 15 * time.Second
 	leaseReleaseTimeout = 3 * time.Second
+	// shutdownBudget is the named ceiling for the whole shutdown tail
+	// (#3186): a release update may cost the world two minutes of
+	// downtime, and the tail must fit well inside that. The final
+	// shutdown log line names the budget and warns when the tail goes
+	// over it.
+	shutdownBudget = 30 * time.Second
 	// bootFillLimit bounds how long admission waits for the population's boot
 	// fill (about 13 s for the full world); past it players are admitted.
 	bootFillLimit = 60 * time.Second
@@ -123,6 +129,14 @@ func newGameWorldApplication(
 	ts *transport.Server,
 	ownedShard shard.Definition,
 ) (application *gameWorldApplication, resultErr error) {
+	// The liveness listener comes first (#3186): /transport/healthz
+	// answers from process start, before any of the load below, and
+	// names the boot phase it is in. Game routes and the WebTransport
+	// listener stay closed until Start at the end of construction -
+	// readiness still belongs to the gate.
+	if err := ts.StartHealth(); err != nil {
+		return nil, fmt.Errorf("transport health listener: %w", err)
+	}
 	application = &gameWorldApplication{
 		transport: ts,
 		readiness: readiness.NewGate(),
@@ -255,6 +269,7 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("EnterWorld process key: %w", err)
 	}
 	authority, err := openAuthorityPlane(
+		startupContext,
 		ts,
 		ownedShard,
 		accountIDs,
@@ -267,6 +282,7 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, err
 	}
+	ts.SetBootPhase(transport.BootPhaseWiring)
 	application.authority = authority.store
 	application.controlAPI = authority.agentAPI
 	journal, err := history.Open(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "history.sqlite"), "gameworld", ownedShard.ID, history.Build())
@@ -475,12 +491,16 @@ the job's healthy_deadline: a fill that never settles opens with a warning.
 ================
 */
 func (application *gameWorldApplication) admit(ctx context.Context) error {
+	// Admission is the filling phase (#3186): healthz says so until the
+	// population settles and the gate opens.
+	application.transport.SetBootPhase(transport.BootPhaseFilling)
 	started := time.Now()
 	settled := func() bool {
 		population := application.population
 		return population == nil || population.PopulationSettled(application.shardID)
 	}
 	open := func(settled bool) {
+		application.transport.SetBootPhase(transport.BootPhaseReady)
 		application.readiness.Open()
 		// The title and login follow admission, not the lease alone: a
 		// leased but loading shard showed online with an empty roster.
@@ -640,12 +660,22 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 		)
 	})
 
+	// The shutdown tail runs in one order and says how long each step
+	// took (#3186): stop admission, drain the sessions, commit the
+	// final tick, close the authority store, settle the small doors -
+	// and the history journal closes LAST, so every one of those lines
+	// is still recorded. The whole tail answers to shutdownBudget.
 	<-groupContext.Done()
+	shutdownStarted := time.Now()
 	cancelRun()
 	<-admitted
+	log.Infof("shutdown: admission stopped in %s", time.Since(shutdownStarted).Round(time.Millisecond))
 	application.readiness.Close()
 
+	drainStarted := time.Now()
 	drainErr := application.drainNetwork()
+	log.Infof("shutdown: sessions drained in %s", time.Since(drainStarted).Round(time.Millisecond))
+
 	runErr := group.Wait()
 	// The tick has stopped: no kill can be queued after this, and the queue
 	// commits before the authority store closes below.
@@ -667,17 +697,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	application.releaseLease()
 	if application.authority != nil {
+		storeStarted := time.Now()
 		log.Info("shutdown: closing the authority store")
 		application.authority.Close()
+		log.Infof("shutdown: authority store closed in %s", time.Since(storeStarted).Round(time.Millisecond))
 	}
 	application.leaseOwned = false
-	log.Info("shutdown: complete")
-	if application.history != nil {
-		drainErr = errors.Join(drainErr, application.history.Close())
-	}
-	if application.connJournal != nil {
-		drainErr = errors.Join(drainErr, application.connJournal.Close())
-	}
 	// The tick has stopped, so the rollup is final: write it before the
 	// economy history closes (#1639).
 	if application.killStatsFlush != nil {
@@ -690,6 +715,18 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	if application.settings != nil {
 		drainErr = errors.Join(drainErr, application.settings.Close())
+	}
+	if application.history != nil {
+		drainErr = errors.Join(drainErr, application.history.Close())
+	}
+	if application.connJournal != nil {
+		drainErr = errors.Join(drainErr, application.connJournal.Close())
+	}
+	shutdownTotal := time.Since(shutdownStarted).Round(time.Millisecond)
+	if shutdownTotal > shutdownBudget {
+		log.Warnf("shutdown: complete in %s, OVER the %s budget", shutdownTotal, shutdownBudget)
+	} else {
+		log.Infof("shutdown: complete in %s (budget %s)", shutdownTotal, shutdownBudget)
 	}
 
 	return errors.Join(runErr, drainErr)
@@ -808,9 +845,6 @@ func (application *gameWorldApplication) rollback() {
 	}
 	application.releaseLease()
 	application.leaseOwned = false
-	if application.history != nil {
-		_ = application.history.Close()
-	}
 	if application.economy != nil {
 		_ = application.economy.Close()
 	}
@@ -819,6 +853,11 @@ func (application *gameWorldApplication) rollback() {
 	}
 	if application.settings != nil {
 		_ = application.settings.Close()
+	}
+	// The history journal closes last, as in Run: every rollback line
+	// above is still recorded (#3186).
+	if application.history != nil {
+		_ = application.history.Close()
 	}
 }
 

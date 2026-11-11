@@ -142,6 +142,7 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
+	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
 	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
@@ -228,6 +229,7 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_FIVE_STAR_THIEF_PERCENT", NomadVar: "trade_five_star_thief_percent", Default: "50"},
 	{Env: "SRO_TRADE_FIVE_STAR_HUNTER_PERCENT", NomadVar: "trade_five_star_hunter_percent", Default: "50"},
 	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_PERCENT", NomadVar: "trade_five_star_bounty_percent", Default: "50"},
+	{Env: "SRO_TRADE_FIVE_STAR_BOUNTY_FLOOR_PERCENT", NomadVar: "trade_five_star_bounty_floor_percent", Default: "10"},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
@@ -470,6 +472,7 @@ var NotSettings = map[string]string{
 	"SRO_SERVER_GAME_DATA_MANIFEST_DIGEST": "identity of the released server game data",
 	"SRO_GM_CHARACTERS":                    "operator GM grants, from the state directory",
 	"SRO_GAMEWORLD_PRIVATE_NETWORK":        "host topology",
+	"SRO_AGENT_URL":                        "the agent's address, fixed at deploy time",
 	"SRO_BENCHMARK_FIXTURE_CONTROL":        "derived from the host network and namespace",
 	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",
 	"SRO_MOVE_CLIENT_CLIP":                 "movement enforcement mode, operational",

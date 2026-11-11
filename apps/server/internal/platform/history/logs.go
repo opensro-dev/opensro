@@ -74,14 +74,20 @@ func (j *Journal) Fire(entry *log.Entry) error {
 		e.Stack = fmt.Sprint(value)
 	}
 	if entry.Level <= log.FatalLevel {
-		// The process may exit as soon as this hook returns.
+		// The process may exit as soon as this hook returns. The
+		// journal's answer stays here: a hook that returns an error
+		// makes logrus print "Failed to fire hook" at the operator,
+		// and a "history queue unavailable" from a journal the
+		// shutdown already closed cost a clean stop its exit 0 - the
+		// entry itself still reaches the console formatter (#3186).
 		ctx := entry.Context
 		if ctx == nil {
 			ctx = context.TODO()
 		}
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
-		return j.RecordConfirmed(ctx, e)
+		_ = j.RecordConfirmed(ctx, e)
+		return nil
 	}
 	j.Record(e)
 	return nil

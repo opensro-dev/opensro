@@ -8,6 +8,7 @@ wiring_authority.go - wiring authority
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -122,6 +123,7 @@ openAuthorityPlane
 ================
 */
 func openAuthorityPlane(
+	startupContext context.Context,
 	ts *transport.Server,
 	ownedShard shard.Definition,
 	accountIDs []string,
@@ -131,6 +133,9 @@ func openAuthorityPlane(
 	sessionVerifier *auth.AgentSessionVerifier,
 	enterWorldSecret []byte,
 ) (authorityPlane, error) {
+	if err := startupContext.Err(); err != nil {
+		return authorityPlane{}, err
+	}
 	textdataDir := devPaths.TextdataDir
 	textdata, err := enterworld.LoadTextdataCatalogs(textdataDir)
 	if err != nil {
@@ -193,7 +198,14 @@ func openAuthorityPlane(
 		log.Infof("cos: %s=%v scaled %d mall vehicle and pet row(s) (port-only, not native)",
 			enterworld.EnvMallRideSpeed, rideFactor, scaled)
 	}
+	if err := startupContext.Err(); err != nil {
+		return authorityPlane{}, err
+	}
 	options := store.OptionsFromEnv()
+	// The startup context reaches the store's open (#3186): a stop
+	// during the long load leaves within a second, and a cancelled
+	// open never quarantines or recovers on its way out.
+	options.Context = startupContext
 	// Port-only, not native (owner, 2026-11-07, #2769): new characters are
 	// created at the 2.5-page inventory base; the world entry raises the
 	// rest (wiring_gameplay.go publishes the same reading to the entry).
@@ -217,6 +229,7 @@ func openAuthorityPlane(
 		return quest.DefaultQuestSeeder(definitions)(raceKey)
 	}
 
+	ts.SetBootPhase(transport.BootPhaseOpeningStore)
 	authorityStore, err := store.Open(store.DirForShardFromEnv(ownedShard.ID), options)
 	if err != nil {
 		return authorityPlane{}, fmt.Errorf("store: %w", err)

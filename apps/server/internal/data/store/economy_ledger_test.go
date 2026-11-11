@@ -1,11 +1,13 @@
 /*
 ===========================================================================
 
-economy_ledger_test.go - every committed gold change is one ledger row
+economy_ledger_test.go - every committed gold change is one ledger record
 
-Port-only (economy_ledger.go): the row names the door that made the change,
-joins its commit, waits with it through a failed commit, and keeps its own
-door's label inside a tick batch.
+Port-only (economy_ledger.go): the record names the door that made the
+change, joins its commit, waits with it through a failed commit, and keeps
+its own door's label inside a tick batch. Since #3187 the record is an
+hourly bucket (plus a per-character bucket for the bulk reasons); only
+non-bulk reasons also keep an exact row.
 
 ===========================================================================
 */
@@ -115,11 +117,77 @@ func setGoldIn(s *Store, c *domain.Character, label string, balance int64) {
 
 /*
 ================
+ledgerHourTotals
+
+The hourly buckets' signed totals by reason and direction ("npc_sale
+gain"), summed over every hour: what the console's aggregates read.
+================
+*/
+func ledgerHourTotals(t *testing.T, s *Store) map[string]int64 {
+	t.Helper()
+	rows, err := s.syncDBLocked().Query("SELECT reason, gain, total FROM economy_ledger_hours")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var reason string
+		var gain int
+		var total int64
+		if err := rows.Scan(&reason, &gain, &total); err != nil {
+			t.Fatal(err)
+		}
+		if gain != 0 {
+			out[reason+" gain"] += total
+		} else {
+			out[reason+" loss"] += total
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+/*
+================
+ledgerCharHourTotals
+
+A character's per-character hourly bucket totals by reason.
+================
+*/
+func ledgerCharHourTotals(t *testing.T, s *Store, charID int64) map[string]int64 {
+	t.Helper()
+	rows, err := s.syncDBLocked().Query("SELECT reason, total FROM economy_ledger_char_hours WHERE char_id = ?", charID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var reason string
+		var total int64
+		if err := rows.Scan(&reason, &total); err != nil {
+			t.Fatal(err)
+		}
+		out[reason] += total
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+/*
+================
 TestDoorGoldChangesBecomeLedgerRows
 
-Each door's change is one row: its reason by door and direction, the door
-without any name or id after it, the signed change and the new balance. A
-door that moves no gold writes none.
+Each door's change is recorded: a non-bulk change as one exact row (its
+reason by door and direction, the door without any name or id after it,
+the signed change and the new balance), and every change - bulk ones
+included - as its hourly bucket (#3187). A door that moves no gold
+writes none.
 ================
 */
 func TestDoorGoldChangesBecomeLedgerRows(t *testing.T) {
@@ -136,8 +204,6 @@ func TestDoorGoldChangesBecomeLedgerRows(t *testing.T) {
 	})
 	want := []storedLedgerRow{
 		{c.ID, "shop_buy", "shop-transaction", -300, 700},
-		{c.ID, "npc_sale", "shop-transaction", 50, 750},
-		{c.ID, "monster_gold", "pickup-gold", 50, 800},
 	}
 	got := ledgerRows(t, s)
 	starting := *seededCharacter().Gold
@@ -153,6 +219,14 @@ func TestDoorGoldChangesBecomeLedgerRows(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("row %d = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+	hours := ledgerHourTotals(t, s)
+	if hours["shop_buy loss"] != -300 || hours["npc_sale gain"] != 50 || hours["monster_gold gain"] != 50 {
+		t.Fatalf("hourly buckets %v", hours)
+	}
+	charHours := ledgerCharHourTotals(t, s, c.ID)
+	if charHours["npc_sale"] != 50 || charHours["monster_gold"] != 50 {
+		t.Fatalf("char buckets %v", charHours)
 	}
 	counters := s.EconomyCounters()
 	if counters["gold.shop_buy.loss"] != 300 || counters["gold.npc_sale.gain"] != 50 || counters["gold.monster_gold.gain"] != 50 {
@@ -231,6 +305,11 @@ func TestTradeSettlementNamesSellerAndShares(t *testing.T) {
 	if got := pay("thief-sale"); got[seller.ID] != "thief_den_sale" || got[share.ID] != "trade_party_share" || len(got) != 2 {
 		t.Fatalf("thief sale reasons %v", got)
 	}
+	// The caravan's size-and-stars stamp (#3162) rides the stored door
+	// word and splits the same way.
+	if got := pay("trade-sale-101s5"); got[seller.ID] != "trade_sale_credit" || got[share.ID] != "trade_party_share" || len(got) != 2 {
+		t.Fatalf("stamped trade sale reasons %v", got)
+	}
 }
 
 /*
@@ -264,9 +343,14 @@ func TestTickBatchKeepsEachDoorsLabel(t *testing.T) {
 		t.Fatalf("flush %+v", stats)
 	}
 	rows := doorRows(t, s)
-	if len(rows) != 2 || rows[0].reason != "monster_gold" || rows[0].gold != 60 ||
-		rows[1].reason != "repair" || rows[1].gold != -10 || rows[1].balance != 150 {
+	if len(rows) != 1 || rows[0].reason != "repair" || rows[0].gold != -10 || rows[0].balance != 150 {
 		t.Fatalf("batched rows %+v", rows)
+	}
+	if hours := ledgerHourTotals(t, s); hours["monster_gold gain"] != 60 || hours["repair loss"] != -10 {
+		t.Fatalf("batched buckets %v", hours)
+	}
+	if charHours := ledgerCharHourTotals(t, s, c.ID); charHours["monster_gold"] != 60 {
+		t.Fatalf("batched char buckets %v", charHours)
 	}
 }
 
@@ -376,8 +460,11 @@ func TestLedgerUpgradeAddsTheTable(t *testing.T) {
 		}
 	})
 	setGoldIn(reopened, live, "pickup-gold", 70)
-	if rows := ledgerRows(t, reopened); len(rows) != 1 || rows[0].gold != 30 {
+	if rows := ledgerRows(t, reopened); len(rows) != 0 {
 		t.Fatalf("rows after the upgrade %+v", rows)
+	}
+	if hours := ledgerHourTotals(t, reopened); hours["monster_gold gain"] != 30 {
+		t.Fatalf("buckets after the upgrade %v", hours)
 	}
 	reopened.Close()
 }

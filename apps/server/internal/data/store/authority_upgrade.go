@@ -21,6 +21,7 @@ This operation is never called by server startup or a network request.
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -109,7 +110,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		return "", err
 	}
 	defer db.Close()
-	if err := quickCheck(db); err != nil {
+	if err := quickCheck(context.Background(), db); err != nil {
 		return "", err
 	}
 	schema, err := readMetaInt(db, metaKeySchemaVersion, 0)
