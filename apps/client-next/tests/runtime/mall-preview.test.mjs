@@ -48,7 +48,7 @@ function fixture() {
 	const frame = {
 		resource: { codename: "CHAR_CH_MAN_ADVENTURER", glb: "body", cover: { 1: 7 } },
 		dress,
-		equipment: [],
+		equipment: /** @type {{ slot: number; refObjId: number; plus: number; }[]} */ ([]),
 		avatars: [ { refObjId: 1 } ],
 		seconds: 10
 	};
