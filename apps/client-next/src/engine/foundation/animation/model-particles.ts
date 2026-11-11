@@ -39,7 +39,10 @@ ambientModelParticles
 
 ACD4D0 -> AE3840 -> AEC870/AEC910. This projection admits static ambient
 emitters, including their native rotation overrides. Animation and named
-activation have separate lifecycle producers.
+activation have separate lifecycle producers. An entry's field4c is its
+animation-event registration key (AE36C0 registers it, AE22F0 fires it);
+AE3840 binds every entry without testing it, so an ambient entry with a
+nonzero key is admitted and the key is not surfaced here (#3134).
 ================
 */
 export function ambientModelParticles( value: unknown ): readonly ModelParticle[] {
@@ -88,10 +91,9 @@ function readModelParticles( value: unknown, animation: boolean ): readonly Mode
 			) throw Error( "Invalid model particle attachment" );
 			if (
 				typeof entry.field00 !== "number" || !Number.isInteger( entry.field00 ) || entry.field00 < 0 ||
-				entry.field00 > 0xffffffff || (animation ?
-					typeof entry.field4c !== "number" || !Number.isInteger( entry.field4c ) || entry.field4c < 0 ||
-					entry.field4c > 0xffffffff :
-					entry.field4c !== 0) ||
+				entry.field00 > 0xffffffff ||
+				typeof entry.field4c !== "number" || !Number.isInteger( entry.field4c ) || entry.field4c < 0 ||
+				entry.field4c > 0xffffffff ||
 				(typeof entry.flag53 !== "number" || !Number.isInteger( entry.flag53 ) || entry.flag53 < 0 ||
 					entry.flag53 > 255) ||
 				!Array.isArray( entry.flags50 ) || entry.flags50.length !== 3 ||
