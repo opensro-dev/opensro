@@ -81,6 +81,11 @@ type Hub struct {
 	accountSessions map[string]map[uint64]*Session
 	sessionAccount  map[uint64]string
 
+	// Account world seat: the account whose character stands in the
+	// world, and the claim that holds it (ClaimAccountWorld). One
+	// character of an account is in the world at a time.
+	accountWorld map[string]*AccountWorldClaim
+
 	// Division index: EFFECTIVE division -> live member sessions, so a
 	// division push touches only its members instead of scanning every
 	// session (O(sessions) per push was the scaling ceiling). sessionDiv
@@ -142,6 +147,7 @@ func newHub(cfg Config) *Hub {
 		controls:        make(map[string]uint64),
 		accountSessions: make(map[string]map[uint64]*Session),
 		sessionAccount:  make(map[uint64]string),
+		accountWorld:    make(map[string]*AccountWorldClaim),
 		divisions:       make(map[string]map[uint64]*Session),
 		sessionDiv:      make(map[uint64]string),
 		restrictions:    make(map[string]*characterRestrictions),
@@ -213,6 +219,121 @@ func (h *Hub) BindExclusive(key string, s *Session) (*Session, bool) {
 		Info("transport: single-bind eviction, replacing session")
 	evict.CloseWhenDrained(ByeReasonReplaced)
 	return evict, true
+}
+
+/*
+================
+AccountWorldClaim
+
+One account's character in the world: the session that entered it and
+the bind key (division:character) it entered under. The session that
+holds the seat claims it at EnterWorld, before admission, so a second
+session of the account entering a different character is refused
+instead of joining the first in the world - the gateway's
+already-connected refusal. previous is the same-key claim this one
+replaced, kept so a failed entry hands the seat back to the holder it
+displaced (a replacement bind whose build then fails).
+================
+*/
+type AccountWorldClaim struct {
+	session  *Session
+	account  string
+	key      string
+	previous *AccountWorldClaim
+}
+
+/*
+================
+ClaimAccountWorld
+
+Claims the account's one world seat for the entering character.
+Refused (the second result) only when another session of the account
+holds the seat for a different character; the same character takes
+the seat over, and the holder claiming again is a no-op. A nil claim
+means no claim was needed: the session carries no admission identity,
+or it already holds the seat for this character. Release a non-nil
+claim with ReleaseAccountWorld when the entry fails; a live claim
+ends when its session retires or loses its gameplay context.
+================
+*/
+func (h *Hub) ClaimAccountWorld(s *Session, divisionID, characterName string) (*AccountWorldClaim, bool) {
+	account, _, ok := s.AdmissionIdentity()
+	if !ok {
+		return nil, false
+	}
+	key := divisionID + ":" + strings.ToLower(characterName)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	current := h.accountWorld[account]
+	if current != nil && current.session == s && current.key == key {
+		return nil, false
+	}
+	if current != nil && current.session != s && current.key != key {
+		return nil, true
+	}
+	claim := &AccountWorldClaim{session: s, account: account, key: key, previous: current}
+	h.accountWorld[account] = claim
+	return claim, false
+}
+
+/*
+================
+ReleaseAccountWorld
+
+Ends a claim taken by ClaimAccountWorld: the seat returns to the
+holder this claim replaced when that session is still live, and is
+freed otherwise. Releasing a claim the seat has already moved past
+(the holder retired, a later claim took over) changes nothing.
+================
+*/
+func (h *Hub) ReleaseAccountWorld(claim *AccountWorldClaim) {
+	if claim == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.accountWorld[claim.account] != claim {
+		return
+	}
+	if previous := claim.previous; previous != nil && previous.session != nil && !sessionClosed(previous.session) {
+		h.accountWorld[claim.account] = previous
+		return
+	}
+	delete(h.accountWorld, claim.account)
+}
+
+/*
+================
+releaseAccountWorldOf
+
+Drops every world seat the session holds (its teardown, or the loss
+of its gameplay context). Never touches another session's seat.
+================
+*/
+func (h *Hub) releaseAccountWorldOf(s *Session) {
+	h.mu.Lock()
+	for account, claim := range h.accountWorld {
+		if claim.session == s {
+			delete(h.accountWorld, account)
+		}
+	}
+	h.mu.Unlock()
+}
+
+/*
+================
+sessionClosed
+
+Whether the session's close has begun (its Done channel closed).
+================
+*/
+func sessionClosed(s *Session) bool {
+	select {
+	case <-s.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 // BindingControlLease serializes one host-side character mutation against
