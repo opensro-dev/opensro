@@ -744,6 +744,25 @@ func EncodeMemberDonatedGp3B29(jid uint32, newDonatedGp uint32) []byte {
 	return writer.Payload()
 }
 
+// EncodeMemberPresence3B29 composes the 0x3B29 subOp-6 member delta
+// carrying ONLY the &0x02 offline leg:
+// {u8 6}{u32 jid}{u8 0x02}{u8 offline}. The applicator's &0x02 arm
+// writes member+0x26 and announces an actual flip - the connect line
+// (or, on the receiving member's own row, the guild notice) at 0, the
+// disconnect line at 1 (client CPSMission_OnGuildUpdate0x3B29 ->
+// CIFGuildMember_OnMemberUpdated, flips announced in 5F3340). Sent on
+// world bind (0, the binder included: the entry seed encoded their
+// own row before the bind made them present) and on session close
+// (1, the others only) - online.go.
+func EncodeMemberPresence3B29(jid uint32, offline uint8) []byte {
+	writer := wire.NewWriter(7)
+	writer.U8(6)
+	writer.U32(jid)
+	writer.U8(0x02)
+	writer.U8(offline)
+	return writer.Payload()
+}
+
 // EncodeMemberGrade3B29 composes the 0x3B29 subOp-6 member delta carrying
 // the &0x04 grade and &0x10 permission legs, in the applicator's read order
 // (CIFGuildMember_OnMemberUpdated): {u8 6}{u32 jid}{u8 0x14}{u8 grade}

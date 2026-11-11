@@ -112,6 +112,7 @@ func (game *gameplayPlane) worldBound(
 	game.items.BindRecoverySession(divisionID, character, session.ID)
 	game.movement.WorldBound(session, divisionID, character)
 	community.FriendWorldBound(game.deps, game.presence, divisionID, character)
+	guild.WorldBound(game.deps, game.presence, divisionID, character)
 	// #1689 (port-only): a rename applied at login is announced to the
 	// character's online friends and guild members, once.
 	community.RenameNoticeWorldBound(game.deps, game.presence, divisionID, character)
@@ -153,6 +154,7 @@ disconnect, so the port-only trader cargo rule skips it.
 */
 func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error, authorityStore *store.Store) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
+	guild.SessionClosed(game.deps, game.presence, session)
 	if game.friends != nil {
 		game.friends.SessionClosed(session)
 	}
