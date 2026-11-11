@@ -156,6 +156,11 @@ combat and abnormal tick for every character a division walk touches, and
 the slice cost an allocation per call plus a walk of the whole bag (#1820).
 Read-door admission checks use it for the same reason (#2032).
 The order is the one canonical order: Companions is built from it.
+
+One record is visited once. A restore adoption (cosrestore.go) can leave
+the active record seated in its summoner row as well; the row is then
+skipped, or every walker would see the one companion twice - an area
+query listed such a transport as two targets (#3129).
 ================
 */
 func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
@@ -166,7 +171,11 @@ func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
 		return
 	}
 	for i := range c.MissionInventory {
-		if pet := c.MissionInventory[i].Summon; pet != nil && !visit(pet) {
+		pet := c.MissionInventory[i].Summon
+		if pet == nil || pet == c.ActiveCOS {
+			continue
+		}
+		if !visit(pet) {
 			return
 		}
 	}

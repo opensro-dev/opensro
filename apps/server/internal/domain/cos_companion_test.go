@@ -107,6 +107,30 @@ func TestCompanionByGIDFindsOneRecordSeatedTwice(t *testing.T) {
 
 /*
 ================
+TestCompanionsListARecordSeatedTwiceOnce
+
+Every walker reads the canonical walk, so the record the active slot
+and its summoner row both seat must appear in it once: listed twice it
+was two area targets, two ticks, two of whatever the walker does
+(#3129). The other records keep their order behind it.
+================
+*/
+func TestCompanionsListARecordSeatedTwiceOnce(t *testing.T) {
+	c := companionTestCharacter()
+	c.MissionInventory[0].Summon = c.ActiveCOS
+	pets := c.Companions()
+	if len(pets) != 6 {
+		t.Fatalf("companions = %d with one record seated twice, want 6", len(pets))
+	}
+	for i, pet := range pets {
+		if pet.GID != uint32(i+1) {
+			t.Fatalf("companion %d has GID %d, want the canonical order 1..6", i, pet.GID)
+		}
+	}
+}
+
+/*
+================
 TestCompanionByGIDDoesNotAllocate
 ================
 */

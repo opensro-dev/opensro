@@ -107,6 +107,36 @@ func TestPlayerBasicAttackStrikesARowBackedTransport(t *testing.T) {
 
 /*
 ================
+TestAreaQueryListsARowBackedTransportOnce
+
+The same record through the area lane: an area query enumerates the
+owner's companions, and a transport seated in the active slot and its
+summoner row alike came out as two candidates once the lookup found it,
+so one area skill would have struck it twice (#3129).
+================
+*/
+func TestAreaQueryListsARowBackedTransportOnce(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, owner)
+	owner.MissionInventory = append(owner.MissionInventory, enterworld.InventoryRow{Slot: 40, Summon: owner.ActiveCOS})
+	now := clock.NowMs()
+	q := areaQuery{selects: areaSelectHostile, division: testDivision, caster: attacker,
+		skill:  enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}},
+		center: rt.liveSpawn(simulation.WorldKey(testDivision, attacker.Name), attacker, now), reach: 50, now: now}
+	transports := 0
+	for _, candidate := range rt.areaPlayerCandidates(q) {
+		if candidate.target.cos != nil {
+			transports++
+		}
+	}
+	if transports != 1 {
+		t.Fatalf("the area query lists the one transport %d times, want once", transports)
+	}
+}
+
+/*
+================
 TestCOSTargetIsJudgedThroughItsOwner
 
 The reference server's attack checks on the owner: an attacker in body mode 2, a target COS in
