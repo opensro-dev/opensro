@@ -50,6 +50,16 @@ means no claim was needed: the session carries no admission identity,
 or it already holds the seat for this character. Release a non-nil
 claim with ReleaseAccountWorld when the entry fails; a live claim
 ends when its session retires or loses its gameplay context.
+
+Inference (no native source: the original answered the overlap
+against a second live connection, and the port's resume grace has no
+native counterpart): a holder whose socket has dropped is not a live
+second connection. A fresh entry for a different character of the
+account retires such a holder and takes the seat - the same end as a
+lapsed grace, resume token included - while a holder with a live
+socket still refuses. A resume that wins the race re-stamps the seat
+or re-enters under it, and the loop below re-reads the seat either
+way, so the two never stand in the world together.
 ================
 */
 func (h *Hub) ClaimAccountWorld(s *Session, divisionID, characterName string) (*AccountWorldClaim, bool) {
@@ -58,18 +68,42 @@ func (h *Hub) ClaimAccountWorld(s *Session, divisionID, characterName string) (*
 		return nil, false
 	}
 	key := divisionID + ":" + strings.ToLower(characterName)
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	current := h.accountWorld[account]
-	if current != nil && current.session == s && current.key == key {
-		return nil, false
+	for {
+		h.mu.Lock()
+		current := h.accountWorld[account]
+		switch {
+		case current == nil || sessionClosed(current.session):
+			claim := &AccountWorldClaim{session: s, account: account, key: key, previous: current}
+			h.accountWorld[account] = claim
+			h.mu.Unlock()
+			return claim, false
+		case current.session == s && current.key == key:
+			h.mu.Unlock()
+			return nil, false
+		case current.key == key:
+			// The same character takes the seat over; eviction at
+			// bind handles the holder, detached or live.
+			claim := &AccountWorldClaim{session: s, account: account, key: key, previous: current}
+			h.accountWorld[account] = claim
+			h.mu.Unlock()
+			return claim, false
+		case current.session == s:
+			// Our own seat under another character (a re-entry that
+			// never lost its gameplay context): take it over.
+			claim := &AccountWorldClaim{session: s, account: account, key: key, previous: current}
+			h.accountWorld[account] = claim
+			h.mu.Unlock()
+			return claim, false
+		}
+		// A different character holds the seat. Refuse a live holder;
+		// retire a detached one and re-read the seat.
+		holder := current.session
+		h.mu.Unlock()
+		if holder.Kind() != "detached" {
+			return nil, true
+		}
+		holder.expireIfDetached()
 	}
-	if current != nil && current.session != s && current.key != key {
-		return nil, true
-	}
-	claim := &AccountWorldClaim{session: s, account: account, key: key, previous: current}
-	h.accountWorld[account] = claim
-	return claim, false
 }
 
 /*
