@@ -72,8 +72,8 @@ from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
 FLAG = "SRO_SKYTEMPLE"
 SOURCE_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-skytemple.json"
-CHARACTER_SHARD = "characterdata_130000.txt"
-SKILL_SHARD = "skilldata_130000.txt"
+CHARACTER_SHARD = "characterdata_160000.txt"
+SKILL_SHARD = "skilldata_160000.txt"
 POPULATION_FILE = "skytemple-monsters.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
