@@ -623,6 +623,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# import just wrote, so they must follow it.
 	from mall_avatar_import import add_avatars
 	mall_avatars = add_avatars(vsro_root, native, out)
+	# The later clients' pets follow the avatars: their COS rows and
+	# summon scrolls append their own shards to the same manifests. The
+	# v1.696 and zip passes read their roots from the environment and
+	# skip cleanly while those sources are not on the machine.
+	from pet_import import add_all_sources
+	pets = add_all_sources(vsro_root, native, out)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -656,6 +662,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcServices": city_services,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
+		"pets": pets["pets"],
+		"petsV1696": pets["petsV1696"],
+		"petsArchive": pets["petsArchive"],
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,
