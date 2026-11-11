@@ -26,6 +26,9 @@ client:
 
 // The ifcosinventory TradeInfo controls the window draws with state.
 export const COS_TRADE_TOTAL = 23;
+// The "TRADE LEVEL" caption the stars sit beside; the port-only
+// progress line hangs under it (#3163).
+export const COS_TRADE_LEVEL = 25;
 export const COS_TRADE_STAR_FIRST = 26;
 export const COS_TRADE_STAR_LAST = 30;
 export const COS_TRADE_SELL_ALL = 35;
@@ -51,6 +54,9 @@ export interface CargoRow {
 	readonly slot: number;
 	readonly quantity: number;
 	readonly price: number;
+	// The item's published max stack: one more stack of this row's
+	// goods is worth price x maxStack of cargo gold (#3163).
+	readonly maxStack: number;
 }
 
 /*
@@ -75,7 +81,12 @@ reference's price field).
 ================
 */
 export function cosCargoRows( items: readonly CargoItem[] ): CargoRow[] {
-	return items.map( item => ({ slot: item.slot, quantity: item.quantity, price: item.tooltip?.fields.price ?? 0 }) );
+	return items.map( item => ({
+		slot: item.slot,
+		quantity: item.quantity,
+		price: item.tooltip?.fields.price ?? 0,
+		maxStack: item.tooltip?.fields.maxStack ?? 0
+	}) );
 }
 
 /*
@@ -132,6 +143,33 @@ export function tradeStarTint( count: number ): readonly [number, number, number
 			argb = STAR_TINT_5;
 	}
 	return [ (argb >>> 16 & 0xff) / 255, (argb >>> 8 & 0xff) / 255, (argb & 0xff) / 255, (argb >>> 24 & 0xff) / 255 ];
+}
+
+/*
+================
+tradeProgressLine
+
+Port-only, not native (#3163): the one line that tells the trader how
+the caravan's stars were earned - its stars and, in stacks of the
+goods in front of the player (one stack worth stackGold of cargo
+gold), how much more cargo reaches the next star. The numbers are
+the server's published progress, never a client-side ladder. ""
+while nothing is published (the flag off, or no answer yet); the
+bare star count when no stack can be priced or the server named no
+gap (an unmeasurable load).
+================
+*/
+export function tradeProgressLine(
+	progress: { readonly stars: number; readonly gap: number; } | null | undefined,
+	stackGold: number
+): string {
+	if ( !progress ) return "";
+	const stars = tradeStarCount( progress.stars );
+	if ( stars >= TRADE_STARS_MAX ) return "5 stars";
+	const head = stars === 1 ? "1 star" : `${stars} stars`;
+	if ( progress.gap <= 0 || stackGold <= 0 ) return head;
+	const stacks = Math.ceil( progress.gap / stackGold );
+	return `${head}; ${stacks} more ${stacks === 1 ? "stack" : "stacks"} for ${stars + 1}`;
 }
 
 /*

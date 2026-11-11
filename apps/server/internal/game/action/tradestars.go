@@ -45,6 +45,26 @@ func (rt *Runtime) tradeStarFrame(c *enterworld.Character) wire.Frame {
 
 /*
 ================
+tradeProgressFrame
+
+Port-only, not native (#3163): the port-only trade progress answer
+(wire.OpTradeProgress) that rides with the star answer under
+SRO_TRADE_TIERS - the cargo's stars and the gold still missing from
+the next one, from the same cargo read as the tier. False with the
+flag off: nothing is published and no client ever hears of it.
+================
+*/
+func (rt *Runtime) tradeProgressFrame(c *enterworld.Character) (wire.Frame, bool) {
+	if !rt.TradeTiers || c == nil {
+		return wire.Frame{}, false
+	}
+	value, full := rt.cargoGoldValue(c), rt.caravanFullValue(c)
+	tier := TradeTierForLoad(value, full)
+	return wire.Frame{Opcode: wire.OpTradeProgress, Payload: wire.EncodeTradeProgress(tier, TradeGoldGap(value, full))}, true
+}
+
+/*
+================
 cargoMove
 
 The item moves that load or unload a transport's cargo.
@@ -74,15 +94,21 @@ func (rt *Runtime) withTradeStars(division string, c *enterworld.Character, move
 		return result
 	}
 	// Only a transport has a trade level; a pet's bag moves tell nothing.
-	var frame wire.Frame
-	summoned := false
+	var frame, progress wire.Frame
+	summoned, hasProgress := false, false
 	rt.deps.Read(division, func() {
 		if summoned = rt.transportSummoned(c); summoned {
 			frame = rt.tradeStarFrame(c)
+			progress, hasProgress = rt.tradeProgressFrame(c)
 		}
 	})
 	if summoned {
 		result.Frames = append(result.Frames, frame)
+		// #3163: the progress answer follows the star answer in the
+		// same step, from the same read.
+		if hasProgress {
+			result.Frames = append(result.Frames, progress)
+		}
 	}
 	return result
 }

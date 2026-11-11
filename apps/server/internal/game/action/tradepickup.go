@@ -152,8 +152,12 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 		public := wire.PickupBroadcastFrames(anim, item.Gid, grant.GroundRemainder)
 		frames := append([]wire.Frame{public[0], {Opcode: wire.OpItemMoveResponse, Payload: receipt}}, public[1:]...)
 		frames = append(frames, wire.Frame{Opcode: wire.OpActionState, Payload: wire.ReleaseActionState().Encode()})
-		// The cargo grew: the bag's trade level follows (tradestars.go).
+		// The cargo grew: the bag's trade level follows (tradestars.go),
+		// and its port-only progress answer under SRO_TRADE_TIERS (#3163).
 		frames = append(frames, rt.tradeStarFrame(c))
+		if progress, ok := rt.tradeProgressFrame(c); ok {
+			frames = append(frames, progress)
+		}
 		result = OpResult{Frames: frames, Broadcast: public}
 		return true
 	})

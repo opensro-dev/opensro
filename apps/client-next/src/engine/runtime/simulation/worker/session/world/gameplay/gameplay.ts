@@ -341,6 +341,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
@@ -587,6 +588,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
@@ -1608,6 +1610,7 @@ selected entities, cooldowns or world-entry state.
 		gmCatalogPending = false;
 		gmReplies = [];
 		tradeStars = 0;
+		tradeProgress.clear();
 		notices = [];
 		crestUploadInFlight = false;
 		guide = undefined;
@@ -1844,6 +1847,7 @@ next 0x3AC5 status-5 row throw "Unknown academy member status" (#2876).
 			};
 			gmReplies = [];
 			tradeStars = 0;
+			tradeProgress.clear();
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {
@@ -4104,6 +4108,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( tradeProgress.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
 					dirty = true;
 					return true;
@@ -6035,6 +6043,9 @@ The published plane when something changed since the last take, else null.
 				musicMode,
 				gmReplies,
 				tradeStars,
+				// Port-only (#3163): the cargo's distance to the next star,
+				// published under SRO_TRADE_TIERS (trade-progress.ts).
+				...(tradeProgress.state() ? { tradeProgress: tradeProgress.state()! } : {}),
 				eligibility,
 				...(gmCatalogPending && gmCatalog ? { gmCatalog } : {}),
 				autoPotion,

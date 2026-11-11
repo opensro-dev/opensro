@@ -35,7 +35,7 @@ ramp over 0.1 s.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
-import { interpolateMovement } from "@/engine/foundation/gameplay/native-movement";
+import { interpolateMovement, movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 import {
 	boundDrawnStep,
@@ -66,6 +66,9 @@ const MAX_HISTORY = 48;
 const CONSISTENT_DISTANCE = .25;
 // Unreal's default NetworkSimulatedSmoothLocationTime; halved when stopped.
 const CORRECTION_SMOOTH_SECONDS = .1;
+// A drawn step smaller than this has no facing of its own: the frame the
+// correction lands on stands where the body stood, by continuity.
+const MIN_FACING_STEP = 1e-3;
 
 /*
 ================
@@ -452,6 +455,17 @@ export function createOwnWalkInterpolation() {
 		},
 		/*
 		================
+		correcting
+
+		Whether a correction's visual offset is still being given back:
+		the drawn body is off the buffered walk and closing on it.
+		================
+		*/
+		correcting() {
+			return offset[0] !== 0 || offset[1] !== 0 || offset[2] !== 0;
+		},
+		/*
+		================
 		delay
 
 		The current render delay in milliseconds (diagnostics and tests).
@@ -578,10 +592,24 @@ export function createOwnWalkPresenter( turn: ( from: number, to: number, second
 				own.pose = { ...target };
 			}
 			if ( frame.handoff ) own.walk.carry( frame.handoff, nowMs );
-			own.angle = turn( own.angle, target.angle, now - own.last );
+			const drawn = own.walk.pose( nowMs, now * 1000 ) ?? target;
+			// While a correction's offset is still being given back on a
+			// moving walk, the body is drawn running at the corrected line
+			// from where it stood: face the run it is actually making, so
+			// it turns onto the line instead of sliding sideways under a
+			// fixed nose (#3148). The first frame after the correction
+			// stands where it stood (continuity), so it keeps the worker's
+			// heading; at rest the worker's heading rules throughout.
+			let heading = target.angle;
+			if ( input.moving && own.displayed && own.walk.correcting() ) {
+				const step = delta( own.displayed, drawn );
+				if ( step && hypot2( step[0], step[2] ) > MIN_FACING_STEP ) {
+					heading = movementHeading( own.displayed, drawn );
+				}
+			}
+			own.angle = turn( own.angle, heading, now - own.last );
 			own.last = now;
 			own.nowMs = nowMs;
-			const drawn = own.walk.pose( nowMs, now * 1000 ) ?? target;
 			own.displayed = { ...drawn, angle: Math.round( own.angle ) % 65536 };
 			return { ...own.displayed };
 		},
