@@ -128,6 +128,10 @@ export interface ShopState {
 	}[];
 	readonly tabs?: readonly { readonly index: number; readonly labelSymbol: string; }[];
 	readonly buyback?: readonly BuybackOffer[];
+	// The open page is the specialty-goods page: the catalogue's goods are
+	// trade goods. Derived where the catalogue lands (inventory.ts); the
+	// sell-end notice tests it before closing the shop (75113D).
+	readonly specialty?: boolean;
 	readonly npc: number;
 	readonly name: string;
 	readonly offers: readonly ShopOffer[];

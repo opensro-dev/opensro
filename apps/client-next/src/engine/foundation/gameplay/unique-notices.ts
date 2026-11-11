@@ -99,13 +99,13 @@ eventNotice
 
 7508C0's other kinds: outside 5..10, and 8, 9 and 10 inside it, the
 category 0x11 notice of that code prints on the centre banner (751155).
-Kind 10 (751114) is the specialty sell-end: the specialty-page test
-(75113D) closes an open specialty-goods page (751150) and control
-falls through to the banner print (751155) either way, so the banner
-always prints and the page close rides along. The port's shop state
-carries no specialty-page marker, so the close half cannot arise
-here; the banner always prints, as natively. Kind 7 has its own
-branch.
+Kind 10 (751114) is the specialty sell-end: with a shop interaction
+live (751127) the handler tests the store's specialty-page field
+(75113D) and hides the shop (751150, CGInterface_SetNpcShopVisible),
+then falls through to the banner print (751155) either way. This
+decoder returns only the banner; gameplay works the close half
+through isSpecialtySellEnd before the notice queues. Kind 7 has its
+own branch.
 ================
 */
 function eventNotice( kind: number ): SystemNotice | null {
@@ -113,6 +113,19 @@ function eventNotice( kind: number ): SystemNotice | null {
 		return constantNativeNotice( EVENT_NOTICE_CATEGORY, kind );
 	}
 	return null;
+}
+
+/*
+================
+isSpecialtySellEnd
+
+Kind 10 (751114) is the one notice kind with a side effect: closing an
+open specialty-goods shop (751150) before its banner. The kind byte
+alone decides; 7508C0 reads nothing after it for this kind.
+================
+*/
+export function isSpecialtySellEnd( opcode: number, p: Uint8Array ): boolean {
+	return opcode === 0x3058 && p[0] === KIND_LAST_SPECIAL;
 }
 
 /*
