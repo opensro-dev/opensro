@@ -601,11 +601,16 @@ export function createWorldRenderer(
 			bounds?: PickBounds;
 			boundsResolved?: boolean;
 			seams?: Map<number, { mask: number; cellX: number; cellZ: number; }>;
-			// The ranges the eye cell selects, the previous cell's (a camera that
-			// steps back reuses them), and the ranges the group's draw holds.
-			candidates?: readonly TerrainRange[];
-			previousCandidates?: { cellX: number; cellZ: number; viewStamp: number; ranges: readonly TerrainRange[]; };
+			// The ranges the eye cell's LOD band selects, the previous cell's
+			// (a camera that steps back reuses them), the ranges the group's
+			// draw holds, and the scratch the next frustum pass fills.
+			lodRanges?: TerrainRange[];
+			previousLodRanges?: { cellX: number; cellZ: number; lodKey: number; ranges: TerrainRange[]; };
+			lodCellX?: number;
+			lodCellZ?: number;
+			lodKey?: number;
 			chosen?: readonly TerrainRange[];
+			scratch?: TerrainRange[];
 			cellX?: number;
 			cellZ?: number;
 			// The view stamp the choice was made for (world.ts's frustum cull).
@@ -2124,9 +2129,12 @@ export function createWorldRenderer(
 					// every range at the LOD its distance from the eye cell selects, then
 					// the frustum culls the ranges whose sphere falls outside it - the
 					// main frustum or the water mirror's - as the native client does
-					// each frame (A2D1B0). A view change re-chooses and re-uploads; the
-					// native client re-chose every frame, so this stays the cheaper
-					// side of parity.
+					// each frame (A2D1B0). The two halves change at different rates:
+					// the LOD band moves only when the eye crosses a cell or the
+					// detail inputs change, and the frustum pass fills a reused
+					// scratch list, so a view that culls the same set as the last
+					// one neither copies nor uploads indices again - the same draw
+					// lists as re-choosing every frame, without the per-frame work.
 					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
 						cache.viewStamp !== terrainViewStamp;
 					if ( cache.chosen && !cellChanged ) {
@@ -2140,54 +2148,76 @@ export function createWorldRenderer(
 						continue;
 					}
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-candidates" );
-					if ( !cache.candidates || (cellChanged && current?.terrainDetail !== "full") ) {
+					// The LOD band's key: the detail inputs selectTerrainLod reads.
+					const lodKey = (current?.terrainDetail === "full" ? 2 : 0) |
+						(renderModes.levelOfDetail ? 1 : 0);
+					if (
+						!cache.lodRanges || cache.lodCellX !== eyeCellX ||
+						cache.lodCellZ !== eyeCellZ || cache.lodKey !== lodKey
+					) {
 						// Retain only two cell-dependent plans; geometry retirement owns both.
-						const previous = cache.previousCandidates;
-						cache.previousCandidates = cache.candidates ?
+						const previous = cache.previousLodRanges;
+						cache.previousLodRanges = cache.lodRanges ?
 							{
-								cellX: cache.cellX!,
-								cellZ: cache.cellZ!,
-								viewStamp: cache.viewStamp!,
-								ranges: cache.candidates
+								cellX: cache.lodCellX!,
+								cellZ: cache.lodCellZ!,
+								lodKey: cache.lodKey!,
+								ranges: cache.lodRanges
 							} :
 							undefined;
-						if (
-							previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ &&
-							previous.viewStamp === terrainViewStamp
-						) {
-							cache.candidates = previous.ranges;
-						} else {
-							cache.candidates = group.ranges.filter( range => {
+						cache.lodRanges = previous && previous.cellX === eyeCellX &&
+								previous.cellZ === eyeCellZ && previous.lodKey === lodKey ?
+							previous.ranges :
+							group.ranges.filter( range => {
 								const dx = range.cell[0] - eyeCellX, dz = range.cell[1] - eyeCellZ;
-								if ( range.lod !== selectTerrainLod( dx * dx + dz * dz ) ) return false;
-								// The "full" detail never re-chooses on a view change
-								// (the recompute condition above), so its kept set must
-								// stay view-independent: every range at LOD 0 stays.
-								if ( current?.terrainDetail === "full" ) return true;
-								return visibleFrustumSphere(
+								return range.lod === selectTerrainLod( dx * dx + dz * dz );
+							} );
+						cache.lodCellX = eyeCellX;
+						cache.lodCellZ = eyeCellZ;
+						cache.lodKey = lodKey;
+					}
+					let chosen: readonly TerrainRange[];
+					if ( current?.terrainDetail === "full" ) {
+						// The "full" detail's set is view-independent: every range
+						// at LOD 0 stays, so there is no frustum pass to run.
+						chosen = cache.lodRanges;
+					} else {
+						const scratch = cache.scratch ?? (cache.scratch = []);
+						let kept = 0;
+						for ( const range of cache.lodRanges ) {
+							if (
+								visibleFrustumSphere(
 									frustum,
 									range.center[0],
 									range.center[1],
 									range.center[2],
 									range.radius
 								) ||
-									!!reflectionFrustum &&
-										visibleFrustumSphere(
-											reflectionFrustum,
-											range.center[0],
-											range.center[1],
-											range.center[2],
-											range.radius
-										);
-							} );
+								!!reflectionFrustum &&
+									visibleFrustumSphere(
+										reflectionFrustum,
+										range.center[0],
+										range.center[1],
+										range.center[2],
+										range.radius
+									)
+							) scratch[kept++] = range;
 						}
+						scratch.length = kept;
+						chosen = scratch;
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
 					cache.viewStamp = terrainViewStamp;
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
-					const chosen = cache.candidates, indicesDirty = chosen !== cache.chosen;
+					// The draw holds the same ranges in the same order as the last
+					// upload exactly when nothing it shows changed.
+					const held = cache.chosen;
+					let indicesDirty = held !== chosen && (!held || held.length !== chosen.length);
+					for ( let i = 0; !indicesDirty && i < chosen.length; i++ ) {
+						indicesDirty = held![i] !== chosen[i];
+					}
 					let count = 0;
 					let positionRanges: [number, number][] | null = null;
 					for ( const range of chosen ) {
@@ -2267,7 +2297,12 @@ export function createWorldRenderer(
 						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
 						else geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
 						if ( group.material.terrain ) {
-							shadowSurfaces.replace( group, groupOrder.get( group )!, cache.chosen, chosen );
+							shadowSurfaces.replace( group, groupOrder.get( group )!, held, chosen );
+						}
+						// The filled scratch becomes the held set; the set it
+						// replaces becomes the next pass's scratch.
+						if ( chosen === cache.scratch ) {
+							cache.scratch = held && held !== cache.lodRanges ? held as TerrainRange[] : [];
 						}
 						cache.chosen = chosen;
 					}
