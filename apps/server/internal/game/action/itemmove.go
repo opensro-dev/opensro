@@ -321,24 +321,14 @@ monster capsules (TID3 2) are the one exemption, a capsule exists to
 be set down - and a row whose authored CanDrop bit is clear is kept;
 the quest items are the visible mass of the second bar. Either bar
 answers the indisposable refusal (01:38); the native routine checks
-the family first, then the bit.
+the family first, then the bit. Trade goods (TID 3/3/8, CanDrop
+clear) are barred like the rest: they live in a transport's cargo
+and never enter the personal bag (costransfer.go, #3144), so no
+bag-held row needs a disposal exemption here.
 ================
 */
 func groundDropBarred(ref *enterworld.ItemRef) bool {
 	t := ref.TypeIDs
-	// Trade goods (TID 3/3/8) are authored CanDrop clear (the shipped
-	// trade rows carry column 20 = 0), so without an exemption a trade
-	// good that reached the personal bag could never leave it again -
-	// the exact stuck stack of #3144. Retail answers a second drop of
-	// an owned trade good from the personal bag with the trade refusal
-	// instead of letting it fall (the native check is scoped to the
-	// cargo a player owns); the personal bag is not the trade route:
-	// goods bought onto a transport sell at the destination specialty
-	// shop as before. Dropping (and destroying) one from the bag is
-	// the disposal path; the drop lands on the ground like any other.
-	if t[0] == 3 && t[1] == 3 && t[2] == 8 {
-		return false
-	}
 	if t[0] == 3 && t[1] == 2 && t[2] != 2 {
 		return true
 	}
