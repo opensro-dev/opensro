@@ -45,6 +45,17 @@ region 50 the Tiger and the Bandit.
 ================
 */
 function catalogue() {
+	// Dungeon anchors in region-local coordinates (issue #3239):
+	// Donwhang's cave (32769) and every Tomb floor region.
+	const dungeons = new Map( [
+		[ 32769, [
+			{ monster: BANDIT, x: 600, z: 600 },
+			{ monster: TIGER, x: 500, z: 700 }
+		] ]
+	] );
+	for ( const region of [ 32775, 32774, 32773, 32772, 32771, 32770 ] ) {
+		dungeons.set( region, [ { monster: GIANT, x: 300, z: 300 } ] );
+	}
 	return {
 		monsters: [ TIGER, BANDIT, GIANT ],
 		regions: new Map( [
@@ -60,18 +71,7 @@ function catalogue() {
 				{ monster: TIGER, x: 9650, z: 25 }
 			] ]
 		] ),
-		// Dungeon anchors in region-local coordinates (issue #3239):
-		// Donwhang's cave (32769) and every Tomb floor region.
-		dungeons: new Map( [
-			[ 32769, [
-				{ monster: BANDIT, x: 600, z: 600 },
-				{ monster: TIGER, x: 500, z: 700 }
-			] ],
-			...[ 32775, 32774, 32773, 32772, 32771, 32770 ].map( region => [
-				region,
-				[ { monster: GIANT, x: 300, z: 300 } ]
-			] )
-		] ),
+		dungeons,
 		sections: []
 	};
 }
