@@ -198,6 +198,7 @@
     "src/engine/runtime/ui/hud/compact-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/world-map.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/hunting-guide.ts": "src/engine/runtime/ui/hud/world-map.ts",
+    "src/engine/runtime/ui/hud/map-tools.ts": "src/engine/runtime/ui/hud/world-map.ts",
     "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
