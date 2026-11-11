@@ -319,7 +319,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		}
 	}
 
-	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
+	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
@@ -474,6 +474,13 @@ Close
 ================
 */
 func (s *Store) Close() {
+	// The economy fold lane (#3187) stops before the lock is taken:
+	// its write batches hold the lock briefly, so it is joined while
+	// the lock is still free.
+	if s.economyFold != nil {
+		s.economyFold.stop()
+		s.economyFold = nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// The background checkpointer stops first (#2142 slice 0): its

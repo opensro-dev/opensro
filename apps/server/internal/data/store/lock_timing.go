@@ -300,6 +300,15 @@ type LockTiming struct {
 	CheckpointCaughtUp    int64             `json:"checkpoint_caught_up"`
 	CheckpointLogRestarts int64             `json:"checkpoint_log_restarts"`
 	CheckpointResetHoldMs latency.Histogram `json:"checkpoint_reset_hold_ms"`
+	// EconomyFold*: the ledger history fold/delete lane (economy_fold.go,
+	// #3187): how far the fold and delete watermarks have come, whether
+	// the history is fully folded, how many delete batches ran, and how
+	// long each batch held the write lock (its bound is 10 ms).
+	EconomyFoldSeq       int64             `json:"economy_fold_seq"`
+	EconomyFoldDeleteSeq int64             `json:"economy_fold_delete_seq"`
+	EconomyFoldDone      bool              `json:"economy_fold_done"`
+	EconomyFoldBatches   int64             `json:"economy_fold_batches"`
+	EconomyFoldHoldMs    latency.Histogram `json:"economy_fold_hold_ms"`
 }
 
 /*
@@ -325,6 +334,14 @@ func (s *Store) LockTiming() LockTiming {
 	}
 	for i, name := range commitPhaseNames {
 		out.CommitMs[name] = s.commits.phases[i].Snapshot()
+	}
+	if f := s.economyFold; f != nil {
+		stats := f.stats()
+		out.EconomyFoldSeq = stats.FoldSeq
+		out.EconomyFoldDeleteSeq = stats.DeleteSeq
+		out.EconomyFoldDone = stats.Done
+		out.EconomyFoldBatches = stats.Batches
+		out.EconomyFoldHoldMs = stats.HoldMs
 	}
 	if c := s.checkpoints; c != nil {
 		out.WALBytes = c.walBytes.Load()

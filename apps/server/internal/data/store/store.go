@@ -200,6 +200,11 @@ type Store struct {
 	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
 	// whenever no database was adopted.
 	checkpoints *walCheckpointer
+	// economyFold is the ledger history fold/delete lane
+	// (economy_fold.go, #3187): started by adoptDB, stopped by Close
+	// before the store lock is taken, nil whenever no database was
+	// adopted.
+	economyFold *economyFoldLane
 	// The boot verifier (boot_verify.go): the full integrity check and
 	// the spare copy, after the store is adopted. integrityError is its
 	// one result, read by Health without a lock.
@@ -571,6 +576,24 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The economy bucket tables (#3187) are created at open: purely
+	// additive, so no schema stamp moves and an older binary on the
+	// same file ignores them (loadDB has already shape-checked them
+	// when they existed).
+	if err := ensureEconomyBuckets(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The shrink runs here too, once the fold has emptied the old
+	// ledger rows into the file's freelist. It is housekeeping: a
+	// shrink that fails leaves a large, healthy file and must never
+	// send the boot down the quarantine ladder, so it reports and
+	// the open goes on. Only a stop that arrived meanwhile ends it.
+	vacuumIfFreelistDominates(s.openCtx, db)
+	if err := s.openStep("serve database"); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	log.Infof("store: %s opened: state tables checked in %s, loaded in %s", filepath.Base(path),
 		checked.Round(time.Millisecond), (time.Since(started) - checked).Round(time.Millisecond))
 	return db, loaded, nil
@@ -673,6 +696,9 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	// (configureDB); the background checkpointer copies its WAL
 	// instead (#2142 slice 0).
 	s.checkpoints = startWALCheckpointer(s.dbPath)
+	// The economy fold lane (#3187) folds the ledger's old rows into
+	// the hourly buckets and deletes them in bounded batches.
+	s.economyFold = startEconomyFold(s)
 	if s.asyncCommit && s.writer == nil {
 		s.writer = startCommitWriter(db, s.mu.now)
 	}
