@@ -167,7 +167,43 @@ func cloneCharacterCompanion(source *Character) *Character {
 	for i, pet := range source.Brood {
 		clone.Brood[i] = cloneCOSCompanion(pet)
 	}
+	pinCloneActiveSeat(clone, source)
 	return clone
+}
+
+/*
+================
+pinCloneActiveSeat
+
+One record seated in the source's active slot and a summoner row alike
+is one companion (#3129); a clone walk copies each seat, so re-point
+every copied row naming the active record's GID at the copied active
+record, or the copy reads the one companion as two duplicated
+identities and every lookup by GID refuses it. The staged full walk
+shares rows with its previous copy only when their values are
+unchanged, and then the seat already points at the shared active
+record, so the pin writes nothing.
+================
+*/
+func pinCloneActiveSeat(clone, source *Character) {
+	if clone == nil || source == nil || source.ActiveCOS == nil || clone.ActiveCOS == nil {
+		return
+	}
+	seated := false
+	for i := range source.MissionInventory {
+		if source.MissionInventory[i].Summon == source.ActiveCOS {
+			seated = true
+			break
+		}
+	}
+	if !seated {
+		return
+	}
+	for i := range clone.MissionInventory {
+		if summon := clone.MissionInventory[i].Summon; summon != nil && summon != clone.ActiveCOS && summon.GID == source.ActiveCOS.GID {
+			clone.MissionInventory[i].Summon = clone.ActiveCOS
+		}
+	}
 }
 
 // cloneRows names which inventory rows one clone walk detaches.
@@ -292,6 +328,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 	clone.EnterEventGroupIds = stagedChild(source.EnterEventGroupIds, previousChild.EnterEventGroupIds, cloneSlice)
 	clone.BlockedWhisperers = stagedChild(source.BlockedWhisperers, previousChild.BlockedWhisperers, cloneSlice)
 	clone.Friends = stagedChild(source.Friends, previousChild.Friends, cloneSlice)
+	pinCloneActiveSeat(&clone, source)
 
 	return &clone
 }
