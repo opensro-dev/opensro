@@ -104,6 +104,19 @@ test("a zero-capability NPC has no visible menu and permits another selection re
 	}
 });
 
+test("the Bandit Den gate's return-point grant alone opens the talk menu", () => {
+	// The den gate has no link out, so its word carries 0x100 (row 0x10,
+	// "Teleport to return point") and no teleport bit.
+	const f = fixture( "teleport" );
+	try {
+		f.select();
+		f.grant( NPC_GID, 0x100 );
+		assert.equal( f.snapshot().npcConversation.phase, "menu" );
+	} finally {
+		f.game.dispose();
+	}
+});
+
 /*
 ================
 navigation
