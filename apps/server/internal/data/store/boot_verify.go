@@ -45,6 +45,10 @@ var bootLogTables = map[string]bool{
 	"economy_ledger": true,
 }
 
+// bootSchemaTable is the schema table's name; checking it also checks the
+// freelist.
+const bootSchemaTable = "sqlite_schema"
+
 // bootVerifierStopTimeout bounds Close's wait for an interrupted verifier.
 const bootVerifierStopTimeout = 5 * time.Second
 
@@ -55,10 +59,12 @@ const bootSpareSuffix = ".partial"
 ================
 quickCheckState
 
-SQLite's integrity probe over every table the boot loads, one table and
-its indexes at a time (PRAGMA quick_check(TABLE), SQLite 3.33). Any
-answer but "ok" is corruption of the state, and the caller's ladder
-quarantines the file.
+SQLite's integrity probe over the schema, the freelist and every table
+the boot loads, one table and its indexes at a time (PRAGMA
+quick_check(TABLE), SQLite 3.33). Any answer but "ok" is corruption of
+the state, and the caller's ladder quarantines the file. What a partial
+check cannot see - one page claimed by two tables, pages no table owns -
+is left to the verifier's whole-file check.
 ================
 */
 func quickCheckState(db *sql.DB) error {
@@ -83,6 +89,11 @@ func quickCheckState(db *sql.DB) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	// A partial check verifies the freelist only when it is asked for the
+	// schema table (sqlite.org/pragma.html#pragma_integrity_check), so the
+	// schema goes first: a damaged freelist would hand a state table a
+	// page that is already in use.
+	tables = append([]string{bootSchemaTable}, tables...)
 	for _, name := range tables {
 		if bootLogTables[name] {
 			continue

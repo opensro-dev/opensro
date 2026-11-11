@@ -17,9 +17,17 @@ package store
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
+)
+
+// The database header names the first freelist trunk page in its bytes
+// 32..35, big-endian (sqlite.org/fileformat.html, section 1.3).
+const (
+	freelistTrunkHeaderOffset = 32
+	freelistTrunkHeaderEnd    = 36
 )
 
 /*
@@ -147,6 +155,81 @@ func TestBootGateSendsADamagedStateTableDownTheLadder(t *testing.T) {
 	quarantines, err := filepath.Glob(filepath.Join(dir, DBFileName) + corruptSuffix + "*")
 	if err != nil || len(quarantines) != 1 {
 		t.Fatalf("exactly one quarantine artifact expected, got %v (err %v)", quarantines, err)
+	}
+}
+
+/*
+================
+TestBootGateChecksTheFreelist
+
+A partial check reads the freelist only when it is asked for the schema
+table. The gate asks: a freelist whose first trunk page is garbage would
+hand a state table a page already in use, so it must fail before the
+store serves.
+================
+*/
+func TestBootGateChecksTheFreelist(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	clock := newTestClock()
+	seedBootStore(t, dir, clock)
+	path := filepath.Join(dir, DBFileName)
+
+	// A dropped table leaves its pages on the freelist.
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"CREATE TABLE freelist_filler (body BLOB)",
+		"INSERT INTO freelist_filler VALUES (zeroblob(200000))",
+		"DROP TABLE freelist_filler",
+		"PRAGMA wal_checkpoint(TRUNCATE)",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	var pageSize int64
+	if err := db.QueryRow("PRAGMA page_size").Scan(&pageSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	removeDBSidecars(path)
+
+	// The header's bytes 32..35 name the first freelist trunk page.
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := make([]byte, freelistTrunkHeaderEnd)
+	if _, err := file.ReadAt(header, 0); err != nil {
+		t.Fatal(err)
+	}
+	trunk := int64(binary.BigEndian.Uint32(header[freelistTrunkHeaderOffset:freelistTrunkHeaderEnd]))
+	if trunk == 0 {
+		t.Fatal("the dropped table left no freelist to damage")
+	}
+	garbage := make([]byte, pageSize)
+	for i := range garbage {
+		garbage[i] = 0xA5
+	}
+	if _, err := file.WriteAt(garbage, (trunk-1)*pageSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	probe, err := connectDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probe.Close()
+	if err := quickCheckState(probe); err == nil {
+		t.Fatal("the gate passed a database whose freelist is garbage")
 	}
 }
 
