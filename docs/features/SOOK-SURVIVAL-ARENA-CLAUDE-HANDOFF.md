@@ -287,3 +287,14 @@ launch and deployment details remain in ignored state, not product defaults.
 This verifies the complete local asset/server-data build and successful world
 entry. User arena testing is pending; no additional full-stage playability or
 production beta packaging/deployment result is claimed.
+
+## Easier monster-level progression (2026-11-11)
+
+Shifted all five stage bands down two levels. Relative ranges are now
+−8..−5, −6..−3, −3..0, −1..+2 and +1..+4; a level-90 player therefore meets
+82–85, 84–87, 87–90, 89–92 and 91–94 monsters. The final stage matches the
+previous stage-IV range. Normal waves, ambush eggs and uniques continue to
+share StageBounds, with the existing level-one floor. Tests cover all five
+ranges, pool filtering and low-level floors; focused arena/action tests pass
+against the fresh v1.150 server dataset. No asset rebuild is needed. The
+change requires a GameWorld restart and is not yet active in the running game.

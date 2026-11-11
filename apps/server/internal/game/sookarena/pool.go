@@ -102,7 +102,7 @@ func (p Pool) Boss(level int) (monster.MonsterRef, bool) {
 
 /*
 ================
-StageNormals - five closed level bands, always within player -6 .. +6.
+StageNormals - five closed level bands, always within player -8 .. +4.
 ================
 */
 func (p Pool) StageNormals(level, stage int) []monster.MonsterRef {
@@ -123,7 +123,7 @@ StageBounds
 */
 func StageBounds(level, stage int) (int, int) {
 	i := max(0, min(4, stage))
-	return max(1, level+[]int{-6, -4, -1, 1, 3}[i]), max(1, level+[]int{-3, -1, 2, 4, 6}[i])
+	return max(1, level+[]int{-8, -6, -3, -1, 1}[i]), max(1, level+[]int{-5, -3, 0, 2, 4}[i])
 }
 
 /*

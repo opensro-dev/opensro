@@ -20,11 +20,11 @@ cutoff; survivors must then be cleared. Decisions can extend the total event.
 
 | Stage | Monster levels relative to player | Average monsters per Pandora | Total chest items |
 | --- | --- | ---: | ---: |
-| 1 | −6 to −3 | 1.8 | 3–7 |
-| 2 | −4 to −1 | 4.95 | 8–15 |
-| 3 | −1 to +2 | 8.1 | 18–28 |
-| 4 | +1 to +4 | 11.25 | 32–45 |
-| 5 | +3 to +6 | 14.4 | 50–70 |
+| 1 | −8 to −5 | 1.8 | 3–7 |
+| 2 | −6 to −3 | 4.95 | 8–15 |
+| 3 | −3 to 0 | 8.1 | 18–28 |
+| 4 | −1 to +2 | 11.25 | 32–45 |
+| 5 | +1 to +4 | 14.4 | 50–70 |
 
 Level 1 is the floor. References, including uniques, must fit their stage's
 band; an unavailable unique is skipped. The safety cap is 200 living
@@ -56,7 +56,7 @@ Qin-Shi Tombstone (81–84), Tomb Archer (84–86), Tombstone Ghost (86–88), R
 Soldier (88–90), Tomb Bug Ghost (90–92), Snake Slave (91–95), Snake Woman
 (92–97), Snake Demon (94–99), and Snake Man (97–100).
 
-Stage bounds still win: a level-90 entrant can meet only level 84–96 monsters.
+Stage bounds still win: a level-90 entrant can meet only level 82–94 monsters.
 Traps, egos, quest copies and tomb-chain bosses are excluded. Existing installed
 Donwhang cave monsters, such as Work Earth Ghost (62/64), Soldier Earth Ghost
 (65/66) and Nachal (69/70), already enter the pool when their levels fit.

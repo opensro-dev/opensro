@@ -23,11 +23,11 @@ earlier when you clear its wave budget. Then defeat every remaining monster.
 
 | Stage | Monster levels compared with yours | Fresh chest items |
 | --- | --- | --- |
-| 1 | 6 to 3 levels lower | 3–7 |
-| 2 | 4 to 1 levels lower | 8–15 |
-| 3 | 1 level lower to 2 higher | 18–28 |
-| 4 | 1 to 4 levels higher | 32–45 |
-| 5 | 3 to 6 levels higher | 50–70 |
+| 1 | 8 to 5 levels lower | 3–7 |
+| 2 | 6 to 3 levels lower | 8–15 |
+| 3 | 3 levels lower to your level | 18–28 |
+| 4 | 1 level lower to 2 higher | 32–45 |
+| 5 | 1 to 4 levels higher | 50–70 |
 
 Regular Qin-Shi Tomb creatures can appear when their levels fit your stage.
 Their natural levels range from 81 to 100; a level-90 character meets only

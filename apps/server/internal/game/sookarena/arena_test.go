@@ -237,25 +237,22 @@ func TestKillRewardBrackets(t *testing.T) {
 
 /*
 ================
-TestDoomsDayAndFiveMinuteReports
+TestStageMonsterLevelBands
 ================
 */
-func TestDoomsDayAndFiveMinuteReports(t *testing.T) {
+func TestStageMonsterLevelBands(t *testing.T) {
 	pool := Pool{}
-	for level := 84; level <= 96; level++ {
+	for level := 1; level <= 110; level++ {
 		pool.Normal = append(pool.Normal, monster.MonsterRef{Level: uint8(level)})
 	}
-	for stage := 0; stage < 5; stage++ {
-		for _, ref := range pool.StageNormals(90, stage) {
-			if ref.Level < 84 || ref.Level > 96 {
-				t.Fatal("outside player band")
-			}
+	for stage, band := range [][2]int{{82, 85}, {84, 87}, {87, 90}, {89, 92}, {91, 94}} {
+		low, high := StageBounds(90, stage)
+		refs := pool.StageNormals(90, stage)
+		if low != band[0] || high != band[1] || len(refs) != band[1]-band[0]+1 || int(refs[0].Level) != band[0] || int(refs[len(refs)-1].Level) != band[1] {
+			t.Fatalf("stage %d: bounds %d..%d, refs %+v; want %v", stage+1, low, high, refs, band)
 		}
-	}
-	if refs := pool.StageNormals(90, 0); refs[0].Level != 84 || refs[len(refs)-1].Level != 87 {
-		t.Fatal("stage one band")
-	}
-	if refs := pool.StageNormals(90, 4); refs[0].Level != 93 || refs[len(refs)-1].Level != 96 {
-		t.Fatal("stage five band")
+		if floor, ceiling := StageBounds(1, stage); floor < 1 || ceiling < floor {
+			t.Fatal("low-level bounds exceed the level floor", floor, ceiling)
+		}
 	}
 }
