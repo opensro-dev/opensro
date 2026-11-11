@@ -146,10 +146,6 @@ func (rt *Runtime) rollSookChest(run *sookArenaRun, c *enterworld.Character, sta
 	band := ranges[stage-1]
 	count := band[0] + rt.arenaDraw(band[1]-band[0]+1)
 	room := arenaSetting("SRO_SOOK_CHEST_CAPACITY", 200, 1, arenaChestLimit)
-	if c.SookChest != nil {
-		room -= len(c.SookChest.Items)
-		count = max(0, count-len(c.SookChest.Items))
-	}
 	items := []inventory.Item{}
 	for attempt := 0; len(items) < min(count, room) && attempt < count*16; attempt++ {
 		item, ok := rt.arenaReward(run, c, stage, attempt)
@@ -180,9 +176,9 @@ func (rt *Runtime) saveSookCheckpoint(run *sookArenaRun, c *enterworld.Character
 			return false
 		}
 		for i := range rows {
-			rows[i].Slot = int64(len(chest.Items) + i)
+			rows[i].Slot = int64(i)
 		}
-		chest.Items = append(chest.Items, rows...)
+		chest.Items = rows
 		chest.Stage, chest.Kills, chest.ElapsedMs = stage, run.program.Kills, rt.Now().UnixMilli()-run.program.Started
 		chest.Checkpoint = true
 		return true

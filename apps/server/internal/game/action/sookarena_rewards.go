@@ -108,17 +108,23 @@ func (rt *Runtime) arenaReward(run *sookArenaRun, c *enterworld.Character, stage
 
 /*
 ================
-arenaRewardTier - per-gear Sun chances: none / none / 0.1% / 0.5% / 1%.
+arenaRewardTier - port-only seal odds, quantized to the native 15-bit roll.
 ================
 */
 func (rt *Runtime) arenaRewardTier(stage int) int {
-	sun := [...]int{0, 0, 0, 10, 50, 100}[min(5, max(0, stage))]
-	roll := rt.arenaDraw(10000)
-	if roll < sun {
+	// Basis points: Sun, Moon, Star. Stage I cannot roll Moon or Sun.
+	odds := [...][3]int{{0, 0, 0}, {0, 0, 200}, {0, 25, 300}, {5, 50, 400}, {10, 75, 500}, {25, 100, 600}}[min(5, max(0, stage))]
+	const samples = 1 << 15
+	const basisPoints = 10000
+	roll := rt.arenaDraw(samples)
+	if roll < odds[0]*samples/basisPoints {
 		return 3
 	}
-	if roll < sun+(10+stage*8)*100 {
-		return 1 + rt.arenaDraw(2)
+	if roll < (odds[0]+odds[1])*samples/basisPoints {
+		return 2
+	}
+	if roll < (odds[0]+odds[1]+odds[2])*samples/basisPoints {
+		return 1
 	}
 	return 0
 }

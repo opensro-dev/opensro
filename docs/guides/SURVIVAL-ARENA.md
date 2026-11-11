@@ -21,7 +21,7 @@ brings the next one sooner; leaving monsters alive still brings timed
 reinforcements. Spawning lasts at most **five minutes per stage**, and may end
 earlier when you clear its wave budget. Then defeat every remaining monster.
 
-| Stage | Monster levels compared with yours | Accumulated chest items |
+| Stage | Monster levels compared with yours | Fresh chest items |
 | --- | --- | --- |
 | 1 | 6 to 3 levels lower | 3–7 |
 | 2 | 4 to 1 levels lower | 8–15 |
@@ -67,17 +67,29 @@ but are removed at stage transitions; they cannot be saved in your inventory.
 After all monsters are dead, a reward window opens. You have **five minutes**
 to decide. Use **Previous/Next** to inspect every page; hover items for details.
 
-- **Take your rewards and leave** to keep the accumulated chest.
-- **Continue** to risk the chest for the next stage. The window closes
+- **Take your rewards and leave** to keep the currently displayed chest.
+- **Continue** to risk the chest for the next stage. Clearing that stage
+  replaces this preview with a completely new reward roll. The window closes
   immediately and a **15-second countdown** starts. You can cast preparation
   buffs during this countdown.
 - Stage 5 offers extraction only. If the decision timer expires, the run ends
   and attempts to deliver the earned rewards.
 
-Chest counts in the table are **totals**, not extra items added at each stage.
-Rewards can include equipment, sealed character and pet gear, recovery grains
-in stacks of 50, and silk scrolls. Sun equipment cannot roll in stages 1–2;
-its chance per gear roll is 0.1% / 0.5% / 1% in stages 3 / 4 / 5. It is never
+Each stage rolls a fresh chest of the size shown above. Earlier previews are
+replaced, not carried over or added together. Rewards can include character
+and pet equipment, recovery grains in stacks of 50, and silk scrolls.
+
+Approximate chance per gear roll (character and pet gear):
+
+| Stage | Star | Moon | Sun |
+| --- | ---: | ---: | ---: |
+| 1 | 2% | Not available | Not available |
+| 2 | 3% | 0.25% | Not available |
+| 3 | 4% | 0.5% | 0.05% |
+| 4 | 5% | 0.75% | 0.1% |
+| 5 | 6% | 1% | 0.25% |
+
+The remaining rolls are ordinary gear. Sealed rewards are never
 promised. Each silk scroll grants **10 Item Mall silk** when used; redemption
 requires the event to remain enabled. Kill-based gold is paid separately.
 

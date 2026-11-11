@@ -40,10 +40,10 @@ saved claim. Existing characters, carried gear and previously rolled items are
 not rewritten by reward changes.
 
 Normal floor loot is suppressed only in the exact arena lease. EXP/SP/pet EXP
-are 5x. Chest totals grow to 3–7/8–15/18–28/32–45/50–70 rows, paged 32 at a time.
+are 5x. Fresh stage chests contain 3–7/8–15/18–28/32–45/50–70 rows, paged 32 at a time.
 Supplies are grains x50 only. Silk stacks are 1–3/1–5/1–10/1–15/1–20; each scroll
 credits 10 silk through an atomic bag/wallet transaction, consuming exactly one.
-Sun chance per gear roll is 0/0/0.1/0.5/1%; no guaranteed Sun reward. Saved earlier
+Sun chance per gear roll is approximately 0/0/0.05/0.1/0.25%; no guaranteed Sun reward. Saved earlier
 Sun items and supplies are retained. Client item effects use existing native
 presentation; arena icons and procedural effects are owned source assets.
 
@@ -52,7 +52,7 @@ presentation; arena icons and procedural effects are owned source assets.
 - `game/sookarena`: pure clock/admission, wave budgets and stage-level pools.
 - `action/sookarena.go`: leased actor lifecycle, admission, return and shutdown.
 - `action/sookarena_chest.go`: checkpoint projection, claims and pause/resume.
-- `action/sookarena_rewards.go`: immutable stage top-ups and reward selection.
+- `action/sookarena_rewards.go`: fresh stage rolls and reward selection.
 - `action/sookarena_powerups.go`, `_reflect.go`, `_transfer.go`: lease-scoped eggs.
 - `action/sookarena_silk.go`, `store/arena_silk.go`: use response and atomic debit.
 - `enterworld/arena_reward.go`: owned voucher reference, stack limit 20.
@@ -144,3 +144,16 @@ local CGO race step. Eight overlay/fingerprint tests and two native-texture
 contract tests pass; scripts typecheck, encoding, size and formatting pass.
 The local GameWorld cave binary is built. Deployment and live rendering status
 are recorded in ignored `cave-expansion-status.json`, not inferred from builds.
+
+## Fresh rewards and lower seals (2026-11-11)
+
+Every newly completed stage replaces the old preview with an independently
+rolled full-size chest; repeated checkpoint saves do not reroll it. Old saved
+claims are not rewritten at deployment, and failed stage saves preserve their
+previous rewards. Stage I forbids Moon and Sun for both character and pet gear.
+Per-gear Star/Moon/Sun targets by stage: 2/0/0%, 3/0.25/0%, 4/0.5/0.05%,
+5/0.75/0.1%, 6/1/0.25%. The seal draw uses the full 32768-value native sample
+space rather than biased modulo-10000 sampling. Exhaustive tests pin every seal
+count; reward tests cover fresh replacement even with a previously full chest,
+contiguous slots, idempotence and failed-save preservation. UI/player guide
+explain that the next cleared stage replaces the preview.

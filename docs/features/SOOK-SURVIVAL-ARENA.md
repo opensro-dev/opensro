@@ -76,14 +76,15 @@ Eggs and Pandora spawners remain. Eggs appear every eight seconds (formerly
 15), during combat and clearing; they do not accumulate during reward decisions. Leftover ground eggs and Pandora props are removed at stage end
 and again before the next stage starts.
 
-Each completed stage grows the accumulated chest to the range shown above.
-The final chest holds **50–70 items total**, including retained earlier rewards.
+Each completed stage replaces the previous preview with a fresh chest in the range shown above.
+The final chest holds **50–70 newly generated items**; earlier-stage items are not retained.
 The native-style window shows **32 items per page**, with item tooltips and
 Previous/Next page buttons. Bundles include:
 
 - Native equipment with plus values, blues, and Seal of Star/Moon/Sun variants.
-  Stages I–II cannot roll Sun gear (including pet gear). Sun chance per gear
-  roll is 0.1% in III, 0.5% in IV and 1% in V, with no guaranteed Sun drops.
+  Stages I–II cannot roll Sun gear (including pet gear). Stage I cannot roll Moon either. Approximate per-gear Star/Moon/Sun rates
+  are **2/0/0%, 3/0.25/0%, 4/0.5/0.05%, 5/0.75/0.1%, 6/1/0.25%** across
+  stages I–V, quantized to the native 15-bit sample space. There are no guaranteed seals.
   Existing saved rewards stay unchanged.
 - Pet collars/harnesses/charms, including sealed versions, with existing blue rules.
 - **Silk scrolls**, each redeemable for 10 real Item Mall silk. Use one from the
@@ -122,7 +123,7 @@ They are private props, cannot enter inventories, and expire with their run.
 | Setting | Default | Bounds | Purpose |
 | --- | ---: | --- | --- |
 | `SRO_SOOK_CHECKPOINT_SECONDS` | 300 | 30–300 | Maximum spawning duration; also sets wave budget. 30 is accelerated testing only |
-| `SRO_SOOK_CHEST_CAPACITY` | 200 | 1–200 | Accumulated item rows; keep at least 70 for full rewards |
+| `SRO_SOOK_CHEST_CAPACITY` | 200 | 1–200 | Reward item rows; keep at least 70 for full rewards |
 
 Malformed settings retain defaults. Bundle counts, stage bands, decision time,
 countdowns and pacing are in `game/sookarena` and `action/sookarena_rewards.go`.

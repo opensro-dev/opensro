@@ -28024,7 +28024,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				const notice = chest.error ??
 					(chest.stage === 5 ?
 						"All five stages cleared. Collect your rewards!" :
-						"Falling in the next stage forfeits this chest.");
+						"Next clear replaces this chest. Death loses it.");
 				quads.push(
 					...text.quads(
 						notice,

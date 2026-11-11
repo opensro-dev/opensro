@@ -312,12 +312,22 @@ func TestSookStageRewardBundleBoundsAndNativeReferences(t *testing.T) {
 	n := uint32(0)
 	rt.DropRoll = func() (uint32, error) { n = (n*1103515245 + 12345) & 0x7fff; return n, nil }
 	for stage, b := range [][2]int{{3, 7}, {8, 15}, {18, 28}, {32, 45}, {50, 70}} {
-		rows := rt.rollSookChest(run, c, stage+1)
-		if total := len(c.SookChest.Items) + len(rows); total < b[0] || total > b[1] {
+		c.SookChest.Items = make([]domain.InventoryRow, arenaChestLimit)
+		for i := range c.SookChest.Items {
+			c.SookChest.Items[i].Codename = "PREVIOUS_STAGE"
+		}
+		if !rt.saveSookCheckpoint(run, c, stage+1) {
+			t.Fatal("stage save failed")
+		}
+		rows := c.SookChest.Items
+		if total := len(rows); total < b[0] || total > b[1] {
 			t.Fatalf("stage %d items=%d, expected %v", stage+1, len(rows), b)
 		}
 		silk := false
-		for _, row := range rows {
+		for index, row := range rows {
+			if row.Slot != int64(index) {
+				t.Fatal("noncontiguous reward slots")
+			}
 			ref, ok := items.ItemRefByID(row.RefObjID)
 			if !ok || ref.Codename != row.Codename {
 				t.Fatal("unknown reward")
@@ -327,7 +337,10 @@ func TestSookStageRewardBundleBoundsAndNativeReferences(t *testing.T) {
 		if !silk {
 			t.Fatal("stage has no silk voucher")
 		}
-		c.SookChest.Items = append(c.SookChest.Items, rows...)
+		before, beforeRoll := domain.CloneCharacter(c), n
+		if !rt.saveSookCheckpoint(run, c, stage+1) || n != beforeRoll || !reflect.DeepEqual(c.SookChest, before.SookChest) {
+			t.Fatal("repeated checkpoint rerolled or changed rewards")
+		}
 	}
 }
 
@@ -352,6 +365,9 @@ func TestSookEarlyStagesNeverRollSun(t *testing.T) {
 			if !ok {
 				t.Fatal("missing early reward")
 			}
+			if stage == 1 && (strings.HasSuffix(item.Codename, "B_RARE") || companion.SealTier(item.RefObjID) == 2) {
+				t.Fatalf("stage 1 Moon: %s", item.Codename)
+			}
 			if strings.HasSuffix(item.Codename, "C_RARE") || companion.SealTier(item.RefObjID) == 3 {
 				t.Fatalf("early Sun: stage %d %s", stage, item.Codename)
 			}
@@ -361,27 +377,21 @@ func TestSookEarlyStagesNeverRollSun(t *testing.T) {
 
 /*
 ================
-TestSookSunRollProbabilities
+TestSookSealRollProbabilities
 ================
 */
-func TestSookSunRollProbabilities(t *testing.T) {
-	for stage, want := range []int{0, 0, 10, 50, 100} {
-		count := 0
-		for roll := 0; roll < 10000; roll++ {
-			first := true
-			rt := Runtime{DropRoll: func() (uint32, error) {
-				if first {
-					first = false
-					return uint32(roll), nil
-				}
-				return 0, nil
-			}}
-			if rt.arenaRewardTier(stage+1) == 3 {
-				count++
-			}
+func TestSookSealRollProbabilities(t *testing.T) {
+	// Normal, Star, Moon, Sun counts across the native 32768-value sample space.
+	expected := [][4]int{{32113, 655, 0, 0}, {31704, 983, 81, 0}, {31278, 1310, 164, 16}, {30852, 1638, 246, 32}, {30393, 1966, 328, 81}}
+	for stage, want := range expected {
+		var got [4]int
+		var value uint32
+		rt := Runtime{DropRoll: func() (uint32, error) { return value, nil }}
+		for value = 0; value < 32768; value++ {
+			got[rt.arenaRewardTier(stage+1)]++
 		}
-		if count != want {
-			t.Fatalf("stage %d: %d/10000 Sun rolls, want %d", stage+1, count, want)
+		if got != want {
+			t.Fatalf("stage %d seals=%v want=%v", stage+1, got, want)
 		}
 	}
 }
@@ -558,5 +568,27 @@ func TestSookFlagOffBlocksRewardsAndVoucherUseWithoutLosingSavedItems(t *testing
 	_, handled := rt.useArenaSilk(c, wire.ItemUseRequest{Slot: 13, TypeWord: enterworld.ArenaSilkScroll().TypeFlags()}, nil)
 	if !handled || wallet.balance.Silk != 0 || !reflect.DeepEqual(c, before) {
 		t.Fatal("flag-off consumed or changed earned items")
+	}
+}
+
+/*
+================
+TestSookStageRerollFailureKeepsSavedPreview
+================
+*/
+func TestSookStageRerollFailureKeepsSavedPreview(t *testing.T) {
+	c := instanceWorldTestCharacter(11, "FailedStageReward")
+	rt, _ := sookFixture(t, c)
+	rt.enterSookArena(testDivision, c)
+	rt.deps.(*enterworld.Deps).Items = enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	rt.DropRoll = constantDropRoll(0)
+	c.SookChest.Stage, c.SookChest.Items = 1, []domain.InventoryRow{chestTestReward()}
+	before := domain.CloneCharacter(c)
+	rt.deps.(*enterworld.Deps).UpdateCharacter = func(_ *enterworld.Character, _ string, _ func() bool) bool { return false }
+	if rt.saveSookCheckpoint(rt.sookRun(testDivision, c), c, 2) {
+		t.Fatal("failed save accepted")
+	}
+	if !reflect.DeepEqual(c.SookChest, before.SookChest) {
+		t.Fatal("failed save lost previous rewards")
 	}
 }
