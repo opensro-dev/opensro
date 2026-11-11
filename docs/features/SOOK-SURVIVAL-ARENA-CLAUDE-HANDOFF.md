@@ -197,3 +197,19 @@ SHOT loops; focused effect suites, client typecheck, ownership/capability and
 execution checks pass, with no new test-type errors. Live visual confirmation
 is pending; applying the client update must wait until the active arena run
 ends or the player accepts a reload. No server or character-data change.
+
+## Arena death owns the return (2026-11-11)
+
+Native town/present-point rebirth requests (including the prepared handler)
+are refused while an active arena lease owns the corpse. The existing five-
+second arena return remains the only relocation, avoiding the intermediate
+Jangan rebirth. The native prompt is suppressed only in private survival
+Colosseum worlds; ordinary deaths keep it. Bag resurrection scrolls and premium
+limited resurrection share an arena refusal before consumption or revival.
+These restrictions disappear outside the feature's active runs.
+
+Action and arena package tests, vet, lint, build, client typecheck, ownership/
+capability/execution checks and the new UI regression pass. Test-type debt is
+unchanged. The broad UI behavior suite has 43 unrelated failures reproducible
+on the unchanged parent (plus the new regression failing there); they remain
+outside this fix. Live death-return verification is pending deployment.

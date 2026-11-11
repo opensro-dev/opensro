@@ -136,6 +136,12 @@ use (countjob.go), which consumes nothing. A living player is refused with
 ==================
 */
 func (rt *Runtime) resurrectWithScroll(division string, character *enterworld.Character, ref *enterworld.ItemRef, nowMs int64, result *OpResult) (revivedWhereDead, bool) {
+	// Port-only: neither bag scrolls nor premium uses can bypass arena death.
+	if rt.sookRun(division, character) != nil {
+		*result = itemUseFailure(0x69)
+		result.Frames = append(result.Frames, sookBanner("Resurrection scrolls cannot be used in the Survival Arena."))
+		return revivedWhereDead{}, false
+	}
 	if enterworld.CharacterAlive(character) {
 		*result = itemUseFailure(errCodeOnlyDeadResurrect)
 		return revivedWhereDead{}, false

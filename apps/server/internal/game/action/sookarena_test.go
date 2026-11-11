@@ -245,6 +245,16 @@ func TestSookDeathDisconnectAndRestart(t *testing.T) {
 				if rt.sookRun(testDivision, c) == nil {
 					t.Fatal("death animation skipped")
 				}
+				for _, choice := range []byte{wire.RebirthAtSpecifiedPoint, wire.RebirthAtPresentPoint} {
+					out := rt.HandleLocalRebirth(testDivision, c, []byte{choice})
+					if out.DiagnosticRefusal != "sook-arena-auto-return" || len(out.Frames) != 0 || enterworld.CharacterAlive(c) || domain.CharacterWorldInstance(c) != uint32(run.lease.ID) {
+						t.Fatal("native rebirth bypassed arena return", out)
+					}
+					commit, handled := rt.prepareLocalRebirth(testDivision, c, []byte{choice})
+					if !handled || commit().DiagnosticRefusal != "sook-arena-auto-return" {
+						t.Fatal("prepared rebirth bypassed arena return")
+					}
+				}
 				clock.now = clock.now.Add(time.Duration(sookarena.DeathReturnDelayMs) * time.Millisecond)
 				rt.advanceSookArena(clock.Now().UnixMilli())
 			case "disconnect":
@@ -854,5 +864,39 @@ func TestSookAmbushEggSpawnsTenAndRespectsPrivatePopulationCap(t *testing.T) {
 		if _, exists := rt.Ground.Get(testDivision, item.Gid); exists {
 			t.Fatal("ambush egg not consumed")
 		}
+	}
+}
+
+/*
+================
+TestSookResurrectionScrollsPreserveInventory
+Bag and premium scroll effects share the arena refusal, without a revive.
+================
+*/
+func TestSookResurrectionScrollsPreserveInventory(t *testing.T) {
+	c, items, body := resurrectionScrollFixture(200)
+	rt, clock := sookFixture(t, c)
+	for code, ref := range items {
+		rt.deps.ItemReferences().(staticItemSource)[code] = ref
+	}
+	rt.enterSookArena(testDivision, c)
+	run := rt.sookRun(testDivision, c)
+	if run == nil {
+		t.Fatal("entry")
+	}
+	zero := int64(0)
+	c.CurrentHP = &zero
+	before := c.MissionInventory[len(c.MissionInventory)-1].StackCount
+	out := rt.HandleItemUse(testDivision, c, body)
+	if len(out.Frames) < 1 || out.Frames[0].Opcode != wire.OpItemUseResponse || out.Frames[0].Payload[0] != wire.ResultError || enterworld.CharacterAlive(c) || c.MissionInventory[len(c.MissionInventory)-1].StackCount != before {
+		t.Fatal("arena scroll revived or consumed", out)
+	}
+	var result OpResult
+	ref := items["ITEM_MALL_RESURRECTION_60P_SCROLL"]
+	if _, ok := rt.resurrectWithScroll(testDivision, c, ref, clock.Now().UnixMilli(), &result); ok || enterworld.CharacterAlive(c) {
+		t.Fatal("premium resurrection bypassed arena death")
+	}
+	if domain.CharacterWorldInstance(c) != uint32(run.lease.ID) {
+		t.Fatal("scroll relocated corpse")
 	}
 }

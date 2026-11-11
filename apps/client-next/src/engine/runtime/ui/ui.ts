@@ -1754,7 +1754,10 @@ export function createUi( ports: UiPorts ) {
 			if ( !(world && next.gameplay?.vitals?.find( v => v.gid === local )?.deathState) ) deathStateAt = null;
 			else if ( deathStateAt === null ) deathStateAt = now;
 		}
-		const due = !!deathIdentity &&
+		// Port-only: survival deaths return automatically, without the native town-rebirth prompt.
+		const definition = (next.gameplay?.fortress?.worldId ?? 0) & 65535;
+		const arena = next.gameplay?.pose?.regionId === 25580 && (definition === 30 || definition === 31);
+		const due = !arena && !!deathIdentity &&
 			(deathRequested || now >= Math.min( deathStateAt ?? Infinity, deathLifeAt + 5000 ) + 3000);
 		if ( due !== rebirthDue ) {
 			rebirthDue = due;

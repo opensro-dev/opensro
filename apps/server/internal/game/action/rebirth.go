@@ -490,6 +490,10 @@ func (rt *Runtime) planRebirth(
 		before = character.Snapshot()
 		corpse = rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	})
+	// Port-only: the arena owns its delayed return; native rebirth must not race it.
+	if rt.sookRun(divisionID, before) != nil {
+		return nil, OpResult{DiagnosticRefusal: "sook-arena-auto-return"}, false
+	}
 	if before.DeletePending || enterworld.CharacterAlive(before) || corpse.MoveSegment != nil {
 		return nil, OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}, false
 	}

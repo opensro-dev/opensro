@@ -6816,3 +6816,33 @@ test("a stall beside a separate window keeps that window open", () => {
 		f.dispose();
 	}
 });
+
+test("survival arena death suppresses town rebirth while ordinary deaths keep it", () => {
+	/** @type {[number, number, boolean][]} */
+	const cases = [ [ 25580, 30, false ], [ 25580, 31, false ], [ 25580, 1, true ], [ 25000, 30, true ] ];
+	for ( const [regionId, worldId, expected] of cases ) {
+		const sent = [], f = uiFixture( c => sent.push( c ) );
+		try {
+			const state = {
+				...f.state,
+				entities: [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ],
+				gameplay: {
+					...f.state.gameplay,
+					pose: { ...f.state.gameplay.pose, regionId },
+					fortress: { worldId, worlds: [], fortresses: [], wars: [], registered: [] },
+					vitals: [ { gid: 1, hp: 0, mp: 0, deathState: true } ]
+				}
+			};
+			let scene;
+			for ( let now = 0; now <= 10000; now += 100 ) scene = f.ui.step( state, now ) ?? scene;
+			assert.ok( scene );
+			assert.equal( scene.controls.some( c => c.id === "rebirth-point" ), expected );
+			if ( !expected ) {
+				f.ui.event( { kind: "activate", id: "rebirth-point" } );
+				assert.equal( sent.some( c => c.command?.kind === "rebirth" ), false );
+			}
+		} finally {
+			f.ui.dispose();
+		}
+	}
+});
