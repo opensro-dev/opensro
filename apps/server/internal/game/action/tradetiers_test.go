@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -167,6 +168,108 @@ func TestEveryFullTransportReachesFiveStars(t *testing.T) {
 			t.Fatalf("a %d-slot transport filled to a %d-slot load reads 5 stars", largest, smallest)
 		}
 		break
+	}
+}
+
+/*
+================
+TestFullSmallTransportNativeBanditsCoverTheFlagCount
+
+Work item 3 of #3162, measured on the shipped data: the bandit count
+is a threat, not a payout, and needs no cargo scaling. The smallest
+ordinary transport - the 32-slot donkey, first ridden at level 20 -
+brim-full at that level already reads the native top tier, and its
+native star rating spawns 10..22 bandits (SpawnCount: the rating,
+one more on half the draws, doubled on 2%), covering the flag's
+5-star count of 5..12 at both ends. The fifth star therefore never
+threatens a small caravan beyond what the identical load draws with
+SRO_TRADE_TIERS off. At higher trader levels the native count falls
+away (the cargo value shrinks against the level's gold basis) while
+the flag keeps the danger the fifth star advertises (#2958), which
+is the star's recorded purpose, so the count takes no transport
+class into account.
+================
+*/
+func TestFullSmallTransportNativeBanditsCoverTheFlagCount(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(dir)
+	if _, err := items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor); err != nil {
+		t.Fatal(err)
+	}
+	levels := enterworld.NewTextdataLevels(dir)
+	var smallest *enterworld.CharacterRef
+	for _, ref := range items.SummonableCharacterRefs() {
+		candidate := ref
+		if !isVehicleCOS(candidate.TidWord) || enterworld.IsMallTransport(&candidate) {
+			continue
+		}
+		if smallest == nil || candidate.InventoryCapacity < smallest.InventoryCapacity {
+			smallest = &candidate
+		}
+	}
+	if smallest == nil || smallest.Codename != "COS_T_DONKEY" || smallest.InventoryCapacity != 32 || smallest.Level != 20 {
+		t.Fatalf("smallest ordinary transport = %+v, want the 32-slot level-20 donkey", smallest)
+	}
+	good, found := items.ItemRefByCodename("ITEM_ETC_TRADE_WC_01")
+	if !found {
+		t.Fatal("ITEM_ETC_TRADE_WC_01 missing")
+	}
+	stack := good.NativeFields.Get("maxStack")
+	basis, found := levels.WithdrawalGoldBasis(caravan.CargoLevel(int64(smallest.Level)))
+	if !found {
+		t.Fatalf("no withdrawal gold basis at level %d", smallest.Level)
+	}
+	// The native cargo value of the brim-full donkey, exactly as
+	// caravanCargoValue computes it for a trader of the first level
+	// that can ride it.
+	capacity := caravan.CargoCapacity(smallest.Parameters.MonsterType&0x0f, uint16(smallest.InventoryCapacity))
+	goods := uint32(smallest.InventoryCapacity) * uint32(stack)
+	value := caravan.CargoValue(goods, capacity, caravan.BaseDeathExp(basis))
+	if tier := caravan.DifficultyTier(value); tier != 5 {
+		t.Fatalf("brim-full donkey at level %d: native value %d reads tier %d, want 5", smallest.Level, value, tier)
+	}
+	stars := caravan.StarRating(value, false)
+	// SpawnCount(stars) draws stars..(stars+1)*2 bandits; the flag's
+	// 5-star count is SpawnCount(5) = 5..12.
+	if stars < 5 || (stars+1)*2 < 12 {
+		t.Fatalf("native rating %d spawns %d..%d bandits, which does not cover the flag's 5..12", stars, stars, (stars+1)*2)
+	}
+}
+
+/*
+================
+TestTradeLoadDoorLabelNamesTheLoad
+
+A trade-goods purchase into a transport commits under its own ledger
+door (#3162), stamped with the transport's size and the load's stars
+once the purchase is aboard; anything else stays a shop transaction.
+================
+*/
+func TestTradeLoadDoorLabelNamesTheLoad(t *testing.T) {
+	rt, c := traderFixture(t, false)
+	rt.TradeTiers = true
+	good, found := rt.deps.ItemReferences().ItemRefByCodename("ITEM_ETC_TRADE_WC_01")
+	if !found {
+		t.Fatal("fixture good missing")
+	}
+	// The fixture transport holds 4 slots of 40: 160 goods brim it.
+	offer := &commerce.Offer{Ref: good}
+	q := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, CosGID: c.ActiveCOS.GID, Quantity: 160}
+	if got := rt.tradeLoadDoorLabel(c, q, offer); got != "trade-load-4s5" {
+		t.Fatalf("brim-full load door = %q, want trade-load-4s5", got)
+	}
+	// One stack is a quarter of the brim: two stars.
+	q.Quantity = 40
+	if got := rt.tradeLoadDoorLabel(c, q, offer); got != "trade-load-4s2" {
+		t.Fatalf("one-stack load door = %q, want trade-load-4s2", got)
+	}
+	if got := rt.tradeLoadDoorLabel(c, q, nil); got != "shop-transaction" {
+		t.Fatalf("unknown offer door = %q, want shop-transaction", got)
+	}
+	ordinary := &commerce.Offer{Ref: &enterworld.ItemRef{Codename: "ITEM_ETC_HP_POTION_01", TypeIDs: [4]int64{3, 3, 1, 1}}}
+	if got := rt.tradeLoadDoorLabel(c, q, ordinary); got != "shop-transaction" {
+		t.Fatalf("ordinary goods door = %q, want shop-transaction", got)
 	}
 }
 
