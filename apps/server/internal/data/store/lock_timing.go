@@ -77,6 +77,17 @@ timedRWMutex.Lock
 ================
 */
 func (m *timedRWMutex) Lock() {
+	// An uncontended acquisition has no wait to measure: the try
+	// path pays one clock read (the hold's start) instead of the
+	// pair a timed wait costs (#3126). TryLock refuses while the
+	// lock is held for reading or writing, so a refused try takes
+	// the timed path below; writers were already serialized with
+	// no order between them promised.
+	if m.mu.TryLock() {
+		m.heldSince = m.now()
+		m.writeWait.Add(0)
+		return
+	}
 	start := m.now()
 	m.mu.Lock()
 	m.heldSince = m.now()
@@ -100,6 +111,15 @@ timedRWMutex.RLock
 ================
 */
 func (m *timedRWMutex) RLock() {
+	// The read door is the tick's hottest lock: an uncontended
+	// acquisition skips both clock reads (#3126). TryRLock refuses
+	// exactly when the plain RLock would block - a writer holds the
+	// lock or waits for it - so a refused try takes the timed path
+	// below and no reader barges past a waiting writer.
+	if m.mu.TryRLock() {
+		m.readWait.Add(0)
+		return
+	}
 	start := m.now()
 	m.readersWaiting.Add(1)
 	m.mu.RLock()

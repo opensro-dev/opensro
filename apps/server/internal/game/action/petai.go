@@ -36,6 +36,23 @@ type petOwnerKey struct {
 
 /*
 ================
+petSessionEntry
+
+One row of the tick's session walk (orderedPetSessions): a session
+key and the session pointer the map held for it when the walk was
+built. The pointer is a capture, not a claim: advancePetInDivision
+revalidates it against the map under the division lock, so a forget
+or rebind since the build is judged on the live entry exactly as
+when the sweep fetched each pointer itself (#3126).
+================
+*/
+type petSessionEntry struct {
+	key   petOwnerKey
+	state *petSession
+}
+
+/*
+================
 petSession
 ================
 */
@@ -279,13 +296,30 @@ so a walk already ranging the old list is never disturbed (#2033).
 Readiness is not membership: a session readies without a map write
 (bindPetSession readies the children in place), so advancePets
 still judges state.ready live at each visit.
+
+The same rebuild fills petSessionEntries with the pointer each key
+holds at build time; the two lists are one walk in two shapes and
+are only ever built and dropped together.
 ================
 */
 func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
+	rt.rebuildPetSessionWalkLocked()
+	return rt.petSessionKeys
+}
+
+/*
+================
+rebuildPetSessionWalkLocked
+
+Builds the cached walk (both shapes) if a membership writer dropped
+it. The caller holds petMu.
+================
+*/
+func (rt *Runtime) rebuildPetSessionWalkLocked() {
 	if rt.petSessionKeys != nil {
-		return rt.petSessionKeys
+		return
 	}
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
 	for key := range rt.petSessions {
@@ -302,8 +336,34 @@ func (rt *Runtime) orderedPetSessionKeys() []petOwnerKey {
 		}
 		return keys[i].gid < keys[j].gid
 	})
+	entries := make([]petSessionEntry, len(keys))
+	for i, key := range keys {
+		entries[i] = petSessionEntry{key: key, state: rt.petSessions[key]}
+	}
 	rt.petSessionKeys = keys
-	return keys
+	rt.petSessionEntries = entries
+}
+
+/*
+================
+orderedPetSessions
+
+The session walk as (key, session) pairs: the sweep judges the
+pointer captured at build time instead of re-hashing the owner's
+two-string key through petSessions for every pet on every tick
+(#3126). The capture can be a tick stale - a session bound since
+the build waits for the next rebuild exactly as it waited outside
+the key list, and a forget or rebind since the build is caught by
+advancePetInDivision's revalidation under the division lock, which
+judges the live entry. Readiness flips land on the same pointer,
+so the sweep still judges state.ready live.
+================
+*/
+func (rt *Runtime) orderedPetSessions() []petSessionEntry {
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	rt.rebuildPetSessionWalkLocked()
+	return rt.petSessionEntries
 }
 
 /*
@@ -315,10 +375,8 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	shieldFrames := rt.advancePetShields(nowMs)
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
-	for _, key := range rt.orderedPetSessionKeys() {
-		rt.petMu.Lock()
-		state := rt.petSessions[key]
-		rt.petMu.Unlock()
+	for _, entry := range rt.orderedPetSessions() {
+		key, state := entry.key, entry.state
 		if state == nil || !state.ready {
 			continue
 		}
