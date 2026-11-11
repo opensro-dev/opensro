@@ -493,6 +493,7 @@ func publicRules() publicstats.RulesResponse {
 			{Flag: action.EnvPremiumUpgrade, On: action.PremiumUpgradeFromEnv(),
 				Native: "A premium time ticket refuses while any premium already runs; the running one must expire first.",
 				Now: "Using a strictly higher-grade premium of the same family (a bigger daily allowance first, then a longer period) replaces the running lower one. " +
+					"A full premium likewise replaces a running skill-only ticket at any grade; a skill-only ticket never replaces a running full premium. " +
 					"The replaced ticket's unused time is added to the new ticket's end and the daily allowance restarts with the new ticket; lower or equal grades still refuse.",
 				Why: "Owner request (#1624): a better premium bought with silk could not be used until a four-week ticket expired."},
 			{Flag: enterworld.EnvMallTransportSpeed, On: enterworld.MallTransportSpeedFromEnv(),

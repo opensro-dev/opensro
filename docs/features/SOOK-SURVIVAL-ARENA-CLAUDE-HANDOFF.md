@@ -226,3 +226,14 @@ tests, test-type gate, encoding, formatting and source-size checks pass.
 PR #3189 targets opensro-dev/opensro main. CI/race verdicts remain pending.
 The live local game was left on the verified pre-merge build/source to avoid
 interrupting play; use the merged worktree for the next deployment.
+
+## PR #3189 CI follow-up (2026-11-11)
+
+Renamed the PR to `feat(server): add solo survival arena`; the server feature
+remains off by default. The failed client-source gate reported a stale UI
+census after merging main's chat changes. Merged main through b5931e19 and
+regenerated the census with the canonical tool. Census verification and its
+architecture test, arena client tests, arena Go tests, formatting and encoding
+checks pass. Previous CI server tests/static/lint/race/policy and source checks
+passed. New CI results must be checked on the pushed head. The running game
+was neither reloaded nor restarted.
