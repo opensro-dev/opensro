@@ -202,7 +202,15 @@ unsummon, town entry and logout discard pending fields.
 ================
 */
 func (rt *Runtime) advancePetGearFields(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advancePetGearFieldsSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advancePetGearFieldsSession
+================
+*/
+func (rt *Runtime) advancePetGearFieldsSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil || len(state.trained.gearFields) == 0 {
 		return
 	}

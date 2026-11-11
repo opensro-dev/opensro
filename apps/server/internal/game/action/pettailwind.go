@@ -80,7 +80,15 @@ No free first stack, catch-up beyond ten, or retained charges after book changes
 ================
 */
 func (rt *Runtime) advanceTailwind(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advanceTailwindSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advanceTailwindSession
+================
+*/
+func (rt *Runtime) advanceTailwindSession(key petOwnerKey, state *petSession, now int64) {
 	var step petCombatStep
 	var skill companion.SkillDef
 	var level uint8

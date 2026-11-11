@@ -28,6 +28,15 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 	rt.petMu.Lock()
 	state := rt.petSessions[key]
 	rt.petMu.Unlock()
+	return rt.advancePetSatietySession(key, state, nowMs)
+}
+
+/*
+================
+advancePetSatietySession
+================
+*/
+func (rt *Runtime) advancePetSatietySession(key petOwnerKey, state *petSession, nowMs int64) []simulation.Frame {
 	if state == nil {
 		return nil
 	}

@@ -322,7 +322,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		if state == nil || !state.ready {
 			continue
 		}
-		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
+		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, state, nowMs)
 		if tether != nil {
 			if tethers == nil {
 				tethers = make(map[string]simulation.Tether)
@@ -354,15 +354,24 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 /*
 ================
 advancePetInDivision
+
+One session fetch serves the whole per-pet tick (#3126): the sweep
+hands in the state it already holds, and every lane below judges that
+pointer instead of re-hashing the owner's string key through
+petSessionFor. The entry under key cannot move while this runs - the
+division lock is held and every session bind/forget takes it too -
+and lanes only ever bind or retire child sessions, never this one.
+The key-only lane names stay for direct callers (tests): each fetches
+the session exactly as every lane once did for itself.
 ================
 */
-func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
+func (rt *Runtime) advancePetInDivision(key petOwnerKey, state *petSession, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	frames := rt.advanceCrowBrood(key, nowMs)
-	frames = append(frames, rt.advancePenguin(key, nowMs)...)
-	rt.advancePetGearFields(key, nowMs)
-	rt.advancePetGearPoison(key, nowMs)
+	frames := rt.advanceCrowBroodSession(key, state, nowMs)
+	frames = append(frames, rt.advancePenguinSession(key, state, nowMs)...)
+	rt.advancePetGearFieldsSession(key, state, nowMs)
+	rt.advancePetGearPoisonSession(key, state, nowMs)
 	// One facts capture, and at most one owner snapshot behind it,
 	// serve the tailwind, crow-kit, plume and wolf lanes (#2030):
 	// nothing between here and the wolf lane writes an owner record
@@ -372,22 +381,19 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	// before the spirit lane: it and the hunt lane judge fresh. The
 	// deferred clear is panic hygiene only; the explicit one below
 	// is the one the spirit lane's freshness rests on.
-	factsKey := rt.armElementalFacts(key, nowMs)
+	factsKey := rt.armElementalFactsSession(key, state, nowMs)
 	defer rt.clearElementalFacts(factsKey)
-	rt.advanceTailwind(key, nowMs)
-	rt.advanceCrowKit(key, nowMs)
-	rt.advanceCrowPlume(key, nowMs)
-	rt.resetWolfExecution(key, nowMs)
-	frames = append(frames, rt.advanceWolfKit(key, nowMs)...)
+	rt.advanceTailwindSession(key, state, nowMs)
+	rt.advanceCrowKitSession(key, state, nowMs)
+	rt.advanceCrowPlumeSession(key, state, nowMs)
+	rt.resetWolfExecutionSession(key, state, nowMs)
+	frames = append(frames, rt.advanceWolfKitSession(key, state, nowMs)...)
 	rt.clearElementalFacts(factsKey)
-	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
-	frames = append(frames, rt.advancePetBond(key, rt.petSessionFor(key.division, key.name, key.gid), nowMs)...)
-	frames = append(frames, rt.advancePetSatiety(key, nowMs)...)
-	frames = append(frames, rt.advancePetNaturalRecovery(key, nowMs)...)
-	frames = append(frames, rt.advancePet(key, nowMs)...)
-	rt.petMu.Lock()
-	state := rt.petSessions[key]
-	rt.petMu.Unlock()
+	frames = append(frames, rt.advancePetSpiritSession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetBond(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetSatietySession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetNaturalRecoverySession(key, state, nowMs)...)
+	frames = append(frames, rt.advancePetSession(key, state, nowMs)...)
 	if state == nil {
 		return 0, frames, nil, nil, nil, "", nil
 	}
@@ -445,12 +451,25 @@ func routePetPublicFrames(divisionID string, petGID uint32, ownerCharacterID int
 /*
 ================
 advancePet
+
+Key-only entry for direct callers: fetch the session, then judge it.
+The per-tick sweep enters through advancePetSession with the state it
+already holds (#3126).
 ================
 */
 func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation.Frame) {
 	rt.petMu.Lock()
 	state := rt.petSessions[key]
 	rt.petMu.Unlock()
+	return rt.advancePetSession(key, state, nowMs)
+}
+
+/*
+================
+advancePetSession
+================
+*/
+func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs int64) (output []simulation.Frame) {
 	if state == nil {
 		return nil
 	}

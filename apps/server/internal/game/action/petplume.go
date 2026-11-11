@@ -86,7 +86,15 @@ advanceCrowPlume
 ================
 */
 func (rt *Runtime) advanceCrowPlume(key petOwnerKey, now int64) {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advanceCrowPlumeSession(key, rt.petSessionFor(key.division, key.name, key.gid), now)
+}
+
+/*
+================
+advanceCrowPlumeSession
+================
+*/
+func (rt *Runtime) advanceCrowPlumeSession(key petOwnerKey, state *petSession, now int64) {
 	if state == nil || state.plume == nil {
 		return
 	}
