@@ -2991,6 +2991,50 @@ test("GPU COS bag leaves a quick transfer's slot to the worker in either directi
 	}
 });
 
+test("COS bag blocks the cells past its capacity under pt_block", () => {
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [],
+			cosRecords: [ {
+				gid: 7,
+				refObjId: 102,
+				band: 4,
+				name: "Pet",
+				hp: 100,
+				dead: false,
+				status: 30,
+				inventory: []
+			} ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "cos-bag" } );
+		let output = f.ui.step( state, ++now );
+		const blocked = () =>
+			f.scenes.at( -1 ).quads.filter( q => String( q.texture ).endsWith( "/interface/pet/pt_block.png" ) ).length;
+		const slot = id => output.controls.find( c => c.id === id );
+		// A full first page: no cell is blocked.
+		assert.equal( slot( "cos-slot:27" )?.disabled, false );
+		assert.equal( blocked(), 0 );
+		f.ui.event( { kind: "activate", id: "cos-next" } );
+		output = f.ui.step( state, ++now ) ?? output;
+		// 30 slots: the second page holds two cells, the other 26 are blocked.
+		assert.equal( slot( "cos-slot:29" )?.disabled, false );
+		assert.equal( slot( "cos-slot:30" )?.disabled, true );
+		assert.equal( slot( "cos-slot:55" )?.disabled, true );
+		assert.equal( blocked(), 26 );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("Ctrl+click moves an item across the open pet bag in either direction", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -6949,5 +6993,35 @@ test("a stall beside a separate window keeps that window open", () => {
 		}
 	} finally {
 		f.dispose();
+	}
+});
+
+test("survival arena death suppresses town rebirth while ordinary deaths keep it", () => {
+	/** @type {[number, number, boolean][]} */
+	const cases = [ [ 25580, 30, false ], [ 25580, 31, false ], [ 25580, 1, true ], [ 25000, 30, true ] ];
+	for ( const [regionId, worldId, expected] of cases ) {
+		const sent = [], f = uiFixture( c => sent.push( c ) );
+		try {
+			const state = {
+				...f.state,
+				entities: [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ],
+				gameplay: {
+					...f.state.gameplay,
+					pose: { ...f.state.gameplay.pose, regionId },
+					fortress: { worldId, worlds: [], fortresses: [], wars: [], registered: [] },
+					vitals: [ { gid: 1, hp: 0, mp: 0, deathState: true } ]
+				}
+			};
+			let scene;
+			for ( let now = 0; now <= 10000; now += 100 ) scene = f.ui.step( state, now ) ?? scene;
+			assert.ok( scene );
+			assert.equal( scene.controls.some( c => c.id === "rebirth-point" ), expected );
+			if ( !expected ) {
+				f.ui.event( { kind: "activate", id: "rebirth-point" } );
+				assert.equal( sent.some( c => c.command?.kind === "rebirth" ), false );
+			}
+		} finally {
+			f.ui.dispose();
+		}
 	}
 });

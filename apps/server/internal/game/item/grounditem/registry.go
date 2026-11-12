@@ -65,7 +65,9 @@ type Item struct {
 	Codename   string
 	// TypeFlags is the itemdata type-flag word; it selects the conditional
 	// fields of the spawn row.
-	TypeFlags uint16
+	// ArenaPowerup is ephemeral; tagged pickups never enter an inventory.
+	ArenaPowerup uint8
+	TypeFlags    uint16
 	// GoldAmount is non-zero only for a gold heap.
 	GoldAmount   uint32
 	Plus         uint8

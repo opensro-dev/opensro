@@ -40,6 +40,9 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	c := rt.findCharacter(division, name)
+	if run := rt.sookRun(division, c); run != nil && run.program.PausedAt != 0 {
+		return nil
+	}
 	if c == nil {
 		rt.storePlayerAbnormal(division, name, nil)
 		return nil

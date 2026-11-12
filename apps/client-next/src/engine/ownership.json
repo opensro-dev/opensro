@@ -4,6 +4,7 @@
   "bootstrap": "src/bootstrap.ts",
   "modules": {
     "src/engine/runtime/ui/frame/frame.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/debug-console.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/hud/debug-console.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/reverse-return-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -134,6 +135,7 @@
     "src/engine/runtime/characters/sounds/sounds.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/effects/effects.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/effects/spine-aims.ts": "src/engine/runtime/characters/effects/effects.ts",
+    "src/engine/runtime/characters/effects/survival-effects.ts": "src/engine/runtime/characters/effects/effects.ts",
     "src/engine/runtime/assets/worker/effects/effects.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/assets/worker/effects/program/program.ts": "src/engine/runtime/assets/worker/effects/effects.ts",
     "src/engine/runtime/ui/ui.ts": "src/engine/runtime/runtime.ts",
@@ -204,6 +206,7 @@
     "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
+    "src/engine/runtime/ui/hud/map-drawer.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",

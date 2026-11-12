@@ -116,6 +116,11 @@ when it exists.
 
 ## Packs
 
+The owner's newer Survival Colosseum can also be staged into a separate
+native-based root without editing PK2s. See
+[Survival Arena map import](../features/SURVIVAL-ARENA-MAP.md) for the pinned
+importer, shared texture/lighting publication and matched server projection.
+
 Small assets are delivered in binary packs (about 50 MiB each) instead of
 thousands of loose files. `packs/manifest.json` maps every logical `/assets/...`
 path to a pack, byte offset, length, MIME type and SHA-256. The build refuses to

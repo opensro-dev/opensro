@@ -637,6 +637,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	if len(fields) > 54 {
 		ref.Icon = strings.TrimSpace(fields[54])
 	}
+	ref.Icon = reinforceRecipeIcon(ref.Codename, ref.Icon)
 	if name, ok := names[ref.NameStrID]; ok {
 		ref.Name = name
 	}

@@ -42,6 +42,15 @@ their run speed; walking and mount speeds are unchanged, and the native follow
 and battle speed rules still compare the unpaced speed. Unset, pets move at
 their native speeds.
 
+Pet bag pages are port-only and on by default (five pages of 28 slots), one
+setting per pet kind: `SRO_GRAB_PET_INVENTORY_PAGES` sizes a grab pet's bag and
+`SRO_TRANSPORT_PET_INVENTORY_PAGES` a transport's cargo bag. Each takes `on`
+(five pages), `off` (native: 28 slots for a grab pet, the authored size for a
+transport) or a page count from 1 to 9; any other value stops the game server
+at startup. A kind left unset follows the older shared `SRO_PET_INVENTORY_PAGES`
+(`on` or `off`, default `on`). A bag is only ever raised, when the pet is
+summoned or restored: a lower setting never shrinks a bag or removes an item.
+
 ### Clock of Reincarnation
 
 Right-click the clock to arm the retail yellow cursor (A6), then left-click

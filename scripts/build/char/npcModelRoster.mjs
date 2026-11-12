@@ -22,7 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
-import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 import { TITLE_CROWD_ROSTER } from "./resolveCharRoster.mjs";
 
 const textdataDir = retailTextdataRoot;
@@ -134,7 +134,7 @@ and a default data build ships a client that cannot draw them (#2024).
 export function loadCreatableMobRoster() {
 	return loadServerRoster( "creatable-monsters", "sro-creatable-monster-roster", "creatable monster", {
 		...process.env,
-		SRO_QINSHI_TOMB: qinshiTombEnabled() ? "on" : "off"
+		SRO_QINSHI_TOMB: qinshiTombCombatEnabled() ? "on" : "off"
 	} );
 }
 

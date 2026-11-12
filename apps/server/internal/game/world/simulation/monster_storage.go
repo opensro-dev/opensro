@@ -42,6 +42,7 @@ type residentMonster struct {
 	spawn               monster.SpawnPoint
 	nestDetached        bool
 	gmSpawned           bool
+	arena               bool
 	spawnHeading        uint16
 	tradeVariant        uint8
 	structureState      uint16
@@ -205,7 +206,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		s.maxBodyRadius = radius
 	}
 	resident := residentMonster{row.ConditionalUsed, sparse, ref, nest, row.Help, row.Motion, row.Spawn,
-		row.NestDetached, row.GMSpawned, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
+		row.NestDetached, row.GMSpawned, row.Arena, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
 	held := monsterHotSlot{gid: gid, row: resident, maxHP: row.Ref.MaxHP,
@@ -286,6 +287,7 @@ func (r *residentMonster) fill(dst *monster.Instance, gid uint32) {
 	dst.Spawn = r.spawn
 	dst.NestDetached = r.nestDetached
 	dst.GMSpawned = r.gmSpawned
+	dst.Arena = r.arena
 	dst.SpawnHeading = r.spawnHeading
 	dst.TradeVariant = r.tradeVariant
 	dst.StructureState = r.structureState

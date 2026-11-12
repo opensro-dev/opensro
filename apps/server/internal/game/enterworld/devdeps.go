@@ -15,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -224,6 +225,18 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		if monster.ArabiaEnabled() {
+			// Port-only (#3268): the Baghdad dungeon world joins the
+			// catalogue only while its switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.ArabiaDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.JupiterEnabled() {
 			// Port-only (#3267): the Jupiter field world joins the
 			// catalogue only while its switch is on, before any
@@ -289,6 +302,12 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			template, err = template.WithQinShiTomb(textdataDir)
 			if err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		} else if sookarena.Enabled(os.Getenv(sookarena.Env)) {
+			// Port-only: arena encounters need cave actors, not cave nests or doors.
+			template, err = template.WithQinShiArenaRefs(textdataDir)
+			if err != nil {
+				return nil, fmt.Errorf("arena cave references: %w", err)
 			}
 		}
 		template, err = WithMonsterSummonReferences(template, skills)

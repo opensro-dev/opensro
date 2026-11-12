@@ -120,6 +120,9 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 		return OpResult{}
 	}
 	operation, arg := payload[5], payload[6]
+	if run := rt.sookRun(division, c); operation == petTrainingUse && run != nil && run.program.PausedAt != 0 {
+		return petTrainingReceipt("Choose whether to continue the arena first.")
+	}
 	if operation == petTrainingState && arg == 2 && snapshot.CompanionByGID(gid).Training.TreeVersion < 2 {
 		if !rt.deps.Update(c, "pet-tree-upgrade", func() bool {
 			live := c.CompanionByGID(gid)

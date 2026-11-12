@@ -11,7 +11,7 @@ the per-actor loop: a loop `continue` is `return null` here.
 ===========================================================================
 */
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
-import { isGoldHeapType } from "@/engine/foundation/gameplay/ground-item";
+import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
 import { assembleEquipmentAppearance } from "@/engine/foundation/animation/equipment-appearance";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
@@ -108,7 +108,11 @@ export function createActorAppearance( owner: ActorOwner ) {
 			}
 			if ( entity.groundItem ) {
 				const item = published.items[String( entity.refObjId )],
-					drop = published.dropModels[item?.dropModelPath ?? ""];
+					egg = isSurvivalPowerEgg( entity.refObjId, entity.regionId, gameplay?.fortress?.worldId ?? 0 ) ?
+						published.catalog.get( 5000001 ) :
+						undefined,
+					baseDrop = published.dropModels[item?.dropModelPath ?? ""],
+					drop = egg ? { glb: egg.glb, clips: egg.clips, clipLoop: true, ambientParticles: [] } : baseDrop;
 				if ( !drop ) {
 					if ( published.manifest === published.manifests.length ) {
 						throw Error( "Missing authored drop model for item " + entity.refObjId );

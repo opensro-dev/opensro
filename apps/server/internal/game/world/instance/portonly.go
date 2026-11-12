@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 
+	"opensro.online/server/internal/game/world/arabia"
 	"opensro.online/server/internal/game/world/jupiter"
 	"opensro.online/server/internal/game/world/muhan"
 	"opensro.online/server/internal/game/world/pharaohtomb"
@@ -89,6 +90,28 @@ func TempleDefinitions() []Definition {
 			NativeType:  1,
 			LayerLimit:  templeLayerLimit,
 			PlayerLimit: uint16(world.PlayerLimit),
+		}
+	}
+	return definitions
+}
+
+/*
+================
+ArabiaDefinitions
+
+The one port-only Arabia dungeon world. Type zero, one resident
+layer, no player limit: the default world's own shape.
+================
+*/
+func ArabiaDefinitions() []Definition {
+	worlds := arabia.Worlds()
+	definitions := make([]Definition, len(worlds))
+	for index, world := range worlds {
+		definitions[index] = Definition{
+			ID:         DefinitionID(world.ID),
+			CodeName:   world.CodeName,
+			NativeType: 0,
+			LayerLimit: 1,
 		}
 	}
 	return definitions

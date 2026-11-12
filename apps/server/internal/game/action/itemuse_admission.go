@@ -62,6 +62,7 @@ const (
 	itemUseCrestDelete
 	itemUseGuildRecall
 	itemUseSummonScroll
+	itemUseModelSwitcher
 )
 
 /*
@@ -155,6 +156,14 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 13, 5} {
 		return itemUseSkillTimeTicket
+	}
+	// #3257 (port-only, not native): the mall model switchers ship as
+	// the gender tool's 3/3/13/8, so admission is by codename ahead of
+	// the tool's arm, and the family's handler re-checks
+	// SRO_MALL_CATEGORIES before any effect (modelswitcher.go). The
+	// classification alone grants nothing.
+	if IsModelSwitcher(ref.Codename) {
+		return itemUseModelSwitcher
 	}
 	// Native special consumable case 7 (type 4 = 8): the armour gender change (gendertool.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 8} {

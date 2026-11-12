@@ -36,7 +36,11 @@ type GMMonsterSpawn struct {
 	Count      uint8
 	Type       uint8
 	Position   Spawn
-	NowMs      int64
+	// Port-only, not native: event encounters target the solo entrant.
+	Arena bool
+	// Port-only: non-immediate spawns retain their native proximity acquisition.
+	ArenaPassive bool
+	NowMs        int64
 }
 
 /*
@@ -117,6 +121,10 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		return nil
 	}
 	rarity := GMSpawnRarity(request.Type, ref.MonsterType)
+	if request.Arena && (request.Type == 0x14 || request.Type == 6 && ref.MonsterType == 0) {
+		// Port-only: survival may request elites; native GM grade resolution stays unchanged.
+		rarity = request.Type
+	}
 	created := make([]uint32, 0, count)
 	for len(created) < count {
 		if s.counter >= domain.MaxMonsterGIDCounter {
@@ -125,7 +133,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		angle := float64(float32(float64(float32(float64(s.randomWord())/nativeRandomMaximum)) * nativeCircleRadians))
 		s.counter++
 		actor := monster.Instance{
-			Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true, GMSpawned: true,
+			Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true, GMSpawned: true, Arena: request.Arena,
 			SpawnHeading: HeadingWordFromRadians(angle),
 			Nest: monster.NestRow{
 				SpawnPoint: spawn, PolicyPinned: true, HasRarityOverride: true, RarityOverride: rarity,
@@ -140,6 +148,17 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 				actor.Nest.ConditionalSkills = tactics.ConditionalSkills
 				actor.Nest.SightRange = float64(tactics.Controls.SightRange)
 				actor.Nest.Aggressive = tactics.Controls.AggressType == 0
+			}
+		}
+		if request.Arena {
+			actor.Arena = true
+			actor.Nest.TargetPolicy = 2
+			// Keep native sight/aggression for the other 70%; passive must not disable proximity aggro.
+			if !request.ArenaPassive {
+				actor.Nest.Aggressive = true
+				actor.Nest.SightRange = 640
+				actor.Nest.Controls.AggressType = 0
+				actor.Nest.Controls.SightRange = 640
 			}
 		}
 		mover := monster.NewSpawnMover(actor, request.NowMs)

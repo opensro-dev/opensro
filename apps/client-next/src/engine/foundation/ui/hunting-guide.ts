@@ -7,7 +7,7 @@ Port-only approximate guidance from static outdoor anchors.
 
 ===========================================================================
 */
-import { featuresAt } from "@/engine/foundation/world/plane";
+import { featuresAt, planeKindOf } from "@/engine/foundation/world/plane";
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { worldMapFrame } from "./world-map";
 const MAX_MONSTERS = 4096, MAX_POINTS = 65536, MAX_NAME = 128;
@@ -45,6 +45,10 @@ HuntingCatalogue
 export interface HuntingCatalogue {
 	readonly monsters: readonly HuntingMonster[];
 	readonly regions: ReadonlyMap<number, readonly HuntingPoint[]>;
+	// Dungeon-region anchors (issue #3239), keyed by their raw region
+	// id with points in region-local coordinates: the outdoor regions
+	// above key anchors by world sector, which a dungeon region is not.
+	readonly dungeons: ReadonlyMap<number, readonly HuntingPoint[]>;
 	readonly sections: readonly HuntingSection[];
 }
 // The level filter's span (issue #3167): with the filter on, the map
@@ -101,25 +105,63 @@ export function monsterDirectory(
 ): readonly MonsterDirectoryRegion[] {
 	const regions: MonsterDirectoryRegion[] = [];
 	for ( const [region, points] of catalogue.regions ) {
-		const byId = new Map<number, MonsterDirectoryMonster>();
-		for ( const point of points ) {
-			if ( maxLevel !== undefined && point.monster.level > maxLevel ) continue;
-			if ( !byId.has( point.monster.refObjId ) ) {
-				byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
-			}
-		}
-		if ( byId.size === 0 ) continue;
-		const monsters = [ ...byId.values() ].sort(
-			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
-		);
-		regions.push( {
-			region,
-			minLevel: monsters[0]!.monster.level,
-			maxLevel: monsters[monsters.length - 1]!.monster.level,
-			monsters
-		} );
+		const row = directoryRegion( region, points, maxLevel );
+		if ( row ) regions.push( row );
 	}
 	return regions.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
+}
+
+/*
+================
+directoryRegion
+
+One region's directory row from its anchors: one row per species at
+its first anchor there, sorted by level then name; undefined when the
+level cap empties the region.
+================
+*/
+function directoryRegion(
+	region: number,
+	points: readonly HuntingPoint[],
+	maxLevel?: number
+): MonsterDirectoryRegion | undefined {
+	const byId = new Map<number, MonsterDirectoryMonster>();
+	for ( const point of points ) {
+		if ( maxLevel !== undefined && point.monster.level > maxLevel ) continue;
+		if ( !byId.has( point.monster.refObjId ) ) {
+			byId.set( point.monster.refObjId, { monster: point.monster, region, x: point.x, z: point.z } );
+		}
+	}
+	if ( byId.size === 0 ) return undefined;
+	const monsters = [ ...byId.values() ].sort(
+		( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+	);
+	return {
+		region,
+		minLevel: monsters[0]!.monster.level,
+		maxLevel: monsters[monsters.length - 1]!.monster.level,
+		monsters
+	};
+}
+
+/*
+================
+dungeonDirectory
+
+The species of one dungeon region (issue #3239), as the world
+directory rows read: a dungeon page lists its own floor's region
+from the catalogue's dungeon anchors. Donwhang's floors share one
+region, so its pages list the cave's species together; the Tomb's
+floors are regions of their own.
+================
+*/
+export function dungeonDirectory(
+	catalogue: HuntingCatalogue,
+	regionId: number,
+	maxLevel?: number
+): MonsterDirectoryRegion | undefined {
+	const points = catalogue.dungeons.get( regionId );
+	return points ? directoryRegion( regionId, points, maxLevel ) : undefined;
 }
 
 /*
@@ -137,9 +179,15 @@ export function filterHuntingGuide( catalogue: HuntingCatalogue, maxLevel: numbe
 		const kept = points.filter( point => point.monster.level <= maxLevel );
 		if ( kept.length > 0 ) regions.set( region, kept );
 	}
+	const dungeons = new Map<number, readonly HuntingPoint[]>();
+	for ( const [region, points] of catalogue.dungeons ) {
+		const kept = points.filter( point => point.monster.level <= maxLevel );
+		if ( kept.length > 0 ) dungeons.set( region, kept );
+	}
 	return {
 		monsters: catalogue.monsters.filter( monster => monster.level <= maxLevel ),
 		regions,
+		dungeons,
 		sections: buildHuntingSections( regions )
 	};
 }
@@ -158,15 +206,20 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 		!Array.isArray( data.rows ) || data.rows.length > MAX_MONSTERS
 	) throw Error( "Invalid hunting guide" );
 	const monsters: HuntingMonster[] = [], regions = new Map<number, HuntingPoint[]>(), ids = new Set<number>();
+	const dungeons = new Map<number, HuntingPoint[]>();
 	let count = 0;
 	for ( const value of data.rows ) {
-		const row = value as HuntingMonster & { points: { regionId: number; x: number; z: number; }[]; };
+		const row = value as HuntingMonster & {
+			points: { regionId: number; x: number; z: number; }[];
+			dungeonPoints?: { regionId: number; x: number; z: number; }[];
+		};
 		if (
 			!row || !Number.isInteger( row.refObjId ) || row.refObjId <= 0 || ids.has( row.refObjId ) ||
 			typeof row.name !== "string" || !row.name.trim() || row.name.length > MAX_NAME ||
 			typeof row.nameKey !== "string" || row.nameKey.length > MAX_NAME ||
 			!Number.isInteger( row.level ) || row.level < 1 || row.level > 255 || !Array.isArray( row.points ) ||
-			(count += row.points.length) > MAX_POINTS
+			(row.dungeonPoints !== undefined && !Array.isArray( row.dungeonPoints )) ||
+			(count += row.points.length + (row.dungeonPoints?.length ?? 0)) > MAX_POINTS
 		) throw Error( "Invalid hunting guide row" );
 		const monster: HuntingMonster = {
 			refObjId: row.refObjId,
@@ -194,8 +247,23 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 			points.push( { monster, x, z } );
 			regions.set( key, points );
 		}
+		// Dungeon anchors (issue #3239) keep their region-local
+		// coordinates: a dungeon region has no outdoor sector to key by.
+		for ( const p of row.dungeonPoints ?? [] ) {
+			if (
+				!p || !Number.isInteger( p.regionId ) || p.regionId < 0 || p.regionId > MAX_REGION_ID ||
+				planeKindOf( p.regionId ) !== "cave" ||
+				!Number.isFinite( p.x ) || !Number.isFinite( p.z ) ||
+				Math.abs( p.x ) > MAX_LOCAL_POSITION || Math.abs( p.z ) > MAX_LOCAL_POSITION
+			) {
+				throw Error( "Invalid hunting guide dungeon location" );
+			}
+			const points = dungeons.get( p.regionId ) ?? [];
+			points.push( { monster, x: p.x, z: p.z } );
+			dungeons.set( p.regionId, points );
+		}
 	}
-	return { monsters, regions, sections: buildHuntingSections( regions ) };
+	return { monsters, regions, dungeons, sections: buildHuntingSections( regions ) };
 }
 
 /*

@@ -72,8 +72,17 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtomb", nil, false)
 	// The temple band worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/temple", nil, false)
+	// The Arabia dungeon world (port-only): the same leaf shape again.
+	checkPackageImports(t, root, modulePath, "internal/game/world/arabia", nil, false)
 	// The Jupiter worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/jupiter", nil, false)
+	// The Pharaoh Temple (port-only, the job temple): the switch and the
+	// identity table the portal catalogue and the movement authority ask.
+	// Its one dependency is world's dependency-free plane geometry, which
+	// owns how a dungeon id becomes a region (world.DungeonRegionID).
+	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtemple", map[string]bool{
+		modulePath + "/internal/game/world": true,
+	}, false)
 	// The Muhan wave worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/muhan", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
@@ -82,6 +91,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/game/world/alexandria":  true,
 		modulePath + "/internal/game/world/pharaohtomb": true,
 		modulePath + "/internal/game/world/temple":      true,
+		modulePath + "/internal/game/world/arabia":      true,
 		modulePath + "/internal/game/world/jupiter":     true,
 		modulePath + "/internal/game/world/muhan":       true,
 		modulePath + "/internal/data/texttable":         true,

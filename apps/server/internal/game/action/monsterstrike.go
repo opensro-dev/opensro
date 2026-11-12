@@ -194,6 +194,9 @@ owner's equipment can neither shield nor weaken a pet.
 ================
 */
 func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Character, pet *enterworld.CharacterCOS, ref *enterworld.CharacterRef, pose simulation.Spawn) monsterStrikeOutcome {
+	if run := rt.sookRun(in.division, owner); run != nil && run.program.PausedAt != 0 {
+		return monsterStrikeOutcome{alive: true, refusal: simulation.MonsterAttackCommandRejected}
+	}
 	// Recheck at impact: a stale cast or area victim cannot harm a grab pet,
 	// which the native hostility test never treats as hostile (a pick pet COS).
 	if ref.TidWord>>11 == domain.PickupPetBand {

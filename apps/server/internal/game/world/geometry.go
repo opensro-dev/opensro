@@ -122,6 +122,21 @@ func IsDungeonRegion(regionID uint16) bool {
 
 /*
 ================
+DungeonRegionID
+
+The dungeon plane's region for a dungeoninfo.txt id: the plane bit over
+the id, as the client's region ids name every dungeon (0x8001 Donwhang,
+0x8002-0x8007 the Ch'in Tomb). This is the one place a dungeon id
+becomes a region. Tables that list dungeons by id ask here rather than
+compose the bit themselves.
+================
+*/
+func DungeonRegionID(dungeonID uint16) uint16 {
+	return DungeonRegionBit | dungeonID&^DungeonRegionBit
+}
+
+/*
+================
 SamePlane
 
 SamePlane reports whether both regions belong to the same outdoor/dungeon

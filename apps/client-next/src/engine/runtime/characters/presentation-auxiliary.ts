@@ -132,6 +132,8 @@ StageFrame
 ================
 */
 interface StageFrame {
+	readonly arenaLoot?: readonly EntityState[];
+	readonly particleHolders?: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
 	readonly orbActors: readonly CharacterActor[];
 	readonly effectActors: readonly CharacterActor[];
 	readonly next: Map<number, CharacterActor>;
@@ -339,6 +341,19 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					.sort( ( a, b ) => a - b ) :
 				undefined;
 			const stageAlive = new Set<number>();
+			// Port-only arena: accumulated loot must not consume every combat-effect slot.
+			const needed = next.size + orbActors.length + effectActors.length - CHARACTER_ACTORS;
+			if ( needed > 0 && player && frame.arenaLoot?.length ) {
+				const loot = frame.arenaLoot.filter( entity => next.has( entity.gid ) ).sort( ( a, b ) =>
+					effectDistanceSq( b, player ) - effectDistanceSq( a, player ) || b.gid - a.gid
+				);
+				for ( let i = 0; i < Math.min( needed, loot.length ); i++ ) next.delete( loot[i]!.gid );
+				for ( const holders of [ animationHolders, frame.particleHolders ?? [] ] ) {
+					for ( let i = holders.length - 1; i >= 0; i-- ) {
+						if ( !next.has( holders[i]!.actor.gid ) ) holders.splice( i, 1 );
+					}
+				}
+			}
 			// The original draws every decoration (85C020 appends to an
 			// unbounded list); the port's renderer holds CHARACTER_ACTORS in
 			// all. When the effects outnumber the room left, the nearest draw

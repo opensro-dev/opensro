@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -28,10 +29,12 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/connjournal"
@@ -49,6 +52,7 @@ var unlistedSettings = map[string]string{
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
+	companion.EnvPetInventoryPages:      "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -64,6 +68,9 @@ var unlistedSettings = map[string]string{
 	"SRO_SHORT_NOTICE_FADE_MS":           "timing of a player's own Experimental Short notices row",
 	"SRO_CHAT_ACK_TIMEOUT_MS":            "the client's wait before warning that a chat line may not have arrived",
 	"SRO_MOST_WANTED_NOTICES_PER_MINUTE": "a cap on the Most Wanted notices, an operator throttle",
+	// The survival arena rule names its checkpoint chests, not their pacing.
+	"SRO_SOOK_CHECKPOINT_SECONDS": "operator pacing of the survival arena rule's checkpoint chests",
+	"SRO_SOOK_CHEST_CAPACITY":     "operator size of the survival arena rule's checkpoint chests",
 	// The trade group: each number is shown in its own rule's text.
 	"SRO_TRADE_ROUTE_DONWHANG_PERCENT":         "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_HOTAN_PERCENT":            "shown in the trade tiers rule",
@@ -131,7 +138,7 @@ func publicRules() publicstats.RulesResponse {
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
-	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
+	petPages, _ := companion.PetInventoryPagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
@@ -160,6 +167,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
+			{Flag: pharaohtemple.EnvPharaohTemple, On: pharaohtemple.Enabled(),
+				Native: "There is no Pharaoh Temple.",
+				Now:    "The Pharaoh Temple opens in the Storm and Cloud Desert: two desert gates (one for the merchant and hunter jobs, one for the thief job) lead to the Temple and its six sanctums, for characters of level 105 and over.",
+				Why:    "Endgame dungeon for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
 				Native: "There is no temple instance.",
 				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
@@ -167,6 +178,10 @@ func publicRules() publicstats.RulesResponse {
 			{Flag: monster.EnvSkytemple, On: monster.SkytempleEnabled(),
 				Native: "There is no Sky Temple.",
 				Now:    "The Sky Temple's four fields open above Jangan's Jupiter Temple, hunting grounds of monsters at levels 131 to 178.",
+				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
+			{Flag: monster.EnvArabia, On: monster.ArabiaEnabled(),
+				Native: "There is no Arabia.",
+				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, and the Baghdad dungeon, hunting grounds of monsters at levels 120 to 130.",
 				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
@@ -204,10 +219,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
-			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
-				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
-				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
-				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvGrabPetInventoryPages, On: petPages.Grab > 0,
+				Native: "A grab pet's bag holds 28 slots.",
+				Now:    petInventoryPagesNow("grab pet", petPages.Grab),
+				Why:    "Owner-requested convenience: more grab pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvTransportPetInventoryPages, On: petPages.Transport > 0,
+				Native: "A transport's cargo bag holds its authored size.",
+				Now:    petInventoryPagesNow("transport", petPages.Transport),
+				Why:    "Owner-requested convenience: more transport cargo without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -284,6 +303,7 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per UTC day, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
 				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
@@ -351,7 +371,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance: the outfits were already in the game data."},
 			{Flag: commerce.EnvMallCategories, On: mallCategoriesOn,
 				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
-				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, and the Destruction Rondo is listed for silk.",
+				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, the Destruction Rondo is listed for silk, and Premium's Gears tab sells the later mall's leveled magic stones.",
 				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",
@@ -655,4 +675,17 @@ func groupedGold(gold int64) string {
 		out = append(out, digits[i])
 	}
 	return string(out)
+}
+
+/*
+================
+petInventoryPagesNow
+
+The rules page's description of one pet kind's bag pages.
+================
+*/
+func petInventoryPagesNow(kind string, pages uint8) string {
+	slots := int(pages) * int(companion.PetInventoryPageSlots)
+	return fmt.Sprintf("Every %s's bag holds at least %d pages of %d slots (%d in all). A bag that is smaller gains the slots when summoned; a lower setting never removes an item or shrinks a bag.",
+		kind, pages, companion.PetInventoryPageSlots, slots)
 }
