@@ -317,6 +317,7 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	template, err = monster.AppendHunting2(template, dir, monster.Hunting2Enabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
+	}
 	// Muhan appends no nests (its worlds run waves, not nests); the
 	// read exists so the catalogue refuses a Muhan build whose wave
 	// file is missing, and the kinds ride in via their shard.
