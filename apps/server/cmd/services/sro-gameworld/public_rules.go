@@ -49,6 +49,7 @@ var unlistedSettings = map[string]string{
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
+	companion.EnvPetInventoryPages:      "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -131,7 +132,7 @@ func publicRules() publicstats.RulesResponse {
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
-	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
+	petPages, _ := companion.PetInventoryPagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -183,10 +184,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
-			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
-				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
-				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
-				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvGrabPetInventoryPages, On: petPages.Grab > 0,
+				Native: "A grab pet's bag holds 28 slots.",
+				Now:    petInventoryPagesNow("grab pet", petPages.Grab),
+				Why:    "Owner-requested convenience: more grab pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvTransportPetInventoryPages, On: petPages.Transport > 0,
+				Native: "A transport's cargo bag holds its authored size.",
+				Now:    petInventoryPagesNow("transport", petPages.Transport),
+				Why:    "Owner-requested convenience: more transport cargo without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -618,4 +623,17 @@ func groupedGold(gold int64) string {
 		out = append(out, digits[i])
 	}
 	return string(out)
+}
+
+/*
+================
+petInventoryPagesNow
+
+The rules page's description of one pet kind's bag pages.
+================
+*/
+func petInventoryPagesNow(kind string, pages uint8) string {
+	slots := int(pages) * int(companion.PetInventoryPageSlots)
+	return fmt.Sprintf("Every %s's bag holds at least %d pages of %d slots (%d in all). A bag that is smaller gains the slots when summoned; a lower setting never removes an item or shrinks a bag.",
+		kind, pages, companion.PetInventoryPageSlots, slots)
 }
