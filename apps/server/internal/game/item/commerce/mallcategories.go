@@ -40,6 +40,17 @@ ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
 30 silk for one soldier and 60 for two, badged new; their use is
 action/summonscroll.go, behind this same setting.
 
+Three screenshot kinds are deliberately not listed (#3331, recorded
+in docs/features/GEARS-STONES.md). Sabakun's jewel and the extension
+gear have rows in the pinned later clients and the ISRO-R backup,
+but both serve only the Devil's Spirit - a wearable, awakening
+clock and alchemy line that neither v1.150 nor this port has - so
+listing them would sell items that can never be used. The Joon and
+Firespirits summon scrolls of HOT shop > Halloween Exclusive have
+no row in any source this build reads. None of the three is
+authored stock here; do not add a listing without the system (or,
+for the scrolls, a source row) that makes it work.
+
 ===========================================================================
 */
 package commerce
