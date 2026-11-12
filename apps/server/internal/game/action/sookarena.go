@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -231,7 +232,7 @@ func (rt *Runtime) enterSookArenaInsideDoor(division string, c *enterworld.Chara
 		return refuse("Survival Arena: entry failed; your daily entry was not spent.")
 	}
 	run := &sookArenaRun{division: division, name: c.Name, ownerID: c.ID, lease: lease, center: center, refs: refs, program: sookarena.New(rt.Now().UnixMilli()), bossPowerups: map[uint32]bool{}}
-	run.program.CheckpointInterval = int64(arenaSetting("SRO_SOOK_CHECKPOINT_SECONDS", 300, 30, 300)) * 1000
+	run.program.CheckpointInterval = tunables.Current().Int(tunables.SookCheckpointSeconds) * 1000
 	if resume {
 		run.program.Started = rt.Now().UnixMilli() - c.SookChest.ElapsedMs
 		run.program.Completed, run.program.Kills = c.SookChest.Stage, c.SookChest.Kills

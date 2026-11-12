@@ -70,6 +70,10 @@ const (
 	ShortNoticeShowMs          = "short_notice_show_ms"
 	ShortNoticeFadeMs          = "short_notice_fade_ms"
 	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
+	// The Sook survival arena (SRO_SOOK_SURVIVAL_ARENA; game/action
+	// sookarena.go): the checkpoint interval and a chest's row capacity.
+	SookCheckpointSeconds = "sook_checkpoint_seconds"
+	SookChestCapacity     = "sook_chest_capacity"
 	// ChatItemLinksPerMessage bounds the port-only item links of one chat
 	// line (SRO_CHAT_ITEM_LINKS; game/social/chat itemlinks.go).
 	ChatItemLinksPerMessage = "chat_item_links_per_message"
@@ -145,6 +149,13 @@ var Registry = []Setting{
 	{Key: SoxNoticeMinDegree, Env: "SRO_SOX_NOTICE_MIN_DEGREE", Kind: Int, Default: 6, Min: 1, Max: 12,
 		Step: 1, Class: Live, Group: "Notices", Label: "Seal-drop notice minimum degree", Unit: "degree",
 		Help: "Lowest equipment degree a seal drop announces (1 announces every degree)."},
+	{Key: SookCheckpointSeconds, Env: "SRO_SOOK_CHECKPOINT_SECONDS", Kind: Int, Default: 300, Min: 30, Max: 300,
+		Step: 1, Class: Live, Group: "Survival Arena", Label: "Checkpoint interval", Unit: "seconds",
+		Help: "Seconds of spawning between checkpoint chests, read when a run starts; also sets each wave's budget. 30 is for accelerated testing."},
+	// Max is action.arenaChestLimit, the rows a stored chest holds.
+	{Key: SookChestCapacity, Env: "SRO_SOOK_CHEST_CAPACITY", Kind: Int, Default: 200, Min: 1, Max: 200,
+		Step: 1, Class: Live, Group: "Survival Arena", Label: "Checkpoint chest capacity", Unit: "rows",
+		Help: "Reward item rows a checkpoint chest holds, read at each roll; keep at least 70 for the full stage-5 reward."},
 	// The client tuning the world-entry bootstrap carries (enterworld
 	// UiTuning; the client's ui-tuning.ts holds the same bounds). A fade is
 	// at most 2000 and a banner at least 3000, so a fade never outlasts it.

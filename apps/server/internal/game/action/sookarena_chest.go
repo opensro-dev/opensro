@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"strconv"
 
 	"opensro.online/server/internal/domain"
@@ -21,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/sookarena"
+	"opensro.online/server/internal/game/tunables"
 )
 
 const opArenaChest uint16 = 0x3fca
@@ -55,19 +55,6 @@ type arenaProjection struct {
 	Items          []shopInventoryRow              `json:"items"`
 	Error          string                          `json:"error,omitempty"`
 	SkillCooldowns []enterworld.EntrySkillCooldown `json:"skillCooldowns"`
-}
-
-/*
-================
-arenaSetting - bounded operator tuning; malformed settings retain the default.
-================
-*/
-func arenaSetting(name string, fallback, low, high int) int {
-	n, err := strconv.Atoi(os.Getenv(name))
-	if err != nil || n < low || n > high {
-		return fallback
-	}
-	return n
 }
 
 /*
@@ -145,7 +132,7 @@ func (rt *Runtime) rollSookChest(run *sookArenaRun, c *enterworld.Character, sta
 	}
 	band := ranges[stage-1]
 	count := band[0] + rt.arenaDraw(band[1]-band[0]+1)
-	room := arenaSetting("SRO_SOOK_CHEST_CAPACITY", 200, 1, arenaChestLimit)
+	room := int(min(tunables.Current().Int(tunables.SookChestCapacity), arenaChestLimit))
 	items := []inventory.Item{}
 	for attempt := 0; len(items) < min(count, room) && attempt < count*16; attempt++ {
 		item, ok := rt.arenaReward(run, c, stage, attempt)

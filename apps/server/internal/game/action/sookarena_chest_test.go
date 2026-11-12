@@ -12,6 +12,7 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -591,4 +592,24 @@ func TestSookStageRerollFailureKeepsSavedPreview(t *testing.T) {
 	if !reflect.DeepEqual(c.SookChest, before.SookChest) {
 		t.Fatal("failed save lost previous rewards")
 	}
+}
+
+/*
+================
+TestSookChestCapacityTunableStopsAtTheStoredLimit
+
+The operator's chest capacity is bounded by the rows a stored chest
+holds, so no accepted value can roll more than the store keeps.
+================
+*/
+func TestSookChestCapacityTunableStopsAtTheStoredLimit(t *testing.T) {
+	for _, s := range tunables.Registry {
+		if s.Key == tunables.SookChestCapacity {
+			if s.Max != arenaChestLimit || s.Default > s.Max {
+				t.Fatalf("capacity bounds %v..%v default %v, want max %d", s.Min, s.Max, s.Default, arenaChestLimit)
+			}
+			return
+		}
+	}
+	t.Fatal("the chest capacity is not a registered tunable")
 }

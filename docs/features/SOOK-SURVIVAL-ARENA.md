@@ -151,7 +151,10 @@ They are private props, cannot enter inventories, and expire with their run.
 | `SRO_SOOK_CHECKPOINT_SECONDS` | 300 | 30–300 | Maximum spawning duration; also sets wave budget. 30 is accelerated testing only |
 | `SRO_SOOK_CHEST_CAPACITY` | 200 | 1–200 | Reward item rows; keep at least 70 for full rewards |
 
-Malformed settings retain defaults. Bundle counts, stage bands, decision time,
+Both are live tunables (`game/tunables`, Nomad vars `sook_checkpoint_seconds`
+and `sook_chest_capacity`): the staff console can change them without a
+restart, and a value outside its bounds or not a number stops the boot rather
+than being clamped. Bundle counts, stage bands, decision time,
 countdowns and pacing are in `game/sookarena` and `action/sookarena_rewards.go`.
 Native loot, blue and seal property generators remain shared. Pet blue maxima
 come from the existing pet-affix DB settings. There is no 10× arena floor-loot
