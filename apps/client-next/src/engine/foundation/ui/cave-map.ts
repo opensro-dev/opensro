@@ -69,13 +69,21 @@ export interface CaveMapCatalog {
 ================
 caveMapCatalog
 
-The published catalogue, refused whole when its shape is wrong.
+The published catalogue, refused whole when its shape is wrong. A
+catalogue of another version is a tree built before the importer
+changed: the refusal names the rebuild that replaces it.
 ================
 */
 export function caveMapCatalog( value: unknown ): CaveMapCatalog {
 	const data = value as Partial<CaveMapCatalog> & { format?: unknown; version?: unknown; };
+	if ( data?.format === CATALOG_FORMAT && data.version !== CATALOG_VERSION ) {
+		throw Error(
+			`dungeon map catalog is version ${String( data.version )}, this client reads ${CATALOG_VERSION}: ` +
+				"rerun the asset build with SRO_VSRO_ROOT naming the pinned v1.188 client"
+		);
+	}
 	if (
-		data?.format !== CATALOG_FORMAT || data.version !== CATALOG_VERSION || !Array.isArray( data.maps ) ||
+		data?.format !== CATALOG_FORMAT || !Array.isArray( data.maps ) ||
 		typeof data.imageRoot !== "string" || typeof data.signIcon !== "string" ||
 		typeof data.monsterLevelNote !== "string" || !data.monsterLevelNote
 	) throw Error( "Invalid dungeon map catalog" );

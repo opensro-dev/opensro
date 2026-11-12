@@ -96,7 +96,11 @@ test("the tomb's six regions are one dungeon of floors, by layer", () => {
 test("a page is found by region and floor, and a bad catalogue is refused", () => {
 	assert.equal( caveMapPage( caveMapCatalog( CATALOG ), 0x8006, 0 ), PAGE );
 	assert.equal( caveMapPage( caveMapCatalog( CATALOG ), 0x8006, 1 ), undefined );
-	assert.throws( () => caveMapCatalog( { ...CATALOG, version: 1 } ) );
+	// A tree built by the older importer is told how to rebuild.
+	assert.throws(
+		() => caveMapCatalog( { ...CATALOG, version: 1 } ),
+		/version 1, this client reads 2.*SRO_VSRO_ROOT/
+	);
 	// A page without its title, or a catalogue without the foot note, is
 	// an import from another shape: refused whole.
 	assert.throws( () => caveMapCatalog( { ...CATALOG, maps: [ { ...PAGE, caption: "" } ] } ) );

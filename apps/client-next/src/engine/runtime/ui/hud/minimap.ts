@@ -125,7 +125,10 @@ function createCaveMapResources( assets: MinimapAssets, base: string ) {
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
 					);
 				}
-			} catch {
+			} catch ( error ) {
+				// The dungeon pages stay off; the refusal says why, so a
+				// stale tree names its rebuild instead of a silent gap.
+				console.warn( "[SRO cave map] " + (error instanceof Error ? error.message : String( error )) );
 				data = undefined;
 			}
 			return true;
