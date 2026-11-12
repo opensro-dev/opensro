@@ -78,7 +78,7 @@ func TestContributorHookInstallsOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("first pass sent %+v", got)
 	}
 	// Nothing changed and nobody arrived: the next pass is silent.
-	hook.Hook(1 + 60_000)
+	hook.Hook(1 + 5_000)
 	select {
 	case extra := <-push.deliveries:
 		t.Fatalf("unchanged roster sent again: %+v", extra)

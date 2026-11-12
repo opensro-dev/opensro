@@ -228,6 +228,11 @@ func TestPushSendsChangesToAllAndTheRosterToNewArrivals(t *testing.T) {
 	if !all || len(decodeRoster(t, payload)) != 0 {
 		t.Fatalf("hide push: all=%v roster=%v", all, decodeRoster(t, payload))
 	}
+	// The refresh bound resends the unchanged roster to everyone.
+	now += refreshIntervalMs + pushIntervalMs
+	if _, _, all := r.Push([]Online{amy, bob, carl}, now); !all {
+		t.Fatal("refresh did not resend the roster to everyone")
+	}
 	// A session that left and came back is sent the roster again.
 	now += 2 * pushIntervalMs
 	r.Push([]Online{amy, bob}, now)

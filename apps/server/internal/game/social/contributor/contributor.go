@@ -60,6 +60,10 @@ const (
 	// pushIntervalMs paces the roster pass, the caravan star's pace: a
 	// new arrival learns the roster within two seconds of entering.
 	pushIntervalMs = 2000
+	// refreshIntervalMs resends the roster to everyone even unchanged:
+	// a client that dropped it (a scene reload, a frame lost before its
+	// world module was ready) recovers within this bound.
+	refreshIntervalMs = 30_000
 	// Command is the chat word a contributor types.
 	Command = "/contributor"
 )
@@ -104,15 +108,16 @@ only callers, and each holds it for a map lookup or a short pass.
 ================
 */
 type Registry struct {
-	mu          sync.Mutex
-	membersPath string
-	hiddenPath  string
-	write       func(string, []byte) error
-	members     map[string]bool
-	hidden      map[string]bool
-	stamp       fileStamp
-	reloadDueMs int64
-	pushDueMs   int64
+	mu           sync.Mutex
+	membersPath  string
+	hiddenPath   string
+	write        func(string, []byte) error
+	members      map[string]bool
+	hidden       map[string]bool
+	stamp        fileStamp
+	reloadDueMs  int64
+	pushDueMs    int64
+	refreshDueMs int64
 	// roster is the payload every session in sent holds.
 	roster []byte
 	sent   map[string]bool
@@ -339,8 +344,9 @@ Push
 
 What the roster pass sends this tick. The roster is the names of the
 online characters whose account shows the title. When it differs from
-the last one, everyone gets it (all true, targets nil); otherwise only
-sessions that never received it do (a new arrival). Nil payload off the
+the last one, or the refresh bound passed, everyone gets it (all true,
+targets nil); otherwise only sessions that never received it do (a new
+arrival). Nil payload off the
 pace or when nobody needs a frame. Sessions that left are forgotten so
 a re-entry is sent the roster again.
 ================
@@ -370,8 +376,9 @@ func (r *Registry) Push(online []Online, nowMs int64) (payload []byte, targets [
 		}
 	}
 	roster := EncodeRoster(names)
-	if string(roster) != string(r.roster) {
+	if string(roster) != string(r.roster) || nowMs >= r.refreshDueMs {
 		r.roster = roster
+		r.refreshDueMs = nowMs + refreshIntervalMs
 		r.sent = make(map[string]bool, len(online))
 		for id := range present {
 			r.sent[id] = true
