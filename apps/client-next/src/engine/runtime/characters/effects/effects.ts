@@ -2105,7 +2105,8 @@ export function createCharacterEffects(
 											{
 												slot: stage.native?.slot ?? 0,
 												fade: (stage.native?.fadeInMs ?? 0) / 1000,
-												loop: stage.action === "AT_LOOP"
+												loop: stage.action === "AT_LOOP",
+												windup: stage.phase === "READY" || stage.phase === "WAIT"
 											} :
 											undefined,
 										family: route ?
@@ -3194,9 +3195,12 @@ export function createCharacterEffects(
 					let flightPose: import("@/engine/contracts/character").CharacterActor["pose"] | undefined;
 					const command = visual.command;
 					if ( command ) {
+						const cast = castStates.get( visual.token );
+						// Inferred: a retained buff token must not keep its completed windup alive.
 						if (
 							!current.has( visual.token ) ||
-							castStates.get( visual.token )?.cancelledAtMs !== undefined || !entity
+							cast?.cancelledAtMs !== undefined || !entity ||
+							command.windup && cast?.shotAtMs !== undefined && clock >= cast.shotAtMs
 						) releaseCommand( command, now );
 						stepRelease( command, now );
 					}

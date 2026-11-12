@@ -5,8 +5,12 @@ import_vsro_dungeon_maps.py - the later client's dungeon pages for the M map
 
 The v1.150 archives have no dungeon world map. The pinned VSRO client has the
 whole system: worldmap_mapinfo.txt's Dungeonmap section (one row per floor),
-interface/worldmap/dungeon's tiles, and worldmap_localinfo.txt's room names
-and gate signs with their destinations. This tool stitches each floor's tiles
+interface/worldmap/dungeon's tiles, worldmap_localinfo.txt's room names
+and gate signs with their destinations, textzonename.txt's page titles
+(the floor's region: "Underground Level 1 of Tomb of Qin-Shi") and
+textuisystem.txt's monster level note the page foot shows. The v1.150 text
+has neither: its zone rows name the tomb floors "Ch'in Tomb B1", and it has
+no world map level filter. This tool stitches each floor's tiles
 into one page image, so the M window shows a floor at once rather than tile by
 tile, and writes one catalogue, later-dungeon-map.json. The asset build runs
 this step when SRO_VSRO_ROOT names the pinned archive (#2956), so a build on
@@ -33,7 +37,7 @@ from import_vsro_tomb_minimap import ddj_payload, entry_name
 from sro_paths import PUBLIC_ROOT
 
 CATALOG_FORMAT = "sro-later-dungeon-map"
-CATALOG_VERSION = 1
+CATALOG_VERSION = 2
 CATALOG_NAME = "later-dungeon-map.json"
 ARCHIVE_ROOT = "interface/worldmap/dungeon/"
 PUBLIC_IMAGE_ROOT = "/assets/images/Media_extracted/interface/worldmap/dungeon/"
@@ -42,6 +46,9 @@ MAP_TABLE = TEXT_ROOT + "worldmap_mapinfo.txt"
 SIGN_TABLE = TEXT_ROOT + "worldmap_localinfo.txt"
 ZONE_TEXT = TEXT_ROOT + "textzonename.txt"
 OBJECT_TEXT = TEXT_ROOT + "textdata_object.txt"
+UI_TEXT = TEXT_ROOT + "textuisystem.txt"
+# The page foot's note: the later client's world map level filter.
+MONSTER_LEVEL_NOTE = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST"
 DUNGEON_SECTION = "#section\tDungeonmap"
 # Donwhang Stone Cave and the six Ch'in Tomb floors: the rows this port has.
 FIRST_MAP_ID = 2001
@@ -146,6 +153,28 @@ def add_signs(rows, lines, names):
 			})
 
 
+def add_captions(rows, zones):
+	"""
+	Puts each floor's page title on its row: the later client's zone name
+	of the floor's region, which its M window heads the page with. A floor
+	whose region has no zone name stops the import, as a page without its
+	title would show another client's caption.
+	"""
+	for row in rows:
+		caption = zones.get(str(row["regionId"]), "")
+		if not caption:
+			raise SystemExit(f"{ZONE_TEXT} names no region {row['regionId']} (Dungeonmap row {row['id']})")
+		row["caption"] = caption
+
+
+def required_text(names, code, table):
+	"""One string the catalogue carries; the import stops when it is absent."""
+	text = names.get(code, "")
+	if not text:
+		raise SystemExit(f"{table} has no {code}")
+	return text
+
+
 def tile_cells(row):
 	"""Each tile of a floor's region box: its file name and page column and row."""
 	return [
@@ -189,7 +218,10 @@ def main():
 		return sro_pk2.payload(data, entries[path])
 
 	rows = map_rows(table_text(read(MAP_TABLE)))
-	names = english_text(table_text(read(ZONE_TEXT)))
+	zones = english_text(table_text(read(ZONE_TEXT)))
+	add_captions(rows, zones)
+	note = required_text(english_text(table_text(read(UI_TEXT))), MONSTER_LEVEL_NOTE, UI_TEXT)
+	names = dict(zones)
 	names.update(english_text(table_text(read(OBJECT_TEXT))))
 	add_signs(rows, table_text(read(SIGN_TABLE)), names)
 
@@ -224,6 +256,7 @@ def main():
 		"version": CATALOG_VERSION,
 		"imageRoot": PUBLIC_IMAGE_ROOT,
 		"signIcon": SIGN_ICON,
+		"monsterLevelNote": note,
 		"maps": rows
 	}
 	path = PUBLIC_ROOT / "assets" / "data" / CATALOG_NAME

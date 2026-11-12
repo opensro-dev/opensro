@@ -280,39 +280,6 @@ func TestTrainingFlagDefaultsOff(t *testing.T) {
 
 /*
 ================
-TestPetInventoryPagesDefaultsOn
-================
-*/
-func TestPetInventoryPagesDefaultsOn(t *testing.T) {
-	for _, value := range []string{"", "on", "1", "true", "ON"} {
-		t.Setenv(EnvPetInventoryPages, value)
-		on, err := PetInventoryPagesEnabled()
-		if err != nil || !on {
-			t.Fatalf("%q = %v, %v; want the five-page bag on", value, on, err)
-		}
-	}
-	for _, value := range []string{"off", "0", "false", "OFF", " off "} {
-		t.Setenv(EnvPetInventoryPages, value)
-		on, err := PetInventoryPagesEnabled()
-		if err != nil || on {
-			t.Fatalf("%q = %v, %v; want the five-page bag off", value, on, err)
-		}
-	}
-	// A raised bag persists, so a typo fails boot instead of reading
-	// as on (the default-on switches' grammar).
-	for _, value := range []string{"of", "unexpected", "2"} {
-		t.Setenv(EnvPetInventoryPages, value)
-		if _, err := PetInventoryPagesEnabled(); err == nil {
-			t.Fatalf("%q read as a setting; want a boot error", value)
-		}
-	}
-	if PetInventorySlots != 5*28 {
-		t.Fatalf("five-page bag = %d slots, want 140", PetInventorySlots)
-	}
-}
-
-/*
-================
 TestRoarRadiusMeters
 ================
 */

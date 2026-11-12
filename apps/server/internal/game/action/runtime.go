@@ -574,6 +574,10 @@ type Runtime struct {
 	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
 	// job level (jobsuitbuff.go; port-only, not native). False is native.
 	JobSuitTiers bool
+	// JobDressTownSpawn reloads a finished dress at the nearest town's
+	// spawn instead of in place (jobdresstown.go; port-only, not native).
+	// False is native.
+	JobDressTownSpawn bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
@@ -637,10 +641,10 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
-	// PetInventoryPages gives every pet bag five pages (companion
-	// PetInventorySlots; port-only, not native; owner 2026-11-07).
-	// False is native.
-	PetInventoryPages bool
+	// PetInventoryPages raises grab pet and transport bags to their
+	// configured pages, each kind on its own (companion inventorypages.go;
+	// port-only, not native; owner 2026-11-07). Zero is native.
+	PetInventoryPages companion.PetInventoryPages
 	// Port-only: DB-configured chance of extra pet gear per admitted normal equipment drop.
 	PetGearDropFactor float64
 	PetGearAffixes    []companion.AffixDef

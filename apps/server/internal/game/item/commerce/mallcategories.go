@@ -29,12 +29,16 @@ packages' own authored ones; the Rondo's authored package takes the
 alchemy stones' 5-silk tier, as a balance the shard owner can retune in
 this one place.
 
-Premium's Gears tab holds the gears magic stones below (the model
-switchers of #3257 ride their own line). The summon scrolls stand in
-Premium's Others tab: the three shipped ITEM_ETC_E050729_SUMMON*_SCROLL
-rows no native family serves, priced 30 silk for one soldier and 60
-for two, badged new; their use is action/summonscroll.go, behind this
-same setting.
+Premium's Gears tab holds the gears magic stones below (the gears
+items of #3257). The sixteen weapon model switchers stand in HOT shop
+> Halloween Models at the later mall's 600 silk, badged hot; their use
+is action/modelswitcher.go. Both families' rows ride the optional
+later-client import, so a catalogue built without it lists none of
+them rather than refusing the boot (Imported below). The summon
+scrolls stand in Premium's Others tab below: the three shipped
+ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
+30 silk for one soldier and 60 for two, badged new; their use is
+action/summonscroll.go, behind this same setting.
 
 ===========================================================================
 */
@@ -43,6 +47,7 @@ package commerce
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -85,6 +90,23 @@ type mallCategoryGood struct {
 	// refused, so a build without the archive boots the rest.
 	Imported bool
 }
+
+// ModelSwitcherItems are the sixteen weapon model switchers the later
+// mall sells (issue #3257): six Chinese and ten European weapon and
+// shield types. action/modelswitcher.go serves their use.
+var ModelSwitcherItems = []string{
+	"ITEM_ORIGIN_CH_HW_SWORD_SCROLL", "ITEM_ORIGIN_CH_HW_BLADE_SCROLL",
+	"ITEM_ORIGIN_CH_HW_TBLADE_SCROLL", "ITEM_ORIGIN_CH_HW_SPEAR_SCROLL",
+	"ITEM_ORIGIN_CH_HW_BOW_SCROLL", "ITEM_ORIGIN_CH_HW_SHIELD_SCROLL",
+	"ITEM_ORIGIN_EU_HW_DAGGER_SCROLL", "ITEM_ORIGIN_EU_HW_SWORD_SCROLL",
+	"ITEM_ORIGIN_EU_HW_TSWORD_SCROLL", "ITEM_ORIGIN_EU_HW_AXE_SCROLL",
+	"ITEM_ORIGIN_EU_HW_CROSSBOW_SCROLL", "ITEM_ORIGIN_EU_HW_DARKSTAFF_SCROLL",
+	"ITEM_ORIGIN_EU_HW_TSTAFF_SCROLL", "ITEM_ORIGIN_EU_HW_HARP_SCROLL",
+	"ITEM_ORIGIN_EU_HW_STAFF_SCROLL", "ITEM_ORIGIN_EU_HW_SHIELD_SCROLL",
+}
+
+// modelSwitcherSilk is the later mall's price of every switcher.
+const modelSwitcherSilk = 600
 
 var mallCategoryTabs = []mallCategoryTab{
 	// The HOT shop, appended after the shipped shops (shop index 5).
@@ -140,10 +162,11 @@ func gearsStoneGoods() []mallCategoryGood {
 }
 
 // mallCategoryGoods is the layout's whole stock: the authored rows
-// below plus the gears stones' generated listings.
-var mallCategoryGoods = append(mallBaseGoods, gearsStoneGoods()...)
+// below plus the gears stones' and the model switchers' generated
+// listings.
+var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), modelSwitcherGoods())
 
-var mallBaseGoods = []mallCategoryGood{
+var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
 	// dresses and hats. All six are SRO_MALL_EXTRA_GOODS packages the
 	// layout re-homes (see the banner).
@@ -173,6 +196,23 @@ var mallBaseGoods = []mallCategoryGood{
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_GOLDTIME", Badge: mallBadgeRecommended},
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_GOLDTIME_PLUS", Badge: mallBadgeRecommended},
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_SILVERTIME", Badge: mallBadgeRecommended},
+}
+
+/*
+================
+modelSwitcherGoods
+
+One Halloween Models listing per switcher, each its own authored
+package, PACKAGE_ plus the item codename.
+================
+*/
+func modelSwitcherGoods() []mallCategoryGood {
+	goods := make([]mallCategoryGood, 0, len(ModelSwitcherItems))
+	for _, item := range ModelSwitcherItems {
+		goods = append(goods, mallCategoryGood{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_" + item,
+			Item: item, Silk: modelSwitcherSilk, Badge: mallBadgeHot, Imported: true})
+	}
+	return goods
 }
 
 /*

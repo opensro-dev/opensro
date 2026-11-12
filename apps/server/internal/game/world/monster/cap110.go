@@ -92,6 +92,8 @@ type cap110Nest struct {
 	ChampionGenPercentage                            int
 	Controls                                         TacticsControls
 	Champion                                         *TacticsControls
+	HiveKey                                          string
+	HiveMaxCount                                     int
 }
 
 /*
@@ -212,6 +214,9 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 			(row.Champion != nil) != (row.Controls.ChampionID != 0) {
 			return Template{}, fmt.Errorf("%s has inconsistent tactics %d", label, row.NestID)
 		}
+		if row.HiveMaxCount < 0 || (row.HiveKey == "") != (row.HiveMaxCount == 0) {
+			return Template{}, fmt.Errorf("%s has inconsistent hive %d", label, row.NestID)
+		}
 		seen[row.NestID] = true
 		if skip != nil && skip(ref, row.Codename) {
 			skipped++
@@ -235,6 +240,7 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 			Radius:     row.Radius, GenerateRadius: row.GenerateRadius, MaxCount: row.MaxCount,
 			RespawnDelayMinSec: row.RespawnDelayMinSec, RespawnDelayMaxSec: row.RespawnDelayMaxSec,
 			Respawn: row.Respawn, InitialDir: row.InitialDir, SpawnType: row.SpawnType, ChampionGenPercentage: row.ChampionGenPercentage,
+			HiveKey: row.HiveKey, HiveMaxCount: row.HiveMaxCount,
 			Controls: row.Controls, HasControls: true, Aggressive: row.Controls.AggressType == 0,
 			SightRange: float64(row.Controls.SightRange), TargetPolicy: row.Controls.ChangeTarget,
 			NativeTacticsFlags: row.Controls.Flags,

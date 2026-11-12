@@ -706,17 +706,19 @@ TestPickupPetBagSizeFollowsPetInventoryPages
 */
 func TestPickupPetBagSizeFollowsPetInventoryPages(t *testing.T) {
 	for _, check := range []struct {
-		name string
-		on   bool
-		want uint8
+		name  string
+		pages companion.PetInventoryPages
+		want  uint8
 	}{
-		{"rule off is native", false, initialPickupCompanionSlots},
-		{"rule on is five pages", true, companion.PetInventorySlots},
+		{"rule off is native", companion.PetInventoryPages{}, initialPickupCompanionSlots},
+		{"grab rule on is five pages", companion.PetInventoryPages{Grab: 5}, companion.PetInventorySlots},
+		{"grab pages are a count", companion.PetInventoryPages{Grab: 3}, 3 * 28},
+		{"the transport rule leaves a grab pet native", companion.PetInventoryPages{Transport: 9}, initialPickupCompanionSlots},
 	} {
 		t.Run(check.name, func(t *testing.T) {
 			c, refs := persistentSummonFixture()
 			rt, _ := newTestRuntime(c, refs)
-			rt.PetInventoryPages = check.on
+			rt.PetInventoryPages = check.pages
 			useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
 			pet := c.Companions()[0]
 			if pet == nil || pet.Container == nil || pet.Container.Capacity != check.want {
@@ -758,7 +760,7 @@ func TestRetainedPetBagRaisedOnSummonNeverLowered(t *testing.T) {
 	pet := c.Companions()[0]
 	pet.Container.Rows = []domain.InventoryRow{row}
 
-	rt.PetInventoryPages = true
+	rt.PetInventoryPages = companion.PetInventoryPages{Grab: 5}
 	dismissAndResummon(t, rt, c, ref)
 	pet = c.Companions()[0]
 	if pet.Container.Capacity != companion.PetInventorySlots || len(pet.Container.Rows) != 1 ||
@@ -767,7 +769,7 @@ func TestRetainedPetBagRaisedOnSummonNeverLowered(t *testing.T) {
 	}
 
 	// Off again: nothing already raised shrinks and no row is lost.
-	rt.PetInventoryPages = false
+	rt.PetInventoryPages = companion.PetInventoryPages{}
 	dismissAndResummon(t, rt, c, ref)
 	pet = c.Companions()[0]
 	if pet.Container.Capacity != companion.PetInventorySlots || len(pet.Container.Rows) != 1 ||
@@ -784,7 +786,7 @@ func TestRetainedPetBagRaisedOnSummonNeverLowered(t *testing.T) {
 	useSummonerFixture(t, rt2, c2, 24, ref2)
 	rt2.advancePets(clock2.NowMs())
 	c2.Companions()[0].Container.Capacity = 200
-	rt2.PetInventoryPages = true
+	rt2.PetInventoryPages = companion.PetInventoryPages{Grab: 5}
 	dismissAndResummon(t, rt2, c2, ref2)
 	if got := c2.Companions()[0].Container.Capacity; got != 200 {
 		t.Fatalf("larger bag lowered to %d", got)

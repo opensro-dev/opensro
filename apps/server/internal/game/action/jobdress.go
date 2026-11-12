@@ -22,7 +22,9 @@ for job suits, notice category 1:
   - the ordinary equip requirements, and the suit's job grade (0xA3).
 
 Taking it off refuses in battle (0x48) or with a full bag (0x07). A
-player who dies or travels before the timer ends keeps the old outfit.
+player who dies or travels before the timer ends keeps the old outfit,
+and so does one who walks: an accepted move cancels the dress
+(cancelJobDressOnMove).
 
 INFERENCE: v1.188 tests the suit's job grade from its own record layout;
 v1.150 carries it as requirement type 2..4 (the job grades the tooltip
@@ -48,6 +50,10 @@ import (
 
 const (
 	opJobDressBar uint16 = 0x3434
+	// opJobDressCancel is v1.150 0x3514 [u32 gid] (75D1E0): it clears the
+	// gid's action bar and, for the local player, prints
+	// UIIT_MSG_STRIP_CANCEL.
+	opJobDressCancel uint16 = 0x3514
 
 	// jobSuitSlot is the job suit's equipment socket.
 	jobSuitSlot uint8 = enterworld.JobSuitSlot
@@ -62,9 +68,13 @@ const (
 
 	// Category 1 notices (v1.188 0x18xx low bytes).
 	jobWearErrBagFull uint8 = 0x07
-	jobWearErrSwap    uint8 = 0x46
-	jobWearErrPending uint8 = 0x47
-	jobWearErrBattle  uint8 = 0x48
+	// jobDressErrCancelled answers a cancelled suit move. Client 75AA1D
+	// prints category 1 code 2 as nothing, so the answer closes silently
+	// and the 0x3514 line is the only text the player sees.
+	jobDressErrCancelled uint8 = 0x02
+	jobWearErrSwap       uint8 = 0x46
+	jobWearErrPending    uint8 = 0x47
+	jobWearErrBattle     uint8 = 0x48
 	// UIIT_MSG_STRGERR_CANT_DETACH_FREEBATTLEITEM_IN_BATTLESTATE.
 	capeStripErrBattle   uint8 = 0x77
 	jobWearErrCart       uint8 = 0x5A
@@ -417,6 +427,36 @@ func (rt *Runtime) beginJobDress(division string, c *enterworld.Character, reque
 
 /*
 ================
+cancelJobDressOnMove
+
+The move event ends a suit move still waiting for its timer. The bar is
+cleared for every observer (0x3514) and the held item move is answered
+with the silent refusal, so the client's inventory lane closes and the
+suit stays where it was.
+
+INFERENCE: the reference server's move-event path was not traced to the
+state changer case 0xE. The v1.150 client carries the cancel for exactly
+this bar (0x3514, client 75D1E0, "Item unequip cancelled"), and the native
+state changers of the same family (the return scroll's cast) end when the
+caster walks; the dress is taken to end the same way. The caller holds
+the division lock.
+================
+*/
+func (rt *Runtime) cancelJobDressOnMove(division string, c *enterworld.Character) {
+	if _, ok := rt.jobDresses.LoadAndDelete(simulation.WorldKey(division, c.Name)); !ok {
+		return
+	}
+	cancel := wire.Frame{Opcode: opJobDressCancel, Payload: wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(c)).Payload()}
+	if rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(division, c.Name, append([]wire.Frame{cancel}, failureResult(jobDressErrCancelled).Frames...))
+	}
+	if rt.PushDivisionPeerFrames != nil {
+		rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{cancel})
+	}
+}
+
+/*
+================
 reloadJobDress
 
 Re-enters the wearer in place after a suit goes on or comes off, so every
@@ -440,6 +480,11 @@ the restore after 1.0 s, which this reuses.
 func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now int64, result *OpResult) {
 	key := simulation.WorldKey(division, c.Name)
 	here := travelPoint{spawn: rt.liveSpawn(key, c, now), world: instance.ID(domain.CharacterWorldInstance(c))}
+	// Port-only, not native: SRO_JOB_DRESS_TOWN_SPAWN reloads at the
+	// nearest town's spawn instead (jobdresstown.go).
+	if rt.JobDressTownSpawn {
+		here = rt.jobDressTownPoint(division, c, here)
+	}
 	var reload OpResult
 	if !rt.deps.UpdateDeferred(c, "job-dress-reload", func() bool {
 		return rt.startReturnCast(returnCast{division: division, character: c, row: -1, duration: skinReloadMs,

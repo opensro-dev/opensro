@@ -157,23 +157,24 @@ test("new published popup resources prepare automatically without a runtime file
 test("normal-tile projection covers its interior exactly without scaling source texels", () => {
 	fc.assert(
 		fc.property( fc.integer( { min: 1, max: 800 } ), fc.integer( { min: 1, max: 600 } ), ( w, h ) => {
+			// One repeating quad: the whole interior, one texel per unit.
 			const quads = normalTile( [ 17, 23, w, h ], "tile", [ 128, 128 ], [ 0, 0, 1000, 1000 ] );
-			assert.equal( quads.reduce( ( area, q ) => area + q.rect[2] * q.rect[3], 0 ), w * h );
-			for ( const q of quads ) {
-				assert.equal( q.uv[2] * 128, q.rect[2] );
-				assert.equal( q.uv[3] * 128, q.rect[3] );
-				assert.ok( q.rect[0] + q.rect[2] <= 17 + w && q.rect[1] + q.rect[3] <= 23 + h );
-			}
+			assert.equal( quads.length, 1 );
+			const [q] = quads;
+			assert.deepEqual( q.rect, [ 17, 23, w, h ] );
+			assert.equal( q.tiled, true );
+			assert.equal( q.uv[2] * 128, w );
+			assert.equal( q.uv[3] * 128, h );
 		} ),
 		{ seed: 150686, numRuns: 150 }
 	);
 	assert.deepEqual(
-		normalTile( [ 0, 0, 148, 112 ], "tile", [ 128, 128 ], [ 0, 0, 200, 200 ] ).map( q => [ q.rect, q.uv ] ),
-		[
-			[ [ 0, 0, 128, 112 ], [ 0, 0, 1, .875 ] ],
-			[ [ 128, 0, 20, 112 ], [ 0, 0, .15625, .875 ] ]
-		]
+		normalTile( [ 0, 0, 148, 112 ], "tile", [ 128, 128 ], [ 0, 0, 200, 200 ] ).map(
+			q => [ q.rect, q.uv, q.tiled ]
+		),
+		[ [ [ 0, 0, 148, 112 ], [ 0, 0, 1.15625, .875 ], true ] ]
 	);
+	assert.deepEqual( normalTile( [ 0, 0, 0, 10 ], "tile", [ 128, 128 ], [ 0, 0, 1, 1 ] ), [] );
 	assert.deepEqual( normalTile( [ 0, 0, 1, 1 ], "tile", undefined, [ 0, 0, 1, 1 ] ), [] );
 	assert.throws( () => normalTile( [ 0, 0, 1, 1 ], "tile", [ 0, 128 ], [ 0, 0, 1, 1 ] ), /extent/ );
 });

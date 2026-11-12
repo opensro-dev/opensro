@@ -263,8 +263,9 @@ func (rt *Runtime) retireEffectsOnEvent(division string, c *enterworld.Character
 RetireMoveEffects
 
 The movement event of the reference server's move command handler: once a player's
-move is accepted, every effect whose skc event mask holds bit 1 ends. The
-movement runtime calls it after releasing the character lock.
+move is accepted, every effect whose skc event mask holds bit 1 ends, and
+a job suit move still on its dress bar is cancelled. The movement runtime
+calls it after releasing the character lock.
 ==================
 */
 func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
@@ -278,6 +279,7 @@ func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
 		rt.retireEffectsOnEvent(division, character, effectEventMove, now)
 		return true
 	})
+	rt.cancelJobDressOnMove(division, character)
 }
 
 /*
