@@ -181,7 +181,7 @@ What one account did across the snapshot.
 type accountFacts struct {
 	characters map[string]string // folded name -> name as stored
 	clients    map[string]bool
-	spans      []Span
+	spans      []int // positions in index.spans
 }
 
 /*
@@ -257,17 +257,17 @@ union-find over merged pairs.
 */
 func buildIndex(spans []Span, now int64) *index {
 	idx := &index{spans: spans, now: now, accounts: map[string]*accountFacts{}, personOf: map[string]string{}}
-	byAddress := map[string]map[string][]Span{}
-	byNetwork := map[string]map[string][]Span{}
+	byAddress := map[string]map[string][]spanInterval{}
+	byNetwork := map[string]map[string]bool{}
 	byClient := map[string]map[string]bool{}
-	for _, span := range spans {
+	for at, span := range spans {
 		facts := idx.accounts[span.Account]
 		if facts == nil {
 			facts = &accountFacts{characters: map[string]string{}, clients: map[string]bool{}}
 			idx.accounts[span.Account] = facts
 		}
 		facts.characters[strings.ToLower(span.Character)] = span.Character
-		facts.spans = append(facts.spans, span)
+		facts.spans = append(facts.spans, at)
 		if span.Client != "" {
 			facts.clients[span.Client] = true
 			group := byClient[span.Client]
@@ -280,18 +280,18 @@ func buildIndex(spans []Span, now int64) *index {
 		if span.IPKey != "" {
 			group := byAddress[span.IPKey]
 			if group == nil {
-				group = map[string][]Span{}
+				group = map[string][]spanInterval{}
 				byAddress[span.IPKey] = group
 			}
-			group[span.Account] = append(group[span.Account], span)
+			group[span.Account] = append(group[span.Account], spanInterval{span.Started, span.end(now)})
 		}
 		if span.NetKey != "" {
 			group := byNetwork[span.NetKey]
 			if group == nil {
-				group = map[string][]Span{}
+				group = map[string]bool{}
 				byNetwork[span.NetKey] = group
 			}
-			group[span.Account] = append(group[span.Account], span)
+			group[span.Account] = true
 		}
 	}
 
@@ -310,9 +310,12 @@ func buildIndex(spans []Span, now int64) *index {
 		if len(accounts) > pairGroupMax {
 			continue
 		}
+		for _, account := range accounts {
+			group[account] = coalesceIntervals(group[account])
+		}
 		for i := 0; i < len(accounts); i++ {
 			for j := i + 1; j < len(accounts); j++ {
-				if minGap(group[accounts[i]], group[accounts[j]], now) > addressWindowMs {
+				if !gapWithin(group[accounts[i]], group[accounts[j]], addressWindowMs) {
 					continue
 				}
 				evidence := pair(accounts[i], accounts[j])
@@ -322,7 +325,7 @@ func buildIndex(spans []Span, now int64) *index {
 		}
 	}
 	for _, group := range byNetwork {
-		accounts := sortedKeys(group)
+		accounts := sortedBoolKeys(group)
 		if len(accounts) > pairGroupMax {
 			continue
 		}
@@ -425,8 +428,8 @@ func buildIndex(spans []Span, now int64) *index {
 	return idx
 }
 
-// sortedKeys returns a span group's account names in order.
-func sortedKeys(group map[string][]Span) []string {
+// sortedKeys returns an address group's account names in order.
+func sortedKeys(group map[string][]spanInterval) []string {
 	keys := make([]string, 0, len(group))
 	for key := range group {
 		keys = append(keys, key)
@@ -435,22 +438,96 @@ func sortedKeys(group map[string][]Span) []string {
 	return keys
 }
 
-// minGap is the smallest distance between any span of a and any of
-// b: zero when they overlap.
-func minGap(a, b []Span, now int64) int64 {
-	var best int64 = -1
-	for _, x := range a {
-		for _, y := range b {
-			gap := max(x.Started, y.Started) - min(x.end(now), y.end(now))
-			if gap < 0 {
-				gap = 0
+// sortedBoolKeys returns an account set's names in order.
+func sortedBoolKeys(group map[string]bool) []string {
+	keys := make([]string, 0, len(group))
+	for key := range group {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+/*
+================
+spanInterval
+
+One span as the gap question sees it: a start and its effective
+end (now while still open), projected while the index is built.
+The address groups keep intervals, not spans: two int64s and no
+pointers, so a 100,000-span account costs the build kilobytes,
+not another slice of sessions for the GC to scan (#3302).
+================
+*/
+type spanInterval struct {
+	started int64
+	ended   int64
+}
+
+/*
+================
+coalesceIntervals
+
+One account's intervals on one address as coverage: sorted by
+start, with overlapping or touching intervals merged into one. A
+reconnect ring leaves thousands of spans milliseconds apart; the
+coverage is the same set of instants either way, so no gap answer
+changes, and the pair walk below sees the short list (#3302).
+Journal rows never end before they start (a crash close is the
+last checkpoint), which is what makes the merge exact.
+================
+*/
+func coalesceIntervals(intervals []spanInterval) []spanInterval {
+	if len(intervals) < 2 {
+		return intervals
+	}
+	sort.Slice(intervals, func(i, j int) bool {
+		if intervals[i].started != intervals[j].started {
+			return intervals[i].started < intervals[j].started
+		}
+		return intervals[i].ended < intervals[j].ended
+	})
+	out := intervals[:1]
+	for _, span := range intervals[1:] {
+		last := &out[len(out)-1]
+		if span.started <= last.ended {
+			if span.ended > last.ended {
+				last.ended = span.ended
 			}
-			if best < 0 || gap < best {
-				best = gap
-			}
+			continue
+		}
+		out = append(out, span)
+	}
+	return out
+}
+
+/*
+================
+gapWithin
+
+Whether any interval of a comes within windowMs of any interval
+of b. Both lists are coalesced (sorted, disjoint within
+themselves), so the nearest neighbours of any interval are the
+ones the two pointers are standing on: the walk visits each
+interval once and stops at the first pair inside the window. The
+only caller asks exactly this question; the old form computed
+every pair's gap to answer it (#3302).
+================
+*/
+func gapWithin(a, b []spanInterval, windowMs int64) bool {
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		x, y := a[i], b[j]
+		if max(x.started, y.started)-min(x.ended, y.ended) <= windowMs {
+			return true
+		}
+		if x.ended <= y.ended {
+			i++
+		} else {
+			j++
 		}
 	}
-	return best
+	return false
 }
 
 // sharedClient reports whether two accounts presented a common
@@ -586,7 +663,8 @@ func (s *Service) Person(character string) (Person, bool, error) {
 			entry.Characters = append(entry.Characters, name)
 		}
 		sort.Strings(entry.Characters)
-		for _, span := range facts.spans {
+		for _, at := range facts.spans {
+			span := idx.spans[at]
 			history = append(history, span)
 			if entry.FirstSeen == 0 || span.Started < entry.FirstSeen {
 				entry.FirstSeen = span.Started

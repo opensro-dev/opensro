@@ -75,6 +75,10 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				continue
 			}
 			price, _, valid := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc, c))
+			if enterworld.FreeGrantItem(item.Codename) {
+				// The quote shows the 0 the sale will pay (#3308).
+				price = 0
+			}
 			quote := shopSaleQuote{CosGID: source.gid, NoBuyback: commerceNoBuyback(item.TypeFlags, item.Codename), Slot: item.Slot, Ref: item.RefObjID, Quantity: item.Quantity, Price: strconv.FormatUint(price, 10)}
 			if inventory.IsTradeGoods(item.TypeFlags) {
 				if item.Quantity == 0 || item.Quantity > maxTradeGoodsStack {

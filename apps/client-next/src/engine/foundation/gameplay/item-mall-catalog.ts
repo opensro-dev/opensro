@@ -8,7 +8,7 @@ owned by the shared inventory decoder, including item-family validation.
 
 ===========================================================================
 */
-import type { MallOffer, MallState, MallTab } from "@/engine/contracts/item-mall";
+import type { MallBadge, MallOffer, MallState, MallTab } from "@/engine/contracts/item-mall";
 import { commerceInteger, commerceJson } from "./commerce";
 
 const MAX_MALL_OFFERS = 65536;
@@ -34,6 +34,18 @@ caption
 function caption( value: unknown ): string {
 	if ( typeof value !== "string" || value.length > MAX_MALL_TEXT ) throw Error( "Invalid mall caption" );
 	return value;
+}
+
+/*
+================
+badge
+
+The N/H/R mark is cosmetic (mallcategories.go): an unknown or absent
+mark decodes as none, so a badge can never brick the catalogue.
+================
+*/
+function badge( value: unknown ): MallBadge | undefined {
+	return value === "new" || value === "hot" || value === "recommended" ? value : undefined;
 }
 
 /*
@@ -118,7 +130,8 @@ export function mallProjection( payload: Uint8Array ) {
 			giftSilk,
 			allowsPoints: row.allowsPoints,
 			purchaseLimit: commerceInteger( row.purchaseLimit, 65535, 1 ),
-			itemIds: row.itemIds.map( id => commerceInteger( id, 0xffffffff, 1 ) )
+			itemIds: row.itemIds.map( id => commerceInteger( id, 0xffffffff, 1 ) ),
+			badge: badge( row.badge )
 		};
 	} );
 	const state: MallState = {

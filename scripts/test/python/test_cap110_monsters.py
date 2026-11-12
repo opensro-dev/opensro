@@ -583,6 +583,223 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual(staged["Equipment"], base["equipment.json"])
 		self.assertNotIn("extra", staged["Properties"]["items"]["ITEM_NATIVE"])
 
+	# ================
+	# test_no_export_names_no_assignments
+	# ================
+	def test_no_export_names_no_assignments(self):
+		self.assertFalse(loot.has_assignments(None))
+
+	# ================
+	# test_client_placements_join_npcpos_by_later_identity
+	#
+	# The client-only claim source (#3246): npcpos names the later
+	# character identity; the join lands on its codename, only MOB_SD_
+	# rows place, a duplicate row stands once, and a dungeon region
+	# arrives signed and masks back to its 0x8000 form.
+	# ================
+	def test_client_placements_join_npcpos_by_later_identity(self):
+		later = {"MOB_SD_FIELD": self.later_row("MOB_SD_FIELD", 0, 105),
+			"NPC_SD_MERCHANT": self.later_row("NPC_SD_MERCHANT", 0, 100)}
+		later["MOB_SD_FIELD"][1], later["NPC_SD_MERCHANT"][1] = "7001", "7002"
+		npcpos = utf16([
+			["7001", "19001", "10.5", "0.0", "20.25"],
+			["7001", "19001", "10.5", "0.0", "20.25"],
+			["7002", "19001", "1.0", "0.0", "2.0"],
+			["7001", "-32767", "3.0", "0.0", "4.0"],
+			["9999", "19001", "5.0", "0.0", "6.0"],
+		])
+		self.assertEqual(monsters.npcpos_placements(npcpos, later), [
+			("MOB_SD_FIELD", 19001, 10.5, 0.0, 20.25),
+			("MOB_SD_FIELD", 0x8001, 3.0, 0.0, 4.0),
+		])
+
+	# ================
+	# test_client_population_stands_at_the_placements
+	#
+	# One outdoor placement of an admitted species is one nest on its
+	# point with the synthesized ordinary posture; dungeon placements
+	# and unadmitted species build none, and nest identities are
+	# sequential over the sorted placements.
+	# ================
+	def test_client_population_stands_at_the_placements(self):
+		placements = [
+			("MOB_SD_FIELD", 19002, 30.0, 0.0, 40.0),
+			("MOB_SD_FIELD", 19001, 10.5, 0.0, 20.25),
+			("MOB_SD_FIELD", 0x8001, 3.0, 0.0, 4.0),
+			("MOB_SD_LOW", 19001, 1.0, 0.0, 2.0),
+		]
+		population = monsters.client_field_population(placements, {"MOB_SD_FIELD": 1})
+		self.assertEqual(population["Version"], 2)
+		rows = population["Rows"]
+		self.assertEqual([(r["NestID"], r["RegionID"], r["X"], r["Z"]) for r in rows],
+			[(1, 19001, 10.5, 20.25), (2, 19002, 30.0, 40.0)])
+		row = rows[0]
+		self.assertEqual((row["WorldID"], row["MaxCount"], row["Radius"], row["GenerateRadius"]), (1, 1, 0, 0))
+		self.assertEqual((row["Respawn"], row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (True, 1, 3))
+		self.assertIsNone(row["Champion"])
+		self.assertEqual(row["Controls"]["SightRange"], monsters.CLIENT_NEST_SIGHT_RANGE)
+		self.assertEqual(row["Controls"]["AggressType"], 0)
+		exported = monsters.tactics_controls(self.tactics_fixture()[1])
+		self.assertEqual(set(row["Controls"]), set(exported))
+
+	# ================
+	# test_client_outdoor_regions_seed_the_placed_sectors
+	#
+	# Stage 1's client-only seeds: the sectors the admitted species'
+	# outdoor placements stand in. The below-window species and the
+	# dungeon placement seed nothing.
+	# ================
+	def test_client_outdoor_regions_seed_the_placed_sectors(self):
+		with tempfile.TemporaryDirectory() as root:
+			vsro = Path(root)
+			field = self.later_row("MOB_SD_FIELD", 0, 105)
+			field[1], field[5] = "7001", "UIO_OBJ_MOB_SD_FIELD"
+			low = self.later_row("MOB_SD_LOW", 0, 99)
+			low[1], low[5] = "7003", "UIO_OBJ_MOB_SD_LOW"
+			media = {
+				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+				"characterdata_6000.txt": utf16([field, low]),
+				"npcpos.txt": utf16([
+					["7001", "19001", "1.0", "0.0", "2.0"],
+					["7001", "-32767", "1.0", "0.0", "2.0"],
+					["7003", "19002", "1.0", "0.0", "2.0"]]),
+			}
+			(vsro / "Media.pk2").write_bytes(archive_bytes(media))
+			self.assertEqual(monsters.client_outdoor_regions(vsro), {(19001 & 255, 19001 >> 8)})
+
+	# ================
+	# build_fixture
+	#
+	# A native output tree and a VSRO Media carrying one admitted field
+	# species (MOB_SD_FIELD, id 7001) and one below the window
+	# (MOB_SD_LOW, id 7003), placed by npcpos outdoors and in a dungeon
+	# region. Returns (vsro, native, output).
+	# ================
+	def build_fixture(self, base):
+		vsro, native, output = base / "vsro", base / "native", base / "output"
+		text_root = output / monsters.TEXT_ROOT
+		text_root.mkdir(parents=True)
+		vsro.mkdir()
+		native.mkdir()
+
+		def later_monster(code, identity, symbol, level):
+			row = self.later_row(code, 0, level)
+			row[1], row[5] = str(identity), symbol
+			return row
+
+		native_char = ["0"] * 104
+		native_char[1], native_char[2] = "100", "MOB_NATIVE"
+		(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
+		(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+		(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+		(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
+		(text_root / "skilleffect.txt").write_bytes(utf16([
+			["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
+		media = {
+			"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+			"characterdata_6000.txt": utf16([
+				later_monster("MOB_SD_FIELD", 7001, "UIO_OBJ_MOB_SD_FIELD", 105),
+				later_monster("MOB_SD_LOW", 7003, "UIO_OBJ_MOB_SD_LOW", 99)]),
+			"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+			"skilldata_6000.txt": utf16([]),
+			"npcpos.txt": utf16([
+				["7001", "19001", "10.5", "0.0", "20.25"],
+				["7001", "19001", "11.5", "0.0", "21.25"],
+				["7001", "-32767", "3.0", "0.0", "4.0"],
+				["7003", "19001", "1.0", "0.0", "2.0"]]),
+			"textdata_object.txt": utf16([
+				["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
+				["2", "UIO_OBJ_MOB_SD_LOW", "x", "x", "Low monster", "l", "x", "a", "b", "c"]]),
+			"skilleffect.txt": utf16([
+				["#section", "characterinfo"],
+				["MOB_SD_FIELD"] + ["0"] * 12,
+				["MOB_SD_LOW"] + ["0"] * 12,
+				["#section", "skillaniset"]]),
+		}
+		(vsro / "Media.pk2").write_bytes(archive_bytes(media))
+		return vsro, native, output
+
+	# ================
+	# test_client_only_build_writes_the_field
+	#
+	# #3246: with no database export named, the field builds from the
+	# client's characterdata and npcpos alone: the admitted species
+	# converts and its outdoor placements become the nests.
+	# ================
+	def test_client_only_build_writes_the_field(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			vsro, native, output = self.build_fixture(Path(root))
+			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": ""}
+			with mock.patch.object(loot, "stage_field_equipment", return_value=0) as staged:
+				with mock.patch.dict(os.environ, env):
+					os.environ.pop(monsters.SOURCE_ENV, None)
+					summary = monsters.add_monsters(vsro, native, output)
+			self.assertIsNone(staged.call_args.args[1])
+			self.assertEqual(summary["source"], "client")
+			self.assertEqual(summary["equipmentLoot"], "native")
+			self.assertNotIn("sourceBackupSha256", summary)
+			text_root = output / monsters.TEXT_ROOT
+			population = json.loads((text_root / monsters.POPULATION_FILE).read_text(encoding="utf-8"))
+			self.assertEqual([(r["Codename"], r["RegionID"], r["X"], r["Z"]) for r in population["Rows"]],
+				[("MOB_SD_FIELD", 19001, 10.5, 20.25), ("MOB_SD_FIELD", 19001, 11.5, 21.25)])
+			shard = (text_root / monsters.CHARACTER_SHARD).read_bytes().decode("utf-16")
+			self.assertIn("MOB_SD_FIELD", shard)
+			self.assertNotIn("MOB_SD_LOW", shard)
+			marker = json.loads((output / monsters.MARKER).read_text(encoding="utf-8"))
+			self.assertEqual(marker["source"], "client")
+
+	# ================
+	# test_export_still_wins_when_it_is_named
+	#
+	# The export remains the enrichment (#3246): named, its authored
+	# nests are the population and the marker keeps its hash, even
+	# though the client tables could build the field alone.
+	# ================
+	def test_export_still_wins_when_it_is_named(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			vsro, native, output = self.build_fixture(base)
+			source = base / "source"
+			source.mkdir()
+			(source / "summary.json").write_text(
+				json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
+			(source / "all-spawns.json").write_text(json.dumps([self.nest_fixture(9, "MOB_SD_FIELD")]), encoding="utf-8")
+			(source / "Tab_RefNest.json").write_text(
+				json.dumps([{"dwNestID": 9, "nChampionGenPercentage": 0}]), encoding="utf-8")
+			(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
+			(source / "Tab_RefHive.json").write_text(
+				json.dumps([{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
+			for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
+				(source / (name + ".json")).write_text("[]", encoding="utf-8")
+			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": ""}
+			with mock.patch.object(loot, "stage_field_equipment", return_value=0):
+				with mock.patch.dict(os.environ, env):
+					summary = monsters.add_monsters(vsro, native, output, source)
+			self.assertEqual(summary["sourceBackupSha256"], monsters.SOURCE_BACKUP_SHA256)
+			self.assertNotIn("source", summary)
+			population = json.loads((output / monsters.TEXT_ROOT / monsters.POPULATION_FILE).read_text(encoding="utf-8"))
+			self.assertEqual([(r["NestID"], r["RegionID"], r["Radius"]) for r in population["Rows"]], [(9, 100, 400)])
+
+	# ================
+	# test_client_mode_refuses_the_other_families
+	#
+	# The tomb, qinshi and temple worlds are the export's alone: with
+	# no export named they refuse by name before any archive is read.
+	# ================
+	def test_client_mode_refuses_the_other_families(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			with mock.patch.dict(os.environ, {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "on"}):
+				os.environ.pop(monsters.SOURCE_ENV, None)
+				with self.assertRaisesRegex(ValueError, "SRO_CAP110_MONSTER_DATABASE"):
+					monsters.add_monsters(base / "vsro", base / "native", base / "output")
+
 
 if __name__ == "__main__":
 	unittest.main()

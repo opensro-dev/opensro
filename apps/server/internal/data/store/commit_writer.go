@@ -46,6 +46,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/platform/latency"
 )
 
 // EnvAsyncCommit turns the asynchronous writer on ("1"). Off, the native
@@ -85,6 +86,8 @@ was built: the writer must not read Store fields, which Store.mu owns.
 type queuedCommit struct {
 	batch        *commitBatch
 	beforeCommit func()
+	// queuedAt is when the batch entered the queue, for the lag.
+	queuedAt time.Time
 }
 
 /*
@@ -128,6 +131,41 @@ type commitWriter struct {
 	// resets, so a drain can tell a fresh failure from an old one.
 	failedTotal uint64
 	done        chan struct{}
+
+	// depthMax is the deepest the queue has stood since start. lag is
+	// each batch's time from queued to committed (the loss window the
+	// durability rule names), slotWait each enqueue's wait for a free
+	// slot (the back-pressure a full queue puts on the door holding
+	// Store.mu). Recording takes no lock; the snapshot reads them bare.
+	depthMax int
+	lag      latency.Live
+	slotWait latency.Live
+}
+
+/*
+================
+CommitWriterStats
+
+The asynchronous writer's state on /transport/metrics (store_lock.
+commit_writer), the design's "queue depth and hand-off lag next to
+store_lock": a queue that fills, a lag that grows or a failing batch
+shows here long before the cap is reached.
+================
+*/
+type CommitWriterStats struct {
+	QueueDepth    int               `json:"queue_depth"`
+	QueueDepthMax int               `json:"queue_depth_max"`
+	QueueCap      int               `json:"queue_cap"`
+	Queued        uint64            `json:"queued"`
+	Applied       uint64            `json:"applied"`
+	LagMs         latency.Histogram `json:"lag_ms"`
+	SlotWaitMs    latency.Histogram `json:"slot_wait_ms"`
+	// FailingAttempts is the current run of failed attempts on the head
+	// batch and FailingSinceMs when it began (Unix ms); both zero once
+	// the head commits. FailedTotal never resets.
+	FailingAttempts int    `json:"failing_attempts"`
+	FailingSinceMs  int64  `json:"failing_since_ms,omitempty"`
+	FailedTotal     uint64 `json:"failed_total"`
 }
 
 /*
@@ -153,13 +191,46 @@ is full: the back-pressure that bounds the loss window.
 func (w *commitWriter) enqueue(batch *commitBatch, beforeCommit func()) uint64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	began := w.now()
 	for len(w.queue) >= maxQueuedCommits && !w.stopping {
 		w.changed.Wait()
 	}
-	w.queue = append(w.queue, queuedCommit{batch: batch, beforeCommit: beforeCommit})
+	queuedAt := w.now()
+	w.slotWait.Add(queuedAt.Sub(began))
+	w.queue = append(w.queue, queuedCommit{batch: batch, beforeCommit: beforeCommit, queuedAt: queuedAt})
+	w.depthMax = max(w.depthMax, len(w.queue))
 	w.queued++
 	w.changed.Broadcast()
 	return w.queued
+}
+
+/*
+================
+commitWriter::stats
+
+The snapshot behind CommitWriterStats. Takes only the writer's own
+mutex, never Store.mu, and never waits on the disk: the writer drops
+it while it applies a batch.
+================
+*/
+func (w *commitWriter) stats() CommitWriterStats {
+	w.mu.Lock()
+	out := CommitWriterStats{
+		QueueDepth:      len(w.queue),
+		QueueDepthMax:   w.depthMax,
+		QueueCap:        maxQueuedCommits,
+		Queued:          w.queued,
+		Applied:         w.applied,
+		FailingAttempts: w.failure.attempts,
+		FailedTotal:     w.failedTotal,
+	}
+	if w.failure.attempts > 0 {
+		out.FailingSinceMs = w.failure.since.UnixMilli()
+	}
+	w.mu.Unlock()
+	out.LagMs = w.lag.Snapshot()
+	out.SlotWaitMs = w.slotWait.Snapshot()
+	return out
 }
 
 /*
@@ -324,6 +395,7 @@ func (w *commitWriter) run() {
 		w.mu.Lock()
 		w.applying = false
 		if ok {
+			w.lag.Add(w.now().Sub(next.queuedAt))
 			w.queue[0] = queuedCommit{}
 			w.queue = w.queue[1:]
 			w.applied++
