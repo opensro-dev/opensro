@@ -92,6 +92,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/platform/readiness", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/latency", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/jsonscratch", nil, false)
+	checkPackageImports(t, root, modulePath, "internal/platform/pacer", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/data/store", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/domain/charactervitals": true,
@@ -108,6 +109,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/domain/charactervitals": true,
 		modulePath + "/internal/security/auth":          true,
 		modulePath + "/internal/platform/readiness":     true,
+		modulePath + "/internal/platform/pacer":         true,
 		modulePath + "/internal/data/store":             true,
 		modulePath + "/internal/game/world/worldarea":   true,
 		modulePath + "/internal/releaseprotocol":        true,
