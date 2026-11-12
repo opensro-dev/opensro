@@ -13,12 +13,47 @@ china/jinsi_floor01..06.dof with embedded generalRegionId headers
 32775..32770 (0x8007..0x8002), while dungeoninfo.txt omitted those six
 rows before the Qin-Shi Tomb opening.
 
+The same existence rule appends the four Mirror Dimension temple
+interiors (regions 32787..32790) when the later client's DOF tree the
+Jupiter import copies (SRO_JUPITER_TEMPLE) sits alongside dungeoninfo.txt
+in the variant build (#3295). Each DOF's embedded generalRegionId header
+names its region (32787..32790, matching regioncode RN_JUPITER_A_THEEARTH,
+RN_JUPITER_A_UNO, RN_JUPITER_A_UPI, RN_JUPITER_B), and a build without the
+import has no such files, so its rows - and every byte built from them -
+are unchanged. The native dungeoninfo entries remain the admission
+authority: these rows publish geometry for regions the server admits
+through the temple worlds; no gate or entry is created here.
+
 ===========================================================================
 */
 
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { decodeJmxText } from "../../shared/jmxBinaryReader.mjs";
+
+// Port-only, not native (#3295): the Mirror Dimension temple interiors
+// of the Jupiter import. The DOF file names are the later client's own
+// (dungeon/jupiter/** is the whole DOF tree it ships), and each file's
+// embedded generalRegionId header carries the region id below, so the
+// binding is read from the data, not authored.
+const JUPITER_TEMPLE_DUNGEON_INFO_ROWS = Object.freeze( [
+	{
+		regionId: 32787,
+		dofName: "Dungeon\\jupiter\\piety\\piety_boss_di.dof",
+		relativeDofPath: "jupiter/piety/piety_boss_di.dof"
+	},
+	{
+		regionId: 32788,
+		dofName: "Dungeon\\jupiter\\piety\\piety_boss_uno.dof",
+		relativeDofPath: "jupiter/piety/piety_boss_uno.dof"
+	},
+	{
+		regionId: 32789,
+		dofName: "Dungeon\\jupiter\\piety\\piety_boss_upi.dof",
+		relativeDofPath: "jupiter/piety/piety_boss_upi.dof"
+	},
+	{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof", relativeDofPath: "jupiter/hide/hide.dof" }
+] );
 
 const QINSHI_TOMB_DUNGEON_INFO_ROWS = Object.freeze( [
 	{ regionId: 7, dofName: "Dungeon\\china\\jinsi_floor01.dof", relativeDofPath: "china/jinsi_floor01.dof" },
@@ -48,8 +83,9 @@ async function fileExists( candidatePath ) {
 readDungeonInfoRows
 
 Read native dungeoninfo rows, treating a missing optional source as an
-empty table, and append the six Qin-Shi Tomb floor rows when their retail
-china/jinsi_floor01..06.dof files exist in the same dungeon directory.
+empty table, and append the Qin-Shi Tomb floor rows and the Mirror
+Dimension temple interior rows whose DOF files exist in the same dungeon
+directory.
 ================
 */
 export async function readDungeonInfoRows( filePath ) {
@@ -79,7 +115,23 @@ export async function readDungeonInfoRows( filePath ) {
 	}
 
 	const dungeonDir = path.dirname( filePath );
-	for ( const entry of QINSHI_TOMB_DUNGEON_INFO_ROWS ) {
+	await appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, QINSHI_TOMB_DUNGEON_INFO_ROWS );
+	await appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, JUPITER_TEMPLE_DUNGEON_INFO_ROWS );
+	return rows;
+}
+
+/*
+================
+appendRowsWithExistingDofs
+
+Append one table's rows whose DOF files exist in the dungeon directory.
+A region the table itself already declares keeps its authored row, and
+a table whose files are absent (a build without that import) appends
+nothing.
+================
+*/
+async function appendRowsWithExistingDofs( rows, seenRegionIds, dungeonDir, table ) {
+	for ( const entry of table ) {
 		if ( seenRegionIds.has( entry.regionId ) ) continue;
 		if ( await fileExists( path.join( dungeonDir, entry.relativeDofPath ) ) ) {
 			rows.push( {
@@ -89,5 +141,4 @@ export async function readDungeonInfoRows( filePath ) {
 			seenRegionIds.add( entry.regionId );
 		}
 	}
-	return rows;
 }

@@ -43,6 +43,9 @@ export async function buildTitleSectorObjectResources( options ) {
 		options.placementCountsByObjectId :
 		countPlacementsByObjectId( options.placements ?? [] );
 	const missing = [];
+	// Lightmaps a mesh names but the archive lacks: reported, never fatal
+	// (meshLightmap).
+	const lightmapsMissing = [];
 
 	const bsrResources = [];
 	const materialPathSet = new Set();
@@ -167,13 +170,19 @@ export async function buildTitleSectorObjectResources( options ) {
 
 	A 0x400 mesh's stage-1 lightmap (formats.mjs readBmsLightmap) publishes
 	beside the material textures. Retail draws a mesh whose lightmap fails to
-	load without one, so a missing file only drops the lightmap.
+	load without one, so a missing file only drops the lightmap: it is not
+	counted in `missing`, whose entries fail the build. The later client's
+	piety_boss_width.bms names piety_boss_widthlightingmap.ddj while its
+	archive ships the spaced piety_boss_width lightingmap.ddj, so that mesh
+	draws without a lightmap exactly as retail draws it (#3295). Each miss
+	is still listed in `lightmapsMissing`, which the dungeon build prints,
+	so a pipeline fault that drops every lightmap cannot pass unseen.
 	================
 	*/
 	async function meshLightmap( source ) {
 		if ( !source ) return null;
 		if ( !(await exists( dataAssetPath( sourceExtractedRoot, source.sourcePath ) )) ) {
-			missing.push( { type: "lightmap", sourcePath: source.sourcePath } );
+			lightmapsMissing.push( source.sourcePath );
 			return null;
 		}
 		const blockFormat = await blockFormatFor( source.sourcePath );
@@ -242,6 +251,7 @@ export async function buildTitleSectorObjectResources( options ) {
 		textureCount: textures.length,
 		missingCount: missing.length,
 		missing,
+		lightmapsMissing,
 		bsr: bsrResources,
 		materialSets,
 		meshes,
