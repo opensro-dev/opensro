@@ -564,6 +564,11 @@ func TestNoteItemSaleBuckets(t *testing.T) {
 			t.Fatalf("the other character's item hours %+v", other)
 		}
 	}
+	// The notes ride the next transaction; the tick's flush is the
+	// production one.
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the pending notes did not flush: %+v", stats)
+	}
 	check(s)
 	s.Close()
 	reopened := openTest(t, dir, newTestClock())
@@ -576,10 +581,11 @@ func TestNoteItemSaleBuckets(t *testing.T) {
 TestNoteItemSaleRidesTheCommit
 
 A note is a fold in memory, never its own disk write (#3307): inside
-an open tick batch nothing reaches the buckets until the batch
-flushes, the batch's flush writes both lots as one bucket, and a
-failed commit keeps the fold pending for the next one, as it keeps
-the gold rows.
+an open tick batch or outside one, nothing reaches the buckets until
+the next transaction, the flush writes both lots as one bucket, a
+note outside a batch runs no transaction of its own, and a failed
+commit keeps the fold pending for the next one, as it keeps the gold
+rows.
 ================
 */
 func TestNoteItemSaleRidesTheCommit(t *testing.T) {
@@ -612,13 +618,29 @@ func TestNoteItemSaleRidesTheCommit(t *testing.T) {
 		t.Fatalf("the flushed batch wrote %d items, want 5", got)
 	}
 
+	// Outside a batch (where shop requests run) a note still writes
+	// nothing by itself: a bot's one-at-a-time sales cost no
+	// transaction each.
+	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("a note outside a batch wrote at once: %d items, want 5", got)
+	}
+
 	s.FailCommits(errors.New("item note outage"))
-	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err == nil {
-		t.Fatal("a note whose commit failed reported success")
+	if stats := s.FlushTickBatch(); stats.Err == nil {
+		t.Fatalf("the flush under an outage reported success: %+v", stats)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("a failed flush wrote %d items, want 5", got)
 	}
 	s.FailCommits(nil)
 	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err != nil {
 		t.Fatal(err)
+	}
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the healed flush did not write: %+v", stats)
 	}
 	if got := count(); got != 7 {
 		t.Fatalf("after a failed and a healed commit the buckets hold %d items, want 7", got)

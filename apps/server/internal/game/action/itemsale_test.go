@@ -45,6 +45,9 @@ func TestMerchantSaleNotesItsItem(t *testing.T) {
 			t.Fatalf("the sale of slot %d did not succeed: %+v", sale.SourceSlot, result.Frames)
 		}
 	}
+	// The notes ride the next transaction (store NoteItemSale): the
+	// tick's flush, as the ticker runs it after the shop requests.
+	authority.FlushTickBatch()
 	hours, err := authority.EconomyCharacterItemHours(c.ID, 0)
 	if err != nil {
 		t.Fatal(err)

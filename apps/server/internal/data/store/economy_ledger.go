@@ -726,17 +726,18 @@ character's per-item hourly bucket (economy_ledger_char_item_hours).
 The gold side needs no call - the ledger reads it off the balance at
 the door - but a balance diff cannot name what was sold, so the sale
 door notes the item itself after its commit lands. The note is a fold
-in memory, never its own disk write: it joins the pending gold rows
-and rides the next commit's transaction (flushLedgerItemsTx), queued
-like any commit. A direct write here drained the commit writer and
-waited on the disk under the store lock once per sale, which a bot
-selling one item at a time turns into a stall per request. Inside an
-open tick batch the note waits for the batch; outside one it commits
-now, which with the asynchronous writer only queues the batch. A
-failed commit keeps the fold pending, as it keeps the gold rows. The
-rows history holds predate the note and carry no item; their gold
-stays readable in the per-character buckets, and the per-item
-buckets simply begin with the first noted sale.
+in memory and never commits by itself, inside a tick batch or not:
+it marks the batch pending, and the next transaction carries it
+(flushLedgerItemsTx) - any door's commit, the tick's flush, or the
+flush at Close. Shop requests reach the store outside the tick batch,
+so a note that committed on its own cost a second transaction per
+sale, and a bot selling one item at a time doubled the store's work
+for nothing. Now a sale costs one map fold, and however many sales a
+tick sees, they share at most one extra transaction. A failed commit
+keeps the fold pending, as it keeps the gold rows. The rows history
+holds predate the note and carry no item; their gold stays readable
+in the per-character buckets, and the per-item buckets simply begin
+with the first noted sale.
 ================
 */
 func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) error {
@@ -756,11 +757,8 @@ func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) e
 	}
 	fold.count += int64(count)
 	fold.gold += gold
-	if s.batch.open {
-		s.batch.pending = true
-		return nil
-	}
-	return s.commitCheckedLocked("economy-item-sale")
+	s.batch.pending = true
+	return nil
 }
 
 /*
