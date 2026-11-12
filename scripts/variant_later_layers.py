@@ -19,6 +19,7 @@ catalogue merges come first, and every later layer merges after them.
 """
 import arabia_import
 import gears_stone_import
+import god_import
 import hunting2_import
 import jupiter_import
 import muhan_import
@@ -34,6 +35,9 @@ LATER_LAYERS = (
 	# and catalogue merges it follows.
 	("arabia", arabia_import.add_arabia),
 	("jupiter", jupiter_import.add_jupiter),
+	# The GOD temple worlds ride SRO_CAP110_TEMPLE (with its cap-110
+	# pairing), on the later-world engine Jupiter shares.
+	("god", god_import.add_god),
 	("muhan", muhan_import.add_muhan),
 	("hunting2", hunting2_import.add_hunting2),
 	# The gears magic stones ride the mall's own switch
