@@ -202,13 +202,18 @@ export function createCharacterSelection( limit: number, effects?: () => readonl
 			anchor: Pose | undefined,
 			localGid: number | undefined,
 			mountedOn: number | undefined,
-			admit?: ( entity: EntityState ) => boolean
+			admit?: ( entity: EntityState ) => boolean,
+			charactersFirst = false
 		): readonly EntityState[] {
 			let count = 0, changed = false;
 			for ( let i = 0; i < entities.length; i++ ) {
 				const entity = entities[i]!;
 				if ( admit && !admit( entity ) ) continue;
-				const priority = entity.gid === localGid ? 0 : entity.gid === mountedOn ? 1 : 2;
+				let priority = entity.gid === localGid ? 0 : entity.gid === mountedOn ? 1 : 2;
+				if ( charactersFirst && priority === 2 ) {
+					priority = entity.groundItem && entity.refObjId !== 9272 ? 4 : 3;
+					if ( entity.kind === "monster" && entity.appearanceState?.[0] !== 2 ) priority = 2;
+				}
 				const distance = anchor ? planarDistanceSquared( anchor, entity ) : 0;
 				const row = input[count];
 				if ( !row ) {
@@ -235,7 +240,7 @@ export function createCharacterSelection( limit: number, effects?: () => readonl
 					a.priority - b.priority || a.distance - b.distance || a.entity.gid - b.entity.gid
 				);
 			}
-			const shared = effects?.();
+			const shared = charactersFirst ? undefined : effects?.();
 			selected.length = shared?.length ?
 				sharedCharacterRoom( ranked, shared, limit ) :
 				Math.min( limit, ranked.length );

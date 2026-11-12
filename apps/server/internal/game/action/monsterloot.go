@@ -613,7 +613,9 @@ func (rt *Runtime) planMonsterKillLoot(
 	// gives named families their own rate; every family runs its native
 	// passes times its rate, so a family at rate 1 drops as often as native.
 	// Nil mix: every family at the uniform rate, the same draws as before.
-	familyRate := func(family string) int { return rt.DropMix.Rate(family, rate) }
+	familyRate := func(family string) int {
+		return rt.DropMix.Rate(family, rate)
+	}
 	widest := rate
 	for _, family := range progression.DropMixFamilies {
 		widest = max(widest, familyRate(family))

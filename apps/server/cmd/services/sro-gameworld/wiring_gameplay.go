@@ -16,6 +16,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	worldgeom "opensro.online/server/internal/game/world"
+	"os"
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
@@ -44,6 +45,7 @@ import (
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -109,6 +111,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	items.ConfigureSookArena(os.Getenv(sookarena.Env))
 	if err := loadPetGearPolicy(items, authorityStore); err != nil {
 		return nil, err
 	}
@@ -521,30 +524,6 @@ func newGameplayPlane(
 		siege:         siegeRuntime,
 		betaSilk:      betaSilk,
 	}, nil
-}
-
-/*
-================
-appendGroundObjectRows
-
-Adds live ground objects after authored NPC rows while retaining the existing
-bootstrap producer and its visibility decisions.
-================
-*/
-func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
-	npcRows := deps.ObjectListRows
-	deps.ObjectListRows = func(
-		divisionID string,
-		character *enterworld.Character,
-		entry *enterworld.LocalPlayerEntry,
-	) []enterworld.Packet {
-		var rows []enterworld.Packet
-		if npcRows != nil {
-			rows = npcRows(divisionID, character, entry)
-		}
-		rows = append(rows, items.GroundObjectRows(divisionID, character, entry)...)
-		return append(rows, items.SkillObjectRows(divisionID, character, entry)...)
-	}
 }
 
 /*

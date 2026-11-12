@@ -25,6 +25,7 @@ import {
 } from "@/engine/foundation/gameplay/container-transfer";
 import { INVENTORY_TRANSACTION_TIMEOUT, type Degradation } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
+import { createArenaChest, ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -120,6 +121,7 @@ export function createInventory(
 	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest ) => void = () => {}
 ) {
 	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall(), magicOption = createMagicOptionGrant();
+	const arena = createArenaChest( preview );
 	const companionRentals = createCompanionRentals();
 	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
@@ -1749,6 +1751,10 @@ receive
 			now = 0,
 			recovery?: { country: number | undefined; abnormal: number; unlimitedItems?: readonly number[]; }
 		) {
+			if ( op === ARENA_CHEST_OPCODE ) {
+				arena.receive( p, now );
+				return true;
+			}
 			// After a timeout the inventory waits for the bootstrap that
 			// resynchronizes it. Frames before it (a resumed transport replays
 			// what it queued while detached, ahead of EnterWorld) are set aside,
@@ -2453,12 +2459,29 @@ step
 		},
 		bag,
 		/*
+		================
+		requestArenaState
+		================
+		*/
+		requestArenaState: () => arena.request(),
+		/*
+		================
+		dismissArena
+		================
+		*/
+		dismissArena() {
+			arena.dismiss();
+		},
+		/*
 ================
 state
 ================
 		*/
 		state() {
 			return {
+				arenaChest: arena.state() ?
+					{ ...arena.state()!, items: arena.state()!.items.map( present ) } :
+					undefined,
 				itemMall: mall.state(),
 				itemMallSilkHistory: mall.silkHistory(),
 				itemCooldowns,
@@ -2512,6 +2535,7 @@ clear
 			stall = { ...emptyStall( stall.namingSequence ), logSequence: stall.logSequence };
 			magicOption.reset();
 			mall.reset();
+			arena.clear();
 			mallDelivery = null;
 			shop = undefined;
 			timedOut = false;

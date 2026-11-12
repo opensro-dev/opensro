@@ -47,6 +47,7 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
+// Protocol 17 also adds survival checkpoint rewards (#3189).
 export const RELEASE_PROTOCOL = 17;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;

@@ -604,6 +604,12 @@ export function createProceduralEffect( path: string ) {
 	const blizzard = createBlizzardResource( path );
 	if ( blizzard ) return blizzard;
 	switch ( path ) {
+		case "/assets/effects/survival-flame":
+			return createSurvivalFireResource();
+		case "/assets/effects/survival-ember-ring":
+			return createSurvivalRingResource();
+		case "/assets/effects/survival-cracks":
+			return createSurvivalCracksResource();
 		case "/assets/effects/crow-heal-wisp":
 			return createCrowRecoveryResource( false );
 		case "/assets/effects/crow-mana-wisp":
@@ -633,4 +639,154 @@ export function createProceduralEffect( path: string ) {
 		default:
 			return null;
 	}
+}
+
+/*
+================
+createSurvivalFireResource - authored alpha-edged flames, never a solid floor quad.
+================
+*/
+function createSurvivalFireResource(): { model: CharacterModel; images: NativeTexture[]; } {
+	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+	for ( let plane = 0; plane < 2; plane++ ) {
+		const angle = plane * Math.PI / 2;
+		for ( const [x, y] of [ [ -1, 0 ], [ 1, 0 ], [ -1, 1 ], [ 1, 1 ] ] ) {
+			positions.push(
+				x! * Math.cos( angle ),
+				y! * 3,
+				x! * Math.sin( angle )
+			);
+			normals.push( 0, 1, 0 );
+			uvs.push( (x! + 1) / 2, y! );
+		}
+		const n = plane * 4;
+		indices.push( n, n + 1, n + 2, n + 2, n + 1, n + 3 );
+	}
+	const size = 128, pixels = new Uint8Array( size * size * 4 );
+	for ( let y = 0; y < size; y++ ) {
+		for ( let x = 0; x < size; x++ ) {
+			const u = (x + .5) / size, v = (y + .5) / size;
+			const center = .5 + Math.sin( v * 17 ) * .1 * v;
+			const width = .42 * Math.pow( 1 - v, .8 );
+			const alpha = Math.pow( Math.max( 0, 1 - Math.abs( u - center ) / width ), 1.5 ) * Math.min( 1, v * 16 ) *
+				(1 - v);
+			pixels.set( [ 15, Math.round( 75 + 140 * (1 - v) ), 255, Math.round( alpha * 255 ) ], (y * size + x) * 4 );
+		}
+	}
+	return buildSurvivalEffectModel( positions, normals, uvs, indices, {
+		kind: "native-texture",
+		width: size,
+		height: size,
+		format: "bgra8unorm",
+		levels: [ pixels ]
+	} );
+}
+
+/*
+================
+buildSurvivalEffectModel - fades must preserve texture alpha, unlike native body fade.
+================
+*/
+function buildSurvivalEffectModel(
+	positions: number[],
+	normals: number[],
+	uvs: number[],
+	indices: number[],
+	texture: NativeTexture
+) {
+	const built = buildProceduralEffectModel( positions, normals, uvs, indices, texture );
+	return {
+		...built,
+		model: {
+			...built.model,
+			primitives: built.model.primitives.map( primitive => ({
+				...primitive,
+				geometry: {
+					...primitive.geometry,
+					material: {
+						...primitive.geometry.material!,
+						fadeAlphaOnly: false,
+						blendPair: { source: 5, destination: 6 } as const
+					}
+				}
+			}) )
+		}
+	};
+}
+
+/*
+================
+createSurvivalRingResource - real 30m annulus; no full-field square geometry.
+================
+*/
+function createSurvivalRingResource() {
+	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+	const segments = 192;
+	for ( let i = 0; i <= segments; i++ ) {
+		const angle = i * Math.PI * 2 / segments;
+		for ( const radius of [ .992, 1 ] ) {
+			positions.push( Math.cos( angle ) * radius, 0, Math.sin( angle ) * radius );
+			normals.push( 0, 1, 0 );
+			uvs.push( radius === 1 ? 1 : 0, .5 );
+		}
+		if ( i < segments ) {
+			const n = i * 2;
+			indices.push( n, n + 1, n + 2, n + 2, n + 1, n + 3 );
+		}
+	}
+	const pixels = new Uint8Array( 64 * 4 );
+	for ( let i = 0; i < 64; i++ ) {
+		pixels.set( [ 12, 118, 235, Math.round( Math.pow( Math.sin( (i + .5) / 64 * Math.PI ), 2 ) * 255 ) ], i * 4 );
+	}
+	return buildSurvivalEffectModel( positions, normals, uvs, indices, {
+		kind: "native-texture",
+		width: 64,
+		height: 1,
+		format: "bgra8unorm",
+		levels: [ pixels ]
+	} );
+}
+
+/*
+================
+createSurvivalCracksResource - thin, branching emissive ribbons; no opaque floor.
+================
+*/
+function createSurvivalCracksResource(): { model: CharacterModel; images: NativeTexture[]; } {
+	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+	for ( let arm = 0; arm < 7; arm++ ) {
+		for ( let branch = 0; branch < 3; branch++ ) {
+			const origin = branch ? .22 + branch * .17 : 0;
+			const length = branch ? .26 : .94;
+			const angle = arm * Math.PI * 2 / 7;
+			let x = Math.cos( angle ) * origin, z = Math.sin( angle ) * origin;
+			for ( let segment = 0; segment < 12; segment++ ) {
+				const turn = angle + (branch ? (branch === 1 ? .8 : -.8) : 0) +
+					Math.sin( arm * 19 + branch * 7 + segment * 2.7 ) * .6;
+				const step = length / 12;
+				const nx = x + Math.cos( turn ) * step, nz = z + Math.sin( turn ) * step;
+				const width = (branch ? .0013 : .002) * (1 - segment / 18);
+				const dx = -Math.sin( turn ) * width, dz = Math.cos( turn ) * width;
+				const n = positions.length / 3;
+				positions.push( x - dx, 0, z - dz, x + dx, 0, z + dz, nx - dx, 0, nz - dz, nx + dx, 0, nz + dz );
+				normals.push( 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0 );
+				uvs.push( 0, 0, 1, 0, 0, 1, 1, 1 );
+				indices.push( n, n + 1, n + 2, n + 2, n + 1, n + 3 );
+				x = nx;
+				z = nz;
+			}
+		}
+	}
+	const size = 32, pixels = new Uint8Array( size * 4 );
+	for ( let x = 0; x < size; x++ ) {
+		const glow = Math.exp( -Math.pow( ((x + .5) / size - .5) * 5, 2 ) );
+		pixels.set( [ 8, Math.round( 90 + glow * 90 ), 255, Math.round( glow * 230 ) ], x * 4 );
+	}
+	return buildSurvivalEffectModel( positions, normals, uvs, indices, {
+		kind: "native-texture",
+		width: size,
+		height: 1,
+		format: "bgra8unorm",
+		levels: [ pixels ]
+	} );
 }

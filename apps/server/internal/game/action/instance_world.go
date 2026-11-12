@@ -152,6 +152,15 @@ The caller holds the division lock.
 ================
 */
 func (rt *Runtime) transferCharacterToInstance(division string, c *enterworld.Character, lease instance.Lease, entry simulation.Spawn) instance.Status {
+	return rt.transferCharacterToInstanceAdmitted(division, c, lease, entry, nil)
+}
+
+/*
+================
+transferCharacterToInstanceAdmitted - admission writes share the relocation commit.
+================
+*/
+func (rt *Runtime) transferCharacterToInstanceAdmitted(division string, c *enterworld.Character, lease instance.Lease, entry simulation.Spawn, admit func() bool) instance.Status {
 	if rt.Monsters == nil || c == nil {
 		return instance.NotMember
 	}
@@ -195,6 +204,9 @@ func (rt *Runtime) transferCharacterToInstance(division string, c *enterworld.Ch
 		return instance.NotMember
 	}
 	if !rt.relocateCharacter(division, c, "instance-transfer", func() (travelPoint, bool) {
+		if admit != nil && !admit() {
+			return travelPoint{}, false
+		}
 		return travelPoint{spawn: entry, world: lease.ID}, true
 	}) {
 		// The relocation rolled its own writes back; the anchor was an

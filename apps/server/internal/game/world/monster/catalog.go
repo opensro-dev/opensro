@@ -511,6 +511,8 @@ type Instance struct {
 	// its loot is conjured, not hunted: the weekly seal board never counts
 	// its seal drops (#1641).
 	GMSpawned bool
+	// Arena marks a port-only solo-event encounter, never a global unique record.
+	Arena bool
 	// SpawnHeading is the wire heading word of the native creation heading
 	// (native: random for monsters, wInitialDir for uniques).
 	SpawnHeading uint16
@@ -587,6 +589,10 @@ func (instance Instance) EffectiveMaxHP() uint32 {
 		multiplier *= 10
 	}
 	scaled := uint64(instance.Ref.MaxHP) * multiplier
+	// Port-only survival uniques retain their native body and skills at one twentieth HP.
+	if instance.Arena && instance.Ref.MonsterType == 3 {
+		scaled = max(uint64(1), scaled/20)
+	}
 	if scaled > math.MaxUint32 {
 		return math.MaxUint32
 	}

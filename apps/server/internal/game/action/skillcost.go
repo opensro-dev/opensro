@@ -74,6 +74,7 @@ caster's keeper maximum (param 4), stored current MP and parameter 0x8D.
 ================
 */
 func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, uint16) {
+	skill.Consumption = rt.sookManaConsumption(division, c, skill.Consumption, rt.Now().UnixMilli())
 	stats, _, err := rt.playerCombatStats(division, c)
 	maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(c, stats, err)
 	return resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, err, skill)
@@ -284,6 +285,9 @@ the native skill action handler, does not. The rate is 100 until a dcmp buff
 ==================
 */
 func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, error) {
+	if rt.sookPowerActive(division, c, sookMana, rt.Now().UnixMilli()) {
+		return 0, nil
+	}
 	stats, _, err := rt.playerCombatStats(division, c)
 	if err != nil {
 		return 0, err
@@ -358,6 +362,9 @@ clamped to leave 1 (a skill's HP cost never kills).
 ================
 */
 func (rt *Runtime) commitOffensiveResources(division string, c *enterworld.Character, cost skillCharge) {
+	if rt.sookPowerActive(division, c, sookMana, rt.Now().UnixMilli()) {
+		cost.mp = 0
+	}
 	_, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, c)
 	mp := int64(combat.ConsumeMana(uint32(currentMP), uint32(maxMP), int32(cost.mp)))
 	c.CurrentMP = &mp

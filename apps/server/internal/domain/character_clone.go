@@ -264,6 +264,7 @@ func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Cha
 		previousChild = *previous
 	}
 	clone := *source
+	clone.SookChest = stagedChild(source.SookChest, previousChild.SookChest, cloneArenaChest)
 	clone.PK = stagedChild(source.PK, previousChild.PK, clonePointer)
 	clone.Online = stagedChild(source.Online, previousChild.Online, cloneOnlineRecord)
 	clone.EventMembership = stagedChild(source.EventMembership, previousChild.EventMembership, clonePointer)

@@ -190,7 +190,12 @@ resolvePlayerImpact against a defender that may stand behind a wall
 defender's part afterwards, added after the split.
 ==================
 */
-func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool, wall *enterworld.SkillWall) (combat.WallOutcome, error) {
+func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool, wall *enterworld.SkillWall) (outcome combat.WallOutcome, failure error) {
+	defer func() {
+		if failure == nil {
+			outcome.Defender = rt.sookDamageBoost(division, name, outcome.Defender, nowMs)
+		}
+	}()
 	// A status cast has no att block: its record is a successful zero-damage
 	// result with no critical, block or imbue roll (skillstatuscast.go).
 	if skill.StatusCast {

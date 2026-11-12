@@ -431,6 +431,8 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 	if !statsHit {
 		return false, false
 	}
+	consumption = rt.sookManaConsumption(p.divisionID, c, consumption, rt.Now().UnixMilli())
+	skill.Consumption = consumption
 	var refusal uint16
 	if p.verdictCost.Pinned {
 		_, refusal = resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, consumption, group)

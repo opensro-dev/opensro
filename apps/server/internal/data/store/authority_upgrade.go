@@ -68,6 +68,7 @@ const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
 const preWantedDecayVersion = 39
 const preGourdCountVersion = 40
+const preArenaChestVersion = 41
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -240,7 +241,8 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		sourceLayout = layout
 	case preOnlineRecordVersion:
-		// Schema 36 ran at layout 11 and has no time-online record; its
+		// Schema 36 ran at layout 11. Optional online fields read
+		// absent without rewriting any character; its
 		// characters read unchanged and start counting at their next
 		// login (#2675). Records read unchanged.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
@@ -263,6 +265,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
+
 	case preWantedDecayVersion:
 		// Schema 39 ran at layout 12 and stamped the wanted level's
 		// seven-day lapse; under the decay that stamp is unread and a
@@ -274,7 +277,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
-	case preGourdCountVersion:
+	case preGourdCountVersion, preArenaChestVersion:
 		// Schema 40 ran at layout 12 and counted every Halloween box
 		// against the one account cap; its account rows carry no
 		// Gourd count and start the Gourd allowance at zero (#2950).

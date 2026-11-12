@@ -12,6 +12,7 @@ undefined shop closes it; other fields belong to the newest snapshot.
 ===========================================================================
 */
 import type { MoverPublication } from "./mover-publication";
+import type { ArenaChest } from "@/engine/foundation/gameplay/arena-chest";
 export type { MovementAim } from "./mover-publication";
 
 /*
@@ -489,6 +490,8 @@ export type GameplayCommand =
 	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
+	| { readonly kind: "arena-dismiss"; }
+	| { readonly kind: "arena-decision"; readonly operation: 0 | 1 | 2; readonly id: string; }
 	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-event-exchange"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
@@ -809,6 +812,7 @@ export interface GameplayState extends MoverPublication {
 	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
+	readonly arenaChest?: ArenaChest;
 	readonly petTailwind?: PetTraining["tailwind"];
 	readonly petGuidance?: PetTraining["guidance"];
 	readonly petHowl?: PetTraining["howl"];

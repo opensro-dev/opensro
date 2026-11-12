@@ -27,6 +27,8 @@ the curve too, so the owner only learns the delta:
 
 package action
 
+import "opensro.online/server/internal/game/sookarena"
+
 import (
 	"strings"
 
@@ -182,7 +184,11 @@ func (rt *Runtime) awardAttackPetExperience(c *enterworld.Character, target mons
 		if petPercent := rt.petGrowthPercent(c, nowMs) / 100; petPercent > 0 {
 			bonus += int64(float64(exp) * float64(petPercent))
 		}
-		private, public := rt.applyAttackPetExperience(c, pet, ref, exp+max(bonus, 0), target.Gid)
+		exp += max(bonus, 0)
+		if target.Arena {
+			exp = sookarena.Fivefold(exp)
+		}
+		private, public := rt.applyAttackPetExperience(c, pet, ref, exp, target.Gid)
 		owner = append(owner, private...)
 		area = append(area, public...)
 	}

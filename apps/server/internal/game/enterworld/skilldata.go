@@ -14,7 +14,9 @@ import (
 	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/item/statuseffect"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/monster"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -542,7 +544,7 @@ variant states it explicitly instead (NewTextdataSkillsWithTomb).
 ================
 */
 func NewTextdataSkills(dir string) *TextdataSkills {
-	return NewTextdataSkillsWithTomb(dir, monster.QinShiTombFromEnv())
+	return NewTextdataSkillsWithTomb(dir, monster.QinShiTombFromEnv() || sookarena.Enabled(os.Getenv(sookarena.Env)))
 }
 
 /*

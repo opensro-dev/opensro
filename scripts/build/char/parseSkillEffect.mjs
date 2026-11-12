@@ -62,7 +62,11 @@ import {
 	readTextDataLinesSync,
 	splitTextDataRow as tabCols
 } from "../shared/textDataIo.mjs";
-import { isQinShiTombSkillEffectName, loadQinShiTombSkillRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import {
+	isQinShiTombSkillEffectName,
+	loadQinShiTombSkillRows,
+	qinshiTombCombatEnabled
+} from "../shared/qinshiTomb.mjs";
 
 const SKILLDATA_COL_ID = 1;
 const SKILLDATA_COL_LEVEL_NAME = 3;
@@ -269,7 +273,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// Port-only, not native: retail v1.150 ships the Qin-Shi Emperor Tomb
 			// skillaniset2 rows with Service == 0 while their skilleffectset rows
 			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
-			if ( !qinshiTombEnabled() || !isQinShiTombSkillEffectName( baseName ) ) {
+			if ( !qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ) ) {
 				continue;
 			}
 		}
@@ -559,7 +563,7 @@ export function loadSkillDataRows( textdataDir ) {
 	}
 	// Port-only, not native: append the Qin-Shi Emperor Tomb skilldata overlay
 	// when SRO_QINSHI_TOMB is on, matching monster.WithQinShiTomb on the server.
-	if ( qinshiTombEnabled() ) {
+	if ( qinshiTombCombatEnabled() ) {
 		for ( const c of loadQinShiTombSkillRows().rows ) {
 			pushCols( c );
 		}

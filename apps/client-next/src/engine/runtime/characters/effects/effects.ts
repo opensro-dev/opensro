@@ -67,6 +67,7 @@ import {
 	type StatusView
 } from "@/engine/foundation/animation/status-presentation";
 import type { CharacterActor } from "@/engine/contracts/character";
+import { survivalEffectActors } from "./survival-effects";
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
@@ -349,6 +350,8 @@ export function createCharacterEffects(
 		cue: number;
 		book: number;
 		started?: number;
+		queuedAt?: number;
+		sounded?: boolean;
 	}[] = [];
 	let catalog: EffectCatalog | null = null,
 		models:
@@ -1091,12 +1094,18 @@ export function createCharacterEffects(
 			cue = 0,
 			book = 1
 		) {
+			// Port-only arena cues reuse the position-event lane; one fixed fire pit per run.
+			if ( cue === 10 ) {
+				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
+					if ( crowEffects[i]!.cue === 10 ) crowEffects.splice( i, 1 );
+				}
+			}
 			if ( crowEffects.length >= CROW_EFFECT_LIMIT ) return;
 			crowEffects.push( {
 				pose: { ...source, yaw: nativeHeadingYaw( 0 ) },
 				cue,
 				book,
-				gids: Array.from( { length: cue === 1 || cue === 4 ? 12 : 7 }, allocate )
+				gids: Array.from( { length: cue >= 9 ? 49 : cue === 1 || cue === 4 ? 12 : 7 }, allocate )
 			} );
 		},
 		/*
@@ -2204,10 +2213,40 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
+					// Port-only arena one-shots wait for their own models; other crow cues retain existing timing.
+					if ( burst.started === undefined && burst.cue === 9 ) {
+						burst.queuedAt ??= now;
+						const paths = [
+							"/assets/effects/challenging-roar-aura",
+							"/assets/effects/challenging-roar-shockwave"
+						];
+						let admitted = true;
+						for ( const path of paths ) if ( !ready( path ) ) admitted = false;
+						if ( !admitted ) {
+							if ( now - burst.queuedAt >= UNREADY_ONE_SHOT_SECONDS ) crowEffects.splice( i, 1 );
+							continue;
+						}
+					}
 					burst.started ??= now;
 					const age = now - burst.started;
-					if ( age >= 1.2 ) {
+					if ( age >= (burst.cue === 10 ? 60 : 1.2) ) {
 						crowEffects.splice( i, 1 );
+						continue;
+					}
+					if ( burst.cue === 9 || burst.cue === 10 ) {
+						if ( burst.cue === 9 && !burst.sounded ) {
+							burst.sounded = true;
+							play( {
+								id: `arena-roar:${burst.gids[0]}`,
+								path: PET_ROAR_SOUND,
+								gain: .8,
+								...audioPosition( burst.pose ),
+								expires: now + .25
+							} );
+						}
+						for ( const actor of survivalEffectActors( burst, age ) ) {
+							if ( ready( actor.model ) ) result.push( actor );
+						}
 						continue;
 					}
 					if ( burst.cue > 0 ) {

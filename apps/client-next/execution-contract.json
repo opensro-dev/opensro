@@ -2,6 +2,11 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/gameplay/arena-chest.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
+			"functions": ["preview"]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/frame/frame.ts",
 			"provider": "src/engine/runtime/ui/hud/window-placement.ts",
 			"functions": [

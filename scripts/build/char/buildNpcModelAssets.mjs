@@ -83,7 +83,7 @@ import { isMainScript } from "../shared/fsUtils.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
-import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import {
 	claimResourceOutput,
@@ -202,7 +202,7 @@ player weapon sets (~580 clips).
 ================
 */
 function nonDefaultMonsterSkillStates() {
-	const tombKey = qinshiTombEnabled();
+	const tombKey = qinshiTombCombatEnabled();
 	let cached = nonDefaultSkillStatesByTomb.get( tombKey );
 	if ( cached ) return cached;
 	cached = new Map();

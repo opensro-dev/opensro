@@ -14,14 +14,19 @@ nests go to a file of their own (cap110-tomb.txt), which the server reads
 behind its own flag.
 
 The admitted content is one declarative family table (FAMILIES below), one
-row per family: the Alexandria field, the Pharaoh tombs, the Qin-Shi tomb
-upper floors (SRO_CAP110_QINSHI, 91-99 content) and the temple instance bands
-(SRO_CAP110_TEMPLE). Every family shares the one character/skill shard pair
-and the one marker allocator, and writes one nest file of its own in the
-Version-2 envelope; a family's switch off removes its nest file and its
-exclusively-owned rows. Qinshi and temple need SRO_CAP110_MONSTERS: their
-drop rules ride the shared cap-110 loot catalogue it builds (cap110_rewards),
-so the build refuses them without it, as the Pharaoh precedent does.
+row per family: the Alexandria field, the Pharaoh tombs and the Qin-Shi tomb
+upper floors (SRO_CAP110_QINSHI, 91-99 content). Every family shares the one
+character/skill shard pair and the one marker allocator, and writes one nest
+file of its own in the Version-2 envelope; a family's switch off removes its
+nest file and its exclusively-owned rows. Qinshi needs SRO_CAP110_MONSTERS:
+its drop rules ride the shared cap-110 loot catalogue it builds
+(cap110_rewards), so the build refuses it without it, as the Pharaoh
+precedent does.
+
+The temple bands (worlds 63-84, SRO_CAP110_TEMPLE) are not a family here:
+god_import.py builds their kinds, nests and regions from the pinned ISRO-R
+population export and the v1.696 client, and writes the same
+cap110-temple.txt behind the same switch, in its own shard and marker.
 
 The database export is optional (#3246). Named (SRO_CAP110_MONSTER_DATABASE
 or --source-root), it is pinned and enriches the field with its authored
@@ -75,18 +80,16 @@ TOMB_EXTRA_GRADES = (6, 8)
 # field on would change live content as a side effect.
 QINSHI_FLAG = "SRO_CAP110_QINSHI"
 QINSHI_FILE = "cap110-qinshi.txt"
-TEMPLE_FLAG = "SRO_CAP110_TEMPLE"
-TEMPLE_FILE = "cap110-temple.txt"
-# The temple bands are the database's 22 instanced worlds, 63-84.
-TEMPLE_WORLDS = tuple(range(63, 85))
+# The temple bands (the database's 22 instanced worlds, 63-84) are built by
+# god_import.py, not by a family here; see the header.
 
 # One row per content family. Admission is a codename prefix set, the source
 # worlds whose in-service nests claim species for the family, a level window
 # (a sanity bound measured from the client table, not a spawn filter) and a
 # grade set; NamedGrades carries one named exception (the field's Apis).
-# CarrySpawnType: the temple's nests use the database's second spawn kind
-# (512 of its 1616 claimed nests), so its rows carry it instead of refusing;
-# the outdoor families' nests are all kind 0 and keep refusing any other.
+# CarrySpawnType: a family whose nests use the database's second spawn kind
+# carries it on the row instead of refusing it; the families here are all
+# kind 0 and keep refusing any other.
 FIELD_FAMILY = {"Name": "field", "Flag": FLAG, "File": POPULATION_FILE, "Prefixes": ("MOB_SD_",),
 	"Worlds": (FIELD_WORLD,), "MinLevel": 100, "MaxLevel": MAX_LEVEL, "Grades": (0,),
 	"NamedGrades": {APIS_CODENAME: APIS_SOURCE_GRADE}, "CarrySpawnType": False}
@@ -96,10 +99,7 @@ TOMB_FAMILY = {"Name": "pharaoh", "Flag": TOMB_FLAG, "File": TOMB_FILE, "Prefixe
 QINSHI_FAMILY = {"Name": "qinshi", "Flag": QINSHI_FLAG, "File": QINSHI_FILE, "Prefixes": ("MOB_TQ_", "MOB_QT_"),
 	"Worlds": (FIELD_WORLD,), "MinLevel": 81, "MaxLevel": MAX_LEVEL, "Grades": (0, 3, 6, 8),
 	"NamedGrades": {}, "CarrySpawnType": False}
-TEMPLE_FAMILY = {"Name": "temple", "Flag": TEMPLE_FLAG, "File": TEMPLE_FILE, "Prefixes": ("MOB_GOD_",),
-	"Worlds": TEMPLE_WORLDS, "MinLevel": 35, "MaxLevel": 109, "Grades": (0, 1, 3, 6, 8),
-	"NamedGrades": {}, "CarrySpawnType": True}
-FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY, TEMPLE_FAMILY)
+FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY)
 
 # The ordinary posture a client-only nest synthesizes (#3246), because the
 # client tables carry placements but no tactics. The values are the
@@ -282,8 +282,8 @@ def tactics_controls(row):
 # admitted instead of silently shrinking the population; unclaimed nests
 # (another family's species sharing the world) are skipped, and the field
 # has always skipped. codes=None claims every in-world nest (the historical
-# tomb behaviour). A family that carries the spawn kind (the temple) keeps
-# it on the row as SpawnType; the outdoor kinds refuse it.
+# tomb behaviour). A family that carries the spawn kind keeps it on the
+# row as SpawnType; the outdoor kinds refuse it.
 # ================
 def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), strict=False, codes=None,
 	carry_spawn_type=False):
@@ -752,9 +752,9 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		tomb_population = populations.get("pharaoh")
 		summary["tombNests"] = len(tomb_population["Rows"]) if tomb_population else 0
 		summary["tombRegions"] = sorted({r["RegionID"] for r in tomb_population["Rows"]}) if tomb_population else []
-		# Per-family nest and region report: consumers (the tomb floors, the
-		# temple bands) read their family's slice from here; the regions
-		# follow the projected nests, never a pinned list.
+		# Per-family nest and region report: consumers (the tomb floors)
+		# read their family's slice from here; the regions follow the
+		# projected nests, never a pinned list.
 		summary["families"] = {family["Name"]: {
 			"nests": len(populations[family["Name"]]["Rows"]),
 			"regions": sorted({r["RegionID"] for r in populations[family["Name"]]["Rows"]})}

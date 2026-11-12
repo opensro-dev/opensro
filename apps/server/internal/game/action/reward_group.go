@@ -378,6 +378,20 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	if !impact.Fatal || impact.Instance.Ref.TrainingDummy {
 		return out
 	}
+	arena := rt.sookPopulation(division, impact.Population)
+	if arena != nil {
+		arena.program.Kill(now)
+		if owner := rt.findCharacter(division, arena.name); owner != nil && owner.SookChest != nil {
+			owner.SookChest.Kills, owner.SookChest.ElapsedMs = arena.program.Kills, now-arena.program.Started
+		}
+		if arena.program.Kills%5 == 0 {
+			arena.powerupsOwed++
+		}
+		if impact.Instance.Ref.MonsterType == 3 && !arena.bossPowerups[impact.Instance.Gid] {
+			arena.bossPowerups[impact.Instance.Gid] = true
+			arena.powerupsOwed++
+		}
+	}
 	// One snapshot of the live tunables for the whole kill (thiefparty.go).
 	settings := tunables.Current()
 	for _, award := range rt.grantBerserkForKill(actor, roster, impact) {
@@ -457,6 +471,10 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 				exp += bonusExp
 				sexp += bonusSkillExp
 			}
+			exp, sexp = sookReward(exp, arena), sookReward(sexp, arena)
+			if arena != nil {
+				sexp = min(sexp, math.MaxInt32)
+			}
 			var frames []wire.Frame
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
@@ -485,7 +503,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			}
 		}
 	}
-	if a, ok := roster.actors[winner]; ok {
+	if a, ok := roster.actors[winner]; ok && arena == nil {
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
@@ -538,7 +556,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			rt.RecordUniqueKill(division, domain.UniqueKill{AtMs: now, RefObjID: ref, KillerCharID: a.character.ID, KillerName: a.character.Name})
 		}
 	}
-	if !roster.companionKill && actor != nil {
+	if !roster.companionKill && actor != nil && arena == nil {
 		frames, drops := rt.creditQuestKillInsideDoor(division, actor, impact.Instance, pose, now)
 		out.actorFrames = append(out.actorFrames, frames...)
 		out.drops = append(out.drops, drops...)

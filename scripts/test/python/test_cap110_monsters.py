@@ -238,27 +238,6 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual(set(refs), {"MOB_TQ_SOLDIER", "MOB_TQ_TOP", "MOB_QT_TQ_MIRROR", "MOB_QT_GHOST"})
 
 	# ================
-	# test_temple_family_claims_only_its_worlds_and_window
-	# ================
-	def test_temple_family_claims_only_its_worlds_and_window(self):
-		later = {}
-		for code, grade, level in [("MOB_GOD_LOW", 0, 34), ("MOB_GOD_BAND", 1, 35), ("MOB_GOD_TOP", 8, 109),
-			("MOB_GOD_OVER", 0, 110), ("MOB_GOD_OUTWORLD", 0, 60), ("MOB_GOD_RARE2", 2, 60), ("MOB_GOD_FIELD", 0, 60)]:
-			later[code] = self.later_row(code, grade, level)
-		spawns = [{"codename": "MOB_GOD_LOW", "game_world_id": 63, "service": 1},
-			{"codename": "MOB_GOD_BAND", "game_world_id": 63, "service": 1},
-			{"codename": "MOB_GOD_TOP", "game_world_id": 84, "service": 1},
-			{"codename": "MOB_GOD_OVER", "game_world_id": 70, "service": 1},
-			{"codename": "MOB_GOD_OUTWORLD", "game_world_id": 62, "service": 1},
-			{"codename": "MOB_GOD_RARE2", "game_world_id": 70, "service": 1},
-			{"codename": "MOB_GOD_FIELD", "game_world_id": 1, "service": 1},
-			{"codename": "MOB_SD_FIELD", "game_world_id": 63, "service": 1}]
-		later["MOB_SD_FIELD"] = self.later_row("MOB_SD_FIELD", 0, 60)
-		claims = self.family_claims(spawns, (monsters.TEMPLE_FAMILY,))
-		refs = monsters.select_references(later, claims)
-		self.assertEqual(set(refs), {"MOB_GOD_BAND", "MOB_GOD_TOP"})
-
-	# ================
 	# test_family_tables_match_the_agreed_rows
 	# ================
 	def test_family_tables_match_the_agreed_rows(self):
@@ -267,10 +246,9 @@ class Cap110MonstersTest(unittest.TestCase):
 		qinshi = by_name["qinshi"]
 		self.assertEqual((qinshi["Flag"], qinshi["File"], qinshi["Worlds"], qinshi["MinLevel"], qinshi["MaxLevel"], qinshi["Grades"]),
 			("SRO_CAP110_QINSHI", "cap110-qinshi.txt", (1,), 81, 110, (0, 3, 6, 8)))
-		temple = by_name["temple"]
-		self.assertEqual((temple["Flag"], temple["File"], temple["MinLevel"], temple["MaxLevel"], temple["Grades"]),
-			("SRO_CAP110_TEMPLE", "cap110-temple.txt", 35, 109, (0, 1, 3, 6, 8)))
-		self.assertEqual((temple["Worlds"][0], temple["Worlds"][-1], len(temple["Worlds"])), (63, 84, 22))
+		# The temple bands are god_import's, not a family here (its
+		# kinds and nests ride the 190000 shard, not this allocator).
+		self.assertNotIn("temple", by_name)
 		flags = {family["Flag"] for family in monsters.FAMILIES}
 		self.assertEqual(len(flags), len(monsters.FAMILIES))
 
@@ -341,7 +319,9 @@ class Cap110MonstersTest(unittest.TestCase):
 		from unittest import mock
 		with tempfile.TemporaryDirectory() as root:
 			base = Path(root)
-			for flag in ("SRO_CAP110_QINSHI", "SRO_CAP110_TEMPLE", "SRO_PHARAOH_TOMB"):
+			# The temple switch's own pairing refusal is god_import's
+			# (test_god_import); the families here refuse without the field.
+			for flag in ("SRO_CAP110_QINSHI", "SRO_PHARAOH_TOMB"):
 				with self.subTest(flag=flag), mock.patch.dict(os.environ, {flag: "on", "SRO_CAP110_MONSTERS": ""}):
 					with self.assertRaisesRegex(ValueError, "requires SRO_CAP110_MONSTERS"):
 						monsters.add_monsters(base / "vsro", base / "native", base / "output")
@@ -351,13 +331,14 @@ class Cap110MonstersTest(unittest.TestCase):
 	#
 	# Today's default build: the shipped tomb switch is on (its registry
 	# default) and every cap-110 switch is off. The families ride none of
-	# the shipped switches, so the run is the plain off path.
+	# the shipped switches - and the temple switch gates god_import's
+	# build, not these families - so the run is the plain off path.
 	# ================
 	def test_shipped_flags_at_their_defaults_do_not_gate_the_families(self):
 		import os
 		from unittest import mock
 		env = {"SRO_QINSHI_TOMB": "on", "SRO_PHARAOH_TOMB": "",
-			"SRO_CAP110_MONSTERS": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": ""}
+			"SRO_CAP110_MONSTERS": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": "on"}
 		with tempfile.TemporaryDirectory() as root:
 			base = Path(root)
 			with mock.patch.dict(os.environ, env):
@@ -497,18 +478,18 @@ class Cap110MonstersTest(unittest.TestCase):
 			**{f"DiversionKeepBasisData{i}": 0 for i in range(1, 9)}}}
 
 	# ================
-	# test_temple_projection_carries_spawn_type
+	# test_projection_carries_spawn_type_when_asked
 	# ================
-	def test_temple_projection_carries_spawn_type(self):
+	def test_projection_carries_spawn_type_when_asked(self):
 		spawns = [self.nest_fixture(1, "MOB_GOD_SOLDIER", 70), self.nest_fixture(2, "MOB_GOD_CAPTAIN", 70, spawn_type=1)]
 		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
 		refs = {"MOB_GOD_SOLDIER": 1, "MOB_GOD_CAPTAIN": 2}
 		rows = monsters.project_population(spawns, refs, self.tactics_fixture(), hives,
-			monsters.TEMPLE_FAMILY["Worlds"], carry_spawn_type=True)["Rows"]
+			(70,), carry_spawn_type=True)["Rows"]
 		self.assertNotIn("SpawnType", rows[0])
 		self.assertEqual(rows[1]["SpawnType"], 1)
 		with self.assertRaisesRegex(ValueError, "unsupported field spawn flags"):
-			monsters.project_population(spawns, refs, self.tactics_fixture(), hives, monsters.TEMPLE_FAMILY["Worlds"])
+			monsters.project_population(spawns, refs, self.tactics_fixture(), hives, (70,))
 
 	# ================
 	# test_strict_codes_answer_for_the_window_only
@@ -787,8 +768,8 @@ class Cap110MonstersTest(unittest.TestCase):
 	# ================
 	# test_client_mode_refuses_the_other_families
 	#
-	# The tomb, qinshi and temple worlds are the export's alone: with
-	# no export named they refuse by name before any archive is read.
+	# The tomb and qinshi worlds are the export's alone: with no export
+	# named they refuse by name before any archive is read.
 	# ================
 	def test_client_mode_refuses_the_other_families(self):
 		import os

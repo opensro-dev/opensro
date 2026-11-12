@@ -14,7 +14,18 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
-const { decodeGroundItem, nearestGroundItem } = await import( "../../src/engine/foundation/gameplay/ground-item.ts" );
+const { decodeGroundItem, nearestGroundItem, isSurvivalPowerEgg } = await import(
+	"../../src/engine/foundation/gameplay/ground-item.ts"
+);
+
+test("survival egg art is confined to private arena layers", () => {
+	assert.equal( isSurvivalPowerEgg( 9272, 25580, 0x1001e ), true );
+	assert.equal( isSurvivalPowerEgg( 9272, 25580, 0x2001f ), true );
+	assert.equal( isSurvivalPowerEgg( 9272, 25580, 0x10001 ), false );
+	assert.equal( isSurvivalPowerEgg( 9272, 17989, 0x1001e ), false );
+	assert.equal( isSurvivalPowerEgg( 9272, 23687, 0x1001e ), false );
+	assert.equal( isSurvivalPowerEgg( 9273, 25580, 0x1001e ), false );
+});
 const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
 const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
