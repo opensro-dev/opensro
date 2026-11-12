@@ -14,6 +14,7 @@ package census
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 )
 
@@ -286,5 +287,185 @@ func TestClusterChainAndSort(t *testing.T) {
 	}
 	if len(big.Links) != 2 {
 		t.Fatalf("chain links: got %d, want 2", len(big.Links))
+	}
+}
+
+/*
+================
+bruteGapWithin
+
+The quadratic pair walk the build used before #3302, kept as the
+oracle: any span of a within windowMs of any span of b, over the
+raw lists.
+================
+*/
+func bruteGapWithin(a, b []Span, now, windowMs int64) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if max(x.Started, y.Started)-min(x.end(now), y.end(now)) <= windowMs {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// intervalsOf projects spans to the build's gap intervals.
+func intervalsOf(spans []Span, now int64) []spanInterval {
+	intervals := make([]spanInterval, len(spans))
+	for i, span := range spans {
+		intervals[i] = spanInterval{span.Started, span.end(now)}
+	}
+	return intervals
+}
+
+/*
+================
+TestGapWithinMatchesBruteForce
+
+The coalesce plus two-pointer walk must answer exactly what the
+quadratic walk answered, on every shape the journal can hold:
+overlaps, touching chains, open spans, lists in journal order.
+================
+*/
+func TestGapWithinMatchesBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewSource(3302))
+	now := nowMs()
+	for trial := 0; trial < 400; trial++ {
+		makeSpans := func() []Span {
+			spans := []Span{}
+			for i, count := 0, rng.Intn(24); i < count; i++ {
+				started := now - rng.Int63n(30*windowDayMs)
+				ended := started + rng.Int63n(hourMs)
+				if rng.Intn(8) == 0 {
+					ended = 0
+				}
+				spans = append(spans, span("s", "acct", "Hero", started, ended, "ip", "net", "client"))
+			}
+			return spans
+		}
+		a, b := makeSpans(), makeSpans()
+		for _, windowMs := range []int64{0, hourMs, addressWindowMs} {
+			want := bruteGapWithin(a, b, now, windowMs)
+			got := gapWithin(coalesceIntervals(intervalsOf(a, now)), coalesceIntervals(intervalsOf(b, now)), windowMs)
+			if got != want {
+				t.Fatalf("trial %d window %d: got %v, want %v\na=%v\nb=%v", trial, windowMs, got, want, a, b)
+			}
+		}
+	}
+}
+
+/*
+================
+TestCoalesceIntervalsCollapsesRings
+
+A reconnect ring (thousands of spans milliseconds apart on one
+address) is one coverage interval; disjoint intervals stay apart,
+and an open span absorbs everything it touches.
+================
+*/
+func TestCoalesceIntervalsCollapsesRings(t *testing.T) {
+	now := nowMs()
+	ring := []Span{}
+	for i := 0; i < 1000; i++ {
+		started := now - int64(2000-i)*1000
+		ring = append(ring, span("s", "acct", "Hero", started, started+1500, "ip", "net", "client"))
+	}
+	if got := coalesceIntervals(intervalsOf(ring, now)); len(got) != 1 {
+		t.Fatalf("ring: got %d intervals, want 1", len(got))
+	}
+	apart := []Span{
+		span("s", "acct", "Hero", now-3000, now-2000, "ip", "net", "client"),
+		span("s", "acct", "Hero", now-1000, now-500, "ip", "net", "client"),
+	}
+	if got := coalesceIntervals(intervalsOf(apart, now)); len(got) != 2 {
+		t.Fatalf("apart: got %d intervals, want 2", len(got))
+	}
+	open := []Span{
+		span("s", "acct", "Hero", now-3000, 0, "ip", "net", "client"),
+		span("s", "acct", "Hero", now-2000, now-1000, "ip", "net", "client"),
+	}
+	if got := coalesceIntervals(intervalsOf(open, now)); len(got) != 1 {
+		t.Fatalf("open: got %d intervals, want 1", len(got))
+	}
+}
+
+/*
+================
+TestRingAccountLinksAndStaysFast
+
+The live shape of #3302 as a verdict: one account with 100,000
+spans on one address. A peer inside the address window earns the
+shared-address pair; a peer outside it earns nothing, and that
+answer walks every span without the quadratic blowup (the suite's
+own time budget is what pins the shape; the benchmark below
+measures it).
+================
+*/
+func TestRingAccountLinksAndStaysFast(t *testing.T) {
+	now := nowMs()
+	first := now - 30*windowDayMs
+	spans := make([]Span, 0, 100001)
+	for i := 0; i < 100000; i++ {
+		started := first + int64(i)*25000
+		spans = append(spans, span("s", "ring", "Hero", started, started+1000, "ip-ring", "net-ring", "client-ring"))
+	}
+	linksOf := func(idx *index) []Link {
+		links := append([]Link{}, idx.possible...)
+		for _, cluster := range idx.clusters {
+			links = append(links, cluster.Links...)
+		}
+		return links
+	}
+	addressLinked := func(idx *index) bool {
+		link, found := findLink(linksOf(idx), "peer", "ring")
+		if !found {
+			return false
+		}
+		for _, kind := range evidenceKinds(link) {
+			if kind == "shared-address" {
+				return true
+			}
+		}
+		return false
+	}
+
+	near := first + 50000*25000 + 500
+	spans = append(spans, span("s", "peer", "Peer", near, near+1000, "ip-ring", "net-ring", "client-peer"))
+	if idx := buildIndex(spans, now); !addressLinked(idx) {
+		t.Fatal("the peer inside the window earned no shared-address pair with the ring account")
+	}
+
+	// Before the ring's first span by more than the window: the
+	// network signal still lists the pair, but no address evidence
+	// may ride it, and the full walk still has to finish.
+	spans[len(spans)-1] = span("s", "peer", "Peer", first-2*windowDayMs-1000, first-2*windowDayMs, "ip-ring", "net-ring", "client-peer")
+	if idx := buildIndex(spans, now); addressLinked(idx) {
+		t.Fatal("the peer outside the window earned shared-address evidence with the ring account")
+	}
+}
+
+/*
+================
+BenchmarkBuildIndexRingAccount
+
+100,000 spans on one account, the live shape of #3302: the index
+build over it. The owner's bound is 50 ms per build; this box's
+number lands in the PR (go test -bench . -run '^$').
+================
+*/
+func BenchmarkBuildIndexRingAccount(b *testing.B) {
+	now := nowMs()
+	spans := make([]Span, 0, 100001)
+	for i := 0; i < 100000; i++ {
+		started := now - 30*windowDayMs + int64(i)*25000
+		spans = append(spans, span("s", "ring", "Hero", started, started+1000, "ip-ring", "net-ring", "client-ring"))
+	}
+	near := now - 30*windowDayMs + 50000*25000 + 500
+	spans = append(spans, span("s", "peer", "Peer", near, near+1000, "ip-ring", "net-ring", "client-peer"))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buildIndex(spans, now)
 	}
 }
