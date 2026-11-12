@@ -481,6 +481,7 @@ export function createRenderer(
 		presentationCamera: () => presentationCamera,
 		audioListener: () => soundListener,
 		setWeather: value => world.weather( value ),
+		setWorldLayers: value => world.worldLayers( value ),
 		setWorldClock: value => world.clock( value ),
 		setCharacterModel: characters.model,
 		setCharacterAnimation: characters.animation,

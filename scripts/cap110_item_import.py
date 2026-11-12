@@ -37,7 +37,7 @@ GLOW_ROOT = Path("Media_extracted") / "resinfo"
 GLOW_TABLE = "itemoption.txt"
 GLOW_TIERS = "itemtypenumber.txt"
 RARE_TABLE = "itemrare.txt"
-PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp")
+PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp", ".cpd")
 
 
 # ================
@@ -94,11 +94,7 @@ def resource_dependencies(requests):
 # modifier dependencies fail rather than yielding an incomplete certificate.
 # ================
 def copy_asset_closure(equipment, native, output, archives, worn=True):
-	native_paths = {name: {
-		normalized_path(path.relative_to(native / folder).as_posix()): path
-		for path in (native / folder).rglob("*") if path.is_file()
-	} for name, folder in FOLDERS.items()}
-	pending, seen, records = set(items.direct_assets(equipment)), set(), []
+	pending = set(items.direct_assets(equipment))
 	# worn is false for rows that are carried, not worn (alchemy materials,
 	# tokens): they have an icon and a drop model but no worn mesh.
 	# A comma pair (set armour's plain and full-set model) was already cut
@@ -117,6 +113,22 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 			raise ValueError(f"equipment has no worn model: {row[items.CODENAME]}")
 	for names in worn_models:
 		pending.update(("Data", normalized_path(name)) for name in names)
+	return copy_resource_closure(pending, native, output, archives)
+
+
+# ================
+# copy_resource_closure
+#
+# Copies each (archive, path) in pending and everything it references,
+# native files first, then the later archives. Shared by the equipment
+# import and the world layer import (world_layer_import.py).
+# ================
+def copy_resource_closure(pending, native, output, archives):
+	native_paths = {name: {
+		normalized_path(path.relative_to(native / folder).as_posix()): path
+		for path in (native / folder).rglob("*") if path.is_file()
+	} for name, folder in FOLDERS.items()}
+	pending, seen, records = set(pending), set(), []
 	while pending:
 		batch, requests = sorted(pending), []
 		pending = set()

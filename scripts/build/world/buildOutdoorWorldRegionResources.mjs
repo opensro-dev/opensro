@@ -40,6 +40,7 @@ import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
 const NEWLINE_BYTE = 0x0a;
 import { parseJmxMapObjectPlacementO2, readJmxMapObjectInfo, readJmxMapTileCatalog } from "./jmx/index.mjs";
 import { buildJmxWorldRegionBundle } from "./maploader/buildMapLoaderRegionBundle.mjs";
+import { WORLD_LAYER_TABLE } from "./maploader/worldLayers.mjs";
 import { buildTitleSectorObjectResources } from "./objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot, gameRoot, generatedRoot, normalizeRegionId, publicRoot, toHex16 } from "./paths.mjs";
 
@@ -398,7 +399,16 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 
 	// Output from older builder code is never reused; a partial run (regionIds)
 	// rebuilds what it selects and leaves the stamp stale for the next full run.
-	const builderHash = await codeHash( import.meta.url );
+	// The seasonal layer table (worldLayers.mjs) changes the bundles' layer
+	// tags and the .o2 files beside it without touching any code, so its
+	// bytes join the stamp: a new or removed layer import rebuilds every region.
+	const layerTable = await readFile( path.join( sourceExtractedRoot, "Map_extracted", WORLD_LAYER_TABLE ) ).catch(
+		error => {
+			if ( error.code === "ENOENT" ) return Buffer.alloc( 0 );
+			throw error;
+		}
+	);
+	const builderHash = sha256Hex( `${await codeHash( import.meta.url )}:${sha256Hex( layerTable )}` );
 	const codeCurrent = await stampIsCurrent( OUTDOOR_CODE_STAMP, builderHash );
 	// This run writes with other code: the old stamp must not survive it.
 	if ( !codeCurrent ) await invalidateStamp( OUTDOOR_CODE_STAMP );

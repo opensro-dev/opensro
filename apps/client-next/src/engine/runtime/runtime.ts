@@ -52,6 +52,7 @@ import type { Pose } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
+import { activeWorldLayers } from "@/engine/foundation/world/world-layers";
 
 // The build's ordered background install list (buildBackgroundInstallAsset.mjs).
 const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
@@ -1294,6 +1295,8 @@ export function startRuntime(
 						{ ...(presentation.gameplay()?.weather ?? { mode: 1, amount: 0 }), eventRain } :
 						null
 				);
+				// The seasonal decoration follows the event groups the server set.
+				renderer.setWorldLayers( activeWorldLayers( presentation.gameplay()?.eventGroups ) );
 				// CGInterface_UpdateCameraOrbitTarget (68F830) locks third person
 				// behind the drawn body's turning yaw (+0x88, written per step by
 				// 86CBA0), not the logical heading, which snaps on each click.

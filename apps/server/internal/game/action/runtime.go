@@ -630,6 +630,9 @@ type Runtime struct {
 	// halloweenWavesAsked is the last instant advanceHalloweenWaves asked
 	// the timetable about; the tick goroutine alone touches it.
 	halloweenWavesAsked time.Time
+	// halloweenLayerKnown and halloweenLayerActive are the window state
+	// advanceHalloweenLayer last saw (halloween_layer.go); tick goroutine only.
+	halloweenLayerKnown, halloweenLayerActive bool
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.

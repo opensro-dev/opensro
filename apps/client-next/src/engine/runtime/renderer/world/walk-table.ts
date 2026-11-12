@@ -25,6 +25,7 @@ Bounds are grown so that rejecting them rejects every member test exactly
 import type { WorldGroup } from "@/engine/contracts/scene";
 import { instanceGroupSphere } from "@/engine/foundation/rendering/instance-bounds";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { NO_WORLD_LAYERS } from "@/engine/foundation/world/world-layers";
 
 export const WALK_SKY = 0;
 export const WALK_TERRAIN = 1;
@@ -85,6 +86,23 @@ export interface WalkTable {
 	// Per resident slot (at the group's slot base), the published alpha of its
 	// object in the group's placement list, or -1 when it is out.
 	readonly alpha: Int16Array;
+	// The seasonal world layers drawn (world-layers.ts); a slot of another
+	// layer is never resident. setWalkLayers changes it.
+	layers: ReadonlySet<number>;
+}
+
+/*
+================
+setWalkLayers
+
+Draws the given seasonal layers from now on: every group's resident list
+is found again on its next pass.
+================
+*/
+export function setWalkLayers( table: WalkTable, layers: ReadonlySet<number> ) {
+	if ( table.layers === layers ) return;
+	table.layers = layers;
+	table.residentCell.fill( NaN );
 }
 
 /*
@@ -97,7 +115,8 @@ meshes without bounds are tested as spheres.
 */
 export function compileWalkTable(
 	groups: readonly WorldGroup[],
-	pickBounds: WeakMap<Float32Array, readonly number[]>
+	pickBounds: WeakMap<Float32Array, readonly number[]>,
+	layers: ReadonlySet<number> = NO_WORLD_LAYERS
 ): WalkTable {
 	const count = groups.length, slotBase = new Int32Array( count + 1 );
 	for ( let i = 0; i < count; i++ ) {
@@ -129,7 +148,8 @@ export function compileWalkTable(
 		resident: new Uint32Array( slots ),
 		residentCount: new Int32Array( count ),
 		residentCell: new Float64Array( count * 2 ).fill( NaN ),
-		alpha: new Int16Array( slots )
+		alpha: new Int16Array( slots ),
+		layers
 	};
 	for ( let i = 0; i < count; i++ ) {
 		const group = groups[i]!;
@@ -203,6 +223,7 @@ export function residentSlots( table: WalkTable, i: number, cellX: number, cellZ
 	let count = 0;
 	for ( let slot = 0; slot < slots; slot++ ) {
 		const descriptor = group.visibility?.[slot];
+		if ( descriptor?.layer !== undefined && !table.layers.has( descriptor.layer ) ) continue;
 		const resident = !descriptor ||
 			descriptor.cells.some( cell =>
 				Math.abs( cell[0] - cellX ) <= descriptor.cellRadius &&

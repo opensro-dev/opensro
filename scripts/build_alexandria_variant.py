@@ -662,6 +662,16 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	later_layers = add_later_layers(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
+	# The later client's seasonal town decoration (Halloween and the other
+	# event layers), into the object catalog and region files written above.
+	# Without the v1.696 archives a previous import is removed.
+	from world_layer_import import add_layers
+	from mall_avatar_import import V1696_SOURCE, source_pins, v1696_root
+	later = v1696_root()
+	if later is not None and not all((later / f"{name}.pk2").is_file() for name in ("Map", "Data", "Media", "Particles")):
+		log(f"world layers: {later} lacks the v1.696 archives; no seasonal layers")
+		later = None
+	world_layers = add_layers(later, native, out, source_pins(V1696_SOURCE) if later else None)
 
 	environment = read_vsro_file(vsro_root, "Map", "environment.ifo")
 	replace_file(out / "Map_extracted" / "environment.ifo", environment)
@@ -670,6 +680,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
 		**later_layers,
+		"worldLayers": world_layers,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
