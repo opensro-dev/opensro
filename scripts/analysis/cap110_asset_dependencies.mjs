@@ -17,7 +17,6 @@ import { collectMeshPaths } from "../build/effects/buildEffectPrograms.mjs";
 import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "../build/effects/parseJmxVisualEffect.mjs";
 import { parseCompound } from "../build/world/objects/compound.mjs";
 import { parseJmxBmtMaterialSet, parseJmxResourceBsr, resolveBmtTexturePath } from "../build/world/objects/formats.mjs";
-import { parseCompound } from "../build/world/objects/compound.mjs";
 
 /*
 ================
@@ -84,9 +83,6 @@ function dependencies( resource ) {
 			const texture = resolveBmtTexturePath( resource.path, material.textureName );
 			if ( texture ) paths.add( texture );
 		}
-	} else if ( resource.path.endsWith( ".cpd" ) ) {
-		// A compound names its branch resources and nothing else (compound.mjs).
-		for ( const branch of parseCompound( bytes, resource.path ).branches ) paths.add( branch );
 	} else if ( resource.path.endsWith( ".efp" ) ) {
 		const effect = parseJmxVisualEffect( bytes, resource.path );
 		for ( const name of [ ...collectMeshPaths( effect ), ...collectJmxEffectTexturePaths( effect ) ] ) {
