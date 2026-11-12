@@ -157,6 +157,7 @@ var catalogueExempt = map[string]string{
 	"SRO_FLAGWAR_START_UTC":                    "the Capture the Flag schedule; the catalogue's event list carries no Capture the Flag row",
 	"SRO_FLAGWAR_MIN_PLAYERS":                  "the Capture the Flag team minimum; the catalogue's event list carries no Capture the Flag row",
 	"SRO_MALL_EXTRA_GOODS":                     "the Item Mall's listing; the catalogue publishes no mall listing, and items.json publishes the goods either way",
+	"SRO_MALL_CATEGORIES":                      "the Item Mall's categories and listing; the catalogue publishes no mall listing, and items.json publishes the goods either way",
 	"SRO_ALCHEMY_NO_ASSIMILATION":              "what a successful stone rerolls at runtime; alchemy.json publishes the rates, not the outcome rule",
 	"SRO_CARAVAN_BANDIT_CAP":                   "caravan ambush composition at runtime; the catalogue publishes no ambushes",
 	"SRO_CARAVAN_STAR_AMBUSH":                  "caravan ambush composition at runtime; the catalogue publishes no ambushes",

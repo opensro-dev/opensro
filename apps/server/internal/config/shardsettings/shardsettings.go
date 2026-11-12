@@ -368,6 +368,10 @@ var Settings = []Setting{
 	// off restores the native Jangan shop.
 	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
+	// Owner ask, 2026-11-12 (#3257): the later mall's categories, HOT
+	// shop and goods badges. Off by default; off is the shipped mall
+	// exactly (commerce/mallcategories.go).
+	{Env: "SRO_MALL_CATEGORIES", NomadVar: "mall_categories", Default: "off"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
