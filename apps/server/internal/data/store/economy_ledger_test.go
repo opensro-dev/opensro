@@ -570,3 +570,58 @@ func TestNoteItemSaleBuckets(t *testing.T) {
 	defer reopened.Close()
 	check(reopened)
 }
+
+/*
+================
+TestNoteItemSaleRidesTheCommit
+
+A note is a fold in memory, never its own disk write (#3307): inside
+an open tick batch nothing reaches the buckets until the batch
+flushes, the batch's flush writes both lots as one bucket, and a
+failed commit keeps the fold pending for the next one, as it keeps
+the gold rows.
+================
+*/
+func TestNoteItemSaleRidesTheCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	count := func() int64 {
+		t.Helper()
+		var total int64
+		if err := s.syncDBLocked().QueryRow(
+			"SELECT COALESCE(SUM(count), 0) FROM economy_ledger_char_item_hours WHERE char_id = 7").Scan(&total); err != nil {
+			t.Fatal(err)
+		}
+		return total
+	}
+
+	s.BeginTickBatch()
+	for _, lot := range []int{2, 3} {
+		if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", lot, int64(15*lot)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := count(); got != 0 {
+		t.Fatalf("a note inside the batch wrote %d items before the flush", got)
+	}
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the batch holding the notes did not flush: %+v", stats)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("the flushed batch wrote %d items, want 5", got)
+	}
+
+	s.FailCommits(errors.New("item note outage"))
+	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err == nil {
+		t.Fatal("a note whose commit failed reported success")
+	}
+	s.FailCommits(nil)
+	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(); got != 7 {
+		t.Fatalf("after a failed and a healed commit the buckets hold %d items, want 7", got)
+	}
+	s.Close()
+}

@@ -185,6 +185,9 @@ gold per reason and direction, for the metrics endpoint.
 type economyLedger struct {
 	seen    map[*domain.Character]int64
 	pending []ledgerRow
+	// items are the merchant sales' per-item folds (#3307) awaiting
+	// the same commit as pending.
+	items map[ledgerItemBucketKey]*ledgerItemFold
 	// warned names the unattributed doors already logged, once each.
 	warned map[string]bool
 	mu     sync.Mutex
@@ -722,9 +725,15 @@ character's per-item hourly bucket (economy_ledger_char_item_hours).
 
 The gold side needs no call - the ledger reads it off the balance at
 the door - but a balance diff cannot name what was sold, so the sale
-door notes the item itself after its commit lands. Sales are
-player-paced, so the note is its own small write under the store
-lock, after the tick's deferred rows like every direct door. The
+door notes the item itself after its commit lands. The note is a fold
+in memory, never its own disk write: it joins the pending gold rows
+and rides the next commit's transaction (flushLedgerItemsTx), queued
+like any commit. A direct write here drained the commit writer and
+waited on the disk under the store lock once per sale, which a bot
+selling one item at a time turns into a stall per request. Inside an
+open tick batch the note waits for the batch; outside one it commits
+now, which with the asynchronous writer only queues the batch. A
+failed commit keeps the fold pending, as it keeps the gold rows. The
 rows history holds predate the note and carry no item; their gold
 stays readable in the per-character buckets, and the per-item
 buckets simply begin with the first noted sale.
@@ -736,19 +745,83 @@ func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) e
 	if s.db == nil || charID <= 0 || item == "" || count <= 0 || gold < 0 {
 		return fmt.Errorf("economy item sale: unavailable or malformed note")
 	}
-	if err := s.flushDeferredLocked(); err != nil {
-		return err
+	key := ledgerItemBucketKey{hourMs: s.now().UnixMilli() / economyHourMs * economyHourMs, charID: charID, item: item}
+	if s.ledger.items == nil {
+		s.ledger.items = map[ledgerItemBucketKey]*ledgerItemFold{}
 	}
-	hourMs := s.now().UnixMilli() / economyHourMs * economyHourMs
-	_, err := s.syncDBLocked().Exec(`INSERT INTO economy_ledger_char_item_hours (hour_ms, char_id, item, count, gold)
+	fold := s.ledger.items[key]
+	if fold == nil {
+		fold = &ledgerItemFold{}
+		s.ledger.items[key] = fold
+	}
+	fold.count += int64(count)
+	fold.gold += gold
+	if s.batch.open {
+		s.batch.pending = true
+		return nil
+	}
+	return s.commitCheckedLocked("economy-item-sale")
+}
+
+/*
+================
+ledgerItemBucketKey
+
+One character's hourly bucket of one sold item.
+================
+*/
+type ledgerItemBucketKey struct {
+	hourMs int64
+	charID int64
+	item   string
+}
+
+/*
+================
+ledgerItemFold
+
+The sales a bucket gathered since the last commit.
+================
+*/
+type ledgerItemFold struct {
+	count, gold int64
+}
+
+/*
+================
+flushLedgerItemsTx
+
+Writes the pending per-item folds into their hourly buckets, in key
+order so a batch's statements are deterministic. It rides the
+caller's transaction, beside flushLedgerTx.
+================
+*/
+func flushLedgerItemsTx(tx sqlExecer, items map[ledgerItemBucketKey]*ledgerItemFold) error {
+	keys := make([]ledgerItemBucketKey, 0, len(items))
+	for key := range items {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.hourMs != b.hourMs {
+			return a.hourMs < b.hourMs
+		}
+		if a.charID != b.charID {
+			return a.charID < b.charID
+		}
+		return a.item < b.item
+	})
+	for _, key := range keys {
+		fold := items[key]
+		if _, err := tx.Exec(`INSERT INTO economy_ledger_char_item_hours (hour_ms, char_id, item, count, gold)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (hour_ms, char_id, item) DO UPDATE SET
   count = count + excluded.count, gold = gold + excluded.gold`,
-		hourMs, charID, item, count, gold)
-	if err != nil {
-		s.recordWriteFailureLocked("economy-item-sale", err)
+			key.hourMs, key.charID, key.item, fold.count, fold.gold); err != nil {
+			return fmt.Errorf("economy ledger char item hours: %w", err)
+		}
 	}
-	return err
+	return nil
 }
 
 /*
