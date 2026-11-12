@@ -259,6 +259,11 @@ var Settings = []Setting{
 	// Owner, 2026-11-11: a finished dress reloads at the nearest town's
 	// spawn, so a rival cannot follow the wearer. Off (native).
 	{Env: "SRO_JOB_DRESS_TOWN_SPAWN", NomadVar: "job_dress_town_spawn", Default: "off"},
+	// Owner, 2026-11-12: no resurrection or reverse return scroll while a
+	// job suit is worn, each its own live tunable (game/tunables). 0 is
+	// native.
+	{Env: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", NomadVar: "job_block_resurrection_scroll", Default: "0"},
+	{Env: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", NomadVar: "job_block_reverse_return_scroll", Default: "0"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
