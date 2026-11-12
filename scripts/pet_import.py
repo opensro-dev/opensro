@@ -145,7 +145,11 @@ def kind_of(family, rows):
 		return "transport"
 	if family.startswith("COS_C_"):
 		return "vehicle"
-	return "fellow"
+	if family.startswith("COS_F_"):
+		return "fellow"
+	# Anything else waits for its lane (the banner's rule): a prefix
+	# this map does not name is deferred, never fellow by default.
+	return "unknown"
 
 
 # ================
