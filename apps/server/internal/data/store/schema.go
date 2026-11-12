@@ -143,9 +143,14 @@ func isVersionMismatch(err error) bool {
 // against their own daily cap, so ordinary grinding no longer starves
 // a wave. Rows saved earlier carry no Gourd count and start at zero;
 // the offline upgrade rewrites no record.
-
 // Version 42 adds optional arena entry markers and its durable reward chest.
-const CurrentVersion = 42
+// Version 43 moves the survival arena's daily entry count to the account
+// (the sookArenaAccounts metadata plane, port-only, #3322): the three
+// entries a UTC day count per account, not per character. The character
+// sookArenaDay/sookArenaEntries fields stay as the seed the account
+// record is derived from at first load; the offline upgrade rewrites no
+// record.
+const CurrentVersion = 43
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -174,6 +179,10 @@ type Meta struct {
 	// record inside its door and the commit stages it, exactly like a
 	// character record.
 	HalloweenBoxes map[string]*domain.HalloweenBoxAccount `json:"halloweenBoxes,omitempty"`
+	// SookArenaAccounts is the per-account survival arena daily entry
+	// count (#3322), keyed by account id, with HalloweenBoxes' pointer
+	// discipline: the entry mutates the one record inside its door.
+	SookArenaAccounts map[string]*domain.SookArenaAccount `json:"sookArenaAccounts,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

@@ -153,6 +153,8 @@ type changeSet struct {
 	tradeRewards   bool
 	jobRankings    bool
 	halloweenBoxes bool
+	// sookArenaAccounts is the survival arena's account plane (#3322).
+	sookArenaAccounts bool
 }
 
 func newChangeSet() changeSet {
@@ -180,7 +182,8 @@ func (changes changeSet) empty() bool {
 		len(changes.dissolvedCamp) == 0 &&
 		!changes.tradeRewards &&
 		!changes.jobRankings &&
-		!changes.halloweenBoxes
+		!changes.halloweenBoxes &&
+		!changes.sookArenaAccounts
 }
 
 // groundState owns the boundary between the live gameplay registry and its
@@ -694,6 +697,11 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	// writes its row, as every commit did before the plane skip.
 	if loaded.halloweenSeeded {
 		s.changes.halloweenBoxes = true
+	}
+	// The survival arena plane takes the same first-commit write when
+	// it was seeded from the schema 42 per-character counts (#3322).
+	if loaded.sookArenaSeeded {
+		s.changes.sookArenaAccounts = true
 	}
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}

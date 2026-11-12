@@ -693,5 +693,8 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 	if err := writeHalloweenBoxes(tx, data.meta.HalloweenBoxes); err != nil {
 		return err
 	}
+	if err := writeSookArenaAccounts(tx, data.meta.SookArenaAccounts); err != nil {
+		return err
+	}
 	return upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", data.updatedAt))
 }

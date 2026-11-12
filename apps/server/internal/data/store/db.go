@@ -339,6 +339,9 @@ type loadedDB struct {
 	// counts), so its bytes are not the disk's until a commit writes
 	// the row; adoptDB flags the plane for the first commit.
 	halloweenSeeded bool
+	// sookArenaSeeded is the same report for the survival arena's
+	// account plane (seedSookArenaAccounts, #3322).
+	sookArenaSeeded bool
 }
 
 // loadDB accepts only the exact current character and layout versions. It

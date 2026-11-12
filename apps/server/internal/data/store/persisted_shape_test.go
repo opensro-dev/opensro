@@ -105,6 +105,7 @@ var strictRecords = []struct {
 	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
 	{"unique-kill", reflect.TypeOf(domain.UniqueKill{})},
 	{"halloween-box-account", reflect.TypeOf(domain.HalloweenBoxAccount{})},
+	{"sook-arena-account", reflect.TypeOf(domain.SookArenaAccount{})},
 }
 
 /*

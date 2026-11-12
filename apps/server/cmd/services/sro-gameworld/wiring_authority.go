@@ -418,6 +418,7 @@ func newBootstrapDependencies(
 	deps.UpdateCharactersDeferred = authorityStore.UpdateCharactersDeferred
 	deps.UpdateTrade = authorityStore.UpdateTrade
 	deps.HalloweenAccountRecord = authorityStore.HalloweenAccount
+	deps.SookArenaAccountRecord = authorityStore.SookArenaAccount
 	deps.CloseJobWeek = authorityStore.CloseJobWeek
 	deps.JobRankings = authorityStore.JobRankings
 	deps.ReadCharacter = func(divisionID string, read func()) {

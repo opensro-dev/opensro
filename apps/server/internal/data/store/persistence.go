@@ -166,6 +166,10 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		len(s.meta.HalloweenBoxes) > 0, func() (string, error) { return halloweenBoxesRecord(s.meta.HalloweenBoxes) }); err != nil {
 		return err
 	}
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeySookArenaAccounts, s.changes.sookArenaAccounts,
+		len(s.meta.SookArenaAccounts) > 0, func() (string, error) { return sookArenaAccountsRecord(s.meta.SookArenaAccounts) }); err != nil {
+		return err
+	}
 
 	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
@@ -389,7 +393,7 @@ Store::commitMetaPlaneTx
 One whole-plane meta row for the commit. The plane is marshaled only
 when a door touched it since the last commit (the change set's plane
 flags, set where the plane is written: UpdateTrade, CloseJobWeek,
-HalloweenAccount). An untouched populated plane counts as skipped
+HalloweenAccount, SookArenaAccount). An untouched populated plane counts as skipped
 without deriving its bytes (an unpopulated one has no row to skip,
 exactly as its empty record counted before); a touched one marshals
 (an empty plane still writes no row) and takes upsertMetaRowTx's
