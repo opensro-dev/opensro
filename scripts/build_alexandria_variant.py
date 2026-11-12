@@ -64,6 +64,8 @@ from alexandria_map_tables import (  # noqa: E402
 )
 import god_import as god  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
+import jupiter_import as jupiter  # noqa: E402
+import muhan_import as muhan  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -648,6 +650,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The GOD temple worlds ride SRO_CAP110_TEMPLE (with its cap-110
 	# pairing); the same off-path rule applies to their outputs.
 	god_build = god.add_god(native, out)
+	# Muhan is independently optional; its off path also removes what a
+	# previous on build of a reused variant root left behind.
+	muhan_build = muhan.add_muhan(native, out)
 	# The second hunting grounds are independently optional the same
 	# way; their off path reaps a previous on build's outputs.
 	hunting2_build = hunting2.add_hunting2(native, out)
@@ -667,6 +672,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"monsterRewards": monster_rewards,
 		"jupiter": jupiter_build,
 		"god": god_build,
+		"muhan": muhan_build,
 		"hunting2": hunting2_build,
 		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
