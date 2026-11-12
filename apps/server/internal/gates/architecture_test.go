@@ -74,6 +74,8 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/game/world/temple", nil, false)
 	// The Arabia dungeon world (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/arabia", nil, false)
+	// The Jupiter worlds (port-only): the same leaf shape again.
+	checkPackageImports(t, root, modulePath, "internal/game/world/jupiter", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/game/world":             true,
@@ -81,6 +83,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/game/world/pharaohtomb": true,
 		modulePath + "/internal/game/world/temple":      true,
 		modulePath + "/internal/game/world/arabia":      true,
+		modulePath + "/internal/game/world/jupiter":     true,
 		modulePath + "/internal/data/texttable":         true,
 		modulePath + "/internal/game/abnormal":          true,
 		modulePath + "/internal/game/paramkeeper":       true,
