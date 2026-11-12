@@ -36,7 +36,6 @@ import (
 	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
-	"opensro.online/server/internal/platform/pacer"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/security/workload"
@@ -154,17 +153,17 @@ type Server struct {
 	dummyHash               []byte
 	bcryptCost              int
 	passwordSlots           chan struct{}
-	loginAttempts           *pacer.Keyed
+	loginAttempts           *loginLimiter
 	// incidentReports paces /client/incident per account; degradedReports
 	// paces its non-fatal "degraded" reports apart, so they never use up the
 	// allowance a session-ending failure needs.
-	incidentReports *pacer.Keyed
-	degradedReports *pacer.Keyed
+	incidentReports *loginLimiter
+	degradedReports *loginLimiter
 	// anonymousIncidents paces reports sent before login, per client
 	// address, apart from every account's allowance. refusalLines paces the
 	// refusal log lines one client can cause (refusal_log.go).
-	anonymousIncidents *pacer.Keyed
-	refusalLines       *pacer.Keyed
+	anonymousIncidents *loginLimiter
+	refusalLines       *loginLimiter
 	refusalCeiling     refusalCeiling
 	anonymousCeiling   refusalCeiling
 	// clientKey keys the client tags in refusal lines (clientTag). It is
