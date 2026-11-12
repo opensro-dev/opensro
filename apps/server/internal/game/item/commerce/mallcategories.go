@@ -29,13 +29,12 @@ packages' own authored ones; the Rondo's authored package takes the
 alchemy stones' 5-silk tier, as a balance the shard owner can retune in
 this one place.
 
-Premium's Gears tab and the recommendation list's stock beyond the
-premium tickets belong to the epic's later lines (the gears items and
-the model switchers of #3257); the tab stands ready for them. The
-summon scrolls stand in Premium's Others tab below: the three shipped
-ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
-30 silk for one soldier and 60 for two, badged new; their use is
-action/summonscroll.go, behind this same setting.
+Premium's Gears tab holds the gears magic stones below (the model
+switchers of #3257 ride their own line). The summon scrolls stand in
+Premium's Others tab: the three shipped ITEM_ETC_E050729_SUMMON*_SCROLL
+rows no native family serves, priced 30 silk for one soldier and 60
+for two, badged new; their use is action/summonscroll.go, behind this
+same setting.
 
 ===========================================================================
 */
@@ -81,6 +80,10 @@ type mallCategoryGood struct {
 	Item    string
 	Silk    uint32
 	Badge   string
+	// Imported marks an Item that only the optional later-client
+	// import authors: without its row the listing is skipped, not
+	// refused, so a build without the archive boots the rest.
+	Imported bool
 }
 
 var mallCategoryTabs = []mallCategoryTab{
@@ -94,7 +97,53 @@ var mallCategoryTabs = []mallCategoryTab{
 	{Shop: "MALL_ARCHEMY", Code: "MALL_ARCHEMY_OTHERS", Group: "MALL_ARCHEMY_GROUP1", Label: "UIIT_STT_SILKMALL_ETC"},
 }
 
-var mallCategoryGoods = []mallCategoryGood{
+// GearsStoneKinds are the sixteen option kinds of the gears magic
+// stones (issue #3257): the later client's leveled magic stones,
+// ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_<kind>_<degree>. Their rows ride
+// the optional later-client import (scripts/gears_stone_import.py);
+// each names a shipped magicoption at its degree, so the native
+// alchemy stone path serves them unchanged once imported.
+var GearsStoneKinds = []string{
+	"STR", "INT", "HP", "MP", "HR", "DUR", "ER", "SOLID",
+	"BURN", "POISON", "FROSTBITE", "ZOMBIE", "ESHOCK",
+	"EVADE_BLOCK", "EVADE_CRITICAL", "LUCK",
+}
+
+// gearsStoneDegrees is the authored degree span of every kind.
+const gearsStoneDegrees = 7
+
+// gearsStoneSilk is the authored price of every gears stone: the
+// summon scrolls' 30-silk tier, retunable here.
+const gearsStoneSilk = 30
+
+/*
+================
+gearsStoneGoods
+
+One Premium > Gears listing per gears stone (16 kinds at degrees
+1-7, 112 goods), each its own authored package, PACKAGE_ plus the
+item codename, at the authored price, badged new. The rows only
+exist when the optional import wrote them (Imported), so a build
+without the later client lists none and still boots.
+================
+*/
+func gearsStoneGoods() []mallCategoryGood {
+	goods := make([]mallCategoryGood, 0, len(GearsStoneKinds)*gearsStoneDegrees)
+	for _, kind := range GearsStoneKinds {
+		for degree := 1; degree <= gearsStoneDegrees; degree++ {
+			item := fmt.Sprintf("ITEM_ETC_ARCHEMY_LEVEL_MAGICSTONE_%s_%02d", kind, degree)
+			goods = append(goods, mallCategoryGood{Tab: "MALL_PREMIUM_GEARS", Package: "PACKAGE_" + item,
+				Item: item, Silk: gearsStoneSilk, Badge: mallBadgeNew, Imported: true})
+		}
+	}
+	return goods
+}
+
+// mallCategoryGoods is the layout's whole stock: the authored rows
+// below plus the gears stones' generated listings.
+var mallCategoryGoods = append(mallBaseGoods, gearsStoneGoods()...)
+
+var mallBaseGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
 	// dresses and hats. All six are SRO_MALL_EXTRA_GOODS packages the
 	// layout re-homes (see the banner).
@@ -236,6 +285,9 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 	}
 	badges := map[string]string{}
 	for _, good := range mallCategoryGoods {
+		if good.Imported && !itemRefPresent(refs, good.Item) {
+			continue
+		}
 		if good.Badge != "" {
 			badges[good.Package] = good.Badge
 		}
@@ -264,4 +316,21 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		listed[good.Package] = true
 	}
 	return badges, nil
+}
+
+/*
+================
+itemRefPresent
+
+Whether the item table holds this codename: the gate an Imported
+good lists behind, so a catalogue built without the later-client
+import skips its listing instead of refusing the boot.
+================
+*/
+func itemRefPresent(refs enterworld.ItemRefSource, codename string) bool {
+	if refs == nil {
+		return false
+	}
+	ref, ok := refs.ItemRefByCodename(codename)
+	return ok && ref != nil
 }

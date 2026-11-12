@@ -343,7 +343,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance: the outfits were already in the game data."},
 			{Flag: commerce.EnvMallCategories, On: mallCategoriesOn,
 				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
-				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, and the Destruction Rondo is listed for silk.",
+				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, the Destruction Rondo is listed for silk, and Premium's Gears tab sells the later mall's leveled magic stones.",
 				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",
