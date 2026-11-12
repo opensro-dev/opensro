@@ -26,10 +26,13 @@ export function isResponseByteLimitError( error: unknown ): boolean {
 ReadBytesOptions
 
 The owner may account for asynchronous cancellation without delaying failure.
+kept sees every chunk as it is accepted, so an owner can hold on to the
+bytes of a read that later fails (the asset loader's resume, #3354).
 ================
 */
 export interface ReadBytesOptions {
 	received?: ( bytes: number ) => void;
+	kept?: ( chunk: Uint8Array ) => void;
 	signal?: AbortSignal;
 	onCancel?: ( completion: Promise<void> ) => void;
 }
@@ -47,7 +50,7 @@ read must never return the bytes received so far as a whole response.
 export async function readBytes(
 	stream: ReadableStream<Uint8Array>,
 	limit: number,
-	{ received, signal, onCancel }: ReadBytesOptions = {}
+	{ received, kept, signal, onCancel }: ReadBytesOptions = {}
 ): Promise<Uint8Array<ArrayBuffer>> {
 	if ( !Number.isSafeInteger( limit ) || limit < 1 ) throw new Error( "Invalid byte limit" );
 	signal?.throwIfAborted();
@@ -72,6 +75,7 @@ export async function readBytes(
 				throw Object.assign( new Error( "Response exceeds byte limit" ), { code: "ASSET_BYTE_LIMIT" } );
 			}
 			chunks.push( part.value );
+			kept?.( part.value );
 			received?.( part.value.byteLength );
 		}
 	} catch ( error ) {
