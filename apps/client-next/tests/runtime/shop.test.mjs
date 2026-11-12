@@ -44,6 +44,52 @@ test("shop artwork follows reference replacement and does not rebuild on unchang
 	inv.bootstrap( { inventorySlotCount: 109, equipmentSlotCount: 13 } );
 	assert.equal( inv.state().shop, undefined );
 });
+function trader( rows, offers ) {
+	const inv = createInventory( () => {}, () => {}, () => {} );
+	inv.bootstrap( { inventorySlotCount: 109, equipmentSlotCount: 13, refItemSnapshot: rows } );
+	inv.openShop( 23, 0 );
+	inv.receive( 11, json( { version: 1, npc: 23, name: "Trader", offers } ) );
+	return inv;
+}
+const TRADE_ROW = { refObjId: 7001, typeFlags: 0x46c };
+const TRADE_OFFER = { tab: 0, slot: 0, refObjId: 7001, name: "Trade goods", price: "100", maxStack: 40 };
+test("the sell-end close takes a specialty-goods shop and leaves any other shop open", () => {
+	// The potion catalogue is no specialty page (a good with no reference
+	// row never marks it either): the close leaves this shop alone.
+	const plain = fixture();
+	assert.equal( plain.inv.state().shop.specialty, false );
+	assert.equal( plain.inv.closeSpecialtyShop(), false );
+	assert.ok( plain.inv.state().shop );
+
+	// Trade goods throughout: the open page is the specialty-goods page
+	// and the close takes the shop, exactly once.
+	const specialty = trader( [ TRADE_ROW ], [ TRADE_OFFER ] );
+	assert.equal( specialty.state().shop.specialty, true );
+	assert.equal( specialty.closeSpecialtyShop(), true );
+	assert.equal( specialty.state().shop, undefined );
+	assert.equal( specialty.closeSpecialtyShop(), false );
+
+	// A package classifies by its first content, as natively.
+	const bundle = trader( [ TRADE_ROW ], [ {
+		tab: 0,
+		slot: 0,
+		refObjId: 8001,
+		name: "Bundle",
+		price: "100",
+		maxStack: 1,
+		contents: [ { refObjId: 7001, name: "Trade goods", quantity: 10, plus: 0 } ]
+	} ] );
+	assert.equal( bundle.state().shop.specialty, true );
+
+	// One ordinary good among trade goods: not a specialty page.
+	const mixed = trader( [ TRADE_ROW, { refObjId: 3630, typeFlags: 0x8ec } ], [
+		TRADE_OFFER,
+		{ tab: 0, slot: 2, refObjId: 3630, name: "Potion", price: "60", maxStack: 50 }
+	] );
+	assert.equal( mixed.state().shop.specialty, false );
+	assert.equal( mixed.closeSpecialtyShop(), false );
+	assert.ok( mixed.state().shop );
+});
 function purchase( quantity = 3 ) {
 	return {
 		version: 1,

@@ -21,6 +21,9 @@ func (api *API) handleTransportAdmissionToken(w http.ResponseWriter, r *http.Req
 		return
 	}
 	identity := requestIdentity(r)
+	if !admitTicket(w, api.transportTickets, identity.accountID) {
+		return
+	}
 	expiresAt := api.now().Add(transportAdmissionTokenTTL)
 	token, err := auth.MintTransportAdmission(
 		api.enterWorldAuthSecret,

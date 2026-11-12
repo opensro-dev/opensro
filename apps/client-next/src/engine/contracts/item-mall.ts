@@ -11,6 +11,18 @@ are integer game currencies. Funding services are outside this contract.
 
 /*
 ================
+MallBadge
+
+The later client's N/H/R mark on the goods (port-only, issue #3257):
+"new", "hot" or "recommended". Only a server running
+SRO_MALL_CATEGORIES stamps it, and only a client with the Experimental
+mall categories row draws it; the native catalogue carries no badge.
+================
+*/
+export type MallBadge = "new" | "hot" | "recommended";
+
+/*
+================
 MallOffer
 ================
 */
@@ -29,6 +41,7 @@ export interface MallOffer {
 	readonly allowsPoints: boolean;
 	readonly purchaseLimit: number;
 	readonly itemIds: readonly number[];
+	readonly badge?: MallBadge;
 }
 
 /*

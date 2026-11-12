@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -54,13 +55,23 @@ func InitCap110(textdataDir string, enabled bool) error {
 	if err != nil {
 		return err
 	}
+	// A client-only build (no database export, #3246) writes no rewards
+	// file: its monsters carry no database rewards, so the native
+	// consumables stand - the same native posture an export without
+	// assignments takes for gear. A file that is present must still
+	// parse and carry rules; an authored build never goes partial.
+	nextConsumables := nativeConsumables
 	rewardData, err := os.ReadFile(filepath.Join(textdataDir, cap110RewardsFile))
-	if err != nil {
+	switch {
+	case err == nil:
+		nextConsumables, err = compileCap110Rewards(nativeConsumables, rewardData)
+		if err != nil {
+			return err
+		}
+	case os.IsNotExist(err):
+		log.Printf("cap110 rewards: no %s; the native drop posture stands (client-only build)", cap110RewardsFile)
+	default:
 		return fmt.Errorf("cap110 rewards: %w", err)
-	}
-	nextConsumables, err := compileCap110Rewards(nativeConsumables, rewardData)
-	if err != nil {
-		return err
 	}
 	markExpansionBuckets(nextEquipment, equipment)
 	equipment, properties, consumables = nextEquipment, nextProperties, nextConsumables
