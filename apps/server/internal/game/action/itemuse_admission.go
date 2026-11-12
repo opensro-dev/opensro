@@ -61,6 +61,7 @@ const (
 	itemUseNameChange
 	itemUseCrestDelete
 	itemUseGuildRecall
+	itemUseSummonScroll
 )
 
 /*
@@ -95,6 +96,14 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// Native item use case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
 	if ref.TypeIDs == globalChatTypeIDs {
 		return itemUseGlobalChat
+	}
+	// #3257 (port-only, not native): the three mall summon scrolls
+	// reuse the shipped quest-tool type (3/3/9/0), so admission is by
+	// codename and the family's handler re-checks SRO_MALL_CATEGORIES
+	// before any effect (summonscroll.go). The classification alone
+	// grants nothing.
+	if SummonScrollCount(ref.Codename) != 0 {
+		return itemUseSummonScroll
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool
