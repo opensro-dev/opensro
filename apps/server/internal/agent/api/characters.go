@@ -565,6 +565,9 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "BAD_REQUEST"})
 		return
 	}
+	if !admitTicket(w, api.enterWorldTickets, requestAccountID(r)) {
+		return
+	}
 	// Lazy reap first, like every character read on this surface: a
 	// matured deletion must not receive a bind ticket.
 	api.store.ReapMaturedDeletions()

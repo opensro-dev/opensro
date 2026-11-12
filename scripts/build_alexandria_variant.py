@@ -63,6 +63,8 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
+import jupiter_import as jupiter  # noqa: E402
+import muhan_import as muhan  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
@@ -643,6 +645,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
 	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
+	# The later clients' pets follow the avatars: their COS rows and
+	# summon scrolls append their own shards to the same manifests. The
+	# v1.696 pass and the pinned-archive pass read their sources from the
+	# environment and skip cleanly while those are not on the machine.
+	from pet_import import add_all_sources
+	pets = add_all_sources(vsro_root, native, out)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -652,9 +660,22 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
+	# The Sky Temple fields are their own switch and their own source (the
+	# v1.696 client), layered on the same variant after the populations
+	# whose identity space they share.
+	from skytemple_import import add_skytemple
+	sky_temple = add_skytemple(native, out)
+	# The Arabia continent is its own switch on the same two later
+	# sources, layered after the Sky Temple fields whose identity and
+	# catalogue merges it follows.
+	from arabia_import import add_arabia
+	arabia = add_arabia(native, out)
 	# Jupiter is independently optional; its off path also removes what a
 	# previous on build of a reused variant root left behind.
 	jupiter_build = jupiter.add_jupiter(native, out)
+	# Muhan is independently optional; its off path also removes what a
+	# previous on build of a reused variant root left behind.
+	muhan_build = muhan.add_muhan(native, out)
 	# The second hunting grounds are independently optional the same
 	# way; their off path reaps a previous on build's outputs.
 	hunting2_build = hunting2.add_hunting2(native, out)
@@ -667,7 +688,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
+		"skyTemple": sky_temple,
+		"arabia": arabia,
 		"jupiter": jupiter_build,
+		"muhan": muhan_build,
 		"hunting2": hunting2_build,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
@@ -686,6 +710,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
+		"pets": pets["pets"],
+		"petsV1696": pets["petsV1696"],
+		"petsArchive": pets["petsArchive"],
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,

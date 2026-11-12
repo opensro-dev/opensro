@@ -50,6 +50,7 @@ var unlistedSettings = map[string]string{
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
+	companion.EnvPetInventoryPages:      "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -132,7 +133,7 @@ func publicRules() publicstats.RulesResponse {
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	hideAlexandriaD11, _ := commerce.AlexandriaHideD11GoodsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
-	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
+	petPages, _ := companion.PetInventoryPagesFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
@@ -169,6 +170,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no temple instance.",
 				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
 				Why:    "Instanced group hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvSkytemple, On: monster.SkytempleEnabled(),
+				Native: "There is no Sky Temple.",
+				Now:    "The Sky Temple's four fields open above Jangan's Jupiter Temple, hunting grounds of monsters at levels 131 to 178.",
+				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
+			{Flag: monster.EnvArabia, On: monster.ArabiaEnabled(),
+				Native: "There is no Arabia.",
+				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, and the Baghdad dungeon, hunting grounds of monsters at levels 120 to 130.",
+				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
@@ -181,6 +190,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There are no Mirror Dimension temples.",
 				Now:    "The two Mirror Dimension temple sets stand beside the Jupiter field, each a shared area of level 111-120 monsters.",
 				Why:    "High-level hunting from a later client, imported as optional content."},
+			{Flag: monster.EnvMuhan, On: monster.MuhanEnabled(),
+				Native: "There is no Muhan, the Battlefield of Infinity.",
+				Now:    "Muhan, the Battlefield of Infinity, stands open: eight arenas (solo and party, for levels 75, 85, 95 and 105) each run twenty waves of monsters.",
+				Why:    "Wave-defence hunting from a later client, imported as optional content."},
 			{Flag: monster.EnvHunting2, On: monster.Hunting2Enabled(),
 				Native: "There is no second hunting ground set.",
 				Now:    "The second hunting grounds stand open: a shared area of level 49-140 monsters.",
@@ -201,10 +214,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
-			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
-				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
-				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
-				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvGrabPetInventoryPages, On: petPages.Grab > 0,
+				Native: "A grab pet's bag holds 28 slots.",
+				Now:    petInventoryPagesNow("grab pet", petPages.Grab),
+				Why:    "Owner-requested convenience: more grab pet storage without a per-pet upgrade item."},
+			{Flag: companion.EnvTransportPetInventoryPages, On: petPages.Transport > 0,
+				Native: "A transport's cargo bag holds its authored size.",
+				Now:    petInventoryPagesNow("transport", petPages.Transport),
+				Why:    "Owner-requested convenience: more transport cargo without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -468,6 +485,18 @@ func publicRules() publicstats.RulesResponse {
 					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
 					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
 				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
+			{Flag: action.EnvJobDressTownSpawn, On: action.JobDressTownSpawnFromEnv(),
+				Native: "Putting a job suit on or taking it off leaves you where you stand.",
+				Now:    "Once the suit is on or off, you reappear at the spawn point of the nearest town.",
+				Why:    "Requested so a rival job player who watched you change cannot follow you; the original returns with one setting."},
+			{Flag: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", On: settings.Int(tunables.JobBlockResurrectionScroll) == 1,
+				Native: "A player in a job suit who falls can use a resurrection scroll like anyone else.",
+				Now:    "While you wear a job suit, resurrection scrolls cannot be used.",
+				Why:    "Requested so a job player who falls cannot get straight back up in the fight; the original returns with one setting."},
+			{Flag: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", On: settings.Int(tunables.JobBlockReverseReturnScroll) == 1,
+				Native: "A player in a job suit can use a reverse return scroll to go back to their last recall or death point.",
+				Now:    "While you wear a job suit, reverse return scrolls cannot be used.",
+				Why:    "Requested so a job player cannot jump straight back to where they fell; the original returns with one setting."},
 			{Flag: action.EnvMoonlitThiefSuit, On: action.MoonlitThiefSuitFromEnv(),
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",
@@ -640,4 +669,17 @@ func groupedGold(gold int64) string {
 		out = append(out, digits[i])
 	}
 	return string(out)
+}
+
+/*
+================
+petInventoryPagesNow
+
+The rules page's description of one pet kind's bag pages.
+================
+*/
+func petInventoryPagesNow(kind string, pages uint8) string {
+	slots := int(pages) * int(companion.PetInventoryPageSlots)
+	return fmt.Sprintf("Every %s's bag holds at least %d pages of %d slots (%d in all). A bag that is smaller gains the slots when summoned; a lower setting never removes an item or shrinks a bag.",
+		kind, pages, companion.PetInventoryPageSlots, slots)
 }

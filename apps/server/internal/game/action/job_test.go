@@ -175,6 +175,46 @@ func TestJobSuitDressesAfterTenSeconds(t *testing.T) {
 
 /*
 ================
+TestJobSuitDressCancelsOnMove
+
+A move accepted during the dress bar cancels it: every observer gets the
+0x3514 bar clear, the wearer's held item move closes with the silent
+refusal, the suit stays in the bag and the timer never fires.
+================
+*/
+func TestJobSuitDressCancelsOnMove(t *testing.T) {
+	rt, clock, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+	if out := rt.HandleItemMove(testDivision, c, wear); len(out.Frames) != 1 || out.Frames[0].Opcode != opJobDressBar {
+		t.Fatalf("dress began with %+v", out.Frames)
+	}
+	var own, peers []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { own = append(own, frames...) }
+	rt.PushDivisionPeerFrames = func(_, _ string, frames []wire.Frame) { peers = append(peers, frames...) }
+	rt.RetireMoveEffects(testDivision, c.Name, clock.NowMs())
+	gid := wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(c)).Payload()
+	if len(own) != 2 || own[0].Opcode != opJobDressCancel || !bytes.Equal(own[0].Payload, gid) ||
+		own[1].Opcode != wire.OpItemMoveResponse || !bytes.Equal(own[1].Payload, wire.EncodeItemMoveError(jobDressErrCancelled)) {
+		t.Fatalf("wearer got %+v", own)
+	}
+	if len(peers) != 1 || peers[0].Opcode != opJobDressCancel || !bytes.Equal(peers[0].Payload, gid) {
+		t.Fatalf("observers got %+v", peers)
+	}
+	own, peers = nil, nil
+	clock.now = clock.now.Add(jobDressSeconds * time.Second)
+	rt.advanceJobDresses(clock.NowMs())
+	rt.RetireMoveEffects(testDivision, c.Name, clock.NowMs())
+	if enterworld.DressedJob(c) != 0 || len(own) != 0 || len(peers) != 0 {
+		t.Fatalf("after the cancel: job %d frames %+v / %+v", enterworld.DressedJob(c), own, peers)
+	}
+	if _, ok := inventoryRowAt(c, jobTestSuitSlot); !ok {
+		t.Fatal("the suit left its bag slot")
+	}
+}
+
+/*
+================
 TestThiefDenScrollRefusesAnyoneButADressedThief
 
 Natively THIEFDEN answers 0x186A to anyone not dressed as a thief.

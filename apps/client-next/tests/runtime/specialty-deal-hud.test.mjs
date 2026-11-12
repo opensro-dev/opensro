@@ -51,6 +51,23 @@ test("a multi-stack purchase sends one stack at a time until the target moved", 
 	assert.equal( hud.state(), null );
 });
 
+test("a request settled before a frame saw it pending still advances the loop", () => {
+	// A local server answers within one frame: the worker's pending flag is
+	// set and cleared between two UI frames, and only the stock shows it.
+	const hud = openDeal( 3960, 40 );
+	assert.deepEqual( hud.confirm( 0, 0 ), { chunk: 40, progress: true } );
+	assert.equal( hud.observe( false, 40, 16 ), 40, "the first stack moved: send the second" );
+	assert.equal( hud.observe( false, 80, 32 ), 40 );
+	let stock = 80, now = 32;
+	while ( hud.state() ) {
+		const next = hud.observe( false, stock += 40, now += 16 );
+		if ( next === 0 ) break;
+		assert.equal( next, 40 );
+	}
+	assert.equal( stock, 3960, "the whole transport filled, one stack per request" );
+	assert.equal( hud.state(), null );
+});
+
 test("a request that moves nothing, or is never taken, ends the deal", () => {
 	const refused = openDeal( 25 );
 	refused.confirm( 4, 0 );

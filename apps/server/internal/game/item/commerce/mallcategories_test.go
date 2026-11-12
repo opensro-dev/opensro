@@ -287,3 +287,76 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 		t.Fatalf("avatar shops hold %d offers, want 24 (8 shipped, 16 extra)", avatar)
 	}
 }
+
+/*
+================
+importedItems
+
+The shipped item table plus rows only the later-client import authors,
+for the model switcher listing.
+================
+*/
+type importedItems struct {
+	enterworld.ItemRefSource
+	extra map[string]*enterworld.ItemRef
+}
+
+func (s importedItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
+	if ref, ok := s.extra[codename]; ok {
+		return ref, true
+	}
+	return s.ItemRefSource.ItemRefByCodename(codename)
+}
+
+func (s importedItems) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
+	for _, ref := range s.extra {
+		if ref.RefObjID == id {
+			return ref, true
+		}
+	}
+	return s.ItemRefSource.ItemRefByID(id)
+}
+
+/*
+================
+TestMallCategoriesListOnlyImportedSwitchers
+
+The shipped data holds no switcher row, so the layout lists none of
+them and still boots (TestMallCategoriesOn's 91). With one switcher
+imported, exactly that one joins Halloween Models at 600 silk, badged
+hot, and its quote resolves.
+================
+*/
+func TestMallCategoriesListOnlyImportedSwitchers(t *testing.T) {
+	tier.Long(t, "the model switchers list only when the import authored them")
+	dir := gamedatatest.TextdataDir(t)
+	shipped := enterworld.NewTextdataItems(dir)
+	base, ok := shipped.ItemRefByCodename("ITEM_ETC_ARCHEMY_RONDO_02")
+	if !ok {
+		t.Fatal("no shipped row to model the switcher on")
+	}
+	switcher := *base
+	switcher.RefObjID, switcher.Codename = 88018, "ITEM_ORIGIN_CH_HW_SWORD_SCROLL"
+	items := importedItems{ItemRefSource: shipped, extra: map[string]*enterworld.ItemRef{switcher.Codename: &switcher}}
+	catalog, err := LoadMall(dir, nil, true, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Offers) != 92 {
+		t.Fatalf("layout mall: %d offers, want 91 plus the one imported switcher", len(catalog.Offers))
+	}
+	offer := mallOfferNamed(catalog, "PACKAGE_ITEM_ORIGIN_CH_HW_SWORD_SCROLL")
+	if offer == nil || offer.Shop != 5 || offer.Tab != 1 || offer.Silk != modelSwitcherSilk || offer.Badge != mallBadgeHot {
+		t.Fatalf("switcher offer = %+v, want HOT Halloween Models at %d silk badged hot", offer, modelSwitcherSilk)
+	}
+	if err := catalog.Hydrate(items); err != nil {
+		t.Fatal(err)
+	}
+	quote, err := catalog.Quote(wire.MallPurchase{
+		Group: offer.Group, Shop: offer.Shop, Tab: offer.Tab, Slot: offer.Slot,
+		Package: offer.PackageID, Quantity: 1,
+	})
+	if err != nil || quote.Cost.Silk != modelSwitcherSilk {
+		t.Fatalf("switcher quote = %+v, %v; want %d silk", quote.Cost, err, modelSwitcherSilk)
+	}
+}

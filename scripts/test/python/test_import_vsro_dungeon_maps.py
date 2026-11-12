@@ -124,6 +124,32 @@ class DungeonMapSignTests(unittest.TestCase):
 		self.assertEqual((sign["width"], sign["height"]), (16, 9))
 
 
+class DungeonMapCaptionTests(unittest.TestCase):
+	def test_a_page_titles_with_its_regions_zone_name(self):
+		rows = importer.map_rows(["#section\tDungeonmap", map_line(2005, 1, 32775), map_line(2010, 6, 32770)])
+		zones = importer.english_text([
+			"1\t32775\tKorean B1\t\t\t\t\t\tUnderground Level 1 of Tomb of Qin-Shi",
+			"1\t32770\tKorean B6\t\t\t\t\t\tUnderground Level 6 of Tomb of Qin-Shi ",
+		])
+		importer.add_captions(rows, zones)
+		# The title is the region's, not the row's layer: B6 is region 32770.
+		self.assertEqual(
+			[row["caption"] for row in rows],
+			["Underground Level 1 of Tomb of Qin-Shi", "Underground Level 6 of Tomb of Qin-Shi"]
+		)
+
+	def test_a_region_without_a_zone_name_stops_the_import(self):
+		rows = importer.map_rows(["#section\tDungeonmap", map_line(2001, 1, 32769)])
+		with self.assertRaises(SystemExit):
+			importer.add_captions(rows, {})
+
+	def test_the_monster_note_is_required(self):
+		names = importer.english_text(["1\tUIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST\tKorean\t\t\t\t\t\tDisplay 6 lv."])
+		self.assertEqual(importer.required_text(names, importer.MONSTER_LEVEL_NOTE, "ui"), "Display 6 lv.")
+		with self.assertRaises(SystemExit):
+			importer.required_text({}, importer.MONSTER_LEVEL_NOTE, "ui")
+
+
 class DungeonMapTileTests(unittest.TestCase):
 	def test_tiles_name_and_place_each_cell(self):
 		row = {"prefix": "qt_a01_", "left": 170, "right": 171, "bottom": 102, "top": 103}

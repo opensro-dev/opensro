@@ -160,6 +160,9 @@ type MonsterState struct {
 	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
 	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
 	tombChain *TombChain
+	// muhanChain owns the Muhan wave runs (#3273); installed by
+	// bootstrap only while SRO_MUHAN is on, nil otherwise.
+	muhanChain *MuhanChain
 	// legViews holds dispatched leg-start snapshot views for the next
 	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
 	legViewMu sync.Mutex
@@ -543,6 +546,9 @@ func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity b
 	s.runDueHiveTicks(state, nowMs)
 	if s.tombChain != nil {
 		s.tombChain.tickLocked(s, state, nowMs)
+	}
+	if s.muhanChain != nil {
+		s.muhanChain.tickLocked(s, state, nowMs)
 	}
 	state.populationTicked = true
 }
