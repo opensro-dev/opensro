@@ -96,6 +96,7 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 		}
 		if (
 			quad.uvTurn !== undefined && ![ 0, 1, 2, 3 ].includes( quad.uvTurn ) ||
+			quad.tiled !== undefined && typeof quad.tiled !== "boolean" ||
 			quad.alphaCutoff !== undefined &&
 				(!Number.isFinite( quad.alphaCutoff ) || quad.alphaCutoff < 0 || quad.alphaCutoff > 1)
 		) throw Error( "Invalid UI sampling" );
@@ -150,6 +151,7 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			...(quad.portraitGid !== undefined ? { portraitGid: quad.portraitGid } : {}),
 			...(quad.rotation !== undefined ? { rotation: quad.rotation } : {}),
 			...(quad.uvTurn !== undefined ? { uvTurn: quad.uvTurn } : {}),
+			...(quad.tiled ? { tiled: true } : {}),
 			...(quad.alphaCutoff !== undefined ? { alphaCutoff: quad.alphaCutoff } : {}),
 			...(quad.characterAnchor !== undefined ? { characterAnchor: quad.characterAnchor } : {}),
 			...(quad.layer ? { layer: quad.layer } : {}),
