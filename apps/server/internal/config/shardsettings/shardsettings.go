@@ -542,6 +542,7 @@ var NotSettings = map[string]string{
 	"SRO_SERVER_GAME_DATA_MANIFEST_DIGEST": "identity of the released server game data",
 	"SRO_GM_CHARACTERS":                    "operator GM grants, from the state directory",
 	"SRO_GAMEWORLD_PRIVATE_NETWORK":        "host topology",
+	"SRO_CONTRIBUTORS_FILE":                "path to the operations sync's members file (opensro-ops#325)",
 	"SRO_AGENT_URL":                        "the agent's address, fixed at deploy time",
 	"SRO_BENCHMARK_FIXTURE_CONTROL":        "derived from the host network and namespace",
 	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",
