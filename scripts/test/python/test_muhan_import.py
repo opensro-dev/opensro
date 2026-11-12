@@ -99,6 +99,19 @@ def export_waves():
 
 
 # ================
+# nest
+# ================
+def nest(code, nest_id, world, region=27091):
+	return {
+		"Codename": code, "NestID": nest_id, "WorldID": world, "RegionID": region,
+		"X": 779.0, "Y": 628.0, "Z": 1108.0, "Radius": 0, "GenerateRadius": 0,
+		"MaxCount": 1, "RespawnDelayMinSec": 0, "RespawnDelayMaxSec": 0,
+		"Respawn": True, "InitialDir": 0, "SpawnType": 0, "ChampionGenPercentage": 0,
+		"Controls": {"ID": 1, "ObjectID": 40421}, "Champion": None,
+	}
+
+
+# ================
 # export_document
 # ================
 def export_document(waves):
@@ -106,7 +119,7 @@ def export_document(waves):
 		"source": "fixture", "sourceSha256": muhan.POPULATION_SOURCE_SHA256,
 		"worlds": {key: {**row, "Regions": list(row["Regions"])} for key, row in WORLDS.items()},
 		"waves": waves,
-		"npcNests": [{"Codename": "NPC_MUHAN_SOLO_75_MANAGER"}],
+		"npcNests": [nest("NPC_MUHAN_SOLO_75_MANAGER", 39604, 103), nest("NPC_MUHAN_CHANGE_SOLO_75_A", 39605, 103)],
 		"transMask": [{"NpcCodename": "NPC_MUHAN_CHANGE_SOLO_75_A"}] * 2,
 	}
 
@@ -167,6 +180,8 @@ class MuhanImportTest(unittest.TestCase):
 	def kinds(self):
 		rows = [later_row(f"MOB_MUHAN_L{level}", f"UIO_OBJ_MOB_MUHAN_L{level}", level) for level in NEEDED_LEVELS]
 		rows[1][89] = "7001"
+		rows.append(later_row("NPC_MUHAN_SOLO_75_MANAGER", "UIO_OBJ_NPC_MUHAN_SOLO_75_MANAGER", 0))
+		rows.append(later_row("NPC_MUHAN_CHANGE_SOLO_75_A", "UIO_OBJ_NPC_MUHAN_CHANGE_SOLO_75_A", 0))
 		return rows
 
 	# ================
@@ -201,12 +216,12 @@ class MuhanImportTest(unittest.TestCase):
 		self.assertEqual(muhan.needed_levels(export), set(NEEDED_LEVELS))
 		levels = set(NEEDED_LEVELS)
 		self.assertTrue(muhan.family_admits("MOB_MUHAN_L75", later_row("MOB_MUHAN_L75", "S", 75), levels))
-		# The transform forms, a graded kind, a level no wave names and
-		# the manager NPC all stay out.
+		# The transform forms, a graded kind and a level no wave names
+		# stay out; the arena NPCs join on codename (#3314).
 		self.assertFalse(muhan.family_admits("MOB_MUHAN_CHANGE_L75", later_row("MOB_MUHAN_CHANGE_L75", "S", 75), levels))
 		self.assertFalse(muhan.family_admits("MOB_MUHAN_L75", later_row("MOB_MUHAN_L75", "S", 75, grade=1), levels))
 		self.assertFalse(muhan.family_admits("MOB_MUHAN_L81", later_row("MOB_MUHAN_L81", "S", 81), levels))
-		self.assertFalse(muhan.family_admits("NPC_MUHAN_SOLO_75_MANAGER", later_row("NPC_MUHAN_SOLO_75_MANAGER", "S", 0), levels))
+		self.assertTrue(muhan.family_admits("NPC_MUHAN_SOLO_75_MANAGER", later_row("NPC_MUHAN_SOLO_75_MANAGER", "S", 0), levels))
 
 	# ================
 	# test_projection_refuses_waves_outside_their_world
@@ -234,17 +249,17 @@ class MuhanImportTest(unittest.TestCase):
 			later_row("MOB_MUHAN_CHANGE_L75", "UIO_OBJ_MOB_MUHAN_CHANGE_L75", 75),
 			later_row("MOB_MUHAN_L81", "UIO_OBJ_MOB_MUHAN_L81", 81),
 			later_row("MOB_MUHAN_GRADED", "UIO_OBJ_MOB_MUHAN_GRADED", 75, grade=1),
-			later_row("NPC_MUHAN_SOLO_75_MANAGER", "UIO_OBJ_NPC_MUHAN_SOLO_75_MANAGER", 0),
 		]
 		with tempfile.TemporaryDirectory() as root:
 			v1696, native, output, source, text_root, pins = self.fixture(Path(root), self.kinds(), export_waves(), extra)
 			with mock.patch.object(jupiter, "archive_pins", return_value=pins):
 				with mock.patch.dict(os.environ, {"SRO_MUHAN": "on"}):
 					summary = muhan.add_monsters(v1696, native, output, source)
-			self.assertEqual(sorted(summary["characters"].values()), list(range(101, 113)))
+			self.assertEqual(sorted(summary["characters"].values()), list(range(101, 115)))
 			self.assertEqual(summary["levels"], sorted(NEEDED_LEVELS))
 			self.assertEqual(summary["waves"], {str(world): 20 for world in muhan.WAVE_WORLDS})
-			self.assertEqual(summary["npcRows"], 1)
+			self.assertEqual(summary["npcRows"], 2)
+			self.assertEqual(summary["npcNests"], 2)
 			self.assertEqual(summary["transMaskRows"], 2)
 			waves_file = json.loads((text_root / muhan.WAVES_FILE).read_text(encoding="utf-8"))
 			self.assertEqual(waves_file["Version"], 2)
@@ -257,7 +272,11 @@ class MuhanImportTest(unittest.TestCase):
 			self.assertNotIn("MOB_MUHAN_CHANGE_L75", shard)
 			self.assertNotIn("MOB_MUHAN_L81", shard)
 			self.assertNotIn("MOB_MUHAN_GRADED", shard)
-			self.assertNotIn("NPC_MUHAN_SOLO_75_MANAGER", shard)
+			self.assertIn("NPC_MUHAN_SOLO_75_MANAGER", shard)
+			npcs_file = json.loads((text_root / muhan.NPCS_FILE).read_text(encoding="utf-8"))
+			self.assertEqual(len(npcs_file["Rows"]), 2)
+			self.assertEqual(npcs_file["Rows"][0]["Codename"], "NPC_MUHAN_SOLO_75_MANAGER")
+			self.assertEqual(npcs_file["Rows"][0]["WorldID"], 103)
 			converted = [line.split("\t") for line in shard.splitlines() if "MOB_MUHAN_L75" in line][0]
 			self.assertEqual(len(converted), 120)
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
@@ -293,7 +312,7 @@ class MuhanImportTest(unittest.TestCase):
 					muhan.add_monsters(v1696, native, output, source)
 				with mock.patch.dict(os.environ, {"SRO_MUHAN": ""}):
 					self.assertEqual(muhan.add_monsters(v1696, native, output, source), {"enabled": False})
-			for name in (muhan.CHARACTER_SHARD, muhan.SKILL_SHARD, muhan.WAVES_FILE):
+			for name in (muhan.CHARACTER_SHARD, muhan.SKILL_SHARD, muhan.WAVES_FILE, muhan.NPCS_FILE):
 				self.assertFalse((text_root / name).exists())
 			self.assertFalse((output / muhan.MARKER).exists())
 			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")

@@ -36,8 +36,12 @@ director reads behind the same flag. add_muhan (below) is the
 variant-side merge of the two wave regions (terrain, navmesh, names
 and Data files) on the Alexandria merge's catalog machinery. A
 switch off removes exactly the rows and files the marker records.
-The manager and change NPCs, the transform masks and any rewards
-stay out: the entry slice places them (docs/features/MUHAN.md).
+The entry slice (#3314) admits the manager and change NPCs (24
+export nests) into the same character shard and writes them as
+muhan-npcs.txt, so the arenas have a gatekeeper to talk to. The
+transform masks' monster forms (MOB_MUHAN_CHANGE_*) stay out of the
+shard: the wave director must never resolve one as a wave kind, and
+admitting them waits for the change interaction itself.
 
 ===========================================================================
 """
@@ -67,6 +71,8 @@ MARKER = ".opensro-muhan.json"
 CHARACTER_SHARD = "characterdata_200000.txt"
 SKILL_SHARD = "skilldata_200000.txt"
 WAVES_FILE = "muhan-waves.txt"
+NPCS_FILE = "muhan-npcs.txt"
+NPC_PREFIX = "NPC_MUHAN_"
 POPULATION_NAME = "muhan-population.json"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 
@@ -208,13 +214,54 @@ def project_waves(export):
 
 
 # ================
+# project_npcs
+#
+# The arena NPCs (managers and change NPCs) in the Version-2 nest
+# schema the server's population join reads (cap110Nest). Every row
+# must stand in one of its world's bound regions; a nest naming
+# another world or region is a data defect and refuses the build.
+# ================
+def project_npcs(export):
+	worlds = export["worlds"]
+	projected = []
+	for nest in export.get("npcNests") or []:
+		world = nest["WorldID"]
+		if world not in WAVE_WORLDS:
+			raise ValueError(f"muhan npc nest {nest['NestID']} stands in non-wave world {world}")
+		if nest["RegionID"] not in worlds[str(world)]["Regions"]:
+			raise ValueError(
+				f"muhan npc nest {nest['NestID']} stands in region {nest['RegionID']}, "
+				"which its world does not bind"
+			)
+		code = nest["Codename"]
+		if not code.startswith(NPC_PREFIX):
+			raise ValueError(f"muhan npc nest {nest['NestID']} names non-muhan npc {code}")
+		projected.append({
+			"Codename": code, "NestID": nest["NestID"], "WorldID": world,
+			"RegionID": nest["RegionID"], "X": nest["X"], "Y": nest["Y"], "Z": nest["Z"],
+			"Radius": nest["Radius"], "GenerateRadius": nest["GenerateRadius"],
+			"MaxCount": nest["MaxCount"], "RespawnDelayMinSec": nest["RespawnDelayMinSec"],
+			"RespawnDelayMaxSec": nest["RespawnDelayMaxSec"], "Respawn": bool(nest["Respawn"]),
+			"InitialDir": nest["InitialDir"], "SpawnType": nest["SpawnType"],
+			"ChampionGenPercentage": nest["ChampionGenPercentage"],
+			"Controls": nest["Controls"], "Champion": nest["Champion"],
+		})
+	projected.sort(key=lambda row: row["NestID"])
+	return {"Version": 2, "Rows": projected}
+
+
+# ================
 # family_admits
 #
 # One later character row against the family's admission: a combat
 # MOB_MUHAN_* kind (the MOB_MUHAN_CHANGE_* transform forms stay out),
-# grade 0 (row 15), at a level (row 57) some wave can name.
+# grade 0 (row 15), at a level (row 57) some wave can name; or one of
+# the arena NPCs (NPC_MUHAN_*), which carry no wave level and are
+# admitted on codename alone (#3314).
 # ================
 def family_admits(code, row, levels):
+	if code.startswith(NPC_PREFIX):
+		return True
 	if not code.startswith(PREFIX) or code.startswith(CHANGE_PREFIX):
 		return False
 	return int(row[15]) == GRADE and int(row[57]) in levels
@@ -242,7 +289,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			write_atomically(effect_path, b"\xff\xfe" + cap110.drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
 			text_path = text_root / "textdataname.txt"
 			write_atomically(text_path, cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
-		for name in (CHARACTER_SHARD, SKILL_SHARD, WAVES_FILE):
+		for name in (CHARACTER_SHARD, SKILL_SHARD, WAVES_FILE, NPCS_FILE):
 			(text_root / name).unlink(missing_ok=True)
 		manifest = text_root / "skilldata.txt"
 		if manifest.exists():
@@ -271,13 +318,21 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		for code in sorted(later):
 			if family_admits(code, later[code], levels):
 				refs[code] = characters.convert_character(later[code])
-				by_level.setdefault(int(later[code][57]), []).append(code)
+				if not code.startswith(NPC_PREFIX):
+					by_level.setdefault(int(later[code][57]), []).append(code)
 		# The wave selection rule names a kind by level alone, so every
 		# level a wave can name must resolve to exactly one kind.
 		for level in sorted(levels):
 			codes = by_level.get(level, [])
 			if len(codes) != 1:
 				raise ValueError(f"muhan level {level} resolves to {len(codes)} kinds {codes}, want exactly one")
+		# Every arena NPC's nest must name an admitted character row:
+		# a nest without a kind can never materialize, so a mismatch
+		# between the export and the client refuses the build here.
+		npcs = project_npcs(export)
+		for row in npcs["Rows"]:
+			if row["Codename"] not in refs:
+				raise ValueError(f"muhan npc nest {row['NestID']} names unadmitted character {row['Codename']}")
 		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD for r in tables.table_rows(p.read_bytes())]
 		occupied = {int(r[1]) for r in native_chars}
 		allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
@@ -298,6 +353,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		manifest = [r for r in manifest if r[0].lower() != SKILL_SHARD] + [[SKILL_SHARD]]
 		write_atomically(text_root / "skilldata.txt", cap110.encode_rows(manifest))
 		write_atomically(text_root / WAVES_FILE, (json.dumps(waves) + "\n").encode())
+		write_atomically(text_root / NPCS_FILE, (json.dumps(npcs) + "\n").encode())
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
@@ -334,6 +390,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
 			"levels": sorted(levels),
 			"waves": {str(world): sum(1 for row in waves["Rows"] if row["WorldID"] == world) for world in WAVE_WORLDS},
+			"npcNests": len(npcs["Rows"]),
 			"npcRows": len(export.get("npcNests") or []),
 			"transMaskRows": len(export.get("transMask") or []),
 			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),

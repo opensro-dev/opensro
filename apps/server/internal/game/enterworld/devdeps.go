@@ -272,6 +272,12 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap muhan waves: %w", err)
 		}
+		// Port-only (#3314): the arenas' manager and change NPCs join
+		// their wave worlds while the same switch is on.
+		template, err = monster.AppendMuhanNPCs(template, textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		// Port-only (#3270): the second hunting grounds' population
 		// joins the default world while its switch is on.
 		template, err = monster.AppendHunting2(template, textdataDir, monster.Hunting2Enabled())
