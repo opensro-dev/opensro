@@ -16508,21 +16508,26 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						if ( infoSlot.GDR_QUESTINFO_SLOT!.texture ) {
 							authoredImage( infoSlot.GDR_QUESTINFO_SLOT!, ox, oy );
 						}
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_TITLE!, ox, oy, entry.title );
+						// Port-only, not native (owner decision on #2806, on by
+						// default): the native statics draw one unbounded line
+						// (CIFQuestInfoGuideSlot_Populate 62E240), sized for the
+						// Korean names; the English title, NPC and condition run
+						// past the plate, so each is cut at its control's edge.
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_TITLE!, ox, oy, entry.title, "clip" );
 						authoredText(
 							infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!,
 							ox,
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_NPC!, ox, oy, entry.notify );
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_NPC!, ox, oy, entry.notify, "clip" );
 						authoredText(
 							infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!,
 							ox,
 							oy,
 							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!.text )
 						);
-						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition );
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition, "clip" );
 					}
 					closeButton( px + QUEST_INFO_WINDOW_WIDTH - 22, py + 6, "quest-info-close" );
 					endWindow( infoAdmission, "quest-info" );
