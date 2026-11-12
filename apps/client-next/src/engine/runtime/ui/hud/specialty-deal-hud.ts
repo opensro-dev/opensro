@@ -161,7 +161,7 @@ export function createSpecialtyDealHud() {
 				}
 				// A request the worker took and settled between two frames (a
 				// local server answers within one) never shows as pending: its
-				// moved stock is the settlement, as native's 756CF0 report is.
+				// moved stock is the settlement (see the header).
 				if ( stock === dealing.baseline ) {
 					if ( now - dealing.sentAt < DEAL_REQUEST_TIMEOUT_MS ) return null;
 					deal = null;
