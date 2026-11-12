@@ -226,9 +226,9 @@ class AddTempleTests(unittest.TestCase):
 			try:
 				if prior is not None:
 					variant.os.environ[temple.FLAG] = prior
-					variant.add_temple(Path(scratch) / "vsro", native, out)
+					temple.add_temple(Path(scratch) / "vsro", native, out)
 				variant.os.environ[temple.FLAG] = flag
-				summary = variant.add_temple(Path(scratch) / "vsro", native, out)
+				summary = temple.add_temple(Path(scratch) / "vsro", native, out)
 				result = (summary, (out / "Data_extracted" / "dungeon" / "dungeoninfo.txt").read_bytes(),
 					(out / "Media_extracted" / variant.TEXTDATA / "eventzonedata.txt").read_bytes())
 			finally:

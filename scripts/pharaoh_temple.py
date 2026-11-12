@@ -8,8 +8,10 @@ v1.150 has no temple. The VSRO client has one in the Storm and Cloud
 Desert: seven dungeons (the Temple and six sanctums) behind two desert gates,
 one for the merchant and hunter jobs, one for the thief job.
 
-This module owns what the temple adds to the variant's tables and nothing
-else; build_alexandria_variant.add_temple does the file work. It is data:
+This module owns what the temple adds to the variant's tables, and
+add_temple writes them into a variant tree, as the other optional
+layers' importers own their file work (skytemple_import.py,
+hunting2_import.py). The tables:
 
 	dungeoninfo.txt    seven rows, region ids 10-16 (regions 0x800A-0x8010),
 	                   appended in the native layout (region id, dof path).
@@ -34,6 +36,7 @@ region ids and gate codes, kept in step by a test on each side.
 ===========================================================================
 """
 import os
+from pathlib import Path
 
 import import_vsro_alexandria as stage1
 
@@ -178,3 +181,49 @@ def merge_event_zones(native_raw, vsro_raw):
 		text += "\r\n"
 	added = "\r\n".join("\t".join(row) for row in wanted) + "\r\n"
 	return b"\xff\xfe" + (text.lstrip("﻿") + added).encode("utf-16-le")
+
+
+# ================
+# add_temple
+# ================
+def add_temple(vsro_root, native, out):
+	"""
+	Port-only, not native: the Pharaoh Temple's dungeon rows and walk-in zones
+	(the tables above), while SRO_PHARAOH_TEMPLE is on. Appends the seven
+	dungeoninfo.txt rows and the two TELEPORT event zones to the native tables
+	and checks the seven .dof files the staging step carried from Data.pk2 are
+	there. Off, the two tables are the native bytes: a variant an earlier on
+	build left rows in is put back, and one that already matches is not
+	touched. Returns the summary.
+	"""
+	import build_alexandria_variant as variant
+
+	enabled = temple_enabled()
+	dungeon_info = Path("Data_extracted") / "dungeon" / "dungeoninfo.txt"
+	event_zones = Path("Media_extracted") / variant.TEXTDATA / "eventzonedata.txt"
+	native_info = (native / dungeon_info).read_bytes()
+	native_zones = (native / event_zones).read_bytes()
+	if enabled:
+		wanted_info = merge_dungeon_info(native_info)
+		wanted_zones = merge_event_zones(
+			native_zones, variant.read_vsro_file(vsro_root, "Media", variant.TEXTDATA + "eventzonedata.txt")
+		)
+	else:
+		wanted_info, wanted_zones = native_info, native_zones
+	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):
+		target = out / relative
+		if not target.is_file() or target.read_bytes() != content:
+			variant.replace_file(target, content)
+	if not enabled:
+		return {"enabled": False}
+	staged = variant.lower_paths(out / "Data_extracted" / "dungeon")
+	missing = [path for path in map(dof_path, DUNGEONS) if path.split("/", 1)[1] not in staged]
+	if missing:
+		raise SystemExit(f"the Pharaoh Temple's dungeon files are missing from the variant: {missing}")
+	return {
+		"enabled": True,
+		"dungeons": [dungeon_id for dungeon_id, _, _ in DUNGEONS],
+		"regions": dungeon_regions(),
+		"gates": list(GATE_CODES),
+		"eventZones": list(TEMPLE_ZONE_CODES)
+	}

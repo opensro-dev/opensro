@@ -22,6 +22,15 @@ Version-2 envelope; a family's switch off removes its nest file and its
 exclusively-owned rows. Qinshi and temple need SRO_CAP110_MONSTERS: their
 drop rules ride the shared cap-110 loot catalogue it builds (cap110_rewards),
 so the build refuses them without it, as the Pharaoh precedent does.
+
+The database export is optional (#3246). Named (SRO_CAP110_MONSTER_DATABASE
+or --source-root), it is pinned and enriches the field with its authored
+nests, tactics and drop assignments. Unnamed, the field family alone builds
+from the later client itself: the characterdata rows and the npcpos
+placements, both already in the pinned Media archive, with the synthesized
+ordinary nest posture at client_field_population. The other families' worlds
+are the export's alone and refuse without it. Drops and AI then follow the
+server's rules for any nest, as they do for the native population.
 ===========================================================================
 """
 import argparse
@@ -91,6 +100,18 @@ TEMPLE_FAMILY = {"Name": "temple", "Flag": TEMPLE_FLAG, "File": TEMPLE_FILE, "Pr
 	"Worlds": TEMPLE_WORLDS, "MinLevel": 35, "MaxLevel": 109, "Grades": (0, 1, 3, 6, 8),
 	"NamedGrades": {}, "CarrySpawnType": True}
 FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY, TEMPLE_FAMILY)
+
+# The ordinary posture a client-only nest synthesizes (#3246), because the
+# client tables carry placements but no tactics. The values are the
+# ordinary authored ones of the population evidence the native server
+# ships (apps/server/internal/game/world/monster/data/
+# v1188_population_evidence.tsv): its commonest respawn window for an
+# ordinary respawning nest is 1-3 seconds and its commonest sight range
+# is 100. Port-only inference, recorded here; the database export's
+# authored rows replace the whole posture when it is named.
+CLIENT_NEST_RESPAWN_MIN_SEC = 1
+CLIENT_NEST_RESPAWN_MAX_SEC = 3
+CLIENT_NEST_SIGHT_RANGE = 100
 
 
 # ================
@@ -303,6 +324,118 @@ def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), stri
 
 
 # ================
+# client_controls
+#
+# The tactics_controls key set at the client-only posture: an ordinary
+# aggressive field monster (AggressType 0, as the server reads it) with
+# the synthesized sight range and no champion. Every other field is 0,
+# the value the native template itself keeps for an anchor whose
+# database tactics row it does not hold.
+# ================
+def client_controls():
+	return {
+		"ID": 0, "ObjectID": 0, "AIQoS": 0, "MaxStamina": 0, "StaminaVariance": 0,
+		"SightRange": CLIENT_NEST_SIGHT_RANGE, "AggressType": 0, "AggressData": 0,
+		"ChangeTarget": 0, "HelpRequest": 0, "HelpResponse": 0, "BattleStyle": 0,
+		"BattleStyleData": 0, "DiversionBasis": 0, "DiversionKeepBasis": 0,
+		"KeepDistance": 0, "KeepDistanceData": 0, "TraceType": 0, "TraceBoundary": 0,
+		"TraceData": 0, "HomingType": 0, "HomingData": 0, "AggressOnHoming": 0,
+		"FleeType": 0, "ChampionID": 0, "Flags": 0,
+		"DiversionBasisData": [0] * 8, "DiversionKeepBasisData": [0] * 8,
+	}
+
+
+# ================
+# npcpos_placements
+#
+# The monster placements of the later client's npcpos.txt: (codename,
+# region, x, y, z) for every row whose character is a MOB_SD_ row.
+# npcpos names characters by their later identity (the join
+# alexandria_npcs makes for the city's NPCs); the region column is the
+# signed u16 the server's own parser normalizes (monster/npcpos.go), so
+# dungeon regions arrive negative and mask back to their 0x8000 form.
+# A duplicate row stands once.
+# ================
+def npcpos_placements(npcpos_raw, later):
+	by_id = {row[1]: row[2] for row in later.values() if len(row) > 2}
+	placements, seen = [], set()
+	for row in tables.table_rows(npcpos_raw):
+		if len(row) < 5 or row[0] not in by_id:
+			continue
+		code = by_id[row[0]]
+		if not code.startswith(FIELD_FAMILY["Prefixes"]):
+			continue
+		try:
+			region, x, y, z = int(row[1]) & 0xFFFF, float(row[2]), float(row[3]), float(row[4])
+		except ValueError:
+			continue
+		key = (code, region, row[2], row[3], row[4])
+		if key in seen:
+			continue
+		seen.add(key)
+		placements.append((code, region, x, y, z))
+	return placements
+
+
+# ================
+# client_claimed_codes
+#
+# The field species the client tables claim: the MOB_SD_ rows npcpos
+# places in an outdoor region. The 0x8000 dungeon bit marks the tomb
+# species' floors, whose worlds are the database export's alone.
+# ================
+def client_claimed_codes(placements):
+	return {code for code, region, x, y, z in placements if not region & 0x8000}
+
+
+# ================
+# client_field_population
+#
+# The field nests from the client's placements alone, in the same
+# Version-2 envelope project_population writes. One outdoor placement
+# of an admitted species is one nest standing on its point - radius 0,
+# the posture of a native anchor whose database evidence the server
+# does not hold - holding one monster, with the synthesized ordinary
+# controls. Nest identities are sequential over the sorted placements,
+# so a rebuild of the pinned client writes the same file. Drops and AI
+# follow the server's rules for any nest; the export's authored rows
+# are the enrichment, never a requirement.
+# ================
+def client_field_population(placements, refs):
+	ordered = sorted((p for p in placements if p[0] in refs and not p[1] & 0x8000),
+		key=lambda p: (p[1], p[0], p[2], p[3], p[4]))
+	rows = []
+	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
+		rows.append({
+			"Codename": code, "NestID": nest_id, "WorldID": FIELD_WORLD, "RegionID": region,
+			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"RespawnDelayMinSec": CLIENT_NEST_RESPAWN_MIN_SEC,
+			"RespawnDelayMaxSec": CLIENT_NEST_RESPAWN_MAX_SEC,
+			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,
+			"Controls": client_controls(), "Champion": None,
+		})
+	return {"Version": 2, "Rows": rows}
+
+
+# ================
+# client_outdoor_regions
+#
+# The field seed sectors from the client alone: outdoor_regions'
+# counterpart for stage 1 (import_vsro_alexandria), the sectors the
+# admitted species' outdoor placements stand in.
+# ================
+def client_outdoor_regions(vsro_root):
+	with open(Path(vsro_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
+		index = tables.archive_index(media)
+		later = {row[2]: row for shard in tables.table_rows(tables.table_text(media, index, "characterdata.txt"))
+			for row in tables.table_rows(tables.table_text(media, index, shard[0]))}
+		placements = npcpos_placements(tables.table_text(media, index, "npcpos.txt"), later)
+	admitted = select_references(later, {code: [FIELD_FAMILY] for code in client_claimed_codes(placements)})
+	return {(region & 255, region >> 8) for code, region, x, y, z in placements
+		if code in admitted and not region & 0x8000}
+
+
+# ================
 # allocate_identities
 #
 # Reserve every published identity before allocating additions. Source order
@@ -471,15 +604,26 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			write_atomically(manifest, encode_rows([r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
 		marker.unlink(missing_ok=True)
 		return {"enabled": False}
-	source_root = Path(source_root or os.environ[SOURCE_ENV])
-	require_pinned_export(source_root)
-	spawns = read_json(source_root / "all-spawns.json")
-	nests = {r["dwNestID"]: r for r in read_json(source_root / "Tab_RefNest.json")}
-	for row in spawns:
-		row["champion_percent"] = nests[row["nest_id"]]["nChampionGenPercentage"]
-	tactics = {r["dwTacticsID"]: r for r in read_json(source_root / "Tab_RefTactics.json")}
-	hives = {r["dwHiveID"]: r for r in read_json(source_root / "Tab_RefHive.json")}
-	source_skills = skill_database.project_database_rows(read_json(source_root / "vsro-outdoor-monster-skills.json"))
+	# The database export is optional (#3246): named, it is pinned and
+	# enriches; unnamed, the field family builds from the client alone
+	# and the other families - whose worlds are the export's - refuse.
+	named = source_root or os.environ.get(SOURCE_ENV, "")
+	if named:
+		source_root = Path(named)
+		require_pinned_export(source_root)
+		spawns = read_json(source_root / "all-spawns.json")
+		nests = {r["dwNestID"]: r for r in read_json(source_root / "Tab_RefNest.json")}
+		for row in spawns:
+			row["champion_percent"] = nests[row["nest_id"]]["nChampionGenPercentage"]
+		tactics = {r["dwTacticsID"]: r for r in read_json(source_root / "Tab_RefTactics.json")}
+		hives = {r["dwHiveID"]: r for r in read_json(source_root / "Tab_RefHive.json")}
+		source_skills = skill_database.project_database_rows(read_json(source_root / "vsro-outdoor-monster-skills.json"))
+	else:
+		source_root = None
+		for family in enabled:
+			if family is not FIELD_FAMILY:
+				raise ValueError(f"{family['Flag']} requires the monster database export ({SOURCE_ENV}); "
+					"the client tables carry the field alone")
 	with open(Path(vsro_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 		# ================
@@ -490,10 +634,15 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
 		claims = {}
 		claimed = {}
-		for family in enabled:
-			claimed[family["Name"]] = family_codes(spawns, family)
-			for code in claimed[family["Name"]]:
-				claims.setdefault(code, []).append(family)
+		if source_root is not None:
+			for family in enabled:
+				claimed[family["Name"]] = family_codes(spawns, family)
+				for code in claimed[family["Name"]]:
+					claims.setdefault(code, []).append(family)
+		else:
+			placements = npcpos_placements(read("npcpos.txt"), later)
+			for code in client_claimed_codes(placements):
+				claims[code] = [FIELD_FAMILY]
 		refs = select_references(later, claims)
 		if not refs:
 			raise ValueError("no ordinary level 100-110 Alexandria field monsters")
@@ -510,24 +659,33 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		def load_client_skills():
 			return {int(r[1]): r for shard in tables.table_rows(read("skilldata.txt"))
 				for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()}
-		source_skills = add_native_client_skills(source_skills, needed, native_skills, load_client_skills)
+		if source_root is None:
+			# The client is its own skill source: its monsters name its
+			# own skill rows, joined by codename exactly as the export's
+			# projection is.
+			source_skills = list(load_client_skills().values())
+		else:
+			source_skills = add_native_client_skills(source_skills, needed, native_skills, load_client_skills)
 		added, skill_map = merge_skills(native_skills, source_skills, needed, prior.get("skills", {}))
 		for row in refs.values():
 			row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]
 		populations = {}
-		for family in enabled:
-			if family is FIELD_FAMILY:
-				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"])
-			elif family is TOMB_FAMILY:
-				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
-					strict=True)
-			else:
-				# The newer families share their worlds and prefixes with
-				# mechanism species outside their windows, so their
-				# strictness answers for the in-window claims only.
-				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
-					strict=True, codes=family_strict_codes(family, claimed[family["Name"]], later),
-					carry_spawn_type=family["CarrySpawnType"])
+		if source_root is None:
+			populations["field"] = client_field_population(placements, refs)
+		else:
+			for family in enabled:
+				if family is FIELD_FAMILY:
+					populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"])
+				elif family is TOMB_FAMILY:
+					populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
+						strict=True)
+				else:
+					# The newer families share their worlds and prefixes with
+					# mechanism species outside their windows, so their
+					# strictness answers for the in-window claims only.
+					populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
+						strict=True, codes=family_strict_codes(family, claimed[family["Name"]], later),
+						carry_spawn_type=family["CarrySpawnType"])
 		population = populations["field"]
 		# Sorted by identity: the codename set has no stable order, and a
 		# rebuild should write the same bytes.
@@ -601,16 +759,22 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			"nests": len(populations[family["Name"]]["Rows"]),
 			"regions": sorted({r["RegionID"] for r in populations[family["Name"]]["Rows"]})}
 			for family in enabled}
-		summary["sourceBackupSha256"] = read_json(source_root / "summary.json")["backup_sha256"]
 		# The drop assignments are optional (#1745 D3): an export without
 		# them builds the native loot posture, and the marker says which.
+		# A client-only build (#3246) is the same posture with no export
+		# at all; the marker names the client as its source instead of a
+		# backup hash it never read.
 		from cap110_monster_loot import ASSIGNMENTS_NAME, has_assignments
 		summary["equipmentLoot"] = "vsro" if has_assignments(source_root) else "native"
-		snapshot = ["all-spawns.json", "Tab_RefNest.json", "Tab_RefTactics.json", "Tab_RefHive.json",
-			"vsro-outdoor-monster-skills.json", "vsro-outdoor-drop-classes.json", "vsro-outdoor-rare-classes.json"]
-		if has_assignments(source_root):
-			snapshot.append(ASSIGNMENTS_NAME + ".json")
-		summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in snapshot}
+		if source_root is None:
+			summary["source"] = "client"
+		else:
+			summary["sourceBackupSha256"] = read_json(source_root / "summary.json")["backup_sha256"]
+			snapshot = ["all-spawns.json", "Tab_RefNest.json", "Tab_RefTactics.json", "Tab_RefHive.json",
+				"vsro-outdoor-monster-skills.json", "vsro-outdoor-drop-classes.json", "vsro-outdoor-rare-classes.json"]
+			if has_assignments(source_root):
+				snapshot.append(ASSIGNMENTS_NAME + ".json")
+			summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in snapshot}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary
 
@@ -623,7 +787,8 @@ def main():
 	parser.add_argument("--vsro-root", required=True)
 	parser.add_argument("--native-extracted", required=True)
 	parser.add_argument("--output", required=True)
-	parser.add_argument("--source-root", required=True)
+	parser.add_argument("--source-root",
+		help=f"the monster database export (else {SOURCE_ENV}, else the client alone)")
 	args = parser.parse_args()
 	# Off, add_monsters only removes its owned outputs and reads no archive.
 	if os.environ.get(FLAG, "").lower() in tables.FLAG_ON:

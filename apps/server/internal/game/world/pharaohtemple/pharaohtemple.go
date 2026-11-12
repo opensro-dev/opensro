@@ -41,10 +41,10 @@ import (
 // pharaoh_temple). Off is the native v1.150 shard.
 const EnvPharaohTemple = "SRO_PHARAOH_TEMPLE"
 
-// DungeonRegionBit marks a dungeon region; a dungeoninfo id is the rest.
-const DungeonRegionBit uint16 = 0x8000
-
-// The dungeons' dungeoninfo ids (10-16) and the Temple's region.
+// The dungeons' dungeoninfo ids (10-16) and the Temple's region. A
+// region id here is data, the value dungeoninfo.txt names: the dungeon
+// plane's region of that dungeon id (0x800A-0x8010). The plane bit
+// itself, and every branch on it, belong to world/geometry.go.
 const (
 	FirstDungeonID = 10
 	LastDungeonID  = 16
@@ -52,7 +52,7 @@ const (
 	TempleDungeonID = 16
 	// TempleRegionID is the Temple's region, 0x8010, the one both
 	// walk-in gates stand in.
-	TempleRegionID = DungeonRegionBit | TempleDungeonID
+	TempleRegionID uint16 = 0x8010
 )
 
 // The gates' codenames, as teleportdata.txt spells them. The two desert
@@ -88,12 +88,12 @@ type Dungeon struct {
 }
 
 var dungeons = []Dungeon{
-	{10, DungeonRegionBit | 10, "Sanctum of Restriction", 51},
-	{11, DungeonRegionBit | 11, "Sanctum of the Blue Eye", 52},
-	{12, DungeonRegionBit | 12, "Sanctum of Punishment", 53},
-	{13, DungeonRegionBit | 13, "Sanctum of Atonement", 54},
-	{14, DungeonRegionBit | 14, "Sanctum of Immortality", 55},
-	{15, DungeonRegionBit | 15, "Sanctum of Dark", 56},
+	{10, 0x800A, "Sanctum of Restriction", 51},
+	{11, 0x800B, "Sanctum of the Blue Eye", 52},
+	{12, 0x800C, "Sanctum of Punishment", 53},
+	{13, 0x800D, "Sanctum of Atonement", 54},
+	{14, 0x800E, "Sanctum of Immortality", 55},
+	{15, 0x800F, "Sanctum of Dark", 56},
 	{TempleDungeonID, TempleRegionID, "Pharaoh Temple", 60},
 }
 

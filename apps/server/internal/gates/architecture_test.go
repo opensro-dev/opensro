@@ -72,6 +72,8 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtomb", nil, false)
 	// The temple band worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/temple", nil, false)
+	// The Jupiter worlds (port-only): the same leaf shape again.
+	checkPackageImports(t, root, modulePath, "internal/game/world/jupiter", nil, false)
 	// The Pharaoh Temple (port-only, the job temple): a leaf again, the
 	// switch and the identity table the portal catalogue and the movement
 	// authority ask.
@@ -82,6 +84,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/game/world/alexandria":  true,
 		modulePath + "/internal/game/world/pharaohtomb": true,
 		modulePath + "/internal/game/world/temple":      true,
+		modulePath + "/internal/game/world/jupiter":     true,
 		modulePath + "/internal/data/texttable":         true,
 		modulePath + "/internal/game/abnormal":          true,
 		modulePath + "/internal/game/paramkeeper":       true,

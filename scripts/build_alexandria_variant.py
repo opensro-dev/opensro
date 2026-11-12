@@ -63,6 +63,8 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
+import hunting2_import as hunting2  # noqa: E402
+import jupiter_import as jupiter  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
@@ -621,7 +623,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
-	pharaoh_temple = add_temple(vsro_root, native, out)
+	pharaoh_temple = temple.add_temple(vsro_root, native, out)
 	# The map step adds to textdataname.txt on top of the gates' texts.
 	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])
 	music = add_music(vsro_root, native, out)
@@ -632,8 +634,15 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	weapons = add_items(vsro_root, native, out)
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	from mall_avatar_import import add_avatars
+	from mall_avatar_import import add_avatars, add_source, v1696_root, V1696_SOURCE, avatars_zip, AVATARS_SOURCE
 	mall_avatars = add_avatars(vsro_root, native, out)
+	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
+	# pinned by v1696_archive_pins.json). Unset removes a previous import.
+	later_avatars = add_source(v1696_root(), native, out, V1696_SOURCE)
+	# The v2.355 export's avatars from the pinned archive (SRO_AVATARS_ZIP,
+	# #3254): without it the build is byte-identical and a previous
+	# import is removed.
+	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -643,6 +652,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
+	# Jupiter is independently optional; its off path also removes what a
+	# previous on build of a reused variant root left behind.
+	jupiter_build = jupiter.add_jupiter(native, out)
+	# The second hunting grounds are independently optional the same
+	# way; their off path reaps a previous on build's outputs.
+	hunting2_build = hunting2.add_hunting2(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -652,6 +667,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
+		"jupiter": jupiter_build,
+		"hunting2": hunting2_build,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
@@ -667,6 +684,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcServices": city_services,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
+		"mallAvatarsV1696": later_avatars,
+		"mallAvatarsArchive": archive_avatars,
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,
@@ -740,50 +759,6 @@ def add_gates(vsro_root, native, out):
 	for name, content in merged.items():
 		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
 	return summary, merged
-
-
-# ================
-# add_temple
-# ================
-def add_temple(vsro_root, native, out):
-	"""
-	Port-only, not native: the Pharaoh Temple's dungeon rows and walk-in zones
-	(pharaoh_temple.py), while SRO_PHARAOH_TEMPLE is on. Appends the seven
-	dungeoninfo.txt rows and the two TELEPORT event zones to the native tables
-	and checks the seven .dof files the staging step carried from Data.pk2 are
-	there. Off, the two tables are the native bytes: a variant an earlier on
-	build left rows in is put back, and one that already matches is not
-	touched. Returns the summary.
-	"""
-	enabled = temple.temple_enabled()
-	dungeon_info = Path("Data_extracted") / "dungeon" / "dungeoninfo.txt"
-	event_zones = Path("Media_extracted") / TEXTDATA / "eventzonedata.txt"
-	native_info = (native / dungeon_info).read_bytes()
-	native_zones = (native / event_zones).read_bytes()
-	if enabled:
-		wanted_info = temple.merge_dungeon_info(native_info)
-		wanted_zones = temple.merge_event_zones(
-			native_zones, read_vsro_file(vsro_root, "Media", TEXTDATA + "eventzonedata.txt")
-		)
-	else:
-		wanted_info, wanted_zones = native_info, native_zones
-	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):
-		target = out / relative
-		if not target.is_file() or target.read_bytes() != content:
-			replace_file(target, content)
-	if not enabled:
-		return {"enabled": False}
-	staged = lower_paths(out / "Data_extracted" / "dungeon")
-	missing = [path for path in map(temple.dof_path, temple.DUNGEONS) if path.split("/", 1)[1] not in staged]
-	if missing:
-		raise SystemExit(f"the Pharaoh Temple's dungeon files are missing from the variant: {missing}")
-	return {
-		"enabled": True,
-		"dungeons": [dungeon_id for dungeon_id, _, _ in temple.DUNGEONS],
-		"regions": temple.dungeon_regions(),
-		"gates": list(temple.GATE_CODES),
-		"eventZones": list(temple.TEMPLE_ZONE_CODES)
-	}
 
 
 # ================

@@ -134,6 +134,7 @@ func publicRules() publicstats.RulesResponse {
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
+	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
@@ -172,6 +173,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
 				Why:    "Levels 91-99 gain a hunting ground in the optional cap-110 expansion."},
+			{Flag: monster.EnvJupiter, On: monster.JupiterEnabled(),
+				Native: "There is no Jupiter field.",
+				Now:    "The Jupiter field stands open: a shared area of level 111-120 monsters.",
+				Why:    "High-level hunting from a later client, imported as optional content."},
+			{Flag: monster.EnvJupiterTemple, On: monster.JupiterTempleEnabled(),
+				Native: "There are no Mirror Dimension temples.",
+				Now:    "The two Mirror Dimension temple sets stand beside the Jupiter field, each a shared area of level 111-120 monsters.",
+				Why:    "High-level hunting from a later client, imported as optional content."},
+			{Flag: monster.EnvHunting2, On: monster.Hunting2Enabled(),
+				Native: "There is no second hunting ground set.",
+				Now:    "The second hunting grounds stand open: a shared area of level 49-140 monsters.",
+				Why:    "More hunting ground from a later client, imported as optional content."},
 			{Flag: monster.EnvPharaohGearRate, On: pharaohGear > 1,
 				Native: "A Pharaoh Tomb elite or unique rolls its equipment at the original rate.",
 				Now:    fmt.Sprintf("A Pharaoh Tomb elite or unique rolls its equipment %d times as often.", pharaohGear),
@@ -333,6 +346,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
 				Why:    "Beta balance: the outfits were already in the game data."},
+			{Flag: commerce.EnvMallCategories, On: mallCategoriesOn,
+				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
+				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, and the Destruction Rondo is listed for silk.",
+				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",
 				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",

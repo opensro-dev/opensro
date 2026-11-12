@@ -10,7 +10,7 @@ and purchase completion. Closing a dialog never retries a purchase.
 */
 
 import type { MallOffer, MallState, MallPreviewState } from "@/engine/contracts/item-mall";
-import { mallCategories, MALL_ROWS_PER_PAGE } from "@/engine/foundation/ui/item-mall-layout";
+import { mallCategories, mallCategoriesLater, MALL_ROWS_PER_PAGE } from "@/engine/foundation/ui/item-mall-layout";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 
 /*
@@ -23,6 +23,12 @@ export function createItemMall() {
 	let category = -1;
 	let tab = 0;
 	let page = 0;
+	// Port-only (issue #3257): the later category rail is in force only
+	// while the Experimental mall categories row is on, and the item
+	// search text the rail's search field edits. Native browsing never
+	// touches either.
+	let categoriesLater = false;
+	let search = "";
 	let pageSize = MALL_ROWS_PER_PAGE;
 	let selected: MallOffer | null = null;
 	let quantity = 1;
@@ -93,11 +99,25 @@ export function createItemMall() {
 	reset
 	================
 	*/
+	/*
+	================
+	categories
+
+	The rail list in force: the later one only while its Experimental
+	row is on.
+	================
+	*/
+	function categories() {
+		return categoriesLater ? mallCategoriesLater() : mallCategories();
+	}
+
 	function reset() {
 		visible = false;
 		category = -1;
 		tab = 0;
 		page = 0;
+		categoriesLater = false;
+		search = "";
 		pageSize = MALL_ROWS_PER_PAGE;
 		selected = null;
 		pointDialog = false;
@@ -170,16 +190,49 @@ export function createItemMall() {
 		================
 		*/
 		browse( index: number, nextTab = 0 ) {
-			if ( !Number.isInteger( index ) || index < -1 || index >= mallCategories().length ) return;
+			if ( !Number.isInteger( index ) || index < -1 || index >= categories().length ) return;
 			if ( !Number.isInteger( nextTab ) || nextTab < 0 ) return;
 			category = index;
 			compactView = "shop";
 			tab = nextTab;
 			page = 0;
+			search = "";
 			selected = null;
 			pointDialog = false;
 			silkOpen = false;
 			silkComboOpen = false;
+		},
+		/*
+		================
+		setCategoriesLater
+
+		The Experimental mall categories row, as the renderer reads it
+		each frame. A switch restarts browsing at the rail: the two
+		rails' indices name different categories, and a search or a
+		tab from the other rail would point at nothing (issue #3257).
+		================
+		*/
+		setCategoriesLater( on: boolean ) {
+			if ( on === categoriesLater ) return;
+			categoriesLater = on;
+			category = -1;
+			tab = 0;
+			page = 0;
+			search = "";
+			selected = null;
+		},
+		/*
+		================
+		setSearch
+
+		The item search text: at most 32 characters (the field's own
+		cap), and any edit returns to the first page.
+		================
+		*/
+		setSearch( text: string ) {
+			if ( typeof text !== "string" ) return;
+			search = text.slice( 0, 32 );
+			page = 0;
 		},
 		/*
 		================
@@ -331,12 +384,24 @@ export function createItemMall() {
 		================
 		*/
 		read( state?: MallState ) {
-			const key = mallCategories()[category]?.key;
+			const list = categories();
+			const key = list[category]?.key;
 			const tabs = state?.tabs.filter( entry => entry.category === key ) ?? [];
-			const current = tabs[tab];
+			// The Recommended tab is the later client's own (issue
+			// #3257): it lists no tab of the catalogue's, it gathers
+			// the offers badged "recommended" from every tab.
+			const virtual = categoriesLater && key === "MALL_HOT" && tabs.length > 0;
+			const shown = virtual ?
+				[ ...tabs, { shop: -1, tab: -1, category: "MALL_HOT", label: "UIIT_STT_SILKMALL_FAVORITE" } ] :
+				tabs;
+			const current = shown[tab];
 			const offers = state?.offers.filter( offer =>
 				key === "basket" ?
 					basket.has( offer.packageId ) :
+					search !== "" ?
+					offer.name.toLowerCase().includes( search.toLowerCase() ) :
+					current && current.shop < 0 ?
+					offer.badge === "recommended" :
 					current && offer.shop === current.shop && offer.tab === current.tab
 			) ?? [];
 			const currentPage = Math.min( page, Math.max( 0, Math.ceil( offers.length / pageSize ) - 1 ) );
@@ -354,6 +419,9 @@ export function createItemMall() {
 				pointDialog,
 				pointDraft,
 				visible,
+				categories: list,
+				categoriesLater,
+				search,
 				category,
 				tab,
 				page: currentPage,
@@ -361,7 +429,7 @@ export function createItemMall() {
 				selected,
 				quantity,
 				points,
-				tabs,
+				tabs: shown,
 				count: offers.length,
 				offers: offers.slice( currentPage * pageSize, (currentPage + 1) * pageSize )
 			};
