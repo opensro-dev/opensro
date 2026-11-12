@@ -5,11 +5,13 @@ test_pet_import.py - the later clients' pet import
 
 Synthetic rows cover the default-on switch, kind classification,
 selection (existing, deferred fellow kinds, skipped kinds without a
-scroll or a model), identity retention and reassignment, and the zip
-source's import and removal, all without a real client tree.
+scroll or a model), identity retention and reassignment, and the
+pinned-archive source's import, refusal and removal, all without a
+real client tree.
 
 ===========================================================================
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,9 +19,9 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
-import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402
 import pet_import as importer  # noqa: E402
 
@@ -172,25 +174,50 @@ class ArchiveTests(unittest.TestCase):
 		(text_root / "itemdata_5000.txt").write_bytes(importer._encode(item_rows))
 		(text_root / "itemdata.txt").write_bytes(importer._encode([["itemdata_5000.txt"]]))
 
-	def test_zip_source_imports_and_unset_removes(self):
+	# The pets ride the archive the avatar pass reads: entries at their
+	# pk2 paths under media/ and data/, the whole zip pinned by sha256.
+	# Returns (zip path, pin file); the pin names the zip's real hash.
+	def _archive(self, folder, entries):
+		zip_path = Path(folder) / "opensro_avatars.zip"
+		avatar_archive.write_archive(zip_path, entries)
+		pin_path = Path(folder) / "avatars_archive_pins.json"
+		pin_path.write_text(json.dumps({
+			"format": avatar_archive.PIN_FORMAT,
+			"sha256": hashlib.sha256(zip_path.read_bytes()).hexdigest()}), encoding="utf-8")
+		return zip_path, pin_path
+
+	def _entries(self, chars, item_rows, texts=(), mixed_case=False):
+		text = "media/" + importer.tables.TEXTDATA
+		shard = "CharacterData_5000.txt" if mixed_case else "characterdata_5000.txt"
+		entries = {
+			f"{text}characterdata.txt": importer._encode([[shard]]),
+			f"{text}{shard}": importer._encode(chars),
+			f"{text}itemdata.txt": importer._encode([["itemdata_5000.txt"]]),
+			f"{text}itemdata_5000.txt": importer._encode(item_rows),
+			"data/res/cos/newpet.bsr": b"bsr",
+		}
+		if texts:
+			entries[f"{text}textdata_object.txt"] = importer._encode(texts)
+		return entries
+
+	def _run(self, zip_path, pin_path, native, output, env=None):
+		if env is None:
+			env = {importer.AVATARS_ENV: str(zip_path)}
+		with unittest.mock.patch.object(importer, "AVATARS_PIN_FILE", pin_path), \
+				unittest.mock.patch.dict(os.environ, env, clear=True):
+			return importer.add_archive_pets(native, output)
+
+	def test_archive_source_imports_and_unset_removes(self):
 		with tempfile.TemporaryDirectory() as folder:
 			base = Path(folder)
 			native, output = base / "native", base / "out"
 			self._tree(native, *native_wolf())
 			output.mkdir()
-			zip_path = base / "opensro_pets.zip"
-			text = importer.TEXT_ROOT.as_posix()
-			with zipfile.ZipFile(zip_path, "w") as archive:
-				# Shard names in a manifest are mixed-case in the real
-				# clients (CharacterData_5000.txt); selection must fold.
-				archive.writestr(f"{text}/characterdata.txt", importer._encode([["CharacterData_5000.txt"]]))
-				archive.writestr(f"{text}/CharacterData_5000.txt", importer._encode([char_row("COS_P_DOG", 9001)]))
-				archive.writestr(f"{text}/itemdata.txt", importer._encode([["itemdata_5000.txt"]]))
-				archive.writestr(f"{text}/itemdata_5000.txt", importer._encode([scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")]))
-				archive.writestr("Data_extracted/res/cos/newpet.bsr", b"bsr")
-			env = {importer.ARCHIVE_ENV: str(zip_path)}
-			with unittest.mock.patch.dict(os.environ, env, clear=True):
-				report = importer.add_archive_pets(native, output)
+			# Shard names in a manifest are mixed-case in the real
+			# clients (CharacterData_5000.txt); selection must fold.
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], mixed_case=True))
+			report = self._run(zip_path, pin_path, native, output)
 			self.assertTrue(report["enabled"])
 			self.assertEqual([kind["family"] for kind in report["added"]], ["COS_P_DOG"])
 			text_root = output / importer.TEXT_ROOT
@@ -198,21 +225,40 @@ class ArchiveTests(unittest.TestCase):
 			self.assertTrue((output / "Data_extracted" / "res" / "cos" / "newpet.bsr").exists())
 			marker = json.loads((output / importer.ARCHIVE_SOURCE["report"]).read_text(encoding="utf-8"))
 			self.assertEqual(marker["idMap"]["COS_P_DOG"]["target"], 9001)
-			with unittest.mock.patch.dict(os.environ, {}, clear=True):
-				removed = importer.add_archive_pets(native, output)
+			removed = self._run(zip_path, pin_path, native, output, env={})
 			self.assertFalse(removed["enabled"])
 			self.assertFalse((text_root / importer.ARCHIVE_SOURCE["char_shard"]).exists())
 
-	def _zip(self, path, chars, item_rows, texts=()):
-		text = importer.TEXT_ROOT.as_posix()
-		with zipfile.ZipFile(path, "w") as archive:
-			archive.writestr(f"{text}/characterdata.txt", importer._encode([["characterdata_5000.txt"]]))
-			archive.writestr(f"{text}/characterdata_5000.txt", importer._encode(chars))
-			archive.writestr(f"{text}/itemdata.txt", importer._encode([["itemdata_5000.txt"]]))
-			archive.writestr(f"{text}/itemdata_5000.txt", importer._encode(item_rows))
-			if texts:
-				archive.writestr(f"{text}/textdata_object.txt", importer._encode(texts))
-			archive.writestr("Data_extracted/res/cos/newpet.bsr", b"bsr")
+	def test_an_archive_with_the_wrong_sha256_is_refused(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			output.mkdir()
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")]))
+			pin_path.write_text(json.dumps({
+				"format": avatar_archive.PIN_FORMAT, "sha256": "0" * 64}), encoding="utf-8")
+			with unittest.mock.patch.object(importer, "AVATARS_PIN_FILE", pin_path), \
+					unittest.mock.patch.dict(os.environ, {importer.AVATARS_ENV: str(zip_path)}, clear=True):
+				with self.assertRaises(SystemExit):
+					importer.add_archive_pets(native, output)
+			# The refusal lands before a byte is read: nothing imported.
+			text_root = output / importer.TEXT_ROOT
+			self.assertFalse((text_root / importer.ARCHIVE_SOURCE["char_shard"]).exists())
+			self.assertFalse((output / importer.ARCHIVE_SOURCE["report"]).exists())
+			self.assertFalse((output / "Data_extracted").exists())
+
+	def test_an_archive_without_pet_tables_imports_nothing(self):
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			output.mkdir()
+			zip_path, pin_path = self._archive(base, {"data/res/cos/newpet.bsr": b"bsr"})
+			report = self._run(zip_path, pin_path, native, output)
+			self.assertFalse(report["enabled"])
+			self.assertFalse((output / importer.TEXT_ROOT / importer.ARCHIVE_SOURCE["char_shard"]).exists())
 
 	def test_shard_identity_used_by_an_earlier_import_is_reserved(self):
 		with tempfile.TemporaryDirectory() as folder:
@@ -223,10 +269,9 @@ class ArchiveTests(unittest.TestCase):
 			text_root.mkdir(parents=True)
 			# An earlier import already placed identity 9001 in the tree.
 			(text_root / "characterdata_7777.txt").write_bytes(importer._encode([char_row("COS_P_CAT", 9001)]))
-			zip_path = base / "opensro_pets.zip"
-			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
-			with unittest.mock.patch.dict(os.environ, {importer.ARCHIVE_ENV: str(zip_path)}, clear=True):
-				importer.add_archive_pets(native, output)
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")]))
+			self._run(zip_path, pin_path, native, output)
 			marker = json.loads((output / importer.ARCHIVE_SOURCE["report"]).read_text(encoding="utf-8"))
 			self.assertNotEqual(marker["idMap"]["COS_P_DOG"]["target"], 9001)
 
@@ -235,12 +280,11 @@ class ArchiveTests(unittest.TestCase):
 			base = Path(folder)
 			native, output = base / "native", base / "out"
 			self._tree(native, *native_wolf())
-			zip_path = base / "opensro_pets.zip"
 			texts = [["1", "SN_COS_P_DOG", "k", "", "", "Dog", "Dog", "a", "b", "c"],
 				["1", "SN_ITEM_PET_DOG", "k", "", "", "Dog scroll", "Dog scroll", "a", "b", "c"]]
-			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], texts)
-			with unittest.mock.patch.dict(os.environ, {importer.ARCHIVE_ENV: str(zip_path)}, clear=True):
-				report = importer.add_archive_pets(native, output)
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")], texts))
+			report = self._run(zip_path, pin_path, native, output)
 			self.assertEqual(report["missingNameText"], [])
 			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
 			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in name_rows if len(row) > 1})
@@ -250,13 +294,11 @@ class ArchiveTests(unittest.TestCase):
 			base = Path(folder)
 			native, output = base / "native", base / "out"
 			self._tree(native, *native_wolf())
-			zip_path = base / "opensro_pets.zip"
-			self._zip(zip_path, [char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
-			env = {importer.ARCHIVE_ENV: str(zip_path)}
-			with unittest.mock.patch.dict(os.environ, env, clear=True):
-				importer.add_archive_pets(native, output)
-				self._zip(zip_path, [], [])
-				importer.add_archive_pets(native, output)
+			zip_path, pin_path = self._archive(base, self._entries(
+				[char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")]))
+			self._run(zip_path, pin_path, native, output)
+			self._archive(base, self._entries([], []))
+			self._run(zip_path, pin_path, native, output)
 			text_root = output / importer.TEXT_ROOT
 			for manifest_name, shard in (("characterdata.txt", importer.ARCHIVE_SOURCE["char_shard"]),
 					("itemdata.txt", importer.ARCHIVE_SOURCE["item_shard"])):

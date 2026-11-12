@@ -9,8 +9,10 @@ character import brought their COS rows with the monsters), so a pass over
 an old source reports every kind as existing and adds nothing. What this
 importer adds is the road for the kinds only a later source holds: the
 v1.696 client's pets (a later native client, so no flag of its own) and
-the v2.355 export's custom pets, read only from the pinned, optional
-opensro zip and gated by SRO_PETS_ARCHIVE (unset: no zip, the pass skips).
+the v2.355 export's custom pets, read from the one pinned, optional
+opensro archive the avatar pass reads (SRO_AVATARS_ZIP, opened through
+avatar_archive so its sha256 pin is checked before a byte is read;
+unset: no archive, the pass skips).
 
 Selection is by codename family (the codename minus its trailing level
 number): COS_P_ kinds with leveled rows are attack (growth) pets, COS_P_
@@ -47,18 +49,23 @@ import mmap
 import os
 from pathlib import Path
 import re
-import zipfile
 
 import alexandria_npcs as characters
+import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
 from prepare_client_resources import safe_target, write_atomically
+import sro_pk2
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
 FLAG = "SRO_PETS"
 FLAG_OFF = ("0", "off", "false", "no")
-ARCHIVE_ENV = "SRO_PETS_ARCHIVE"
+# The one pinned archive the avatar pass reads (#3254): the v2.355
+# export's pets ride the same zip and the same sha256 pin, so the build
+# has one optional supply chain, not two.
+AVATARS_ENV = "SRO_AVATARS_ZIP"
+AVATARS_PIN_FILE = Path(__file__).with_name("avatars_archive_pins.json")
 V1696_ENV = "SRO_V1696_ROOT"
 V1696_PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
@@ -83,7 +90,7 @@ VSRO_SOURCE = {"name": "vsro", "char_shard": "characterdata_130000.txt", "item_s
 V1696_SOURCE = {"name": "v1696", "char_shard": "characterdata_140000.txt", "item_shard": "itemdata_140000.txt",
 	"report": ".opensro-pets-v1696.json", "pins": V1696_PIN_FILE}
 ARCHIVE_SOURCE = {"name": "archive", "char_shard": "characterdata_150000.txt", "item_shard": "itemdata_150000.txt",
-	"report": ".opensro-pets-archive.json", "pins": None}
+	"report": ".opensro-pets-archive.json", "pins": AVATARS_PIN_FILE}
 SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
 
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
@@ -98,8 +105,9 @@ LANE_KINDS = ("pickup", "attack", "transport", "vehicle")
 #
 # The import as a whole defaults on like the mall avatars: an unset or
 # empty value is on, only an explicit off value turns it off. An
-# unreadable value is refused rather than guessed. The zip source has
-# its own gate (ARCHIVE_ENV names the zip; unset imports nothing).
+# unreadable value is refused rather than guessed. The archive source
+# has its own gate (AVATARS_ENV names the pinned archive; unset imports
+# nothing).
 # ================
 def enabled(env=os.environ):
 	value = env.get(FLAG, "").strip().lower()
@@ -244,10 +252,10 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 # ================
 # later table readers
 #
-# A pk2 source reads its Media archive; the zip source reads the same
-# tables at their extracted-tree paths inside the pinned archive. Both
-# return (character rows, item rows, object text table) with shards
-# resolved through their manifests.
+# Every source's tables come off a Media (bytes, index) pair: a pk2
+# source mmaps its client archive, the pinned archive's Media comes
+# from avatar_archive. Both return (character rows, item rows, object
+# text table) with shards resolved through their manifests.
 # ================
 def _shard_rows(read, manifest_name, prefix):
 	names = [row[0] for row in tables.table_rows(read(manifest_name)) if row and row[0]]
@@ -258,31 +266,18 @@ def _shard_rows(read, manifest_name, prefix):
 	return rows
 
 
+def later_tables_from_media(media, index):
+	def read(name):
+		return tables.table_text(media, index, name.lower())
+
+	return (_shard_rows(read, "characterdata.txt", "characterdata"),
+		_shard_rows(read, "itemdata.txt", "itemdata"),
+		read("textdata_object.txt"))
+
+
 def later_tables_from_pk2(root):
 	with open(Path(root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
-		index = tables.archive_index(media)
-
-		def read(name):
-			return tables.table_text(media, index, name.lower())
-
-		return (_shard_rows(read, "characterdata.txt", "characterdata"),
-			_shard_rows(read, "itemdata.txt", "itemdata"),
-			read("textdata_object.txt"))
-
-
-def later_tables_from_zip(zip_path):
-	with zipfile.ZipFile(zip_path) as archive:
-		names = {name.lower(): name for name in archive.namelist()}
-
-		def read(name):
-			key = (TEXT_ROOT.as_posix() + "/" + name).lower()
-			if key not in names:
-				return b""
-			return archive.read(names[key])
-
-		return (_shard_rows(read, "characterdata.txt", "characterdata"),
-			_shard_rows(read, "itemdata.txt", "itemdata"),
-			read("textdata_object.txt"))
+		return later_tables_from_media(media, tables.archive_index(media))
 
 
 # ================
@@ -453,45 +448,51 @@ def add_pets(root, native, output, source=VSRO_SOURCE, earlier_codes=(), env=os.
 # ================
 # add_archive_pets
 #
-# The zip source: the pinned opensro pets archive (a zip holding the
-# export's tables and resources at their extracted-tree paths). Unset
-# ARCHIVE_ENV, a missing zip or the master flag off removes the pass's
-# previous import. The zip is read, never the export folder.
+# The pinned-archive source: the v2.355 export's custom pets ride the
+# one opensro archive the avatar pass reads (AVATARS_ENV), opened
+# through avatar_archive so its sha256 is verified against
+# avatars_archive_pins.json before a byte is read; a mismatch stops the
+# build. Unset AVATARS_ENV, a missing archive, an archive carrying no
+# pet tables or the master flag off removes the pass's previous import.
+# The archive is read, never the export folder.
 # ================
 def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 	output = Path(output)
-	zip_path = env.get(ARCHIVE_ENV, "").strip()
+	zip_path = env.get(AVATARS_ENV, "").strip()
 	if not zip_path or not enabled(env) or not Path(zip_path).is_file():
 		remove_import(output, ARCHIVE_SOURCE)
 		return _disabled(ARCHIVE_SOURCE, "no pets archive")
+	archives, _identities = avatar_archive.open_archive(zip_path, AVATARS_PIN_FILE)
+	media, media_index = archives["Media"]
+	data, data_index = archives["Data"]
+	if (tables.TEXTDATA + "characterdata.txt" not in media_index
+			or tables.TEXTDATA + "itemdata.txt" not in media_index):
+		remove_import(output, ARCHIVE_SOURCE)
+		return _disabled(ARCHIVE_SOURCE, "archive carries no pet tables")
 	native_chars, native_items = native_tables(native)
-	later_chars, later_items, later_text = later_tables_from_zip(zip_path)
-	with zipfile.ZipFile(zip_path) as archive:
-		members = {name.lower() for name in archive.namelist()}
+	later_chars, later_items, later_text = later_tables_from_media(media, media_index)
 
-		def missing(family, rows):
-			for row in rows:
-				model = row[CHAR_MODEL].replace("\\", "/").lower() if len(row) > CHAR_MODEL else ""
-				native_hit = bool(model) and (Path(native) / "Data_extracted" / "res" / model).exists()
-				if not model or (not native_hit and f"data_extracted/res/{model}" not in members):
-					return ["model"]
-			return []
+	def missing(family, rows):
+		for row in rows:
+			model = row[CHAR_MODEL].replace("\\", "/").lower() if len(row) > CHAR_MODEL else ""
+			native_hit = bool(model) and (Path(native) / "Data_extracted" / "res" / model).exists()
+			if not model or (not native_hit and f"res/{model}" not in data_index):
+				return ["model"]
+		return []
 
-		prior = read_marker(output, ARCHIVE_SOURCE)
-		char_rows, item_rows, report = select_pets(
-			native_chars, native_items, set(earlier_codes), later_chars, later_items,
-			previous=previous_targets(prior), missing=missing,
-			reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE))
+	prior = read_marker(output, ARCHIVE_SOURCE)
+	char_rows, item_rows, report = select_pets(
+		native_chars, native_items, set(earlier_codes), later_chars, later_items,
+		previous=previous_targets(prior), missing=missing,
+		reserved_ids=output_reserved_ids(output, ARCHIVE_SOURCE))
 	if char_rows:
 		_merge_name_text(output, char_rows, item_rows, later_text, report)
-		# The zip's resources join the staging tree at their archive
+		# The archive's resources join the staging tree at their pk2
 		# paths, so the model builder reads one tree for every source.
-		with zipfile.ZipFile(zip_path) as archive:
-			for name in archive.namelist():
-				if name.lower().startswith("data_extracted/") and not name.endswith("/"):
-					target = safe_target(output, name)
-					if not target.exists():
-						write_atomically(target, archive.read(name))
+		for key in sorted(data_index):
+			target = safe_target(output / "Data_extracted", data_index[key].path)
+			if not target.exists():
+				write_atomically(target, sro_pk2.payload(data, data_index[key]))
 	return _write_pass(output, ARCHIVE_SOURCE, char_rows, item_rows, report)
 
 
