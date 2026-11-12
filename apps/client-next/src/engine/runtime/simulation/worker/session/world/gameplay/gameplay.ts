@@ -342,6 +342,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -596,6 +597,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		contributorTitles = createContributorTitles(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1599,6 +1601,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		caravanStars.clear();
+		contributorTitles.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -4132,6 +4135,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( contributorTitles.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( tradeProgress.receive( frame ) ) {
 					dirty = true;
 					return true;
@@ -6185,6 +6192,9 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				caravanStars: caravanStars.gids(),
+				// Port-only (#3358): the shown Contributor roster
+				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
+				contributorTitles: contributorTitles.names(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
