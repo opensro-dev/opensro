@@ -86,6 +86,7 @@ var catalogueExempt = map[string]string{
 	"SRO_MAINTENANCE_MESSAGE":                  "the refusal shown during a release window; no catalogue file carries it",
 	"SRO_PET_PACING":                           "pet movement speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_PET_INVENTORY_PAGES":                  "a pet's inventory size at runtime; the catalogue publishes no pet state",
+	"SRO_FORT_CONSTANTINOPLE":                  "the Constantinople fortress's registration and structures at runtime; the catalogue publishes no fortress state",
 	"SRO_CHAT_ITEM_LINKS":                      "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE":          "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_STORAGE_AUTO_STACK":                   "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",

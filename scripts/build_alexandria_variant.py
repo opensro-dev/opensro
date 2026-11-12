@@ -652,6 +652,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# whose identity space they share.
 	from skytemple_import import add_skytemple
 	sky_temple = add_skytemple(native, out)
+	# The Constantinople fortress is its own switch and its own source
+	# (the v1.696 client), layered after the Sky Temple whose merge
+	# machinery it shares.
+	from constantinople_import import add_constantinople
+	constantinople = add_constantinople(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -664,6 +669,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"jupiter": jupiter_build,
 		"hunting2": hunting2_build,
 		"skyTemple": sky_temple,
+		"constantinople": constantinople,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],

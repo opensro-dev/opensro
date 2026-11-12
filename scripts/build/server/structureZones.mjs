@@ -75,11 +75,39 @@ export function parseObjectStringIfo( text ) {
 ================
 buildStructureZoneProjection
 
-Writes world-authority/structure-zones.json into the bundle.
+Writes world-authority/structure-zones.json into the bundle. The
+port-only placement file (navmesh/objectstring.portonly.ifo, written by
+scripts/constantinople_import.py while SRO_FORT_CONSTANTINOPLE is on)
+joins when it exists: its zone names are the later fortress's, disjoint
+from the native file's by construction, and a name both files place is
+a build error rather than a silent pick. Without the file the
+projection is exactly the native one.
 ================
 */
-export async function buildStructureZoneProjection( bundleRoot, objectStringFile ) {
+export async function buildStructureZoneProjection( bundleRoot, objectStringFile, portOnlyStringFile ) {
 	const zones = parseObjectStringIfo( await readFile( objectStringFile, "latin1" ) );
+	if ( portOnlyStringFile ) {
+		let extra = null;
+		try {
+			extra = await readFile( portOnlyStringFile, "latin1" );
+		} catch ( error ) {
+			if ( error.code !== "ENOENT" ) throw error;
+		}
+		if ( extra !== null ) {
+			const placed = new Map( zones.map( zone => [ zone.name, zone ] ) );
+			for ( const zone of parseObjectStringIfo( extra ) ) {
+				const existing = placed.get( zone.name );
+				if ( existing ) {
+					if ( JSON.stringify( existing ) !== JSON.stringify( zone ) ) {
+						throw new Error( `objectstring port-only file re-places ${zone.name} elsewhere` );
+					}
+					continue;
+				}
+				placed.set( zone.name, zone );
+				zones.push( zone );
+			}
+		}
+	}
 	const target = path.join( bundleRoot, "world-authority", "structure-zones.json" );
 	await mkdir( path.dirname( target ), { recursive: true } );
 	await writeFile( target, `${JSON.stringify( { format: FORMAT, version: VERSION, zones }, null, 2 )}\n` );
