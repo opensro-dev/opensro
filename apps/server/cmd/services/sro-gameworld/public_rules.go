@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/connjournal"
@@ -161,6 +162,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
+			{Flag: pharaohtemple.EnvPharaohTemple, On: pharaohtemple.Enabled(),
+				Native: "There is no Pharaoh Temple.",
+				Now:    "The Pharaoh Temple opens in the Storm and Cloud Desert: two desert gates (one for the merchant and hunter jobs, one for the thief job) lead to the Temple and its six sanctums, for characters of level 105 and over.",
+				Why:    "Endgame dungeon for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
 				Native: "There is no temple instance.",
 				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
@@ -364,7 +369,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance: the outfits were already in the game data."},
 			{Flag: commerce.EnvMallCategories, On: mallCategoriesOn,
 				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
-				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, and the Destruction Rondo is listed for silk.",
+				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, the Destruction Rondo is listed for silk, and Premium's Gears tab sells the later mall's leveled magic stones.",
 				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",

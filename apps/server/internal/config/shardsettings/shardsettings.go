@@ -124,6 +124,12 @@ var Settings = []Setting{
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	// Port-only, not native: the Pharaoh Temple (the job temple) in the
+	// Storm and Cloud Desert: seven dungeons behind two desert gates. Needs
+	// a variant built with the same flag (build_alexandria_variant.py stages
+	// the dungeons and gates). Server only: the catalogue does not list the
+	// temple's dungeons or gates. "off" is native.
+	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off"},
 	// Port-only, not native: the Qin-Shi tomb upper-floor population
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
@@ -406,8 +412,9 @@ var Settings = []Setting{
 	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	// Owner ask, 2026-11-12 (#3257): the later mall's categories, HOT
-	// shop and goods badges. Off by default; off is the shipped mall
-	// exactly (commerce/mallcategories.go).
+	// shop and goods badges. Build and server read the same switch:
+	// the gears stone import stages its shard behind it, and off is
+	// the shipped mall exactly (commerce/mallcategories.go).
 	{Env: "SRO_MALL_CATEGORIES", NomadVar: "mall_categories", Default: "off"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
