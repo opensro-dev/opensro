@@ -319,6 +319,7 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	// file is missing, and the kinds ride in via their shard.
 	if _, err := monster.LoadMuhanWaves(dir, monster.MuhanEnabled()); err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue muhan waves: %w", err)
+	}
 	template, err = monster.AppendHunting2(template, dir, monster.Hunting2Enabled())
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
