@@ -15,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -295,6 +296,12 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			template, err = template.WithQinShiTomb(textdataDir)
 			if err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		} else if sookarena.Enabled(os.Getenv(sookarena.Env)) {
+			// Port-only: arena encounters need cave actors, not cave nests or doors.
+			template, err = template.WithQinShiArenaRefs(textdataDir)
+			if err != nil {
+				return nil, fmt.Errorf("arena cave references: %w", err)
 			}
 		}
 		template, err = WithMonsterSummonReferences(template, skills)

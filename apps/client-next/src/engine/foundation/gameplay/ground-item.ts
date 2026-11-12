@@ -1,5 +1,25 @@
+/*
+===========================================================================
+
+ground-item.ts - native ground-item widths, labels and pickup selection
+
+===========================================================================
+*/
 import type { EntityState } from "@/engine/contracts/world";
 import { worldDelta } from "@/engine/foundation/world/world-space";
+
+/*
+================
+isSurvivalPowerEgg
+
+Port-only asset choice in the server-flagged arena's private courtyard.
+The ordinary Easter item keeps its native drop model everywhere else.
+================
+*/
+export function isSurvivalPowerEgg( refObjId: number, regionId: number, worldId: number ): boolean {
+	const definition = worldId & 65535;
+	return refObjId === 9272 && regionId === 25580 && (definition === 30 || definition === 31);
+}
 /*
 ================
 isGoldGroupType

@@ -25,7 +25,9 @@ import {
 	loadQinShiTombCharacterRows,
 	loadQinShiTombSkillRows,
 	loadQinShiTombTeleportLinkRows,
-	qinshiTombEnabled
+	qinshiTombEnabled,
+	qinshiTombCombatEnabled,
+	qinshiTombBranchFallback
 } from "../../build/shared/qinshiTomb.mjs";
 
 // The server source root this process started with (fixtureServerRoot
@@ -233,5 +235,50 @@ test("tomb overlay rows are collision-free", () => {
 	assert.equal( teleportLinks.length, 77, "expected 77 Tomb teleport link rows" );
 	for ( const cols of teleportLinks ) {
 		assert.equal( cols.length, 21 );
+	}
+});
+
+test("arena combat overlays do not enable tomb teleport links", ( t ) => {
+	withTombFlag( t, "off" );
+	const saved = process.env.SRO_SOOK_SURVIVAL_ARENA;
+	t.after( () => {
+		if ( saved === undefined ) delete process.env.SRO_SOOK_SURVIVAL_ARENA;
+		else process.env.SRO_SOOK_SURVIVAL_ARENA = saved;
+	} );
+	for ( const flag of [ "yes", "off", "on" ] ) {
+		process.env.SRO_SOOK_SURVIVAL_ARENA = flag;
+		assert.equal( qinshiTombCombatEnabled(), flag === "on" );
+		assert.equal( qinshiTombEnabled(), false );
+		const rows = loadCharacterDataRows( fixtureTextdata( t ), { codenamePattern: /./, qinshiTombOverlay: true } );
+		assert.equal( rows.size, flag === "on" ? 80 : 1 );
+	}
+	assert.ok( buildKnobLines().includes( "env SRO_SOOK_SURVIVAL_ARENA=on" ) );
+});
+
+/*
+================
+Arena asset opt-in must not opt into the cave world.
+================
+*/
+test("arena and tomb switches have an explicit combat-only bake matrix", t => {
+	withTombFlag( t, "off" );
+	const saved = process.env.SRO_SOOK_SURVIVAL_ARENA;
+	t.after( () => {
+		if ( saved === undefined ) delete process.env.SRO_SOOK_SURVIVAL_ARENA;
+		else process.env.SRO_SOOK_SURVIVAL_ARENA = saved;
+	} );
+	for ( const tomb of [ "off", "on" ] ) {
+		for ( const arena of [ "off", "on" ] ) {
+			process.env.SRO_QINSHI_TOMB = tomb;
+			process.env.SRO_SOOK_SURVIVAL_ARENA = arena;
+			const combat = tomb === "on" || arena === "on";
+			assert.equal( qinshiTombEnabled(), tomb === "on" );
+			assert.equal( qinshiTombCombatEnabled(), combat );
+			assert.equal(
+				qinshiTombBranchFallback( "res/item/china/man/armor/heavy_10_aa.bsr" ),
+				combat ? "res/item/china/man/armor/heavy_09_aa.bsr" : null
+			);
+			assert.equal( qinshiTombBranchFallback( "res/native.bsr" ), null );
+		}
 	}
 });

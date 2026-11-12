@@ -161,6 +161,9 @@ Preserve native prerequisite order across direct and item-owned skill paths.
 ================
 */
 func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, target *admitTarget, prepared *pendingProjectileCast, mask admitMask, context admitContext) uint16 {
+	if run := rt.sookRun(division, c); run != nil && run.program.PausedAt != 0 && run.program.ResumeAt == 0 {
+		return 0x3005
+	}
 	// Natively frozen, asleep or stunned refuses, unless the skill has nmf.
 	// The codename exemptions (MOB_RM_SEALSTONE, MSKILL_SD_SETH_ATTACK10)
 	// are monster-only.

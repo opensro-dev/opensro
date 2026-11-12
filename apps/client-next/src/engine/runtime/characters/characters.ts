@@ -493,7 +493,17 @@ export function createCharacterPresentation(
 				renderer.dungeonBlockHides !== undefined,
 			dungeonBlockHides: renderer.dungeonBlockHides
 		} );
-		const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn, admit );
+		// Port-only survival arena: dense spells must not evict live enemies and their pick meshes.
+		const definition = (gameplay?.fortress?.worldId ?? 0) & 65535;
+		const survival = anchor?.regionId === 25580 && (definition === 30 || definition === 31);
+		const selected = selection.select(
+			entities,
+			anchor ?? undefined,
+			local?.gid,
+			local?.mountedOn,
+			admit,
+			survival
+		);
 		// Resident actor assemblies own their dependencies before transient
 		// effects compete for the frame's resource budget. A cold hit effect
 		// must never evict the fighter or strip its already admitted clothing.
@@ -520,7 +530,7 @@ export function createCharacterPresentation(
 			}
 		}
 		probe?.detailEnd( "presentation-selection" );
-		return { sampleActorDetails, local, selected };
+		return { sampleActorDetails, local, selected, survival };
 	}
 	/*
 	================
@@ -857,7 +867,18 @@ export function createCharacterPresentation(
 		// The stage budget ranks effect actors by distance to the player: budget
 		// logic (#1442), so the anchor is the logical pose, not the drawn one.
 		auxiliary.presentStages(
-			{ orbActors, effectActors, next, seconds, animationHolders, player: gameplay?.pose ?? undefined },
+			{
+				orbActors,
+				effectActors,
+				next,
+				seconds,
+				animationHolders,
+				particleHolders,
+				player: gameplay?.pose ?? undefined,
+				arenaLoot: presented.survival ?
+					entities.filter( entity => entity.groundItem && entity.refObjId !== 9272 ) :
+					undefined
+			},
 			{ renderer, resources, effects, probe }
 		);
 		auxiliary.step(

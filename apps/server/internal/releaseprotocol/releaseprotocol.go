@@ -54,8 +54,8 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 16 grows a pet chat link to name its pet (see ChatContract 2).
-	Current = 16
+	// Protocol 17 adds survival checkpoint rewards alongside protocol 16 pet chat links.
+	Current = 17
 	// The chat contract: 1 carries the port-only item links
 	// (SRO_CHAT_ITEM_LINKS): a link block after the text of a 0x7367 request
 	// and of a 0x75BD Global Chatting use, and the linked item bodies after

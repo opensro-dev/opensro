@@ -400,6 +400,7 @@ export interface ActorOwner {
 		carry( gid: number, displayed: Pose ): void;
 	};
 	readonly published: {
+		readonly catalog: ReadonlyMap<number, Resource>;
 		readonly animationStates: ReadonlyMap<string, Record<string, AnimationMetadata>>;
 		readonly bloodEffects: ReadonlyMap<string, readonly [string | null, string | null]>;
 		readonly dress: DressCatalog;

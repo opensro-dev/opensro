@@ -37,14 +37,22 @@ only current learned references, so an upgrade restores its family's timer.
 ================
 */
 func entrySkillCooldowns(deps *Deps, character *Character) []EntrySkillCooldown {
+	return RemainingSkillCooldowns(deps.Skills, character, deps.clock().UnixMilli())
+}
+
+/*
+================
+RemainingSkillCooldowns - shared entry and checkpoint reuse projection.
+================
+*/
+func RemainingSkillCooldowns(skills SkillDataSource, character *Character, now int64) []EntrySkillCooldown {
 	rows := []EntrySkillCooldown{}
-	if deps.Skills == nil {
+	if skills == nil {
 		return rows
 	}
-	now := deps.clock().UnixMilli()
 	seen := map[uint32]bool{}
 	for _, id := range character.Skills {
-		skill, found := deps.Skills.SkillByID(id)
+		skill, found := skills.SkillByID(id)
 		if !found || !skillHasUI(skill) || skill.CoolTimeMs == 0 || seen[id] {
 			continue
 		}

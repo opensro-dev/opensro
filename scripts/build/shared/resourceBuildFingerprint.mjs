@@ -54,6 +54,7 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the server's Qin-Shi tomb overlays join the
 	// client bake (shared/qinshiTomb.mjs).
 	"SRO_QINSHI_TOMB",
+	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",
@@ -94,6 +95,7 @@ const CODE_ENTRIES = [
 ];
 
 const FINGERPRINT_ROOTS = [
+	{ label: "survival-art", absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ) },
 	{ label: "extracted", absolutePath: extractedRoot },
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
 	// The effects builder checks the archive itself against its evidence.
@@ -134,7 +136,13 @@ const FINGERPRINT_ROOTS = [
 // The retail and converted inputs every lane may read (laneMemo.mjs): not
 // the code, not the public tree, and not the server sources, which only
 // the NPC lane's roster export runs (serverRosterRoots).
-const DATA_ROOT_LABELS = new Set( [ "extracted", "client-executable", "particle-archive", "rebuild-assets" ] );
+const DATA_ROOT_LABELS = new Set( [
+	"extracted",
+	"client-executable",
+	"particle-archive",
+	"rebuild-assets",
+	"survival-art"
+] );
 
 /*
 ================

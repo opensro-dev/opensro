@@ -19,7 +19,7 @@ clip.
 import path from "node:path";
 import { parseSkillAniSet } from "./parseSkillEffect.mjs";
 import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
-import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 import { retailTextdataRoot } from "../world/paths.mjs";
 import { findAnimationSet, pickAnimationSetSoundEvents, pickAnimationStateTableMetadata } from "./animationUtils.mjs";
 
@@ -54,7 +54,7 @@ default set's.
 export function pickAttachedMotionClips( bsr, requests ) {
 	let effectiveRequests = requests;
 	if ( !effectiveRequests ) {
-		const tombKey = qinshiTombEnabled();
+		const tombKey = qinshiTombCombatEnabled();
 		effectiveRequests = requiredByTomb.get( tombKey );
 		if ( !effectiveRequests ) {
 			effectiveRequests = attachedMotionRequests(

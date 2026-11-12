@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/namefilter"
-	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -59,7 +58,7 @@ func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 	catalogs := &TextdataCatalogs{
 		Items:        NewTextdataItems(dir),
 		Levels:       NewTextdataLevels(dir),
-		Skills:       NewTextdataSkillsWithTomb(dir, monster.QinShiTombFromEnv()),
+		Skills:       NewTextdataSkills(dir),
 		MagicOptions: NewTextdataMagicOptions(dir),
 		SetGroups:    NewTextdataSetGroups(dir),
 	}

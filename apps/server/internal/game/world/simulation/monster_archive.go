@@ -56,6 +56,7 @@ type archivedMonster struct {
 	rarity    uint8
 	variant   uint8
 	gmSpawned bool
+	arena     bool
 	hp, maxHP uint32
 }
 
@@ -109,6 +110,7 @@ func (a *monsterArchive) put(row monster.Instance) (archivedMonster, bool) {
 		rarity:    row.Rarity(),
 		variant:   row.TradeVariant,
 		gmSpawned: row.GMSpawned,
+		arena:     row.Arena,
 		hp:        row.CurrentHP,
 		maxHP:     row.EffectiveMaxHP(),
 	}
@@ -134,6 +136,7 @@ func (a *monsterArchive) get(gid uint32, r archivedMonster) monster.Instance {
 		SpawnHeading: r.heading,
 		TradeVariant: r.variant,
 		GMSpawned:    r.gmSpawned,
+		Arena:        r.arena,
 		CurrentHP:    r.hp,
 	}
 }

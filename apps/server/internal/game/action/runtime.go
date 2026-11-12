@@ -257,6 +257,8 @@ type Runtime struct {
 	// Monsters is the shared division-keyed population authority. It is nil
 	// only when the composition root's explicit monster kill switch is on.
 	Monsters *simulation.MonsterState
+	// Port-only, not native: nil preserves every native admission/reward path.
+	sookArena *sookArenaRuntime
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests

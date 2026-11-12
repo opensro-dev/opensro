@@ -143,7 +143,9 @@ func isVersionMismatch(err error) bool {
 // against their own daily cap, so ordinary grinding no longer starves
 // a wave. Rows saved earlier carry no Gourd count and start at zero;
 // the offline upgrade rewrites no record.
-const CurrentVersion = 41
+
+// Version 42 adds optional arena entry markers and its durable reward chest.
+const CurrentVersion = 42
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
