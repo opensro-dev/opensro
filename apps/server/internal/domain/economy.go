@@ -90,6 +90,10 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"guild-war-compensation":    {gain: "guild_war_compensation"},
 	"mercenary-attribute":       {loss: "guild_fee"},
 	"operator-grant-items":      {gain: "gm_grant", loss: "gm_grant"},
+	// The operator's gold correction (#3309): one signed adjustment
+	// through the character's own door. Its kind follows the sign
+	// (EconomyReasonKindAt): a credit mints, a debit burns.
+	"operator-adjust-gold": {gain: "operator_adjust", loss: "operator_adjust"},
 	// Loading a transport at a specialty shop (action/commerce.go): the
 	// caravan outcome the trade-sale doors complete, told apart from an
 	// ordinary purchase so a run's start is on the ledger too (#3162).
@@ -225,27 +229,29 @@ var economyReasonKinds = map[string]string{
 	"teleport_refund":        EconomyKindMint,
 	"starting_gold":          EconomyKindMint,
 	"gm_grant":               EconomyKindMint,
-	"shop_buy":               EconomyKindBurn,
-	"trade_goods_cost":       EconomyKindBurn,
-	"buyback":                EconomyKindBurn,
-	"gold_drop":              EconomyKindBurn,
-	"repair":                 EconomyKindBurn,
-	"alchemy":                EconomyKindBurn,
-	"skill_learn":            EconomyKindBurn,
-	"skill_untrain":          EconomyKindBurn,
-	"quest_fee":              EconomyKindBurn,
-	"job_fee":                EconomyKindBurn,
-	"fortress_fee":           EconomyKindBurn,
-	"guild_fee":              EconomyKindBurn,
-	"academy_fee":            EconomyKindBurn,
-	"guild_war_stake":        EconomyKindBurn,
-	"teleport_fee":           EconomyKindBurn,
-	"exchange":               EconomyKindTransfer,
-	"stall_sale":             EconomyKindTransfer,
-	"storage_withdraw":       EconomyKindTransfer,
-	"storage_deposit":        EconomyKindTransfer,
-	"guild_storage":          EconomyKindTransfer,
-	"most_wanted_transfer":   EconomyKindTransfer,
+	// The credit side's kind; a debit burns instead (EconomyReasonKindAt).
+	"operator_adjust":      EconomyKindMint,
+	"shop_buy":             EconomyKindBurn,
+	"trade_goods_cost":     EconomyKindBurn,
+	"buyback":              EconomyKindBurn,
+	"gold_drop":            EconomyKindBurn,
+	"repair":               EconomyKindBurn,
+	"alchemy":              EconomyKindBurn,
+	"skill_learn":          EconomyKindBurn,
+	"skill_untrain":        EconomyKindBurn,
+	"quest_fee":            EconomyKindBurn,
+	"job_fee":              EconomyKindBurn,
+	"fortress_fee":         EconomyKindBurn,
+	"guild_fee":            EconomyKindBurn,
+	"academy_fee":          EconomyKindBurn,
+	"guild_war_stake":      EconomyKindBurn,
+	"teleport_fee":         EconomyKindBurn,
+	"exchange":             EconomyKindTransfer,
+	"stall_sale":           EconomyKindTransfer,
+	"storage_withdraw":     EconomyKindTransfer,
+	"storage_deposit":      EconomyKindTransfer,
+	"guild_storage":        EconomyKindTransfer,
+	"most_wanted_transfer": EconomyKindTransfer,
 }
 
 /*
@@ -260,6 +266,27 @@ func EconomyReasonKind(reason string) string {
 		return kind
 	}
 	return EconomyKindUnknown
+}
+
+/*
+================
+EconomyReasonKindAt
+
+The kind of one change of a reason in the given direction. Every reason
+keeps its EconomyReasonKind in both directions except operator_adjust,
+the operator's gold correction (#3309): it mints gold into the shard
+when it credits a character and burns it out when it debits one, so its
+kind follows the change's sign.
+================
+*/
+func EconomyReasonKindAt(reason string, gain bool) string {
+	if reason == "operator_adjust" {
+		if gain {
+			return EconomyKindMint
+		}
+		return EconomyKindBurn
+	}
+	return EconomyReasonKind(reason)
 }
 
 /*

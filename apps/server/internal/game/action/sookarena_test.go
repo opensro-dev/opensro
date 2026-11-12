@@ -54,17 +54,30 @@ func sookFixture(t *testing.T, characters ...*enterworld.Character) (*Runtime, *
 
 /*
 ================
+sookEntries
+
+The entries the character's account has spent on its recorded day
+(#3322): the account, not the character, owns the daily count.
+================
+*/
+func sookEntries(rt *Runtime, c *enterworld.Character) uint8 {
+	return rt.deps.SookArenaAccount(c.AccountID).Entries
+}
+
+/*
+================
 TestSookAdmissionIsolationAndVictory
 ================
 */
 func TestSookAdmissionIsolationAndVictory(t *testing.T) {
 	a, b := instanceWorldTestCharacter(11, "Survivor"), instanceWorldTestCharacter(12, "Other")
+	a.AccountID, b.AccountID = "account-a", "account-b"
 	rt, clock := sookFixture(t, a, b)
 	rt.enterSookArena(testDivision, a)
 	clock.now = clock.now.Add(time.Minute)
 	rt.enterSookArena(testDivision, b)
 	ra, rb := rt.sookRun(testDivision, a), rt.sookRun(testDivision, b)
-	if ra == nil || rb == nil || ra.lease.ID == rb.lease.ID || a.SookArenaEntries != 1 || !a.SookArenaActive {
+	if ra == nil || rb == nil || ra.lease.ID == rb.lease.ID || sookEntries(rt, a) != 1 || sookEntries(rt, b) != 1 || !a.SookArenaActive {
 		t.Fatal("independent admitted runs missing")
 	}
 	clock.now = clock.now.Add(time.Duration(sookarena.OpeningDelayMs-sookarena.PandoraWindupMs) * time.Millisecond)
@@ -135,7 +148,7 @@ func TestSookColosseumGateDoesNotBlockAdmission(t *testing.T) {
 		if (rt.sookRun(testDivision, c) != nil) != gate {
 			t.Fatalf("gate=%v: wrong admission result", gate)
 		}
-		if !gate && (c.SookArenaEntries != 0 || c.SookArenaActive) {
+		if !gate && (sookEntries(rt, c) != 0 || c.SookArenaActive) {
 			t.Fatal("rejected occupied arena spent an entry")
 		}
 	}
@@ -191,7 +204,7 @@ func TestSookFailedEntryAndDailyLimit(t *testing.T) {
 	push := rt.PushCharacterFrames
 	rt.PushCharacterFrames = nil
 	rt.enterSookArena(testDivision, c)
-	if c.SookArenaEntries != 0 || c.SookArenaActive || c.World.InstanceReturn != nil {
+	if sookEntries(rt, c) != 0 || c.SookArenaActive || c.World.InstanceReturn != nil {
 		t.Fatal("failed relocation spent admission")
 	}
 	rt.PushCharacterFrames = push
@@ -205,13 +218,13 @@ func TestSookFailedEntryAndDailyLimit(t *testing.T) {
 		rt.endSookArena(run, c, false)
 	}
 	rt.enterSookArena(testDivision, c)
-	if rt.sookRun(testDivision, c) != nil || c.SookArenaEntries != 3 {
+	if rt.sookRun(testDivision, c) != nil || sookEntries(rt, c) != 3 {
 		t.Fatal("fourth entry")
 	}
 	clock.now = clock.now.Add(24 * time.Hour)
 	rt.Selected.Set(testDivision, c.Name, 333)
 	rt.enterSookArena(testDivision, c)
-	if rt.sookRun(testDivision, c) == nil || c.SookArenaEntries != 1 {
+	if rt.sookRun(testDivision, c) == nil || sookEntries(rt, c) != 1 {
 		t.Fatal("daily reset")
 	}
 }
@@ -271,7 +284,7 @@ func TestSookDeathDisconnectAndRestart(t *testing.T) {
 				})
 				rt.advanceSookArena(clock.Now().UnixMilli())
 			}
-			if c.SookArenaActive || c.World.InstanceReturn != nil || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || !enterworld.CharacterAlive(c) || goldOf(c) != wantGold || c.SookArenaEntries != 1 {
+			if c.SookArenaActive || c.World.InstanceReturn != nil || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || !enterworld.CharacterAlive(c) || goldOf(c) != wantGold || sookEntries(rt, c) != 1 {
 				t.Fatalf("bad %s recovery: %+v", cause, c.World)
 			}
 			if rt.sookArena != nil {

@@ -90,6 +90,10 @@ type Dependencies interface {
 	// (port-only, #2547): the live record, read or mutated only inside
 	// a kill settlement's door.
 	HalloweenAccount(accountID string) *domain.HalloweenBoxAccount
+	// SookArenaAccount is the account's survival arena daily entry
+	// count (port-only, #3322): the live record, read or mutated only
+	// inside the arena entry's door.
+	SookArenaAccount(accountID string) *domain.SookArenaAccount
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())

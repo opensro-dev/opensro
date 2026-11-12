@@ -166,6 +166,10 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		len(s.meta.HalloweenBoxes) > 0, func() (string, error) { return halloweenBoxesRecord(s.meta.HalloweenBoxes) }); err != nil {
 		return err
 	}
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeySookArenaAccounts, s.changes.sookArenaAccounts,
+		len(s.meta.SookArenaAccounts) > 0, func() (string, error) { return sookArenaAccountsRecord(s.meta.SookArenaAccounts) }); err != nil {
+		return err
+	}
 
 	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
@@ -317,6 +321,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
+	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
+		return err
+	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
 	if s.writer != nil {
 		// Asynchronous (commit_writer.go): the batch is the disk's next
@@ -341,6 +348,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	s.batch.pending = false
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
+	s.ledger.items = nil
 
 	if ground != nil {
 		s.retainGroundChangesLocked(ground)
@@ -389,7 +397,7 @@ Store::commitMetaPlaneTx
 One whole-plane meta row for the commit. The plane is marshaled only
 when a door touched it since the last commit (the change set's plane
 flags, set where the plane is written: UpdateTrade, CloseJobWeek,
-HalloweenAccount). An untouched populated plane counts as skipped
+HalloweenAccount, SookArenaAccount). An untouched populated plane counts as skipped
 without deriving its bytes (an unpopulated one has no row to skip,
 exactly as its empty record counted before); a touched one marshals
 (an empty plane still writes no row) and takes upsertMetaRowTx's

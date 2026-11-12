@@ -73,11 +73,12 @@ GRADES = (0, 1, 3, 6, 8)
 PREFIX = "MOB_JUPITER_"
 
 # The engine's process-wide set of verified archives, under this
-# module's name: muhan and hunting2 pin through jupiter_import too.
+# module's name: muhan and hunting2 read their pins through this
+# module's archive_pins too.
 _verified_archives = later_world_import._verified_archives
 
-# The later name-table readers, re-exported: muhan_import reads the
-# later client's name tables through jupiter_import.
+# The later name-table readers, re-exported from the engine: this
+# module's suite pins them under this import's name.
 later_object_text = later_world_import.later_object_text
 later_text_row = later_world_import.later_text_row
 

@@ -494,14 +494,17 @@ def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 # ================
 # remove_owned
 #
-# The off path: everything the marker owns leaves - the shards, the
-# population, the copied files and the owned name, characterinfo,
-# animation and gate rows. The variant build rewrites the gate tables,
-# the catalogues and mapinfo from the native tables on every run, so a
-# standalone off run strips the gate rows itself and a build-run off
-# finds none.
+# The off path, the Sky Temple family's one implementation (Arabia
+# calls it with its own shard names and region prefix): everything
+# the marker owns leaves - the shards, the population, the NPC
+# standings and talk rows, the copied files and the owned name,
+# characterinfo, animation and gate rows. The variant build rewrites
+# the gate tables, the catalogues and mapinfo from the native tables
+# on every run, so a standalone off run strips the gate rows itself
+# and a build-run off finds none.
 # ================
-def remove_owned(output, prior):
+def remove_owned(output, prior, character_shard=CHARACTER_SHARD, skill_shard=SKILL_SHARD,
+		population_file=POPULATION_FILE, marker=MARKER, region_prefix=REGION_PREFIX):
 	text_root = output / TEXT_ROOT
 	if prior:
 		symbols = set(prior.get("nameSymbols", [])) | set(prior.get("gateTextSymbols", []))
@@ -509,6 +512,13 @@ def remove_owned(output, prior):
 			text_path = text_root / "textdataname.txt"
 			write_atomically(text_path, monsters.encode_rows(
 				monsters.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), symbols)))
+		speech_symbols = set(prior.get("speechSymbols", []))
+		if speech_symbols:
+			quest_path = text_root / "textquest.txt"
+			if quest_path.exists():
+				write_atomically(quest_path, monsters.encode_rows(
+					[row for row in tables.table_rows(quest_path.read_bytes())
+						if len(row) <= 1 or row[1] not in speech_symbols]))
 		effect_path = text_root / "skilleffect.txt"
 		effect_text = effects.remove_animation_bases(
 			tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
@@ -529,21 +539,35 @@ def remove_owned(output, prior):
 			write_atomically(link_path, monsters.encode_rows(
 				[row for row in tables.table_rows(link_path.read_bytes())
 					if len(row) <= 2 or (row[1] not in removed_ids and row[2] not in removed_ids)]))
+		chat_codes = set(prior.get("chatCodes", prior.get("npcCodes", [])))
+		if chat_codes:
+			chat_path = text_root / "npcchat.txt"
+			if chat_path.exists():
+				write_atomically(chat_path, monsters.encode_rows(
+					[row for row in tables.table_rows(chat_path.read_bytes())
+						if len(row) <= 1 or row[1] not in chat_codes]))
+		npc_ids = {str(identity) for identity in prior.get("npcIds", [])}
+		if npc_ids:
+			npcpos_path = text_root / "npcpos.txt"
+			if npcpos_path.exists():
+				write_atomically(npcpos_path, monsters.encode_rows(
+					[row for row in tables.table_rows(npcpos_path.read_bytes())
+						if len(row) < 1 or row[0] not in npc_ids]))
 		region_ids = {str(region) for region in prior.get("regions", [])}
 		if region_ids:
 			region_path = text_root / "regioncode.txt"
 			write_atomically(region_path, monsters.encode_rows(
 				[row for row in tables.table_rows(region_path.read_bytes())
-					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(REGION_PREFIX)]))
-	for name in (CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE):
+					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(region_prefix)]))
+	for name in (character_shard, skill_shard, population_file):
 		(text_root / name).unlink(missing_ok=True)
 	manifest = text_root / "skilldata.txt"
 	if manifest.exists():
 		write_atomically(manifest, monsters.encode_rows(
-			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
+			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != skill_shard]))
 	for relative in prior.get("files", []):
 		safe_target(output, relative).unlink(missing_ok=True)
-	(output / MARKER).unlink(missing_ok=True)
+	(output / marker).unlink(missing_ok=True)
 	return {"enabled": False}
 
 

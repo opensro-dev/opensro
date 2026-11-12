@@ -30,7 +30,8 @@ and is reviewed separately. Ordinary crow-effect lifetimes are unchanged;
 only the arena's own one-shot cues use its cold-model admission policy.
 
 Talk to Event So-ok and choose **Survival Arena (5 stages, EXP/SP x5)**. There are
-three entries per character per UTC day. The same off-by-default server flag
+three entries per account per UTC day, shared by every character of the
+account (#3322). The same off-by-default server flag
 gates entry, eggs/modifiers and chest claims; saved items remain
 stored when it is off. Login recovery still returns stranded characters safely. Enter alive, without a job suit,
 stall/exchange/storage interaction or another event return anchor.

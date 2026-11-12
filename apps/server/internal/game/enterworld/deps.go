@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
@@ -250,7 +252,15 @@ type Deps struct {
 	// fixtureHalloweenBoxes is HalloweenAccount's store when no authority
 	// is wired.
 	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
-	ReadCharacter         func(divisionID string, read func())
+	// SookArenaAccountRecord is the account's survival arena daily
+	// entry count (store sookarenaaccounts.go, port-only #3322): the
+	// live record, read or mutated only inside a write door. Nil keeps
+	// the records in fixtureSookArenaAccounts below.
+	SookArenaAccountRecord func(accountID string) *domain.SookArenaAccount
+	// fixtureSookArenaAccounts is SookArenaAccount's store when no
+	// authority is wired.
+	fixtureSookArenaAccounts map[string]*domain.SookArenaAccount
+	ReadCharacter            func(divisionID string, read func())
 	// CharacterWriteEpoch is the authority's per-record write count
 	// (store CharacterWriteEpoch): a reader that copied a record at
 	// one epoch may reuse the copy while the epoch stands. Nil leaves
@@ -266,6 +276,13 @@ type Deps struct {
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
+	// ItemSaleNote takes one ordinary merchant sale's item evidence
+	// into the economy's per-item hourly buckets (store
+	// NoteItemSale, #3307): the sold item's codename, how many, and
+	// the gold the seller was credited. Installed by the server
+	// wiring with the authority store; nil keeps no item evidence,
+	// as a detached composition has no ledger to keep it in.
+	ItemSaleNote func(charID int64, item string, count int, gold int64) error
 	// LockPublication orders bootstrap snapshots with action/tick inventory
 	// receipts. The returned release runs only after the full batch is queued.
 	// The label names this holder class for the gate-hold report.
@@ -349,6 +366,24 @@ func (d *Deps) Mutate(character *Character, label string, mutate func()) {
 		return
 	}
 	mutate()
+}
+
+/*
+================
+NoteItemSale
+
+Notes one committed merchant sale's item evidence (ItemSaleNote);
+unwired keeps nothing. A failed note is the ledger's loss alone -
+the sale already landed - so it is logged, never returned.
+================
+*/
+func (d *Deps) NoteItemSale(charID int64, item string, count int, gold int64) {
+	if d.ItemSaleNote == nil {
+		return
+	}
+	if err := d.ItemSaleNote(charID, item, count, gold); err != nil {
+		log.Warnf("economy item sale note: %v", err)
+	}
 }
 
 // Update routes a validate-and-change operation through the conditional
@@ -628,30 +663,6 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 	pool := domain.TradeRewardPool{}
 	d.fixtureJobRankings[divisionID] = domain.CloseJobWeek(d.CharactersForDivision(divisionID), &pool, previous, week)
 	return true
-}
-
-/*
-================
-HalloweenAccount
-
-Production supplies the authority's account record. The in-memory
-fallback is for isolated gameplay fixtures, which do not run a durable
-authority; it keeps one record per account id for the fixture's life.
-================
-*/
-func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
-	if d.HalloweenAccountRecord != nil {
-		return d.HalloweenAccountRecord(accountID)
-	}
-	if d.fixtureHalloweenBoxes == nil {
-		d.fixtureHalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
-	}
-	record := d.fixtureHalloweenBoxes[accountID]
-	if record == nil {
-		record = &domain.HalloweenBoxAccount{}
-		d.fixtureHalloweenBoxes[accountID] = record
-	}
-	return record
 }
 
 /*

@@ -255,7 +255,7 @@ func metricPicks(metric string, g group) (sign int64, counted bool) {
 	if reason, isReason := strings.CutPrefix(metric, "reason:"); isReason {
 		return 1, g.reason == reason && !g.commission
 	}
-	kind := domain.EconomyReasonKind(g.reason)
+	kind := domain.EconomyReasonKindAt(g.reason, g.gain)
 	minted := kind == domain.EconomyKindMint && g.gain
 	burned := (kind == domain.EconomyKindBurn && !g.gain) || g.commission
 	switch metric {

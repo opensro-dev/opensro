@@ -42,6 +42,23 @@ export function sunDropChatColor(): UiQuad["color"] {
 
 /*
 ================
+CONTRIBUTOR_TAG / CONTRIBUTOR_TAG_COLOR
+
+Port-only, not native (#3358): a line whose sender is in the shown
+Contributor roster (contributor-titles.ts) carries this tag before the
+sender. The tag is gold-orange (0xffb000) on every channel: the global
+channel (6) already paints every line yellow (0xffff00), so a yellow
+tag would vanish exactly where contributors are most visible. Drawn
+in the outline glyph style (CONTRIBUTOR_TAG_STYLE) it also stands
+apart from the line's own text.
+================
+*/
+export const CONTRIBUTOR_TAG = "[Contributor] ";
+export const CONTRIBUTOR_TAG_COLOR = 0xffb000;
+const CONTRIBUTOR_TAG_STYLE = { fontStyle: 2 } as const;
+
+/*
+================
 isSunDropChatLine
 
 Whether a channel-7 notice line announces a Seal of Sun drop: prefers the
@@ -114,6 +131,10 @@ export interface ChatLayoutInput {
 	tab: number;
 	input: string;
 	lines: readonly ChatLine[];
+	// Port-only, not native (#3358): the shown Contributor roster; a
+	// line whose sender is named here carries the contributor tag.
+	// Omitted or empty keeps every line untagged.
+	contributorTitles?: readonly string[];
 	chatTimestamps?: boolean;
 	// Port-only: link a drop/plus notice's player and item (Experimental
 	// "Links in notices"); omitted or false keeps every line plain.
@@ -350,6 +371,7 @@ button
 					() => textLines( welcome, textWidth, measure, true )
 				).map( value => ({
 					value,
+					tag: "",
 					color: gold,
 					style: undefined as GlyphStyle | undefined,
 					recipient: undefined as string | undefined,
@@ -374,9 +396,15 @@ button
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
 						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
+						// Port-only, not native (#3358): the contributor tag
+						// before a rostered sender, notices (channel 7)
+						// carry no sender and are never tagged.
+						tag = l.channel !== 7 && l.name !== "" && state.contributorTitles?.includes( l.name ) ?
+							CONTRIBUTOR_TAG :
+							"",
 						// Port-only item links: each marker shows its item's label. A line
 						// without a marker takes none of this path (the per-frame budget).
-						raw = chatLineText( l, copy ),
+						raw = tag + chatLineText( l, copy ),
 						labelled = raw.includes( CHAT_LINK_MARKER ) ?
 							chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
 							null,
@@ -392,6 +420,7 @@ button
 						itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
 					return wrapped.map( ( value, index ) => ({
 						value,
+						tag: index === 0 ? tag : "",
 						color,
 						style,
 						recipient: l.channel !== 7 ? l.name : undefined,
@@ -444,7 +473,31 @@ button
 					color: [ 1, 1, 1, 102 / 255 ]
 				} );
 			}
-			quads.push( ...text( line.value, r, clip, line.color, line.style ) );
+			// Port-only, not native (#3358): a tagged row draws its tag
+			// in the tag colour and style, the rest in the line's own.
+			if ( line.tag && line.value.startsWith( line.tag ) ) {
+				const tagWidth = measure( line.tag, CONTRIBUTOR_TAG_STYLE );
+				quads.push(
+					...text(
+						line.tag,
+						r,
+						clip,
+						noticeColorQuad( 0xff000000 | CONTRIBUTOR_TAG_COLOR ),
+						CONTRIBUTOR_TAG_STYLE
+					)
+				);
+				quads.push(
+					...text(
+						line.value.slice( line.tag.length ),
+						[ r[0] + tagWidth, r[1], r[2] - tagWidth, r[3] ],
+						clip,
+						line.color,
+						line.style
+					)
+				);
+			} else {
+				quads.push( ...text( line.value, r, clip, line.color, line.style ) );
+			}
 			// Port-only notice links (notice-links.ts): the player's name whispers,
 			// the item's name shows its tooltip; each underlines while hovered.
 			if ( line.links.length > 0 && line.sequence !== undefined ) {

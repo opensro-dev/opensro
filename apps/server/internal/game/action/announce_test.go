@@ -371,16 +371,18 @@ func TestPlusNoticeNamesTheSeal(t *testing.T) {
 		rt, _ := newTestRuntime(testCharacter(), items)
 		rt.Announce.Plus = true
 		rt.announcePlus(testDivision, "Smith", plus(codename), 0)
-		want := "Smith advanced " + ref.Name + seal + " to +9"
+		want := "[Smith] has succeded in augmenting <<" + ref.Name + seal + ">> to [+9]."
 		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
 			t.Fatalf("%s: %q, want %q", codename, got, want)
 		}
 	}
 	rt, _ := newTestRuntime(testCharacter(), items)
 	rt.Announce.Plus = true
-	long := strings.Repeat("W", noticeMaxUnits-30)
+	// Sized for the #3260 sentence: the sealed line overflows, the
+	// seal-less line fits, so the plus survives and the seal goes.
+	long := strings.Repeat("W", noticeMaxUnits-60)
 	rt.announcePlus(testDivision, long, plus("ITEM_CH_BLADE_08_A_RARE"), 0)
-	if got := drainedNotices(t, rt); len(got) != 1 || !strings.HasSuffix(got[0], " to +9") || strings.Contains(got[0], "Seal") {
+	if got := drainedNotices(t, rt); len(got) != 1 || !strings.HasSuffix(got[0], "to [+9].") || strings.Contains(got[0], "Seal") {
 		t.Fatalf("an over-long line %q, want the plus kept and the seal dropped", got)
 	}
 }
@@ -416,8 +418,8 @@ func TestPlusNoticeFollowsTheFlag(t *testing.T) {
 		rt.Announce.Plus = tc.on
 		rt.announcePlus(testDivision, "Smith", tc.outcome, 0)
 		got := drainedNotices(t, rt)
-		if tc.want == "" && len(got) != 0 || tc.want != "" && (len(got) != 1 || !strings.HasPrefix(got[0], "Smith advanced ") ||
-			!strings.HasSuffix(got[0], " to "+tc.want)) {
+		if tc.want == "" && len(got) != 0 || tc.want != "" && (len(got) != 1 || !strings.HasPrefix(got[0], "[Smith] has succeded in augmenting <<") ||
+			!strings.HasSuffix(got[0], "to ["+tc.want+"].")) {
 			t.Fatalf("on=%v plus=%d: %q", tc.on, tc.outcome.Items[0].Plus, got)
 		}
 	}
@@ -451,19 +453,19 @@ func TestPlusNoticeTiersFollowTheSwitch(t *testing.T) {
 		return alchemy.Outcome{Success: true, Target: 13,
 			Items: []inventory.Item{{Slot: 13, Codename: "ITEM_CH_BLADE_08_C_RARE", Plus: plus}}}
 	}
-	plain := "Smith advanced " + ref.Name + " (Seal Of Sun) to +"
+	plain := "[Smith] has succeded in augmenting <<" + ref.Name + " (Seal Of Sun)>> to [+"
 	for _, tc := range []struct {
 		tiers bool
 		plus  uint8
 		want  string
 	}{
-		{false, 10, plain + "10"},
-		{false, 11, plain + "11"},
-		{false, 12, plain + "12"},
-		{true, 9, plain + "9"},
-		{true, 10, "Great success! " + plain + "10"},
-		{true, 11, "LEGENDARY! " + plain + "11"},
-		{true, 12, "LEGENDARY! " + plain + "12"},
+		{false, 10, plain + "10]."},
+		{false, 11, plain + "11]."},
+		{false, 12, plain + "12]."},
+		{true, 9, plain + "9]."},
+		{true, 10, "Great success! " + plain + "10]."},
+		{true, 11, "LEGENDARY! " + plain + "11]."},
+		{true, 12, "LEGENDARY! " + plain + "12]."},
 	} {
 		rt, _ := newTestRuntime(testCharacter(), items)
 		rt.Announce.Plus = true
@@ -475,13 +477,14 @@ func TestPlusNoticeTiersFollowTheSwitch(t *testing.T) {
 	}
 	// An over-long line keeps the lead and gives the seal up first: the
 	// player name is sized so the sealed line overflows and the lead
-	// line fits.
-	long := strings.Repeat("W", 65-len([]rune(ref.Name)))
+	// line fits (the #3260 sentence is longer than the line it replaced,
+	// so the name is shorter than the old calibration's).
+	long := strings.Repeat("W", 30)
 	rt, _ := newTestRuntime(testCharacter(), items)
 	rt.Announce.Plus = true
 	rt.Announce.PlusTiers = true
 	rt.announcePlus(testDivision, long, outcome(11), 0)
-	want := "LEGENDARY! " + long + " advanced " + ref.Name + " to +11"
+	want := "LEGENDARY! [" + long + "] has succeded in augmenting <<" + ref.Name + ">> to [+11]."
 	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
 		t.Fatalf("over-long tiered line: %q, want %q", got, want)
 	}
@@ -639,7 +642,7 @@ func TestReinforceIntoPlusEightAnnounces(t *testing.T) {
 			t.Fatalf("on=%v: the reinforcement did not succeed: %+v", on, frames)
 		}
 		got := drainedNotices(t, rt)
-		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasSuffix(got[0], " to +8")) {
+		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasSuffix(got[0], "to [+8].")) {
 			t.Fatalf("on=%v: %q", on, got)
 		}
 	}

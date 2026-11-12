@@ -16,16 +16,19 @@ previous run to safety; this never starts an event or spends an entry.
 Reference decoding and schema support remain available for saved items.
 
 Matched Agent/GameWorld/client protocol **17**, asset schema **4**, authority
-schema **42**, layout **12**. Protocol 17 combines main's protocol 16 pet-chat
+schema **43**, layout **12**. Protocol 17 combines main's protocol 16 pet-chat
 links with arena checkpoint frames. Old tabs must reload. Schema 42 adds optional
-arena fields on top of schema 41's Halloween Gourd count; historical manifests
-must not be rewritten. Back up the authority and use the normal schema upgrader.
+arena fields on top of schema 41's Halloween Gourd count; schema 43 moves the
+daily entry count from the character to the account (`sookArenaAccounts`,
+seeded at first load from the schema 42 character counts, #3322). Historical
+manifests must not be rewritten. Back up the authority and use the normal schema upgrader.
 Disabling the event does not downgrade the authority schema.
 
 ## Current mechanics
 
 See [player/operator guide](SOOK-SURVIVAL-ARENA.md) for all numbers. Five stages,
-private leases, three entries per UTC day. Default 15-wave budget; fast clears
+private leases, three entries per account per UTC day (the store's
+`sookArenaAccounts` plane, schema 43, #3322). Default 15-wave budget; fast clears
 accelerate Pandoras and finish sooner. Surviving monsters receive timed waves;
 spawning stops after five minutes or when the budget is spent. 200 living cap.
 After spawning ends, survivors hunt every 10s after one minute. Eggs continue

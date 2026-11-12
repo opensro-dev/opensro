@@ -69,6 +69,7 @@ const preSilkHistoryVersion = 38
 const preWantedDecayVersion = 39
 const preGourdCountVersion = 40
 const preArenaChestVersion = 41
+const preSookArenaAccountVersion = 42
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -282,6 +283,15 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		// against the one account cap; its account rows carry no
 		// Gourd count and start the Gourd allowance at zero (#2950).
 		// Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preSookArenaAccountVersion:
+		// Schema 42 ran at layout 12 and counted survival arena entries
+		// per character; the account plane starts absent and is seeded
+		// from those counts at first load (#3322). Records read
+		// unchanged.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

@@ -806,6 +806,9 @@ export interface GameplayState extends MoverPublication {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only (#2958): the 5-star caravan transport gids (caravan-stars.ts).
 	readonly caravanStars?: readonly number[];
+	// Port-only (#3358): the shown Contributor character names
+	// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
+	readonly contributorTitles?: readonly string[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only most-wanted state of the local player (most-wanted.ts).
