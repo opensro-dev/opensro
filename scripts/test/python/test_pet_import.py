@@ -105,11 +105,16 @@ class SelectionTests(unittest.TestCase):
 		self.assertEqual((kind["kind"], kind["levels"]), ("attack", [1, 40]))
 		self.assertIn("pet skill rows", kind["needs"])
 
-	def test_fellow_kind_is_deferred_not_imported(self):
+	def test_fellow_kind_rides_the_attack_lane(self):
+		# Fellows are admitted like attack kinds (#3328): rows and scroll
+		# import, they fight with their native rows, and the report owes
+		# no design entry (the expansion's design is attack-pet only).
 		chars, item_rows, report = self.select(
 			[char_row("COS_F_FAIRY", 9001)], [scroll("ITEM_PET_FAIRY", 9002, "COS_F_FAIRY")])
-		self.assertEqual((chars, item_rows), ([], []))
-		self.assertEqual(report["deferred"][0]["family"], "COS_F_FAIRY")
+		self.assertEqual((len(chars), len(item_rows)), (1, 1))
+		kind = report["added"][0]
+		self.assertEqual((kind["family"], kind["kind"]), ("COS_F_FAIRY", "fellow"))
+		self.assertEqual(kind["needs"], [])
 
 	def test_kind_without_a_scroll_is_skipped(self):
 		chars, _, report = self.select([char_row("COS_P_DOG", 9001)], [])
