@@ -29,10 +29,13 @@ packages' own authored ones; the Rondo's authored package takes the
 alchemy stones' 5-silk tier, as a balance the shard owner can retune in
 this one place.
 
-Premium's Gears and Others tabs and the recommendation list's stock
-beyond the premium tickets belong to the epic's later lines (the gears
-items, the summon scrolls and the model switchers of #3257); the tabs
-stand ready for them.
+Premium's Gears tab and the recommendation list's stock beyond the
+premium tickets belong to the epic's later lines (the gears items and
+the model switchers of #3257); the tab stands ready for them. The
+summon scrolls stand in Premium's Others tab below: the three shipped
+ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
+30 silk for one soldier and 60 for two, badged new; their use is
+action/summonscroll.go, behind this same setting.
 
 ===========================================================================
 */
@@ -101,6 +104,15 @@ var mallCategoryGoods = []mallCategoryGood{
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_M_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_HAT", Badge: mallBadgeHot},
+	// The summon scrolls (issue #3257): shipped items no native
+	// family serves; one soldier for 30 silk, two for 60, badged new.
+	// Their use is action/summonscroll.go behind this same setting.
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_SCROLL", Silk: 30, Badge: mallBadgeNew},
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_ONE_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_ONE_SCROLL", Silk: 30, Badge: mallBadgeNew},
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_TWO_SCROLL", Silk: 60, Badge: mallBadgeNew},
 	// The Destruction Rondo, first listed by this layout (issue #3257
 	// line 2): the item ships in v1.150 and Dissolve honours it; only a
 	// mall package was missing. 5 silk, the astral stones' tier.
