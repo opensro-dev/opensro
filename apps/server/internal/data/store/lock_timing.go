@@ -309,6 +309,9 @@ type LockTiming struct {
 	EconomyFoldDone      bool              `json:"economy_fold_done"`
 	EconomyFoldBatches   int64             `json:"economy_fold_batches"`
 	EconomyFoldHoldMs    latency.Histogram `json:"economy_fold_hold_ms"`
+	// CommitWriter is the asynchronous writer's queue and lag
+	// (commit_writer.go); absent while SRO_STORE_ASYNC_COMMIT is off.
+	CommitWriter *CommitWriterStats `json:"commit_writer,omitempty"`
 }
 
 /*
@@ -342,6 +345,10 @@ func (s *Store) LockTiming() LockTiming {
 		out.EconomyFoldDone = stats.Done
 		out.EconomyFoldBatches = stats.Batches
 		out.EconomyFoldHoldMs = stats.HoldMs
+	}
+	if w := s.writer; w != nil {
+		stats := w.stats()
+		out.CommitWriter = &stats
 	}
 	if c := s.checkpoints; c != nil {
 		out.WALBytes = c.walBytes.Load()

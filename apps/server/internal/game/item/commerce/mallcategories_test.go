@@ -97,9 +97,9 @@ func TestMallCategoriesOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 6 Halloween + the Rondo.
-	if len(catalog.Offers) != 88 {
-		t.Fatalf("layout mall: %d offers, want 88", len(catalog.Offers))
+	// 81 shipped + 6 Halloween + the Rondo + the 3 summon scrolls.
+	if len(catalog.Offers) != 91 {
+		t.Fatalf("layout mall: %d offers, want 91", len(catalog.Offers))
 	}
 	// 16 shipped tabs + 2 HOT + 2 Premium + 1 Alchemy.
 	if len(catalog.Tabs) != 21 {
@@ -164,6 +164,34 @@ func TestMallCategoriesOn(t *testing.T) {
 	})
 	if err != nil || quote.Cost.Silk != 5 {
 		t.Fatalf("Rondo quote = %+v, %v; want 5 silk", quote.Cost, err)
+	}
+	// The summon scrolls: Premium's Others tab (shop 4, tab 2), badged
+	// new at the authored prices, one item each once hydrated.
+	scrolls := mallOffersOn(catalog, 4, 2)
+	if len(scrolls) != 3 {
+		t.Fatalf("Premium Others tab: %d offers, want the 3 summon scrolls", len(scrolls))
+	}
+	wantSilk := map[string]uint32{
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL":     30,
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_ONE_SCROLL": 30,
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL": 60,
+	}
+	for _, offer := range scrolls {
+		if offer.Badge != mallBadgeNew || offer.Silk != wantSilk[offer.Code] {
+			t.Fatalf("%s = %d silk badged %q, want %d silk badged new",
+				offer.Code, offer.Silk, offer.Badge, wantSilk[offer.Code])
+		}
+	}
+	two := mallOfferNamed(catalog, "PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL")
+	if two == nil || len(two.ItemIDs) != 1 {
+		t.Fatalf("two-scroll contents = %v, want the one scroll item", two)
+	}
+	scrollQuote, err := catalog.Quote(wire.MallPurchase{
+		Group: two.Group, Shop: two.Shop, Tab: two.Tab, Slot: two.Slot,
+		Package: two.PackageID, Quantity: 1,
+	})
+	if err != nil || scrollQuote.Cost.Silk != 60 {
+		t.Fatalf("two-scroll quote = %+v, %v; want 60 silk", scrollQuote.Cost, err)
 	}
 	// The premium tickets are badged; the shipped offers are not.
 	for code, want := range map[string]string{
@@ -231,10 +259,10 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 22 extra + the Rondo: the Halloween six are among
-	// the 22 and move tabs rather than listing twice.
-	if len(catalog.Offers) != 104 {
-		t.Fatalf("both settings: %d offers, want 104", len(catalog.Offers))
+	// 81 shipped + 22 extra + the Rondo + the 3 summon scrolls: the
+	// Halloween six are among the 22 and move tabs rather than twice.
+	if len(catalog.Offers) != 107 {
+		t.Fatalf("both settings: %d offers, want 107", len(catalog.Offers))
 	}
 	listings := map[string]int{}
 	for _, offer := range catalog.Offers {

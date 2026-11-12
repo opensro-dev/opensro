@@ -9,16 +9,20 @@ import, the on/off/on rebuild and the absent-client skip.
 
 ===========================================================================
 """
+import json
 import os
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402
 import mall_avatar_import as importer  # noqa: E402
+import sro_pk2  # noqa: E402
 from test_cap110_items import archive_bytes, utf16  # noqa: E402
 
 FIRST_ID = 24371
@@ -54,6 +58,26 @@ def native_row(identity, code="ITEM_CH_SWORD_01"):
 	row = avatar(code, identity)
 	row[9:13] = ["3", "1", "6", "2"]
 	return row
+
+
+class TextLayoutTests(unittest.TestCase):
+	# ================
+	# test_v1696_row_takes_the_vsro_layout
+	# ================
+	def test_v1696_row_takes_the_vsro_layout(self):
+		row = ["1", "5979", "SN_X", "ko"] + ["0"] * 5 + ["Devil"] + ["0"] * 3 + ["Devil"] * 4
+		cells = importer.vsro_text_row(row)
+		self.assertEqual(len(cells), importer.VSRO_TEXT_COLUMNS)
+		self.assertEqual(cells[:4], ["1", "SN_X", "ko", ""])
+		self.assertEqual(cells[importer.TEXT_ENGLISH], "Devil")
+		self.assertNotIn(importer.V1696_ABSENT, cells[3:])
+
+	# ================
+	# test_vsro_row_passes_through
+	# ================
+	def test_vsro_row_passes_through(self):
+		row = ["1", "SN_X", "ko", "", "tw", "cn", "en", "ja", "en", "vi", "en", "ru", "en", "en", "en"]
+		self.assertIs(importer.vsro_text_row(row), row)
 
 
 class SwitchTests(unittest.TestCase):
@@ -231,15 +255,42 @@ class MallTests(unittest.TestCase):
 		self.assertEqual(importer.avatar_kind("ITEM_MALL_AVATAR_M_ADMIRAL_2011"), "dress")
 
 	# ================
-	# test_attachments_take_the_hat_tab_after_present_slots
+	# test_attachments_take_their_own_tab_after_present_slots
 	# ================
-	def test_attachments_take_the_hat_tab_after_present_slots(self):
+	def test_attachments_take_their_own_tab_after_present_slots(self):
 		later, current, avatars = self.tables()
 		rows, _ = importer.mall_rows(later, avatars, current, {1})
 		slots = {row[3]: (row[2], row[4]) for row in rows["refshopgoods.txt"]}
 		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_HAT"], ("MALL_AVATAR_HAT", "2"))
-		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_ATTACH"], ("MALL_AVATAR_HAT", "3"))
+		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY_ATTACH"], (importer.ATTACH_TAB, "0"))
 		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY"], ("MALL_AVATAR_DRESS", "0"))
+
+	# ================
+	# test_attach_tab_row_is_carried_over_once
+	# ================
+	def test_attach_tab_row_is_carried_over_once(self):
+		later = [["1", "15", "3401", importer.ATTACH_TAB, "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_ATTACH", "xxx"]]
+		current = [["1", "11", "1982", "MALL_AVATAR_HAT", "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_HAT"],
+			["1", "11", "3401", "OTHER_TAB", "OTHER_GROUP", "X"]]
+		row = importer.attach_tab_row(current, later)
+		self.assertEqual(row, ["1", "11", "3402", importer.ATTACH_TAB, "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_ATTACH", "xxx"])
+		self.assertIsNone(importer.attach_tab_row(current + [row], later))
+		with self.assertRaises(ValueError):
+			importer.attach_tab_row(current, [])
+
+	# ================
+	# test_strip_tabs_removes_only_the_added_tab
+	# ================
+	def test_strip_tabs_removes_only_the_added_tab(self):
+		with tempfile.TemporaryDirectory() as folder:
+			output = Path(folder)
+			path = output / importer.TEXT_ROOT / importer.SHOP_TAB_TABLE
+			path.parent.mkdir(parents=True)
+			path.write_bytes(utf16([["1", "11", "1982", "MALL_AVATAR_HAT"], ["1", "11", "2379", importer.ATTACH_TAB]]))
+			importer.strip_tabs(output, {importer.ATTACH_TAB})
+			text = path.read_bytes().decode("utf-16")
+			self.assertIn("MALL_AVATAR_HAT", text)
+			self.assertNotIn(importer.ATTACH_TAB, text)
 
 	# ================
 	# test_unsold_and_packageless_avatars_stay_unlisted
@@ -250,6 +301,62 @@ class MallTests(unittest.TestCase):
 		reasons = {entry["code"]: entry["reason"] for entry in summary["unlisted"]}
 		self.assertEqual(reasons["ITEM_MALL_AVATAR_M_NOSALE"], "not sold in the later mall")
 		self.assertEqual(reasons["ITEM_MALL_AVATAR_M_NOPACKAGE"], "no package")
+
+	# ================
+	# test_list_all_authors_the_unsold_and_packageless
+	#
+	# Port-only listing: both avatars the later mall could not list get an
+	# authored package, plain scrap and native silk price, and take the
+	# dress tab after the avatars the later mall sold.
+	# ================
+	def test_list_all_authors_the_unsold_and_packageless(self):
+		later, current, avatars = self.tables()
+		rows, summary = importer.mall_rows(later, avatars, current, {1}, list_all=True)
+		self.assertEqual(summary["listed"], 5)
+		self.assertEqual(summary["unlisted"], [])
+		self.assertEqual(sorted(summary["authored"]), ["ITEM_MALL_AVATAR_M_NOPACKAGE", "ITEM_MALL_AVATAR_M_NOSALE"])
+		package = [row for row in rows["refpackageitem.txt"] if row[3] == "PACKAGE_ITEM_MALL_AVATAR_M_NOPACKAGE"][0]
+		self.assertEqual(package[4:9], ["0", "EXPAND_TERM_ALL", "SN_ITEM_MALL_AVATAR_M_NOPACKAGE",
+			"SN_ITEM_MALL_AVATAR_M_NOPACKAGE_TT_DESC", "item/avatar.ddj"])
+		self.assertEqual(len(package), 17)
+		scrap = [row for row in rows["refscrapofpackageitem.txt"] if row[2] == package[3]][0]
+		self.assertEqual((len(scrap), scrap[3]), (29, "ITEM_MALL_AVATAR_M_NOPACKAGE"))
+		prices = [row for row in rows["refpricepolicyofitem.txt"] if row[2] == package[3]]
+		self.assertEqual([row[3:5] for row in prices], [["2", "130"]])
+		slots = {row[3]: (row[2], row[4]) for row in rows["refshopgoods.txt"]}
+		self.assertEqual(slots["PACKAGE_MALL_AVATAR_M_TURKEY"], ("MALL_AVATAR_DRESS", "0"))
+		self.assertEqual(slots["PACKAGE_ITEM_MALL_AVATAR_M_NOPACKAGE"], ("MALL_AVATAR_DRESS", "1"))
+		self.assertEqual(slots["PACKAGE_ITEM_MALL_AVATAR_M_NOSALE"], ("MALL_AVATAR_DRESS", "2"))
+
+	# ================
+	# test_authored_identities_pass_every_shipped_one
+	# ================
+	def test_authored_identities_pass_every_shipped_one(self):
+		later, current, avatars = self.tables()
+		rows, summary = importer.mall_rows(later, avatars, current, {90000}, list_all=True)
+		authored = {"PACKAGE_" + code for code in summary["authored"]}
+		ids = [int(row[2]) for row in rows["refpackageitem.txt"] if row[3] in authored]
+		serials = [int(row[28]) for row in rows["refscrapofpackageitem.txt"] if row[2] in authored]
+		self.assertTrue(all(identity > 90000 for identity in ids))
+		self.assertTrue(all(serial > 80000 for serial in serials))
+		self.assertEqual(len(set(ids)), 2)
+		self.assertEqual(len(set(serials)), 2)
+
+	# ================
+	# test_a_full_tab_is_refused
+	# ================
+	def test_a_full_tab_is_refused(self):
+		later, current, avatars = self.tables()
+		current["refshopgoods.txt"].append(["1", "11", "MALL_AVATAR_DRESS", "PACKAGE_Y", "255"] + ["-1", "xxx"] * 4)
+		with self.assertRaises(ValueError):
+			importer.mall_rows(later, avatars, current, {1}, list_all=True)
+
+	# ================
+	# test_list_all_switch_is_read
+	# ================
+	def test_list_all_switch_is_read(self):
+		self.assertTrue(importer.enabled({}, importer.LIST_ALL_FLAG))
+		self.assertFalse(importer.enabled({importer.LIST_ALL_FLAG: "off"}, importer.LIST_ALL_FLAG))
 
 	# ================
 	# test_package_identity_clash_is_refused
@@ -278,7 +385,7 @@ class BuildTests(unittest.TestCase):
 	# ================
 	# stage
 	# ================
-	def stage(self, root):
+	def stage(self, root, mall=False):
 		native, output, later = root / "native", root / "variant", root / "later"
 		base = native / importer.TEXT_ROOT
 		base.mkdir(parents=True)
@@ -294,6 +401,10 @@ class BuildTests(unittest.TestCase):
 			"textdata_equip&skill.txt": utf16(texts),
 			"textdata_object.txt": utf16([]), "textdata_new.txt": utf16([]),
 		}
+		if mall:
+			for name, _ in importer.MALL_TABLES:
+				(base / name).write_bytes(utf16([]))
+				files[name] = utf16([])
 		(later / "Media.pk2").write_bytes(archive_bytes(files))
 		(later / "Data.pk2").write_bytes(archive_bytes({}))
 		(later / "Particles.pk2").write_bytes(archive_bytes({}))
@@ -339,6 +450,88 @@ class BuildTests(unittest.TestCase):
 				self.assertTrue(importer.add_avatars(later, native, output)["enabled"])
 
 	# ================
+	# stage_v1696
+	#
+	# A v1.696-shaped client: the text table is a shard index naming one
+	# part, whose rows carry the numeric text id and "0" cells.
+	# ================
+	def stage_v1696(self, root, mall=False):
+		later = root / "v1696"
+		later.mkdir()
+		codes = ("ITEM_MALL_AVATAR_M_DEVIL_HAT", "ITEM_MALL_AVATAR_M_DEVIL")
+		rows = [avatar(code, FIRST_ID + index) for index, code in enumerate(codes)]
+		texts = [
+			["1", str(5000 + index), row[5], "ko"] + ["0"] * 5 + ["Devil"] + ["0"] * 3 + ["Devil"] * 4
+			for index, row in enumerate(rows)
+		]
+		manifest = utf16([["itemdata_100001.txt"]])
+		files = {
+			"itemdata.txt": manifest, "itemdata_100001.txt": utf16(rows),
+			"textdata_equip&skill.txt": utf16([["textdata_equip&skill_1.txt"]]),
+			"textdata_equip&skill_1.txt": utf16(texts),
+			"textdata_object.txt": utf16([]),
+		}
+		if mall:
+			for name, _ in importer.MALL_TABLES:
+				files[name] = utf16([])
+		(later / "Media.pk2").write_bytes(archive_bytes(files))
+		(later / "Data.pk2").write_bytes(archive_bytes({}))
+		(later / "Particles.pk2").write_bytes(archive_bytes({}))
+		return later
+
+	# ================
+	# test_second_source_adds_its_own_shard
+	#
+	# The v1.696 pass runs after the VSRO pass: its rows land in their own
+	# shard, its sharded 17-column text is read, and it takes no identity
+	# the VSRO pass holds.
+	# ================
+	def test_second_source_adds_its_own_shard(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output, later = self.stage(Path(folder))
+			v1696 = self.stage_v1696(Path(folder))
+			closure, check = self.patched()
+			with closure, check:
+				first = importer.add_avatars(later, native, output)
+				second = importer.add_avatars(v1696, native, output, importer.V1696_SOURCE)
+			self.assertEqual(second["added"], 2)
+			self.assertEqual(second["source"], "v1696")
+			targets = [{entry["target"] for entry in summary["idMap"].values()} for summary in (first, second)]
+			self.assertFalse(targets[0] & targets[1])
+			self.assertEqual(
+				self.manifest_names(output),
+				["itemdata_5000.txt", importer.OUTPUT_SHARD, importer.V1696_SOURCE["shard"]],
+			)
+			names = (output / importer.TEXT_ROOT / "textdataname.txt").read_bytes().decode("utf-16")
+			self.assertIn("Devil", names)
+
+	# ================
+	# test_two_sources_relist_identically_on_a_reused_tree
+	#
+	# A rebuild strips each source's goods and lists them again beside
+	# the other source's: the goods must land on the same slots, not
+	# walk each tab upward until the one-byte slot overflows, and the
+	# re-authored package identities stay unique in the table.
+	# ================
+	def test_two_sources_relist_identically_on_a_reused_tree(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output, later = self.stage(Path(folder), mall=True)
+			v1696 = self.stage_v1696(Path(folder), mall=True)
+			closure, check = self.patched()
+			with closure, check:
+				first = importer.add_avatars(later, native, output)
+				second = importer.add_avatars(v1696, native, output, importer.V1696_SOURCE)
+				goods = (output / importer.TEXT_ROOT / "refshopgoods.txt").read_bytes()
+				again_first = importer.add_avatars(later, native, output)
+				again_second = importer.add_avatars(v1696, native, output, importer.V1696_SOURCE)
+			self.assertEqual(first["idMap"], again_first["idMap"])
+			self.assertEqual(second["idMap"], again_second["idMap"])
+			self.assertEqual(goods, (output / importer.TEXT_ROOT / "refshopgoods.txt").read_bytes())
+			packages = importer.tables.table_rows((output / importer.TEXT_ROOT / "refpackageitem.txt").read_bytes())
+			identities = [row[2] for row in packages]
+			self.assertEqual(len(identities), len(set(identities)))
+
+	# ================
 	# test_absent_client_skips_without_failing
 	# ================
 	def test_absent_client_skips_without_failing(self):
@@ -362,6 +555,205 @@ class BuildTests(unittest.TestCase):
 				shard.write_bytes(shard.read_bytes() + b"x\x00")
 				with self.assertRaises(ValueError):
 					importer.add_avatars(later, native, output)
+
+
+ZIP_CODES = ("ITEM_CREDDY_AVATAR_M_SUIT", "ITEM_CREDDY_AVATAR_M_SUIT_HAT", "ITEM_EVENT_AVATAR_W_BALL")
+
+
+# ================
+# zip_bytes
+#
+# A pinned-archive fixture: the tables the importer reads, under the
+# media/ prefix the packer writes.
+# ================
+def zip_bytes(codes=ZIP_CODES):
+	rows = [avatar(code, FIRST_ID + index) for index, code in enumerate(codes)]
+	texts = [["1", row[5], "ko", "", "tw", "cn", "de", "ja", "Suit", "vi"] for row in rows]
+	prefix = "media/" + importer.tables.TEXTDATA
+	entries = {
+		prefix + "itemdata.txt": utf16([[importer.AVATARS_SOURCE["shard"]]]),
+		prefix + importer.AVATARS_SOURCE["shard"]: utf16(rows),
+		prefix + "textdata_equip&skill.txt": utf16(texts),
+		prefix + "textdata_object.txt": utf16([]),
+		prefix + "textdata_new.txt": utf16([]),
+		"data/res/item/avatar.bsr": b"model",
+	}
+	with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as handle:
+		path = Path(handle.name)
+	avatar_archive.write_archive(path, entries)
+	raw = path.read_bytes()
+	path.unlink()
+	return raw
+
+
+class ArchiveTests(unittest.TestCase):
+	# ================
+	# stage
+	#
+	# A native tree with the mall tables, shop tabs and interface texts
+	# the board listing appends to.
+	# ================
+	def stage(self, root):
+		native, output = root / "native", root / "variant"
+		base = native / importer.TEXT_ROOT
+		base.mkdir(parents=True)
+		(output / importer.TEXT_ROOT).mkdir(parents=True)
+		(base / "itemdata.txt").write_bytes(utf16([["itemdata_5000.txt"]]))
+		(base / "itemdata_5000.txt").write_bytes(utf16([native_row(10)]))
+		(base / "textdataname.txt").write_bytes(utf16([]))
+		for name, _ in importer.MALL_TABLES:
+			(base / name).write_bytes(utf16([]))
+		tabs = [
+			["1", "11", "1982", "MALL_AVATAR_HAT", "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_HAT"],
+			["1", "11", "2378", "MALL_AVATAR_DRESS", "MALL_AVATAR_GROUP1", "UIIT_STT_SILKMALL_DRESS"],
+		]
+		(base / importer.SHOP_TAB_TABLE).write_bytes(utf16(tabs))
+		(base / "textuisystem.txt").write_bytes(utf16([["1", "UIIT_STT_SILKMALL", "ko", "", "", "cn", "tw", "ja", "Item Mall", "vi"]]))
+		return native, output
+
+	# ================
+	# archive
+	#
+	# The fixture archive and a source pinned to its hash.
+	# ================
+	def archive(self, root, codes=ZIP_CODES, sha256=None):
+		path = root / "opensro_avatars.zip"
+		raw = zip_bytes(codes)
+		path.write_bytes(raw)
+		pin = root / "pins.json"
+		pin.write_text(json.dumps({
+			"format": importer.AVATARS_PIN_FORMAT,
+			"sha256": sha256 if sha256 is not None else sro_pk2.digest(raw),
+		}), encoding="utf-8")
+		return path, dict(importer.AVATARS_SOURCE, pins=pin)
+
+	# ================
+	# patched
+	# ================
+	def patched(self):
+		return (
+			patch.object(importer.shared, "copy_asset_closure", return_value=[]),
+			patch.object(importer, "resource_check", return_value=lambda row: []),
+		)
+
+	# ================
+	# table
+	# ================
+	def table(self, output, name):
+		return importer.tables.table_rows((output / importer.TEXT_ROOT / name).read_bytes())
+
+	# ================
+	# test_candidate_takes_any_prefix_only_for_boards
+	# ================
+	def test_candidate_takes_any_prefix_only_for_boards(self):
+		row = avatar("ITEM_EVENT_AVATAR_M_X", FIRST_ID)
+		self.assertFalse(importer.candidate(row))
+		self.assertTrue(importer.candidate(row, any_prefix=True))
+		self.assertFalse(importer.candidate(avatar("ITEM_CREDDY_AVATAR_M_TEST", FIRST_ID), any_prefix=True))
+		self.assertEqual(importer.board_of("ITEM_EVENT_AVATAR_W_BALL"), "ev")
+		self.assertEqual(importer.board_of("ITEM_CREDDY_AVATAR_M_SUIT"), "cu")
+
+	# ================
+	# test_archive_lists_avatars_on_boards
+	# ================
+	def test_archive_lists_avatars_on_boards(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = self.stage(Path(folder))
+			path, source = self.archive(Path(folder))
+			closure, check = self.patched()
+			with closure, check:
+				summary = importer.add_source(path, native, output, source)
+			self.assertEqual(summary["added"], 3)
+			self.assertEqual(summary["source"], "avatars")
+			self.assertEqual(summary["laterArchiveHashes"], {"archive": sro_pk2.digest(path.read_bytes())})
+			goods = self.table(output, "refshopgoods.txt")
+			by_tab = {}
+			for row in goods:
+				by_tab.setdefault(row[2], []).append(row)
+			self.assertEqual(sorted(by_tab), [importer.BOARD_TABS["cu"], importer.BOARD_TABS["ev"]])
+			self.assertEqual([row[4] for row in by_tab[importer.BOARD_TABS["cu"]]], ["0", "1"])
+			self.assertEqual([row[4] for row in by_tab[importer.BOARD_TABS["ev"]]], ["0"])
+			prices = {row[2]: row[4] for row in self.table(output, "refpricepolicyofitem.txt")}
+			self.assertEqual(prices["PACKAGE_ITEM_CREDDY_AVATAR_M_SUIT"], "130")
+			self.assertEqual(prices["PACKAGE_ITEM_CREDDY_AVATAR_M_SUIT_HAT"], "30")
+			tabs = {row[3]: row for row in self.table(output, importer.SHOP_TAB_TABLE)}
+			for board in ("cu", "ev"):
+				row = tabs[importer.BOARD_TABS[board]]
+				self.assertEqual((row[1], row[4], row[5]), ("11", "MALL_AVATAR_GROUP1", importer.BOARD_LABELS[board]))
+			self.assertEqual({int(tabs[code][2]) for code in (importer.BOARD_TABS["cu"], importer.BOARD_TABS["ev"])}, {2379, 2380})
+			labels = {row[1]: row[8] for row in self.table(output, "textuisystem.txt") if len(row) > 8}
+			self.assertEqual(labels[importer.BOARD_LABELS["cu"]], "Custom avatars")
+			self.assertEqual(labels[importer.BOARD_LABELS["ev"]], "Event avatars")
+			marker = json.loads((output / source["report"]).read_text(encoding="utf-8"))
+			self.assertEqual(marker["mall"]["tabs"], [importer.BOARD_TABS["cu"], importer.BOARD_TABS["ev"]])
+
+	# ================
+	# test_board_pages_hold_one_byte_of_goods
+	# ================
+	def test_board_pages_hold_one_byte_of_goods(self):
+		codes = tuple(f"ITEM_CREDDY_AVATAR_M_SET_{index:03d}" for index in range(importer.MALL_SLOTS + 1))
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = self.stage(Path(folder))
+			path, source = self.archive(Path(folder), codes)
+			closure, check = self.patched()
+			with closure, check:
+				summary = importer.add_source(path, native, output, source)
+			self.assertEqual(summary["mall"]["listed"], importer.MALL_SLOTS + 1)
+			goods = self.table(output, "refshopgoods.txt")
+			pages = {}
+			for row in goods:
+				pages.setdefault(row[2], []).append(int(row[4]))
+			self.assertEqual(sorted(pages), [importer.BOARD_TABS["cu"], importer.BOARD_TABS["cu"] + "_2"])
+			self.assertEqual(pages[importer.BOARD_TABS["cu"]], list(range(importer.MALL_SLOTS)))
+			self.assertEqual(pages[importer.BOARD_TABS["cu"] + "_2"], [0])
+
+	# ================
+	# test_rebuild_is_stable_and_removal_strips_the_boards
+	# ================
+	def test_rebuild_is_stable_and_removal_strips_the_boards(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = self.stage(Path(folder))
+			path, source = self.archive(Path(folder))
+			closure, check = self.patched()
+			with closure, check:
+				first = importer.add_source(path, native, output, source)
+				second = importer.add_source(path, native, output, source)
+				self.assertEqual(first["idMap"], second["idMap"])
+				tabs = self.table(output, importer.SHOP_TAB_TABLE)
+				self.assertEqual(sum(row[3].startswith("MALL_AVATAR_BOARD") for row in tabs), 2)
+				labels = [row for row in self.table(output, "textuisystem.txt") if len(row) > 1 and row[1].startswith("UIIT_STT_SILKMALL_AVATAR_BOARD")]
+				self.assertEqual(len(labels), 2)
+				self.assertFalse(importer.add_source(None, native, output, source)["enabled"])
+			self.assertEqual(self.table(output, "refshopgoods.txt"), [])
+			self.assertFalse(any(row[3].startswith("MALL_AVATAR_BOARD") for row in self.table(output, importer.SHOP_TAB_TABLE)))
+			self.assertFalse(any(len(row) > 1 and row[1].startswith("UIIT_STT_SILKMALL_AVATAR_BOARD") for row in self.table(output, "textuisystem.txt")))
+			self.assertFalse((output / importer.TEXT_ROOT / source["shard"]).exists())
+			self.assertFalse((output / source["report"]).exists())
+
+	# ================
+	# test_absent_archive_changes_nothing
+	# ================
+	def test_absent_archive_changes_nothing(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = self.stage(Path(folder))
+			_, source = self.archive(Path(folder))
+			before = {path.name: path.read_bytes() for path in (output / importer.TEXT_ROOT).iterdir()}
+			for root in (None, Path(folder) / "nowhere.zip"):
+				summary = importer.add_source(root, native, output, source)
+				self.assertFalse(summary["enabled"])
+			after = {path.name: path.read_bytes() for path in (output / importer.TEXT_ROOT).iterdir()}
+			self.assertEqual(before, after)
+			self.assertFalse((output / source["report"]).exists())
+
+	# ================
+	# test_wrong_pin_is_refused
+	# ================
+	def test_wrong_pin_is_refused(self):
+		with tempfile.TemporaryDirectory() as folder:
+			native, output = self.stage(Path(folder))
+			path, source = self.archive(Path(folder), sha256="0" * 64)
+			with self.assertRaises(SystemExit):
+				importer.add_source(path, native, output, source)
 
 
 if __name__ == "__main__":
