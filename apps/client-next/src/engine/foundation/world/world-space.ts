@@ -100,6 +100,30 @@ export function isDungeonRegion( regionId: number ): boolean {
 
 /*
 ================
+dungeonId
+
+The dungeon a dungeon region names: its id with the dungeon bit taken
+off (32775, 0x8007, is dungeon 7). Meaningful only for a region
+isDungeonRegion accepts.
+================
+*/
+export function dungeonId( regionId: number ): number {
+	return regionId & 0xffff & ~DUNGEON_REGION_BIT;
+}
+
+/*
+================
+dungeonRegionId
+
+The region id of dungeon id: the inverse of dungeonId.
+================
+*/
+export function dungeonRegionId( id: number ): number {
+	return DUNGEON_REGION_BIT | dungeonId( id );
+}
+
+/*
+================
 samePlane
 
 Reports whether both regions belong to the same outdoor or dungeon coordinate

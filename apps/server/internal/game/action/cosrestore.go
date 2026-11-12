@@ -76,10 +76,10 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 				continue
 			}
 			pet.InventorySlot = uint8(row.Slot)
-			// The five-page rule raises a retained bag on restore; it is
-			// never lowered, so every row survives the change either way.
+			// The grab pet page rule raises a retained bag on restore; it
+			// is never lowered, so every row survives the change either way.
 			if pet.Container != nil {
-				if raised := rt.petInventoryCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
+				if raised := rt.PetInventoryPages.GrabCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
 					pet.Container.Capacity = raised
 					changed = true
 				}
@@ -124,10 +124,10 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 		// (itemuse.go) was saved without its cargo bag; it
 		// comes back with the authored one.
 		if pet.Container == nil && ref.InventoryCapacity > 0 {
-			pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(ref.InventoryCapacity)}
+			pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(ref.InventoryCapacity)}
 			changed = true
 		} else if pet.Container != nil {
-			if raised := rt.petInventoryCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
+			if raised := rt.PetInventoryPages.TransportCapacity(pet.Container.Capacity); raised != pet.Container.Capacity {
 				pet.Container.Capacity = raised
 				changed = true
 			}

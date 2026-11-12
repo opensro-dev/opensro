@@ -10,6 +10,7 @@ package store
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/testsupport/tier"
 )
@@ -98,6 +99,75 @@ func TestHalloweenBoxesSeedFromLegacyCounts(t *testing.T) {
 	}
 	if got := reopened.HalloweenAccount("account-c"); got.Day != 0 || got.Count != 0 {
 		t.Fatalf("account-c seeded = %+v, want zero (nothing minted)", got)
+	}
+}
+
+/*
+================
+TestSeededHalloweenPlaneJoinsFirstCommit
+
+The seed is derived at load, not read: its bytes become the disk's
+only when a commit writes the halloweenBoxes row. The first commit
+after such a load writes the plane even though no settlement
+touched it (the exception #3164's plane skip needs); left
+unwritten, every later boot re-derives the seed from the surviving
+characters, so a character deleted in between permanently shrinks
+the account's boxes. The deleting door is the unrelated commit
+that proves it.
+================
+*/
+func TestSeededHalloweenPlaneJoinsFirstCommit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	clock := newTestClock()
+	s := openTest(t, dir, clock)
+	seed := func(name string, day, count int64, doomed bool) {
+		c := seededCharacter()
+		c.Name = name
+		c.AccountID = "account-a"
+		c.HalloweenBoxDay = day
+		c.HalloweenBoxCount = count
+		if err := s.CreateCharacter(testDivision, "account-a", c); err != nil {
+			t.Fatal(err)
+		}
+		if doomed {
+			// The ordinary delete: reserve, let the reservation mature.
+			s.MutateCharacter(c, "delete-reserve", func() {
+				c.DeletePending = true
+				c.DeleteReservedAt = clock.Now().UTC().Format(time.RFC3339)
+			})
+		}
+	}
+	seed("main", 100, 5, false)
+	seed("alt", 100, 3, true)
+	seed("stale", 99, 20, false)
+	s.Close()
+
+	clock.Advance(DeleteReservationWindow + time.Hour)
+	reopened := openTest(t, dir, clock)
+	if reaped := reopened.ReapMaturedDeletions(); len(reaped) != 1 {
+		t.Fatalf("reaped %v, want the reserved character", reaped)
+	}
+	// The reap archives through its own fail-closed transaction, not
+	// the plane commit; the first ordinary commit after the load is
+	// the one that must freeze the seed's row.
+	touched := false
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if c.Name == "main" {
+			reopened.MutateCharacter(c, "unrelated touch", func() {})
+			touched = true
+		}
+	}
+	if !touched {
+		t.Fatal("surviving character not found after reopen")
+	}
+	reopened.Close()
+
+	third := openTest(t, dir, clock)
+	defer third.Close()
+	if got := third.meta.HalloweenBoxes["account-a"]; got == nil || got.Day != 100 || got.Count != 8 {
+		t.Fatalf("account-a after delete and restart = %+v, want the frozen seed day 100 count 8", got)
 	}
 }
 

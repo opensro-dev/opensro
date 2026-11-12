@@ -142,34 +142,29 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// database until apply (commit_batch.go).
 	begun := s.mu.now()
 	tx := &commitBatch{}
-	// The trade and job planes marshal whole on every commit, changed
-	// or not; like the character rows below, a plane whose bytes still
-	// match its last committed digest is not rewritten (#1943 W2).
-	// Digests stage here and are retained only once the transaction
-	// commits (below). The updated-at stamp is the commit's own time
-	// and is written every time; the schema and layout stamps are
-	// build constants and take the same skip.
+	// The meta planes marshal whole, but only when a door touched the
+	// plane since the last commit (#3164): an untouched plane's bytes
+	// are its retained digest's by construction, and re-deriving them
+	// on every commit - marshal, string copy, hash, discard - was the
+	// commit path's largest flat allocation (the halloween plane keeps
+	// an entry per account forever). A touched plane still takes the
+	// digest skip: bytes matching the last committed digest are not
+	// rewritten (#1943 W2). Digests stage here and are retained only
+	// once the transaction commits (below). The updated-at stamp is
+	// the commit's own time and is written every time; the schema and
+	// layout stamps are build constants and take the same skip.
 	stagedMeta := map[string][32]byte{}
-	if record, err := tradeRewardsRecord(s.meta.TradeRewards); err != nil {
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyTradeRewards, s.changes.tradeRewards,
+		len(s.meta.TradeRewards) > 0, func() (string, error) { return tradeRewardsRecord(s.meta.TradeRewards) }); err != nil {
 		return err
-	} else if record != "" {
-		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyTradeRewards, record); err != nil {
-			return err
-		}
 	}
-	if record, err := jobRankingsRecord(s.meta.JobRankings); err != nil {
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyJobRankings, s.changes.jobRankings,
+		len(s.meta.JobRankings) > 0, func() (string, error) { return jobRankingsRecord(s.meta.JobRankings) }); err != nil {
 		return err
-	} else if record != "" {
-		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyJobRankings, record); err != nil {
-			return err
-		}
 	}
-	if record, err := halloweenBoxesRecord(s.meta.HalloweenBoxes); err != nil {
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, s.changes.halloweenBoxes,
+		len(s.meta.HalloweenBoxes) > 0, func() (string, error) { return halloweenBoxesRecord(s.meta.HalloweenBoxes) }); err != nil {
 		return err
-	} else if record != "" {
-		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, record); err != nil {
-			return err
-		}
 	}
 
 	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
@@ -385,6 +380,37 @@ func (s *Store) upsertMetaRowTx(tx sqlExecer, staged map[string][32]byte, rows *
 	rows.metaWritten++
 	staged[key] = digest
 	return nil
+}
+
+/*
+================
+Store::commitMetaPlaneTx
+
+One whole-plane meta row for the commit. The plane is marshaled only
+when a door touched it since the last commit (the change set's plane
+flags, set where the plane is written: UpdateTrade, CloseJobWeek,
+HalloweenAccount). An untouched populated plane counts as skipped
+without deriving its bytes (an unpopulated one has no row to skip,
+exactly as its empty record counted before); a touched one marshals
+(an empty plane still writes no row) and takes upsertMetaRowTx's
+digest skip, so a touch that changed nothing writes nothing.
+================
+*/
+func (s *Store) commitMetaPlaneTx(tx sqlExecer, staged map[string][32]byte, rows *commitRowCounts, key string, touched, populated bool, recordOf func() (string, error)) error {
+	if !touched {
+		if populated {
+			rows.metaSkipped++
+		}
+		return nil
+	}
+	record, err := recordOf()
+	if err != nil {
+		return err
+	}
+	if record == "" {
+		return nil
+	}
+	return s.upsertMetaRowTx(tx, staged, rows, key, record)
 }
 
 // recordWriteFailureLocked implements D5's fail-open-loud: first failure

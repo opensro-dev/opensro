@@ -346,4 +346,9 @@ func (t *Ticker) observePhases() {
 		t.PhaseObserver(timing)
 	}
 	t.traceFinish(timing)
+	budget := t.Interval
+	if budget <= 0 {
+		budget = DefaultTickInterval
+	}
+	t.flight.record(timing, t.tickPlayers, t.flight.gcPauseDelta(), t.timingNow(), budget)
 }

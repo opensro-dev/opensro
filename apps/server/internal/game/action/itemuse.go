@@ -261,6 +261,12 @@ func (rt *Runtime) HandleItemUse(
 			}
 			return rt.useMercenaryScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, mercenaryContext, &result)
 		}
+		if family == itemUseSummonScroll {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.useSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
 		if family == itemUseStructureRepair {
 			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
 		}
@@ -397,6 +403,11 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseGenderTool {
 			return rt.useGenderTool(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseModelSwitcher {
+			return rt.useModelSwitcher(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
@@ -592,7 +603,7 @@ func (rt *Runtime) HandleItemUse(
 			// (+0x224) for everything but pets, so a transport carries a
 			// cargo bag of its authored size; a riding horse authors none.
 			if cosRef.InventoryCapacity > 0 {
-				pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(cosRef.InventoryCapacity)}
+				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(cosRef.InventoryCapacity)}
 			}
 			// Validate the complete private record before inventory debit. Native
 			// summoning automatically binds both riding and transport vehicles.

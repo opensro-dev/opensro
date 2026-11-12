@@ -12,13 +12,13 @@ the world map.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
-import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 import { planeKindOf } from "@/engine/foundation/world/plane";
+import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 import { minimapRotation } from "./hud-readouts";
-import { MAP_LOCAL_MARKER } from "./world-map";
+import { MAP_LOCAL_MARKER, TOMB_FIRST_DUNGEON, worldMapDungeonOf } from "./world-map";
 
 const CATALOG_FORMAT = "sro-later-dungeon-map";
-const CATALOG_VERSION = 1;
+const CATALOG_VERSION = 2;
 // The offset in a dungeon tile's name, as the minimap's (minimapTiles).
 const CAVE_TILE_ORIGIN = 128;
 const CAVE_MARKER_SIZE = 16;
@@ -55,6 +55,8 @@ export interface CaveMapPage {
 	readonly left: number;
 	readonly top: number;
 	readonly image: string;
+	// The page title: the later client's zone name of the floor's region.
+	readonly caption: string;
 	readonly labels: readonly CaveMapLabel[];
 	readonly signs: readonly CaveMapSign[];
 }
@@ -62,6 +64,8 @@ export interface CaveMapPage {
 export interface CaveMapCatalog {
 	readonly imageRoot: string;
 	readonly signIcon: string;
+	// The page foot's note on the level filter, in the later client's words.
+	readonly monsterLevelNote: string;
 	readonly maps: readonly CaveMapPage[];
 }
 
@@ -69,20 +73,30 @@ export interface CaveMapCatalog {
 ================
 caveMapCatalog
 
-The published catalogue, refused whole when its shape is wrong.
+The published catalogue, refused whole when its shape is wrong. A
+catalogue of another version is a tree built before the importer
+changed: the refusal names the rebuild that replaces it.
 ================
 */
 export function caveMapCatalog( value: unknown ): CaveMapCatalog {
 	const data = value as Partial<CaveMapCatalog> & { format?: unknown; version?: unknown; };
+	if ( data?.format === CATALOG_FORMAT && data.version !== CATALOG_VERSION ) {
+		throw Error(
+			`dungeon map catalog is version ${String( data.version )}, this client reads ${CATALOG_VERSION}: ` +
+				"rerun the asset build with SRO_VSRO_ROOT naming the pinned v1.188 client"
+		);
+	}
 	if (
-		data?.format !== CATALOG_FORMAT || data.version !== CATALOG_VERSION || !Array.isArray( data.maps ) ||
-		typeof data.imageRoot !== "string" || typeof data.signIcon !== "string"
+		data?.format !== CATALOG_FORMAT || !Array.isArray( data.maps ) ||
+		typeof data.imageRoot !== "string" || typeof data.signIcon !== "string" ||
+		typeof data.monsterLevelNote !== "string" || !data.monsterLevelNote
 	) throw Error( "Invalid dungeon map catalog" );
 	for ( const map of data.maps ) {
 		if (
 			!Number.isInteger( map.regionId ) || !Number.isInteger( map.floorIndex ) ||
 			!Number.isInteger( map.layer ) || !(map.columns > 0) ||
 			!(map.rows > 0) || !(map.width > 0) || !(map.height > 0) || typeof map.image !== "string" ||
+			typeof map.caption !== "string" || !map.caption ||
 			!Array.isArray( map.labels ) || !Array.isArray( map.signs )
 		) throw Error( "Invalid dungeon map page" );
 	}
@@ -105,10 +119,9 @@ export function caveMapPage( catalog: CaveMapCatalog | undefined, regionId: numb
 caveDungeonFloors
 
 The pages of the dungeon a region belongs to, in floor order (issue
-#3167's floor selector): Donwhang's cave is one region whose pages
-differ by floorIndex; Ch'in Tomb spreads its floors over regions
-2..7 of the dungeon mask, ordered by their authored layer. A region
-in no known dungeon floors with its own pages alone.
+#3167's floor selector). Ch'in Tomb spreads its floors over six
+regions, ordered by their authored layer; Donwhang's cave, and any
+other dungeon, is one region whose pages differ by floorIndex.
 ================
 */
 export function caveDungeonFloors(
@@ -116,15 +129,9 @@ export function caveDungeonFloors(
 	regionId: number
 ): readonly CaveMapPage[] {
 	if ( !catalog ) return [];
-	const dungeon = regionId & 0x7fff;
-	if ( planeKindOf( regionId ) === "cave" && dungeon === 1 ) {
+	if ( worldMapDungeonOf( regionId ) === TOMB_FIRST_DUNGEON ) {
 		return catalog.maps
-			.filter( map => map.regionId === regionId )
-			.sort( ( a, b ) => a.floorIndex - b.floorIndex );
-	}
-	if ( planeKindOf( regionId ) === "cave" && dungeon >= 2 && dungeon <= 7 ) {
-		return catalog.maps
-			.filter( map => (map.regionId & 0x7fff) >= 2 && (map.regionId & 0x7fff) <= 7 )
+			.filter( map => worldMapDungeonOf( map.regionId ) === TOMB_FIRST_DUNGEON )
 			.sort( ( a, b ) => a.layer - b.layer );
 	}
 	return catalog.maps

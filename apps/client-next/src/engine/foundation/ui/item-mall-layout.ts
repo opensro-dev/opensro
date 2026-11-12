@@ -78,20 +78,58 @@ export function mallCategories() {
 
 /*
 ================
+mallCategoriesLater
+
+The later client's rail (port-only, issue #3257): Expendables, Avatar,
+Pet, Premium, Alchemy and the HOT shop, then the basket. Only the
+Experimental mall categories row reads it, and only a server running
+SRO_MALL_CATEGORIES lists the HOT shop's tabs; the native rail above is
+untouched.
+================
+*/
+export function mallCategoriesLater() {
+	return [
+		{ key: "MALL_CONSUME", text: "CONSUMPTION", icon: "consum" },
+		{ key: "MALL_AVATAR", text: "AVATA", icon: "avatar" },
+		{ key: "MALL_PET", text: "PET", icon: "pet" },
+		{ key: "MALL_PREMIUM", text: "PREMIUM", icon: "premium" },
+		{ key: "MALL_ARCHEMY", text: "ARCHEMY", icon: "alchemy" },
+		{ key: "MALL_HOT", text: "HOT_STORE", icon: "hot" },
+		{ key: "basket", text: "SHOPPING_BASKET_LIST", icon: "choicelist" }
+	] as const;
+}
+
+/*
+================
+MallCategoryList
+
+One rail entry list, native or later: mallCategories() or
+mallCategoriesLater().
+================
+*/
+export type MallCategoryList = readonly { key: string; text: string; icon: string; }[];
+
+/*
+================
 mallMenuControl
 
 CIFItemMall_OnCreate (6BBFA0) creates eight 116x28 tabs at a 30-pixel pitch.
 The eighth tab uses the second texture family. 6BC2A5 and 6BC33E establish
 the text insets separately from the icon; 6BC466 selects centered text.
+categories is the rail list in force (mallCategoriesLater under the
+Experimental row); the native list is the default, so the native rail
+draws exactly as before. The later rail has seven entries, so the
+basket takes the second texture family as the eighth did.
 ================
 */
 export function mallMenuControl(
 	template: AuthoredControl,
 	index: number,
 	selected: boolean,
-	disabled = false
+	disabled = false,
+	categories: MallCategoryList = mallCategories()
 ): AuthoredControl {
-	if ( !Number.isInteger( index ) || index < 0 || index >= MALL_MENU_COUNT ) {
+	if ( !Number.isInteger( index ) || index < 0 || index >= categories.length ) {
 		throw Error( "Invalid Item Mall category" );
 	}
 	return {
@@ -101,11 +139,11 @@ export function mallMenuControl(
 		client: [ 33, 8, 19, 0 ],
 		hAlign: 1,
 		vAlign: 0,
-		text: "UIIT_STT_SILKMALL_" + mallCategories()[index]!.text,
+		text: "UIIT_STT_SILKMALL_" + categories[index]!.text,
 		rect: [ MENU_X, MENU_Y + index * MENU_STEP, MENU_WIDTH, MENU_HEIGHT ],
 		texture: disabled ?
 			ART + "mall_tab_disable.png" :
-			ART + (index === MALL_MENU_COUNT - 1 ? "mall_tab2_" : "mall_tab_") +
+			ART + (index === categories.length - 1 ? "mall_tab2_" : "mall_tab_") +
 			(selected ? "on" : "off") + ".png"
 	};
 }
@@ -130,9 +168,65 @@ export function mallDescription( category: string, tab: number ): string {
 		case "MALL_PREMIUM":
 			return "UIIT_STT_SILKMALL_MAIN_PREMIUM";
 		case "MALL_ARCHEMY":
-			return "UIIT_STT_SILKMALL_MAIN_SUB_ARCHEMY_" + (tab === 0 ? "ASTRAL" : "ATHANASIA");
+			// Tab 2 (Others) exists only with the later categories;
+			// natively the shop has tabs 0 and 1 alone.
+			return tab === 0 ?
+				"UIIT_STT_SILKMALL_MAIN_SUB_ARCHEMY_ASTRAL" :
+				tab === 1 ?
+				"UIIT_STT_SILKMALL_MAIN_SUB_ARCHEMY_ATHANASIA" :
+				"";
 		default:
 			return "";
+	}
+}
+
+/*
+================
+mallTabCaptionLater
+
+The later tabs' captions (port-only, issue #3257): the v2.355 mall
+names its sub-categories, and v1.150 carries no string for them, so the
+captions are the port's literals. category and position are the tab's
+shop codename and its index within it; a tab the later mall does not
+rename answers undefined and the renderer falls back to the server's
+label.
+================
+*/
+export function mallTabCaptionLater( category: string, position: number ): string | undefined {
+	if ( category === "MALL_HOT" ) {
+		return [ "Halloween Exclusive", "Halloween Models", "Recommended" ][position];
+	}
+	if ( category === "MALL_PREMIUM" ) {
+		return [ undefined, "Gears", "Others" ][position];
+	}
+	if ( category === "MALL_ARCHEMY" ) {
+		return [ undefined, undefined, "Others" ][position];
+	}
+	return undefined;
+}
+
+/*
+================
+mallBadgeMark
+
+The N/H/R mark on the goods (port-only, issue #3257): the letter and
+the chip colour the offer rows draw at the icon's top-right corner,
+for a badge the catalogue stamps. Colours are the port's own; the
+later client draws its authored art, which v1.150 does not ship.
+================
+*/
+export function mallBadgeMark(
+	badge: import("@/engine/contracts/item-mall").MallBadge | undefined
+): { letter: string; color: readonly [number, number, number, number]; } | undefined {
+	switch ( badge ) {
+		case "new":
+			return { letter: "N", color: [ 0.16, 0.62, 0.28, 1 ] };
+		case "hot":
+			return { letter: "H", color: [ 0.85, 0.3, 0.15, 1 ] };
+		case "recommended":
+			return { letter: "R", color: [ 0.85, 0.65, 0.1, 1 ] };
+		default:
+			return undefined;
 	}
 }
 
@@ -194,13 +288,18 @@ export function mallTabControl( template: AuthoredControl, index: number, select
 mallCategoryIcon
 ================
 */
-export function mallCategoryIcon( template: AuthoredControl, index: number, disabled = false ): AuthoredControl {
+export function mallCategoryIcon(
+	template: AuthoredControl,
+	index: number,
+	disabled = false,
+	categories: MallCategoryList = mallCategories()
+): AuthoredControl {
 	const ICON_X = 6, ICON_Y = 5, ICON_SIZE = 20;
 	return {
 		...template,
 		type: "CIFStatic",
 		rect: [ template.rect[0] + ICON_X, template.rect[1] + ICON_Y, ICON_SIZE, ICON_SIZE ],
-		texture: ART + "mall_" + mallCategories()[index]!.icon + "_icon" + (disabled ? "_disable" : "") + ".png"
+		texture: ART + "mall_" + categories[index]!.icon + "_icon" + (disabled ? "_disable" : "") + ".png"
 	};
 }
 

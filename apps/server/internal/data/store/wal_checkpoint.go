@@ -85,8 +85,8 @@ const (
 	// cycle keeps copying until it is level with the writer, but never
 	// loops forever against a reader that keeps the WAL pinned or a
 	// writer that never pauses. A quiet store ends in two passes; the
-	// measured writer (TestWALStaysShortBesideASteadyWriter) was caught
-	// in 9 to 12 of 12 cycles, and a cycle that is not leaves its tail
+	// measured writer (TestWALStaysShortBesideASteadyWriter) is caught
+	// within a few cycles, and a cycle that is not leaves its tail
 	// to the next.
 	walCheckpointPassesPerCycle = 8
 	// walCheckpointStopTimeout bounds Close's wait for the goroutine.

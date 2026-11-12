@@ -29,9 +29,10 @@ type moverRecord struct {
 	pending *residentPendingMover
 }
 
-// Positions, activity clocks and the spawning bit remain per actor (the bit
-// is the schedule read's per-leg need, read off the record instead of
-// expanding the interned row for it). All other immutable pending fields
+// Positions, activity clocks and the spawning and stuck bits remain per
+// actor (the bits are the schedule, stuck and recheck reads' per-leg needs,
+// read off the record instead of expanding the interned row for them). All
+// other immutable pending fields
 // commonly repeat across thousands of actors; handles share those values
 // without sharing mutable state. Float speed bits preserve signed zero exactly.
 /*
@@ -53,6 +54,7 @@ type residentPendingMover struct {
 	pose     monster.Pose
 	activity monster.ActivityCadence
 	spawning bool
+	stuck    bool
 	shared   unique.Handle[pendingMoverShared]
 	// cachedRow is the shared row copied out of its handle once
 	// per set (sharedRow), with the navigation speed restored:
@@ -72,6 +74,7 @@ set
 func (p *residentPendingMover) set(row monster.PendingMover) {
 	p.pose, p.activity = row.Pose, row.Activity
 	p.spawning = row.Spawning
+	p.stuck = row.Stuck
 	p.cachedRow = nil
 	shared := pendingMoverShared{row: row, speedBits: math.Float64bits(row.NavigationSpeed)}
 	shared.row.Pose = monster.Pose{}
@@ -100,8 +103,8 @@ residentPendingMover.sharedRow
 The interned shared row as a PendingMover, copied out of its
 handle once per set and then read in place: the handle's value
 cannot change while the row stands (set is its only writer and
-drops this copy), so the per-leg reads - the snapshot fill, the
-stuck probe, the retaliation guard - take the copy instead of
+drops this copy), so the per-leg reads that need the whole row -
+the snapshot fill, the retaliation guard - take the copy instead of
 paying the handle's whole-row copy on every read (#3027). The
 row's pose and activity stay zero in it (the interned form
 excludes them); its navigation speed is restored from the
@@ -523,7 +526,7 @@ func (s *moverStorage) stuckAt(slot uint32, gid uint32) (stuck, found bool) {
 	case rec.live != nil:
 		return rec.live.Stuck(), true
 	case rec.pending != nil:
-		return rec.pending.sharedRow().Stuck, true
+		return rec.pending.stuck, true
 	}
 	return false, true
 }

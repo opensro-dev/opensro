@@ -304,6 +304,13 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-silk-history",
 						label: "Silk charge history",
 						description: "The Item Mall's Buying list: silk spending by period."
+					},
+					{
+						key: "mallCategories",
+						id: "experimental-mall-categories",
+						label: "Item Mall categories",
+						description:
+							"The later mall's categories, HOT shop and item search (needs a shard that lists them)."
 					}
 				]
 			},

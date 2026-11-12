@@ -99,7 +99,7 @@ import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
-import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
+import { isSpecialtySellEnd, uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
@@ -444,6 +444,11 @@ const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
 const GUILD_BAN_REFUSED = 0x1f;
+// The 0xB45A grant bits that open the talk window on selection: shop 0x1,
+// talk 0x2, recall point 0x40, teleport 0x80 and return point 0x100. The
+// Bandit Den gate has no link out, so 0x100 (row 0x10, "Teleport to return
+// point") is its only bit; without it the gate's menu never opened.
+const TALK_WINDOW_CAPABILITIES = 0x1c3;
 // Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
@@ -4459,6 +4464,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return false;
 				}
+				// 751114..751150: the specialty sell-end closes an open
+				// specialty-goods shop before its banner (751155) prints
+				// below; any other shop page stays open.
+				if ( isSpecialtySellEnd( frame.opcode, frame.payload ) && inventory.closeSpecialtyShop() ) {
+					dirty = true;
+				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
 					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??
@@ -5634,7 +5645,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const selection = targeting.state();
 					if (
 						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
-						!selection.targetPending && ((selection.targetCapabilities ?? 0) & 0xc3)
+						!selection.targetPending && ((selection.targetCapabilities ?? 0) & TALK_WINDOW_CAPABILITIES)
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
 				}

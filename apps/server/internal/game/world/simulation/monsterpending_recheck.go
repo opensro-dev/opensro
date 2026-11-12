@@ -104,7 +104,7 @@ func (s *moverStorage) pendingRecheckAt(slot uint32, gid uint32, now uint32) (ui
 	if now-pending.activity.LastCheck <= uint32(pending.activity.Interval) {
 		return 0, 0, monster.ActivityCadence{}, monster.Pose{}, false
 	}
-	if pending.sharedRow().Stuck {
+	if pending.stuck {
 		return 0, 0, monster.ActivityCadence{}, monster.Pose{}, false
 	}
 	return slot, held.gen, pending.activity, pending.pose, true
@@ -222,18 +222,34 @@ func (s *MonsterState) settlePendingRechecks(key populationKey, candidates []pen
 ================
 divisionMonsterState.pendingRecheckHolds
 
-Whether the rows still prove what the candidate was read as: the
-lane's whole row proof, repeated at the commit. An unchanged
-generation says no whole-value write touched the mover, and the
-cadence and pose compare covers the stamps that leave it alone.
+Whether the rows still prove what the candidate was read as. The
+mover half is the generation guard the commit doors use, not a
+second run of the candidate probe: an unchanged generation says
+no whole-value write touched the row (setRow is their only door
+and advances it), so the record's form, its spawning and stuck
+bits and its interned row are still the ones the candidate read,
+and the cadence and pose compares cover the two writes that leave
+the generation alone (stampActivity, catchUpActivity) - with the
+cadence unchanged at the same leg clock, the due test answers as
+it did. The instance half is re-probed whole: help, motion and
+life land there from other actors' turns without touching the
+mover row.
 ================
 */
 func (state *divisionMonsterState) pendingRecheckHolds(candidate *pendingRecheck, now int64) bool {
-	slot, gen, activity, pose, pending := state.movers.pendingRecheckAt(candidate.slot, candidate.gid, uint32(now))
-	if !pending || slot != candidate.slot || gen != candidate.gen || activity != candidate.activity || pose != candidate.pose {
+	movers := state.movers
+	if movers == nil || int(candidate.slot) >= len(movers.slots) || movers.slots[candidate.slot].gid != candidate.gid {
 		return false
 	}
-	monsterSlot, quiet := state.instances.quietAt(candidate.monsterSlot, candidate.gid, now, pose.RegionID)
+	held := &movers.slots[candidate.slot]
+	if held.gen != candidate.gen {
+		return false
+	}
+	pending := held.rec.pending
+	if pending == nil || pending.activity != candidate.activity || pending.pose != candidate.pose {
+		return false
+	}
+	monsterSlot, quiet := state.instances.quietAt(candidate.monsterSlot, candidate.gid, now, candidate.pose.RegionID)
 	return quiet && monsterSlot == candidate.monsterSlot && len(state.aiEvents[candidate.gid]) == 0
 }
 

@@ -393,6 +393,13 @@ type Ticker struct {
 	// Commit is the authority's per-tick batch (tick_commit.go).
 	Commit TickCommit
 	clock  tickClock
+	// flight is the rolling tick flight recorder (tick_flight.go,
+	// #3226): always on, it dumps its window to the log when a tick
+	// runs over budget.
+	flight tickFlightRecorder
+	// tickPlayers is how many sessions the running tick serves,
+	// stamped by prepareTick for the flight recorder.
+	tickPlayers int
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.
@@ -427,6 +434,7 @@ divisionTickState
 */
 type divisionTickState struct {
 	settled             map[string]int64
+	npcScope            NpcScopeBuffer
 	shownPeers          map[string]map[uint32]bool
 	peerPaths           map[string]map[uint32]peerPath
 	peerReferences      map[string]map[uint32]bool
@@ -907,7 +915,10 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 			roster = append(append(make([]NpcDef, 0, len(t.Roster)+len(extra)), t.Roster...), extra...)
 		}
 	}
-	if frames := NpcScopeFrames(roster, session, nowMs); len(frames) != 0 {
+	// The legs of one division run in order on one worker, so the
+	// division's scope scratch is free to carry from session to session;
+	// the push below copies the frames before it returns.
+	if frames := NpcScopeFramesInto(&state.npcScope, roster, session, nowMs); len(frames) != 0 {
 		t.Push.PushToSession(session.SessionID, frames)
 	}
 

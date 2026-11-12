@@ -283,7 +283,7 @@ func TestNameChangeMallListing(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	good := commerce.MallExtraGood{Tab: NameChangeMallTab, Package: NameChangeMallPackage,
 		Item: NameChangeScrollItem, Silk: NameChangePriceSilk}
-	catalog, err := commerce.LoadMall(dir, []commerce.MallExtraGood{good}, enterworld.NewTextdataItems(dir))
+	catalog, err := commerce.LoadMall(dir, []commerce.MallExtraGood{good}, false, enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
 	}

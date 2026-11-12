@@ -168,10 +168,15 @@ func TestCap110RewardsRefuseWhatWouldChangeNativeOrDangle(t *testing.T) {
 
 /*
 ================
-TestInitCap110RequiresRewardsAndIsRepeatable
+TestInitCap110RewardsPostures
+
+No rewards file is the client-only build (#3246): the expansion admits
+and the native consumables stand. A present file must still parse and
+carry rules; with one, its rules install and a second call does not
+stack them.
 ================
 */
-func TestInitCap110RequiresRewardsAndIsRepeatable(t *testing.T) {
+func TestInitCap110RewardsPostures(t *testing.T) {
 	var source cap110Catalog
 	source.Version = 1
 	if err := json.Unmarshal(equipmentJSON, &source.Equipment); err != nil {
@@ -194,8 +199,17 @@ func TestInitCap110RequiresRewardsAndIsRepeatable(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, cap110EquipmentFile), equipmentData, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := InitCap110(dir, true); err != nil {
+		t.Fatalf("client-only build refused: %v", err)
+	}
+	if len(consumables.fixed["MOB_SD_TEST_BOSS"]) != 0 {
+		t.Fatal("native consumables replaced without a rewards file")
+	}
+	if err := os.WriteFile(filepath.Join(dir, cap110RewardsFile), []byte(`{"Version":1,"Fixed":[],"Random":[],"Groups":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := InitCap110(dir, true); err == nil {
-		t.Fatal("expansion admitted without its rewards")
+		t.Fatal("a rewards file with no rules admitted")
 	}
 	if err := os.WriteFile(filepath.Join(dir, cap110RewardsFile), rewardData, 0o600); err != nil {
 		t.Fatal(err)

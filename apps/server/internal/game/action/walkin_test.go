@@ -151,6 +151,48 @@ func TestWalkingIntoTheCaveMouthTeleportsInside(t *testing.T) {
 
 /*
 ================
+TestAWalkAcrossASmallZoneBetweenPassesEntersIt
+
+A zone narrower than one pass's run (the Pharaoh Temple's ~10-unit exits)
+is entered when the walk crosses it, though neither sample stands in it.
+A jump longer than a walk (a teleport) tests only its end.
+================
+*/
+func TestAWalkAcrossASmallZoneBetweenPassesEntersIt(t *testing.T) {
+	rt, c, pushed := walkInFixture(t)
+	rt.WalkInZoneAt = func(at simulation.Spawn) string {
+		if at.RegionID == 0x6a93 && at.X >= 300 && at.X < 310 {
+			return "GATE_DUNGEON_DH_IN"
+		}
+		return ""
+	}
+	level := int64(60)
+	c.Level = &level
+	// A jump past the zone in one pass is not a walk through it.
+	rt.advanceWalkIns(1000)
+	placeWalker(rt, c, 100+walkInPathLimit+50)
+	rt.advanceWalkIns(1100)
+	if len(*pushed) != 0 {
+		t.Fatalf("a jump over the zone answered %+v", *pushed)
+	}
+	// Walking back across it, neither sample inside, enters it.
+	placeWalker(rt, c, 330)
+	rt.advanceWalkIns(1200)
+	if len(*pushed) != 0 {
+		t.Fatalf("approaching the zone answered %+v", *pushed)
+	}
+	placeWalker(rt, c, 280)
+	rt.advanceWalkIns(1300)
+	if len(*pushed) != 1 || (*pushed)[0][0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("the walk across the zone answered %+v", *pushed)
+	}
+	if uint16(*c.World.Spawn.RegionID) != caveRegion {
+		t.Fatalf("arrived in region %v, want the cave", *c.World.Spawn.RegionID)
+	}
+}
+
+/*
+================
 TestAPlayerAdmittedInsideAZoneIsNotMoved
 
 A player first sampled inside the mouth's zone (a login there) was placed,

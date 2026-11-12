@@ -19,6 +19,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 )
 
 const (
@@ -406,7 +407,9 @@ func AppendTeleportGates(dir string, roster []NpcDef) ([]NpcDef, error) {
 		if len(c) != 58 {
 			return nil, fmt.Errorf("teleportbuilding row %d shape", index+1)
 		}
-		if hidden.HidesBuilding(c[2]) {
+		// Port-only, not native: the Pharaoh Temple's desert gate objects are
+		// skipped while SRO_PHARAOH_TEMPLE is off.
+		if hidden.HidesBuilding(c[2]) || pharaohtemple.HidesBuilding(c[2]) {
 			continue
 		}
 		ref, ok := npcUint32(c[1])
