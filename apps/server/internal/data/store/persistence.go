@@ -317,6 +317,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
+	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
+		return err
+	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
 	if s.writer != nil {
 		// Asynchronous (commit_writer.go): the batch is the disk's next
@@ -341,6 +344,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	s.batch.pending = false
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
+	s.ledger.items = nil
 
 	if ground != nil {
 		s.retainGroundChangesLocked(ground)

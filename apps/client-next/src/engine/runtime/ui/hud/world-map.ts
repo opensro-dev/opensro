@@ -942,7 +942,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					pan: mapPan,
 					center: pose ? mapCenter ?? mapViewPose( pose ) : null,
 					layout: mapLayout,
-					huntingVisible: guideAvailable && mapPage === 0 && !caveMap
+					huntingVisible: guideAvailable && mapPage === 0 && !caveMap,
+					levelCheckbox: experimental.state().saved.worldMapLevelCheckbox
 				} );
 				paths.push( ...tools.paths );
 				quads.push( ...tools.quads );

@@ -24,10 +24,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"opensro.online/server/internal/game/world/muhan"
 )
 
 const EnvMuhan = "SRO_MUHAN"
 const muhanWavesFile = "muhan-waves.txt"
+const muhanNPCsFile = "muhan-npcs.txt"
+const muhanNPCPrefix = "NPC_MUHAN_"
 
 /*
 ================
@@ -70,6 +74,66 @@ type MuhanWave struct {
 type muhanWavesDocument struct {
 	Version int         `json:"Version"`
 	Rows    []MuhanWave `json:"Rows"`
+}
+
+/*
+================
+AppendMuhanNPCs
+
+Off never reads the optional file. On fails before startup when the
+arena NPC data is absent or malformed; the managers and change NPCs
+are how anyone reaches an arena, so a partial set must not reach
+gameplay. Registering the wave worlds with the world catalogue is
+the boot composition's job (enterworld), beside this call.
+================
+*/
+func AppendMuhanNPCs(template Template, textdataDir string, enabled bool) (Template, error) {
+	if !enabled {
+		return template, nil
+	}
+	data, err := os.ReadFile(filepath.Join(textdataDir, muhanNPCsFile))
+	if err != nil {
+		return Template{}, fmt.Errorf("muhan npc population: %w", err)
+	}
+	return appendMuhanNPCData(template, data)
+}
+
+/*
+================
+appendMuhanNPCData
+================
+*/
+func appendMuhanNPCData(template Template, data []byte) (Template, error) {
+	return appendNests(template, data, "muhan npc population", admitMuhanNPC, nil, muhanNPCWorldCode)
+}
+
+/*
+================
+admitMuhanNPC
+
+Port-only, not native: the arena NPCs alone (NPC_MUHAN_*). A wave
+kind or transform form in the NPC file is refused here, as imports.
+================
+*/
+func admitMuhanNPC(ref MonsterRef, codename string) bool {
+	return strings.HasPrefix(codename, muhanNPCPrefix)
+}
+
+/*
+================
+muhanNPCWorldCode
+
+The wave world a Muhan NPC nest joins, from the source world its
+row carries. A row naming any other world is refused: the NPC
+population must not leak onto another world.
+================
+*/
+func muhanNPCWorldCode(row cap110Nest) (string, error) {
+	code, ok := muhan.CodeName(row.WorldID)
+	if !ok {
+		return "", fmt.Errorf("muhan npc population has nest %d in unknown world %d", row.NestID, row.WorldID)
+	}
+	return code, nil
 }
 
 /*

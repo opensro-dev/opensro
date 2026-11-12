@@ -268,6 +268,7 @@ function paint( hud, over = {} ) {
 		pan: [ 0, 0 ],
 		center: { regionId: 250, x: 0, y: 0, z: 0, angle: 0 },
 		huntingVisible: false,
+		levelCheckbox: false,
 		...over
 	} );
 }
@@ -290,6 +291,32 @@ test("the level filter starts on and its toggle lifts the cap", () => {
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
 	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
 	assert.equal( hud.activate( "map-size", catalogue(), 20 ), undefined, "foreign ids are not the tools'" );
+	hud.dispose();
+});
+
+test("the Entire-map foot checkbox stands in for the strip toggle behind its row", () => {
+	const hud = tools();
+	// Row off (the default): the strip's own toggle is the switch, at
+	// the strip (window top + 7), and no foot box stands.
+	const strip = paint( hud ).controls.filter( row => row.id === "map-level-filter" );
+	assert.equal( strip.length, 1 );
+	assert.equal( strip[0].rect[1], 107 );
+	// Row on: one switch still, now the foot checkbox at the window's
+	// foot (window 100,100 800x600: foot strip 676, box 678), and the
+	// strip toggle stands down.
+	const foot = paint( hud, { levelCheckbox: true } ).controls.filter( row => row.id === "map-level-filter" );
+	assert.equal( foot.length, 1 );
+	assert.deepEqual( foot[0].rect, [ 872, 678, 16, 16 ] );
+	// Either face flips the one state: the cap lifts and returns.
+	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
+	assert.equal( hud.filterCap( 20 ), undefined );
+	assert.equal(
+		paint( hud, { levelCheckbox: true } ).controls
+			.find( row => row.id === "map-level-filter" )?.selected,
+		false
+	);
+	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
+	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
 	hud.dispose();
 });
 

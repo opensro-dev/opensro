@@ -19,57 +19,26 @@ shard spawned 79 species no shipped pack could draw (#2024).
 ===========================================================================
 */
 
-import fs from "node:fs";
-import path from "node:path";
-import { splitTextDataRow } from "./textDataIo.mjs";
 import { serverSourceRoot } from "../world/paths.mjs";
+import { loadServerOverlayRows, shardSwitchEnabled, shardSwitchPosture } from "./shardSwitch.mjs";
 
-// The switch, its deployed profile, and the shard settings registry
-// that holds its default (shardsettings.go, the server's one owner).
 const QINSHI_TOMB_ENV = "SRO_QINSHI_TOMB";
+
+// Mirrors monster.QinShiTombFromEnv: 1, on, true or yes.
+const QINSHI_TOMB_ON_WORDS = [ "1", "on", "true", "yes" ];
 
 // A degree-10 compound branch: heavy_10_aa.bsr, spear_10.bsr.
 const DEGREE_10_BRANCH = /_10(?=(?:_[a-z]+)?\.bsr$)/i;
-const SHARD_PROFILE = path.join( "config", "shard-settings.json" );
-const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
-
-/*
-================
-flagWordOn
-
-Mirrors monster.QinShiTombFromEnv: the value trimmed and folded to
-lower case must be 1, on, true or yes.
-================
-*/
-function flagWordOn( value ) {
-	const word = String( value ).trim().toLowerCase();
-	return word === "1" || word === "on" || word === "true" || word === "yes";
-}
 
 /*
 ================
 qinshiTombShardPosture
 
-The switch's value as the deployment sets it when the build env does
-not: the release profile's entry, else the registry Default. A registry
-row this cannot read throws - a posture the bake cannot see must stop
-the build, never read as off.
+SRO_QINSHI_TOMB as the deployment sets it (shardSwitch.mjs).
 ================
 */
 export function qinshiTombShardPosture() {
-	const serverRoot = qinshiTombServerRoot();
-	const profile = JSON.parse( fs.readFileSync( path.join( serverRoot, SHARD_PROFILE ), "utf8" ) );
-	if ( typeof profile[QINSHI_TOMB_ENV] === "string" ) {
-		return profile[QINSHI_TOMB_ENV];
-	}
-	const registry = fs.readFileSync( path.join( serverRoot, SHARD_REGISTRY ), "utf8" );
-	const row = new RegExp( `\\{\\s*Env:\\s*"${QINSHI_TOMB_ENV}"[^}]*?Default:\\s*"([^"]*)"` ).exec( registry );
-	if ( !row ) {
-		throw new Error(
-			`${QINSHI_TOMB_ENV}: no Default in ${SHARD_REGISTRY}; the bake cannot see the shard's posture`
-		);
-	}
-	return row[1];
+	return shardSwitchPosture( QINSHI_TOMB_ENV );
 }
 
 /*
@@ -81,11 +50,7 @@ unset or blank takes the shard's deployed posture.
 ================
 */
 export function qinshiTombEnabled() {
-	const value = process.env[QINSHI_TOMB_ENV] ?? "";
-	if ( value.trim() !== "" ) {
-		return flagWordOn( value );
-	}
-	return flagWordOn( qinshiTombShardPosture() );
+	return shardSwitchEnabled( QINSHI_TOMB_ENV, QINSHI_TOMB_ON_WORDS );
 }
 
 /*
@@ -134,30 +99,6 @@ export function qinshiTombServerRoot() {
 
 /*
 ================
-loadQinShiTombRows
-
-One overlay file as column rows. The files are UTF-8, tab-separated, in
-the exact v1.150 characterdata/skilldata column layout, with `#` header
-comment lines and blank lines skipped (the server's SplitTabbedText
-framing).
-================
-*/
-function loadQinShiTombRows( relativePath ) {
-	const sourcePath = path.join( qinshiTombServerRoot(), relativePath );
-	const text = fs.readFileSync( sourcePath, "utf8" ).replace( /^\ufeff/, "" );
-	const rows = [];
-	for ( const line of text.split( /\r?\n/ ) ) {
-		if ( !line.trim() ) continue;
-		const cols = splitTextDataRow( line );
-		const first = String( cols[0] ?? "" ).trim();
-		if ( first.startsWith( "#" ) || first.startsWith( "//" ) ) continue;
-		rows.push( cols );
-	}
-	return { sourcePath, rows };
-}
-
-/*
-================
 loadQinShiTombCharacterRows
 
 The 79 Qin-Shi characterdata rows (61 MOB_TQ_* and 18 MOB_QT_TQ_*,
@@ -165,7 +106,7 @@ remapped into the v1.150 ID gaps 14791..14851 and 22638..22655).
 ================
 */
 export function loadQinShiTombCharacterRows() {
-	return loadQinShiTombRows( "internal/game/world/monster/data/qinshi_tomb_characterdata.tsv" );
+	return loadServerOverlayRows( "internal/game/world/monster/data/qinshi_tomb_characterdata.tsv" );
 }
 
 /*
@@ -177,7 +118,7 @@ v1.150 gap IDs).
 ================
 */
 export function loadQinShiTombSkillRows() {
-	return loadQinShiTombRows( "internal/game/enterworld/data/qinshi_tomb_skilldata.tsv" );
+	return loadServerOverlayRows( "internal/game/enterworld/data/qinshi_tomb_skilldata.tsv" );
 }
 
 /*
@@ -189,7 +130,7 @@ gate links 125 and 131..134).
 ================
 */
 export function loadQinShiTombTeleportLinkRows() {
-	return loadQinShiTombRows( "internal/game/action/data/qinshi_tomb_teleportlink.tsv" );
+	return loadServerOverlayRows( "internal/game/action/data/qinshi_tomb_teleportlink.tsv" );
 }
 
 /*

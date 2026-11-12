@@ -320,6 +320,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Owner, 2026-11-12 (#3358): Discord Contributor-role members carry a
+	// yellow Contributor title, seen by everyone, hidden by their own
+	// /contributor off. Off is native: no frame, no command.
+	{Env: "SRO_CONTRIBUTOR_TITLES", NomadVar: "contributor_titles", Default: "off"},
 	// Decision record, 2026-11-04 (#2538): one counting-only cycle
 	// measures Sun drops and their recipients before any Sun knob is
 	// considered. Count-only and off by default: nothing counts.

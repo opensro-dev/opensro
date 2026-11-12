@@ -170,6 +170,29 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			result.(map[string]any)["silkBalance"] = balance.Silk
 			return result, nil
 		},
+		AdjustGold: func(request agentapi.PlayerOperation) (any, error) {
+			if authority.Health().LastError != "" {
+				return nil, fmt.Errorf("storage is unhealthy; gold adjustment refused")
+			}
+			adjustment, err := game.items.OperatorAdjustGold(shard, request.Character, request.Gold)
+			if err != nil {
+				return nil, err
+			}
+			if authority.Health().LastError != "" {
+				return nil, fmt.Errorf("gold adjustment persistence failed; inspect storage before retrying")
+			}
+			result, err := read(request.Character)
+			if err != nil {
+				return nil, err
+			}
+			// The audit's completion line names the correction: the
+			// operator, the amount, the balances it moved between and
+			// the reason ride the result beside the character read.
+			result.(map[string]any)["goldAdjustment"] = map[string]any{
+				"operator": request.Operator, "requested": adjustment.Requested, "applied": adjustment.Applied,
+				"balanceBefore": adjustment.Before, "balanceAfter": adjustment.After, "reason": request.Reason}
+			return result, nil
+		},
 		Rescue: func(request agentapi.PlayerOperation) (any, error) {
 			valid := false
 			for _, town := range game.items.OperatorTowns() {

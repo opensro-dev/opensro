@@ -101,9 +101,12 @@ function fixtureServerRoot( t, profileValue, registryDefault ) {
 	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
 	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
 	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
+	// The fingerprint reads every bake switch's posture (buildKnobLines),
+	// so the registry carries SRO_MUHAN too, at its native "off".
 	fs.writeFileSync(
 		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
-		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n}\n`
+		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n` +
+			`\t{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off"},\n}\n`
 	);
 	process.env.SRO_SERVER_SOURCE_ROOT = root;
 }
