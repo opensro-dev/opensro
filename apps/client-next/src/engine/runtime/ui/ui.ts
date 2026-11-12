@@ -19006,19 +19006,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							[]
 					);
 					if ( cosTab === 1 && !training ) {
-						const pages = Math.max( 1, Math.ceil( (record?.status ?? 0) / 28 ) );
+						const capacity = record?.status ?? 0,
+							pages = Math.max( 1, Math.ceil( capacity / 28 ) );
 						cosPage = Math.min( cosPage, pages - 1 );
 						for ( let i = 0; i < 28; i++ ) {
 							const slot = cosPage * 28 + i,
 								item = record?.inventory?.find( r => r.slot === slot ),
 								r: UiRect = [ ox + 41 + (i % 7) * 36, oy + 59 + Math.floor( i / 7 ) * 36, 32, 32 ];
-							nativeItem(
-								"cos-slot:" + slot,
-								item,
-								r,
-								busy || slot >= (record?.status ?? 0),
-								slot === cosSlot
-							);
+							// INFERENCE: a cell past the bag's capacity (a 99-slot
+							// transport's last page) shows the pet folder's
+							// pt_block, as the player bag's cells past its size do;
+							// it stays a disabled control so a drop there is refused.
+							if ( slot >= capacity ) {
+								image( r, hudData.popupArt.blocked );
+								nativeItem( "cos-slot:" + slot, undefined, r, true );
+								continue;
+							}
+							nativeItem( "cos-slot:" + slot, item, r, busy, slot === cosSlot );
 						}
 						authoredText(
 							page.GDR_COS_INVENTORY_NAME ?? Object.values( page ).find( n => n.id === 6 )!,

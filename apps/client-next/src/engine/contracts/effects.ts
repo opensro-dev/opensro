@@ -223,7 +223,7 @@ export interface EffectVisual {
 		started?: number;
 		expired: boolean;
 	}[];
-	readonly command?: EffectRelease & { readonly slot: number; readonly loop: boolean; };
+	readonly command?: EffectRelease & { readonly slot: number; readonly loop: boolean; readonly windup?: boolean; };
 	readonly visualStarted?: number;
 	readonly family?: {
 		readonly fadeIn: number;

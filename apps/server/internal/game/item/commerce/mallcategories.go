@@ -29,10 +29,17 @@ packages' own authored ones; the Rondo's authored package takes the
 alchemy stones' 5-silk tier, as a balance the shard owner can retune in
 this one place.
 
-Premium's Gears and Others tabs and the recommendation list's stock
-beyond the premium tickets belong to the epic's later lines (the gears
-items, the summon scrolls and the model switchers of #3257); the tabs
-stand ready for them.
+Premium's Gears tab and the recommendation list's stock beyond the
+premium tickets belong to the epic's later lines (the gears items of
+#3257); the tab stands ready for them. The sixteen weapon model
+switchers stand in HOT shop > Halloween Models at the later mall's 600
+silk, badged hot; their use is action/modelswitcher.go. Their rows
+ride the optional later-client import, so a catalogue built without it
+lists none of them rather than refusing the boot (Imported below). The
+summon scrolls stand in Premium's Others tab below: the three shipped
+ITEM_ETC_E050729_SUMMON*_SCROLL rows no native family serves, priced
+30 silk for one soldier and 60 for two, badged new; their use is
+action/summonscroll.go, behind this same setting.
 
 ===========================================================================
 */
@@ -78,7 +85,28 @@ type mallCategoryGood struct {
 	Item    string
 	Silk    uint32
 	Badge   string
+	// Imported marks an Item that only the optional later-client
+	// import authors: without its row the listing is skipped, not
+	// refused, so a build without the archive boots the rest.
+	Imported bool
 }
+
+// ModelSwitcherItems are the sixteen weapon model switchers the later
+// mall sells (issue #3257): six Chinese and ten European weapon and
+// shield types. action/modelswitcher.go serves their use.
+var ModelSwitcherItems = []string{
+	"ITEM_ORIGIN_CH_HW_SWORD_SCROLL", "ITEM_ORIGIN_CH_HW_BLADE_SCROLL",
+	"ITEM_ORIGIN_CH_HW_TBLADE_SCROLL", "ITEM_ORIGIN_CH_HW_SPEAR_SCROLL",
+	"ITEM_ORIGIN_CH_HW_BOW_SCROLL", "ITEM_ORIGIN_CH_HW_SHIELD_SCROLL",
+	"ITEM_ORIGIN_EU_HW_DAGGER_SCROLL", "ITEM_ORIGIN_EU_HW_SWORD_SCROLL",
+	"ITEM_ORIGIN_EU_HW_TSWORD_SCROLL", "ITEM_ORIGIN_EU_HW_AXE_SCROLL",
+	"ITEM_ORIGIN_EU_HW_CROSSBOW_SCROLL", "ITEM_ORIGIN_EU_HW_DARKSTAFF_SCROLL",
+	"ITEM_ORIGIN_EU_HW_TSTAFF_SCROLL", "ITEM_ORIGIN_EU_HW_HARP_SCROLL",
+	"ITEM_ORIGIN_EU_HW_STAFF_SCROLL", "ITEM_ORIGIN_EU_HW_SHIELD_SCROLL",
+}
+
+// modelSwitcherSilk is the later mall's price of every switcher.
+const modelSwitcherSilk = 600
 
 var mallCategoryTabs = []mallCategoryTab{
 	// The HOT shop, appended after the shipped shops (shop index 5).
@@ -91,7 +119,9 @@ var mallCategoryTabs = []mallCategoryTab{
 	{Shop: "MALL_ARCHEMY", Code: "MALL_ARCHEMY_OTHERS", Group: "MALL_ARCHEMY_GROUP1", Label: "UIIT_STT_SILKMALL_ETC"},
 }
 
-var mallCategoryGoods = []mallCategoryGood{
+var mallCategoryGoods = append(mallLayoutGoods, modelSwitcherGoods()...)
+
+var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
 	// dresses and hats. All six are SRO_MALL_EXTRA_GOODS packages the
 	// layout re-homes (see the banner).
@@ -101,6 +131,15 @@ var mallCategoryGoods = []mallCategoryGood{
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_M_HALLOWEEN_HAT", Badge: mallBadgeHot},
 	{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_HAT", Badge: mallBadgeHot},
+	// The summon scrolls (issue #3257): shipped items no native
+	// family serves; one soldier for 30 silk, two for 60, badged new.
+	// Their use is action/summonscroll.go behind this same setting.
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_SCROLL", Silk: 30, Badge: mallBadgeNew},
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_ONE_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_ONE_SCROLL", Silk: 30, Badge: mallBadgeNew},
+	{Tab: "MALL_PREMIUM_OTHERS", Package: "PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL",
+		Item: "ITEM_ETC_E050729_SUMMON_TWO_SCROLL", Silk: 60, Badge: mallBadgeNew},
 	// The Destruction Rondo, first listed by this layout (issue #3257
 	// line 2): the item ships in v1.150 and Dissolve honours it; only a
 	// mall package was missing. 5 silk, the astral stones' tier.
@@ -112,6 +151,23 @@ var mallCategoryGoods = []mallCategoryGood{
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_GOLDTIME", Badge: mallBadgeRecommended},
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_GOLDTIME_PLUS", Badge: mallBadgeRecommended},
 	{Package: "PACKAGE_ITEM_MALL_PREMIUM_GLOBAL_SILVERTIME", Badge: mallBadgeRecommended},
+}
+
+/*
+================
+modelSwitcherGoods
+
+One Halloween Models listing per switcher, each its own authored
+package, PACKAGE_ plus the item codename.
+================
+*/
+func modelSwitcherGoods() []mallCategoryGood {
+	goods := make([]mallCategoryGood, 0, len(ModelSwitcherItems))
+	for _, item := range ModelSwitcherItems {
+		goods = append(goods, mallCategoryGood{Tab: "MALL_HOT_MODELS", Package: "PACKAGE_" + item,
+			Item: item, Silk: modelSwitcherSilk, Badge: mallBadgeHot, Imported: true})
+	}
+	return goods
 }
 
 /*
@@ -224,6 +280,9 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 	}
 	badges := map[string]string{}
 	for _, good := range mallCategoryGoods {
+		if good.Imported && !itemRefPresent(refs, good.Item) {
+			continue
+		}
 		if good.Badge != "" {
 			badges[good.Package] = good.Badge
 		}
@@ -252,4 +311,17 @@ func addMallCategoryRows(tables map[string][][]string, refs enterworld.ItemRefSo
 		listed[good.Package] = true
 	}
 	return badges, nil
+}
+
+/*
+================
+itemRefPresent
+================
+*/
+func itemRefPresent(refs enterworld.ItemRefSource, codename string) bool {
+	if refs == nil {
+		return false
+	}
+	ref, ok := refs.ItemRefByCodename(codename)
+	return ok && ref != nil
 }

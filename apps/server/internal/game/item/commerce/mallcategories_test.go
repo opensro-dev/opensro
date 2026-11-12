@@ -97,9 +97,9 @@ func TestMallCategoriesOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 6 Halloween + the Rondo.
-	if len(catalog.Offers) != 88 {
-		t.Fatalf("layout mall: %d offers, want 88", len(catalog.Offers))
+	// 81 shipped + 6 Halloween + the Rondo + the 3 summon scrolls.
+	if len(catalog.Offers) != 91 {
+		t.Fatalf("layout mall: %d offers, want 91", len(catalog.Offers))
 	}
 	// 16 shipped tabs + 2 HOT + 2 Premium + 1 Alchemy.
 	if len(catalog.Tabs) != 21 {
@@ -164,6 +164,34 @@ func TestMallCategoriesOn(t *testing.T) {
 	})
 	if err != nil || quote.Cost.Silk != 5 {
 		t.Fatalf("Rondo quote = %+v, %v; want 5 silk", quote.Cost, err)
+	}
+	// The summon scrolls: Premium's Others tab (shop 4, tab 2), badged
+	// new at the authored prices, one item each once hydrated.
+	scrolls := mallOffersOn(catalog, 4, 2)
+	if len(scrolls) != 3 {
+		t.Fatalf("Premium Others tab: %d offers, want the 3 summon scrolls", len(scrolls))
+	}
+	wantSilk := map[string]uint32{
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_SCROLL":     30,
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_ONE_SCROLL": 30,
+		"PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL": 60,
+	}
+	for _, offer := range scrolls {
+		if offer.Badge != mallBadgeNew || offer.Silk != wantSilk[offer.Code] {
+			t.Fatalf("%s = %d silk badged %q, want %d silk badged new",
+				offer.Code, offer.Silk, offer.Badge, wantSilk[offer.Code])
+		}
+	}
+	two := mallOfferNamed(catalog, "PACKAGE_ITEM_ETC_E050729_SUMMON_TWO_SCROLL")
+	if two == nil || len(two.ItemIDs) != 1 {
+		t.Fatalf("two-scroll contents = %v, want the one scroll item", two)
+	}
+	scrollQuote, err := catalog.Quote(wire.MallPurchase{
+		Group: two.Group, Shop: two.Shop, Tab: two.Tab, Slot: two.Slot,
+		Package: two.PackageID, Quantity: 1,
+	})
+	if err != nil || scrollQuote.Cost.Silk != 60 {
+		t.Fatalf("two-scroll quote = %+v, %v; want 60 silk", scrollQuote.Cost, err)
 	}
 	// The premium tickets are badged; the shipped offers are not.
 	for code, want := range map[string]string{
@@ -231,10 +259,10 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 81 shipped + 22 extra + the Rondo: the Halloween six are among
-	// the 22 and move tabs rather than listing twice.
-	if len(catalog.Offers) != 104 {
-		t.Fatalf("both settings: %d offers, want 104", len(catalog.Offers))
+	// 81 shipped + 22 extra + the Rondo + the 3 summon scrolls: the
+	// Halloween six are among the 22 and move tabs rather than twice.
+	if len(catalog.Offers) != 107 {
+		t.Fatalf("both settings: %d offers, want 107", len(catalog.Offers))
 	}
 	listings := map[string]int{}
 	for _, offer := range catalog.Offers {
@@ -257,5 +285,78 @@ func TestMallCategoriesWithExtraGoods(t *testing.T) {
 	}
 	if avatar != 16+8 {
 		t.Fatalf("avatar shops hold %d offers, want 24 (8 shipped, 16 extra)", avatar)
+	}
+}
+
+/*
+================
+importedItems
+
+The shipped item table plus rows only the later-client import authors,
+for the model switcher listing.
+================
+*/
+type importedItems struct {
+	enterworld.ItemRefSource
+	extra map[string]*enterworld.ItemRef
+}
+
+func (s importedItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
+	if ref, ok := s.extra[codename]; ok {
+		return ref, true
+	}
+	return s.ItemRefSource.ItemRefByCodename(codename)
+}
+
+func (s importedItems) ItemRefByID(id uint32) (*enterworld.ItemRef, bool) {
+	for _, ref := range s.extra {
+		if ref.RefObjID == id {
+			return ref, true
+		}
+	}
+	return s.ItemRefSource.ItemRefByID(id)
+}
+
+/*
+================
+TestMallCategoriesListOnlyImportedSwitchers
+
+The shipped data holds no switcher row, so the layout lists none of
+them and still boots (TestMallCategoriesOn's 91). With one switcher
+imported, exactly that one joins Halloween Models at 600 silk, badged
+hot, and its quote resolves.
+================
+*/
+func TestMallCategoriesListOnlyImportedSwitchers(t *testing.T) {
+	tier.Long(t, "the model switchers list only when the import authored them")
+	dir := gamedatatest.TextdataDir(t)
+	shipped := enterworld.NewTextdataItems(dir)
+	base, ok := shipped.ItemRefByCodename("ITEM_ETC_ARCHEMY_RONDO_02")
+	if !ok {
+		t.Fatal("no shipped row to model the switcher on")
+	}
+	switcher := *base
+	switcher.RefObjID, switcher.Codename = 88018, "ITEM_ORIGIN_CH_HW_SWORD_SCROLL"
+	items := importedItems{ItemRefSource: shipped, extra: map[string]*enterworld.ItemRef{switcher.Codename: &switcher}}
+	catalog, err := LoadMall(dir, nil, true, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Offers) != 92 {
+		t.Fatalf("layout mall: %d offers, want 91 plus the one imported switcher", len(catalog.Offers))
+	}
+	offer := mallOfferNamed(catalog, "PACKAGE_ITEM_ORIGIN_CH_HW_SWORD_SCROLL")
+	if offer == nil || offer.Shop != 5 || offer.Tab != 1 || offer.Silk != modelSwitcherSilk || offer.Badge != mallBadgeHot {
+		t.Fatalf("switcher offer = %+v, want HOT Halloween Models at %d silk badged hot", offer, modelSwitcherSilk)
+	}
+	if err := catalog.Hydrate(items); err != nil {
+		t.Fatal(err)
+	}
+	quote, err := catalog.Quote(wire.MallPurchase{
+		Group: offer.Group, Shop: offer.Shop, Tab: offer.Tab, Slot: offer.Slot,
+		Package: offer.PackageID, Quantity: 1,
+	})
+	if err != nil || quote.Cost.Silk != modelSwitcherSilk {
+		t.Fatalf("switcher quote = %+v, %v; want %d silk", quote.Cost, err, modelSwitcherSilk)
 	}
 }
