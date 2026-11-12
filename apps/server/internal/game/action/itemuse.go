@@ -261,6 +261,12 @@ func (rt *Runtime) HandleItemUse(
 			}
 			return rt.useMercenaryScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, mercenaryContext, &result)
 		}
+		if family == itemUseSummonScroll {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.useSummonScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
 		if family == itemUseStructureRepair {
 			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
 		}
