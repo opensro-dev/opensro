@@ -187,4 +187,15 @@ func TestModelSwitcherTwin(t *testing.T) {
 	if IsModelSwitcher("ITEM_MALL_EQUIP_TRANSGENDER_1") {
 		t.Fatal("the gender tool classified as a switcher")
 	}
+	// The mall's list owns the set: a codename of the switcher shape
+	// the mall does not sell is not admitted.
+	if IsModelSwitcher("ITEM_ORIGIN_CH_HW_GLAIVE_SCROLL") {
+		t.Fatal("an unlisted switcher-shaped codename was admitted")
+	}
+	// And every listed switcher parses to a race and weapon type.
+	for _, item := range commerce.ModelSwitcherItems {
+		if modelSwitcherScroll.FindStringSubmatch(item) == nil {
+			t.Fatalf("%s is listed but its race and type cannot be read", item)
+		}
+	}
 }

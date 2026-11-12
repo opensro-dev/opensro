@@ -40,6 +40,7 @@ package action
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -51,7 +52,8 @@ import (
 // ModelSwitcherTwinSuffix marks a degree-9 weapon's look-alike twin.
 const ModelSwitcherTwinSuffix = "_HWSET"
 
-// modelSwitcherScroll names a switcher: its race and weapon type.
+// modelSwitcherScroll reads a switcher's race and weapon type from its
+// codename; which codenames are switchers is commerce.ModelSwitcherItems.
 var modelSwitcherScroll = regexp.MustCompile(`^ITEM_ORIGIN_(CH|EU)_HW_([A-Z]+)_SCROLL$`)
 
 // modelSwitcherTarget names a degree-9 weapon or shield, plain or twin.
@@ -61,11 +63,13 @@ var modelSwitcherTarget = regexp.MustCompile(`^ITEM_(CH|EU)_([A-Z]+)_09_[ABC](_R
 ================
 IsModelSwitcher
 
-Whether a codename is one of the sixteen switchers.
+Whether a codename is one of the sixteen switchers the mall sells. The
+list is the one owner, so the mall and the use cannot disagree on what
+a switcher is.
 ================
 */
 func IsModelSwitcher(codename string) bool {
-	return modelSwitcherScroll.MatchString(codename)
+	return slices.Contains(commerce.ModelSwitcherItems, codename)
 }
 
 /*
