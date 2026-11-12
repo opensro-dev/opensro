@@ -320,6 +320,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Owner, 2026-11-12 (#3358): Discord Contributor-role members carry a
+	// yellow Contributor title, seen by everyone, hidden by their own
+	// /contributor off. Off is native: no frame, no command.
+	{Env: "SRO_CONTRIBUTOR_TITLES", NomadVar: "contributor_titles", Default: "off"},
 	// Decision record, 2026-11-04 (#2538): one counting-only cycle
 	// measures Sun drops and their recipients before any Sun knob is
 	// considered. Count-only and off by default: nothing counts.
@@ -538,6 +542,7 @@ var NotSettings = map[string]string{
 	"SRO_SERVER_GAME_DATA_MANIFEST_DIGEST": "identity of the released server game data",
 	"SRO_GM_CHARACTERS":                    "operator GM grants, from the state directory",
 	"SRO_GAMEWORLD_PRIVATE_NETWORK":        "host topology",
+	"SRO_CONTRIBUTORS_FILE":                "path to the operations sync's members file (opensro-ops#325)",
 	"SRO_AGENT_URL":                        "the agent's address, fixed at deploy time",
 	"SRO_BENCHMARK_FIXTURE_CONTROL":        "derived from the host network and namespace",
 	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",

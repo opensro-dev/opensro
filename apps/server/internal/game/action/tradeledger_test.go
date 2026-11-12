@@ -67,6 +67,7 @@ func TestCaravanSaleWritesTradeSaleCredit(t *testing.T) {
 	// commits through the authority store's own door.
 	deps.UpdateTrade = authority.UpdateTrade
 	deps.ReadCharacter = func(_ string, read func()) { authority.ReadState(read) }
+	deps.ItemSaleNote = authority.NoteItemSale
 	rt := NewRuntime(deps, nil)
 	rt.Now = (&fakeClock{now: time.UnixMilli(1_000_000)}).Now
 	rt.NpcSpawn.Enabled = true
@@ -97,5 +98,10 @@ func TestCaravanSaleWritesTradeSaleCredit(t *testing.T) {
 	}
 	if got := after["gold.npc_sale.gain"] - before["gold.npc_sale.gain"]; got != 0 {
 		t.Fatalf("the caravan sale also wrote npc_sale (%d): it is not an ordinary shop sale", got)
+	}
+	// Trade goods are not merchant items: nothing enters the
+	// per-item buckets (#3307).
+	if itemHours, err := authority.EconomyCharacterItemHours(c.ID, 0); err != nil || len(itemHours) != 0 {
+		t.Fatalf("a caravan sale entered the item buckets: %+v (%v)", itemHours, err)
 	}
 }

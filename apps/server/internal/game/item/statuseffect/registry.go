@@ -731,20 +731,30 @@ func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 	defer r.mu.Unlock()
 	var out []EndedBatch
 	for key, rows := range r.byOwner {
-		r.touchLocked(key)
+		// Only an owner whose rows moved is marked (#3291): marking a
+		// quiet one would republish its view on the next Snapshot and
+		// erase the snapshot saving, as the sibling sweeps record
+		// (Expire). A consumed checkpoint moves its row too.
+		changed := false
 		var batch EndedBatch
 		for i := range rows {
 			e := &rows[i]
 			if e.StopRequested {
 				continue
 			}
-			e.advanceJob(nowMs)
+			if e.advanceJob(nowMs) {
+				changed = true
+			}
 			if e.Persistent && e.jobCheckpointDue {
 				e.jobCheckpointDue = false
+				changed = true
 				batch.DivisionID = e.DivisionID
 				batch.CharacterName = e.CharacterName
 				batch.Effects = append(batch.Effects, *e)
 			}
+		}
+		if changed {
+			r.touchLocked(key)
 		}
 		if len(batch.Effects) > 0 {
 			out = append(out, batch)

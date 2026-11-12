@@ -31,5 +31,25 @@ These are inferences and port choices, not native evidence:
 - **Admission.** Exactly the 112 codename rows; a missing, miscast or mislabelled row refuses the build
   rather than staging a partial set the mall would half list.
 - **Price.** Authored at 30 silk (the summon scrolls' tier) in one constant the shard owner can retune.
-- **Left out.** Sabakun's jewel and the extension gear are separate lines of the same epic: no row for either
-  stands in any pinned client this build reads, and no behaviour is invented here.
+- **Left out, on evidence (#3331).** The two other Premium > Gears kinds of the screenshot epic were
+  searched for in every source this build reads, and both stay unlisted — not for missing rows. An
+  earlier line here recorded that no pinned client holds a row for either; that was wrong. Sabakun's
+  jewel (`ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE`) and the extension gear (`ITEM_MALL_NASRUN_EXTENSION`)
+  stand in the pinned v1.696 client's `ItemData_24400.txt` (ids 24397 and 24395, the stones' own shard
+  neighbourhood), in the VSRO client's `ItemData_25000.txt` (ids 24417 and 24415), and in the ISRO-R
+  shard backup's item census. What neither v1.150 nor this port holds is anything for them to act on:
+  both serve only the Devil's Spirit (the later client's Nasrun). The extension gear lengthens a worn
+  Nasrun's awakening by four weeks; the jewel upgrades one. The Nasrun wearable is item type 3/1/14 —
+  v1.150's avatars are 3/1/13, the later-avatar import selects 3/1/13 only and skips the Nasrun rows
+  for absent resources — and no awakening clock, Nasrun alchemy (the jewel's recipe and stones) or
+  upgrade path exists here yet. Listing either now would sell an item that cannot be used, and a substitute
+  effect would be invented behaviour. The owner's call (2026-11-12): port every prerequisite first. #3348
+  ports the Devil's Spirit system (the wearable, its awakening clock, Nasrun alchemy) and then lists both.
+- **The Halloween summon scrolls (#3331).** The screenshot's Joon (500 silk) and Firespirits (200)
+  summon scrolls for HOT shop > Halloween Exclusive have no row in any source searched: the v1.150,
+  VSRO and pinned v1.696 item tables, the ISRO-R shard census (40,691 codenames) and its game-reference
+  item tables (whose only summon scrolls are the party scrolls and v1.150's own E050729 family). The
+  content archive (#3329) packs world areas, not mall stock, and no pinned archive exists yet. With no
+  source row there is nothing to price or summon, so the two stay unlisted; a future pinned source
+  carrying their rows would admit them through the summon-scroll pattern `action/summonscroll.go`
+  already serves.

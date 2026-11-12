@@ -33,12 +33,19 @@ import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
 import { directionLegEnd, modelYaw } from "@/engine/foundation/gameplay/direction-movement";
 import {
+	appendWalkingHistory,
 	correctWalkingHistory,
 	extendWalkingHistory,
 	rewindWalkingHistory
 } from "@/engine/foundation/gameplay/walking-history";
 const ENDPOINT_EPSILON = 0.001;
 const PRESENTATION_LOOKAHEAD_MS = 100;
+// A reused lookahead keeps at least this much of its window ahead of the
+// pose. The presentation never runs past the window's point, so a window
+// that shrank to the last few milliseconds froze the actor there until the
+// next worker sample; half a window still clips about twice per
+// window instead of every tick (#3178).
+const PRESENTATION_REUSE_MIN_MS = PRESENTATION_LOOKAHEAD_MS / 2;
 /*
 ================
 MotionClip
@@ -326,10 +333,17 @@ does not move the actor or replace its actual-time collision result.
 		// outruns the lookahead (a stall, a long catch-up step) falls
 		// through and admits the next window.
 		const cache = segment.presentationHistory;
+		// The presentation derives velocity from span over window: scale
+		// the window by the span remaining or its recovery budget decays
+		// as the pose closes in.
+		const remainingMs = cache && cache.span > 0 ?
+			PRESENTATION_LOOKAHEAD_MS * poseDistance( pose, cache.to ) / cache.span :
+			0;
 		if (
 			cache && !segment.blocked && !segment.arrived &&
 			cache.segmentFrom === segment.from && cache.segmentTo === segment.to &&
-			poseDistance( pose, segment.to ) > poseDistance( cache.to, segment.to )
+			poseDistance( pose, segment.to ) > poseDistance( cache.to, segment.to ) &&
+			remainingMs >= PRESENTATION_REUSE_MIN_MS
 		) {
 			return {
 				from: pose,
@@ -337,14 +351,9 @@ does not move the actor or replace its actual-time collision result.
 				// The accepted path as it stands now plus the admitted
 				// tail; a re-anchored extension replaces it outright.
 				walkingPath: cache.tail && segment.walkingPath ?
-					[ ...segment.walkingPath, ...cache.tail ] :
+					appendWalkingHistory( segment.walkingPath, cache.tail ) :
 					cache.result,
-				// The presentation derives velocity from span over
-				// window: scale the window by the span remaining or
-				// its recovery budget decays as the pose closes in.
-				durationMs: cache.span > 0 ?
-					PRESENTATION_LOOKAHEAD_MS * poseDistance( pose, cache.to ) / cache.span :
-					PRESENTATION_LOOKAHEAD_MS
+				durationMs: remainingMs
 			};
 		}
 		const desired = candidate( segment, pose, PRESENTATION_LOOKAHEAD_MS ).pose;
