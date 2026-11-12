@@ -266,13 +266,20 @@ def _shard_rows(read, manifest_name, prefix):
 	return rows
 
 
-def later_tables_from_media(media, index):
+def later_tables_from_media(media, index, object_text_required=True):
 	def read(name):
 		return tables.table_text(media, index, name.lower())
 
+	# A client Media always carries the object text, so a pk2 read stops
+	# without it; the pinned archive may carry pet rows without it, and a
+	# kind whose name never arrived is reported, never fatal.
+	if object_text_required or tables.TEXTDATA + "textdata_object.txt" in index:
+		object_text = read("textdata_object.txt")
+	else:
+		object_text = b""
 	return (_shard_rows(read, "characterdata.txt", "characterdata"),
 		_shard_rows(read, "itemdata.txt", "itemdata"),
-		read("textdata_object.txt"))
+		object_text)
 
 
 def later_tables_from_pk2(root):
@@ -470,7 +477,7 @@ def add_archive_pets(native, output, earlier_codes=(), env=os.environ):
 		remove_import(output, ARCHIVE_SOURCE)
 		return _disabled(ARCHIVE_SOURCE, "archive carries no pet tables")
 	native_chars, native_items = native_tables(native)
-	later_chars, later_items, later_text = later_tables_from_media(media, media_index)
+	later_chars, later_items, later_text = later_tables_from_media(media, media_index, object_text_required=False)
 
 	def missing(family, rows):
 		for row in rows:
