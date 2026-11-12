@@ -59,17 +59,28 @@ These are inferences and port choices, not native evidence:
   closing and reopening an instance on a schedule.
 - **Ambient runs.** The arenas are permanent worlds whose timers run whether or not anyone stands inside (the
   tomb chain's posture: the world owns its timers, including regions without viewers). Nothing raises the player
-  level cap, and solo versus party rides the world codename alone until the entry slice gives it meaning.
+  level cap.
 - **No authored drops.** The import writes no reward table: the kinds keep the native loot posture.
 
-## Left for the entry slice
+## Entry (the #3314 slice)
 
-Recorded so the follow-up needs no second pass over the sources (#3314 tracks it):
+- **Managers and gates.** The importer now also admits the 24 manager/change NPC nests (`muhan-npcs.txt`);
+  with the switch on they join their arena worlds as ordinary nests. The pinned v1.696 client's teleport
+  tables give the entry shape: an arena manager hub (teleport 227, the manager building) links to the eight
+  gates (228..235), and each gate links back to the town gate (teleport 5), fee 0 and condition-free. The
+  server appends those rows behind the same switch (its committed overlays), and the client bake publishes
+  the same rows into the destination menu behind the shard's deployed posture.
+- **Solo/party rule.** A solo arena refuses a player in a live party and a party arena refuses one without
+  (the world admission's arena branch, refusal byte 2): solo versus party no longer rides the codename alone.
+- **Return.** The exit links land on the town gate; the arenas are permanent worlds, so a relog inside one
+  resumes there, as in the other port-only worlds.
 
-- **Entry.** The manager NPCs (`NPC_MUHAN_<SOLO|PARTY>_<band>_MANAGER`) and the gates/teleports that admit a
-  player or party to an arena, with the solo/party rule. The port has no entry machinery for port-only instanced
-  content yet (the same gap as the Jupiter temples' admission and the #1800 step-3 slice-4 work).
+## Still left
+
 - **Transforms.** The 16 `_RefMuhanMonsterTransMask` rows (change NPC, `SKILL_MUHAN_*_BUFF01`, `MOB_MUHAN_CHANGE_*`
-  form) the export records.
-- **Rewards.** Any wave-clear or run rewards: the source's reward tables were not imported.
+  form) the export records. The kinds and nests are admitted and placed; applying the transform on talk has
+  no talk-flag evidence in the rows (the NPC-action multiplexer knows shops, storage, talk and withdraw -
+  no transform kind), so it waits for its own traced slice.
+- **Rewards.** Any wave-clear or run rewards: the source exports no reward table, so there is nothing to
+  import; the kinds keep the native loot posture (see "No authored drops").
 - **The unbanded shells.** Worlds 99-102 carry no data in the source and stay out unless the source grows some.
