@@ -44,6 +44,40 @@ const REPLY_LIMIT_MS = 90_000;
 const GATE_ROWS_FLAG = 0x8000000;
 // A teleport gate's grant: result byte, gid, capability word.
 const TELEPORT_GRANT_BYTES = 9;
+// The character arm's grants: an NPC's [u8 vitals=0][u32 word][u8 event]
+// and a monster's or COS's [u8 vitals=1][u32 hp][u32 word].
+const NPC_GRANT_BYTES = 11;
+const VITALS_GRANT_BYTES = 14;
+// CPSMission_OnNpcSelectResponse0xB45A gates a CICMonster or CICCos
+// target's talk pane on its grant word: talk 0x2 set and 0x10 clear.
+const MONSTER_TALK_BIT = 0x2;
+const MONSTER_TALK_BLOCK_BIT = 0x10;
+
+/*
+================
+talkPaneOpens
+
+Whether a granted selection opens the talk pane, by the target's kind as
+CPSMission_OnNpcSelectResponse0xB45A branches (#3280): a CICNPC always
+shows it and builds its menu from the grant (5D9100), even an empty one;
+a CITeleportGate always shows it with the gate caption (0x7650b8); a
+CICMonster or CICCos only when its word has the talk bit and not 0x10.
+A target of another kind, or one this client has not spawned, is judged
+by the grant's shape, which the server writes by the same class: the
+NPC arm (11 bytes, no vitals) opens, the vitals arm takes the monster
+rule. Inferred, as no other kind has a recorded grant.
+================
+*/
+export function talkPaneOpens( kind: string | undefined, gate: boolean, p: Uint8Array ): boolean {
+	if ( gate || kind === "npc" ) return true;
+	const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const monsterRule = ( word: number ) => (word & MONSTER_TALK_BLOCK_BIT) === 0 && (word & MONSTER_TALK_BIT) !== 0;
+	const vitalsArm = p.length === VITALS_GRANT_BYTES && p[5] === 1;
+	if ( kind === "monster" || kind === "cos" ) return vitalsArm && monsterRule( view.getUint32( 10, true ) );
+	if ( kind !== undefined && kind !== "structure" ) return false;
+	if ( p.length === NPC_GRANT_BYTES && p[5] === 0 ) return true;
+	return vitalsArm && monsterRule( view.getUint32( 10, true ) );
+}
 
 /*
 ================
@@ -92,9 +126,26 @@ export function createTargeting(
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined
 ) {
 	let capabilities = 0, taxRate = 0, flagWarMode = 0;
+	// talkPane is the granted target's talk-pane decision (talkPaneOpens).
+	let talkPane = false;
 	let gateRows: GateRow[] = [];
 	let localSelection = false;
 	let target = 0, pending: Pending | null = null, error: string | null = null;
+	/*
+================
+forgetGrant
+
+Drops everything the last grant carried; the target and the pending
+transaction are each caller's own to settle.
+================
+	*/
+	function forgetGrant() {
+		capabilities = 0;
+		flagWarMode = 0;
+		taxRate = 0;
+		gateRows = [];
+		talkPane = false;
+	}
 	/*
 ================
 request
@@ -121,10 +172,7 @@ select
 			// transaction retains its reply ownership while display intent changes.
 			if ( kind === "local-player" ) {
 				target = gid;
-				capabilities = 0;
-				flagWarMode = 0;
-				taxRate = 0;
-				gateRows = [];
+				forgetGrant();
 				error = null;
 				localSelection = true;
 				return null;
@@ -151,10 +199,7 @@ select
 				};
 			} else {
 				target = gid;
-				capabilities = 0;
-				flagWarMode = 0;
-				taxRate = 0;
-				gateRows = [];
+				forgetGrant();
 			}
 			return frame;
 		},
@@ -171,10 +216,7 @@ release
 			// Display intent is local; the untagged protocol transaction remains pending.
 			target = 0;
 			localSelection = false;
-			capabilities = 0;
-			flagWarMode = 0;
-			taxRate = 0;
-			gateRows = [];
+			forgetGrant();
 			error = null;
 			return frame;
 		},
@@ -223,10 +265,7 @@ frame fixes the hard limit the holds cannot pass.
 			pending = null;
 			target = 0;
 			localSelection = false;
-			capabilities = 0;
-			flagWarMode = 0;
-			taxRate = 0;
-			gateRows = [];
+			forgetGrant();
 			error = "Target selection was not confirmed; select again";
 			return true;
 		},
@@ -242,10 +281,7 @@ receive
 				}
 				target = 0;
 				localSelection = false;
-				capabilities = 0;
-				flagWarMode = 0;
-				taxRate = 0;
-				gateRows = [];
+				forgetGrant();
 				pending = null;
 				error = null;
 				return true;
@@ -302,6 +338,9 @@ receive
 			// (the reference server's event byte: 1 offers sign-up, 2 offers cancel, else no row).
 			flagWarMode = !gate && p.length === 11 && p[5] === 0 ? p[10]! : 0;
 			gateRows = rows ?? [];
+			// The click-time family can be stale (above); an unspawned
+			// target is judged by the grant's shape instead.
+			talkPane = talkPaneOpens( replied?.kind, gate, p );
 			pending = null;
 			error = null;
 			return true;
@@ -315,10 +354,7 @@ remove
 			if ( target === gid ) {
 				target = 0;
 				localSelection = false;
-				capabilities = 0;
-				flagWarMode = 0;
-				taxRate = 0;
-				gateRows = [];
+				forgetGrant();
 			}
 			// Preserve a release barrier until its untagged acknowledgement arrives.
 			if ( pending?.kind === "select" && pending.gid === gid ) pending = null;
@@ -336,10 +372,7 @@ NPC function opened through it (an open warehouse) stay as they are.
 			if ( pending ) return;
 			target = 0;
 			localSelection = false;
-			capabilities = 0;
-			flagWarMode = 0;
-			taxRate = 0;
-			gateRows = [];
+			forgetGrant();
 			error = null;
 		},
 		/*
@@ -350,14 +383,19 @@ clear
 		clear() {
 			target = 0;
 			localSelection = false;
-			capabilities = 0;
-			flagWarMode = 0;
-			taxRate = 0;
-			gateRows = [];
+			forgetGrant();
 			pending = null;
 			error = null;
 		},
 		error: () => error,
+		/*
+================
+opensTalkPane
+
+Whether the current target's grant opens the talk pane (talkPaneOpens).
+================
+		*/
+		opensTalkPane: () => !!target && !localSelection && talkPane,
 		/*
 ================
 selectionIntent
