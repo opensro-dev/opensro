@@ -13,6 +13,7 @@ Their use is the native alchemy stone path (alchemy package).
 package commerce
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -138,5 +139,36 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 	if len(GearsStoneKinds)*gearsStoneDegrees != 112 {
 		t.Fatalf("gears stock = %d kinds at %d degrees, want 112",
 			len(GearsStoneKinds), gearsStoneDegrees)
+	}
+}
+
+/*
+================
+TestMallCategoriesNasrunKindsStayUnlisted
+
+Until the Devil's Spirit port (#3348) lands, Sabakun's jewel and
+the extension gear stay unlisted (#3331): even when a build's item
+table holds their later-client rows, no offer may name them. Listing
+one without the Nasrun system behind it fails here first; #3348
+replaces this test with the listing's own when the system stands.
+================
+*/
+func TestMallCategoriesNasrunKindsStayUnlisted(t *testing.T) {
+	tier.Long(t, "Nasrun kinds stay unlisted behind the mall flag")
+	dir := gamedatatest.TextdataDir(t)
+	extra := map[string]*enterworld.ItemRef{}
+	for _, code := range []string{"ITEM_MALL_NASRUN_EXTENSION", "ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE"} {
+		extra[code] = &enterworld.ItemRef{RefObjID: 24395, Codename: code, NameStrID: "SN_" + code,
+			TypeIDs: [4]int64{3, 3, 13, 16}}
+	}
+	refs := gearsStubRefs{base: enterworld.NewTextdataItems(dir), extra: extra}
+	catalog, err := LoadMall(dir, nil, true, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, offer := range catalog.Offers {
+		if strings.Contains(offer.Code, "NASRUN") {
+			t.Fatalf("flag-on mall lists %s, want the Nasrun kinds unlisted (#3331)", offer.Code)
+		}
 	}
 }

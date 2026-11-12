@@ -50,6 +50,10 @@ import { DRAWER_WIDTH, paintDrawer } from "./map-drawer";
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
 const CHECK_OFF = ROOT + "interface/ifcommon/com_checkbutton_off.png";
+// The level filter note's UI text key: the later client's words for
+// the foot checkbox (the dungeon catalogue already carries them as
+// its monsterLevelNote, issue #3238).
+const LEVEL_FILTER_NOTE_KEY = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST";
 // The later client's dungeon-page chrome (issue #3210), published by
 // import_vsro_worldmap_buttons.py beside the v1.150 worldmap art.
 const WMAP = ROOT + "interface/worldmap/";
@@ -121,6 +125,10 @@ interface MapToolsPaint {
 	center: Pose | null;
 	layout?: WorldMapLayout;
 	huntingVisible: boolean;
+	// The Experimental Entire-map checkbox (#3258): when on, the level
+	// filter's switch stands at the world window's foot in the later
+	// client's form, and the strip's own toggle stands down.
+	levelCheckbox: boolean;
 }
 
 /*
@@ -289,28 +297,32 @@ export function createMapToolsHud( options: {
 	): number {
 		const text = input.text, my = input.window[1];
 		// The level filter toggle: the toolkit checkbutton, as the
-		// hunting toggle beside it draws.
+		// hunting toggle beside it draws. The Entire-map checkbox
+		// (input.levelCheckbox, #3258) draws this same switch at the
+		// window's foot instead, so the strip stands down there.
 		paths.push( CHECK_ON, CHECK_OFF );
-		quads.push( {
-			texture: levelFilter ? CHECK_ON : CHECK_OFF,
-			rect: [ stripX, my + 10, 16, 16 ],
-			uv: [ 0, 0, 1, 1 ],
-			color: WHITE,
-			clip: input.full
-		} );
-		quads.push(
-			...text.quads( "Lv filter", [ stripX + 20, my + 10, 56, 17 ], input.full, GOLD, { vAlign: 1 } )
-		);
-		controls.push( {
-			id: "map-level-filter",
-			kind: "button",
-			label: "Monster level filter",
-			helpText: (levelFilter ? "Hide" : "Show") + " only monsters up to " +
-				MONSTER_LEVEL_FILTER_SPAN + " levels above you",
-			rect: [ stripX - 2, my + 7, 80, 20 ],
-			selected: levelFilter
-		} );
-		stripX += 84;
+		if ( !input.levelCheckbox ) {
+			quads.push( {
+				texture: levelFilter ? CHECK_ON : CHECK_OFF,
+				rect: [ stripX, my + 10, 16, 16 ],
+				uv: [ 0, 0, 1, 1 ],
+				color: WHITE,
+				clip: input.full
+			} );
+			quads.push(
+				...text.quads( "Lv filter", [ stripX + 20, my + 10, 56, 17 ], input.full, GOLD, { vAlign: 1 } )
+			);
+			controls.push( {
+				id: "map-level-filter",
+				kind: "button",
+				label: "Monster level filter",
+				helpText: (levelFilter ? "Hide" : "Show") + " only monsters up to " +
+					MONSTER_LEVEL_FILTER_SPAN + " levels above you",
+				rect: [ stripX - 2, my + 7, 80, 20 ],
+				selected: levelFilter
+			} );
+			stripX += 84;
+		}
 		// The drawer toggle.
 		quads.push(
 			...text.quads( "Monsters", [ stripX + 2, my + 10, 64, 17 ], input.full, GOLD, { vAlign: 1 } )
@@ -324,6 +336,60 @@ export function createMapToolsHud( options: {
 			selected: drawerOpen
 		} );
 		return stripX + 76;
+	}
+
+	/*
+	================
+	levelFilterFoot
+
+	The level filter's foot (issues #3238, #3258): a black strip at
+	the window's foot with the later client's level note right-aligned
+	against its checkbox at the strip's right end. On a dungeon page
+	the note is the cave catalogue's own; on the world it is the
+	catalogue's note or the client's UI text (LEVEL_FILTER_NOTE_KEY),
+	whichever stands, else no note. The box is the strip toggle's
+	switch: one state, and either face flips it (activate's
+	map-level-filter).
+	================
+	*/
+	function levelFilterFoot( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ): void {
+		const [mx, , mw] = input.window;
+		const note = input.levelNote ?? input.strings?.[LEVEL_FILTER_NOTE_KEY];
+		const footY = input.window[1] + input.window[3] - 24;
+		const box: UiRect = [ mx + mw - 28, footY + 2, 16, 16 ];
+		quads.push( {
+			texture: "",
+			rect: [ mx + 4, footY, mw - 8, 20 ],
+			uv: [ 0, 0, 1, 1 ],
+			color: [ 0, 0, 0, .92 ],
+			clip: input.full
+		} );
+		if ( note ) {
+			quads.push(
+				...input.text.quads(
+					note,
+					[ mx + 12, footY + 2, box[0] - 8 - (mx + 12), 16 ],
+					input.full,
+					WHITE,
+					{ hAlign: 2, vAlign: 1 }
+				)
+			);
+		}
+		quads.push( {
+			texture: levelFilter ? CHECK_ON : CHECK_OFF,
+			rect: box,
+			uv: [ 0, 0, 1, 1 ],
+			color: WHITE,
+			clip: input.full
+		} );
+		controls.push( {
+			id: "map-level-filter",
+			kind: "button",
+			label: "Monster level filter",
+			helpText: note,
+			rect: box,
+			selected: levelFilter
+		} );
 	}
 
 	/*
@@ -752,48 +818,9 @@ export function createMapToolsHud( options: {
 					} );
 				}
 				if ( drawerOpen ) caveDrawer( input, quads, controls );
-				// The page foot (issue #3238): a black strip with the
-				// later client's level filter note, right-aligned against
-				// its checkbox at the strip's right end. The note is the
-				// catalogue's (UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST of the
-				// archive the build imported), so its words and number are
-				// that client's own. The box is the world strip's switch:
-				// one state, and either face flips it.
-				const footY = input.window[1] + input.window[3] - 24;
-				const box: UiRect = [ mx + mw - 28, footY + 2, 16, 16 ];
-				quads.push( {
-					texture: "",
-					rect: [ mx + 4, footY, mw - 8, 20 ],
-					uv: [ 0, 0, 1, 1 ],
-					color: [ 0, 0, 0, .92 ],
-					clip: input.full
-				} );
-				if ( input.levelNote ) {
-					quads.push(
-						...text.quads(
-							input.levelNote,
-							[ mx + 12, footY + 2, box[0] - 8 - (mx + 12), 16 ],
-							input.full,
-							WHITE,
-							{ hAlign: 2, vAlign: 1 }
-						)
-					);
-				}
-				quads.push( {
-					texture: levelFilter ? CHECK_ON : CHECK_OFF,
-					rect: box,
-					uv: [ 0, 0, 1, 1 ],
-					color: WHITE,
-					clip: input.full
-				} );
-				controls.push( {
-					id: "map-level-filter",
-					kind: "button",
-					label: "Monster level filter",
-					helpText: input.levelNote,
-					rect: box,
-					selected: levelFilter
-				} );
+				// The page foot (issue #3238): the level filter's
+				// checkbox and its note, levelFilterFoot's one shape.
+				levelFilterFoot( input, quads, controls );
 				return { quads, controls, paths };
 			}
 			stripX = stripToggles( input, quads, controls, paths, stripX );
@@ -885,6 +912,10 @@ export function createMapToolsHud( options: {
 					controls
 				);
 			}
+			// The Entire map's own foot checkbox (issue #3258), the
+			// Experimental row's form of the filter switch; the strip
+			// toggle stands down while it stands (stripToggles).
+			if ( input.levelCheckbox ) levelFilterFoot( input, quads, controls );
 			return { quads, controls, paths };
 		},
 		/*

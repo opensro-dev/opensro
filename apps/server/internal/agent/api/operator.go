@@ -61,6 +61,8 @@ type PlayerOperation struct {
 	Reason    string              `json:"reason"`
 	// Silk is a grant-silk operation's amount.
 	Silk uint32 `json:"silk,omitempty"`
+	// Gold is an adjust-gold operation's signed amount (#3309).
+	Gold int64 `json:"gold,omitempty"`
 	// Minutes is a mute-chat operation's length.
 	Minutes uint32 `json:"minutes,omitempty"`
 	// Clause is the rule clause a conduct action (mute-chat, unmute-chat,
@@ -100,6 +102,9 @@ type PlayerOperations struct {
 	ResetStats func(PlayerOperation) (any, error)
 	// GrantSilk credits silk to the character's account (operator tooling).
 	GrantSilk func(PlayerOperation) (any, error)
+	// AdjustGold applies a signed gold correction to the character
+	// through its mutation door (#3309, operator tooling).
+	AdjustGold func(PlayerOperation) (any, error)
 	// MuteChat, UnmuteChat and Kick are the conduct actions (#2671): a
 	// persisted chat mute on the character, its removal, and ending the
 	// character's session the way a logout does.
@@ -213,6 +218,10 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "a crest target belongs to remove-crest only", http.StatusBadRequest)
 		return
 	}
+	if request.Action != "adjust-gold" && request.Gold != 0 {
+		http.Error(w, "a gold amount belongs to adjust-gold only", http.StatusBadRequest)
+		return
+	}
 	operation := endpoint.config.Rescue
 	switch request.Action {
 	case "", "rescue":
@@ -245,6 +254,13 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.GrantSilk
+	case "adjust-gold":
+		if endpoint.config.AdjustGold == nil || request.Town != 0 || len(request.Items) != 0 ||
+			request.Silk != 0 || request.Gold == 0 {
+			http.Error(w, "invalid gold adjustment", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.AdjustGold
 	case "reset-stats":
 		if endpoint.config.ResetStats == nil || request.Town != 0 || len(request.Items) != 0 {
 			http.Error(w, "invalid stat reset", http.StatusBadRequest)

@@ -93,6 +93,7 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/game/world/temple":      true,
 		modulePath + "/internal/game/world/arabia":      true,
 		modulePath + "/internal/game/world/jupiter":     true,
+		modulePath + "/internal/game/world/muhan":       true,
 		modulePath + "/internal/data/texttable":         true,
 		modulePath + "/internal/game/abnormal":          true,
 		modulePath + "/internal/game/paramkeeper":       true,

@@ -16,7 +16,7 @@ func TestWolfBookScalingNeverDropsAtPromotion(t *testing.T) {
 	for _, family := range []string{"Hunting Howl", "Bloodscent"} {
 		previous := 0.0
 		for _, skill := range D.TreeSkills {
-			if skill.Family != family {
+			if skill.Family != family || skill.Pet != "Wolf" {
 				continue
 			}
 			if skill.ValueAt(1) < previous {
@@ -40,7 +40,7 @@ TestExecutionThreshold
 */
 func TestExecutionThreshold(t *testing.T) {
 	for _, s := range D.TreeSkills {
-		if s.Family != "Execute" {
+		if s.Family != "Execute" || s.Pet != "Wolf" {
 			continue
 		}
 		for _, rank := range []uint8{1, 5, 10, 12} {

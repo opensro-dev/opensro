@@ -38,6 +38,7 @@ import (
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/community"
+	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/match"
@@ -86,6 +87,9 @@ type gameplayPlane struct {
 	quests        *quest.Runtime
 	// betaSilk earns the beta's Item Mall silk (nil when SRO_BETA_SILK is off).
 	betaSilk *action.BetaSilk
+	// contributors is the Contributor title (nil when
+	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
+	contributors *contributor.Registry
 }
 
 /*
@@ -905,6 +909,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.chat.ModerationLog = moderationLog
 	game.items.ModerationLog = moderationLog
 	wireChatReports(game)
+	if err := wireContributorTitles(game); err != nil {
+		return err
+	}
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	if game.deps.ChatItemLinks > 0 {

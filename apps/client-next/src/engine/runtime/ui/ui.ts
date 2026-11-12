@@ -12724,6 +12724,8 @@ export function createUi( ports: UiPorts ) {
 						];
 					key.push( experimental.state().saved.noticeLinks );
 					key.push( experimental.state().saved.eventChatTab );
+					// Port-only (#3358): the contributor roster retags lines.
+					key.push( ...(game?.contributorTitles ?? []) );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -12744,6 +12746,7 @@ export function createUi( ports: UiPorts ) {
 						() =>
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
+								contributorTitles: game?.contributorTitles,
 								noticeLinks: experimental.state().saved.noticeLinks,
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
@@ -22225,8 +22228,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
 						if (
-							overlay.fortressMark || overlay.caravanMark || overlay.guildText || overlay.status ||
-							overlay.stallText
+							overlay.fortressMark || overlay.caravanMark || overlay.guildText ||
+							overlay.contributorText ||
+							overlay.status || overlay.stallText
 						) {
 							overlaid.add( entity.gid );
 						}
@@ -22341,6 +22345,28 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									}
 								}
 							}
+						}
+						if ( overlay.contributorText ) {
+							// Port-only, not native (#3358): the Contributor
+							// title row above the guild row, in its yellow.
+							const value = overlay.contributorText,
+								width = text.run( value ).width,
+								height = text.boardHeight(),
+								left = -(width >> 1),
+								top = overlay.contributorY - (height >> 1);
+							quads.push( {
+								characterAnchor: entity.gid,
+								rect: [ left - 1, top - 1, width + 2, height + 2 ],
+								clip: full,
+								uv: [ 0, 0, 1, 1 ],
+								texture: "",
+								color: [ 0, 0, 0, 64 / 255 ]
+							} );
+							quads.push(
+								...text.quads( value, [ left, top, width, height ], full, overlay.contributorColor, {
+									vAlign: 0
+								} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
+							);
 						}
 						const status = overlay.status;
 						if ( !status ) continue;

@@ -24,6 +24,17 @@ the native bytes on every build before any later-world merge runs,
 so a build with a switch off leaves native catalogs behind on its
 own. Both imports are port-only, not native.
 
+Four worlds ride this engine (#3326). jupiter and god are driven by
+their population exports end to end (add_world). muhan (waves name
+kinds by level, not by nest) and hunting2 (the client's own npcpos
+placements; it postdates the shard backup) drive their own monster
+passes and take the shared region merge and reap through
+merge_world, reap_monsters and reap_world, so the off path above is
+decided once for all four. skytemple_import and arabia_import are
+the other family: they merge catalogues over the variant's current
+ones inside build_alexandria_variant and share their machinery
+through skytemple_import; they take no WorldImport spec.
+
 ===========================================================================
 """
 import hashlib
@@ -56,30 +67,37 @@ _verified_archives = set()
 # its own (which groups its nests claim, what admits a kind, which
 # population files it writes, what its summary reports, which regions
 # it covers). Frozen: a spec is a fact about the world, not state.
+#
+# A world whose population the nest export drives fills every field
+# (jupiter, god). A world whose kinds no nest export names drives
+# its own monster pass on the same merge and reap (muhan's waves,
+# hunting2's client placements): its export-driving fields stay
+# empty, and add_monsters / add_world refuse such a spec by name -
+# merge_world, reap_monsters and reap_world are its entry points.
 # ================
 @dataclass(frozen=True)
 class WorldImport:
 	label: str
 	flag: str
-	requires: str | None
 	root_env: str
-	source_env: str
-	population_name: str
-	source_sha256: str
 	character_shard: str
 	skill_shard: str
 	marker: str
 	pin_file: Path
 	pin_sentence: str
 	region_label: str
-	worlds_required: tuple
 	population_files: tuple
-	info_prefixes: tuple
-	claim_groups: Callable
-	admit: Callable
-	build_populations: Callable
-	summarize_populations: Callable
-	regions_of: Callable
+	requires: str | None = None
+	source_env: str = ""
+	population_name: str = ""
+	source_sha256: str = ""
+	worlds_required: tuple = ()
+	info_prefixes: tuple = ()
+	claim_groups: Callable = None
+	admit: Callable = None
+	build_populations: Callable = None
+	summarize_populations: Callable = None
+	regions_of: Callable = None
 
 
 #============================================================================
@@ -302,6 +320,8 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 	if not enabled:
 		reap_monsters(spec, output, prior)
 		return {"enabled": False}
+	if spec.claim_groups is None:
+		raise ValueError(f"{spec.label} import drives its own monster pass; add_monsters does not serve it")
 	require_pairing(spec)
 	if not v1696_root:
 		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
@@ -470,23 +490,14 @@ def merge_region_tables(native, later, region_ids):
 # ================
 # add_world
 #
-# One world's variant-side merge: the regions' terrain remapped onto
-# the merged tile catalog, their navmesh and availability bits, every
-# Data file the native tree lacks, the regions' minimap tiles and
-# names, and the monster population.
-#
-# The variant root is reused across builds (see the header): the
-# merge enrols what it writes in the marker's regionMerge record -
-# every file it writes (unioned with the previous build's record, so
-# a file an earlier build wrote and this one merely kept is still
-# enrolled), the availability sectors, the region ids and the zone
-# prefixes. The two catalogs are not enrolled: the Alexandria stage
-# rebuilds tile2d.ifo and object.ifo from the native bytes on every
-# build before this merge runs. The availability bits and the two
-# name tables are undone from the record itself (reap_regions).
+# An export-driven world's whole import: the pairing and pin checks,
+# the pinned population export, the regions it covers, and the merge
+# itself (merge_world). A spec with no export-driving shape refuses
+# here: that world drives its own monster pass (see WorldImport).
 # ================
 def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for):
-	import build_alexandria_variant as variant
+	if spec.regions_of is None:
+		raise ValueError(f"{spec.label} import drives its own monster pass; add_world does not serve it")
 	native, out = Path(native), Path(out)
 	require_pairing(spec)
 	v1696_root = Path(v1696_root or os.environ.get(spec.root_env, ""))
@@ -498,6 +509,33 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	require_pin(spec, v1696_root, ("Map", "Media", "Data"), pins_for)
 	export = read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)
+	return merge_world(spec, native, out, v1696_root, regions,
+		lambda: add_monsters(spec, v1696_root, native, out, source_root, True, sub_enabled, pins_for))
+
+
+# ================
+# merge_world
+#
+# One world's variant-side merge over a resolved region set: the
+# regions' terrain remapped onto the merged tile catalog, their
+# navmesh and availability bits, every Data file the native tree
+# lacks, the regions' minimap tiles and names, and the monster
+# population (build_monsters, the caller's own pass, run last).
+#
+# The variant root is reused across builds (see the header): the
+# merge enrols what it writes in the marker's regionMerge record -
+# every file it writes (unioned with the previous build's record, so
+# a file an earlier build wrote and this one merely kept is still
+# enrolled), the availability sectors, the region ids and the zone
+# prefixes. The two catalogs are not enrolled: the Alexandria stage
+# rebuilds tile2d.ifo and object.ifo from the native bytes on every
+# build before this merge runs. The availability bits and the two
+# name tables are undone from the record itself (reap_regions).
+# ================
+def merge_world(spec, native, out, v1696_root, regions, build_monsters):
+	import build_alexandria_variant as variant
+	native, out = Path(native), Path(out)
+	v1696_root = Path(v1696_root)
 	# The temple sets' named interiors are dungeon regions (bit 15):
 	# no sector terrain exists for them - their geometry is the DOF
 	# tree the Data pass below copies, published into the client's
@@ -628,7 +666,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	for name, content in merged_tables.items():
 		variant.replace_file(out / textdata / name, content)
 
-	monsters = add_monsters(spec, v1696_root, native, out, source_root, True, sub_enabled, pins_for)
+	monsters = build_monsters()
 	record = {
 		"files": sorted(written),
 		"sectors": sorted({tuple(sector) for sector in prior_record.get("sectors", [])} | set(sectors)),

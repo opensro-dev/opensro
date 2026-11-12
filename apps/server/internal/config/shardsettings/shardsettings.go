@@ -172,6 +172,12 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the Constantinople fortress area from the
+	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
+	// server read the same switch; off leaves every imported row out of
+	// the build and the fortress unregistered. Not a catalogue setting:
+	// the catalogue publishes no fortress state.
+	{Env: "SRO_FORT_CONSTANTINOPLE", NomadVar: "fort_constantinople", Default: "off"},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
@@ -314,6 +320,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Owner, 2026-11-12 (#3358): Discord Contributor-role members carry a
+	// yellow Contributor title, seen by everyone, hidden by their own
+	// /contributor off. Off is native: no frame, no command.
+	{Env: "SRO_CONTRIBUTOR_TITLES", NomadVar: "contributor_titles", Default: "off"},
 	// Decision record, 2026-11-04 (#2538): one counting-only cycle
 	// measures Sun drops and their recipients before any Sun knob is
 	// considered. Count-only and off by default: nothing counts.

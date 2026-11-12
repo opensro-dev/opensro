@@ -37,10 +37,17 @@ allocated above every published row and kept in the marker, their
 monster skills merged the cap-110 way, and the nests written
 as one Version-2 population file (hunting2-field.txt) the server
 reads behind the same flag. add_hunting2 is the variant-side merge:
-the regions' terrain, navmesh, names and Data files, built on the
-Jupiter merge's catalog machinery beside it. A switch off removes
-exactly what the marker records. No authored drops: the monsters
-keep the native loot posture.
+the regions' terrain, navmesh, names and Data files. A switch off
+removes exactly what the marker records. No authored drops: the
+monsters keep the native loot posture.
+
+The region merge and the reap are later_world_import's
+(merge_world / reap_world, #3326); this module is the hunting2
+spec and the placement shapes that are truly its own: the region
+set, the npcpos join, the admission window and the synthesized
+nests. The set postdates the shard backup, so no population
+export drives it - it takes the engine's merge and reap, not its
+export-driven monster pass.
 
 ===========================================================================
 """
@@ -50,12 +57,11 @@ import os
 from pathlib import Path
 
 import alexandria_npcs as characters
-from alexandria_map_tables import append_rows, table_text
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import jupiter_import as jupiter
-import sro_pk2
+import later_world_import
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_HUNTING2"
@@ -66,6 +72,7 @@ SKILL_SHARD = "skilldata_180000.txt"
 FIELD_FILE = "hunting2-field.txt"
 REGION_CODE = "RN_NEW_HUNTING_SECOND_FIELD"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
+PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 
 # The family's recorded window: the levels and grades the placed
 # kinds author (measured: 49-140, grades 0 and 1). A placed kind
@@ -167,8 +174,47 @@ def synthesize_population(placements, refs):
 	return {"Version": 2, "Rows": rows}
 
 
+SPEC = later_world_import.WorldImport(
+	label="hunting2",
+	flag=FLAG,
+	root_env=ROOT_ENV,
+	character_shard=CHARACTER_SHARD,
+	skill_shard=SKILL_SHARD,
+	marker=MARKER,
+	pin_file=PIN_FILE,
+	pin_sentence="The second hunting grounds are built from one pinned v1.696 client; its archives are never committed.",
+	region_label="hunting ground",
+	population_files=(("field", FIELD_FILE),),
+)
+
+
 #============================================================================
-# The monster import
+# The engine, under this import's names
+#============================================================================
+
+
+# ================
+# archive_pins
+#
+# The family's one pin reader is jupiter_import's (one pin file, one
+# process-wide verified set); this name exists so the pin check
+# below reads through it.
+# ================
+def archive_pins():
+	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
+	return jupiter.archive_pins()
+
+
+# ================
+# require_v1696_pin
+# ================
+def require_v1696_pin(root, names):
+	"""The v1.696 archives against their pins, before any of them is read."""
+	return later_world_import.require_pin(SPEC, root, names, archive_pins)
+
+
+#============================================================================
+# The monster import (hunting2's own: the client's npcpos placements)
 #============================================================================
 
 
@@ -183,22 +229,11 @@ def add_monsters(v1696_root, native, output):
 	prior = cap110.read_json(marker) if marker.exists() else {}
 	text_root = output / TEXT_ROOT
 	if not flag_enabled():
-		if prior:
-			effect_path = text_root / "skilleffect.txt"
-			effect_text = effects.remove_animation_bases(tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-			write_atomically(effect_path, b"\xff\xfe" + cap110.drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
-			text_path = text_root / "textdataname.txt"
-			write_atomically(text_path, cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
-		for name in (CHARACTER_SHARD, SKILL_SHARD, FIELD_FILE):
-			(text_root / name).unlink(missing_ok=True)
-		manifest = text_root / "skilldata.txt"
-		if manifest.exists():
-			write_atomically(manifest, cap110.encode_rows([r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
-		marker.unlink(missing_ok=True)
+		later_world_import.reap_monsters(SPEC, output, prior)
 		return {"enabled": False}
 	if not v1696_root:
 		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
-	jupiter.require_v1696_pin(v1696_root, ("Media",))
+	require_v1696_pin(v1696_root, ("Media",))
 	with open(Path(v1696_root) / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 
@@ -247,9 +282,9 @@ def add_monsters(v1696_root, native, output):
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
-		object_raw = b"\xff\xfe" + jupiter.later_object_text(read).encode("utf-16-le")
+		object_raw = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in
-			(jupiter.later_text_row(row) for row in characters.translation_rows(object_raw)) if len(r) >= 10 and r[1] in wanted]
+			(later_world_import.later_text_row(row) for row in characters.translation_rows(object_raw)) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing hunting ground monster names")
 		# Name rows a previous build owned leave with the species that
@@ -290,10 +325,8 @@ def add_monsters(v1696_root, native, output):
 		return summary
 
 #============================================================================
-# The variant-side merge (port-only, not native). The tile and object
-# catalog machinery it remaps onto lives in build_alexandria_variant
-# (the Alexandria merge owns it); the region-table merge is the
-# Jupiter import's, beside this file. The population is add_monsters.
+# The variant-side merge is later_world_import's (merge_world, on the
+# Alexandria merge's catalog machinery); the population is add_monsters.
 #============================================================================
 
 
@@ -307,131 +340,23 @@ def add_hunting2(native, out, v1696_root=None):
 	tile catalog, their navmesh and availability bits, every Data
 	file the native tree lacks, the regions' minimap tiles and
 	names, and the monster population. Port-only, not native; off,
-	only the monster pass's owned outputs are reaped and no archive
-	is read.
+	exactly what the marker records is reaped - monster and region
+	merge alike - and no archive is read.
 	"""
-	import build_alexandria_variant as variant
 	if not flag_enabled():
-		add_monsters(None, native, out)
+		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
 	v1696_root = Path(v1696_root or os.environ.get(ROOT_ENV, ""))
 	if not str(v1696_root):
 		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
-	jupiter.require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
+	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 		regions = hunting_regions(tables.table_rows(tables.table_text(media, index, "regioncode.txt")))
-	media.close()
 	if not regions:
 		raise ValueError(f"the v1.696 client has no {REGION_CODE} regions")
-	sectors = [tables.region_xy(region_id) for region_id in regions]
-	textdata = Path("Media_extracted") / tables.TEXTDATA
-
-	# Map: the regions' files, their terrain remapped onto the catalog
-	# the Alexandria merge left, and the ground textures they paint.
-	map_path, map_handle, map_data = tables.open_archive(v1696_root, "Map")
-	try:
-		map_index = tables.archive_index(map_data)
-		terrains, tile_ids, map_missing = {}, set(), []
-		for sector_x, sector_y in sectors:
-			for archive_path in tables.region_files(sector_x, sector_y):
-				entry = map_index.get(archive_path)
-				if entry is None:
-					map_missing.append(archive_path)
-					continue
-				stored = sro_pk2.payload(map_data, entry)
-				if archive_path.endswith(".m"):
-					tile_ids |= tables.terrain_tile_ids(stored)
-				terrains[archive_path] = stored
-		missing_terrain = [path for path in map_missing if path.endswith(".m")]
-		if missing_terrain:
-			raise SystemExit(f"Map.pk2 lacks terrain for hunting ground regions: {missing_terrain}")
-		tiles, remap = variant.merge_tile_catalog(
-			(out / "Map_extracted" / "tile2d.ifo").read_bytes(),
-			sro_pk2.payload(map_data, map_index["tile2d.ifo"]), tile_ids
-		)
-		objects = variant.merge_object_catalog(
-			(out / "Map_extracted" / "object.ifo").read_bytes(),
-			sro_pk2.payload(map_data, map_index["object.ifo"])
-		)
-		variant.replace_file(out / "Map_extracted" / "tile2d.ifo", tiles)
-		variant.replace_file(out / "Map_extracted" / "object.ifo", objects)
-		for archive_path, stored in sorted(terrains.items()):
-			if archive_path.endswith(".m"):
-				stored = variant.remap_terrain(stored, remap)
-			variant.replace_file(out / "Map_extracted" / archive_path, stored)
-		later_tiles = tables.tile_catalog(sro_pk2.payload(map_data, map_index["tile2d.ifo"]))
-		textures = 0
-		for tile_id in sorted(tile_ids):
-			name = later_tiles[tile_id][1].replace("\\", "/")
-			entry = map_index.get("tile2d/" + name.lower())
-			target = out / "Map_extracted" / "tile2d" / name
-			if entry is None:
-				map_missing.append("tile2d/" + name)
-			elif not target.exists():
-				variant.replace_file(target, sro_pk2.payload(map_data, entry))
-				textures += 1
-	finally:
-		map_data.close()
-		map_handle.close()
-
-	# Data: every file the native tree lacks (the regions' objects and
-	# the monsters' models), the regions' navmesh, their availability.
-	data_added = variant.add_missing_files(
-		v1696_root, "Data", out / "Data_extracted", variant.lower_paths(out / "Data_extracted"), ("navmesh/",)
-	)
-	data_path, data_handle, data_data = tables.open_archive(v1696_root, "Data")
-	try:
-		data_index = tables.archive_index(data_data)
-		nav_added = 0
-		for sector_x, sector_y in sectors:
-			nav = tables.navmesh_path(sector_x, sector_y)
-			entry = data_index.get(nav)
-			if entry is None:
-				raise SystemExit(f"Data.pk2 has no {nav}; the hunting ground regions are incomplete")
-			variant.replace_file(out / "Data_extracted" / nav, sro_pk2.payload(data_data, entry))
-			nav_added += 1
-	finally:
-		data_data.close()
-		data_handle.close()
-	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
-	variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
-
-	# Media: the regions' minimap tiles and their code and zone rows.
-	media_path, media_handle, media_data = tables.open_archive(v1696_root, "Media")
-	try:
-		media_index = tables.archive_index(media_data)
-		native_media = variant.lower_paths(native / "Media_extracted")
-		minimaps = 0
-		for sector_x, sector_y in sectors:
-			name = f"minimap/{sector_x}x{sector_y}.ddj"
-			entry = media_index.get(name)
-			if entry is not None and name not in native_media:
-				variant.replace_file(out / "Media_extracted" / name, sro_pk2.payload(media_data, entry))
-				minimaps += 1
-
-		def media_table(name):
-			entry = media_index.get((tables.TEXTDATA + name).lower())
-			if entry is None:
-				raise SystemExit(f"Media.pk2 has no {tables.TEXTDATA}{name}")
-			return sro_pk2.payload(media_data, entry)
-
-		later_tables = {name: media_table(name) for name in ("regioncode.txt", "textzonename.txt")}
-	finally:
-		media_data.close()
-		media_handle.close()
-	current_tables = {name: (out / textdata / name).read_bytes() for name in later_tables}
-	merged_tables, table_summary = jupiter.merge_jupiter_region_tables(current_tables, later_tables, regions)
-	for name, content in merged_tables.items():
-		variant.replace_file(out / textdata / name, content)
-
-	monsters = add_monsters(v1696_root, native, out)
-	return {
-		"enabled": True, "regions": len(regions), "mapFilesAdded": len(terrains),
-		"tileTexturesAdded": textures, "mapFilesMissing": sorted(map_missing),
-		"dataFilesAdded": data_added, "navmeshAdded": nav_added, "minimapTiles": minimaps,
-		**table_summary, "monsters": monsters
-	}
+	return later_world_import.merge_world(SPEC, native, out, v1696_root, regions,
+		lambda: add_monsters(v1696_root, native, out))
 
 
 # ================

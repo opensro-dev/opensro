@@ -342,6 +342,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -445,11 +446,6 @@ const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
 const GUILD_BAN_REFUSED = 0x1f;
-// The 0xB45A grant bits that open the talk window on selection: shop 0x1,
-// talk 0x2, recall point 0x40, teleport 0x80 and return point 0x100. The
-// Bandit Den gate has no link out, so 0x100 (row 0x10, "Teleport to return
-// point") is its only bit; without it the gate's menu never opened.
-const TALK_WINDOW_CAPABILITIES = 0x1c3;
 // Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
@@ -601,6 +597,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		contributorTitles = createContributorTitles(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1604,6 +1601,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		caravanStars.clear();
+		contributorTitles.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -4137,6 +4135,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( contributorTitles.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( tradeProgress.receive( frame ) ) {
 					dirty = true;
 					return true;
@@ -5663,7 +5665,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const selection = targeting.state();
 					if (
 						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
-						!selection.targetPending && ((selection.targetCapabilities ?? 0) & TALK_WINDOW_CAPABILITIES)
+						!selection.targetPending && targeting.opensTalkPane()
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
 				}
@@ -6190,6 +6192,9 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				caravanStars: caravanStars.gids(),
+				// Port-only (#3358): the shown Contributor roster
+				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
+				contributorTitles: contributorTitles.names(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),

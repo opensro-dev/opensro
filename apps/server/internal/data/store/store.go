@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -280,6 +281,15 @@ type Store struct {
 	// guild plane's owner - does the invalidation. Dissolving a guild
 	// deletes its entry, and a missing entry reads as no revision.
 	guildRevisions map[guildKey]uint64
+	// guildViews is the memoised member-view plane (guilds.go
+	// guildMemberViewsLocked, #3291): the last projected roster per
+	// guild, validated against the stored rows and live levels on
+	// every read and republished only when either moved. guildViewMu
+	// guards the map alone - reads hold mu in read mode, which admits
+	// concurrent readers - and a published view is never mutated,
+	// only replaced.
+	guildViewMu sync.Mutex
+	guildViews  map[guildKey][]domain.GuildMemberRecord
 
 	// camps / campMembers are the training-camp plane (the
 	// training_camps and training_camp_members tables): the guild

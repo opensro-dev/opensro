@@ -86,7 +86,7 @@ import import_vsro_alexandria as tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import native_text_row  # noqa: E402
 from arabia_gates import prepare_gates  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
 	copy_resource_closure,
 	later_object_texts,
@@ -94,6 +94,7 @@ from skytemple_import import (  # noqa: E402
 	o2_object_ids,
 	open_archive,
 	patch_o2_objects,
+	remove_owned as shared_remove_owned,
 	source_root,
 	verify_archives,
 )
@@ -388,78 +389,13 @@ def format_coord(value):
 # ================
 # remove_owned
 #
-# The off path: everything the marker owns leaves - the shards, the
-# population, the NPC standings and talk rows, the copied files and
-# the owned name, characterinfo, animation and gate rows. The variant
-# build rewrites the gate tables, the catalogues and mapinfo from the
-# native tables on every run, so a standalone off run strips the gate
-# rows itself and a build-run off finds none.
+# The off path is the Sky Temple family's one implementation
+# (skytemple_import.remove_owned) over Arabia's shard names and
+# region prefix; the speech, chat and standing sets this import's
+# marker records ride the same reap.
 # ================
 def remove_owned(output, prior):
-	text_root = output / TEXT_ROOT
-	if prior:
-		symbols = set(prior.get("nameSymbols", [])) | set(prior.get("gateTextSymbols", []))
-		if symbols:
-			text_path = text_root / "textdataname.txt"
-			write_atomically(text_path, monsters.encode_rows(
-				monsters.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), symbols)))
-		speech_symbols = set(prior.get("speechSymbols", []))
-		if speech_symbols:
-			quest_path = text_root / "textquest.txt"
-			if quest_path.exists():
-				write_atomically(quest_path, monsters.encode_rows(
-					[row for row in tables.table_rows(quest_path.read_bytes())
-						if len(row) <= 1 or row[1] not in speech_symbols]))
-		effect_path = text_root / "skilleffect.txt"
-		effect_text = effects.remove_animation_bases(
-			tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-		write_atomically(effect_path, b"\xff\xfe" + monsters.drop_characterinfo_rows(
-			effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
-		gate_codes = set(prior.get("gateCodes", []))
-		data_path = text_root / "teleportdata.txt"
-		data_rows = tables.table_rows(data_path.read_bytes()) if gate_codes else []
-		removed_ids = {row[1] for row in data_rows if len(row) > 2 and row[2] in gate_codes}
-		if removed_ids:
-			write_atomically(data_path, monsters.encode_rows(
-				[row for row in data_rows if len(row) <= 2 or row[2] not in gate_codes]))
-			building_path = text_root / "teleportbuilding.txt"
-			write_atomically(building_path, monsters.encode_rows(
-				[row for row in tables.table_rows(building_path.read_bytes())
-					if len(row) <= 2 or row[2] not in set(prior.get("gateBuildingCodes", []))]))
-			link_path = text_root / "teleportlink.txt"
-			write_atomically(link_path, monsters.encode_rows(
-				[row for row in tables.table_rows(link_path.read_bytes())
-					if len(row) <= 2 or (row[1] not in removed_ids and row[2] not in removed_ids)]))
-		chat_codes = set(prior.get("chatCodes", prior.get("npcCodes", [])))
-		if chat_codes:
-			chat_path = text_root / "npcchat.txt"
-			if chat_path.exists():
-				write_atomically(chat_path, monsters.encode_rows(
-					[row for row in tables.table_rows(chat_path.read_bytes())
-						if len(row) <= 1 or row[1] not in chat_codes]))
-		npc_ids = {str(identity) for identity in prior.get("npcIds", [])}
-		if npc_ids:
-			npcpos_path = text_root / "npcpos.txt"
-			if npcpos_path.exists():
-				write_atomically(npcpos_path, monsters.encode_rows(
-					[row for row in tables.table_rows(npcpos_path.read_bytes())
-						if len(row) < 1 or row[0] not in npc_ids]))
-		region_ids = {str(region) for region in prior.get("regions", [])}
-		if region_ids:
-			region_path = text_root / "regioncode.txt"
-			write_atomically(region_path, monsters.encode_rows(
-				[row for row in tables.table_rows(region_path.read_bytes())
-					if len(row) <= 2 or row[1] not in region_ids or not row[2].startswith(REGION_PREFIX)]))
-	for name in (CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE):
-		(text_root / name).unlink(missing_ok=True)
-	manifest = text_root / "skilldata.txt"
-	if manifest.exists():
-		write_atomically(manifest, monsters.encode_rows(
-			[r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
-	for relative in prior.get("files", []):
-		safe_target(output, relative).unlink(missing_ok=True)
-	(output / MARKER).unlink(missing_ok=True)
-	return {"enabled": False}
+	return shared_remove_owned(output, prior, CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE, MARKER, REGION_PREFIX)
 
 
 # ================

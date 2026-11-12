@@ -19,6 +19,7 @@ only when drawn and only to their whole tick.
 
 import type { CharacterActor, CharacterModel, CharacterPrimitive } from "@/engine/contracts/character";
 import type { ParticleGraphState, ParticleLink } from "@/engine/foundation/animation/particle-graph";
+import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { advanceParticle, type ParticleInstance } from "@/engine/foundation/animation/particle-program";
 import {
 	PARTICLE_TICKS_PER_SECOND,
@@ -299,7 +300,10 @@ export function writeParticleRow(
 	actors[at + ACTOR_OPACITY] = row.opacity;
 	if ( stream.graphPalette ) {
 		if ( !graph ) throw Error( "Graph particle stream without its graph" );
-		actors[at + ACTOR_FRACTION] = actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame;
+		// Graph records carry their births on the graph's own clock.
+		const graphTime = particleGraphTime( graph, actor.time );
+		actors[at + ACTOR_TIME] = graphTime;
+		actors[at + ACTOR_FRACTION] = graphTime * PARTICLE_TICKS_PER_SECOND - graph.frame;
 		actors.set( stream.graphPalette, at + ACTOR_PALETTE );
 		if ( history.link ) actors.set( history.link.follow, at + ACTOR_FOLLOW );
 		writeGraphRow( stream, index, history, row.origin );

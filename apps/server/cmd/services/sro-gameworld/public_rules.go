@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/social/contributor"
 	"opensro.online/server/internal/game/sookarena"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -52,6 +53,7 @@ var unlistedSettings = map[string]string{
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
+	contributor.EnvContributorTitles:    "a title over Discord contributors' names, not a rule players meet",
 	companion.EnvPetInventoryPages:      "the older shared value the grab pet and transport bag rules fall back to",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
@@ -183,6 +185,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Arabia.",
 				Now:    "The Arabia continent opens east of Jangan: Baghdad town, its three fields and Petra, and the Baghdad dungeon, hunting grounds of monsters at levels 120 to 130.",
 				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
+			{Flag: monster.EnvConstantinople, On: monster.ConstantinopleEnabled(),
+				Native: "Constantinople has no fortress; Jangan's is the only fortress war.",
+				Now:    "The Constantinople fortress stands west of the city with its gates, towers and fort stone, and joins the fortress war beside Jangan's.",
+				Why:    "The second fortress of the later client, for guilds that outgrow one war."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
