@@ -51,6 +51,10 @@ export interface ExperimentalOptions {
 	readonly safeLoadingScreen: boolean;
 	// Port-only, not native: beginner atlas on M, explicitly enabled.
 	readonly monsterGuide: boolean;
+	// Port-only, not native (#3258): the later client's monster level
+	// checkbox at the foot of the Entire map; off, the map tools' own
+	// strip toggle (issue #3167) is the level filter's only switch.
+	readonly worldMapLevelCheckbox: boolean;
 	readonly developerDiagnostics: boolean;
 	// Video: renderer stages that deviate from the 2005 D3D9 look.
 	readonly postProcessing: boolean;
@@ -484,6 +488,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		eventChatTab: record.eventChatTab !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
+		worldMapLevelCheckbox: enabled( "worldMapLevelCheckbox" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),

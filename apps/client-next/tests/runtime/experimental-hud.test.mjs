@@ -197,8 +197,8 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	// 64 since the mall categories row (#3257) joined Items and mall.
-	assert.equal( keys.length, 64 );
+	// 65 since the Entire-map level checkbox (#3258) joined World map (M).
+	assert.equal( keys.length, 65 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(
@@ -245,10 +245,10 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 });
 
 test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide, so its emptied World map (M)
-	// section goes and the next section leads the tab; no HD set.
+	// No world session: no hunting guide, so its row goes; the level
+	// checkbox (not the guide's) keeps World map (M) standing; no HD set.
 	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "questTrackerMarkers" ] );
+	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "worldMapLevelCheckbox" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 

@@ -441,6 +441,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-monster-guide",
 						label: "Monster hunting guide",
 						description: "Monster portraits and approximate level ranges on M."
+					},
+					{
+						key: "worldMapLevelCheckbox",
+						id: "experimental-world-map-level-checkbox",
+						label: "Monster level checkbox",
+						description: "The level-filter checkbox at the foot of the Entire map."
 					}
 				]
 			},
