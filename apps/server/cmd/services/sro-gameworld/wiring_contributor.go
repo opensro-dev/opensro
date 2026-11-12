@@ -35,13 +35,18 @@ func wireContributorTitles(game *gameplayPlane) error {
 	if !contributor.Enabled(os.Getenv) {
 		return nil
 	}
-	registry, err := contributor.Open(store.DirForShardFromEnv(game.divisionID), store.WriteFileAtomic)
+	dir := store.DirForShardFromEnv(game.divisionID)
+	members, err := contributor.MembersPath(os.Getenv, dir)
+	if err != nil {
+		return err
+	}
+	registry, err := contributor.Open(dir, members, store.WriteFileAtomic)
 	if err != nil {
 		return err
 	}
 	game.contributors = registry
 	game.chat.Contributor = registry.Command
-	log.Infof("contributor titles: ON (%s)", contributor.EnvContributorTitles)
+	log.Infof("contributor titles: ON (%s), members from %s", contributor.EnvContributorTitles, members)
 	return nil
 }
 

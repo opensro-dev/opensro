@@ -51,7 +51,7 @@ func TestContributorHookInstallsOnlyWhenEnabled(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, contributor.MembersFileName), []byte(`{"accounts":["`+character.AccountID+`"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	registry, err := contributor.Open(dir, func(path string, body []byte) error { return os.WriteFile(path, body, 0o600) })
+	registry, err := contributor.Open(dir, filepath.Join(dir, contributor.MembersFileName), func(path string, body []byte) error { return os.WriteFile(path, body, 0o600) })
 	if err != nil {
 		t.Fatal(err)
 	}

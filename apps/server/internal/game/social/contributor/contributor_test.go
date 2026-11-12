@@ -76,6 +76,42 @@ func decodeRoster(t *testing.T, p []byte) []string {
 	return out
 }
 
+func TestMembersPathIsTheSyncFileOrTheShardDefault(t *testing.T) {
+	env := map[string]string{}
+	getenv := func(name string) string { return env[name] }
+	dir := t.TempDir()
+	if got, err := MembersPath(getenv, dir); err != nil || got != filepath.Join(dir, MembersFileName) {
+		t.Fatalf("default = %q, %v", got, err)
+	}
+	abs := filepath.Join(t.TempDir(), "elsewhere.json")
+	env[EnvContributorsFile] = " " + abs + " "
+	if got, err := MembersPath(getenv, dir); err != nil || got != abs {
+		t.Fatalf("absolute = %q, %v", got, err)
+	}
+	env[EnvContributorsFile] = "relative/contributors.json"
+	if _, err := MembersPath(getenv, dir); err == nil {
+		t.Fatal("a relative path was accepted")
+	}
+}
+
+func TestMembersFileOutsideTheShardDirectory(t *testing.T) {
+	shard, elsewhere := t.TempDir(), t.TempDir()
+	writeMembers(t, elsewhere, `{"accounts":["a1"]}`, time.Unix(1_700_000_000, 0))
+	r, err := Open(shard, filepath.Join(elsewhere, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Shown("a1") {
+		t.Fatal("members file outside the shard directory not read")
+	}
+	if answer, _ := r.Command("a1", "/contributor off"); answer != answerHidden {
+		t.Fatalf("off = %q", answer)
+	}
+	if _, err := os.Stat(filepath.Join(shard, HiddenFileName)); err != nil {
+		t.Fatalf("opt-out not kept in the shard directory: %v", err)
+	}
+}
+
 func TestEnabledReadsTheShardFlag(t *testing.T) {
 	for value, want := range map[string]bool{"": false, "off": false, "on": true, " ON ": true, "1": true, "true": true, "yes": false} {
 		if got := Enabled(func(string) string { return value }); got != want {
@@ -103,7 +139,7 @@ func TestEncodeRosterIsSortedDistinctAndBounded(t *testing.T) {
 
 func TestMembersFileDecidesWhoIsShown(t *testing.T) {
 	dir, at := t.TempDir(), time.Unix(1_700_000_000, 0)
-	r, err := Open(dir, writeFile)
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +170,7 @@ func TestMembersFileDecidesWhoIsShown(t *testing.T) {
 func TestCommandHidesAndShowsAndPersists(t *testing.T) {
 	dir := t.TempDir()
 	writeMembers(t, dir, `{"accounts":["a1"]}`, time.Unix(1_700_000_000, 0))
-	r, err := Open(dir, writeFile)
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +190,7 @@ func TestCommandHidesAndShowsAndPersists(t *testing.T) {
 		t.Fatalf("off = %q, shown %v", answer, r.Shown("a1"))
 	}
 	// The choice survives a restart.
-	again, err := Open(dir, writeFile)
+	again, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +200,7 @@ func TestCommandHidesAndShowsAndPersists(t *testing.T) {
 	if answer, _ := again.Command("a1", "/contributor on"); answer != answerShown || !again.Shown("a1") {
 		t.Fatalf("on = %q", answer)
 	}
-	if third, _ := Open(dir, writeFile); !third.Shown("a1") {
+	if third, _ := Open(dir, filepath.Join(dir, MembersFileName), writeFile); !third.Shown("a1") {
 		t.Fatal("opt-in lost across a reopen")
 	}
 }
@@ -172,7 +208,7 @@ func TestCommandHidesAndShowsAndPersists(t *testing.T) {
 func TestCommandSaveFailureKeepsTheOldChoice(t *testing.T) {
 	dir := t.TempDir()
 	writeMembers(t, dir, `{"accounts":["a1"]}`, time.Unix(1_700_000_000, 0))
-	r, err := Open(dir, func(string, []byte) error { return errors.New("disk full") })
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), func(string, []byte) error { return errors.New("disk full") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +222,7 @@ func TestCorruptOptOutFileRefusesTheBoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, HiddenFileName), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(dir, writeFile); err == nil {
+	if _, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile); err == nil {
 		t.Fatal("corrupt opt-out file opened")
 	}
 }
@@ -194,7 +230,7 @@ func TestCorruptOptOutFileRefusesTheBoot(t *testing.T) {
 func TestPushSendsChangesToAllAndTheRosterToNewArrivals(t *testing.T) {
 	dir := t.TempDir()
 	writeMembers(t, dir, `{"accounts":["a1"]}`, time.Unix(1_700_000_000, 0))
-	r, err := Open(dir, writeFile)
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +280,7 @@ func TestPushSendsChangesToAllAndTheRosterToNewArrivals(t *testing.T) {
 
 func TestPushRereadsTheMembersFileOnItsPace(t *testing.T) {
 	dir := t.TempDir()
-	r, err := Open(dir, writeFile)
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,9 +14,13 @@ Two files in the shard's authority directory, one owner each:
 
   - contributors.json, {"accounts":["<account id>", ...]}, written by
     the operations sync (Discord role members mapped to their linked
-    game accounts). This package only reads it, re-reading when its
-    size or modification time changes. A missing file is an empty
-    set; a corrupt one keeps the last good set and logs.
+    game accounts). In production it lives in the sync's own directory
+    and SRO_CONTRIBUTORS_FILE names it: the sync runs as the bot's
+    user and never writes into the GameWorld's authority directory.
+    Unset, it is the shard directory's contributors.json (a local
+    world). This package only reads it, re-reading when its size or
+    modification time changes. A missing file is an empty set; a
+    corrupt one keeps the last good set and logs.
   - contributor-titles.json, {"hidden":["<account id>", ...]}, owned
     here: a contributor's own "/contributor off" choice. It is a server
     setting, so every viewer sees the same state.
@@ -45,6 +49,9 @@ import (
 const (
 	// EnvContributorTitles turns the title on ("on", "1", "true").
 	EnvContributorTitles = "SRO_CONTRIBUTOR_TITLES"
+	// EnvContributorsFile names the operations sync's file by absolute
+	// path; unset means MembersFileName in the shard directory.
+	EnvContributorsFile = "SRO_CONTRIBUTORS_FILE"
 	// MembersFileName is the operations sync's file (read only here).
 	MembersFileName = "contributors.json"
 	// HiddenFileName is this package's opt-out file.
@@ -92,6 +99,26 @@ func Enabled(getenv func(string) string) bool {
 	return false
 }
 
+/*
+================
+MembersPath
+
+Where the sync's file is read: SRO_CONTRIBUTORS_FILE when set (it must
+be absolute, so a relative value cannot quietly resolve against the
+process's working directory), else the shard directory's file.
+================
+*/
+func MembersPath(getenv func(string) string, dir string) (string, error) {
+	path := strings.TrimSpace(getenv(EnvContributorsFile))
+	if path == "" {
+		return filepath.Join(dir, MembersFileName), nil
+	}
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("contributor titles: %s must be an absolute path, got %q", EnvContributorsFile, path)
+	}
+	return path, nil
+}
+
 // fileStamp is what decides that the sync's file changed.
 type fileStamp struct {
 	size int64
@@ -127,14 +154,15 @@ type Registry struct {
 ================
 Open
 
-Reads both files from dir. A corrupt opt-out file stops the boot, the
-mute book's posture: silently showing titles people hid is worse than a
-loud refusal. The sync's file never stops it (Reload's rules).
+Reads the sync's file at membersPath (MembersPath) and the opt-out
+file from dir. A corrupt opt-out file stops the boot, the mute book's
+posture: silently showing titles people hid is worse than a loud
+refusal. The sync's file never stops it (reloadLocked's rules).
 ================
 */
-func Open(dir string, write func(string, []byte) error) (*Registry, error) {
+func Open(dir, membersPath string, write func(string, []byte) error) (*Registry, error) {
 	r := &Registry{
-		membersPath: filepath.Join(dir, MembersFileName),
+		membersPath: membersPath,
 		hiddenPath:  filepath.Join(dir, HiddenFileName),
 		write:       write,
 		members:     map[string]bool{},
