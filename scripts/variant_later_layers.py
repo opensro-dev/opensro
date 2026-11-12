@@ -18,6 +18,7 @@ catalogue merges come first, and every later layer merges after them.
 ===========================================================================
 """
 import arabia_import
+import constantinople_import
 import gears_stone_import
 import god_import
 import hunting2_import
@@ -40,6 +41,9 @@ LATER_LAYERS = (
 	("god", god_import.add_god),
 	("muhan", muhan_import.add_muhan),
 	("hunting2", hunting2_import.add_hunting2),
+	# The Constantinople fortress: its own switch and source (the v1.696
+	# client), on the merge machinery the Sky Temple shares.
+	("constantinople", constantinople_import.add_constantinople),
 	# The gears magic stones ride the mall's own switch
 	# (SRO_MALL_CATEGORIES): on stages their item shard beside the mall
 	# layout that lists them.
