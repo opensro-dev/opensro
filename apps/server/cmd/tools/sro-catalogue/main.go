@@ -328,6 +328,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
 	}
+	template, err = monster.AppendExportWorld(template, dir, monster.ExportWorldEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue export world population: %w", err)
+	}
 	return template, nil
 }
 

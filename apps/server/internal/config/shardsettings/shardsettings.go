@@ -172,6 +172,11 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the export-world areas from the pinned
+	// content archive (#3329). Build and server read the same switch;
+	// off leaves every imported row out of the build and the areas'
+	// admission index and population unread.
+	{Env: "SRO_EXPORT_WORLD", NomadVar: "export_world", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.

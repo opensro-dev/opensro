@@ -278,6 +278,13 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		// Port-only (#3329): the export-world areas' population joins
+		// only while its switch is on, gated by the packed areas'
+		// admission index; no file yet is the native population.
+		template, err = monster.AppendExportWorld(template, textdataDir, monster.ExportWorldEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if rate, _ := monster.PharaohGearRateFromEnv(); rate > 1 && monster.PharaohTombEnabled() {
 			log.Infof("bootstrap: Pharaoh Tomb elites and uniques roll equipment x%d (%s, port-only)", rate, monster.EnvPharaohGearRate)
 		}

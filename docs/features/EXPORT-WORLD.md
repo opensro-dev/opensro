@@ -37,14 +37,44 @@ sector terrain (`<sectorY>/<sectorX>.t/.m/.o/.o2`), navmesh
 - **Deterministic.** Sorted entries at a fixed timestamp: the same
   export and areas file re-pack to the same sha256.
 
-## What is left (one PR per area)
+## The importer (this slice, #3329)
 
-The `SRO_EXPORT_WORLD` importer that reads the archive into the
-variant build beside the other optional layers, authors each area's
-areas-file entry, and carries its regions, spawns, NPCs and teleports;
-the server admits the area's regions and kinds only while the flag is
-on. The inventory (`research/investigations/later-sources-3247/v2355-inventory.md`)
+`scripts/export_world_import.py` is the optional layer beside the
+others (`variant_later_layers.py`, last of the world layers). While
+`SRO_EXPORT_WORLD` is on and `SRO_CONTENT_ZIP` names an archive that
+verifies against the pin, every packed area merges into the variant:
+sector files into `Map_extracted`, navmesh into
+`Data_extracted/navmesh`, map tiles into `Media_extracted`, the
+sectors' availability bits set, and the area's region rows (from the
+archive's `tables/regioninfo.txt`) join the tree's `regioninfo.txt`
+under a section of its own. The marker (`.opensro-export-world.json`)
+enrols every file and row, so a switch off - or the archive gone -
+reaps the tree back byte for byte. Off, unnamed or unpinned, nothing
+is written: the world is unchanged, which is every checkout's state
+until a real pack is pinned.
+
+The build also writes the server's admission index,
+`export-world.json` beside the character tables: each area's region
+ids and the character kinds it admits (empty until its own import
+names them). The server reads it only while the flag is on
+(`internal/game/world/exportworld`), and an area's population - a
+Version-2 nest file, `export-world-field.txt` - joins only when
+every nest stands in an admitted region and names an admitted kind
+(`monster.AppendExportWorld`); anything else refuses startup. With
+no population file yet, the flag on boots the native population.
+
+Character kinds convert into the identity band **190000**, reserved
+here: no other layer may take it. The archive's character shard and
+`tables/dungeoninfo.txt` ride along unread - conversions, spawns,
+NPCs, teleports and dungeon rows are each area's own import PR
+(authors its areas-file entry, its population rows and its admitted
+kinds against this road). The inventory
+(`research/investigations/later-sources-3247/v2355-inventory.md`)
 prices every area: no area is asset-blocked.
+
+Ops companion owed: the shard job gains an `export_world` variable
+before a release build can carry the switch (the muhan/hunting2
+order); until then the flag is set by hand.
 
 ## Claims
 
