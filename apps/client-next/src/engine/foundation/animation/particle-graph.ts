@@ -44,6 +44,7 @@ import {
 	createStepCache
 } from "@/engine/foundation/animation/particle-presentation";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { graphStartTick } from "@/engine/foundation/animation/particle-graph-clock";
 
 /*
 ================
@@ -149,6 +150,9 @@ ParticleGraphState
 */
 export interface ParticleGraphState {
 	serial: number;
+	// frame, births and clockBirth count ticks of the graph's own clock, whose
+	// tick 0 is the actor's tick startTick (particle-graph-clock.ts).
+	startTick: number;
 	frame: number;
 	index: number;
 	readonly births: number[][];
@@ -542,6 +546,7 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 	Object.assign( root, { parent: root } );
 	return {
 		serial: 0,
+		startTick: 0,
 		frame: -1,
 		index,
 		elements: graph.map( () => [] ),
@@ -614,6 +619,9 @@ function linkElement( element: ParticleElement, def: ParticleEmitter, scratch: P
 /*
 ================
 advanceParticleGraph
+
+time and stop are actor seconds. A fresh history fixes its clock's start
+on its first call (graphStartTick); every later call reads time against it.
 ================
 */
 export function advanceParticleGraph(
@@ -627,7 +635,12 @@ export function advanceParticleGraph(
 	shiftZ = 0,
 	keepRoots = false
 ): void {
-	const target = Math.min( Math.floor( time * TICKS_PER_SECOND + 1e-6 ), tickHorizon( graph ) );
+	const actorTick = Math.floor( time * TICKS_PER_SECOND + 1e-6 );
+	if ( history.frame < 0 && Number.isSafeInteger( actorTick ) ) {
+		history.startTick = graphStartTick( graph, actorTick, keepRoots );
+	}
+	const start = history.startTick;
+	const target = Math.min( actorTick - start, tickHorizon( graph ) );
 	if ( target < history.frame || !Number.isSafeInteger( target ) ) throw Error( "Invalid particle graph time" );
 	const scratch = history.scratch, elements = history.elements;
 	// Only a region crossing shifts the origin. Every other call walked every
@@ -685,7 +698,7 @@ export function advanceParticleGraph(
 				copy3( element.state.position, element.previousPosition );
 				snapshotParticleTick( element.state, element.matrix );
 				if (
-					(def.loop || keepRoots && def.parent < 0 && tick / TICKS_PER_SECOND < stop) &&
+					(def.loop || keepRoots && def.parent < 0 && (start + tick) / TICKS_PER_SECOND < stop) &&
 					tick - element.clockBirth >= def.frames
 				) element.clockBirth += Math.floor( (tick - element.clockBirth) / def.frames ) * def.frames;
 				element.age = tick - element.clockBirth;
@@ -715,7 +728,7 @@ export function advanceParticleGraph(
 		for ( let n = 0; n < graph.length; n++ ) {
 			const def = graph[n]!, rows = elements[n]!, births = history.births[n]!;
 			const indexedSiblings = scratch.siblingEmitters.has( def );
-			if ( def.emission && tick / TICKS_PER_SECOND < stop ) {
+			if ( def.emission && (start + tick) / TICKS_PER_SECOND < stop ) {
 				for ( const group of history.groups[n]!.values() ) {
 					if ( !group.parent.alive ) continue;
 					const emitted = particleEmission( def.emission, group.total, group.parent.age );
@@ -759,7 +772,7 @@ export function advanceParticleGraph(
 					elapsed = tick - birth,
 					existing = rows[b],
 					age = existing ? existing.age : def.loop && elapsed >= 0 ? elapsed % def.frames : elapsed;
-				if ( age < 0 || (!existing && birth / TICKS_PER_SECOND >= stop) ) continue;
+				if ( age < 0 || (!existing && (start + birth) / TICKS_PER_SECOND >= stop) ) continue;
 				const parent = def.emission ?
 					history.parents[n]![b] :
 					def.parent < 0 ?
