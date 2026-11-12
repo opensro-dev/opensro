@@ -142,6 +142,11 @@ var Settings = []Setting{
 	// jupiter-temple.txt only on that pairing, and the consumer refuses
 	// the same pairing at load). "off" is native.
 	{Env: "SRO_JUPITER_TEMPLE", NomadVar: "jupiter_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: Muhan, the Battlefield of Infinity - the
+	// eight wave arenas and their twenty-wave runs (#3273). Build and
+	// server read the same switch; off leaves every imported row out
+	// of the build and the wave file unread.
+	{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off", Catalogue: true},
 	// Port-only, not native: the second hunting grounds population
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.

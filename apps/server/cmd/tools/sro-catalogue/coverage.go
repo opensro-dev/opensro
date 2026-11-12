@@ -30,6 +30,7 @@ var catalogueReaders = map[string]string{
 	"SRO_CAP110_TEMPLE":                      "shardPopulation reads it (monster.TempleEnabled) to append the temple population",
 	"SRO_JUPITER":                            "shardPopulation reads it (monster.JupiterEnabled) to append the Jupiter field population",
 	"SRO_JUPITER_TEMPLE":                     "shardPopulation reads it (monster.JupiterTempleEnabled) to append the Jupiter temple population",
+	"SRO_MUHAN":                              "shardPopulation reads it (monster.MuhanEnabled) to load the Muhan wave file beside the kinds its shard adds",
 	"SRO_HUNTING2":                           "shardPopulation reads it (monster.Hunting2Enabled) to append the second hunting grounds population",
 	"SRO_SKYTEMPLE":                          "shardPopulation reads it (monster.SkytempleEnabled) to append the skytemple population",
 	"SRO_QINSHI_TOMB":                        "shardPopulation reads it (monster.QinShiTombFromEnv) to append the shipped tomb population",
