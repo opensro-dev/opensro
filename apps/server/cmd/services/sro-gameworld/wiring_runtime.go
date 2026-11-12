@@ -135,6 +135,13 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return nil
 		}})
 	}
+	// Port-only (#3358): the shown Contributor roster; the registry
+	// paces the pass and sends only what changed or who is new.
+	if game.contributors != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "contributor-titles", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.contributorRosterTick(ticker, nowMs)
+		}})
+	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	// Port-only (killstats.go): online time accrues to the entered
 	// characters only - the session views at each accrual instant,

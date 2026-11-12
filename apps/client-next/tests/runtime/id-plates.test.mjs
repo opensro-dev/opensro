@@ -102,18 +102,18 @@ test("/id clears the name board and the kind-4 rows; the stall title stays (85F5
 	try {
 		const standing = "Lacrimosa".length + "[Keepers]".length;
 		assert.equal( anchoredGlyphs( f, GUILD_GID ).length, standing, "the byte ships standing: name and guild row" );
-		assert.equal( anchoredGlyphs( f, STALL_GID ).length, "Merchant".length + "Bargains".length );
+		assert.equal( anchoredGlyphs( f, STALL_GID ).length, "Merchant".length + "[Bargains]".length );
 		type( "/id" );
 		assert.equal( anchoredGlyphs( f, GUILD_GID ).length, 0, "neither the name board nor the guild row draws" );
 		assert.equal(
 			anchoredGlyphs( f, STALL_GID ).length,
-			"Bargains".length,
-			"the +0x464 board draws past the branch, without its name"
+			"[Bargains]".length,
+			"the +0x464 board draws past the branch, without its name (869750 brackets the title)"
 		);
 		assert.deepEqual( shown, [ false ], "the character owner receives the cleared byte" );
 		type( "/id" );
 		assert.equal( anchoredGlyphs( f, GUILD_GID ).length, standing );
-		assert.equal( anchoredGlyphs( f, STALL_GID ).length, "Merchant".length + "Bargains".length );
+		assert.equal( anchoredGlyphs( f, STALL_GID ).length, "Merchant".length + "[Bargains]".length );
 		assert.deepEqual( shown, [ false, true ] );
 	} finally {
 		f.dispose();
@@ -157,7 +157,7 @@ test("without the kind-4 pass no row lifts the stall title or speech", () => {
 	assert.equal( cleared.status, null );
 	assert.equal( cleared.fortressMark, null );
 	assert.equal( cleared.fortressCrest, null );
-	assert.equal( cleared.stallText, "Bargains" );
+	assert.equal( cleared.stallText, "[Bargains]" );
 	assert.equal( cleared.stallY, -20 );
 	assert.equal( cleared.speechY, -20 );
 	const plain = withoutBoardPass(
