@@ -43,21 +43,26 @@ transform masks' monster forms (MOB_MUHAN_CHANGE_*) stay out of the
 shard: the wave director must never resolve one as a wave kind, and
 admitting them waits for the change interaction itself.
 
+The region merge and the reap are later_world_import's
+(merge_world / reap_world, #3326); this module is the Muhan spec
+and the wave shapes that are truly its own: the banded worlds, the
+level admission, the wave and NPC projections.
+
 ===========================================================================
 """
-import hashlib
 import json
 import mmap
 import os
 from pathlib import Path
 
 import alexandria_npcs as characters
-from alexandria_map_tables import append_rows, native_text_row, table_text
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import jupiter_import as jupiter
+import later_world_import
 import sro_pk2
-from jupiter_import import later_object_text, later_text_row, require_v1696_pin
+from later_world_import import later_object_text, later_text_row
 from prepare_client_resources import write_atomically
 
 FLAG = "SRO_MUHAN"
@@ -75,6 +80,7 @@ NPCS_FILE = "muhan-npcs.txt"
 NPC_PREFIX = "NPC_MUHAN_"
 POPULATION_NAME = "muhan-population.json"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
+PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 
 # The later server's shard backup the population export was extracted
 # from (research/investigations/later-sources-3247, extract_muhan_population.py).
@@ -123,21 +129,14 @@ def world_band(code):
 # ================
 # read_population
 #
-# The population export: its recorded backup hash must be the pinned
-# one, the eight wave worlds must all be present with their regions,
-# and every wave world must carry its full sequence of waves.
+# The population export: the shared read (its recorded backup hash
+# must be the pinned one, the eight wave worlds all present), then
+# Muhan's own contract - every wave world banded and region-bound,
+# and carrying its full sequence of waves.
 # ================
 def read_population(source_root):
+	export = later_world_import.read_population(SPEC, source_root)
 	path = Path(source_root) / POPULATION_NAME
-	try:
-		export = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{path} is unreadable: {error}")
-	if str(export.get("sourceSha256", "")).lower() != POPULATION_SOURCE_SHA256:
-		raise ValueError(
-			f"population export {path} records backup {export.get('sourceSha256') or 'none'}, "
-			f"not the pinned shard backup ({POPULATION_SOURCE_SHA256})"
-		)
 	worlds = export.get("worlds") or {}
 	for world in WAVE_WORLDS:
 		row = worlds.get(str(world))
@@ -267,8 +266,51 @@ def family_admits(code, row, levels):
 	return int(row[15]) == GRADE and int(row[57]) in levels
 
 
+SPEC = later_world_import.WorldImport(
+	label="muhan",
+	flag=FLAG,
+	root_env=ROOT_ENV,
+	character_shard=CHARACTER_SHARD,
+	skill_shard=SKILL_SHARD,
+	marker=MARKER,
+	pin_file=PIN_FILE,
+	pin_sentence="Muhan is built from one pinned v1.696 client; its archives are never committed.",
+	region_label="Muhan",
+	population_files=(("waves", WAVES_FILE), ("npcs", NPCS_FILE)),
+	source_env=SOURCE_ENV,
+	population_name=POPULATION_NAME,
+	source_sha256=POPULATION_SOURCE_SHA256,
+	worlds_required=WAVE_WORLDS,
+)
+
+
 #============================================================================
-# The monster import
+# The engine, under this import's names
+#============================================================================
+
+
+# ================
+# archive_pins
+#
+# The family's one pin reader is jupiter_import's (one pin file, one
+# process-wide verified set); this name exists so the pin check
+# below reads through it.
+# ================
+def archive_pins():
+	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
+	return jupiter.archive_pins()
+
+
+# ================
+# require_v1696_pin
+# ================
+def require_v1696_pin(root, names):
+	"""The v1.696 archives against their pins, before any of them is read."""
+	return later_world_import.require_pin(SPEC, root, names, archive_pins)
+
+
+#============================================================================
+# The monster import (Muhan's own: waves name kinds by level)
 #============================================================================
 
 
@@ -283,18 +325,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 	prior = cap110.read_json(marker) if marker.exists() else {}
 	text_root = output / TEXT_ROOT
 	if not flag_enabled():
-		if prior:
-			effect_path = text_root / "skilleffect.txt"
-			effect_text = effects.remove_animation_bases(tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-			write_atomically(effect_path, b"\xff\xfe" + cap110.drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
-			text_path = text_root / "textdataname.txt"
-			write_atomically(text_path, cap110.encode_rows(cap110.drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
-		for name in (CHARACTER_SHARD, SKILL_SHARD, WAVES_FILE, NPCS_FILE):
-			(text_root / name).unlink(missing_ok=True)
-		manifest = text_root / "skilldata.txt"
-		if manifest.exists():
-			write_atomically(manifest, cap110.encode_rows([r for r in tables.table_rows(manifest.read_bytes()) if r[0].lower() != SKILL_SHARD]))
-		marker.unlink(missing_ok=True)
+		later_world_import.reap_monsters(SPEC, output, prior)
 		return {"enabled": False}
 	if not v1696_root:
 		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
@@ -403,10 +434,8 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		return summary
 
 #============================================================================
-# The variant-side merge (port-only, not native). The tile and object
-# catalog machinery it remaps onto lives in build_alexandria_variant
-# (the Alexandria merge owns it) and is imported lazily; the name-table
-# helpers are alexandria_map_tables'. The population is add_monsters.
+# The variant-side merge is later_world_import's (merge_world, on the
+# Alexandria merge's catalog machinery); the population is add_monsters.
 #============================================================================
 
 
@@ -420,32 +449,8 @@ def merge_muhan_region_tables(native, later, region_ids):
 	native placeholder of its id, and each region's zone names join by
 	id and by code prefix, as the Alexandria map merge does.
 	"""
-	id_strings = {str(region_id) for region_id in region_ids}
-	native_regions = {row[1]: row for row in tables.table_rows(native["regioncode.txt"]) if len(row) >= 4}
-	code_rows = [
-		row for row in tables.table_rows(later["regioncode.txt"])
-		if len(row) >= 4 and row[1] in id_strings and row[2] != "xxx"
-		and native_regions.get(row[1], [0, 0, "xxx"])[2] == "xxx"
-	]
-	replaced = {row[1] for row in code_rows}
-	kept = [
-		row for row in tables.table_rows(native["regioncode.txt"]) if len(row) < 2 or row[1] not in replaced
-	]
-	regioncode = (
-		append_rows(b"\xff\xfe" + table_text(kept).encode("utf-16-le"), code_rows)
-		if replaced else append_rows(native["regioncode.txt"], code_rows)
-	)
-	prefixes = tuple(sorted({row[2] + "_" for row in code_rows}))
-	native_zone_keys = {row[1] for row in tables.table_rows(native["textzonename.txt"]) if len(row) > 1}
-	zone_rows = [
-		native_text_row(row) for row in tables.table_rows(later["textzonename.txt"])
-		if len(row) >= 10 and (row[1] in id_strings or row[1].startswith(prefixes))
-		and row[1] not in native_zone_keys
-	]
-	return {
-		"regioncode.txt": regioncode,
-		"textzonename.txt": append_rows(native["textzonename.txt"], zone_rows)
-	}, {"regionCodes": len(code_rows), "zoneNames": len(zone_rows)}
+	merged, summary, _prefixes = later_world_import.merge_region_tables_record(native, later, region_ids)
+	return merged, summary
 
 
 # ================
@@ -457,13 +462,14 @@ def add_muhan(native, out, v1696_root=None, source_root=None):
 	client into the variant: the two wave regions' terrain remapped
 	onto the merged tile catalog, their navmesh and availability
 	bits, every Data file the native tree lacks, the regions' minimap
-	tiles and names, and the monster population. Port-only, not
-	native; off, only the monster pass's owned outputs are reaped and
-	no archive is read.
+	tiles and names, and the monster population (later_world_import's
+	merge_world; the wave regions are outdoor halls, so its dungeon-
+	interior split is a guard here). Port-only, not native; off,
+	exactly what the marker records is reaped - monster and region
+	merge alike - and no archive is read.
 	"""
-	import build_alexandria_variant as variant
 	if not flag_enabled():
-		add_monsters(None, native, out)
+		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
 	v1696_root = Path(v1696_root or os.environ.get(ROOT_ENV, ""))
 	if not str(v1696_root):
@@ -474,126 +480,8 @@ def add_muhan(native, out, v1696_root=None, source_root=None):
 	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
 	export = read_population(source_root)
 	regions = population_regions(export)
-	# Named dungeon interiors (bit 15) have no sector terrain: their
-	# geometry is the DOF tree the Data pass copies. Only outdoor
-	# regions take sector files; interiors take their authored nav
-	# data. The wave regions are outdoor halls, so this is a guard.
-	local_regions = [region_id for region_id in regions if region_id & 0x8000]
-	sectors = [tables.region_xy(region_id) for region_id in regions if not region_id & 0x8000]
-	textdata = Path("Media_extracted") / tables.TEXTDATA
-
-	# Map: the regions' files, their terrain remapped onto the catalog
-	# the Alexandria merge left, and the ground textures they paint.
-	map_path, map_handle, map_data = tables.open_archive(v1696_root, "Map")
-	try:
-		map_index = tables.archive_index(map_data)
-		terrains, tile_ids, map_missing = {}, set(), []
-		for sector_x, sector_y in sectors:
-			for archive_path in tables.region_files(sector_x, sector_y):
-				entry = map_index.get(archive_path)
-				if entry is None:
-					map_missing.append(archive_path)
-					continue
-				stored = sro_pk2.payload(map_data, entry)
-				if archive_path.endswith(".m"):
-					tile_ids |= tables.terrain_tile_ids(stored)
-				terrains[archive_path] = stored
-		missing_terrain = [path for path in map_missing if path.endswith(".m")]
-		if missing_terrain:
-			raise SystemExit(f"Map.pk2 lacks terrain for Muhan regions: {missing_terrain}")
-		tiles, remap = variant.merge_tile_catalog(
-			(out / "Map_extracted" / "tile2d.ifo").read_bytes(),
-			sro_pk2.payload(map_data, map_index["tile2d.ifo"]), tile_ids
-		)
-		objects = variant.merge_object_catalog(
-			(out / "Map_extracted" / "object.ifo").read_bytes(),
-			sro_pk2.payload(map_data, map_index["object.ifo"])
-		)
-		variant.replace_file(out / "Map_extracted" / "tile2d.ifo", tiles)
-		variant.replace_file(out / "Map_extracted" / "object.ifo", objects)
-		for archive_path, stored in sorted(terrains.items()):
-			if archive_path.endswith(".m"):
-				stored = variant.remap_terrain(stored, remap)
-			variant.replace_file(out / "Map_extracted" / archive_path, stored)
-		later_tiles = tables.tile_catalog(sro_pk2.payload(map_data, map_index["tile2d.ifo"]))
-		textures = 0
-		for tile_id in sorted(tile_ids):
-			name = later_tiles[tile_id][1].replace("\\", "/")
-			entry = map_index.get("tile2d/" + name.lower())
-			target = out / "Map_extracted" / "tile2d" / name
-			if entry is None:
-				map_missing.append("tile2d/" + name)
-			elif not target.exists():
-				variant.replace_file(target, sro_pk2.payload(map_data, entry))
-				textures += 1
-	finally:
-		map_data.close()
-		map_handle.close()
-
-	# Data: every file the native tree lacks (the regions' objects and
-	# the monsters' models), the regions' navmesh, their availability.
-	data_added = variant.add_missing_files(
-		v1696_root, "Data", out / "Data_extracted", variant.lower_paths(out / "Data_extracted"), ("navmesh/",)
-	)
-	data_path, data_handle, data_data = tables.open_archive(v1696_root, "Data")
-	try:
-		data_index = tables.archive_index(data_data)
-		nav_added = 0
-		for sector_x, sector_y in sectors:
-			nav = tables.navmesh_path(sector_x, sector_y)
-			entry = data_index.get(nav)
-			if entry is None:
-				raise SystemExit(f"Data.pk2 has no {nav}; the Muhan regions are incomplete")
-			variant.replace_file(out / "Data_extracted" / nav, sro_pk2.payload(data_data, entry))
-			nav_added += 1
-		for region_id in local_regions:
-			nav = f"navmesh/ainavdata_{region_id}.dat"
-			entry = data_index.get(nav)
-			if entry is None:
-				raise SystemExit(f"Data.pk2 has no {nav}; the Muhan regions are incomplete")
-			variant.replace_file(out / "Data_extracted" / nav, sro_pk2.payload(data_data, entry))
-			nav_added += 1
-	finally:
-		data_data.close()
-		data_handle.close()
-	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
-	variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
-
-	# Media: the regions' minimap tiles and their code and zone rows.
-	media_path, media_handle, media_data = tables.open_archive(v1696_root, "Media")
-	try:
-		media_index = tables.archive_index(media_data)
-		native_media = variant.lower_paths(native / "Media_extracted")
-		minimaps = 0
-		for sector_x, sector_y in sectors:
-			name = f"minimap/{sector_x}x{sector_y}.ddj"
-			entry = media_index.get(name)
-			if entry is not None and name not in native_media:
-				variant.replace_file(out / "Media_extracted" / name, sro_pk2.payload(media_data, entry))
-				minimaps += 1
-
-		def media_table(name):
-			entry = media_index.get((tables.TEXTDATA + name).lower())
-			if entry is None:
-				raise SystemExit(f"Media.pk2 has no {tables.TEXTDATA}{name}")
-			return sro_pk2.payload(media_data, entry)
-
-		later_tables = {name: media_table(name) for name in ("regioncode.txt", "textzonename.txt")}
-	finally:
-		media_data.close()
-		media_handle.close()
-	current_tables = {name: (out / textdata / name).read_bytes() for name in later_tables}
-	merged_tables, table_summary = merge_muhan_region_tables(current_tables, later_tables, regions)
-	for name, content in merged_tables.items():
-		variant.replace_file(out / textdata / name, content)
-
-	monsters = add_monsters(v1696_root, native, out, source_root)
-	return {
-		"enabled": True, "regions": len(regions), "localRegions": len(local_regions), "mapFilesAdded": len(terrains),
-		"tileTexturesAdded": textures, "mapFilesMissing": sorted(map_missing),
-		"dataFilesAdded": data_added, "navmeshAdded": nav_added, "minimapTiles": minimaps,
-		**table_summary, "monsters": monsters
-	}
+	return later_world_import.merge_world(SPEC, native, out, v1696_root, regions,
+		lambda: add_monsters(v1696_root, native, out, source_root))
 
 
 # ================
