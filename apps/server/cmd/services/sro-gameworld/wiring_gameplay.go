@@ -274,7 +274,17 @@ func newGameplayPlane(
 		})
 		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
 	}
-	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
+	// SRO_MALL_CATEGORIES (port-only, not native, #3257): the later
+	// mall's categories, HOT shop and goods badges; "off" (the
+	// default) is the shipped mall (commerce/mallcategories.go).
+	mallCategories, err := commerce.MallCategoriesFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if mallCategories {
+		log.Infof("mall: later category layout from %s (port-only, not native)", commerce.EnvMallCategories)
+	}
+	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra, mallCategories); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)

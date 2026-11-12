@@ -82,9 +82,10 @@ def compile_field_equipment(base, item_rows, assignments, normal, rare):
 # has_assignments
 #
 # Whether the export carries the drop assignments the overlay joins.
+# No export at all (None, the client-only build) names none.
 # ================
 def has_assignments(source_root):
-	return (source_root / (ASSIGNMENTS_NAME + ".json")).is_file()
+	return source_root is not None and (source_root / (ASSIGNMENTS_NAME + ".json")).is_file()
 
 
 # ================
@@ -97,8 +98,9 @@ def stage_field_equipment(text_root, source_root):
 	def read(name):
 		return json.loads((source_root / (name + ".json")).read_text(encoding="utf-8"))
 	if not has_assignments(source_root):
-		print(f"cap110 loot: {source_root} has no {ASSIGNMENTS_NAME}.json; "
-			"field monsters drop through the native tables (#1745 D3)", flush=True)
+		if source_root is not None:
+			print(f"cap110 loot: {source_root} has no {ASSIGNMENTS_NAME}.json; "
+				"field monsters drop through the native tables (#1745 D3)", flush=True)
 		compiled = compile_field_equipment(compile_catalogs(), [], None, None, None)
 	else:
 		items = [r for path in text_root.glob("itemdata_*.txt") for r in tables.table_rows(path.read_bytes())]
