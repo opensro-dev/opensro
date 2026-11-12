@@ -360,6 +360,28 @@ def require_vsro_pin(root, names, pins=None):
 		verify_vsro_archive(root, name, pins)
 
 
+# ================
+# field_seed_regions
+#
+# The terrain seeds of the cap-110 field: the database export's spawn
+# regions when an export is named, otherwise the admitted species'
+# npcpos regions from the client alone (#3246). The tomb's worlds are
+# the export's alone, so it still refuses without one.
+# ================
+def field_seed_regions(vsro_root):
+	if os.environ.get("SRO_CAP110_MONSTERS", "").lower() not in FLAG_ON:
+		return set()
+	from cap110_monsters import SOURCE_ENV, client_outdoor_regions, outdoor_regions, tomb_enabled
+	source = os.environ.get(SOURCE_ENV, "")
+	if source:
+		# The Pharaoh Tomb regions seed their own components the same way.
+		return outdoor_regions(source, tomb_enabled())
+	if tomb_enabled():
+		raise SystemExit(f"SRO_PHARAOH_TOMB is on but {SOURCE_ENV} names no monster database export; "
+			"the client tables carry the field alone")
+	return client_outdoor_regions(vsro_root)
+
+
 def table_text(media, index, name):
 	entry = index.get(TEXTDATA + name)
 	if entry is None:
@@ -412,14 +434,7 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		# Port-only, not native: field regions are seeds for complete source
 		# terrain components, not an exhaustive list of regions worth importing.
 		# Empty connecting terrain and mountain sectors have no monster nests.
-		fields = set()
-		if os.environ.get("SRO_CAP110_MONSTERS", "").lower() in FLAG_ON:
-			from cap110_monsters import outdoor_regions, SOURCE_ENV, tomb_enabled
-			source = os.environ.get(SOURCE_ENV, "")
-			if not source:
-				raise SystemExit(f"SRO_CAP110_MONSTERS is on but {SOURCE_ENV} names no monster database export")
-			# The Pharaoh Tomb regions seed their own components the same way.
-			fields = outdoor_regions(source, tomb_enabled())
+		fields = field_seed_regions(vsro_root)
 		regions = connected_regions(city, vsro_only_regions(data_data, data_index, native_mapinfo), fields)
 		log(f"{len(city)} city regions, {len(regions)} regions with the fields around it")
 
