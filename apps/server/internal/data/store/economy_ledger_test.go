@@ -537,3 +537,152 @@ func TestMostWantedBountyIsATransfer(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestNoteItemSaleBuckets
+
+A noted merchant sale folds into the character's per-item hourly
+bucket (#3307): repeat sales of one item accumulate count and gold,
+another item and another character keep their own buckets, and the
+buckets survive a reopen. A malformed note is refused whole.
+================
+*/
+func TestNoteItemSaleBuckets(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	note := func(charID int64, item string, count int, gold int64) {
+		t.Helper()
+		if err := s.NoteItemSale(charID, item, count, gold); err != nil {
+			t.Fatal(err)
+		}
+	}
+	note(7, "ITEM_ETC_HP_POTION_01", 2, 30)
+	note(7, "ITEM_ETC_HP_POTION_01", 3, 45)
+	note(7, "ITEM_ETC_SCROLL_RETURN_01", 1, 40)
+	note(8, "ITEM_ETC_HP_POTION_01", 1, 15)
+	for _, bad := range []struct {
+		charID int64
+		item   string
+		count  int
+		gold   int64
+	}{
+		{0, "ITEM_ETC_HP_POTION_01", 1, 15},
+		{7, "", 1, 15},
+		{7, "ITEM_ETC_HP_POTION_01", 0, 15},
+		{7, "ITEM_ETC_HP_POTION_01", 1, -1},
+	} {
+		if err := s.NoteItemSale(bad.charID, bad.item, bad.count, bad.gold); err == nil {
+			t.Fatalf("malformed note %+v was kept", bad)
+		}
+	}
+	want := []LedgerCharItemHour{
+		{Item: "ITEM_ETC_HP_POTION_01", Count: 5, Gold: 75},
+		{Item: "ITEM_ETC_SCROLL_RETURN_01", Count: 1, Gold: 40},
+	}
+	check := func(s *Store) {
+		t.Helper()
+		hours, err := s.EconomyCharacterItemHours(7, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hours) != len(want) {
+			t.Fatalf("item hours %+v, want %+v", hours, want)
+		}
+		for i, row := range hours {
+			if row.Item != want[i].Item || row.Count != want[i].Count || row.Gold != want[i].Gold || row.HourMs <= 0 {
+				t.Fatalf("item hours %+v, want %+v", hours, want)
+			}
+		}
+		other, err := s.EconomyCharacterItemHours(8, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(other) != 1 || other[0].Count != 1 || other[0].Gold != 15 {
+			t.Fatalf("the other character's item hours %+v", other)
+		}
+	}
+	// The notes ride the next transaction; the tick's flush is the
+	// production one.
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the pending notes did not flush: %+v", stats)
+	}
+	check(s)
+	s.Close()
+	reopened := openTest(t, dir, newTestClock())
+	defer reopened.Close()
+	check(reopened)
+}
+
+/*
+================
+TestNoteItemSaleRidesTheCommit
+
+A note is a fold in memory, never its own disk write (#3307): inside
+an open tick batch or outside one, nothing reaches the buckets until
+the next transaction, the flush writes both lots as one bucket, a
+note outside a batch runs no transaction of its own, and a failed
+commit keeps the fold pending for the next one, as it keeps the gold
+rows.
+================
+*/
+func TestNoteItemSaleRidesTheCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	count := func() int64 {
+		t.Helper()
+		var total int64
+		if err := s.syncDBLocked().QueryRow(
+			"SELECT COALESCE(SUM(count), 0) FROM economy_ledger_char_item_hours WHERE char_id = 7").Scan(&total); err != nil {
+			t.Fatal(err)
+		}
+		return total
+	}
+
+	s.BeginTickBatch()
+	for _, lot := range []int{2, 3} {
+		if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", lot, int64(15*lot)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := count(); got != 0 {
+		t.Fatalf("a note inside the batch wrote %d items before the flush", got)
+	}
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the batch holding the notes did not flush: %+v", stats)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("the flushed batch wrote %d items, want 5", got)
+	}
+
+	// Outside a batch (where shop requests run) a note still writes
+	// nothing by itself: a bot's one-at-a-time sales cost no
+	// transaction each.
+	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("a note outside a batch wrote at once: %d items, want 5", got)
+	}
+
+	s.FailCommits(errors.New("item note outage"))
+	if stats := s.FlushTickBatch(); stats.Err == nil {
+		t.Fatalf("the flush under an outage reported success: %+v", stats)
+	}
+	if got := count(); got != 5 {
+		t.Fatalf("a failed flush wrote %d items, want 5", got)
+	}
+	s.FailCommits(nil)
+	if err := s.NoteItemSale(7, "ITEM_ETC_HP_POTION_01", 1, 15); err != nil {
+		t.Fatal(err)
+	}
+	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
+		t.Fatalf("the healed flush did not write: %+v", stats)
+	}
+	if got := count(); got != 7 {
+		t.Fatalf("after a failed and a healed commit the buckets hold %d items, want 7", got)
+	}
+	s.Close()
+}

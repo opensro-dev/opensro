@@ -381,6 +381,24 @@ func (rt *Runtime) caravanTierAfterLoad(snapshot *enterworld.Character, cos *ent
 applyCommerce
 ================
 */
+/*
+================
+noteItemSale
+
+Notes one committed ordinary merchant sale's item evidence with
+the deps that keep it (enterworld Deps.NoteItemSale, #3307): the
+economy's per-item hourly buckets. A composition that keeps no
+ledger (a fixture) simply has nothing to note with.
+================
+*/
+func (rt *Runtime) noteItemSale(charID int64, item string, count int, gold int64) {
+	if recorder, ok := rt.deps.(interface {
+		NoteItemSale(charID int64, item string, count int, gold int64)
+	}); ok {
+		recorder.NoteItemSale(charID, item, count, gold)
+	}
+}
+
 func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	snapshot := rt.characterSnapshot(division, c)
 	npc, ok := rt.commerceNpc(division, snapshot, q.NpcGID)
@@ -410,6 +428,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var collected int64
 	var guildPointCost uint64
 	var honorCost uint64
+	// The ordinary sale's item evidence (noteItemSale after the
+	// commit): the sold item, how many, the gold credited.
+	var soldItem string
+	var soldCount int
+	var soldGold int64
 	label, cargoCapacity := commerceDoorLabel(snapshot, q, isCOS)
 	if cargoCapacity >= 0 {
 		// The stars are read off the snapshot, as the door word was: the
@@ -643,6 +666,13 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				}
 				credit = uint64(payouts[0].Gold)
 			}
+			if !inventory.IsTradeGoods(item.TypeFlags) {
+				// Port-only (#3307): an ordinary merchant sale's item
+				// evidence for the per-item hourly buckets, noted
+				// after the commit. Trade-goods sales pay out under
+				// their own doors, not npc_sale, and keep theirs.
+				soldItem, soldCount, soldGold = item.Codename, int(q.Quantity), int64(credit)
+			}
 			if credit > math.MaxInt64-balance {
 				return false
 			}
@@ -709,6 +739,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	})
 	if !committed {
 		return failureResult(refusal)
+	}
+	if soldItem != "" {
+		rt.noteItemSale(c.ID, soldItem, soldCount, soldGold)
 	}
 	if honorCost > 0 {
 		rt.spendHonorPoints(division, snapshot, uint32(honorCost))
