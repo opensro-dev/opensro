@@ -634,6 +634,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
 	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
+	# The later clients' pets follow the avatars: their COS rows and
+	# summon scrolls append their own shards to the same manifests. The
+	# v1.696 pass and the pinned-archive pass read their sources from the
+	# environment and skip cleanly while those are not on the machine.
+	from pet_import import add_all_sources
+	pets = add_all_sources(vsro_root, native, out)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -693,6 +699,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
+		"pets": pets["pets"],
+		"petsV1696": pets["petsV1696"],
+		"petsArchive": pets["petsArchive"],
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,
