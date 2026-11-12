@@ -124,6 +124,12 @@ var Settings = []Setting{
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	// Port-only, not native: the Pharaoh Temple (the job temple) in the
+	// Storm and Cloud Desert: seven dungeons behind two desert gates. Needs
+	// a variant built with the same flag (build_alexandria_variant.py stages
+	// the dungeons and gates). Server only: the catalogue does not list the
+	// temple's dungeons or gates. "off" is native.
+	{Env: "SRO_PHARAOH_TEMPLE", NomadVar: "pharaoh_temple", Default: "off"},
 	// Port-only, not native: the Qin-Shi tomb upper-floor population
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).

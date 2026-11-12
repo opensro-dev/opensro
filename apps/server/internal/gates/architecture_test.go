@@ -72,6 +72,10 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtomb", nil, false)
 	// The temple band worlds (port-only): the same leaf shape again.
 	checkPackageImports(t, root, modulePath, "internal/game/world/temple", nil, false)
+	// The Pharaoh Temple (port-only, the job temple): a leaf again, the
+	// switch and the identity table the portal catalogue and the movement
+	// authority ask.
+	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtemple", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/game/world":             true,

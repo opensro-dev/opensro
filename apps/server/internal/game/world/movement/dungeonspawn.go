@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -172,6 +173,9 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 
 	surfaces := make(map[uint16]*dungeonSpawnSurface, len(manifest.Entries))
 	for _, entry := range manifest.Entries {
+		if !dungeonRegionAdmitted(entry.SectorID) {
+			continue
+		}
 		raw := dofBytesByName[normalizeDungeonResourcePath(entry.NormalizedName)]
 		blocks, err := parseDungeonDofBlocks(raw)
 		if err != nil {
@@ -206,6 +210,21 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 		surfaces[region].routeTable = table
 	}
 	return surfaces
+}
+
+/*
+================
+dungeonRegionAdmitted
+
+Whether the shard runs a dungeon region the manifest lists. Port-only, not
+native: the Pharaoh Temple's seven dungeons are on the shard only while
+SRO_PHARAOH_TEMPLE is on. Off, they get no surface, so no spawn, step, clip,
+grid or walk-in zone resolves in them and the movement authority equals a
+native build's. Every other region is admitted.
+================
+*/
+func dungeonRegionAdmitted(region uint16) bool {
+	return !pharaohtemple.IsRegion(region) || pharaohtemple.Enabled()
 }
 
 func (surface *dungeonSpawnSurface) heightAt(x, authoredY, z float64) (float64, bool) {

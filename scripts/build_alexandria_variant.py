@@ -63,6 +63,7 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
+import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
@@ -92,6 +93,10 @@ GATE_CODES = (
 TOMB_GATE_CODES = (
 	"GATE_TOMB_GATE_IN", "GATE_TOMB_GATE_OUT_1", "GATE_TOMB_GATE_OUT_2", "GATE_TOMB_GATE_OUT_3"
 )
+# Port-only, not native: the Pharaoh Temple's four gates, added with
+# SRO_PHARAOH_TEMPLE (pharaoh_temple.py): the two clicked desert gates and the
+# two walk-in gates inside the Temple. Their world column is flattened (below).
+TEMPLE_GATE_CODES = temple.GATE_CODES
 # The last teleportdata column names the destination game world. The source's
 # tomb exits name worlds 57-59, one per tomb. The v1.150 world table does not
 # define them, but the port does while SRO_PHARAOH_TOMB is on (the three
@@ -325,13 +330,15 @@ def translate_link(row, ids, level_cap, dropped=None):
 # ================
 # merge_gate_tables
 # ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP):
+def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=()):
 	"""
 	The native tables with the gates in codes added. native and vsro map
 	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
 	"text" (textdataname / textdata_object) to raw bytes. Teleport ids differ
 	between the clients, so links are renumbered by code; the new gates take
-	their VSRO ids, which the native table does not use. Returns {name: bytes}
+	their VSRO ids, which the native table does not use. A gate named in
+	flatten has its destination world set to the persistent world (the
+	temple's source world 60 does not exist in the port). Returns {name: bytes}
 	for the changed files, and the list of gates added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -348,6 +355,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 	data_rows = []
 	for code in codes:
 		row = list(vsro_gates[code])
+		if code in flatten:
+			row[TELEPORT_WORLD_COLUMN] = temple.SOURCE_WORLD_COLUMN_VALUE
 		data_rows.append(row)
 	building_ids = {row[3] for row in data_rows}
 	buildings = [
@@ -380,7 +389,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		"buildingCodes": sorted(row[2] for row in buildings),
 		# Link conditions the native catalogue cannot evaluate yet, reported
 		# so the loss is visible in the build output and manifest (#1749).
-		**({"droppedConditions": dropped_conditions} if dropped_conditions else {})
+		**({"droppedConditions": dropped_conditions} if dropped_conditions else {}),
+		**({"worldsFlattened": [code for code in codes if code in flatten]} if set(codes) & set(flatten) else {})
 	}
 
 
@@ -611,6 +621,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
+	pharaoh_temple = add_temple(vsro_root, native, out)
 	# The map step adds to textdataname.txt on top of the gates' texts.
 	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])
 	music = add_music(vsro_root, native, out)
@@ -661,6 +672,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"linked": linked,
 		"note": ENVIRONMENT_NOTE
 	}
+	if pharaoh_temple["enabled"]:
+		# Absent while off, so an off manifest is what it was before the temple.
+		manifest["pharaohTemple"] = pharaoh_temple
 	write_atomically(variant / VARIANT_MANIFEST, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 	return manifest
 
@@ -715,13 +729,61 @@ def add_gates(vsro_root, native, out):
 	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
 	from cap110_monsters import tomb_enabled
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
-	merged, summary = merge_gate_tables(tables, vsro, codes=codes, level_cap=level_cap)
+	if temple.temple_enabled():
+		codes += TEMPLE_GATE_CODES
+	merged, summary = merge_gate_tables(
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES
+	)
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
 	for name, content in merged.items():
 		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
 	return summary, merged
+
+
+# ================
+# add_temple
+# ================
+def add_temple(vsro_root, native, out):
+	"""
+	Port-only, not native: the Pharaoh Temple's dungeon rows and walk-in zones
+	(pharaoh_temple.py), while SRO_PHARAOH_TEMPLE is on. Appends the seven
+	dungeoninfo.txt rows and the two TELEPORT event zones to the native tables
+	and checks the seven .dof files the staging step carried from Data.pk2 are
+	there. Off, the two tables are the native bytes: a variant an earlier on
+	build left rows in is put back, and one that already matches is not
+	touched. Returns the summary.
+	"""
+	enabled = temple.temple_enabled()
+	dungeon_info = Path("Data_extracted") / "dungeon" / "dungeoninfo.txt"
+	event_zones = Path("Media_extracted") / TEXTDATA / "eventzonedata.txt"
+	native_info = (native / dungeon_info).read_bytes()
+	native_zones = (native / event_zones).read_bytes()
+	if enabled:
+		wanted_info = temple.merge_dungeon_info(native_info)
+		wanted_zones = temple.merge_event_zones(
+			native_zones, read_vsro_file(vsro_root, "Media", TEXTDATA + "eventzonedata.txt")
+		)
+	else:
+		wanted_info, wanted_zones = native_info, native_zones
+	for relative, content in ((dungeon_info, wanted_info), (event_zones, wanted_zones)):
+		target = out / relative
+		if not target.is_file() or target.read_bytes() != content:
+			replace_file(target, content)
+	if not enabled:
+		return {"enabled": False}
+	staged = lower_paths(out / "Data_extracted" / "dungeon")
+	missing = [path for path in map(temple.dof_path, temple.DUNGEONS) if path.split("/", 1)[1] not in staged]
+	if missing:
+		raise SystemExit(f"the Pharaoh Temple's dungeon files are missing from the variant: {missing}")
+	return {
+		"enabled": True,
+		"dungeons": [dungeon_id for dungeon_id, _, _ in temple.DUNGEONS],
+		"regions": temple.dungeon_regions(),
+		"gates": list(temple.GATE_CODES),
+		"eventZones": list(temple.TEMPLE_ZONE_CODES)
+	}
 
 
 # ================

@@ -82,9 +82,10 @@ loadWalkIns
 The walk-in gates: each TELEPORT event zone by codename, with the one link
 of the teleport it names. A TELEPORT zone naming a missing teleport, or one
 with other than one link, is a data error, as the native handler minidumps on it.
+A zone naming a teleport the catalogue hides (hiddenCodes) is skipped.
 ================
 */
-func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, error) {
+func loadWalkIns(dir string, catalog *portalCatalog, hiddenCodes map[string]bool) (map[string]portalLink, error) {
 	byCode := make(map[string]uint32, len(catalog.destinations))
 	for id, destination := range catalog.destinations {
 		byCode[destination.code] = id
@@ -104,6 +105,11 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 		// (e.g. GATE_JINSI_01X01_12); normalize the key so mixed-case
 		// eventzonedata codenames (GATE_JINSI_01x01_12) resolve.
 		zone, teleport := strings.ToUpper(strings.TrimSpace(row[eventZoneCodenameColumn])), strings.TrimSpace(row[eventZoneTeleportColumn])
+		if hiddenCodes[teleport] {
+			// The teleport is hidden (the Alexandria overlay, or the Pharaoh
+			// Temple's switch off): its zone is as absent as the gate.
+			continue
+		}
 		source, ok := byCode[teleport]
 		if !ok {
 			return nil, fmt.Errorf("event zone %s names missing teleport %s", zone, teleport)

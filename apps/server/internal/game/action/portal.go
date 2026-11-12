@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/pharaohtemple"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -144,6 +145,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	if on, _ := alexandria.EnabledFromEnv(); on {
 		key += "+alexandria"
 	}
+	if pharaohtemple.Enabled() {
+		key += "+pharaoh_temple"
+	}
 	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
 		catalog, err := parsePortalCatalog(dir)
 		return &portalCatalogParse{catalog: catalog, err: err}
@@ -180,6 +184,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		return nil, err
 	}
 	hiddenIDs := map[uint32]bool{}
+	hiddenCodes := map[string]bool{}
 	buildingRows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportbuilding.txt"))
 	if len(buildingRows) == 0 {
 		return nil, fmt.Errorf("teleportbuilding is absent or empty")
@@ -191,7 +196,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if len(r) < 2 {
 			return nil, fmt.Errorf("truncated teleportbuilding")
 		}
-		if len(r) > 2 && hidden.HidesBuilding(r[2]) {
+		if len(r) > 2 && (hidden.HidesBuilding(r[2]) || pharaohtemple.HidesBuilding(r[2])) {
 			continue
 		}
 		id, e := number(r[1])
@@ -239,6 +244,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		if hidden.HidesTeleport(r[2]) {
 			hiddenIDs[id] = true
+			hiddenCodes[r[2]] = true
 			continue
 		}
 		ref, e := number(r[3])
@@ -248,6 +254,14 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		region, e := strconv.ParseInt(r[5], 10, 32)
 		if e != nil || region < -32768 || region > 65535 {
 			return nil, fmt.Errorf("teleportdata region at row %d", i+1)
+		}
+		// Port-only, not native: the Pharaoh Temple's gates exist only while
+		// SRO_PHARAOH_TEMPLE is on; off, they and every link to them are
+		// skipped, as the Alexandria overlay's are.
+		if pharaohtemple.Hides(r[2], uint16(region)) {
+			hiddenIDs[id] = true
+			hiddenCodes[r[2]] = true
+			continue
 		}
 		xyz := [3]float64{}
 		for j := range xyz {
@@ -360,7 +374,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		c.links[key] = link
 	}
-	walkIns, err := loadWalkIns(dir, c)
+	walkIns, err := loadWalkIns(dir, c, hiddenCodes)
 	if err != nil {
 		return nil, err
 	}
@@ -816,6 +830,12 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 			return errCodeDenJob
 		}
 	}
+	// Port-only, not native: the Pharaoh Temple's job suit rule belongs here
+	// (slice 2 of SRO_PHARAOH_TEMPLE). The temple gates' links carry only a
+	// level and a transport condition (build_alexandria_variant.py), so with
+	// the switch on any character of level 105 and over passes in this slice.
+	// The merchant/hunter and thief gates' job check is v1.188's trimmed
+	// job-server code (walkin.go item 4); restore it before the conditions.
 	for _, condition := range link.conditions {
 		switch condition.kind {
 		case 1:
