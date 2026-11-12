@@ -178,10 +178,15 @@ var Settings = []Setting{
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
-	// Port-only, not native: every pet bag holds five pages of 28 slots
-	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// Port-only, not native: pet bags hold pages of 28 slots (#2770). The
+	// owner approved five pages on by default (2026-11-07); "off" is
 	// native: a grab pet holds 28 slots and a transport its authored size.
+	// The shared switch sets both kinds; each kind's own setting ("on",
+	// "off" or a page count from 1 to 9) overrides it, and empty defers to
+	// it (companion/inventorypages.go).
 	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
+	{Env: "SRO_GRAB_PET_INVENTORY_PAGES", NomadVar: "grab_pet_inventory_pages", Default: ""},
+	{Env: "SRO_TRANSPORT_PET_INVENTORY_PAGES", NomadVar: "transport_pet_inventory_pages", Default: ""},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
