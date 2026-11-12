@@ -4422,6 +4422,13 @@
 			"function": "readBytes",
 			"kind": "callback",
 			"reason": "Asset loader supplies received-byte progress through ReadBytesOptions; callers without progress leave it absent."
+		},
+		{
+			"file": "src/engine/foundation/assets/read-bytes.ts",
+			"expression": "kept",
+			"function": "readBytes",
+			"kind": "callback",
+			"reason": "Asset loader keeps each accepted chunk through ReadBytesOptions so a stalled read resumes after it (#3354); callers that do not resume leave it absent."
 		}
 	],
 	"sequences": [
