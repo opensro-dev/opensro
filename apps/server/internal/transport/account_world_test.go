@@ -50,3 +50,29 @@ func TestAccountWorldSeatReturnsToTheDisplacedHolder(t *testing.T) {
 		t.Fatalf("the first holder no longer holds its seat: claim=%v refused=%v", claim != nil, refused)
 	}
 }
+
+/*
+================
+TestAccountMultiWorldAdmitsSeveralCharacters
+
+The closed beta's switch (SRO_BETA_MULTI_CHARACTER, port-only, not
+native): a second session of the account entering a different
+character is admitted, not refused. With the switch off the same
+claim is refused - the native one world seat.
+================
+*/
+func TestAccountMultiWorldAdmitsSeveralCharacters(t *testing.T) {
+	for _, multi := range []bool{false, true} {
+		hub := accountHub(t, 4)
+		hub.cfg.AccountMultiWorld = multi
+		first := admit(t, hub, "alice-1")
+		if _, refused := hub.ClaimAccountWorld(first, "global-official", "alpha"); refused {
+			t.Fatalf("multi=%v: the first character was refused", multi)
+		}
+		second := admit(t, hub, "alice-2")
+		_, refused := hub.ClaimAccountWorld(second, "global-official", "beta")
+		if refused == multi {
+			t.Fatalf("multi=%v: a second character's claim refused=%v", multi, refused)
+		}
+	}
+}

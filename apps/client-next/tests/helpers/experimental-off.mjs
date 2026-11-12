@@ -132,5 +132,8 @@ export const OFF = Object.freeze( {
 	setBonusTooltip: false,
 	// Off by default (#2269): the Item Mall's Buying list; the native
 	// window is inert and its mall button is born disabled.
-	silkHistory: false
+	silkHistory: false,
+	// Off by default (#3257): the later mall's categories, HOT shop and
+	// item search; the native mall stands.
+	mallCategories: false
 } );

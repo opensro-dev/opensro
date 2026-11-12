@@ -87,6 +87,10 @@ var Settings = []Setting{
 	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native: several characters of one account in the
+	// world at once, one per tab (the closed beta, owner 2026-11-11).
+	// "off" is native: one world seat per account (#3137).
+	{Env: "SRO_BETA_MULTI_CHARACTER", NomadVar: "beta_multi_character", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
 	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
@@ -355,6 +359,10 @@ var Settings = []Setting{
 	// off restores the native Jangan shop.
 	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
+	// Owner ask, 2026-11-12 (#3257): the later mall's categories, HOT
+	// shop and goods badges. Off by default; off is the shipped mall
+	// exactly (commerce/mallcategories.go).
+	{Env: "SRO_MALL_CATEGORIES", NomadVar: "mall_categories", Default: "off"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
