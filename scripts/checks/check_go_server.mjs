@@ -41,7 +41,10 @@ TEST_BUDGET_SECONDS; a package over it fails the gate unless the shrinking
 ledger scripts/checks/go-test-budget.txt names it. A green run that trips
 the budget first re-measures the offenders alone (one package worker, no
 test cache) and judges those times, so a busy box cannot fail an all-green
-run (#2582); SRO_GO_BUDGET_REMEASURE=off restores judging the full run's
+run (#2582); the packages still over then get one more launch and are
+judged by their better time, because a freshly linked test binary's first
+launch can pay a one-off process-init toll that is the box, not the
+package (#3306). SRO_GO_BUDGET_REMEASURE=off restores judging the full run's
 wall times directly. `--long`
 (check:server:long, and every release freeze) runs only the test steps,
 without -short, so the sweeps run; neither tier needs a hosted CI.
@@ -79,6 +82,7 @@ import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import {
+	betterSoloTimes,
 	budgetOffenders,
 	isLintRunnerRefusal,
 	overBudgetPackages,
@@ -114,6 +118,9 @@ const STEP_ENVIRONMENT = [
 ];
 // TEST_BUDGET_SECONDS is the most one package's everyday tests may take.
 const TEST_BUDGET_SECONDS = 30;
+// SOLO_RUN_ATTEMPTS is how often one budget re-measure launch may run
+// before it gives up: one retry, for a solo run killed by the box (#2971).
+const SOLO_RUN_ATTEMPTS = 2;
 // A golangci-lint parallel-runner refusal (another session holds the
 // tool's cache lock) is waited out and retried this many times before
 // the step may fail: peer lint runs are minutes, not seconds (#2971).
@@ -333,11 +340,15 @@ async function withinTestBudget( output ) {
 remeasureOffenders
 
 Runs the offenders' packages alone - one package worker, no test cache -
-and judges their solo times against the budget. Returns null when the
-re-measure itself produced no verdict (its run failed), leaving the full
-run's times to judge as before; the re-measure's output tail is printed
-either way it fails, so the evidence is never silent. Prints each
-offender's two times when it does judge.
+and judges their solo times against the budget. A package still over on
+its solo time gets one more launch and is judged by its better time: the
+first launch of a freshly linked test binary can pay a one-off toll
+(process init under Windows AV scanning; #3306) that the solo run exists
+to exclude, and a package genuinely over budget is over on both launches.
+Returns null when the re-measure itself produced no verdict (its run
+failed), leaving the full run's times to judge as before; the re-measure's
+output tail is printed either way it fails, so the evidence is never
+silent. Prints each offender's two times when it does judge.
 ================
 */
 /**
@@ -350,32 +361,14 @@ async function remeasureOffenders( offenders ) {
 		`test budget: re-measuring ${packages.length} package(s) alone (-p=1, -count=1); ` +
 			"a busy box inflates the full run's wall times together"
 	);
-	// One retry: the solo run itself can die to the same loaded box (or
-	// to a peer's cache lock), and falling back to the full run's
-	// inflated times would reject a package the solo pass exists to
-	// clear (#2971). Only a second failure gives up and judges the
-	// full run, as before.
-	let rerun = null;
-	for ( let attempt = 1; attempt <= 2; attempt++ ) {
-		rerun = await runStep(
-			"tests (budget re-measure)",
-			"go",
-			[ "test", "-p=1", ...tierArgs, "-count=1", ...packages ],
-			undefined
-		);
-		if ( rerun.ok ) {
-			break;
-		}
-		if ( attempt === 1 ) {
-			console.log( "test budget: the re-measure run failed; measuring once more" );
-		}
-	}
+	const rerun = await soloRun( packages );
 	if ( !rerun?.ok ) {
 		console.log( "test budget: the re-measure run failed; judging the full run's times" );
 		console.log( (rerun?.output ?? "").split( "\n" ).slice( -40 ).join( "\n" ) );
 		return null;
 	}
-	const verdicts = soloVerdicts( offenders, packageTestTimes( rerun.output ), TEST_BUDGET_SECONDS );
+	const soloTimes = packageTestTimes( rerun.output );
+	const verdicts = soloVerdicts( offenders, soloTimes, TEST_BUDGET_SECONDS );
 	for ( const { pkg, seconds, solo } of verdicts ) {
 		console.log(
 			`test budget: ${pkg} took ${seconds}s in the full run, ${
@@ -383,7 +376,74 @@ async function remeasureOffenders( offenders ) {
 			}`
 		);
 	}
-	return verdicts.every( ( { fits } ) => fits );
+	const stillOver = verdicts.filter( ( { fits } ) => !fits );
+	if ( stillOver.length === 0 ) {
+		return true;
+	}
+	// One more launch for the packages still over, judged by the better
+	// time (betterSoloTimes): the first launch above may itself have paid
+	// the toll this re-measure exists to exclude (#3306). Only these
+	// packages pay the extra run, so a healthy gate never runs it.
+	console.log(
+		`test budget: ${stillOver.length} package(s) still over alone; one more launch each, ` +
+			"judged by the better time"
+	);
+	const second = await soloRun( stillOver.map( ( { pkg } ) => pkg ) );
+	if ( !second?.ok ) {
+		// The first launch's times are still over, so the verdict stands.
+		console.log( "test budget: the second solo run failed; judging the first launch's times" );
+		console.log( (second?.output ?? "").split( "\n" ).slice( -40 ).join( "\n" ) );
+		return false;
+	}
+	const judged = soloVerdicts(
+		offenders,
+		betterSoloTimes( soloTimes, packageTestTimes( second.output ) ),
+		TEST_BUDGET_SECONDS
+	);
+	for ( const { pkg, solo } of judged ) {
+		if ( stillOver.some( ( over ) => over.pkg === pkg ) ) {
+			console.log(
+				`test budget: ${pkg} judged by its better launch, ${
+					solo === undefined ? "no solo time" : `${solo}s alone`
+				}`
+			);
+		}
+	}
+	return judged.every( ( { fits } ) => fits );
+}
+
+/*
+================
+soloRun
+
+One solo test run of the given packages (one package worker, no test
+cache), with one retry: the solo run itself can die to the same loaded
+box (or to a peer's cache lock), and a single such death would reject a
+package the solo pass exists to clear (#2971). Both re-measure launches
+go through here, so the second launch (#3306) has the same retry as the
+first. Returns the last attempt's step result.
+================
+*/
+/**
+ * @param {string[]} packages
+ */
+async function soloRun( packages ) {
+	let run = null;
+	for ( let attempt = 1; attempt <= SOLO_RUN_ATTEMPTS; attempt++ ) {
+		run = await runStep(
+			"tests (budget re-measure)",
+			"go",
+			[ "test", "-p=1", ...tierArgs, "-count=1", ...packages ],
+			undefined
+		);
+		if ( run.ok ) {
+			break;
+		}
+		if ( attempt < SOLO_RUN_ATTEMPTS ) {
+			console.log( "test budget: the re-measure run failed; measuring once more" );
+		}
+	}
+	return run;
 }
 
 /*
