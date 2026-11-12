@@ -45,6 +45,7 @@ import {
 } from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import { DRAWER_WIDTH, paintDrawer } from "./map-drawer";
 
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
@@ -68,9 +69,6 @@ const FLOOR_TRACK = WMAP + "wmap_floor_big_box.png";
 const REGIONCODE_PATH = "/assets/text/regioncode.json";
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const GOLD = [ .96, .83, .55, 1 ] as const;
-const DIM = [ .72, .7, .63, 1 ] as const;
-const DRAWER_WIDTH = 196;
-const ROW_HEIGHT = 18;
 // The world map's dungeon doors: the dungeon each opens and the v1.150
 // object text that names it. The doors themselves are the client's own
 // xy_dungeon icons (worldmap_localinfo rows 92033 and 92032).
@@ -341,94 +339,27 @@ export function createMapToolsHud( options: {
 	function caveDrawer( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ) {
 		const floor = input.floor;
 		if ( !floor ) return;
-		const text = input.text, [mx] = input.window;
-		const dw = DRAWER_WIDTH, dx = mx + 6, dy = input.clip[1], dh = input.clip[3];
-		quads.push( {
-			texture: "",
-			rect: [ dx, dy, dw, dh ],
-			uv: [ 0, 0, 1, 1 ],
-			color: [ .05, .06, .055, .97 ],
-			clip: input.full
-		} );
-		const title = input.zones?.[floor.floorLabel] ?? floor.floorLabel;
-		quads.push(
-			...text.quads( title, [ dx + 10, dy + 6, dw - 20, 18 ], input.full, GOLD, {
-				fontStyle: 2,
-				overflow: "clip"
-			} )
-		);
 		const region = input.catalogue ?
 			dungeonDirectory( input.catalogue, floor.regionId, filterCap( input.characterLevel ) ) :
 			undefined;
-		const rows = (region?.monsters ?? []).map( entry => ({
-			id: "map-cave-monster:" + entry.region + ":" + entry.monster.refObjId,
-			label: entry.monster.name + "  Lv. " + entry.monster.level,
-			selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
-		}) );
-		const visible = Math.max( 1, Math.floor( (dh - 56) / ROW_HEIGHT ) );
-		const pages = Math.max( 1, Math.ceil( rows.length / visible ) );
-		if ( drawerPage >= pages ) drawerPage = pages - 1;
-		if ( rows.length === 0 ) {
-			quads.push(
-				...text.quads(
-					input.catalogue ? "No monsters" : "Loading...",
-					[ dx + 10, dy + 30, dw - 20, 18 ],
-					input.full,
-					DIM,
-					{ overflow: "clip" }
-				)
-			);
-		}
-		rows.slice( drawerPage * visible, drawerPage * visible + visible ).forEach( ( row, index ) => {
-			const top = dy + 28 + index * ROW_HEIGHT;
-			controls.push( {
-				id: row.id,
-				kind: "button",
-				label: row.label,
-				rect: [ dx + 4, top, dw - 8, ROW_HEIGHT ],
-				selected: row.selected
-			} );
-			quads.push(
-				...text.quads(
-					row.label,
-					[ dx + 10, top, dw - 16, ROW_HEIGHT ],
-					input.full,
-					row.selected ? GOLD : WHITE,
-					{
-						vAlign: 1,
-						overflow: "clip"
-					}
-				)
-			);
-		} );
-		if ( pages > 1 ) {
-			controls.push( {
-				id: "map-drawer-prev",
-				kind: "button",
-				label: "Previous page",
-				rect: [ dx + 4, dy + dh - 22, 52, 18 ]
-			} );
-			controls.push( {
-				id: "map-drawer-next",
-				kind: "button",
-				label: "Next page",
-				rect: [ dx + dw - 56, dy + dh - 22, 52, 18 ]
-			} );
-			quads.push(
-				...text.quads( "< Prev", [ dx + 10, dy + dh - 22, 52, 18 ], input.full, WHITE, { vAlign: 1 } ),
-				...text.quads( "Next >", [ dx + dw - 62, dy + dh - 22, 52, 18 ], input.full, WHITE, {
-					hAlign: 2,
-					vAlign: 1
-				} ),
-				...text.quads(
-					(drawerPage + 1) + "/" + pages,
-					[ dx + 56, dy + dh - 22, dw - 112, 18 ],
-					input.full,
-					DIM,
-					{ hAlign: 1, vAlign: 1 }
-				)
-			);
-		}
+		drawerPage = paintDrawer(
+			{
+				text: input.text,
+				rect: [ input.window[0] + 6, input.clip[1], DRAWER_WIDTH, input.clip[3] ],
+				full: input.full,
+				title: input.zones?.[floor.floorLabel] ?? floor.floorLabel,
+				back: false,
+				rows: (region?.monsters ?? []).map( entry => ({
+					id: "map-cave-monster:" + entry.region + ":" + entry.monster.refObjId,
+					label: entry.monster.name + "  Lv. " + entry.monster.level,
+					selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
+				}) ),
+				page: drawerPage,
+				empty: input.catalogue ? "No monsters" : "Loading..."
+			},
+			quads,
+			controls
+		);
 	}
 
 	/*
@@ -924,116 +855,35 @@ export function createMapToolsHud( options: {
 				} );
 			}
 			if ( drawerOpen ) {
-				const dw = DRAWER_WIDTH,
-					dx = mx + mw - dw - 6,
-					dy = input.clip[1],
-					dh = input.clip[3];
-				quads.push( {
-					texture: "",
-					rect: [ dx, dy, dw, dh ],
-					uv: [ 0, 0, 1, 1 ],
-					color: [ .05, .06, .055, .97 ],
-					clip: input.full
-				} );
-				const cap = filterCap( input.characterLevel );
-				const regions = directory( input.catalogue, cap );
+				const regions = directory( input.catalogue, filterCap( input.characterLevel ) );
 				const region = drawerRegion === null ?
 					undefined :
 					regions.find( row => row.region === drawerRegion );
-				const title = region ? regionName( region.region, input.zones ) : "Regions";
-				quads.push(
-					...text.quads( title, [ dx + 10, dy + 6, dw - 20, 18 ], input.full, GOLD, {
-						fontStyle: 2,
-						overflow: "clip"
-					} )
+				drawerPage = paintDrawer(
+					{
+						text,
+						rect: [ mx + mw - DRAWER_WIDTH - 6, input.clip[1], DRAWER_WIDTH, input.clip[3] ],
+						full: input.full,
+						title: region ? regionName( region.region, input.zones ) : "Regions",
+						back: region !== undefined,
+						rows: region ?
+							region.monsters.map( entry => ({
+								id: "map-monster:" + entry.region + ":" + entry.monster.refObjId,
+								label: entry.monster.name + "  Lv. " + entry.monster.level,
+								selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
+							}) ) :
+							regions.map( row => ({
+								id: "map-region:" + row.region,
+								label: regionName( row.region, input.zones ) + "  Lv. " +
+									(row.minLevel === row.maxLevel ? row.minLevel : row.minLevel + "-" + row.maxLevel),
+								selected: false
+							}) ),
+						page: drawerPage,
+						empty: input.catalogue ? "No monsters" : "Loading..."
+					},
+					quads,
+					controls
 				);
-				if ( region ) {
-					controls.push( {
-						id: "map-drawer-back",
-						kind: "button",
-						label: "All regions",
-						rect: [ dx + dw - 58, dy + 4, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Back", [ dx + dw - 58, dy + 6, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} )
-					);
-				}
-				const rows = region ?
-					region.monsters.map( entry => ({
-						id: "map-monster:" + entry.region + ":" + entry.monster.refObjId,
-						label: entry.monster.name + "  Lv. " + entry.monster.level,
-						selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
-					}) ) :
-					regions.map( row => ({
-						id: "map-region:" + row.region,
-						label: regionName( row.region, input.zones ) + "  Lv. " +
-							(row.minLevel === row.maxLevel ? row.minLevel : row.minLevel + "-" + row.maxLevel),
-						selected: false
-					}) );
-				const visible = Math.max( 1, Math.floor( (dh - 56) / ROW_HEIGHT ) );
-				const pages = Math.max( 1, Math.ceil( rows.length / visible ) );
-				if ( drawerPage >= pages ) drawerPage = pages - 1;
-				if ( rows.length === 0 ) {
-					quads.push(
-						...text.quads(
-							input.catalogue ? "No monsters" : "Loading...",
-							[ dx + 10, dy + 30, dw - 20, 18 ],
-							input.full,
-							DIM,
-							{ overflow: "clip" }
-						)
-					);
-				}
-				rows.slice( drawerPage * visible, drawerPage * visible + visible ).forEach( ( row, index ) => {
-					const top = dy + 28 + index * ROW_HEIGHT;
-					controls.push( {
-						id: row.id,
-						kind: "button",
-						label: row.label,
-						rect: [ dx + 4, top, dw - 8, ROW_HEIGHT ],
-						selected: row.selected
-					} );
-					quads.push(
-						...text.quads(
-							row.label,
-							[ dx + 10, top, dw - 16, ROW_HEIGHT ],
-							input.full,
-							row.selected ? GOLD : WHITE,
-							{ vAlign: 1, overflow: "clip" }
-						)
-					);
-				} );
-				if ( pages > 1 ) {
-					controls.push( {
-						id: "map-drawer-prev",
-						kind: "button",
-						label: "Previous page",
-						rect: [ dx + 4, dy + dh - 22, 52, 18 ]
-					} );
-					controls.push( {
-						id: "map-drawer-next",
-						kind: "button",
-						label: "Next page",
-						rect: [ dx + dw - 56, dy + dh - 22, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Prev", [ dx + 10, dy + dh - 22, 52, 18 ], input.full, WHITE, { vAlign: 1 } ),
-						...text.quads( "Next >", [ dx + dw - 62, dy + dh - 22, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} ),
-						...text.quads(
-							(drawerPage + 1) + "/" + pages,
-							[ dx + 56, dy + dh - 22, dw - 112, 18 ],
-							input.full,
-							DIM,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
-				}
 			}
 			return { quads, controls, paths };
 		},
