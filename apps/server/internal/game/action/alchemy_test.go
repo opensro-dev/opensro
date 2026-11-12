@@ -126,7 +126,7 @@ func TestAlchemyPlusFailNoticeFoldsTheBreakLine(t *testing.T) {
 		failFlag bool
 		want     string
 	}{
-		{"fail on", true, "leChiffre failed +9 on ITEM_CH_SWORD_01_A_RARE: destroyed"},
+		{"fail on", true, "[leChiffre] has failed in augmenting <<ITEM_CH_SWORD_01_A_RARE>> to [+9]: destroyed."},
 		{"fail off", false, "leChiffre broke ITEM_CH_SWORD_01_A_RARE"},
 	} {
 		rt, character := alchemyRuntime()
