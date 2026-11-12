@@ -404,12 +404,17 @@ def later_object_texts(read):
 # models, and every particle set's effects walk, not only the equipment
 # selector kind. A file the tree already holds (native or an earlier
 # import) is parsed but never rewritten; every file written is returned
-# as a path relative to the output root.
+# as a path relative to the output root. With tolerate_gaps (the Arabia
+# import), a file the archives name but do not hold, and a file the
+# audit cannot parse, are recorded in the result instead of stopping
+# the walk: later-client content ships with such holes, and inventing
+# the missing bytes is not an option.
 # ================
-def copy_resource_closure(seeds, archives, native, output):
+def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 	from cap110_item_import import normalized_path, resource_dependencies
 	pending = {("Data", normalized_path(seed)) for seed in seeds}
 	seen, written, missing_sounds, missing_effects = set(), [], [], []
+	missing_files, unparsed_files = [], []
 	while pending:
 		batch, requests = sorted(pending), []
 		pending = set()
@@ -445,13 +450,28 @@ def copy_resource_closure(seeds, archives, native, output):
 			elif name.endswith(EFFECT_EXTENSIONS):
 				missing_effects.append(name)
 				continue
+			elif tolerate_gaps:
+				missing_files.append(f"{archive_name}:{name}")
+				continue
 			else:
 				raise ValueError(f"missing {archive_name} resource: {name}")
 			if name.endswith(PARSED_EXTENSIONS):
 				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"),
 					"native": origin, "sounds": "data", "particles": "all"})
 		if requests:
-			for names in resource_dependencies(requests):
+			try:
+				dependencies = resource_dependencies(requests)
+			except ValueError:
+				if not tolerate_gaps:
+					raise
+				dependencies = []
+				for request in requests:
+					try:
+						dependencies.append(resource_dependencies([request])[0])
+					except ValueError:
+						unparsed_files.append(request["path"])
+						dependencies.append([])
+			for names in dependencies:
 				for dep in names:
 					if isinstance(dep, dict):
 						archive_name = dep.get("archive") or "Data"
@@ -461,7 +481,8 @@ def copy_resource_closure(seeds, archives, native, output):
 					else:
 						pending.add(("Data", normalized_path(dep)))
 	return {"files": written, "missingSounds": sorted(missing_sounds),
-		"missingEffects": sorted(missing_effects)}
+		"missingEffects": sorted(missing_effects), "missingFiles": sorted(missing_files),
+		"unparsedFiles": sorted(unparsed_files)}
 
 
 #============================================================================

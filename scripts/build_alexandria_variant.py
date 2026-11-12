@@ -637,6 +637,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# whose identity space they share.
 	from skytemple_import import add_skytemple
 	sky_temple = add_skytemple(native, out)
+	# The Arabia continent is its own switch on the same two later
+	# sources, layered after the Sky Temple fields whose identity and
+	# catalogue merges it follows.
+	from arabia_import import add_arabia
+	arabia = add_arabia(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -647,6 +652,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
 		"skyTemple": sky_temple,
+		"arabia": arabia,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],

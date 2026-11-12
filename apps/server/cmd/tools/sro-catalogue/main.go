@@ -300,6 +300,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue skytemple population: %w", err)
 	}
+	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue arabia population: %w", err)
+	}
 	if monster.QinShiTombFromEnv() {
 		template, err = template.WithQinShiTomb(dir)
 		if err != nil {
