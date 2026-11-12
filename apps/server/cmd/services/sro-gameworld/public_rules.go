@@ -467,6 +467,10 @@ func publicRules() publicstats.RulesResponse {
 					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
 					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
 				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
+			{Flag: action.EnvJobDressTownSpawn, On: action.JobDressTownSpawnFromEnv(),
+				Native: "Putting a job suit on or taking it off leaves you where you stand.",
+				Now:    "Once the suit is on or off, you reappear at the spawn point of the nearest town.",
+				Why:    "Requested so a rival job player who watched you change cannot follow you; the original returns with one setting."},
 			{Flag: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", On: settings.Int(tunables.JobBlockResurrectionScroll) == 1,
 				Native: "A player in a job suit who falls can use a resurrection scroll like anyone else.",
 				Now:    "While you wear a job suit, resurrection scrolls cannot be used.",

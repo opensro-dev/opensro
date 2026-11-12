@@ -256,6 +256,9 @@ var Settings = []Setting{
 	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
 	// (#2475). Off (native) until the carrying release turns it on.
 	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
+	// Owner, 2026-11-11: a finished dress reloads at the nearest town's
+	// spawn, so a rival cannot follow the wearer. Off (native).
+	{Env: "SRO_JOB_DRESS_TOWN_SPAWN", NomadVar: "job_dress_town_spawn", Default: "off"},
 	// Owner, 2026-11-12: no resurrection or reverse return scroll while a
 	// job suit is worn, each its own live tunable (game/tunables). 0 is
 	// native.
