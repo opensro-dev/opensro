@@ -49,6 +49,7 @@ import cap110_skill_database as skill_database
 import cap110_skill_effects as effects
 from cap110_skills import MAX_ID
 import import_vsro_alexandria as tables
+import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import write_atomically
 
@@ -655,10 +656,14 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
 		# ================
 		# load_client_skills
+		#
+		# The client's skills as the client reads them: its encrypted
+		# skilldataenc set (skilldata_enc.py), whose plain twin is an older
+		# copy that lacks the Egypt field monsters' own skills.
 		# ================
 		def load_client_skills():
-			return {int(r[1]): r for shard in tables.table_rows(read("skilldata.txt"))
-				for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()}
+			rows = skill_tables.client_skill_rows(read, lambda name: tables.TEXTDATA + name.lower() in index)
+			return {int(r[1]): r for r in rows if len(r) > 3 and r[1].isdigit()}
 		if source_root is None:
 			# The client is its own skill source: its monsters name its
 			# own skill rows, joined by codename exactly as the export's
