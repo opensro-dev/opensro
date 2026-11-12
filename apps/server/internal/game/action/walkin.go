@@ -35,9 +35,10 @@ UIIT_MSG_JSERR_PREVIOUS_TELEPORT_WORKING and 4 UIIT_MSG_COS_CAN_NOT_ENTER_
 DUNGEON (native-notice-data.ts 4355/4356).
 
 Inference: natively the region manager reports a nav-cell entry along
-the walked path; the port samples each player's live pose once per tick.
-A zone is 30 x 30, so a straight walk or ride cannot step over one in a
-tick, though a path that only clips a corner may.
+the walked path; the port samples each player's live pose once per tick
+and tests the straight path from the last sample (walkInZoneAlong), as
+the Pharaoh Temple's exits (~10 x 10) are smaller than a tick's run. A
+path that bends inside one tick and only clips a corner may still miss.
 
 ===========================================================================
 */
@@ -73,7 +74,26 @@ const (
 	opEventNotice                   uint16 = 0x3058
 	walkInNoticeTeleportWorking     uint8  = 3
 	walkInNoticeCOSCannotEnterGates uint8  = 4
+	// walkInPathStep is the spacing of the points tested along a pass's
+	// walk: under half the smallest zone (the Temple exits, ~10 units).
+	walkInPathStep = 4.0
+	// walkInPathLimit is the longest move one pass treats as walked
+	// (a run covers well under it in a tick); a longer one is a jump.
+	walkInPathLimit = 400.0
 )
+
+/*
+================
+walkInSample
+
+What the last walk-in pass saw of a player: the zone it stood in and
+where it stood, so the next pass can test the path between.
+================
+*/
+type walkInSample struct {
+	zone string
+	pose simulation.Spawn
+}
 
 /*
 ================
@@ -82,9 +102,10 @@ loadWalkIns
 The walk-in gates: each TELEPORT event zone by codename, with the one link
 of the teleport it names. A TELEPORT zone naming a missing teleport, or one
 with other than one link, is a data error, as the native handler minidumps on it.
+A zone naming a teleport the catalogue hides (hiddenCodes) is skipped.
 ================
 */
-func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, error) {
+func loadWalkIns(dir string, catalog *portalCatalog, hiddenCodes map[string]bool) (map[string]portalLink, error) {
 	byCode := make(map[string]uint32, len(catalog.destinations))
 	for id, destination := range catalog.destinations {
 		byCode[destination.code] = id
@@ -104,6 +125,11 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 		// (e.g. GATE_JINSI_01X01_12); normalize the key so mixed-case
 		// eventzonedata codenames (GATE_JINSI_01x01_12) resolve.
 		zone, teleport := strings.ToUpper(strings.TrimSpace(row[eventZoneCodenameColumn])), strings.TrimSpace(row[eventZoneTeleportColumn])
+		if hiddenCodes[teleport] {
+			// The teleport is hidden (the Alexandria overlay, or the Pharaoh
+			// Temple's switch off): its zone is as absent as the gate.
+			continue
+		}
 		source, ok := byCode[teleport]
 		if !ok {
 			return nil, fmt.Errorf("event zone %s names missing teleport %s", zone, teleport)
@@ -278,14 +304,18 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	if !inWorld {
 		return OpResult{}
 	}
-	zone := rt.walkInZoneAt(pose)
-	previous, sampled := rt.walkInZones.Load(key)
-	rt.walkInZones.Store(key, zone)
+	value, sampled := rt.walkInZones.Load(key)
+	rt.walkInZones.Store(key, walkInSample{zone: rt.walkInZoneAt(pose), pose: pose})
 	// The first sample after admission only seeds the zone. Inference: a PC
 	// inserted into the world inside a zone (a login on the cave's mouth)
 	// was placed there, not walked in, and the region manager reports
 	// entries, so it is not moved until it leaves and walks back in.
-	if !sampled || previous == zone {
+	if !sampled {
+		return OpResult{}
+	}
+	last := value.(walkInSample)
+	zone := rt.walkInZoneAlong(last, pose)
+	if zone == last.zone {
 		return OpResult{}
 	}
 	link, ok := rt.portals.walkIns[zone]
@@ -305,9 +335,45 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	out, arrived := rt.enterWalkIn(owner.division, c, link, moving)
 	if arrived {
 		// The arrival point may itself lie in a zone; it was not entered.
-		rt.walkInZones.Store(key, rt.walkInZoneAt(rt.portals.destinations[link.target].spawn))
+		arrival := rt.portals.destinations[link.target].spawn
+		rt.walkInZones.Store(key, walkInSample{zone: rt.walkInZoneAt(arrival), pose: arrival})
 	}
 	return out
+}
+
+/*
+================
+walkInZoneAlong
+
+The zone a player entered on the way from the last pass's sample to pose:
+the first zone other than the one it stood in that a point along the
+straight path stands in, else the zone at pose. Natively the region
+manager reports each nav cell the PC enters along its walk; the port
+samples once per tick, and the Pharaoh Temple's exits are only ~10 x 10
+units, smaller than a tick's run, so testing the end point alone stepped
+over them. A displacement across regions, or longer than a walk covers
+in a pass (a teleport, a reset), is not a walk: only its end is tested.
+================
+*/
+func (rt *Runtime) walkInZoneAlong(last walkInSample, pose simulation.Spawn) string {
+	end := rt.walkInZoneAt(pose)
+	if last.pose.RegionID != pose.RegionID {
+		return end
+	}
+	dx, dy, dz := pose.X-last.pose.X, pose.Y-last.pose.Y, pose.Z-last.pose.Z
+	distance := math.Hypot(dx, dz)
+	if distance <= walkInPathStep || distance > walkInPathLimit {
+		return end
+	}
+	steps := int(math.Ceil(distance / walkInPathStep))
+	for i := 1; i < steps; i++ {
+		f := float64(i) / float64(steps)
+		at := simulation.Spawn{RegionID: pose.RegionID, X: last.pose.X + dx*f, Y: last.pose.Y + dy*f, Z: last.pose.Z + dz*f}
+		if zone := rt.walkInZoneAt(at); zone != "" && zone != last.zone {
+			return zone
+		}
+	}
+	return end
 }
 
 /*

@@ -62,11 +62,8 @@ from alexandria_map_tables import (  # noqa: E402
 	OVERVIEW_TILE_REGIONS, MAP_TEXTURES, table_text, append_rows, native_text_row,
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
-import god_import as god  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
-import jupiter_import as jupiter  # noqa: E402
-import muhan_import as muhan  # noqa: E402
-import hunting2_import as hunting2  # noqa: E402
+import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
@@ -96,6 +93,10 @@ GATE_CODES = (
 TOMB_GATE_CODES = (
 	"GATE_TOMB_GATE_IN", "GATE_TOMB_GATE_OUT_1", "GATE_TOMB_GATE_OUT_2", "GATE_TOMB_GATE_OUT_3"
 )
+# Port-only, not native: the Pharaoh Temple's four gates, added with
+# SRO_PHARAOH_TEMPLE (pharaoh_temple.py): the two clicked desert gates and the
+# two walk-in gates inside the Temple. Their world column is flattened (below).
+TEMPLE_GATE_CODES = temple.GATE_CODES
 # The last teleportdata column names the destination game world. The source's
 # tomb exits name worlds 57-59, one per tomb. The v1.150 world table does not
 # define them, but the port does while SRO_PHARAOH_TOMB is on (the three
@@ -329,13 +330,15 @@ def translate_link(row, ids, level_cap, dropped=None):
 # ================
 # merge_gate_tables
 # ================
-def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP):
+def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP, flatten=()):
 	"""
 	The native tables with the gates in codes added. native and vsro map
 	"teleportdata.txt", "teleportbuilding.txt", "teleportlink.txt" and
 	"text" (textdataname / textdata_object) to raw bytes. Teleport ids differ
 	between the clients, so links are renumbered by code; the new gates take
-	their VSRO ids, which the native table does not use. Returns {name: bytes}
+	their VSRO ids, which the native table does not use. A gate named in
+	flatten has its destination world set to the persistent world (the
+	temple's source world 60 does not exist in the port). Returns {name: bytes}
 	for the changed files, and the list of gates added.
 	"""
 	native_gates = by_column(native["teleportdata.txt"], 2, TELEPORT_COLUMNS)
@@ -352,6 +355,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 	data_rows = []
 	for code in codes:
 		row = list(vsro_gates[code])
+		if code in flatten:
+			row[TELEPORT_WORLD_COLUMN] = temple.SOURCE_WORLD_COLUMN_VALUE
 		data_rows.append(row)
 	building_ids = {row[3] for row in data_rows}
 	buildings = [
@@ -384,7 +389,8 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		"buildingCodes": sorted(row[2] for row in buildings),
 		# Link conditions the native catalogue cannot evaluate yet, reported
 		# so the loss is visible in the build output and manifest (#1749).
-		**({"droppedConditions": dropped_conditions} if dropped_conditions else {})
+		**({"droppedConditions": dropped_conditions} if dropped_conditions else {}),
+		**({"worldsFlattened": [code for code in codes if code in flatten]} if set(codes) & set(flatten) else {})
 	}
 
 
@@ -615,6 +621,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
+	pharaoh_temple = temple.add_temple(vsro_root, native, out)
 	# The map step adds to textdataname.txt on top of the gates' texts.
 	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])
 	music = add_music(vsro_root, native, out)
@@ -634,6 +641,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
 	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
+	# The later clients' pets follow the avatars: their COS rows and
+	# summon scrolls append their own shards to the same manifests. The
+	# v1.696 pass and the pinned-archive pass read their sources from the
+	# environment and skip cleanly while those are not on the machine.
+	from pet_import import add_all_sources
+	pets = add_all_sources(vsro_root, native, out)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -643,23 +656,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
-	# Jupiter is independently optional; its off path also removes what a
-	# previous on build of a reused variant root left behind.
-	jupiter_build = jupiter.add_jupiter(native, out)
-	# The GOD temple worlds ride SRO_CAP110_TEMPLE (with its cap-110
-	# pairing); the same off-path rule applies to their outputs.
-	god_build = god.add_god(native, out)
-	# Muhan is independently optional; its off path also removes what a
-	# previous on build of a reused variant root left behind.
-	muhan_build = muhan.add_muhan(native, out)
-	# The second hunting grounds are independently optional the same
-	# way; their off path reaps a previous on build's outputs.
-	hunting2_build = hunting2.add_hunting2(native, out)
-	# The Sky Temple fields are their own switch and their own source (the
-	# v1.696 client), layered on the same variant after the populations
-	# whose identity space they share.
-	from skytemple_import import add_skytemple
-	sky_temple = add_skytemple(native, out)
+	# The later sources' optional layers, in their load-bearing order
+	# (variant_later_layers.py owns the order and the manifest keys).
+	from variant_later_layers import add_later_layers
+	later_layers = add_later_layers(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -669,11 +669,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
-		"jupiter": jupiter_build,
-		"god": god_build,
-		"muhan": muhan_build,
-		"hunting2": hunting2_build,
-		"skyTemple": sky_temple,
+		**later_layers,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
@@ -691,11 +687,17 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
+		"pets": pets["pets"],
+		"petsV1696": pets["petsV1696"],
+		"petsArchive": pets["petsArchive"],
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,
 		"note": ENVIRONMENT_NOTE
 	}
+	if pharaoh_temple["enabled"]:
+		# Absent while off, so an off manifest is what it was before the temple.
+		manifest["pharaohTemple"] = pharaoh_temple
 	write_atomically(variant / VARIANT_MANIFEST, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 	return manifest
 
@@ -750,7 +752,11 @@ def add_gates(vsro_root, native, out):
 	vsro["text"] = read_vsro_file(vsro_root, "Media", TEXTDATA + "textdata_object.txt")
 	from cap110_monsters import tomb_enabled
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
-	merged, summary = merge_gate_tables(tables, vsro, codes=codes, level_cap=level_cap)
+	if temple.temple_enabled():
+		codes += TEMPLE_GATE_CODES
+	merged, summary = merge_gate_tables(
+		tables, vsro, codes=codes, level_cap=level_cap, flatten=TEMPLE_GATE_CODES
+	)
 	for dropped in summary.get("droppedConditions", []):
 		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
 			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")

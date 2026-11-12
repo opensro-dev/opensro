@@ -117,8 +117,9 @@ func TestRestoredBaglessTransportGetsItsCargo(t *testing.T) {
 ================
 TestTransportBagFollowsPetInventoryPages
 
-A fresh summon and a bagless restore both take the five-page size while
-the rule is on; an authored size above it is kept, never lowered.
+A fresh summon and a bagless restore both take the transport page size
+while that rule is on, whatever the grab pet rule says; an authored size
+above it is kept, never lowered.
 ================
 */
 func TestTransportBagFollowsPetInventoryPages(t *testing.T) {
@@ -129,7 +130,7 @@ func TestTransportBagFollowsPetInventoryPages(t *testing.T) {
 	refs := testCosSource(testItems())
 	refs.characters["COS_T_DHORSE3"].InventoryCapacity = 40
 	rt, _ := newTestRuntime(c, refs)
-	rt.PetInventoryPages = true
+	rt.PetInventoryPages = companion.PetInventoryPages{Transport: 5}
 	rt.BindPetSession(testDivision, c, 101)
 	rt.HandleItemUse(testDivision, c, []byte{22, 0xEC, 0x11})
 	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil || c.ActiveCOS.Container.Capacity != companion.PetInventorySlots {
@@ -142,10 +143,23 @@ func TestTransportBagFollowsPetInventoryPages(t *testing.T) {
 	baggedRefs := testCosSource(testItems())
 	baggedRefs.characters["COS_T_DHORSE3"].InventoryCapacity = 40
 	baggedRT, _ := newTestRuntime(bagless, baggedRefs)
-	baggedRT.PetInventoryPages = true
+	baggedRT.PetInventoryPages = companion.PetInventoryPages{Grab: 9, Transport: 2}
 	baggedRT.restoreCharacterCOS(testDivision, bagless.Name)
-	if bagless.ActiveCOS.Container == nil || bagless.ActiveCOS.Container.Capacity != companion.PetInventorySlots {
-		t.Fatalf("the restored transport's bag is %+v, want %d slots", bagless.ActiveCOS.Container, companion.PetInventorySlots)
+	if bagless.ActiveCOS.Container == nil || bagless.ActiveCOS.Container.Capacity != 2*28 {
+		t.Fatalf("the restored transport's bag is %+v, want two pages (56 slots)", bagless.ActiveCOS.Container)
+	}
+
+	// The grab pet rule alone leaves a transport its authored size.
+	grabOnly := testCharacter()
+	grabOnlyGID, _ := enterworld.CosObjectIDForCharacter(grabOnly)
+	grabOnly.ActiveCOS = &enterworld.CharacterCOS{GID: grabOnlyGID, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, StateFlags: 3}
+	grabOnlyRefs := testCosSource(testItems())
+	grabOnlyRefs.characters["COS_T_DHORSE3"].InventoryCapacity = 40
+	grabOnlyRT, _ := newTestRuntime(grabOnly, grabOnlyRefs)
+	grabOnlyRT.PetInventoryPages = companion.PetInventoryPages{Grab: 5}
+	grabOnlyRT.restoreCharacterCOS(testDivision, grabOnly.Name)
+	if grabOnly.ActiveCOS.Container == nil || grabOnly.ActiveCOS.Container.Capacity != 40 {
+		t.Fatalf("the grab pet rule changed the transport's bag to %+v, want its authored 40 slots", grabOnly.ActiveCOS.Container)
 	}
 
 	// The authored size already exceeds the five-page size: it stays.
@@ -155,7 +169,7 @@ func TestTransportBagFollowsPetInventoryPages(t *testing.T) {
 	wideRefs := testCosSource(testItems())
 	wideRefs.characters["COS_T_DHORSE3"].InventoryCapacity = 177
 	wideRT, _ := newTestRuntime(wide, wideRefs)
-	wideRT.PetInventoryPages = true
+	wideRT.PetInventoryPages = companion.PetInventoryPages{Transport: 5}
 	wideRT.restoreCharacterCOS(testDivision, wide.Name)
 	if wide.ActiveCOS.Container == nil || wide.ActiveCOS.Container.Capacity != 177 {
 		t.Fatalf("the larger authored bag became %+v, want 177 slots", wide.ActiveCOS.Container)

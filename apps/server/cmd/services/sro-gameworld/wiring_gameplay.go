@@ -732,7 +732,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
-	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
+	game.items.PetInventoryPages, err = companion.PetInventoryPagesFromEnv()
 	if err != nil {
 		return err
 	}

@@ -808,7 +808,7 @@ func (b *forgeBuilder) forgeSummon(now time.Time) (*domain.CharacterCOS, bool) {
 	}
 	if charRef.TidWord>>11 == 4 {
 		summon.CommandMode = initialPickupCompanionMode
-		summon.Container = &domain.COSContainer{Capacity: b.rt.petInventoryCapacity(initialPickupCompanionSlots)}
+		summon.Container = &domain.COSContainer{Capacity: b.rt.PetInventoryPages.GrabCapacity(initialPickupCompanionSlots)}
 		minutes, present := b.ref.NativeFields.Lookup("itemParam1_29c")
 		if !present || math.IsNaN(minutes) || math.IsInf(minutes, 0) ||
 			minutes <= 0 || minutes > math.MaxInt32/60 || math.Trunc(minutes) != minutes {
