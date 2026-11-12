@@ -363,6 +363,15 @@ test("smartPetPickup: an owner-bag refusal holds back only its own drop, never t
 	f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 30000, true );
 	f.owner.spaceChanged();
 	assert.deepEqual( f.owner.step( { ...f.frame, now: 30001, smartPetPickup: true } ), [ cosPickupRequest( 2, 10 ) ] );
+	// An item-share retry (0x9C) holds back the drop, not the pet.
+	const share = fixture();
+	share.drop( 10, 1, 0x4ec, 1 );
+	share.drop( 11, 5, 0x82c, 1 );
+	share.owner.step( share.frame );
+	share.owner.result( { subtype: 2, selector: 8, result: 0x9c, gid: 2, itemGid: 10 }, 0, true );
+	assert.deepEqual( share.owner.step( { ...share.frame, now: 1, smartPetPickup: true } ), [
+		cosPickupRequest( 2, 11 )
+	] );
 	// The pet's own full bag (0xB4) still pauses every non-gold drop.
 	f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 10 }, 30002, true );
 	f.drop( 12, 5, 0x82c, 1 );

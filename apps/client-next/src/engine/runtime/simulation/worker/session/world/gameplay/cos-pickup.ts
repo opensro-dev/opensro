@@ -244,7 +244,14 @@ refused drop, since every other drop still fits the pet's own bag.
 				drops.delete( result.itemGid );
 				retired.add( result.itemGid );
 			} else if ( code === 0x13 || code === 0x99 ) dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
-			else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
+			else if ( code === 0x9c && smartPetPickup ) {
+				// Port-only (smartPetPickup): an item-share party answers 0x9C
+				// for a drop it cannot land yet (a quest item for a full owner
+				// bag, a full peer pet). Pausing the pet re-proposed the same
+				// nearest drop every 3 s and starved every other one; holding
+				// back that drop lets the pet take the rest meanwhile.
+				dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
+			} else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
 			else if ( code === 0xb4 || code === 0xb5 ) {
 				if ( smartPetPickup && code === 0xb5 ) {
 					ownerBagFull.set( result.itemGid, now + OWNER_BAG_RETRY_MS );
