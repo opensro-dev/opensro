@@ -92,6 +92,10 @@ type Runtime struct {
 	// not native, #2959); nil leaves "/report ..." as ordinary chat
 	// text, the native posture for a command the original lacks.
 	Reports *chatreport.Service
+	// Contributor is the /contributor title switch (contributor,
+	// port-only, not native, #3358): the answer line and true when the
+	// line was the command; nil leaves "/contributor" ordinary text.
+	Contributor func(accountID, message string) (answer string, handled bool)
 }
 
 /*
