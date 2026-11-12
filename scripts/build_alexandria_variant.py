@@ -679,6 +679,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The second hunting grounds are independently optional the same
 	# way; their off path reaps a previous on build's outputs.
 	hunting2_build = hunting2.add_hunting2(native, out)
+	# The gears magic stones ride the mall's own switch
+	# (SRO_MALL_CATEGORIES): on stages their item shard beside the
+	# mall layout that lists them; off reaps a previous on build.
+	import gears_stone_import as gears_stones
+	gears_build = gears_stones.add_stones(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -693,6 +698,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"jupiter": jupiter_build,
 		"muhan": muhan_build,
 		"hunting2": hunting2_build,
+		"gearsStones": gears_build,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
