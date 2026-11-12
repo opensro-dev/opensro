@@ -628,7 +628,9 @@ class Cap110MonstersTest(unittest.TestCase):
 	#
 	# Stage 1's client-only seeds: the sectors the admitted species'
 	# outdoor placements stand in. The below-window species and the
-	# dungeon placement seed nothing.
+	# dungeon placement seed nothing. The manifest names its shard in
+	# the client's mixed case (CharacterData_5000.txt in the real one),
+	# which must still resolve against the lower-case archive index.
 	# ================
 	def test_client_outdoor_regions_seed_the_placed_sectors(self):
 		with tempfile.TemporaryDirectory() as root:
@@ -638,7 +640,7 @@ class Cap110MonstersTest(unittest.TestCase):
 			low = self.later_row("MOB_SD_LOW", 0, 99)
 			low[1], low[5] = "7003", "UIO_OBJ_MOB_SD_LOW"
 			media = {
-				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+				"characterdata.txt": utf16([["CharacterData_6000.txt"]]),
 				"characterdata_6000.txt": utf16([field, low]),
 				"npcpos.txt": utf16([
 					["7001", "19001", "1.0", "0.0", "2.0"],
