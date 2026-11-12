@@ -166,7 +166,13 @@ export function overheadLayout(
 			iconPath( game.fortress?.fortresses.find( f => f.id === ownerFortress.id )?.icon ) :
 			null;
 	// 751430 / 86A26D: a stall's title rides above the rest (SetOverheadStallTitle, 0xFFFEB5FF).
-	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ? entity.titleText : "",
+	// 869750 (SetStallName) stores the title bracketed - "[" + title + "]" - and the
+	// spawn row (869DF0) and the 0x30DF open both draw that bracketed form; only the
+	// 0x34B7 rename handler passes the raw packet string to the board, the one native
+	// slip. entity.titleText stays raw for the stall window; the board brackets here.
+	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ?
+			"[" + entity.titleText + "]" :
+			"",
 		stallY = statusY - (stallText ? STALL_TITLE_RISE : 0);
 	// Port-only, not native (#2958): the fifth star shows on the
 	// transport's nameplate, five stars in the bag window's row and tint,
