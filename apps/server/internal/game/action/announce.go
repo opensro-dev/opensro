@@ -9,7 +9,8 @@ GameWorld's Nomad job turns them on:
 
 	SRO_ANNOUNCE_SOX_DROP  a seal drop notice, worded by its tier (#1640;
 	                       sealDropText: the Sun's line is the loudest)
-	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N >= 7)
+	SRO_ANNOUNCE_PLUS      "[<player>] has succeded in augmenting <<item>> to [+N]"
+	                       (N >= 7; the later client's wording, #3260)
 	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
 	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
@@ -30,11 +31,12 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_GACHA_WIN  "<player> won <prize> xN from Magic Pang" on a
 	                          committed Magic Pop win (#2852); the native
 	                          0x30C0 banner is unchanged either way.
-	SRO_ANNOUNCE_PLUS_FAIL  "<alias> failed +N on <item>: ..." for an
-	                          opted-in character's failed reinforce at
+	SRO_ANNOUNCE_PLUS_FAIL  "[<alias>] has failed in augmenting <<item>> to [+N]: ..."
+	                          for an opted-in character's failed reinforce at
 	                          SRO_ANNOUNCE_PLUS_FAIL_MIN (default 9) or
 	                          above (#2852; #1738's alias rule: never a
-	                          character name; rides the break channel).
+	                          character name; rides the break channel,
+	                          its chat line linking the item, #3260).
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -64,6 +66,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/social/chatfeed"
@@ -286,7 +289,9 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	case announceJobKill, announceMostWanted:
 		frame = wire.JobKillNotificationFrame(text)
 	case announceBreak, announcePlusFail:
-		frame = wire.BreakNotificationFrame(text)
+		// The link is a plus-fail's item (#3260); a break passes none.
+		// Only the body goes on: the break channel never names a player.
+		frame = wire.BreakNotificationFrame(text, link.Body)
 	}
 	frames := make([]simulation.Frame, 0, 2)
 	if refObjID != 0 {
@@ -466,9 +471,14 @@ func plusNoticeLead(plus uint8, tiers bool) string {
 Runtime.announcePlus
 
 Item 2: a reinforcement that succeeded into +7 or above, after its commit,
-naming a sealed item's seal as the drop notice does. With the plus tiers
-on, +10 and above lead louder (plusNoticeLead); the line's seal colour
-rides the item link as before, tiers or not.
+naming a sealed item's seal as the drop notice does. The line takes the
+later client's announcement wording (#3260, owner ask 2026-11-12, on the
+UIIT_MSG_REINFORCERR_SUCCESS_CENTER pattern): "[<player>] has succeded
+in augmenting <<item>> to [+N]." - "succeded" is the asked-for spelling.
+The chat line links the item name inside the <<>> off the same body the
+line has always carried. With the plus tiers on, +10 and above still
+lead louder (plusNoticeLead); the line's seal colour rides the item
+link as before, tiers or not.
 ================
 */
 func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome, nowMs int64) {
@@ -489,14 +499,14 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 			}
 		}
 		lead := plusNoticeLead(item.Plus, rt.Announce.PlusTiers)
-		text := lead + fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
+		text := lead + fmt.Sprintf("[%s] has succeded in augmenting <<%s%s>> to [+%d].", player, name, seal, item.Plus)
 		// The seal is the part to give up: clamping would cut the plus off
 		// the end instead. A tier lead is given up next, for the same reason.
 		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
-			text = lead + fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
+			text = lead + fmt.Sprintf("[%s] has succeded in augmenting <<%s>> to [+%d].", player, name, item.Plus)
 		}
 		if lead != "" && len(utf16.Encode([]rune(text))) > noticeMaxUnits {
-			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
+			text = fmt.Sprintf("[%s] has succeded in augmenting <<%s>> to [+%d].", player, name, item.Plus)
 		}
 		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, item.RefObjID, nowMs)
 		return
@@ -639,10 +649,14 @@ Runtime.announcePlusFail
 SRO_ANNOUNCE_PLUS_FAIL_MIN, when the shard flag is on AND the character
 opted in on the account page - the break notice's opt-in
 (character.BreakNotice) and its privacy rule: the job alias or
-"a player", never the character name, and the line links nothing (the
-break channel), so the alias cannot lead to a character. The wording
-names the outcome: destroyed, saved by its Immortal option, or dropped
-to its new plus. Returns true only when the line actually posted (the
+"a player", never the character name. The line takes the success
+line's later-client wording (#3260): "[<alias>] has failed in
+augmenting <<item>> to [+N]", and still names the outcome after it:
+destroyed, saved by its Immortal option, or dropped to its new plus.
+The chat line links the item inside the <<>> - the item as it stands
+after the attempt, or, destroyed, the item as the door read it before
+the commit (target) - and links no player, so the alias cannot lead
+to a character. Returns true only when the line actually posted (the
 kind's shard bucket can still drop it), so the caller folds a destroyed
 item's break line into this one instead of posting both, and only then.
 The line also keeps the break channel's per-character window, shared
@@ -650,7 +664,7 @@ with the break line, and spends it only on a post. A notice only: the
 reinforcement's outcome stands either way.
 ================
 */
-func (rt *Runtime) announcePlusFail(division string, character *enterworld.Character, codename string, outcome alchemy.Outcome, nowMs int64) bool {
+func (rt *Runtime) announcePlusFail(division string, character *enterworld.Character, target inventory.Item, outcome alchemy.Outcome, nowMs int64) bool {
 	if !rt.Announce.PlusFail || character == nil || !character.BreakNotice || outcome.Success {
 		return false
 	}
@@ -661,14 +675,14 @@ func (rt *Runtime) announcePlusFail(division string, character *enterworld.Chara
 	if !rt.breakNoticeQuiet(division, character.Name, nowMs) {
 		return false
 	}
-	name, seal := rt.announceItemName(codename)
+	name, seal := rt.announceItemName(target.Codename)
 	who := announceAlias(character)
 	var text string
 	switch {
 	case outcome.Destroyed:
-		text = fmt.Sprintf("%s failed +%d on %s%s: destroyed", who, attempted, name, seal)
+		text = fmt.Sprintf("[%s] has failed in augmenting <<%s%s>> to [+%d]: destroyed.", who, name, seal, attempted)
 	case outcome.ImmortalSaved:
-		text = fmt.Sprintf("%s failed +%d on %s%s: saved by Immortal", who, attempted, name, seal)
+		text = fmt.Sprintf("[%s] has failed in augmenting <<%s%s>> to [+%d]: saved by Immortal.", who, name, seal, attempted)
 	default:
 		final := 0
 		for _, item := range outcome.Items {
@@ -676,13 +690,21 @@ func (rt *Runtime) announcePlusFail(division string, character *enterworld.Chara
 				final = int(item.Plus)
 			}
 		}
-		text = fmt.Sprintf("%s failed +%d on %s%s: dropped to +%d", who, attempted, name, seal, final)
+		text = fmt.Sprintf("[%s] has failed in augmenting <<%s%s>> to [+%d]: dropped to +%d.", who, name, seal, attempted, final)
 	}
 	// The seal is the part to give up, as in the break notice.
 	if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 		text = strings.Replace(text, seal, "", 1)
 	}
-	posted := rt.announce(division, announcePlusFail, text, wire.NoticeLink{}, 0, nowMs)
+	// The linked item: as it stands after the attempt, or - destroyed,
+	// absent from the outcome - as it stood before it.
+	body, refObjID := target.Body().Encode(), target.RefObjID
+	for _, item := range outcome.Items {
+		if item.Slot == outcome.Target {
+			body, refObjID = item.Body().Encode(), item.RefObjID
+		}
+	}
+	posted := rt.announce(division, announcePlusFail, text, wire.NoticeLink{Body: body}, refObjID, nowMs)
 	if posted {
 		rt.breakNoticeRecord(division, character.Name, nowMs)
 	}
