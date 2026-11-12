@@ -647,6 +647,21 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 
 
 # ================
+# availability
+#
+# An availability file's bytes, checked for its signature; b"" when
+# the file is absent (a native tree without one enables nothing).
+# ================
+def availability(variant, path):
+	if not path.exists():
+		return b""
+	raw = path.read_bytes()
+	if raw[:len(variant.MFO_SIGNATURE)] != variant.MFO_SIGNATURE:
+		raise ValueError(f"{path} is not a JMXVMFO availability file")
+	return raw
+
+
+# ================
 # reap_regions
 #
 # The region half of a switch off, from the marker's regionMerge
@@ -661,19 +676,27 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 # ================
 def reap_regions(spec, native, out, record):
 	for relative in record.get("files", []):
-		(out / relative).unlink(missing_ok=True)
+		target = (out / relative).resolve()
+		# The marker is the build's own file, but a path it names is
+		# still checked: a reap never deletes outside the overlay.
+		if out not in target.parents:
+			raise ValueError(f"{spec.label} enrolled file {relative!r} is outside the overlay")
+		target.unlink(missing_ok=True)
 	sectors = [tuple(sector) for sector in record.get("sectors", [])]
 	if sectors:
 		import build_alexandria_variant as variant
 		mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 		if mapinfo.exists():
-			raw = mapinfo.read_bytes()
-			if raw[:len(variant.MFO_SIGNATURE)] != variant.MFO_SIGNATURE:
-				raise ValueError("not a JMXVMFO availability file")
-			data = bytearray(raw)
+			native_bits = availability(variant, native / "Data_extracted" / "navmesh" / "mapinfo.mfo")
+			data = bytearray(availability(variant, mapinfo))
 			for sector_x, sector_y in sectors:
 				region_id = (sector_y << 8) | sector_x
-				data[variant.MFO_HEADER_BYTES + (region_id >> 3)] &= ~(0x80 >> (region_id & 7))
+				at, bit = variant.MFO_HEADER_BYTES + (region_id >> 3), 0x80 >> (region_id & 7)
+				# A sector the native tree already enables stays enabled:
+				# the merge set it again, it did not create it.
+				if native_bits and at < len(native_bits) and native_bits[at] & bit:
+					continue
+				data[at] &= ~bit
 			write_atomically(mapinfo, bytes(data))
 	ids = {str(region_id) for region_id in record.get("regions", [])}
 	prefixes = tuple(record.get("prefixes", []))

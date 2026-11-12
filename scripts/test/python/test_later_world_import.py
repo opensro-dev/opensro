@@ -121,6 +121,38 @@ class LaterWorldReapTest(unittest.TestCase):
 			later.reap_world(jupiter.SPEC, native, out)
 
 	# ================
+	# test_off_keeps_a_sector_native_already_enables
+	#
+	# An export region that is also a native sector: the merge set its
+	# availability bit again, so the reap must not clear it.
+	# ================
+	def test_off_keeps_a_sector_native_already_enables(self):
+		with tempfile.TemporaryDirectory() as root:
+			native, out, _ = self.fixture(Path(root))
+			native_map = bytearray(b"JMXVMFO 1000" + bytes(12) + bytes(8192))
+			region_id = (85 << 8) | 129
+			native_map[24 + (region_id >> 3)] |= 0x80 >> (region_id & 7)
+			(native / "Data_extracted" / "navmesh").mkdir(parents=True)
+			(native / "Data_extracted" / "navmesh" / "mapinfo.mfo").write_bytes(bytes(native_map))
+			later.reap_world(jupiter.SPEC, native, out)
+			mapinfo = (out / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()
+			self.assertTrue(mapinfo[24 + (region_id >> 3)] & (0x80 >> (region_id & 7)))
+
+	# ================
+	# test_off_refuses_an_enrolled_path_outside_the_overlay
+	# ================
+	def test_off_refuses_an_enrolled_path_outside_the_overlay(self):
+		with tempfile.TemporaryDirectory() as root:
+			native, out, _ = self.fixture(Path(root))
+			marker = json.loads((out / jupiter.MARKER).read_text(encoding="utf-8"))
+			marker["regionMerge"]["files"] = ["../native/keep.txt"]
+			(out / jupiter.MARKER).write_text(json.dumps(marker), encoding="utf-8")
+			(native / "keep.txt").write_bytes(b"x")
+			with self.assertRaises(ValueError):
+				later.reap_world(jupiter.SPEC, native, out)
+			self.assertTrue((native / "keep.txt").exists())
+
+	# ================
 	# test_off_without_a_prior_build_is_quiet
 	# ================
 	def test_off_without_a_prior_build_is_quiet(self):
