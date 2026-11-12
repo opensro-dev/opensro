@@ -324,6 +324,14 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if _, err := monster.LoadMuhanWaves(dir, monster.MuhanEnabled()); err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue muhan waves: %w", err)
 	}
+	template, err = monster.AppendArabia(template, dir, monster.ArabiaEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue arabia field population: %w", err)
+	}
+	template, err = monster.AppendArabiaDungeon(template, dir, monster.ArabiaEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue arabia dungeon population: %w", err)
+	}
 	return template, nil
 }
 

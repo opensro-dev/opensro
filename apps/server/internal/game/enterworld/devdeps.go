@@ -250,6 +250,9 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		// Port-only (#3270): the second hunting grounds' population
 		// joins the default world while its switch is on.
 		template, err = monster.AppendHunting2(template, textdataDir, monster.Hunting2Enabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.MuhanEnabled() {
 			// Port-only (#3273): the Muhan wave worlds join the
 			// catalogue only while their switch is on, before any
@@ -259,6 +262,25 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			}
 		}
 		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		if monster.ArabiaEnabled() {
+			// Port-only (#3268): the Baghdad dungeon world joins the
+			// catalogue only while its switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.ArabiaDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		// Port-only (#3268): the Arabia field population joins the
+		// default world and the dungeon's population its own world,
+		// while their switch is on.
+		template, err = monster.AppendArabia(template, textdataDir, monster.ArabiaEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		template, err = monster.AppendArabiaDungeon(template, textdataDir, monster.ArabiaEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}

@@ -5,10 +5,9 @@ portonly.go - port-only world definitions, registered behind their switches
 
 The shipped catalogue (catalog.go) is the v1.150 table extract and never
 grows: optional port-only content (the Pharaoh Tombs, #1750; the temple
-bands, #1800 step 3; the Jupiter worlds, #3267) registers its own world definitions here while its
 bands, #1800 step 3; the Jupiter worlds, #3267; the Muhan wave worlds,
-#3273) registers its own world definitions here while its
-switch is on, so Lookup
+#3273; the Baghdad dungeon, #3268) registers its own world definitions
+here while its switch is on, so Lookup
 and the registry builders see one catalogue. Registration is idempotent
 for identical rows and refuses anything that collides with a shipped row
 or with a different row already registered under the same id.
@@ -21,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 
+	"opensro.online/server/internal/game/world/arabia"
 	"opensro.online/server/internal/game/world/jupiter"
 	"opensro.online/server/internal/game/world/muhan"
 	"opensro.online/server/internal/game/world/pharaohtomb"
@@ -167,6 +167,28 @@ func MuhanDefinitions() []Definition {
 		}
 	}
 	return definitions
+}
+
+/*
+================
+ArabiaDefinitions
+
+The port-only Baghdad dungeon world (#3268). The later server's row
+is an ordinary permanent world, so the shape is the Jupiter field's:
+type zero, one resident layer, no player limit. The continent's town
+and fields stand on the persistent world and register nothing. How a
+player reaches the dungeon is the admission slice's; this registers
+while SRO_ARABIA is on.
+================
+*/
+func ArabiaDefinitions() []Definition {
+	world := arabia.DungeonWorld()
+	return []Definition{{
+		ID:         DefinitionID(world.ID),
+		CodeName:   world.CodeName,
+		NativeType: 0,
+		LayerLimit: 1,
+	}}
 }
 
 /*

@@ -1,0 +1,19 @@
+feat(arabia): import the Arabia continent behind SRO_ARABIA (#3268)
+
+Port-only, not native. The Arabia continent (Baghdad town, its three
+fields and the Baghdad dungeon) builds from the two later sources
+behind SRO_ARABIA: the v1.696 client (hash-pinned) carries terrain,
+navmesh, names and the 51 MOB_AR*/MOB_ARABIA_* kinds at levels
+121-130, and the pinned ISRO-R population export carries their
+nests. The importer merges exactly the regions the client's
+regioncode names (264 RN_ARABIA_*; the backup's nests cover 173 -
+both numbers recorded, not assumed), writes the town and field
+nests for the persistent world and the dungeon's 237 for its own
+registered world (112, GROUP_ARABIA_DUNGEON, Type 0), and counts
+the 72 NPC nests it leaves for the NPC pass. Travel, dungeon entry
+and the town's people are the #3320 admission slice; off leaves
+the build and the server unchanged. The branch also carries the
+stacking merges of main and the Muhan branch; one merge dropped
+AppendHunting2's error check in devdeps.go, restored here.
+
+Co-Authored-By: Muse Wonder 1.0 <noreply@muse.dev>

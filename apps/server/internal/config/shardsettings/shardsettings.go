@@ -155,6 +155,11 @@ var Settings = []Setting{
 	// server read the same switch; off leaves every imported row out
 	// of the build and the wave file unread.
 	{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off", Catalogue: true},
+	// Port-only, not native: the Arabia continent - Baghdad town, its
+	// three fields and the Baghdad dungeon world (#3268). Build and
+	// server read the same switch; off leaves every imported row out
+	// of the build and both population files unread.
+	{Env: "SRO_ARABIA", NomadVar: "arabia", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
