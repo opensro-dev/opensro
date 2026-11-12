@@ -11,7 +11,7 @@ fields are outdoor regions of the default world, so their nests join
 it like the field population's.
 
 Unlike the cap-110 families the population needs no second switch: its
-character rows ride its own shard (characterdata_130000.txt) and its
+character rows ride its own shard (characterdata_160000.txt) and its
 drops are the native posture, so nothing here rides the cap-110 loot
 catalogue the field switch builds. The authored level window is the
 importer's sanity bound from the client table (131-178), not a spawn

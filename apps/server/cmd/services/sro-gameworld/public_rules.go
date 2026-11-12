@@ -133,6 +133,7 @@ func publicRules() publicstats.RulesResponse {
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
+	mallCategoriesOn, _ := commerce.MallCategoriesFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
 	settings := tunables.Current()
@@ -163,6 +164,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no temple instance.",
 				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
 				Why:    "Instanced group hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvSkytemple, On: monster.SkytempleEnabled(),
+				Native: "There is no Sky Temple.",
+				Now:    "The Sky Temple's four fields open above Jangan's Jupiter Temple, hunting grounds of monsters at levels 131 to 178.",
+				Why:    "Higher hunting grounds for the optional expansion's upper levels."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
@@ -328,6 +333,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
 				Why:    "Beta balance: the outfits were already in the game data."},
+			{Flag: commerce.EnvMallCategories, On: mallCategoriesOn,
+				Native: "The Item Mall's categories are the v1.150 shops: Expendables, Avatar, Pet, Premium and Alchemy.",
+				Now:    "A HOT shop joins them with Halloween exclusives and recommended goods, Premium and Alchemy gain tabs of their own, and the Destruction Rondo is listed for silk.",
+				Why:    "Owner ask (#3257): the later mall's shape; clients without the Experimental categories row keep the shipped mall."},
 			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
 				Native: "A character's name never changes.",
 				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",

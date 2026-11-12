@@ -432,6 +432,16 @@ def build_trees(base):
 
 
 class SkytempleImportTest(unittest.TestCase):
+	# The fixture's archives are synthetic; the v1.696 pin file
+	# (v1696_archive_pins.json, #3250) must not reach them, or the
+	# importer's archive verification refuses the fixture before
+	# anything is read. Point the pin at an absent file - the same
+	# "nothing to verify against" posture a pre-pin tree has.
+	def setUp(self):
+		stub = mock.patch.object(sky, "PIN_FILE", Path(tempfile.gettempdir()) / "opensro-no-v1696-pins.json")
+		stub.start()
+		self.addCleanup(stub.stop)
+
 	# ================
 	# test_on_then_off
 	# ================

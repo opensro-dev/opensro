@@ -27,8 +27,9 @@ What the source authors, and what this import does with it:
 	          client authors them, 131-178 (see docs/features/CAP110.md
 	          for the level decision); skills join by codename, native
 	          records win, identities are allocated once and kept in the
-	          marker. Nests are the client-only posture of #3246: one
-	          monster on the placement point, respawn 1-3 s, sight 100.
+	          marker. Nests take the client-only posture recorded for
+	          this import (#3269): one monster on the placement point,
+	          respawn 1-3 s, sight 100.
 	gates     the source chain stands in a Jupiter field this port does
 	          not import, and its C links name gates whose buildings the
 	          later client itself never shipped. Authored at import: the
@@ -83,7 +84,7 @@ REGION_PREFIX = "RN_OTHER_SKYTEMPLE_"
 FIRST_LEVEL = 131
 LAST_LEVEL = 178
 
-# The client-only nest posture (#3246): the client tables carry placements
+# The client-only nest posture (#3269): the client tables carry placements
 # but no tactics, so an ordinary aggressive field monster is synthesized -
 # respawn 1-3 seconds and sight 100, the commonest authored values of the
 # population evidence the native server ships. Port-only inference.
