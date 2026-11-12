@@ -181,17 +181,39 @@ test("a ranged pack block that stalls resumes its range after the kept bytes", a
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const asset = packedAsset( false ), messages = [], later = [];
 	const total = asset.manifest.groups[0].packs[0].bytes, kept = 100;
-	let stalledAt = -1;
+	let stalledAt = -1, consumed = () => {}, deliver = () => {};
+	// Resolved once the reader asked past the first chunk: the loader has
+	// kept it, so the stall that follows must resume after it.
+	/** @type {Promise<void>} */
+	const keptFirst = new Promise( resolve => {
+		consumed = resolve;
+	} );
+	/** @type {Promise<void>} */
+	const delivered = new Promise( resolve => {
+		deliver = resolve;
+	} );
 	t.mock.method( globalThis, "fetch", async ( url, options ) => {
 		if ( stalledAt < 0 && asset.isMember( options ) ) {
 			// The first member read delivers its first bytes, then stalls.
 			const [start, end] = defined( /bytes=(\d+)-(\d+)/.exec( options.headers.Range ) ).slice( 1 ).map( Number );
 			stalledAt = start;
 			const block = new Uint8Array( await asset.serve( url, options ).arrayBuffer() );
-			return stallingBody( [ block.subarray( 0, kept ) ], {
-				status: 206,
-				headers: { "Content-Range": `bytes ${start}-${end}/${total}` }
-			} );
+			let pulls = 0;
+			return new Response(
+				new ReadableStream( {
+					/*
+					================
+					pull
+					================
+					*/
+					pull( controller ) {
+						if ( pulls++ === 0 ) return controller.enqueue( block.slice( 0, kept ) );
+						consumed();
+						return new Promise( () => {} );
+					}
+				} ),
+				{ status: 206, headers: { "Content-Range": `bytes ${start}-${end}/${total}` } }
+			);
 		}
 		if ( stalledAt >= 0 ) later.push( options?.headers?.Range ?? null );
 		return asset.serve( url, options );
@@ -202,12 +224,13 @@ test("a ranged pack block that stalls resumes its range after the kept bytes", a
 		) {
 			messages.push( message );
 		}
+		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
-	for ( let i = 0; i < 20 && stalledAt < 0; i++ ) await settle();
+	await keptFirst;
 	await stall( t );
-	for ( let i = 0; i < 20 && messages.length === 0; i++ ) await settle();
+	await delivered;
 	assert.ok( later[0]?.startsWith( `bytes=${stalledAt + kept}-` ), `the retry asked ${later[0]}` );
 	assert.equal( messages.length, 1 );
 	assert.equal( messages[0].kind, "bytes" );
