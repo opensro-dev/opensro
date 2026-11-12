@@ -179,9 +179,6 @@ func (rt *Runtime) HandleItemUse(
 		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
 	}
 
-	if result, handled := rt.useArenaSilk(character, request, tail); handled {
-		return result
-	}
 	// Port-only (SRO_CHAT_ITEM_LINKS): a Global Chatting line's warehouse
 	// links are read here, before the door that holds the store's lock.
 	globalChatStorage := rt.globalChatStorageLinks(divisionID, character, request, tail)

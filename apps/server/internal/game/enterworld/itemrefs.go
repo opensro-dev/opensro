@@ -74,6 +74,43 @@ func NewTextdataItems(dir string) *TextdataItems {
 	return &TextdataItems{dir: dir}
 }
 
+// ItemRefByCodename implements ItemRefSource.
+/*
+================
+ItemRefByCodename
+================
+*/
+func (t *TextdataItems) ItemRefByCodename(codename string) (*ItemRef, bool) {
+	t.once.Do(t.load)
+	if t.archive != nil {
+		key, ok := t.nameKeys[codename]
+		if !ok {
+			return nil, false
+		}
+		return t.archive.Get(key)
+	}
+	row, ok := t.byCodename[codename]
+	return row, ok
+}
+
+/*
+================
+ItemRefByID
+================
+*/
+func (t *TextdataItems) ItemRefByID(id uint32) (*ItemRef, bool) {
+	t.once.Do(t.load)
+	if t.archive != nil {
+		key, ok := t.idKeys[id]
+		if !ok {
+			return nil, false
+		}
+		return t.archive.Get(key)
+	}
+	row, ok := t.byID[id]
+	return row, ok
+}
+
 // Public immutable item identity/type data used by the native GM composer.
 /*
 ================

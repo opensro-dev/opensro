@@ -109,7 +109,7 @@ func (s *Store) PurchaseMall(character *domain.Character, cost domain.MallBalanc
 	next := *character
 	next.MissionInventory = nextInventory
 	remaining := domain.MallBalance{Silk: balance.Silk - cost.Silk, GiftSilk: balance.GiftSilk - cost.GiftSilk, Points: balance.Points - cost.Points}
-	if err := s.commitMallPurchaseLocked(division, &next, remaining, cost, domain.MallBalance{}); err != nil {
+	if err := s.commitMallPurchaseLocked(division, &next, remaining, cost); err != nil {
 		s.recordWriteFailureLocked("mall-purchase", err)
 		return balance, err
 	}
@@ -130,7 +130,7 @@ that charged silk also appends its silk-history row here (silkhistory.go),
 so the debit and its record are durable together or not at all.
 ================
 */
-func (s *Store) commitMallPurchaseLocked(division string, character *domain.Character, balance domain.MallBalance, cost domain.MallBalance, credit domain.MallBalance) error {
+func (s *Store) commitMallPurchaseLocked(division string, character *domain.Character, balance domain.MallBalance, cost domain.MallBalance) error {
 	if s.commitFail != nil {
 		return s.commitFail
 	}
@@ -147,11 +147,6 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk, gift_silk = excluded
 	}
 	if uint64(cost.Silk)+uint64(cost.GiftSilk) > 0 {
 		if err := insertSilkHistoryTx(tx.Tx, character.AccountID, s.now().UnixMilli(), silkHistoryUse, cost); err != nil {
-			return err
-		}
-	}
-	if credit.Silk > 0 {
-		if err := insertSilkHistoryTx(tx.Tx, character.AccountID, s.now().UnixMilli(), silkHistoryCharge, credit); err != nil {
 			return err
 		}
 	}

@@ -79,7 +79,7 @@ to decide. Use **Previous/Next** to inspect every page; hover items for details.
 
 Each stage rolls a fresh chest of the size shown above. Earlier previews are
 replaced, not carried over or added together. Rewards can include character
-and pet equipment, recovery grains in stacks of 50, and silk scrolls.
+and pet equipment and recovery grains in stacks of 50. No reward pays silk.
 
 Approximate chance per gear roll (character and pet gear):
 
@@ -92,8 +92,7 @@ Approximate chance per gear roll (character and pet gear):
 | 5 | 6% | 1% | 0.25% |
 
 The remaining rolls are ordinary gear. Sealed rewards are never
-promised. Each silk scroll grants **10 Item Mall silk** when used; redemption
-requires the event to remain enabled. Kill-based gold is paid separately.
+promised. Kill-based gold is paid separately.
 
 **Death loses the unclaimed chest.** Your carried gear and items remain yours,
 and you return after five seconds. Disconnecting during combat also forfeits

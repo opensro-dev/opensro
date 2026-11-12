@@ -5,11 +5,6 @@ arenachest.go - port-only, durable survival rewards, separate from carried gear.
 */
 package domain
 
-const ArenaSilkScrollID uint32 = 0x7f531001
-const ArenaSilkScrollCode = "ITEM_PORT_ARENA_SILK_SCROLL"
-const ArenaSilkScrollValue uint32 = 10
-const ArenaSilkScrollMaxStack = 20
-
 /*
 ================
 ArenaChest - one run's rolled items; Pending survives a full bag and recovery.

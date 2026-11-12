@@ -6,7 +6,6 @@ sookarena_rewards.go - port-only stage bundles drawn from authored item families
 package action
 
 import (
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -32,7 +31,7 @@ func (rt *Runtime) arenaDraw(n int) int {
 
 /*
 ================
-arenaReward - vouchers, pet gear, useful supplies, and normal/Star/Moon/Sun gear.
+arenaReward - pet gear, useful supplies, and normal/Star/Moon/Sun gear.
 ================
 */
 func (rt *Runtime) arenaReward(run *sookArenaRun, c *enterworld.Character, stage, index int) (inventory.Item, bool) {
@@ -40,14 +39,8 @@ func (rt *Runtime) arenaReward(run *sookArenaRun, c *enterworld.Character, stage
 	if items == nil {
 		return inventory.Item{}, false
 	}
-	if index%12 == 0 {
-		ref, ok := items.ItemRefByID(domain.ArenaSilkScrollID)
-		if ok && ref != nil {
-			limits := [...]int{3, 5, 10, 15, domain.ArenaSilkScrollMaxStack}
-			count := uint16(1 + rt.arenaDraw(limits[min(4, max(0, stage-1))]))
-			return inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: count}, true
-		}
-	}
+	// No reward pays silk (owner, 2026-11-12): silk is the paid currency,
+	// and a free daily activity that mints it would be an economy mint.
 	level := uint8(min(int64(90), max(int64(1), rewardLevel(c))))
 	group, ok := loot.SpecialEquipmentGroup(level)
 	if !ok {

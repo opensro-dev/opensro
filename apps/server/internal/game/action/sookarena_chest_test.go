@@ -324,7 +324,6 @@ func TestSookStageRewardBundleBoundsAndNativeReferences(t *testing.T) {
 		if total := len(rows); total < b[0] || total > b[1] {
 			t.Fatalf("stage %d items=%d, expected %v", stage+1, len(rows), b)
 		}
-		silk := false
 		for index, row := range rows {
 			if row.Slot != int64(index) {
 				t.Fatal("noncontiguous reward slots")
@@ -333,10 +332,6 @@ func TestSookStageRewardBundleBoundsAndNativeReferences(t *testing.T) {
 			if !ok || ref.Codename != row.Codename {
 				t.Fatal("unknown reward")
 			}
-			silk = silk || row.RefObjID == domain.ArenaSilkScrollID
-		}
-		if !silk {
-			t.Fatal("stage has no silk voucher")
 		}
 		before, beforeRoll := domain.CloneCharacter(c), n
 		if !rt.saveSookCheckpoint(run, c, stage+1) || n != beforeRoll || !reflect.DeepEqual(c.SookChest, before.SookChest) {
@@ -479,86 +474,39 @@ func TestSookRecoveryRewardsAreFiftyGrainsOnly(t *testing.T) {
 
 /*
 ================
-TestSookSilkStackRanges
+TestSookRewardsNeverPaySilk
+
+No arena reward is a silk voucher (owner, 2026-11-12): every reward a
+full stage-5 chest's worth of draws yields is gear or a supply.
 ================
 */
-func TestSookSilkStackRanges(t *testing.T) {
-	c := instanceWorldTestCharacter(11, "ScrollStacks")
+func TestSookRewardsNeverPaySilk(t *testing.T) {
+	c := instanceWorldTestCharacter(11, "NoSilk")
 	rt, _ := sookFixture(t, c)
-	items := testItems()
-	items[domain.ArenaSilkScrollCode] = enterworld.ArenaSilkScroll()
-	rt.deps.(*enterworld.Deps).Items = items
 	rt.enterSookArena(testDivision, c)
-	if rt.maxStackFor(enterworld.ArenaSilkScroll().TypeFlags(), domain.ArenaSilkScrollCode) != 20 {
-		t.Fatal("voucher metadata is not stackable to20")
-	}
-	for stage, limit := range []int{3, 5, 10, 15, 20} {
-		for roll := 0; roll < limit; roll++ {
-			rt.DropRoll = func() (uint32, error) { return uint32(roll), nil }
-			item, ok := rt.arenaReward(rt.sookRun(testDivision, c), c, stage+1, 0)
-			if !ok || item.RefObjID != domain.ArenaSilkScrollID || int(item.Quantity) != roll+1 {
-				t.Fatalf("stage %d roll %d: %+v", stage+1, roll, item)
+	rt.deps.(*enterworld.Deps).Items = enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	n := uint32(17)
+	rt.DropRoll = func() (uint32, error) { n = n*1664525 + 1013904223; return n, nil }
+	for stage := 1; stage <= 5; stage++ {
+		for index := 0; index < 70; index++ {
+			item, ok := rt.arenaReward(rt.sookRun(testDivision, c), c, stage, index)
+			if ok && strings.Contains(strings.ToUpper(item.Codename), "SILK") {
+				t.Fatalf("stage %d draw %d pays silk: %s", stage, index, item.Codename)
 			}
 		}
 	}
-	c.InventorySize = 14
-	c.MissionInventory = nil
-	c.SookChest = &domain.ArenaChest{ID: "stack-claim", Pending: true, Items: []domain.InventoryRow{{Slot: 0, RefObjID: domain.ArenaSilkScrollID, Codename: domain.ArenaSilkScrollCode, TypeFlags: enterworld.ArenaSilkScroll().TypeFlags(), StackCount: 20}}}
-	if _, fault := rt.claimSookChest(c); fault != "" || len(c.MissionInventory) != 1 || c.MissionInventory[0].StackCount != 20 {
-		t.Fatal("voucher stack did not fit one bag slot", fault)
-	}
-
 }
 
 /*
 ================
-arenaStackTestWallet - protocol-only authority; durable debits are tested in store.
+TestSookFlagOffBlocksRewardsWithoutLosingSavedItems
 ================
 */
-type arenaStackTestWallet struct{ mallTestAuthority }
-
-/*
-================
-RedeemArenaSilk
-================
-*/
-func (a *arenaStackTestWallet) RedeemArenaSilk(c *domain.Character, _ uint8) (domain.MallBalance, error) {
-	c.MissionInventory[0].StackCount--
-	a.balance.Silk += domain.ArenaSilkScrollValue
-	return a.balance, nil
-}
-
-/*
-================
-TestArenaSilkUseReportsRemainingStack
-================
-*/
-func TestArenaSilkUseReportsRemainingStack(t *testing.T) {
-	c := instanceWorldTestCharacter(11, "UseStack")
-	rt, _ := sookFixture(t, c)
-	c.MissionInventory = []domain.InventoryRow{{Slot: 13, RefObjID: domain.ArenaSilkScrollID, Codename: domain.ArenaSilkScrollCode, StackCount: 20}}
-	rt.mallAuthority = &arenaStackTestWallet{}
-	q := wire.ItemUseRequest{Slot: 13, TypeWord: enterworld.ArenaSilkScroll().TypeFlags()}
-	result, handled := rt.useArenaSilk(c, q, nil)
-	want := wire.EncodeItemUseSuccess(13, 19, q.TypeWord)
-	if !handled || len(result.Frames) != 3 || string(result.Frames[0].Payload) != string(want) {
-		t.Fatal("client did not receive remaining19")
-	}
-}
-
-/*
-================
-TestSookFlagOffBlocksRewardsAndVoucherUseWithoutLosingSavedItems
-================
-*/
-func TestSookFlagOffBlocksRewardsAndVoucherUseWithoutLosingSavedItems(t *testing.T) {
+func TestSookFlagOffBlocksRewardsWithoutLosingSavedItems(t *testing.T) {
 	c := instanceWorldTestCharacter(11, "DisabledRewards")
 	rt, _ := sookFixture(t, c)
 	rt.sookArena = nil
 	c.SookChest = &domain.ArenaChest{ID: "saved", Pending: true, Stage: 1, Items: []domain.InventoryRow{chestTestReward()}}
-	c.MissionInventory = []domain.InventoryRow{{Slot: 13, RefObjID: domain.ArenaSilkScrollID, Codename: domain.ArenaSilkScrollCode, StackCount: 20}}
-	wallet := &arenaStackTestWallet{}
-	rt.mallAuthority = wallet
 	before := domain.CloneCharacter(c)
 	probe := rt.HandleArenaDecision(testDivision, c, []byte{0})
 	var projection arenaProjection
@@ -566,8 +514,7 @@ func TestSookFlagOffBlocksRewardsAndVoucherUseWithoutLosingSavedItems(t *testing
 		t.Fatal("disabled arena exposed rewards")
 	}
 	rt.HandleArenaDecision(testDivision, c, append([]byte{1}, []byte("saved")...))
-	_, handled := rt.useArenaSilk(c, wire.ItemUseRequest{Slot: 13, TypeWord: enterworld.ArenaSilkScroll().TypeFlags()}, nil)
-	if !handled || wallet.balance.Silk != 0 || !reflect.DeepEqual(c, before) {
+	if !reflect.DeepEqual(c, before) {
 		t.Fatal("flag-off consumed or changed earned items")
 	}
 }

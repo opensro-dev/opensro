@@ -4,12 +4,12 @@
 
 This is a port-only PvE event, not a reconstruction of the official PvP event.
 `SRO_SOOK_SURVIVAL_ARENA` defaults to `off`. Configure it on the GameWorld and
-restart to enable entry, stages, eggs, rewards, chest decisions and silk use.
+restart to enable entry, stages, eggs, rewards and chest decisions.
 The shared shard-setting catalogue also defaults it off. The client presents
 only server-owned arena state; it cannot enable the event locally.
 
 With the flag off, So-ok has no arena option, requests cannot enter/resume/
-claim, vouchers cannot be consumed, and combat/reward modifiers have no run to
+claim, and combat/reward modifiers have no run to
 apply to. A state probe returns only a closed, empty projection. Earned items
 remain stored. Login recovery may still return a character stranded inside a
 previous run to safety; this never starts an event or spends an entry.
@@ -41,8 +41,7 @@ not rewritten by reward changes.
 
 Normal floor loot is suppressed only in the exact arena lease. EXP/SP/pet EXP
 are 5x. Fresh stage chests contain 3–7/8–15/18–28/32–45/50–70 rows, paged 32 at a time.
-Supplies are grains x50 only. Silk stacks are 1–3/1–5/1–10/1–15/1–20; each scroll
-credits 10 silk through an atomic bag/wallet transaction, consuming exactly one.
+Supplies are grains x50 only. No reward pays silk (owner, 2026-11-12).
 Sun chance per gear roll is approximately 0/0/0.05/0.1/0.25%; no guaranteed Sun reward. Saved earlier
 Sun items and supplies are retained. Client item effects use existing native
 presentation; arena icons and procedural effects are owned source assets.
@@ -54,8 +53,6 @@ presentation; arena icons and procedural effects are owned source assets.
 - `action/sookarena_chest.go`: checkpoint projection, claims and pause/resume.
 - `action/sookarena_rewards.go`: fresh stage rolls and reward selection.
 - `action/sookarena_powerups.go`, `_reflect.go`, `_transfer.go`: lease-scoped eggs.
-- `action/sookarena_silk.go`, `store/arena_silk.go`: use response and atomic debit.
-- `enterworld/arena_reward.go`: owned voucher reference, stack limit 20.
 - `foundation/gameplay/arena-chest.ts`: bounded client projection parser.
 - `runtime/ui/ui.ts`: native-style chest, paging and preparation keyboard input.
 - `runtime/characters/effects/survival-effects.ts`: owned arena effects.
@@ -77,8 +74,7 @@ backups and full prior transcripts are retained only in the ignored local state.
 Tests cover both flag states; private-population isolation; exact countdown/
 expiry/death boundaries; rapid clears and timed waves; hard cap including
 ambush; repeated hunt; egg cleanup; reward range/early Sun restrictions; immutable
-saved chests; full bag, stale/replayed decisions; and atomic silk stacks/save
-failure. Client tests cover projection bounds, tooltips, timers and actor budgets.
+saved chests; full bag, stale/replayed decisions; and save failure. Client tests cover projection bounds, tooltips, timers and actor budgets.
 Run the contributor checks against the merged branch; the PR description records
 actual final commands/results rather than treating old runs as new evidence.
 
@@ -262,8 +258,7 @@ pack/release gates. The running game and its data were left untouched.
 
 Main advanced through 8a6e98de while the repo-only arena build was being
 verified. Its new catalogue exemptions are preserved alongside the arena
-exemption, and the generated UI census was rebuilt. Arena silk redemption now
-uses main's betaSilkStarterSilk helper rather than the removed starter constant.
+exemption, and the generated UI census was rebuilt.
 These changes are isolated from the running local game.
 
 ## Full v1.150-based build and launch verified (2026-11-11)
