@@ -2830,6 +2830,20 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
+			"provider": "src/engine/runtime/ui/hud/map-drawer.ts",
+			"functions": [
+				"paintDrawer"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-drawer.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/characters/characters.ts",
 			"provider": "src/engine/runtime/characters/presentation-poses.ts",
 			"functions": [

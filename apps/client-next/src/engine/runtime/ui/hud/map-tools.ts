@@ -9,7 +9,8 @@ strip and right edge, clickable dungeon entrances, and the later
 client's dungeon page chrome (issue #3210): the globe back to the
 world and the follow pin at the map's top right corner, the floor
 selector down its right edge, in art the build imports from the later
-client. One owner for that state; the map HUD keeps the window, the
+client, and the shown floor's monster list at its left edge (issue
+#3239). One owner for that state; the map HUD keeps the window, the
 pages and the cave view itself. Monster levels and anchors come from
 the hunting catalogue the session publishes; dungeon pages from the
 cave catalogue; region names from the published regioncode table
@@ -29,6 +30,7 @@ import {
 } from "@/engine/foundation/ui/cave-map";
 import {
 	MONSTER_LEVEL_FILTER_SPAN,
+	dungeonDirectory,
 	monsterDirectory,
 	type HuntingCatalogue,
 	type MonsterDirectoryRegion
@@ -43,6 +45,7 @@ import {
 } from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import { DRAWER_WIDTH, paintDrawer } from "./map-drawer";
 
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
@@ -66,9 +69,6 @@ const FLOOR_TRACK = WMAP + "wmap_floor_big_box.png";
 const REGIONCODE_PATH = "/assets/text/regioncode.json";
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const GOLD = [ .96, .83, .55, 1 ] as const;
-const DIM = [ .72, .7, .63, 1 ] as const;
-const DRAWER_WIDTH = 196;
-const ROW_HEIGHT = 18;
 // The world map's dungeon doors: the dungeon each opens and the v1.150
 // object text that names it. The doors themselves are the client's own
 // xy_dungeon icons (worldmap_localinfo rows 92033 and 92032).
@@ -269,6 +269,97 @@ export function createMapToolsHud( options: {
 		if ( !next ) return;
 		floorChoice = { regionId: next.regionId, floorIndex: next.floorIndex };
 		choiceFromView = !indoors;
+	}
+
+	/*
+	================
+	stripToggles
+
+	The level filter and monster list toggles of the window's top
+	strip, on the world and on a dungeon page alike (issue #3239:
+	the dungeon page keeps its list). Returns the strip x after them.
+	================
+	*/
+	function stripToggles(
+		input: MapToolsPaint,
+		quads: UiQuad[],
+		controls: UiControl[],
+		paths: string[],
+		stripX: number
+	): number {
+		const text = input.text, my = input.window[1];
+		// The level filter toggle: the toolkit checkbutton, as the
+		// hunting toggle beside it draws.
+		paths.push( CHECK_ON, CHECK_OFF );
+		quads.push( {
+			texture: levelFilter ? CHECK_ON : CHECK_OFF,
+			rect: [ stripX, my + 10, 16, 16 ],
+			uv: [ 0, 0, 1, 1 ],
+			color: WHITE,
+			clip: input.full
+		} );
+		quads.push(
+			...text.quads( "Lv filter", [ stripX + 20, my + 10, 56, 17 ], input.full, GOLD, { vAlign: 1 } )
+		);
+		controls.push( {
+			id: "map-level-filter",
+			kind: "button",
+			label: "Monster level filter",
+			helpText: (levelFilter ? "Hide" : "Show") + " only monsters up to " +
+				MONSTER_LEVEL_FILTER_SPAN + " levels above you",
+			rect: [ stripX - 2, my + 7, 80, 20 ],
+			selected: levelFilter
+		} );
+		stripX += 84;
+		// The drawer toggle.
+		quads.push(
+			...text.quads( "Monsters", [ stripX + 2, my + 10, 64, 17 ], input.full, GOLD, { vAlign: 1 } )
+		);
+		controls.push( {
+			id: "map-list",
+			kind: "button",
+			label: "Monster list",
+			helpText: (drawerOpen ? "Close" : "Open") + " the region and monster list",
+			rect: [ stripX, my + 7, 68, 20 ],
+			selected: drawerOpen
+		} );
+		return stripX + 76;
+	}
+
+	/*
+	================
+	caveDrawer
+
+	The monster list on a dungeon page (issue #3239): the shown
+	floor's species from the catalogue's dungeon anchors, at the
+	map's left edge, where the floor selector at the right stays
+	clear. The level filter caps it as it caps the world list.
+	================
+	*/
+	function caveDrawer( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ) {
+		const floor = input.floor;
+		if ( !floor ) return;
+		const region = input.catalogue ?
+			dungeonDirectory( input.catalogue, floor.regionId, filterCap( input.characterLevel ) ) :
+			undefined;
+		drawerPage = paintDrawer(
+			{
+				text: input.text,
+				rect: [ input.window[0] + 6, input.clip[1], DRAWER_WIDTH, input.clip[3] ],
+				full: input.full,
+				title: input.zones?.[floor.floorLabel] ?? floor.floorLabel,
+				back: false,
+				rows: (region?.monsters ?? []).map( entry => ({
+					id: "map-cave-monster:" + entry.region + ":" + entry.monster.refObjId,
+					label: entry.monster.name + "  Lv. " + entry.monster.level,
+					selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
+				}) ),
+				page: drawerPage,
+				empty: input.catalogue ? "No monsters" : "Loading..."
+			},
+			quads,
+			controls
+		);
 	}
 
 	/*
@@ -502,6 +593,19 @@ export function createMapToolsHud( options: {
 				}
 				return null;
 			}
+			if ( id.startsWith( "map-cave-monster:" ) ) {
+				// A species picked on a dungeon page marks where it
+				// lives on that page; the view stays on the floor.
+				const [regionId, refObjId] = id.slice( "map-cave-monster:".length ).split( ":" ).map( Number );
+				if (
+					regionId === undefined || refObjId === undefined ||
+					!Number.isInteger( regionId ) || !Number.isInteger( refObjId ) || !catalogue
+				) return null;
+				const entry = dungeonDirectory( catalogue, regionId, filterCap( characterLevel ) )
+					?.monsters.find( row => row.monster.refObjId === refObjId );
+				if ( entry ) mark = { regionId, x: entry.x, z: entry.z, refObjId };
+				return null;
+			}
 			if ( id.startsWith( "map-dungeon:" ) || id.startsWith( "map-dungeon-icon:" ) ) {
 				// The label and the entrance's own icon carry the id in
 				// two shapes (map-dungeon:N, map-dungeon-icon:N); the
@@ -532,10 +636,10 @@ export function createMapToolsHud( options: {
 		================
 		present
 
-		The strip (level filter and list toggles on the world), the
-		dungeon entrances and the follow pin on the world, the dungeon
-		page's globe, pin and floor selector in a cave, and the drawer
-		when it is open.
+		The strip (level filter and list toggles, on the world and on
+		a dungeon page), the dungeon entrances and the follow pin on
+		the world, the dungeon page's globe, pin and floor selector
+		in a cave, and the drawer when it is open.
 		================
 		*/
 		present( input: MapToolsPaint ): { quads: UiQuad[]; controls: UiControl[]; paths: string[]; } {
@@ -586,6 +690,9 @@ export function createMapToolsHud( options: {
 					rect: [ right - 84, clip[1] + 4, 36, 36 ]
 				} );
 				followPin( input, quads, controls );
+				// The strip and the floor's monster list stay on the
+				// dungeon page (issue #3239).
+				stripToggles( input, quads, controls, paths, mx + 8 );
 				const index = input.floors.findIndex( floor => floor === input.floor );
 				if ( input.floor && index >= 0 && clip[3] >= 140 ) {
 					const sx = right - 32, sy = clip[1] + 48;
@@ -644,6 +751,7 @@ export function createMapToolsHud( options: {
 						disabled: downOff
 					} );
 				}
+				if ( drawerOpen ) caveDrawer( input, quads, controls );
 				// The page foot (issue #3238): a black strip with the
 				// later client's level filter note, right-aligned against
 				// its checkbox at the strip's right end. The note is the
@@ -688,41 +796,7 @@ export function createMapToolsHud( options: {
 				} );
 				return { quads, controls, paths };
 			}
-			// The level filter toggle: the toolkit checkbutton, as the
-			// hunting toggle beside it draws.
-			paths.push( CHECK_ON, CHECK_OFF );
-			quads.push( {
-				texture: levelFilter ? CHECK_ON : CHECK_OFF,
-				rect: [ stripX, my + 10, 16, 16 ],
-				uv: [ 0, 0, 1, 1 ],
-				color: WHITE,
-				clip: input.full
-			} );
-			quads.push(
-				...text.quads( "Lv filter", [ stripX + 20, my + 10, 56, 17 ], input.full, GOLD, { vAlign: 1 } )
-			);
-			controls.push( {
-				id: "map-level-filter",
-				kind: "button",
-				label: "Monster level filter",
-				helpText: (levelFilter ? "Hide" : "Show") + " only monsters up to " +
-					MONSTER_LEVEL_FILTER_SPAN + " levels above you",
-				rect: [ stripX - 2, my + 7, 80, 20 ],
-				selected: levelFilter
-			} );
-			stripX += 84;
-			// The drawer toggle.
-			quads.push(
-				...text.quads( "Monsters", [ stripX + 2, my + 10, 64, 17 ], input.full, GOLD, { vAlign: 1 } )
-			);
-			controls.push( {
-				id: "map-list",
-				kind: "button",
-				label: "Monster list",
-				helpText: (drawerOpen ? "Close" : "Open") + " the region and monster list",
-				rect: [ stripX, my + 7, 68, 20 ],
-				selected: drawerOpen
-			} );
+			stripX = stripToggles( input, quads, controls, paths, stripX );
 			// The follow pin at the map's own corner, as the later
 			// client draws it on the world too (issue #3210).
 			paths.push( PIN_AUTO, PIN_PASSIVE );
@@ -781,116 +855,35 @@ export function createMapToolsHud( options: {
 				} );
 			}
 			if ( drawerOpen ) {
-				const dw = DRAWER_WIDTH,
-					dx = mx + mw - dw - 6,
-					dy = input.clip[1],
-					dh = input.clip[3];
-				quads.push( {
-					texture: "",
-					rect: [ dx, dy, dw, dh ],
-					uv: [ 0, 0, 1, 1 ],
-					color: [ .05, .06, .055, .97 ],
-					clip: input.full
-				} );
-				const cap = filterCap( input.characterLevel );
-				const regions = directory( input.catalogue, cap );
+				const regions = directory( input.catalogue, filterCap( input.characterLevel ) );
 				const region = drawerRegion === null ?
 					undefined :
 					regions.find( row => row.region === drawerRegion );
-				const title = region ? regionName( region.region, input.zones ) : "Regions";
-				quads.push(
-					...text.quads( title, [ dx + 10, dy + 6, dw - 20, 18 ], input.full, GOLD, {
-						fontStyle: 2,
-						overflow: "clip"
-					} )
+				drawerPage = paintDrawer(
+					{
+						text,
+						rect: [ mx + mw - DRAWER_WIDTH - 6, input.clip[1], DRAWER_WIDTH, input.clip[3] ],
+						full: input.full,
+						title: region ? regionName( region.region, input.zones ) : "Regions",
+						back: region !== undefined,
+						rows: region ?
+							region.monsters.map( entry => ({
+								id: "map-monster:" + entry.region + ":" + entry.monster.refObjId,
+								label: entry.monster.name + "  Lv. " + entry.monster.level,
+								selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
+							}) ) :
+							regions.map( row => ({
+								id: "map-region:" + row.region,
+								label: regionName( row.region, input.zones ) + "  Lv. " +
+									(row.minLevel === row.maxLevel ? row.minLevel : row.minLevel + "-" + row.maxLevel),
+								selected: false
+							}) ),
+						page: drawerPage,
+						empty: input.catalogue ? "No monsters" : "Loading..."
+					},
+					quads,
+					controls
 				);
-				if ( region ) {
-					controls.push( {
-						id: "map-drawer-back",
-						kind: "button",
-						label: "All regions",
-						rect: [ dx + dw - 58, dy + 4, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Back", [ dx + dw - 58, dy + 6, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} )
-					);
-				}
-				const rows = region ?
-					region.monsters.map( entry => ({
-						id: "map-monster:" + entry.region + ":" + entry.monster.refObjId,
-						label: entry.monster.name + "  Lv. " + entry.monster.level,
-						selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
-					}) ) :
-					regions.map( row => ({
-						id: "map-region:" + row.region,
-						label: regionName( row.region, input.zones ) + "  Lv. " +
-							(row.minLevel === row.maxLevel ? row.minLevel : row.minLevel + "-" + row.maxLevel),
-						selected: false
-					}) );
-				const visible = Math.max( 1, Math.floor( (dh - 56) / ROW_HEIGHT ) );
-				const pages = Math.max( 1, Math.ceil( rows.length / visible ) );
-				if ( drawerPage >= pages ) drawerPage = pages - 1;
-				if ( rows.length === 0 ) {
-					quads.push(
-						...text.quads(
-							input.catalogue ? "No monsters" : "Loading...",
-							[ dx + 10, dy + 30, dw - 20, 18 ],
-							input.full,
-							DIM,
-							{ overflow: "clip" }
-						)
-					);
-				}
-				rows.slice( drawerPage * visible, drawerPage * visible + visible ).forEach( ( row, index ) => {
-					const top = dy + 28 + index * ROW_HEIGHT;
-					controls.push( {
-						id: row.id,
-						kind: "button",
-						label: row.label,
-						rect: [ dx + 4, top, dw - 8, ROW_HEIGHT ],
-						selected: row.selected
-					} );
-					quads.push(
-						...text.quads(
-							row.label,
-							[ dx + 10, top, dw - 16, ROW_HEIGHT ],
-							input.full,
-							row.selected ? GOLD : WHITE,
-							{ vAlign: 1, overflow: "clip" }
-						)
-					);
-				} );
-				if ( pages > 1 ) {
-					controls.push( {
-						id: "map-drawer-prev",
-						kind: "button",
-						label: "Previous page",
-						rect: [ dx + 4, dy + dh - 22, 52, 18 ]
-					} );
-					controls.push( {
-						id: "map-drawer-next",
-						kind: "button",
-						label: "Next page",
-						rect: [ dx + dw - 56, dy + dh - 22, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Prev", [ dx + 10, dy + dh - 22, 52, 18 ], input.full, WHITE, { vAlign: 1 } ),
-						...text.quads( "Next >", [ dx + dw - 62, dy + dh - 22, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} ),
-						...text.quads(
-							(drawerPage + 1) + "/" + pages,
-							[ dx + 56, dy + dh - 22, dw - 112, 18 ],
-							input.full,
-							DIM,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
-				}
 			}
 			return { quads, controls, paths };
 		},
