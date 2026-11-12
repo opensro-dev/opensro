@@ -90,8 +90,11 @@ export async function buildServerGameDataBundle( options ) {
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
 		await buildAINavProjection( temporaryRoot, options.aiNavSourceRoot ?? AINAV_SOURCE_ROOT );
-		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE,
-			options.objectStringPortOnlyFile ?? OBJECT_STRING_PORTONLY_FILE );
+		await buildStructureZoneProjection(
+			temporaryRoot,
+			options.objectStringFile ?? OBJECT_STRING_FILE,
+			options.objectStringPortOnlyFile ?? OBJECT_STRING_PORTONLY_FILE
+		);
 
 		const files = await describeProjectionFiles( temporaryRoot );
 		const manifest = {
