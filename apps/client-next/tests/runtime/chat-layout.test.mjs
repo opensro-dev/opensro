@@ -168,6 +168,14 @@ const EVENT_LINES = [
 	}
 ];
 
+const TAB_LINES = [
+	{ channel: 1, name: "Peer", text: "hello all", outgoing: false },
+	{ channel: 2, name: "Pal", text: "psst, still there?", outgoing: false },
+	{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
+	{ channel: 5, name: "Peer", text: "hello guild", outgoing: false },
+	{ channel: 11, name: "Peer", text: "hello ally", outgoing: false }
+];
+
 /*
 ================
 visibleLabels
@@ -185,6 +193,26 @@ test("without the Event tab the four native tabs keep notices in All", () => {
 		[ "chat-tab:0", "chat-tab:1", "chat-tab:2", "chat-tab:3" ]
 	);
 	assert.ok( visibleLabels( result ).some( label => label.includes( "Seal Of Star" ) ) );
+});
+
+// Native filings put a whisper on every native tab (6ad280 files type 2
+// into the All, Party, Guild and Ally lists alike), so each channel tab
+// shows its own channel beside the whisper and nothing else; the
+// port-only Event tab stays notice-only, whisper included out.
+test("whisper lines show on every native chat tab beside the tab's own channel", () => {
+	for ( const eventTab of [ false, true ] ) {
+		const shows = ( tab, text ) =>
+			visibleLabels( chatLayout( input( { lines: TAB_LINES, welcome: "", eventTab, tab, rows: 6 } ) ) )
+				.some( label => label.includes( text ) );
+		// The addressed sender prefix pins the whisper row even where its
+		// text wraps onto a second displayed row.
+		const whisper = "Pal(UIIT_CHATERR_WHISPER_FROM_MESSAGE):psst";
+		for ( const tab of [ 0, 1, 2, 3 ] ) assert.ok( shows( tab, whisper ), `tab ${tab}` );
+		assert.ok( shows( 1, "hello party" ) && !shows( 1, "hello guild" ) && !shows( 1, "hello ally" ) );
+		assert.ok( shows( 2, "hello guild" ) && !shows( 2, "hello party" ) );
+		assert.ok( shows( 3, "hello ally" ) && !shows( 3, "hello party" ) );
+		if ( eventTab ) assert.ok( !shows( 4, whisper ), "Event tab stays notice-only" );
+	}
 });
 
 test("the Event tab holds channel-7 notices and All skips them", () => {

@@ -59,6 +59,23 @@ const CONTRIBUTOR_TAG_STYLE = { fontStyle: 2 } as const;
 
 /*
 ================
+WHISPER_CHAT_CHANNEL
+
+Whispers (chat type 2) land on every native chat tab, never only on
+All: the native viewer files each incoming line into the All block and
+a whisper into the Party, Guild and Ally blocks as well
+(ClientChat_PresentChannelMessage 752800 presents by raw type;
+CIFChatViewer_AppendLineByType 6ad280 files type 2 into all four
+lists), so switching tabs must not hide a conversation. The channel
+tabs otherwise keep filtering to their own channel alone. The
+port-only Event tab stays notice-only, as it is for every other
+channel.
+================
+*/
+const WHISPER_CHAT_CHANNEL = 2;
+
+/*
+================
 isSunDropChatLine
 
 Whether a channel-7 notice line announces a Seal of Sun drop: prefers the
@@ -387,10 +404,12 @@ button
 			// All skips them and the native tabs never carried them.
 			...lines.filter( l => {
 				if ( l.channel === STALL_CHAT_CHANNEL ) return false;
-				if ( !state.eventTab ) return activeTab === 0 || l.channel === channel;
+				if ( !state.eventTab ) {
+					return activeTab === 0 || l.channel === channel || l.channel === WHISPER_CHAT_CHANNEL;
+				}
 				if ( activeTab === 4 ) return l.channel === 7;
 				if ( activeTab === 0 ) return l.channel !== 7;
-				return l.channel === channel;
+				return l.channel === channel || l.channel === WHISPER_CHAT_CHANNEL;
 			} ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
