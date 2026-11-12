@@ -299,6 +299,12 @@ export interface ExperimentalOptions {
 	// (0x6CE6F0) and its mall button is born disabled (0x6BC17E). Off
 	// unless turned on; off is the original.
 	readonly silkHistory: boolean;
+	// Port-only, not native (#3257): the later mall's category rail
+	// (Expendables, Avatar, Pet, Premium, Alchemy, HOT shop), its
+	// sub-category tabs, item search and the N/H/R badges. The server
+	// sides it with SRO_MALL_CATEGORIES; a client with the row off keeps
+	// the shipped mall exactly. Off unless turned on.
+	readonly mallCategories: boolean;
 }
 
 /*
@@ -533,7 +539,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		warpArrivalSound: enabled( "warpArrivalSound" ),
 		sealUnderHeading: enabled( "sealUnderHeading" ),
 		setBonusTooltip: enabled( "setBonusTooltip" ),
-		silkHistory: enabled( "silkHistory" )
+		silkHistory: enabled( "silkHistory" ),
+		mallCategories: enabled( "mallCategories" )
 	};
 }
 
