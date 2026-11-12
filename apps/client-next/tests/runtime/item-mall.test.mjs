@@ -9,10 +9,21 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
-const { mallCurrencyRows, mallPageLayout, mallPageNumberPresentation, compactMallBagLayout, mallQuestionLayout } =
-	await import(
-		"../../src/engine/foundation/ui/item-mall-layout.ts"
-	);
+const {
+	mallCurrencyRows,
+	mallPageLayout,
+	mallPageNumberPresentation,
+	compactMallBagLayout,
+	mallQuestionLayout,
+	mallCategories,
+	mallCategoriesLater,
+	mallTabCaptionLater,
+	mallBadgeMark,
+	mallDescription
+} = await import(
+	"../../src/engine/foundation/ui/item-mall-layout.ts"
+);
+const { mallProjection } = await import( "../../src/engine/foundation/gameplay/item-mall-catalog.ts" );
 
 /*
 ================
@@ -353,6 +364,162 @@ test("rejection and closing cancel unsent purchases without retrying the in-flig
 		assert.equal( mall.takeNextPurchase( state ), null );
 		assert.equal( mall.read().batchPending, false );
 	}
+});
+
+/*
+================
+laterCatalogue
+
+The SRO_MALL_CATEGORIES catalogue's shape (issue #3257): Alchemy with
+its Others tab, the premium ticket badged recommended, and the HOT
+shop's two tabs with a Halloween outfit badged hot.
+================
+*/
+function laterCatalogue() {
+	const offer = ( shop, tab, slot, packageId, name, badge ) => ({
+		group: 852,
+		shop,
+		tab,
+		slot,
+		packageId,
+		name,
+		description: "Description",
+		icon: "item/example.ddj",
+		silk: 5,
+		giftSilk: 0,
+		currencyMask: 2,
+		allowsPoints: false,
+		purchaseLimit: 5,
+		itemIds: [ 100 + packageId % 10 ],
+		...(badge ? { badge } : {})
+	});
+	return {
+		tabs: [
+			{ shop: 0, tab: 0, category: "MALL_ARCHEMY", label: "UIIT_STT_SILKMALL_ARCHEMY_ASTRAL" },
+			{ shop: 0, tab: 2, category: "MALL_ARCHEMY", label: "UIIT_STT_SILKMALL_ETC" },
+			{ shop: 4, tab: 0, category: "MALL_PREMIUM", label: "UIIT_STT_SILKMALL_PREMIUM_PREMIUM" },
+			{ shop: 5, tab: 0, category: "MALL_HOT", label: "UIIT_STT_SILKMALL_EVENT" },
+			{ shop: 5, tab: 1, category: "MALL_HOT", label: "UIIT_STT_SILKMALL_AVATA" }
+		],
+		offers: [
+			offer( 0, 0, 0, 90002, "Astral Stone" ),
+			offer( 0, 2, 0, 90001, "Destruction Rondo", "new" ),
+			offer( 4, 0, 0, 90003, "Premium Goldtime", "recommended" ),
+			offer( 5, 0, 0, 90005, "Halloween Attach", "hot" ),
+			offer( 5, 1, 0, 90004, "Halloween Dress", "hot" )
+		],
+		silk: 100,
+		giftSilk: 0,
+		points: 0,
+		pending: false,
+		revision: 0
+	};
+}
+
+test("the later rail orders Expendables first and the HOT shop before the basket; the native rail stands", () => {
+	assert.deepEqual(
+		mallCategoriesLater().map( category => category.key ),
+		[ "MALL_CONSUME", "MALL_AVATAR", "MALL_PET", "MALL_PREMIUM", "MALL_ARCHEMY", "MALL_HOT", "basket" ]
+	);
+	assert.deepEqual(
+		mallCategories().map( category => category.key ),
+		[ "hot", "MALL_CONSUME", "MALL_AVATAR", "MALL_PET", "package", "MALL_PREMIUM", "MALL_ARCHEMY", "basket" ]
+	);
+	// The later captions and the N/H/R marks the offer rows draw.
+	assert.equal( mallTabCaptionLater( "MALL_HOT", 0 ), "Halloween Exclusive" );
+	assert.equal( mallTabCaptionLater( "MALL_HOT", 1 ), "Halloween Models" );
+	assert.equal( mallTabCaptionLater( "MALL_HOT", 2 ), "Recommended" );
+	assert.equal( mallTabCaptionLater( "MALL_PREMIUM", 1 ), "Gears" );
+	assert.equal( mallTabCaptionLater( "MALL_PREMIUM", 0 ), undefined );
+	assert.equal( mallTabCaptionLater( "MALL_ARCHEMY", 2 ), "Others" );
+	assert.equal( mallBadgeMark( "new" )?.letter, "N" );
+	assert.equal( mallBadgeMark( "hot" )?.letter, "H" );
+	assert.equal( mallBadgeMark( "recommended" )?.letter, "R" );
+	assert.equal( mallBadgeMark( undefined ), undefined );
+	// Alchemy's subtitle names tabs 0 and 1 as before; tab 2 has none.
+	assert.equal( mallDescription( "MALL_ARCHEMY", 0 ), "UIIT_STT_SILKMALL_MAIN_SUB_ARCHEMY_ASTRAL" );
+	assert.equal( mallDescription( "MALL_ARCHEMY", 1 ), "UIIT_STT_SILKMALL_MAIN_SUB_ARCHEMY_ATHANASIA" );
+	assert.equal( mallDescription( "MALL_ARCHEMY", 2 ), "" );
+});
+
+test("the later mode browses the HOT shop, gathers the Recommended tab and searches across tabs", () => {
+	const mall = createItemMall(), state = laterCatalogue();
+	mall.open();
+	mall.setCategoriesLater( true );
+	assert.deepEqual(
+		mall.read( state ).categories.map( category => category.key ),
+		mallCategoriesLater().map( category => category.key )
+	);
+	// The HOT shop is rail index 5: two server tabs plus the virtual one.
+	mall.browse( 5 );
+	const hot = mall.read( state );
+	assert.equal( hot.tabs.length, 3 );
+	assert.deepEqual( hot.offers.map( offer => offer.name ), [ "Halloween Attach" ] );
+	mall.browse( 5, 1 );
+	assert.deepEqual( mall.read( state ).offers.map( offer => offer.name ), [ "Halloween Dress" ] );
+	// The virtual Recommended tab gathers badged offers from every tab.
+	mall.browse( 5, 2 );
+	assert.deepEqual( mall.read( state ).offers.map( offer => offer.name ), [ "Premium Goldtime" ] );
+	// Alchemy is rail index 4; the Rondo stands badged in its Others tab.
+	mall.browse( 4 );
+	assert.deepEqual( mall.read( state ).offers.map( offer => offer.name ), [ "Astral Stone" ] );
+	mall.browse( 4, 1 );
+	const rondo = mall.read( state ).offers;
+	assert.deepEqual( rondo.map( offer => offer.name ), [ "Destruction Rondo" ] );
+	assert.equal( rondo[0]?.badge, "new" );
+	// The search looks across the whole catalogue, case folded.
+	mall.setSearch( "halloween" );
+	assert.deepEqual(
+		mall.read( state ).offers.map( offer => offer.name ),
+		[ "Halloween Attach", "Halloween Dress" ]
+	);
+	mall.setSearch( "" );
+	assert.deepEqual( mall.read( state ).offers.map( offer => offer.name ), [ "Destruction Rondo" ] );
+	// Switching the row off restarts browsing on the native rail.
+	mall.setCategoriesLater( false );
+	const native = mall.read( state );
+	assert.equal( native.category, -1 );
+	assert.equal( native.search, "" );
+	assert.deepEqual(
+		native.categories.map( category => category.key ),
+		mallCategories().map( category => category.key )
+	);
+	// The basket is the native rail's eighth entry and still reads.
+	mall.browse( 7 );
+	mall.reserve( state.offers[0] );
+	assert.deepEqual( mall.read( state ).offers.map( offer => offer.name ), [ "Astral Stone" ] );
+});
+
+test("the catalogue decoder keeps a known badge and drops an unknown one", () => {
+	const offer = ( slot, badge ) => ({
+		group: 852,
+		shop: 0,
+		tab: 0,
+		slot,
+		currencyMask: 2,
+		packageId: 90000 + slot,
+		name: "Package " + slot,
+		description: "Description",
+		icon: "item/example.ddj",
+		silk: 5,
+		giftSilk: 0,
+		allowsPoints: false,
+		purchaseLimit: 5,
+		itemIds: [ 42 ],
+		...(badge === null ? {} : { badge })
+	});
+	const payload = new TextEncoder().encode( JSON.stringify( {
+		version: 1,
+		tabs: [ { shop: 0, tab: 0, category: "MALL_ARCHEMY", label: "Astral" } ],
+		offers: [ offer( 0, "new" ), offer( 1, "bogus" ), offer( 2, null ) ],
+		silk: 0,
+		giftSilk: 0,
+		points: 0
+	} ) );
+	const { state } = mallProjection( payload );
+	assert.equal( state.offers[0]?.badge, "new" );
+	assert.equal( state.offers[1]?.badge, undefined );
+	assert.equal( state.offers[2]?.badge, undefined );
 });
 
 test("the lump-buy boxes caption their total row with the total-price line", () => {
