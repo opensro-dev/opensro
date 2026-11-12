@@ -323,6 +323,14 @@ class ConstantinopleImportTest(unittest.TestCase):
 			self.assertEqual(sum(1 for row in regions if row[2] == "RN_FORT_CONSTANTINOPLE"), 36)
 			names = {row[1] for row in read_rows(text / "textdataname.txt")}
 			self.assertIn("SN_FORTRESS_CONSTANTINOPLE", names)
+			owned = set(summary["nameSymbols"])
+			self.assertIn("SN_FORTRESS_CONSTANTINOPLE", owned)
+			self.assertNotIn("SN_NATIVE", owned)
+
+			# A second enabled run appends nothing and keeps the ownership.
+			with mock.patch.dict(os.environ, {ct.FLAG: "1"}):
+				again = ct.add_constantinople(native, output, source, closure)
+			self.assertEqual(set(again["nameSymbols"]), owned)
 
 			ifo = (output / "Data_extracted" / "navmesh" / ct.PORTONLY_IFO).read_text(encoding="latin1")
 			ifo_lines = ifo.splitlines()
@@ -339,6 +347,9 @@ class ConstantinopleImportTest(unittest.TestCase):
 			self.assertEqual([row[2] for row in read_rows(text / "siegefortress.txt")], ["FORTRESS_JANGAN"])
 			regions = read_rows(text / "regioncode.txt")
 			self.assertEqual(sum(1 for row in regions if row[2] == "RN_FORT_CONSTANTINOPLE"), 0)
+			names = {row[1] for row in read_rows(text / "textdataname.txt")}
+			self.assertEqual(names & owned, set(), "the off run reaps every name row the import added")
+			self.assertIn("SN_NATIVE", names)
 
 	# ================
 	# test_counts_refuse

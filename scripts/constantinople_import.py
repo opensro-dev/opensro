@@ -25,7 +25,7 @@ What the source authors, and what this import does with it:
 	          or a placeholder.
 	fortress  the 49 INS_FORT_CT event zones join eventzonedata.txt,
 	          the FORTRESS_CONSTANTINOPLE row joins siegefortress.txt,
-	          and the eight structure characters the shipped tables
+	          and the seven structure characters the shipped tables
 	          lack (the fort stone, the two gates and the four gate
 	          pulleys) join as characterdata_210000.txt. The zones'
 	          placements (navmesh\objectstring.ifo) are staged as
@@ -452,8 +452,11 @@ def add_constantinople(native, output, source=None, closure=sky.copy_resource_cl
 			"tileTextureClashes": sorted(e[len("clash:"):] for e in copied if e.startswith("clash:")),
 			"missingSounds": closure_result["missingSounds"],
 			"missingEffects": closure_result["missingEffects"],
-			"nameSymbols": sorted({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-				& wanted_symbols),
+			# The marker owns the rows this run appended and the ones an
+			# earlier run owned, never a native row that already held a
+			# wanted symbol: the off run reaps exactly these.
+			"nameSymbols": sorted(((set(prior.get("nameSymbols", [])) & wanted_symbols)
+				| {r[1] for r in texts})),
 			"files": files,
 			"archives": archive_hashes,
 		}

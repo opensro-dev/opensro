@@ -79,8 +79,9 @@ Writes world-authority/structure-zones.json into the bundle. The
 port-only placement file (navmesh/objectstring.portonly.ifo, written by
 scripts/constantinople_import.py while SRO_FORT_CONSTANTINOPLE is on)
 joins when it exists: its zone names are the later fortress's, disjoint
-from the native file's by construction, and a name both files place is
-a build error rather than a silent pick. Without the file the
+from the native file's by construction. A name both files place at the
+same spot is kept once; a name they place differently is a build error
+rather than a silent pick. Without the file the
 projection is exactly the native one.
 ================
 */
