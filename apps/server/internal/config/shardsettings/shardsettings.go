@@ -82,8 +82,9 @@ type Setting struct {
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
 	{Env: "SRO_SOOK_SURVIVAL_ARENA", NomadVar: "sook_survival_arena", Default: "off"},
-	// The arena's tunables, which action.arenaSetting clamps: the seconds
-	// between checkpoint chests (30..300) and a chest's capacity.
+	// The arena's tunables, bounded by the game/tunables registry: the
+	// seconds between checkpoint chests (30..300) and a chest's capacity
+	// (1..200).
 	{Env: "SRO_SOOK_CHECKPOINT_SECONDS", NomadVar: "sook_checkpoint_seconds", Default: "300"},
 	{Env: "SRO_SOOK_CHEST_CAPACITY", NomadVar: "sook_chest_capacity", Default: "200"},
 	// The catalogue publishes the expansion's derived pet-gear drops

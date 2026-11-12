@@ -66,6 +66,9 @@ var unlistedSettings = map[string]string{
 	"SRO_SHORT_NOTICE_FADE_MS":           "timing of a player's own Experimental Short notices row",
 	"SRO_CHAT_ACK_TIMEOUT_MS":            "the client's wait before warning that a chat line may not have arrived",
 	"SRO_MOST_WANTED_NOTICES_PER_MINUTE": "a cap on the Most Wanted notices, an operator throttle",
+	// The survival arena rule names its checkpoint chests, not their pacing.
+	"SRO_SOOK_CHECKPOINT_SECONDS": "operator pacing of the survival arena rule's checkpoint chests",
+	"SRO_SOOK_CHEST_CAPACITY":     "operator size of the survival arena rule's checkpoint chests",
 	// The trade group: each number is shown in its own rule's text.
 	"SRO_TRADE_ROUTE_DONWHANG_PERCENT":         "shown in the trade tiers rule",
 	"SRO_TRADE_ROUTE_HOTAN_PERCENT":            "shown in the trade tiers rule",
