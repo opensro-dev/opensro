@@ -26,6 +26,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 )
 
 // errCodeOnlyDeadResurrect is the low byte of the native 0x1887.
@@ -138,6 +139,9 @@ use (countjob.go), which consumes nothing. A living player is refused with
 func (rt *Runtime) resurrectWithScroll(division string, character *enterworld.Character, ref *enterworld.ItemRef, nowMs int64, result *OpResult) (revivedWhereDead, bool) {
 	if enterworld.CharacterAlive(character) {
 		*result = itemUseFailure(errCodeOnlyDeadResurrect)
+		return revivedWhereDead{}, false
+	}
+	if rt.jobRefusesScroll(tunables.JobBlockResurrectionScroll, character, result) {
 		return revivedWhereDead{}, false
 	}
 	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, character)

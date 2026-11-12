@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -123,5 +124,69 @@ func TestJobSuitRefusedAtTheTimerDoesNotReload(t *testing.T) {
 	rt.advanceJobDresses(clock.NowMs())
 	if enterworld.DressedJob(c) != 0 || c.NativeTeleportMode != 0 || reloadFrameIn(pushed, c) {
 		t.Fatalf("a refused dress reloaded: job %d mode %d frames %+v", enterworld.DressedJob(c), c.NativeTeleportMode, pushed)
+	}
+}
+
+/*
+================
+jobDressReloadDestination
+
+Wears the fixture's suit at spawn, with SRO_JOB_DRESS_TOWN_SPAWN set to
+townSpawn, and returns where the dress's reload was scheduled to land.
+================
+*/
+func jobDressReloadDestination(t *testing.T, townSpawn bool, spawn simulation.Spawn, destinations map[uint32]portalDestination) travelPoint {
+	t.Helper()
+	rt, clock, c := jobFixture(t)
+	rt.JobDressTownSpawn = townSpawn
+	rt.portals = &portalCatalog{sources: map[uint32]uint32{}, destinations: destinations}
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) {
+		world.Spawn = spawn
+	})
+	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+	rt.HandleItemMove(testDivision, c, wear)
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+	rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
+	clock.now = clock.now.Add(jobDressSeconds * time.Second)
+	rt.advanceJobDresses(clock.NowMs())
+	value, ok := rt.returnCasts.Load(simulation.WorldKey(testDivision, c.Name))
+	if !ok || value.(pendingReturn).destination == nil {
+		t.Fatal("no reload was scheduled")
+	}
+	return *value.(pendingReturn).destination
+}
+
+/*
+================
+TestJobDressTownSpawnReloadsAtTheNearestTown
+
+Port-only SRO_JOB_DRESS_TOWN_SPAWN: on, the reload lands on the nearest
+recall point of the wearer's world; a farther town, a point that is not a
+recall point and a dungeon point are passed over. Off (native), it stays
+in place.
+================
+*/
+func TestJobDressTownSpawnReloadsAtTheNearestTown(t *testing.T) {
+	const region = uint16(0x61A8)
+	at := simulation.Spawn{RegionID: region, X: 960, Y: 20, Z: 960}
+	near := simulation.Spawn{RegionID: region, X: 100, Y: 0, Z: 100}
+	far := simulation.Spawn{RegionID: region + 3, X: 900, Y: 0, Z: 900}
+	notRecall := simulation.Spawn{RegionID: region, X: 950, Y: 0, Z: 950}
+	dungeon := simulation.Spawn{RegionID: 0x8000 | 25000, X: 960, Y: 0, Z: 960}
+	destinations := map[uint32]portalDestination{
+		1: {id: 1, recall: true, world: 1, spawn: far},
+		2: {id: 2, recall: true, world: 1, spawn: near},
+		3: {id: 3, world: 1, spawn: notRecall},
+		4: {id: 4, recall: true, world: 1, spawn: dungeon},
+	}
+	if portalWorld(destinations[2]) != instance.ID(domain.DefaultWorldInstance) {
+		t.Fatal("the test's towns are not in the wearer's world")
+	}
+	if got := jobDressReloadDestination(t, true, at, destinations); got.spawn != near {
+		t.Fatalf("on: reload at %+v, want the nearest town %+v", got.spawn, near)
+	}
+	if got := jobDressReloadDestination(t, false, at, destinations); got.spawn != at {
+		t.Fatalf("off: reload at %+v, want in place %+v", got.spawn, at)
 	}
 }

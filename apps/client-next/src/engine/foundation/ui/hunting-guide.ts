@@ -48,8 +48,11 @@ export interface HuntingCatalogue {
 	readonly sections: readonly HuntingSection[];
 }
 // The level filter's span (issue #3167): with the filter on, the map
-// shows the monsters at most this many levels above the character.
-export const MONSTER_LEVEL_FILTER_SPAN = 10;
+// shows the monsters at most this many levels above the character. The
+// later client's own note on its filter names 6 (v1.188 textuisystem
+// UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST, "Display 6 lv.higher monsters
+// from the current character's level"; the v2.355 export says the same).
+export const MONSTER_LEVEL_FILTER_SPAN = 6;
 
 /*
 ================

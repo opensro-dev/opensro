@@ -87,6 +87,9 @@ export interface UiQuad {
 	readonly portraitGid?: number;
 	readonly rotation?: number;
 	readonly uvTurn?: 0 | 1 | 2 | 3;
+	// The texture repeats across the quad: uv runs from 0 past 1, one unit
+	// per texture (CIFNormalTile, normal-tile.ts). One quad, so no seams.
+	readonly tiled?: boolean;
 	readonly alphaCutoff?: number;
 	// Drawn with additive blending (source added to what is behind it). Effect sheets such as
 	// ga_effect_* and alcm_effect_prepare carry no alpha: black is "nothing", so the quad adds light.

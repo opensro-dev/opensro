@@ -142,6 +142,11 @@ var Settings = []Setting{
 	// jupiter-temple.txt only on that pairing, and the consumer refuses
 	// the same pairing at load). "off" is native.
 	{Env: "SRO_JUPITER_TEMPLE", NomadVar: "jupiter_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: Muhan, the Battlefield of Infinity - the
+	// eight wave arenas and their twenty-wave runs (#3273). Build and
+	// server read the same switch; off leaves every imported row out
+	// of the build and the wave file unread.
+	{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off", Catalogue: true},
 	// Port-only, not native: the second hunting grounds population
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
@@ -256,6 +261,14 @@ var Settings = []Setting{
 	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
 	// (#2475). Off (native) until the carrying release turns it on.
 	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
+	// Owner, 2026-11-11: a finished dress reloads at the nearest town's
+	// spawn, so a rival cannot follow the wearer. Off (native).
+	{Env: "SRO_JOB_DRESS_TOWN_SPAWN", NomadVar: "job_dress_town_spawn", Default: "off"},
+	// Owner, 2026-11-12: no resurrection or reverse return scroll while a
+	// job suit is worn, each its own live tunable (game/tunables). 0 is
+	// native.
+	{Env: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", NomadVar: "job_block_resurrection_scroll", Default: "0"},
+	{Env: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", NomadVar: "job_block_reverse_return_scroll", Default: "0"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.

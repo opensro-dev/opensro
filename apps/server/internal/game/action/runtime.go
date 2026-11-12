@@ -574,6 +574,10 @@ type Runtime struct {
 	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
 	// job level (jobsuitbuff.go; port-only, not native). False is native.
 	JobSuitTiers bool
+	// JobDressTownSpawn reloads a finished dress at the nearest town's
+	// spawn instead of in place (jobdresstown.go; port-only, not native).
+	// False is native.
+	JobDressTownSpawn bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
