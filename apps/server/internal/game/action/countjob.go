@@ -36,6 +36,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -216,6 +217,9 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 		return true
 	case limitedUseReverseReturn:
 		if choice != reverseReturnLastRecall && choice != reverseReturnLastDeath {
+			return false
+		}
+		if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
 			return false
 		}
 		duration, ok := returnScrollDuration(ref)

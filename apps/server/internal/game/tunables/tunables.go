@@ -92,6 +92,10 @@ const (
 	// BetaSilkStarter is the silk a new account's wallet starts with
 	// (SRO_BETA_SILK; game/action betasilk.go).
 	BetaSilkStarter = "mall_starter_silk"
+	// The job-suit scroll bans, each 1 (on) or 0 (native)
+	// (game/action jobscrolls.go).
+	JobBlockResurrectionScroll  = "job_block_resurrection_scroll"
+	JobBlockReverseReturnScroll = "job_block_reverse_return_scroll"
 )
 
 /*
@@ -218,6 +222,16 @@ var Registry = []Setting{
 	{Key: BetaSilkStarter, Env: "SRO_MALL_STARTER_SILK", Kind: Int, Default: 700, Min: 0, Max: 1500, Step: 50,
 		Class: Live, Group: "Mall", Label: "Beta starter silk", Unit: "silk",
 		Help: "The Item Mall silk a new account's wallet starts with under SRO_BETA_SILK, granted once, only when the account has no wallet yet; existing wallets are never topped up."},
+	// The job-suit scroll bans: switches, read at each scroll use, so the
+	// staff console turns one on or off without a restart. 0 is native.
+	{Key: JobBlockResurrectionScroll, Env: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", Kind: Int, Default: 0, Min: 0, Max: 1,
+		Allowed: []float64{0, 1}, Step: 1, Class: Live, Group: "Job", Label: "No resurrection scroll in a job suit",
+		Unit: "switch",
+		Help: "1 refuses resurrection scrolls (bag or premium limited use) while a job suit is worn; 0 is native."},
+	{Key: JobBlockReverseReturnScroll, Env: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", Kind: Int, Default: 0, Min: 0,
+		Max: 1, Allowed: []float64{0, 1}, Step: 1, Class: Live, Group: "Job",
+		Label: "No reverse return scroll in a job suit", Unit: "switch",
+		Help: "1 refuses reverse return scrolls (bag, teleport gate or premium limited use) while a job suit is worn; 0 is native."},
 }
 
 /*
