@@ -63,6 +63,7 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
+import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
@@ -636,6 +637,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# Jupiter is independently optional; its off path also removes what a
 	# previous on build of a reused variant root left behind.
 	jupiter_build = jupiter.add_jupiter(native, out)
+	# The second hunting grounds are independently optional the same
+	# way; their off path reaps a previous on build's outputs.
+	hunting2_build = hunting2.add_hunting2(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -646,6 +650,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
 		"jupiter": jupiter_build,
+		"hunting2": hunting2_build,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],

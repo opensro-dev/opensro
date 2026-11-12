@@ -310,6 +310,10 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 	if err != nil {
 		return monster.Template{}, fmt.Errorf("catalogue jupiter temple population: %w", err)
 	}
+	template, err = monster.AppendHunting2(template, dir, monster.Hunting2Enabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
+	}
 	return template, nil
 }
 

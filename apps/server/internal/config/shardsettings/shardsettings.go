@@ -142,6 +142,10 @@ var Settings = []Setting{
 	// jupiter-temple.txt only on that pairing, and the consumer refuses
 	// the same pairing at load). "off" is native.
 	{Env: "SRO_JUPITER_TEMPLE", NomadVar: "jupiter_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: the second hunting grounds population
+	// (#3270). Build and server read the same switch; off leaves
+	// every imported row out of the build and the population unread.
+	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
