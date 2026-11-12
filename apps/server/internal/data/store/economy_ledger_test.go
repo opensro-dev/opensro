@@ -471,6 +471,45 @@ func TestLedgerUpgradeAddsTheTable(t *testing.T) {
 
 /*
 ================
+TestOperatorAdjustGoldWritesOperatorRows
+
+The operator's correction door (#3309) records each signed change as an
+operator_adjust row - the signed change and the balance it left - and
+folds it into the hourly buckets as a gain or a loss by sign.
+================
+*/
+func TestOperatorAdjustGoldWritesOperatorRows(t *testing.T) {
+	t.Parallel()
+
+	s := openTest(t, t.TempDir(), newTestClock())
+	c := newLedgerCharacter(t, s, "LedgerAdjust", 1000)
+	setGoldIn(s, c, "operator-adjust-gold", 1250)
+	setGoldIn(s, c, "operator-adjust-gold", 900)
+	got := doorRows(t, s)
+	want := []storedLedgerRow{
+		{c.ID, "operator_adjust", "operator-adjust-gold", 250, 1250},
+		{c.ID, "operator_adjust", "operator-adjust-gold", -350, 900},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("rows %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("row %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	hours := ledgerHourTotals(t, s)
+	if hours["operator_adjust gain"] != 250 || hours["operator_adjust loss"] != -350 {
+		t.Fatalf("hourly buckets %v", hours)
+	}
+	counters := s.EconomyCounters()
+	if counters["gold.operator_adjust.gain"] != 250 || counters["gold.operator_adjust.loss"] != 350 {
+		t.Fatalf("counters %v", counters)
+	}
+}
+
+/*
+================
 TestMostWantedBountyIsATransfer
 
 The bounty taken from a wanted victim (door most-wanted-bounty) is a
