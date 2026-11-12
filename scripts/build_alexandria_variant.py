@@ -65,6 +65,8 @@ from alexandria_map_tables import (  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
+import hunting2_import as hunting2  # noqa: E402
+import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
@@ -647,6 +649,14 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# Muhan is independently optional; its off path also removes what a
 	# previous on build of a reused variant root left behind.
 	muhan_build = muhan.add_muhan(native, out)
+	# The second hunting grounds are independently optional the same
+	# way; their off path reaps a previous on build's outputs.
+	hunting2_build = hunting2.add_hunting2(native, out)
+	# The Sky Temple fields are their own switch and their own source (the
+	# v1.696 client), layered on the same variant after the populations
+	# whose identity space they share.
+	from skytemple_import import add_skytemple
+	sky_temple = add_skytemple(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -658,6 +668,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"monsterRewards": monster_rewards,
 		"jupiter": jupiter_build,
 		"muhan": muhan_build,
+		"hunting2": hunting2_build,
+		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],

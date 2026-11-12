@@ -15,6 +15,7 @@ import { parseCharacterBsr } from "../build/char/formats.mjs";
 import { equipmentSources } from "../build/char/equipmentParticles.mjs";
 import { collectMeshPaths } from "../build/effects/buildEffectPrograms.mjs";
 import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "../build/effects/parseJmxVisualEffect.mjs";
+import { parseCompound } from "../build/world/objects/compound.mjs";
 import { parseJmxBmtMaterialSet, parseJmxResourceBsr, resolveBmtTexturePath } from "../build/world/objects/formats.mjs";
 
 /*
@@ -48,16 +49,34 @@ function dependencies( resource ) {
 			if ( name ) paths.add( name );
 		}
 		// Native drop resources keep their unchanged particle/audio owners.
-		// A new later resource cannot silently acquire that exemption.
+		// A new later resource cannot silently acquire that exemption: its
+		// importer declares a posture instead. "data" walks the sound
+		// tracks' files as Data resources (the Sky Temple import, whose
+		// monsters keep their authored sounds); "all" walks every particle
+		// set's effects, not only the equipment selector kind.
 		if ( !resource.native && character.soundModifiers.length ) {
-			throw Error( `${resource.path}: sound closure requires an explicit importer` );
+			if ( resource.sounds !== "data" ) {
+				throw Error( `${resource.path}: sound closure requires an explicit importer` );
+			}
+			for ( const set of character.soundModifiers ) {
+				for ( const entry of set.entries ) {
+					for ( const track of entry.tracks ) {
+						if ( track.sourcePath ) paths.add( track.sourcePath );
+					}
+				}
+			}
 		}
 		if ( !resource.native ) {
 			for ( const modifier of character.particleModifiers ) {
-				if ( modifier.kind !== 2 ) throw Error( `${resource.path}: unsupported equipment particle selector` );
+				if ( modifier.kind !== 2 && resource.particles !== "all" ) {
+					throw Error( `${resource.path}: unsupported equipment particle selector` );
+				}
 				for ( const entry of modifier.entries ) particles.add( entry.effectPath );
 			}
 		}
+	} else if ( resource.path.endsWith( ".cpd" ) ) {
+		const compound = parseCompound( bytes, resource.path );
+		for ( const name of compound.branches ) paths.add( name );
 	} else if ( resource.path.endsWith( ".bmt" ) ) {
 		const materialSet = parseJmxBmtMaterialSet( bytes, resource.path );
 		for ( const material of materialSet.materials ) {

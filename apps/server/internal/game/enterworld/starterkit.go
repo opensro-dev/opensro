@@ -16,6 +16,10 @@ SRO_BETA_STARTER_KIT=on enables it (the Nomad job's beta_starter_kit
 variable); anything else leaves characters exactly as the native rules make
 them.
 
+While the switch is on, what the kit grants also carries no merchant
+value: merchants pay 0 for the kit rows and every refill grade
+(FreeGrantItem, #3308), so the free grant cannot be turned into gold.
+
 ===========================================================================
 */
 
@@ -76,6 +80,51 @@ func BetaStarterKitEnabled() bool {
 		return true
 	}
 	return false
+}
+
+/*
+================
+FreeGrantItem
+
+Port-only, not native (#3308): whether a codename is one the starter
+kit hands out free while its switch is on - the kit rows and every
+grade of the refill families. This is the one place that answers;
+merchants and their quotes ask here, and the set is derived from the
+two grant lists above and in starterrefill.go, never a second list.
+
+What the shard gives away on entry carries no merchant value: a
+merchant pays 0 for these while the switch is on, though the sale
+itself still succeeds and clears the bag. Off - the native state -
+answers false for everything.
+================
+*/
+func FreeGrantItem(codename string) bool {
+	if !BetaStarterKitEnabled() {
+		return false
+	}
+	return freeGrantCodenames[codename]
+}
+
+// freeGrantCodenames is the kit rows plus every refill grade, built
+// from the grant lists themselves so the two can never drift apart.
+var freeGrantCodenames = buildFreeGrantCodenames()
+
+/*
+================
+buildFreeGrantCodenames
+================
+*/
+func buildFreeGrantCodenames() map[string]bool {
+	out := make(map[string]bool, len(betaStarterKitCodenames))
+	for _, codename := range betaStarterKitCodenames {
+		out[codename] = true
+	}
+	for _, family := range betaRefillFamilies {
+		for _, codename := range family {
+			out[codename] = true
+		}
+	}
+	return out
 }
 
 /*

@@ -7,6 +7,7 @@ The shipped catalogue (catalog.go) is the v1.150 table extract and never
 grows: optional port-only content (the Pharaoh Tombs, #1750; the temple
 bands, #1800 step 3; the Jupiter worlds, #3267; the Muhan wave worlds,
 #3273) registers its own world definitions here while its
+bands, #1800 step 3; the Jupiter worlds, #3267) registers its own world definitions here while its
 switch is on, so Lookup
 and the registry builders see one catalogue. Registration is idempotent
 for identical rows and refuses anything that collides with a shipped row
@@ -152,7 +153,6 @@ Jupiter field's: type zero, one resident layer, no player limit.
 The unbanded shells (99-102) bind no region and author no waves, so
 they stay unregistered. Which arena a player enters is the entry
 slice's; these register while SRO_MUHAN is on.
-================
 */
 func MuhanDefinitions() []Definition {
 	worlds := muhan.Worlds()
@@ -170,6 +170,7 @@ func MuhanDefinitions() []Definition {
 
 /*
 ================
+=======
 RegisterPortOnly
 
 Adds port-only definitions to the catalogue Lookup and Definitions see.

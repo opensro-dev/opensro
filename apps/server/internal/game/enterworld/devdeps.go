@@ -220,6 +220,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		template, err = monster.AppendSkytemple(template, textdataDir, monster.SkytempleEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.JupiterEnabled() {
 			// Port-only (#3267): the Jupiter field world joins the
 			// catalogue only while its switch is on, before any
@@ -252,6 +256,9 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			}
 		}
 		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
+		// Port-only (#3270): the second hunting grounds' population
+		// joins the default world while its switch is on.
+		template, err = monster.AppendHunting2(template, textdataDir, monster.Hunting2Enabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
