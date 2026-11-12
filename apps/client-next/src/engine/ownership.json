@@ -6,6 +6,7 @@
     "src/engine/runtime/ui/frame/frame.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/debug-console.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/ui/hud/debug-console.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/reverse-return-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",

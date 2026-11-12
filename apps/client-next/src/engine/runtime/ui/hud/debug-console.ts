@@ -98,7 +98,6 @@ import {
 	debugClockStep,
 	type DebugClock
 } from "@/engine/foundation/gameplay/debug-clock";
-import type { UiExtensions } from "@/engine/contracts/ui";
 
 /*
 ================
@@ -171,6 +170,33 @@ export interface DebugConsoleState {
 
 /*
 ================
+DebugConsoleExtensions
+
+The renderer and camera hooks the console drives: the members of ui.ts's
+UiExtensions it calls, restated here because a child module never imports
+its owner (tools/verify-ownership.mjs). ui.ts passes its own extensions,
+which match this shape structurally.
+================
+*/
+export interface DebugConsoleExtensions {
+	playSoundByName?: ( name: string ) => void;
+	saveCameraWaypoints?: ( text: string ) => void;
+	setCameraCollision?: ( collision: boolean ) => void;
+	setCameraPlaying?: ( playing: boolean ) => void;
+	setCameraWaypoints?: (
+		keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
+	) => void;
+	setCameraZoomRail?: ( capped: boolean ) => void;
+	setCursorVisible?: ( visible: boolean ) => void;
+	setDamageNumbers?: ( shown: boolean ) => void;
+	setFreeCamera?: ( free: boolean ) => void;
+	setFreeCameraSpeed?: ( speed: number ) => void;
+	setRenderMode?: ( mode: number, enabled: boolean ) => void;
+	setWorldFieldOfView?: ( degrees: number ) => void;
+}
+
+/*
+================
 DebugConsolePorts
 
 What the console reaches outside itself: the gameplay lane, the bag's
@@ -181,7 +207,7 @@ double click, the extensions, and the two per-frame values it reads
 export interface DebugConsolePorts {
 	readonly sendGameplay: ( command: Extract<SessionCommand, { kind: "gameplay"; }>["command"] ) => void;
 	readonly useInventorySlot: ( slot: number ) => boolean;
-	readonly extensions: UiExtensions;
+	readonly extensions: DebugConsoleExtensions;
 	readonly worldClock: () => WorldClockSeed | undefined;
 	readonly quickslotTime: () => number;
 }

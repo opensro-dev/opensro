@@ -134,6 +134,19 @@ var Settings = []Setting{
 	// importer writes cap110-temple.txt only on that pairing, and the
 	// consumer refuses the same pairing at load). "off" is native.
 	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: the Jupiter field population and its world
+	// (#3267). Build and server read the same switch; off leaves every
+	// imported row out of the build and the population unread.
+	{Env: "SRO_JUPITER", NomadVar: "jupiter", Default: "off", Catalogue: true},
+	// Port-only, not native: the two Mirror Dimension temple sets beside
+	// the Jupiter field (#3267). Needs SRO_JUPITER (the importer writes
+	// jupiter-temple.txt only on that pairing, and the consumer refuses
+	// the same pairing at load). "off" is native.
+	{Env: "SRO_JUPITER_TEMPLE", NomadVar: "jupiter_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: the second hunting grounds population
+	// (#3270). Build and server read the same switch; off leaves
+	// every imported row out of the build and the population unread.
+	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
@@ -360,6 +373,10 @@ var Settings = []Setting{
 	// off restores the native Jangan shop.
 	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
+	// Owner ask, 2026-11-12 (#3257): the later mall's categories, HOT
+	// shop and goods badges. Off by default; off is the shipped mall
+	// exactly (commerce/mallcategories.go).
+	{Env: "SRO_MALL_CATEGORIES", NomadVar: "mall_categories", Default: "off"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},

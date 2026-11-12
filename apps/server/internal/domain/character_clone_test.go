@@ -778,3 +778,72 @@ func BenchmarkSnapshotCast(b *testing.B) {
 		_ = c.SnapshotCast()
 	}
 }
+
+/*
+================
+TestCloneCharacterStagedSharesQuietInventoryRows
+
+One touched row in a wide bag: the next staged copy re-clones that row
+alone and shares every quiet row's children with the previous copy
+(#3164). The staged copy still equals a full clone, and a write through
+the live record crosses into neither the shared nor the cloned rows.
+================
+*/
+func TestCloneCharacterStagedSharesQuietInventoryRows(t *testing.T) {
+	source := clonePopulatedCharacter()
+	for slot := len(source.MissionInventory); slot < 40; slot++ {
+		source.MissionInventory = append(source.MissionInventory, InventoryRow{
+			Slot:         int64(slot),
+			StackCount:   1,
+			MagicOptions: []uint64{uint64(slot)},
+		})
+	}
+	previous := CloneCharacterStaged(source, nil)
+
+	source.MissionInventory[20].StackCount = 7
+	staged := CloneCharacterStaged(source, previous)
+	if !reflect.DeepEqual(staged, CloneCharacter(source)) {
+		t.Fatal("the staged copy differs from the full clone")
+	}
+	quiet := staged.MissionInventory[10]
+	before := previous.MissionInventory[10]
+	if len(quiet.MagicOptions) == 0 || &quiet.MagicOptions[0] != &before.MagicOptions[0] {
+		t.Fatal("a quiet row was re-cloned instead of shared")
+	}
+	touched := staged.MissionInventory[20]
+	if touched.StackCount != 7 || &touched.MagicOptions[0] == &previous.MissionInventory[20].MagicOptions[0] {
+		t.Fatal("the touched row was shared instead of re-cloned")
+	}
+	source.MissionInventory[10].MagicOptions[0] = 99
+	source.MissionInventory[20].MagicOptions[0] = 99
+	if staged.MissionInventory[10].MagicOptions[0] == 99 || staged.MissionInventory[20].MagicOptions[0] == 99 {
+		t.Fatal("a record write crossed into the staged copy")
+	}
+}
+
+/*
+================
+BenchmarkCloneCharacterStagedInventoryChurn
+
+The staged copy of a 120-row bag when one row moved since the previous
+stage: the live shape behind #3164's inventory clone bytes.
+================
+*/
+func BenchmarkCloneCharacterStagedInventoryChurn(b *testing.B) {
+	source := clonePopulatedCharacter()
+	for slot := len(source.MissionInventory); slot < 120; slot++ {
+		source.MissionInventory = append(source.MissionInventory, InventoryRow{
+			Slot:         int64(slot),
+			StackCount:   1,
+			MagicOptions: []uint64{uint64(slot)},
+			Summon:       &CharacterCOS{GID: uint32(slot), Container: &COSContainer{Rows: []InventoryRow{{Slot: 1}}}},
+		})
+	}
+	previous := CloneCharacterStaged(source, nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		source.MissionInventory[60].StackCount = int64(i)
+		previous = CloneCharacterStaged(source, previous)
+	}
+}
