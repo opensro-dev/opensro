@@ -236,3 +236,66 @@ test("the armed quest icon paints in the topmost group, after the minimap plate"
 	const covered = quads.slice( iconIndex + 1 ).find( q => q.texture && q.texture !== fontAtlas.image );
 	assert.ok( !covered, "a panel quad paints after the quest icon: " + covered?.texture );
 });
+
+/*
+================
+quest rows clipped at the plate
+
+#2806, port-only (owner decision 2026-11-12): natively the window
+clips none of its three texts, and the boxes were sized for the
+Korean names. With the window open on an entry whose English NPC
+line is far wider than its control, no glyph ink lands past the
+window's right edge, and the row still paints.
+================
+*/
+test("the open quest window keeps its rows' ink inside the plate (#2806)", () => {
+	const served = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf-8" ) );
+	served.rows.push( "999002\t11\tSN_Q998\tSN_R998\tSN_B998\tSN_NN998\tSN_NC998" );
+	served.countryBytes.push( 3 );
+	served.giveupWarnBytes.push( 0 );
+	served.progressClearBytes.push( 0 );
+	Object.assign( served.textEntries, {
+		SN_Q998: "Making Yeosun's Firecracker",
+		SN_R998: "Reward",
+		SN_B998: "Body",
+		SN_NN998: "Yeosun, shopgirl of haberdashery in Donwhang",
+		SN_NC998: "Deliver the firecracker to Yeosun in Donwhang before the festival ends"
+	} );
+	const f = uiFixture(
+		() => {},
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ "/assets/data/questData.json": new TextEncoder().encode( JSON.stringify( served ) ) }
+	);
+	f.state.entities = f.state.entities.map( e => ({ ...e, countryByte9c: 0 }) );
+	const step = ( level, now ) => {
+		f.state.gameplay = { ...f.state.gameplay, progression: { level, masteries: [] } };
+		f.ui.step( f.state, now );
+	};
+	for ( let i = 0; i < 80; i++ ) step( 10, 1000 + i * 100 );
+	for ( let i = 0; i < 40; i++ ) step( 11, 10000 + i * 100 );
+	f.ui.event( { kind: "activate", id: "quest-info-icon" } );
+	step( 11, 15000 );
+	// The window is centred: 315 wide (foundation quest-info), the
+	// short 142 height for its one row. A glyph's ink is its quad cut
+	// by its clip: clipped glyphs still emit quads past the edge,
+	// with the clip holding the ink inside.
+	const px = Math.floor( (f.state.width - 315) / 2 ), py = Math.floor( (f.state.height - 142) / 2 );
+	const ink = (f.scenes.at( -1 )?.quads ?? []).filter( q =>
+		q.texture === fontAtlas.image && q.rect[1] >= py && q.rect[1] < py + 142 && q.rect[0] >= px
+	);
+	assert.ok( ink.length > 20, "the quest row did not paint" );
+	const inkRight = q => Math.min( q.rect[0] + q.rect[2], q.clip[0] + q.clip[2] ),
+		inkLeft = q => Math.max( q.rect[0], q.clip[0] );
+	assert.ok(
+		ink.some( q => inkRight( q ) < q.rect[0] + q.rect[2] ),
+		"no glyph was cut at its control edge, so the clip proved nothing"
+	);
+	const past = ink.filter( q => inkLeft( q ) < inkRight( q ) && inkRight( q ) > px + 315 );
+	assert.deepEqual( past, [], "glyph ink past the window's right edge: " + JSON.stringify( past[0]?.rect ) );
+});
