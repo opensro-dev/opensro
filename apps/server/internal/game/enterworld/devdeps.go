@@ -256,6 +256,9 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			}
 		}
 		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap muhan waves: %w", err)
+		}
 		// Port-only (#3270): the second hunting grounds' population
 		// joins the default world while its switch is on.
 		template, err = monster.AppendHunting2(template, textdataDir, monster.Hunting2Enabled())
