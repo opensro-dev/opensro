@@ -62,6 +62,7 @@ from alexandria_map_tables import (  # noqa: E402
 	OVERVIEW_TILE_REGIONS, MAP_TEXTURES, table_text, append_rows, native_text_row,
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
+import god_import as god  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
@@ -636,6 +637,9 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# Jupiter is independently optional; its off path also removes what a
 	# previous on build of a reused variant root left behind.
 	jupiter_build = jupiter.add_jupiter(native, out)
+	# The GOD temple worlds ride SRO_CAP110_TEMPLE (with its cap-110
+	# pairing); the same off-path rule applies to their outputs.
+	god_build = god.add_god(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -646,6 +650,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
 		"jupiter": jupiter_build,
+		"god": god_build,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
