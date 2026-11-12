@@ -14,6 +14,7 @@ const { caveMapCatalog, caveMapPage, caveMapView, caveDungeonName, cavePageCapti
 
 const CLIP = [ 100, 50, 300, 300 ];
 // B2's row: 22 x 10 regions drawn 1408 x 640, so 64 pixels a region.
+/** @type {import("../../src/engine/foundation/ui/cave-map.ts").CaveMapPage} */
 const PAGE = {
 	regionId: 0x8006,
 	floorIndex: 0,
