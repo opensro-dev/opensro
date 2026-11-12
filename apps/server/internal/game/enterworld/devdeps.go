@@ -243,6 +243,18 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		if monster.MuhanEnabled() {
+			// Port-only (#3273): the Muhan wave worlds join the
+			// catalogue only while their switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.MuhanDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		muhanWaves, err := monster.LoadMuhanWaves(textdataDir, monster.MuhanEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if rate, _ := monster.PharaohGearRateFromEnv(); rate > 1 && monster.PharaohTombEnabled() {
 			log.Infof("bootstrap: Pharaoh Tomb elites and uniques roll equipment x%d (%s, port-only)", rate, monster.EnvPharaohGearRate)
 		}
@@ -279,6 +291,13 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			// Port-only, not native: the tomb trigger chain owns the
 			// Floor 5 unique spawns (simulation/tomb_chain.go, #2372).
 			if err := monsters.InstallTombChain(); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		if monster.MuhanEnabled() {
+			// Port-only, not native: the wave director owns the Muhan
+			// arenas' twenty-wave runs (simulation/muhan_chain.go).
+			if err := monsters.InstallMuhanChain(muhanWaves); err != nil {
 				return nil, fmt.Errorf("bootstrap: %w", err)
 			}
 		}

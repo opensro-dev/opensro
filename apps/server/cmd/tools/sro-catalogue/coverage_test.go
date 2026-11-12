@@ -365,6 +365,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_CAP110_QINSHI", "on", nil, "monsters", "SRO_CAP110_QINSHI requires"},
 		{"SRO_JUPITER", "on", nil, "monsters", "jupiter-field.txt"},
 		{"SRO_JUPITER_TEMPLE", "on", nil, "monsters", "SRO_JUPITER_TEMPLE requires"},
+		{"SRO_MUHAN", "on", nil, "monsters", "muhan-waves.txt"},
 		{"SRO_QINSHI_TOMB", "off", nil, "monsters", ""},
 		{"SRO_ALEXANDRIA", "on", nil, "npcs-alexandria", ""},
 		{"SRO_HALLOWEEN_EVENT", "on", map[string]string{"SRO_HALLOWEEN_EVENT_WINDOW": halloweenWindow}, "events", ""},

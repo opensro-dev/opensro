@@ -5,7 +5,8 @@ portonly.go - port-only world definitions, registered behind their switches
 
 The shipped catalogue (catalog.go) is the v1.150 table extract and never
 grows: optional port-only content (the Pharaoh Tombs, #1750; the temple
-bands, #1800 step 3; the Jupiter worlds, #3267) registers its own world definitions here while its
+bands, #1800 step 3; the Jupiter worlds, #3267; the Muhan wave worlds,
+#3273) registers its own world definitions here while its
 switch is on, so Lookup
 and the registry builders see one catalogue. Registration is idempotent
 for identical rows and refuses anything that collides with a shipped row
@@ -20,6 +21,7 @@ import (
 	"sync"
 
 	"opensro.online/server/internal/game/world/jupiter"
+	"opensro.online/server/internal/game/world/muhan"
 	"opensro.online/server/internal/game/world/pharaohtomb"
 	"opensro.online/server/internal/game/world/temple"
 )
@@ -128,6 +130,32 @@ SRO_JUPITER_TEMPLE is on.
 */
 func JupiterTempleDefinitions() []Definition {
 	worlds := jupiter.TempleWorlds()
+	definitions := make([]Definition, len(worlds))
+	for index, world := range worlds {
+		definitions[index] = Definition{
+			ID:         DefinitionID(world.ID),
+			CodeName:   world.CodeName,
+			NativeType: 0,
+			LayerLimit: 1,
+		}
+	}
+	return definitions
+}
+
+/*
+================
+MuhanDefinitions
+
+The port-only Muhan wave worlds (#3273), in id order. The later
+server's rows are ordinary permanent worlds, so the shape is the
+Jupiter field's: type zero, one resident layer, no player limit.
+The unbanded shells (99-102) bind no region and author no waves, so
+they stay unregistered. Which arena a player enters is the entry
+slice's; these register while SRO_MUHAN is on.
+================
+*/
+func MuhanDefinitions() []Definition {
+	worlds := muhan.Worlds()
 	definitions := make([]Definition, len(worlds))
 	for index, world := range worlds {
 		definitions[index] = Definition{
