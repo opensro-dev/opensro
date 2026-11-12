@@ -35,25 +35,27 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/world"
 )
 
 // EnvPharaohTemple is the shard switch (shardsettings, nomad var
 // pharaoh_temple). Off is the native v1.150 shard.
 const EnvPharaohTemple = "SRO_PHARAOH_TEMPLE"
 
-// The dungeons' dungeoninfo ids (10-16) and the Temple's region. A
-// region id here is data, the value dungeoninfo.txt names: the dungeon
-// plane's region of that dungeon id (0x800A-0x8010). The plane bit
-// itself, and every branch on it, belong to world/geometry.go.
+// The dungeons' dungeoninfo ids (10-16). A dungeon's region is the
+// plane owner's derivation of its id (world.DungeonRegionID: 0x800A-
+// 0x8010); this package never composes the plane bit itself.
 const (
 	FirstDungeonID = 10
 	LastDungeonID  = 16
 	// TempleDungeonID is the main Temple; the other six are sanctums.
 	TempleDungeonID = 16
-	// TempleRegionID is the Temple's region, 0x8010, the one both
-	// walk-in gates stand in.
-	TempleRegionID uint16 = 0x8010
 )
+
+// TempleRegionID is the Temple's region (0x8010), the one both walk-in
+// gates stand in.
+var TempleRegionID = world.DungeonRegionID(TempleDungeonID)
 
 // The gates' codenames, as teleportdata.txt spells them. The two desert
 // gates are objects a player clicks (teleportbuilding); the two temple
@@ -88,12 +90,12 @@ type Dungeon struct {
 }
 
 var dungeons = []Dungeon{
-	{10, 0x800A, "Sanctum of Restriction", 51},
-	{11, 0x800B, "Sanctum of the Blue Eye", 52},
-	{12, 0x800C, "Sanctum of Punishment", 53},
-	{13, 0x800D, "Sanctum of Atonement", 54},
-	{14, 0x800E, "Sanctum of Immortality", 55},
-	{15, 0x800F, "Sanctum of Dark", 56},
+	{10, world.DungeonRegionID(10), "Sanctum of Restriction", 51},
+	{11, world.DungeonRegionID(11), "Sanctum of the Blue Eye", 52},
+	{12, world.DungeonRegionID(12), "Sanctum of Punishment", 53},
+	{13, world.DungeonRegionID(13), "Sanctum of Atonement", 54},
+	{14, world.DungeonRegionID(14), "Sanctum of Immortality", 55},
+	{15, world.DungeonRegionID(15), "Sanctum of Dark", 56},
 	{TempleDungeonID, TempleRegionID, "Pharaoh Temple", 60},
 }
 
