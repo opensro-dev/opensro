@@ -607,6 +607,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !priced || price > math.MaxInt64/uint64(q.Quantity) || restore > math.MaxInt64/uint64(q.Quantity) {
 				return false
 			}
+			// Port-only, not native (#3308): what the starter kit hands
+			// out free carries no merchant value while its switch is on
+			// (enterworld.FreeGrantItem owns the list). The sale still
+			// succeeds and clears the bag, and the buyback restore
+			// price is untouched.
+			if enterworld.FreeGrantItem(item.Codename) {
+				price = 0
+			}
 			credit := price * uint64(q.Quantity)
 			if inventory.IsTradeGoods(item.TypeFlags) {
 				part := item
