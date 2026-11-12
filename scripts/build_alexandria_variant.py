@@ -67,7 +67,6 @@ import import_vsro_alexandria as stage1  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import muhan_import as muhan  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
-import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
