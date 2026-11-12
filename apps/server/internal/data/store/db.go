@@ -334,6 +334,11 @@ type loadedDB struct {
 	nameReservations map[string]map[string]NameReservation
 	meta             Meta
 	version          int
+	// halloweenSeeded reports the meta plane was derived at this load
+	// (no halloweenBoxes row: seedHalloweenBoxes over the legacy
+	// counts), so its bytes are not the disk's until a commit writes
+	// the row; adoptDB flags the plane for the first commit.
+	halloweenSeeded bool
 }
 
 // loadDB accepts only the exact current character and layout versions. It

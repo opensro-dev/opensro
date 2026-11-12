@@ -294,3 +294,72 @@ func TestDurableTicketIsEmptyWithTheFlagOff(t *testing.T) {
 	}
 	ticket.wait()
 }
+
+/*
+================
+TestCommitWriterStatsShowQueueAndLag
+
+The writer's metrics block: a batch parked in its commit and two behind
+it read as depth 3 (the parked one stays queued until it commits), the
+high-water keeps 3 after the drain, and each batch's lag is its time
+from queued to committed on the writer's clock.
+================
+*/
+func TestCommitWriterStatsShowQueueAndLag(t *testing.T) {
+	t.Parallel()
+	s := openTestSync(t, t.TempDir(), newTestClock())
+	clock := newTestClock()
+	w := startCommitWriter(s.db, clock.Now)
+	park := newParkedCommit(t)
+	t.Cleanup(w.stop)
+
+	w.enqueue(&commitBatch{}, park.seam)
+	<-park.inCommit
+	w.enqueue(&commitBatch{}, nil)
+	last := w.enqueue(&commitBatch{}, nil)
+	stats := w.stats()
+	if stats.QueueDepth != 3 || stats.QueueDepthMax != 3 || stats.Queued != 3 || stats.Applied != 0 ||
+		stats.QueueCap != maxQueuedCommits {
+		t.Fatalf("parked stats = %+v, want depth 3 of %d, queued 3, applied 0", stats, maxQueuedCommits)
+	}
+	clock.Advance(40 * time.Millisecond)
+	park.free()
+	w.waitApplied(last)
+
+	stats = w.stats()
+	if stats.QueueDepth != 0 || stats.QueueDepthMax != 3 || stats.Applied != 3 {
+		t.Fatalf("drained stats = %+v, want depth 0, high-water 3, applied 3", stats)
+	}
+	var lagged uint64
+	for _, n := range stats.LagMs.Buckets {
+		lagged += n
+	}
+	if lagged != 3 || stats.LagMs.MaxMs != 40 {
+		t.Fatalf("lag = %d samples, max %.1f ms; want 3 samples, max 40 ms", lagged, stats.LagMs.MaxMs)
+	}
+	if stats.SlotWaitMs.MaxMs != 0 || stats.FailingAttempts != 0 || stats.FailedTotal != 0 {
+		t.Fatalf("an uncontended healthy queue reads slot wait %.1f ms, failing %d/%d",
+			stats.SlotWaitMs.MaxMs, stats.FailingAttempts, stats.FailedTotal)
+	}
+}
+
+/*
+================
+TestLockTimingCarriesTheWriterOnlyWhenOn
+
+store_lock.commit_writer is present with the asynchronous writer and
+absent with the synchronous door, so a dashboard can tell the two apart.
+================
+*/
+func TestLockTimingCarriesTheWriterOnlyWhenOn(t *testing.T) {
+	t.Parallel()
+	syncStore := openTestSync(t, t.TempDir(), newTestClock())
+	if got := syncStore.LockTiming().CommitWriter; got != nil {
+		t.Fatalf("synchronous store reports a writer: %+v", got)
+	}
+	asyncStore, _ := asyncStoreWithCharacter(t, t.TempDir(), "metricshero")
+	got := asyncStore.LockTiming().CommitWriter
+	if got == nil || got.QueueCap != maxQueuedCommits || got.Queued == 0 {
+		t.Fatalf("asynchronous store writer block = %+v, want the cap and the queued batches", got)
+	}
+}

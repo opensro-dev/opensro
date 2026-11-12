@@ -166,10 +166,11 @@ import { createItemMall } from "./hud/item-mall";
 import {
 	mallControl,
 	compactMallBagLayout,
-	mallCategories,
+	mallBadgeMark,
 	mallDescription,
 	mallMenuControl,
 	mallMenuArtwork,
+	mallTabCaptionLater,
 	mallTabControl,
 	mallCategoryIcon,
 	mallPageLayout,
@@ -6233,6 +6234,9 @@ export function createUi( ports: UiPorts ) {
 			if ( itemMall.read().visible ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
+					if ( event.id === "item-mall-search" ) {
+						itemMall.setSearch( event.value );
+					}
 					if ( event.id === "item-mall-point-value" && /^\d{0,10}$/.test( event.value ) ) {
 						itemMall.editPointDraft( Number( event.value ), view.gameplay.itemMall );
 					}
@@ -25374,27 +25378,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
-				// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
+				// The item-target pick (cursor A6 at 567372, kind 0x1F pushed at
+				// 5673A9) asks UIIT_MSG_QUESTION_SILKMALL_ITEM_USE (53252D) -
+				// the CANCLE pair is kind 0x20, the buff-cancel confirm below.
 				const layout = guildProposalLayout( w, h ),
 					targeted = cosHud.targetUse() !== null,
 					// 5C82D0 keeps the confirm box 308x148 whatever its text; the
-					// two lines wrap inside that frame. The text board wraps them,
-					// centred, so a long line folds instead of running past the
-					// window frame.
+					// text board wraps its lines centred inside that frame.
 					message = text.guide(
 						guideTokens(
-							"<center>" +
-								hudCopy(
-									targeted ?
-										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
-										"UIIT_MSG_COS_CLEAN_CONFIRM1"
-								) +
+							targeted ?
+								"<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" :
+								"<center>" +
+								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM1" ) +
 								"<br>" +
-								hudCopy(
-									targeted ?
-										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
-										"UIIT_MSG_COS_CLEAN_CONFIRM2"
-								) +
+								hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM2" ) +
 								"</center>"
 						),
 						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
@@ -25513,8 +25511,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				);
 			}
 			if ( worldVisible && buffDismiss ) {
-				// The same fixed 308x148 confirm frame as the COS box above; its
-				// two CANCLE lines wrap inside it instead of running past it.
+				// Kind 0x20, opened at 6E2C45 when the skill record demands a
+				// confirm before its cancel: the same fixed 308x148 frame as the
+				// COS box above; its two CANCLE lines wrap inside it.
 				const layout = guildProposalLayout( w, h ),
 					message = text.guide(
 						guideTokens(
@@ -26445,6 +26444,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			}
 			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
 				const data = hud.data()!;
+				// Port-only (#3257): the Experimental mall categories row
+				// puts the later rail in force; the row off is the native
+				// rail, and switching rails restarts browsing there.
+				itemMall.setCategoriesLater( experimental.state().saved.mallCategories );
 				let state = itemMall.read( game.itemMall );
 				const root = data.windows.ifitemmall!;
 				const frame = data.root.GDR_ITEM_MALL!;
@@ -26465,7 +26468,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const columns = Math.max( 1, Math.min( 2, Math.floor( contentWidth / 240 ) ) );
 					const tabColumns = Math.max( 1, Math.floor( contentWidth / 140 ) );
 					const tabRows = Math.ceil( state.tabs.length / tabColumns );
-					const productTop = 124 + tabRows * tabPitch;
+					// Port-only (#3257): the later rail's search row takes
+					// 36 pixels above the tabs while browsing a category.
+					const searchTop = state.compactView === "shop" && state.category >= 0 && state.categoriesLater;
+					const browsingTop = 124 + (searchTop ? 36 : 0);
+					const productTop = browsingTop + tabRows * tabPitch;
 					const visibleRows = Math.max( 1, Math.floor( (h - touch - margin - productTop) / cardHeight ) );
 					itemMall.setPageSize( Math.min( 6, columns * visibleRows ) );
 					state = itemMall.read( game.itemMall );
@@ -26654,10 +26661,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						if ( state.compactView === "shop" && state.category === -1 ) {
 							const menuWidth = contentWidth;
 							const categoryWidth = (menuWidth - gap) / 2;
-							mallCategories().forEach( ( category, index ) => {
+							state.categories.forEach( ( category, index ) => {
 								const disabled = category.key !== "basket" &&
 									!game.itemMall?.tabs.some( tab => tab.category === category.key );
-								const node = mallMenuControl( mallControl( root, 8 ), index, false, disabled );
+								const node = mallMenuControl(
+									mallControl( root, 8 ),
+									index,
+									false,
+									disabled,
+									state.categories
+								);
 								const r: UiRect = [
 									margin + index % 2 * (categoryWidth + gap),
 									124 + Math.floor( index / 2 ) * (touch + gap),
@@ -26665,7 +26678,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									touch
 								];
 								image( r, node.texture );
-								const icon = mallCategoryIcon( node, index, disabled );
+								const icon = mallCategoryIcon( node, index, disabled, state.categories );
 								image( [ r[0] + 6, r[1] + 10, 20, 20 ], icon.texture );
 								mallText( hudCopy( node.text ), [ r[0] + 30, r[1] + 4, r[2] - 34, 32 ] );
 								controls.push( {
@@ -26766,20 +26779,36 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								touch
 							], !state.worn.length || busy );
 						} else {
+							if ( searchTop ) {
+								rect( [ margin, 124, contentWidth, 32 ], [ .02, .025, .03, 1 ] );
+								if ( !state.search ) mallText( "Search", [ margin + 4, 132, contentWidth - 8, 16 ] );
+								controls.push( {
+									id: "item-mall-search",
+									label: "Search",
+									kind: "text",
+									rect: [ margin, 124, contentWidth, 32 ],
+									value: state.search,
+									maxLength: 32,
+									disabled: busy
+								} );
+							}
 							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
 							state.tabs.forEach( ( tab, index ) => {
 								const node = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
 								const r: UiRect = [
 									margin + index % tabColumns * (tabWidth + gap),
-									124 + Math.floor( index / tabColumns ) * tabPitch,
+									browsingTop + Math.floor( index / tabColumns ) * tabPitch,
 									tabWidth,
 									tabPitch
 								];
+								const caption = state.categoriesLater ?
+									(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
+									hudCopy( tab.label );
 								image( r, node.texture );
-								mallText( hudCopy( tab.label ), [ r[0] + 4, r[1] + 6, r[2] - 8, 18 ] );
+								mallText( caption, [ r[0] + 4, r[1] + 6, r[2] - 8, 18 ] );
 								controls.push( {
 									id: node.name,
-									label: hudCopy( tab.label ),
+									label: caption,
 									kind: "button",
 									rect: r,
 									selected: index === state.tab
@@ -26794,6 +26823,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								image( [ x + 40, y + 4, cardWidth - 44, 36 ], mallControl( rowArt, 2 ).texture );
 								const icon = iconPath( offer.icon );
 								if ( icon ) image( [ x + 4, y + 4, 32, 32 ], icon );
+								const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
+								if ( mark ) {
+									rect( [ x + 24, y + 2, 12, 12 ], mark.color );
+									quads.push( ...text.quads( mark.letter, [ x + 24, y + 3, 12, 10 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ) );
+								}
 								controls.push( {
 									id: "item-mall-offer:" + offer.packageId,
 									label: hudCopy( offer.name ),
@@ -26820,12 +26857,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									[ x + 8 + bw, y + 64, bw, touch ],
 									busy || !game.itemMall || !itemMall.wearEnabled( offer, game.itemMall )
 								);
-								mallButton( "item-mall-reserve:" + index, state.category === 7 ? "Remove" : "Basket", [
-									x + 12 + bw * 2,
-									y + 64,
-									bw,
-									touch
-								], busy );
+								mallButton(
+									"item-mall-reserve:" + index,
+									state.categories[state.category]?.key === "basket" ? "Remove" : "Basket",
+									[
+										x + 12 + bw * 2,
+										y + 64,
+										bw,
+										touch
+									],
+									busy
+								);
 							} );
 							const pages = Math.ceil( state.count / state.pageSize ), footerY = h - touch - margin;
 							mallButton(
@@ -26840,7 +26882,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								touch,
 								touch
 							], state.page + 1 >= pages );
-							if ( state.category === 7 ) {
+							if ( state.categories[state.category]?.key === "basket" ) {
 								mallButton( "item-mall-buy-all", "Buy basket", [
 									margin + touch + gap,
 									footerY,
@@ -26897,18 +26939,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								node.id !== 8 && node.id !== 3
 						);
 					}
-					for ( let index = 0; index < 8; index++ ) {
-						const category = mallCategories()[index]!;
+					for ( let index = 0; index < state.categories.length; index++ ) {
+						const category = state.categories[index]!;
 						const disabled = category.key !== "basket" &&
 							!game.itemMall?.tabs.some( row => row.category === category.key );
 						const node = mallMenuControl(
 							mallControl( root, 8 ),
 							index,
 							state.category === index,
-							disabled
+							disabled,
+							state.categories
 						);
 						authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
-						authoredImage( mallCategoryIcon( node, index, disabled ), ox, oy );
+						authoredImage( mallCategoryIcon( node, index, disabled, state.categories ), ox, oy );
 					}
 					const infoOrigin = mallControl( root, 90 ).rect;
 					const info = data.windows.ifitemmallmyinfo!;
@@ -27168,14 +27211,37 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						}
 					} else {
 						const currentTab = state.tabs[state.tab];
+						// Port-only (#3257): the later rail's search field
+						// stands where the subtitle stands while browsing.
+						const searching = state.categoriesLater && state.category >= 0 &&
+							state.categories[state.category]?.key !== "basket";
 						const description = state.category === -1 ?
 							"UIIT_STT_SILKMALL_MAIN_INTRO" :
-							state.category === 7 ?
+							state.categories[state.category]?.key === "basket" ?
 							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
 							currentTab ?
 							mallDescription( currentTab.category, currentTab.tab ) :
 							"";
-						authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						if ( searching ) {
+							rect( [ sx + 26, sy + 39, 363, 32 ], [ .02, .025, .03, 1 ] );
+							if ( !state.search ) {
+								quads.push( ...text.quads( "Search", [ sx + 30, sy + 47, 355, 16 ], full, white, {
+									hAlign: 0,
+									vAlign: 0
+								} ) );
+							}
+							controls.push( {
+								id: "item-mall-search",
+								label: "Search",
+								kind: "text",
+								rect: [ sx + 26, sy + 39, 363, 32 ],
+								value: state.search,
+								maxLength: 32,
+								disabled: state.batchPending || !!game.inventoryPending
+							} );
+						} else {
+							authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						}
 						if ( state.category === -1 ) {
 							authoredChrome(
 								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
@@ -27183,7 +27249,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								sy
 							);
 						}
-						if ( state.category === 7 ) {
+						if ( state.categories[state.category]?.key === "basket" ) {
 							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
 							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
 							const buyAll = mallControl( shop, 42 );
@@ -27200,7 +27266,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							for ( let index = 0; index < state.tabs.length; index++ ) {
 								const tab = state.tabs[index]!;
 								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-								authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+								const caption = state.categoriesLater ?
+									(mallTabCaptionLater( tab.category, index ) ?? hudCopy( tab.label )) :
+									hudCopy( tab.label );
+								authoredLabeledButton( control, sx, sy, control.name, caption );
 							}
 							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
 							if ( manager.count > 0 ) {
@@ -27299,6 +27368,24 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
 								const icon = iconPath( offer.icon );
 								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+								const mark = state.categoriesLater ? mallBadgeMark( offer.badge ) : undefined;
+								if ( mark ) {
+									const iconRect = authoredRect( mallControl( row, 1 ), rx, ry );
+									const chip: UiRect = [ iconRect[0] + iconRect[2] - 12, iconRect[1], 12, 12 ];
+									rect( chip, mark.color );
+									quads.push( ...text.quads(
+										mark.letter,
+										[
+											chip[0],
+											chip[1] + 1,
+											chip[2],
+											chip[3] - 2
+										],
+										full,
+										white,
+										{ hAlign: 1, vAlign: 1 }
+									) );
+								}
 								controls.push( {
 									id: "item-mall-offer:" + offer.packageId,
 									label: hudCopy( offer.name ),
@@ -27318,7 +27405,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										ry,
 										action,
 										hudCopy(
-											node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
+											node.id === 6 && state.categories[state.category]?.key === "basket" ?
+												"UIIT_STT_SILKMALL_DEL" :
+												node.text
 										),
 										(node.id === 3 ?
 											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
