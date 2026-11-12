@@ -93,3 +93,44 @@ func TestTempleDefinitionsShape(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestJupiterDefinitionsShape
+
+The Jupiter worlds register (enterworld wires the call) as permanent
+outdoor worlds: native type 0 so they open at boot, one layer, no
+resident limit - the later client's own shape for 86-90 and 93-94
+(#3267). The field switch takes the field world alone; the temple
+switch takes the six temple worlds. Shape only: registration itself
+is TestPortOnlyRegistration's subject.
+================
+*/
+func TestJupiterDefinitionsShape(t *testing.T) {
+	field := JupiterFieldDefinitions()
+	if len(field) != 1 || field[0].ID != 90 || field[0].CodeName != "GROUP_JUPITER_FIELD" {
+		t.Fatalf("jupiter field definitions = %+v", field)
+	}
+	temple := JupiterTempleDefinitions()
+	if len(temple) != 6 {
+		t.Fatalf("jupiter temple definitions = %d, want 6", len(temple))
+	}
+	wantTemple := []int{86, 87, 88, 89, 93, 94}
+	for index, row := range append(field, temple...) {
+		if index > 0 && int(row.ID) != wantTemple[index-1] {
+			t.Fatalf("jupiter temple definition %d has id %d, want %d", index-1, row.ID, wantTemple[index-1])
+		}
+		if row.NativeType != 0 || row.LayerLimit != 1 || row.PlayerLimit != 0 {
+			t.Fatalf("jupiter world %d shape = type %d, %d layers, %d players; want type 0, 1, 0",
+				row.ID, row.NativeType, row.LayerLimit, row.PlayerLimit)
+		}
+		if row.CodeName == "" {
+			t.Fatalf("jupiter world %d has no codename", row.ID)
+		}
+		for _, shipped := range Shipped() {
+			if shipped.ID == row.ID || shipped.CodeName == row.CodeName {
+				t.Fatalf("jupiter world %d collides with shipped %+v", row.ID, shipped)
+			}
+		}
+	}
+}

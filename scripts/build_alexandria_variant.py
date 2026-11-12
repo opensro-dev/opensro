@@ -63,6 +63,8 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
+import hunting2_import as hunting2  # noqa: E402
+import jupiter_import as jupiter  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
@@ -621,8 +623,15 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	weapons = add_items(vsro_root, native, out)
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	from mall_avatar_import import add_avatars
+	from mall_avatar_import import add_avatars, add_source, v1696_root, V1696_SOURCE, avatars_zip, AVATARS_SOURCE
 	mall_avatars = add_avatars(vsro_root, native, out)
+	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
+	# pinned by v1696_archive_pins.json). Unset removes a previous import.
+	later_avatars = add_source(v1696_root(), native, out, V1696_SOURCE)
+	# The v2.355 export's avatars from the pinned archive (SRO_AVATARS_ZIP,
+	# #3254): without it the build is byte-identical and a previous
+	# import is removed.
+	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -632,6 +641,12 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
+	# Jupiter is independently optional; its off path also removes what a
+	# previous on build of a reused variant root left behind.
+	jupiter_build = jupiter.add_jupiter(native, out)
+	# The second hunting grounds are independently optional the same
+	# way; their off path reaps a previous on build's outputs.
+	hunting2_build = hunting2.add_hunting2(native, out)
 	# The Sky Temple fields are their own switch and their own source (the
 	# v1.696 client), layered on the same variant after the populations
 	# whose identity space they share.
@@ -646,6 +661,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
+		"jupiter": jupiter_build,
+		"hunting2": hunting2_build,
 		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
@@ -662,6 +679,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcServices": city_services,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
+		"mallAvatarsV1696": later_avatars,
+		"mallAvatarsArchive": archive_avatars,
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,

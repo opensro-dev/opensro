@@ -306,6 +306,18 @@ func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
 			return monster.Template{}, fmt.Errorf("catalogue qinshi tomb population: %w", err)
 		}
 	}
+	template, err = monster.AppendJupiter(template, dir, monster.JupiterEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue jupiter field population: %w", err)
+	}
+	template, err = monster.AppendJupiterTemple(template, dir, monster.JupiterTempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue jupiter temple population: %w", err)
+	}
+	template, err = monster.AppendHunting2(template, dir, monster.Hunting2Enabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue hunting2 population: %w", err)
+	}
 	return template, nil
 }
 
