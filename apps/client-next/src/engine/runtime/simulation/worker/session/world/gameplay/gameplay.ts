@@ -445,11 +445,28 @@ const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
 const GUILD_BAN_REFUSED = 0x1f;
-// The 0xB45A grant bits that open the talk window on selection: shop 0x1,
-// talk 0x2, recall point 0x40, teleport 0x80 and return point 0x100. The
-// Bandit Den gate has no link out, so 0x100 (row 0x10, "Teleport to return
-// point") is its only bit; without it the gate's menu never opened.
-const TALK_WINDOW_CAPABILITIES = 0x1c3;
+/*
+================
+talkWindowOpens
+
+Whether a granted selection opens the talk window. Native
+CPSMission_OnNpcSelectResponse0xB45A branches on the target's class,
+never on the capability word alone (0x7650B8, #3280): a CICNPC always
+opens (its greeting), a CITeleportGate always opens (the gate caption
+greeting), and a CICMonster or CICCos opens only when its capability
+word carries the talk function bit 2 without the hide bit 0x10. A
+zero-capability NPC therefore still greets; the word only gates the
+monster and COS classes.
+================
+*/
+function talkWindowOpens( selection: Pick<GameplayState, "targetKind" | "targetCapabilities"> ): boolean {
+	const capabilities = selection.targetCapabilities ?? 0;
+	if ( selection.targetKind === "npc" || selection.targetKind === "teleport" ) return true;
+	if ( selection.targetKind === "monster" || selection.targetKind === "cos" ) {
+		return (capabilities & 0x10) === 0 && (capabilities & 2) !== 0;
+	}
+	return false;
+}
 // Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
@@ -5663,7 +5680,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const selection = targeting.state();
 					if (
 						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
-						!selection.targetPending && ((selection.targetCapabilities ?? 0) & TALK_WINDOW_CAPABILITIES)
+						!selection.targetPending && talkWindowOpens( selection )
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
 				}

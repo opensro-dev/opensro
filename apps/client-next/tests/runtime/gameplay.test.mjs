@@ -1638,7 +1638,7 @@ test("same-target clicks restore the shared marker without duplicate grants, inc
 			p[0] = 1;
 			p.writeUInt32LE( 8, 1 );
 			p[5] = kind === "monster" ? 1 : 0;
-			// This case retains an open talk pane; zero-capability NPCs never open one.
+			// This case retains an open talk pane; an NPC opens one by class (#3280).
 			if ( kind === "npc" ) p.writeUInt32LE( 2, 6 );
 			game.receive( { opcode: 0xb45a, payload: p }, 20 );
 		}

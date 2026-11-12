@@ -91,16 +91,56 @@ function fixture( kind = "npc", fortress = false ) {
 	return { game, sent, transport, entity, grant, select, snapshot };
 }
 
-test("a zero-capability NPC has no visible menu and permits another selection request", () => {
+test("a zero-capability NPC still opens its talk menu and holds the selection", () => {
+	// Native branches on the target's class, not the capability word
+	// (#3280): a CICNPC always opens, so the grant with no function bits
+	// greets, and 692BC8 suppresses re-selecting it while its pane shows.
 	const f = fixture();
 	try {
 		f.select();
 		f.grant( NPC_GID, 0 );
-		assert.equal( f.snapshot().npcConversation.phase, "closed" );
-		assert.equal( f.select( 2 )?.opcode, SELECT );
-		assert.equal( f.select( 3 ), null, "A fresh pending grant still coalesces" );
+		assert.equal( f.snapshot().npcConversation.phase, "menu" );
+		assert.equal( f.select( 2 ), null, "the visible pane suppresses a fresh select" );
 	} finally {
 		f.game.dispose();
+	}
+});
+
+test("a zero-capability teleport gate still opens its talk menu", () => {
+	// A CITeleportGate always opens too (#3280): the caption greeting is
+	// the gate's, whatever its word carries.
+	const f = fixture( "teleport" );
+	try {
+		f.select();
+		f.grant( NPC_GID, 0 );
+		assert.equal( f.snapshot().npcConversation.phase, "menu" );
+	} finally {
+		f.game.dispose();
+	}
+});
+
+test("a monster opens its talk menu only on the talk bit without the hide bit", () => {
+	// A CICMonster is the one granted class the word gates (#3280): bit
+	// 2 offers the talk, bit 0x10 hides it. A CICCos shares the native
+	// branch and the predicate's arm; the port selects a COS locally, so
+	// a COS answer reaches the branch only when the replied class
+	// disagrees with the click-time family (#2870).
+	for (
+		const [capabilities, phase] of [
+			[ 2, "menu" ],
+			[ 0x12, "closed" ],
+			[ 0x10, "closed" ],
+			[ 0, "closed" ]
+		]
+	) {
+		const f = fixture( "monster" );
+		try {
+			f.select();
+			f.grant( NPC_GID, capabilities );
+			assert.equal( f.snapshot().npcConversation.phase, phase, `monster with 0x${capabilities.toString( 16 )}` );
+		} finally {
+			f.game.dispose();
+		}
 	}
 });
 

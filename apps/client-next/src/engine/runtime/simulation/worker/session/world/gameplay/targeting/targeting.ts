@@ -95,6 +95,10 @@ export function createTargeting(
 	let gateRows: GateRow[] = [];
 	let localSelection = false;
 	let target = 0, pending: Pending | null = null, error: string | null = null;
+	// The granted target's entity class, settled by the 0xB45A reply as
+	// native settles it (764C60 picks the shape from the entity's class):
+	// the talk window opens by class, not by capabilities alone (#3280).
+	let targetKind = "";
 	/*
 ================
 request
@@ -122,6 +126,7 @@ select
 			if ( kind === "local-player" ) {
 				target = gid;
 				capabilities = 0;
+				targetKind = "";
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
@@ -152,6 +157,7 @@ select
 			} else {
 				target = gid;
 				capabilities = 0;
+				targetKind = kind;
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
@@ -172,6 +178,7 @@ release
 			target = 0;
 			localSelection = false;
 			capabilities = 0;
+			targetKind = "";
 			flagWarMode = 0;
 			taxRate = 0;
 			gateRows = [];
@@ -224,6 +231,7 @@ frame fixes the hard limit the holds cannot pass.
 			target = 0;
 			localSelection = false;
 			capabilities = 0;
+			targetKind = "";
 			flagWarMode = 0;
 			taxRate = 0;
 			gateRows = [];
@@ -243,6 +251,7 @@ receive
 				target = 0;
 				localSelection = false;
 				capabilities = 0;
+				targetKind = "";
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
@@ -289,6 +298,7 @@ receive
 			) throw new Error( "Unsupported target grant" );
 			if ( pending?.kind !== "select" || gid !== pending.gid ) return true;
 			target = gid;
+			targetKind = gate ? "teleport" : replied?.kind ?? pending.family ?? "";
 			localSelection = false;
 			taxRate = gate && fortress ?
 				new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt16( 9, true ) :
@@ -316,6 +326,7 @@ remove
 				target = 0;
 				localSelection = false;
 				capabilities = 0;
+				targetKind = "";
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
@@ -337,6 +348,7 @@ NPC function opened through it (an open warehouse) stay as they are.
 			target = 0;
 			localSelection = false;
 			capabilities = 0;
+			targetKind = "";
 			flagWarMode = 0;
 			taxRate = 0;
 			gateRows = [];
@@ -351,6 +363,7 @@ clear
 			target = 0;
 			localSelection = false;
 			capabilities = 0;
+			targetKind = "";
 			flagWarMode = 0;
 			taxRate = 0;
 			gateRows = [];
@@ -377,6 +390,7 @@ target window lags the grant too, yet an immediate press casts.
 			target,
 			targetPending: pending?.gid ?? 0,
 			...(capabilities ? { targetCapabilities: capabilities } : {}),
+			...(targetKind ? { targetKind } : {}),
 			...(flagWarMode ? { targetFlagWarMode: flagWarMode } : {}),
 			...(gateRows.length ? { targetGateRows: gateRows } : {})
 		})

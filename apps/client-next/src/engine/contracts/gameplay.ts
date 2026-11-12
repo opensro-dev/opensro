@@ -917,6 +917,10 @@ export interface GameplayState extends MoverPublication {
 	readonly stall?: import("@/engine/foundation/gameplay/stall").StallState;
 	readonly magicOption?: import("./item-process").MagicOptionGrantState;
 	readonly targetCapabilities?: number;
+	// The granted target's entity class ("npc", "monster", "cos",
+	// "teleport", ...): the talk window opens by class, not by the
+	// capability word alone (#3280).
+	readonly targetKind?: string;
 	// The selected NPC's flag-war row mode (1 sign-up, 2 cancel).
 	readonly targetFlagWarMode?: number;
 	// The flag-war timer and carrier, owned by the gameplay worker.
