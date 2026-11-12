@@ -49,6 +49,37 @@ func TestAdmission(t *testing.T) {
 
 /*
 ================
+TestRefundGivesBackOnlyTheSpentDaysEntry
+
+A failed entry refunds one entry of the day it spent, never more than
+the count holds, and nothing once the count has rolled to a later day
+(#3322).
+================
+*/
+func TestRefundGivesBackOnlyTheSpentDaysEntry(t *testing.T) {
+	cases := []struct {
+		day      int32
+		entries  uint8
+		spentDay int32
+		want     uint8
+	}{
+		{day: 7, entries: 2, spentDay: 7, want: 1},
+		{day: 7, entries: 0, spentDay: 7, want: 0},
+		{day: 8, entries: 1, spentDay: 7, want: 1},
+	}
+	for _, tc := range cases {
+		if got := Refund(tc.day, tc.entries, tc.spentDay); got != tc.want {
+			t.Fatalf("Refund(%d, %d, %d) = %d, want %d", tc.day, tc.entries, tc.spentDay, got, tc.want)
+		}
+	}
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	if Used(Day(now), 2, now) != 2 || Used(Day(now)-1, 3, now) != 0 {
+		t.Fatal("Used counts another day's entries")
+	}
+}
+
+/*
+================
 TestScheduleCapsAndLeaseLocalState
 ================
 */

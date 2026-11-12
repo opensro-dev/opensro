@@ -115,6 +115,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	if err != nil {
 		return nil, err
 	}
+	sookArenaAccountsPresent := false
+	out.meta.SookArenaAccounts, sookArenaAccountsPresent, err = loadSookArenaAccounts(db)
+	if err != nil {
+		return nil, err
+	}
 	if currentLayout >= 11 {
 		out.nameReservations, err = loadNameReservations(db)
 		if err != nil {
@@ -158,6 +163,12 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	if !halloweenBoxesPresent {
 		out.meta.HalloweenBoxes = seedHalloweenBoxes(out.characters)
 		out.halloweenSeeded = len(out.meta.HalloweenBoxes) > 0
+	}
+	// The survival arena counted per character until schema 43 (#3322):
+	// the same first-load seed, for the same reason.
+	if !sookArenaAccountsPresent {
+		out.meta.SookArenaAccounts = seedSookArenaAccounts(out.characters)
+		out.sookArenaSeeded = len(out.meta.SookArenaAccounts) > 0
 	}
 
 	delRows, err := db.Query("SELECT division, record FROM deleted_characters ORDER BY division, seq")

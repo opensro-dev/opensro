@@ -252,7 +252,15 @@ type Deps struct {
 	// fixtureHalloweenBoxes is HalloweenAccount's store when no authority
 	// is wired.
 	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
-	ReadCharacter         func(divisionID string, read func())
+	// SookArenaAccountRecord is the account's survival arena daily
+	// entry count (store sookarenaaccounts.go, port-only #3322): the
+	// live record, read or mutated only inside a write door. Nil keeps
+	// the records in fixtureSookArenaAccounts below.
+	SookArenaAccountRecord func(accountID string) *domain.SookArenaAccount
+	// fixtureSookArenaAccounts is SookArenaAccount's store when no
+	// authority is wired.
+	fixtureSookArenaAccounts map[string]*domain.SookArenaAccount
+	ReadCharacter            func(divisionID string, read func())
 	// CharacterWriteEpoch is the authority's per-record write count
 	// (store CharacterWriteEpoch): a reader that copied a record at
 	// one epoch may reuse the copy while the epoch stands. Nil leaves
@@ -655,30 +663,6 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 	pool := domain.TradeRewardPool{}
 	d.fixtureJobRankings[divisionID] = domain.CloseJobWeek(d.CharactersForDivision(divisionID), &pool, previous, week)
 	return true
-}
-
-/*
-================
-HalloweenAccount
-
-Production supplies the authority's account record. The in-memory
-fallback is for isolated gameplay fixtures, which do not run a durable
-authority; it keeps one record per account id for the fixture's life.
-================
-*/
-func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
-	if d.HalloweenAccountRecord != nil {
-		return d.HalloweenAccountRecord(accountID)
-	}
-	if d.fixtureHalloweenBoxes == nil {
-		d.fixtureHalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
-	}
-	record := d.fixtureHalloweenBoxes[accountID]
-	if record == nil {
-		record = &domain.HalloweenBoxAccount{}
-		d.fixtureHalloweenBoxes[accountID] = record
-	}
-	return record
 }
 
 /*

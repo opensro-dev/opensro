@@ -92,15 +92,17 @@ func TestSookCheckpointReconnectDoesNotSpendEntry(t *testing.T) {
 	run.program.Kills = 1
 	rt.advanceSookArena(clock.Now().UnixMilli())
 	id := c.SookChest.ID
-	entries := c.SookArenaEntries
+	spent := *rt.deps.SookArenaAccount(c.AccountID)
 	rt.forgetSookArena(testDivision, c.Name)
 	if c.SookChest == nil || !c.SookChest.Checkpoint {
 		t.Fatal("safe checkpoint lost")
 	}
 	next, _ := sookFixture(t, c)
+	// The restarted runtime reads the same durable account record.
+	*next.deps.SookArenaAccount(c.AccountID) = spent
 	next.enterSookArena(testDivision, c)
 	resumed := next.sookRun(testDivision, c)
-	if resumed == nil || resumed.program.PausedAt == 0 || c.SookChest.ID != id || c.SookArenaEntries != entries || resumed.lease == (instance.Lease{}) {
+	if resumed == nil || resumed.program.PausedAt == 0 || c.SookChest.ID != id || *next.deps.SookArenaAccount(c.AccountID) != spent || resumed.lease == (instance.Lease{}) {
 		t.Fatal("checkpoint resume changed entry or loot identity")
 	}
 }
