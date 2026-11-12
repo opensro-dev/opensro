@@ -643,6 +643,16 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
+	# The Sky Temple fields are their own switch and their own source (the
+	# v1.696 client), layered on the same variant after the populations
+	# whose identity space they share.
+	from skytemple_import import add_skytemple
+	sky_temple = add_skytemple(native, out)
+	# The Arabia continent is its own switch on the same two later
+	# sources, layered after the Sky Temple fields whose identity and
+	# catalogue merges it follows.
+	from arabia_import import add_arabia
+	arabia = add_arabia(native, out)
 	# Jupiter is independently optional; its off path also removes what a
 	# previous on build of a reused variant root left behind.
 	jupiter_build = jupiter.add_jupiter(native, out)
@@ -652,11 +662,6 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The second hunting grounds are independently optional the same
 	# way; their off path reaps a previous on build's outputs.
 	hunting2_build = hunting2.add_hunting2(native, out)
-	# The Sky Temple fields are their own switch and their own source (the
-	# v1.696 client), layered on the same variant after the populations
-	# whose identity space they share.
-	from skytemple_import import add_skytemple
-	sky_temple = add_skytemple(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -666,10 +671,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
+		"skyTemple": sky_temple,
+		"arabia": arabia,
 		"jupiter": jupiter_build,
 		"muhan": muhan_build,
 		"hunting2": hunting2_build,
-		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
