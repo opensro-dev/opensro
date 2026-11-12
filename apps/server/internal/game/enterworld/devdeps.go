@@ -220,6 +220,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		template, err = monster.AppendSkytemple(template, textdataDir, monster.SkytempleEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		if monster.JupiterEnabled() {
 			// Port-only (#3267): the Jupiter field world joins the
 			// catalogue only while its switch is on, before any
