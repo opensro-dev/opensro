@@ -59,7 +59,16 @@ TestInstalledPoolHasEncountersAcrossNativeLevels
 ================
 */
 func TestInstalledPoolHasEncountersAcrossNativeLevels(t *testing.T) {
-	pool := BuildPool(monster.LoadTemplate(gamedatatest.TextdataDir(t)).CreatableRefs())
+	// The runtime pool reads rt.Monsters, whose template always carries the
+	// tomb actors while the arena is on (enterworld/devdeps.go: WithQinShiTomb
+	// or WithQinShiArenaRefs). They are the only installed 91-94 normals, so a
+	// pool without them tests a world the arena never runs in.
+	dir := gamedatatest.TextdataDir(t)
+	template, err := monster.LoadTemplate(dir).WithQinShiArenaRefs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := BuildPool(template.CreatableRefs())
 	for _, level := range []int{1, 20, 40, 60, 80, 90} {
 		if len(pool.Normals(level)) == 0 {
 			t.Fatalf("level %d has no encounters", level)
