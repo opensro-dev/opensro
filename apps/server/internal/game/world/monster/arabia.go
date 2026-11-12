@@ -12,7 +12,7 @@ Baghdad dungeon's nests join its own port-only world (world/arabia),
 registered while the same switch is on.
 
 Unlike the cap-110 families the population needs no second switch: its
-character rows ride its own shard (characterdata_170000.txt) and its
+character rows ride its own shard (characterdata_200000.txt) and its
 drops are the native posture, so nothing here rides the cap-110 loot
 catalogue the field switch builds. The authored level window is the
 importer's sanity bound from the client table (120-130), not a spawn

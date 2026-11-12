@@ -103,8 +103,12 @@ FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
 NESTS_ENV = "SRO_ARABIA_NESTS"
 MARKER = ".opensro-arabia.json"
-CHARACTER_SHARD = "characterdata_170000.txt"
-SKILL_SHARD = "skilldata_170000.txt"
+# The 200000 identity band: 120000 is the cap-110 family's, 130000 the
+# pet import's (140000/150000 held for its later sources), 160000 the
+# Sky Temple's, 170000 Jupiter's, 180000 the second hunting grounds',
+# 190000 the GOD temples'. One importer owns one shard file in a build.
+CHARACTER_SHARD = "characterdata_200000.txt"
+SKILL_SHARD = "skilldata_200000.txt"
 POPULATION_FILE = "arabia-monsters.txt"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 

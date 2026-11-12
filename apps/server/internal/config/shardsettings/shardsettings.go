@@ -137,6 +137,11 @@ var Settings = []Setting{
 	// v1.696 client (monster/skytemple.go). The fields ride the Alexandria
 	// variant build; the switch admits their kinds here. "off" is native.
 	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
+	// Port-only, not native: the Arabia continent population and its
+	// dungeon world from the v1.696 client (monster/arabia.go). The
+	// continent rides the Alexandria variant build; the switch admits
+	// their kinds here. "off" is native.
+	{Env: "SRO_ARABIA", NomadVar: "arabia", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
