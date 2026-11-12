@@ -129,9 +129,19 @@ export function parseJmxBmsStaticMesh( buffer, sourcePath = "<memory>" ) {
 	};
 }
 
+// Later clients (v1.696 avatars) set this material flag and append a
+// normal-map texture path and one 32-bit word after the render-state tail.
+// The v1.150 writer (CPrimMtrl_Serialize @00a62d90 -> 00a62cc0) has no such
+// field, and none of the 2374 v1.150 BMTs sets the bit; all 214 v1.696 BMTs
+// parse to their exact length with it (scan 2026-11-12, the word always 0).
+const BMT_NORMAL_MAP_FLAG = 0x2000;
+
 /*
 ================
 parseJmxBmtMaterialSet
+
+The port renders no normal maps, so a later material's normal-map path is
+kept as data only and is not a texture dependency.
 ================
 */
 export function parseJmxBmtMaterialSet( buffer, sourcePath = "<memory>" ) {
@@ -182,6 +192,15 @@ export function parseJmxBmtMaterialSet( buffer, sourcePath = "<memory>" ) {
 		const renderStateTail = [ buffer[offset], buffer[offset + 1], buffer[offset + 2] ];
 		offset += 3;
 
+		let normalMap = null;
+		if ( flags & BMT_NORMAL_MAP_FLAG ) {
+			const normalMapName = readCountedString( buffer, offset, sourcePath );
+			offset = normalMapName.nextOffset;
+			ensureAvailable( buffer, offset, 4, sourcePath );
+			normalMap = { textureName: normalizeAssetPath( normalMapName.value ), word: buffer.readUInt32LE( offset ) };
+			offset += 4;
+		}
+
 		materials.push( {
 			materialIndex,
 			byteOffset,
@@ -197,7 +216,8 @@ export function parseJmxBmtMaterialSet( buffer, sourcePath = "<memory>" ) {
 			flags,
 			textureName: normalizeAssetPath( textureName.value ),
 			textureScale,
-			renderStateTailHex: renderStateTail.map( ( value ) => value.toString( 16 ).padStart( 2, "0" ) ).join( " " )
+			renderStateTailHex: renderStateTail.map( ( value ) => value.toString( 16 ).padStart( 2, "0" ) ).join( " " ),
+			...(normalMap ? { normalMap } : {})
 		} );
 	}
 

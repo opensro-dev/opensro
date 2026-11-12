@@ -88,11 +88,12 @@ type mallProjection struct {
 ConfigureMall
 ================
 */
-func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, extra []commerce.MallExtraGood) error {
+func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, extra []commerce.MallExtraGood,
+	categories bool) error {
 	if authority == nil {
 		return fmt.Errorf("mall: missing durable currency authority")
 	}
-	catalog, err := commerce.LoadMall(dir, extra, rt.deps.ItemReferences())
+	catalog, err := commerce.LoadMall(dir, extra, categories, rt.deps.ItemReferences())
 	if err != nil {
 		return err
 	}

@@ -21,7 +21,7 @@ import {
 	parseNavmesh
 } from "../../build/world/navmesh/parseNavmesh.mjs";
 import { buildDungeonResourceManifest } from "../../build/world/assets/buildDungeonResources.mjs";
-import { parseJmxBmsStaticMesh } from "../../build/world/objects/formats.mjs";
+import { parseJmxBmsStaticMesh, parseJmxBmtMaterialSet } from "../../build/world/objects/formats.mjs";
 import { deriveTitleTerrainSectorCoverage } from "../../build/world/sworld/deriveTitleTerrainSectorCoverage.mjs";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
 import { extractedRoot, rebuildRoot } from "../../build/world/paths.mjs";
@@ -226,6 +226,53 @@ function decodeLinkRows( buffer, count ) {
 	}
 	return rows;
 }
+
+/*
+================
+bmtBytes
+
+One synthetic JMXVBMT 0102 material set. A material with a normalMap
+carries the later clients' 0x2000 flag and its path plus one word.
+================
+*/
+function bmtBytes( materials ) {
+	const counted = ( text ) => {
+		const length = Buffer.alloc( 4 );
+		length.writeUInt32LE( text.length );
+		return Buffer.concat( [ length, Buffer.from( text, "latin1" ) ] );
+	};
+	const count = Buffer.alloc( 4 );
+	count.writeUInt32LE( materials.length );
+	const parts = [ Buffer.from( "JMXVBMT 0102", "latin1" ), count ];
+	for ( const material of materials ) {
+		const fixed = Buffer.alloc( 72 );
+		fixed.writeFloatLE( 0.5, 64 );
+		fixed.writeUInt32LE( material.normalMap ? 0x2345 : 0x0345, 68 );
+		const tail = Buffer.from( [ 0, 0, 0x80, 0x3f, 0x20, 0x08, 0x00 ] );
+		parts.push( counted( material.name ), fixed, counted( material.texture ), tail );
+		if ( material.normalMap ) parts.push( counted( material.normalMap ), Buffer.alloc( 4 ) );
+	}
+	return Buffer.concat( parts );
+}
+
+test("JMXVBMT 0102 reads a v1.150 material set to its exact length", () => {
+	const set = parseJmxBmtMaterialSet(
+		bmtBytes( [ { name: "a", texture: "a.ddj" }, { name: "b", texture: "b.ddj" } ] )
+	);
+	assert.equal( set.materialCount, 2 );
+	assert.deepEqual( set.materials.map( ( material ) => material.textureName ), [ "a.ddj", "b.ddj" ] );
+	assert.equal( set.materials[0].normalMap, undefined );
+});
+
+test("JMXVBMT 0102 reads a later client's normal-map field under flag 0x2000", () => {
+	const set = parseJmxBmtMaterialSet( bmtBytes( [
+		{ name: "devil", texture: "devil.ddj", normalMap: "prim\\mtrl\\item\\devil_n.ddj" },
+		{ name: "hand", texture: "hand.ddj" }
+	] ) );
+	assert.equal( set.materials[0].textureName, "devil.ddj" );
+	assert.deepEqual( set.materials[0].normalMap, { textureName: "prim/mtrl/item/devil_n.ddj", word: 0 } );
+	assert.equal( set.materials[1].textureName, "hand.ddj" );
+});
 
 test("JMXVBMS 0110 preserves native object-nav tail bytes for harbor bridge mesh", async () => {
 	const mesh = parseJmxBmsStaticMesh( await readFile( harborBridgeMeshPath ), harborBridgeMeshSourcePath );
