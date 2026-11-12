@@ -290,7 +290,8 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 		frame = wire.JobKillNotificationFrame(text)
 	case announceBreak, announcePlusFail:
 		// The link is a plus-fail's item (#3260); a break passes none.
-		frame = wire.BreakNotificationFrame(text, link)
+		// Only the body goes on: the break channel never names a player.
+		frame = wire.BreakNotificationFrame(text, link.Body)
 	}
 	frames := make([]simulation.Frame, 0, 2)
 	if refObjID != 0 {

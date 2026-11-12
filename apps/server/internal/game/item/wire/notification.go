@@ -63,20 +63,15 @@ func JobKillNotificationFrame(message string) Frame {
 }
 
 // BreakNotificationFrame is a notice on BreakNoticeChannel. An empty
-// link writes the plain channel-7 layout, byte for byte what the frame
-// has always been; a link appends the drop/plus section after the text
-// (its name empty: this channel never names a player to link).
-func BreakNotificationFrame(message string, link NoticeLink) Frame {
-	text := notificationFrameOn(BreakNoticeChannel, message).Payload
-	if link.Player == "" && len(link.Body) == 0 {
-		return Frame{Opcode: 0x3667, Payload: text}
+// body writes the plain channel-7 layout, byte for byte what the frame
+// has always been; a body appends the drop/plus link section after the
+// text. The frame takes the item body alone, so its name is always
+// empty: no caller can make this channel name a player (#1738's rule).
+func BreakNotificationFrame(message string, body []byte) Frame {
+	if len(body) == 0 {
+		return notificationFrameOn(BreakNoticeChannel, message)
 	}
-	if len(link.Player) > 0xffff || len(link.Body) > 0xffff {
-		panic("notice link exceeds its length fields")
-	}
-	w := NewWriter(len(text) + 4 + len(link.Player) + len(link.Body)).Bytes(text).
-		Str(link.Player).U16(uint16(len(link.Body))).Bytes(link.Body)
-	return Frame{Opcode: 0x3667, Payload: w.Payload()}
+	return linkedNotificationFrame(BreakNoticeChannel, message, NoticeLink{Body: body})
 }
 
 // RenameNotificationFrame is NotificationFrame on RenameNoticeChannel.
@@ -91,10 +86,16 @@ func RenameNotificationFrame(message string) Frame {
 //
 // nameLen 0 names no player; bodyLen 0 links no item.
 func DropPlusNotificationFrame(message string, link NoticeLink) Frame {
+	return linkedNotificationFrame(DropPlusNoticeChannel, message, link)
+}
+
+// linkedNotificationFrame writes one notification on a channel followed
+// by the drop/plus link section, [u16 nameLen][name][u16 bodyLen][body].
+func linkedNotificationFrame(channel uint8, message string, link NoticeLink) Frame {
 	if len(link.Player) > 0xffff || len(link.Body) > 0xffff {
 		panic("notice link exceeds its length fields")
 	}
-	text := notificationFrameOn(DropPlusNoticeChannel, message).Payload
+	text := notificationFrameOn(channel, message).Payload
 	w := NewWriter(len(text) + 4 + len(link.Player) + len(link.Body)).Bytes(text).
 		Str(link.Player).U16(uint16(len(link.Body))).Bytes(link.Body)
 	return Frame{Opcode: 0x3667, Payload: w.Payload()}
