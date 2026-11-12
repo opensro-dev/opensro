@@ -700,7 +700,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	rt.noteTeleportArrival(division, c)
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	if rt.WalkInZoneAt != nil {
-		rt.walkInZones.Store(key, rt.walkInZoneAt(destination))
+		rt.walkInZones.Store(key, walkInSample{zone: rt.walkInZoneAt(destination), pose: destination})
 	} else {
 		rt.walkInZones.Delete(key)
 	}
