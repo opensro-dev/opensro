@@ -27,10 +27,12 @@ sector terrain (`<sectorY>/<sectorX>.t/.m/.o/.o2`), navmesh
 - **Whole or not at all.** A sector missing its terrain mesh, its
   placements or its navmesh excludes its area; the report names every
   gap and no half area is written. Packing no complete area refuses.
-- **Deliberate exclusion.** Character rows naming a third-party server
-  brand (CREDDY, ORIGIN) are dropped at pack time and counted in the
-  report; they are not later-client content. The export's remaining
-  unique rows ride the shard whole - what an area imports is its own
+- **Deliberate exclusion.** Only character rows whose codename opens
+  with a native kind (MOB, COS, NPC, MOV, STRUCTURE, CHAR) are kept;
+  another server's own authored rows carry its prefix instead, are
+  dropped at pack time and counted in the report; they are not
+  later-client content. The export's remaining unique rows ride the
+  shard whole - what an area imports is its own
   PR's decision.
 - **Deterministic.** Sorted entries at a fixed timestamp: the same
   export and areas file re-pack to the same sha256.

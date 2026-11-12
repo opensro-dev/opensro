@@ -16,9 +16,9 @@ dungeon/dungeoninfo.txt).
 An area is packed whole or not at all: a sector missing its terrain
 mesh, its placements or its navmesh excludes the area, and the report
 names every gap - the packer never writes half an area. The character
-shard loses the third-party server brands the inventory marks for
-deliberate exclusion (rows naming CREDDY or ORIGIN); every dropped row
-is counted in the report. The archive is written outside the
+shard keeps only rows whose codename opens with a native character
+kind (NATIVE_KINDS); another server's own authored rows carry its
+prefix instead and are dropped, every one counted in the report. The archive is written outside the
 repository and never committed; its sha256 is pinned in
 content_archive_pins.json.
 
@@ -36,10 +36,14 @@ AREAS_FORMAT = "opensro-content-areas-v1"
 SECTOR_EXTENSIONS = (".t", ".m", ".o", ".o2")
 REQUIRED_SECTOR_EXTENSIONS = (".m", ".o")
 TILE_DIRS = ("map", "minimap")
-# The third-party server brands the export's inventory (#3263) marks
-# for deliberate exclusion: another server's authored rows are not
-# later-client content and never ride the archive.
-EXCLUDED_BRANDS = ("CREDDY", "ORIGIN")
+# Every character codename the v1.150 client ships opens with one of
+# these kinds (characterdata: MOB 7250, COS 5011, NPC 242, MOV 140,
+# STRUCTURE 66, CHAR 52 rows). A later client's own rows keep them; a
+# row under any other leading segment is another server's authored
+# content, not later-client content, and never rides the archive. The
+# rule names the kinds we keep, never the servers we drop (owner,
+# 2026-11-12: no third-party server name in the repository).
+NATIVE_KINDS = ("MOB", "COS", "NPC", "MOV", "STRUCTURE", "CHAR")
 CODENAME = 2
 
 
@@ -126,8 +130,8 @@ def tile_entries(export_root, sector_x, sector_y):
 # ================
 # character_shard
 #
-# The export's one characterdata shard, with the third-party brand
-# rows dropped (counted per brand). Exactly one shard must sit at the
+# The export's one characterdata shard, with every row outside the
+# native kinds dropped (counted per leading segment). Exactly one shard must sit at the
 # export root; zero or several is an operator error, not a guess.
 # ================
 def character_shard(export_root):
@@ -138,11 +142,11 @@ def character_shard(export_root):
 	kept, dropped = [], {}
 	for row in rows:
 		code = row[CODENAME].upper() if len(row) > CODENAME else ""
-		brand = next((mark for mark in EXCLUDED_BRANDS if mark in code), None)
-		if brand is None:
+		kind = code.split("_", 1)[0]
+		if kind in NATIVE_KINDS:
 			kept.append(row)
 		else:
-			dropped[brand] = dropped.get(brand, 0) + 1
+			dropped[kind] = dropped.get(kind, 0) + 1
 	raw = b"\xff\xfe" + text_tables.table_text(kept).encode("utf-16-le")
 	return shards[0].name, raw, dropped
 
@@ -222,8 +226,8 @@ def main():
 	print(f"Areas packed: {', '.join(sorted(report['areas']))}")
 	for entry in report["excludedAreas"]:
 		print(f"  excluded area {entry['area']}: {len(entry['missing'])} missing file(s), first: {entry['missing'][0]}")
-	for brand, count in sorted(report["excludedRows"].items()):
-		print(f"  excluded {count} character row(s) naming {brand}")
+	for kind, count in sorted(report["excludedRows"].items()):
+		print(f"  excluded {count} character row(s) outside the native kinds, prefix {kind!r}")
 	print(f"Archive: {args.output} ({report['files']} entries, {report['bytes']} bytes)")
 	print(f"sha256: {report['sha256']}")
 	print(f"Pin it as scripts/{content_archive.PIN_FILE}: {{\"format\": \"{content_archive.PIN_FORMAT}\", \"sha256\": \"{report['sha256']}\"}}")

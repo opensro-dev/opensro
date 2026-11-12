@@ -5,7 +5,7 @@ test_pack_content.py - the content archive packer, complete and incomplete areas
 
 Port-only, not native. A synthetic export tree; no game data is read.
 The complete area packs whole (terrain, navmesh, tiles, the shared
-tables with the third-party brand rows dropped), the incomplete one
+tables with the rows outside the native kinds dropped), the incomplete one
 is excluded with its gaps named, and the archive re-packs to the same
 sha256 and re-opens only against its pin.
 
@@ -51,8 +51,9 @@ def export_tree(root):
 	dungeon.write_bytes(b"dungeoninfo")
 	write_table(root / "characterdata_45000.txt", [
 		["1", "1001", "MOB_TEST_ONE", "0"],
-		["1", "1002", "NPC_CREDDY_SILK_SHOP", "0"],
-		["1", "1003", "MOB_ORIGIN_TEST", "0"],
+		["1", "1002", "OTHERSRV_COS_P_FOX", "0"],
+		["1", "1003", "ELSEWHERE_NPC_SHOP", "0"],
+		["1", "1005", "COS_P_FOX", "0"],
 		["1", "1004", "NPC_TEST_TWO", "0"],
 	])
 	return root
@@ -88,7 +89,7 @@ class PackContentTest(unittest.TestCase):
 		self.assertEqual([entry["area"] for entry in excluded], ["beta"])
 		self.assertIn("10,10: 10/10.o", excluded[0]["missing"])
 		self.assertIn("10,10: navmesh/nv_0a0a.nvm", excluded[0]["missing"])
-		self.assertEqual(report["excludedRows"], {"CREDDY": 1, "ORIGIN": 1})
+		self.assertEqual(report["excludedRows"], {"OTHERSRV": 1, "ELSEWHERE": 1})
 
 	def test_repacking_is_byte_identical(self):
 		first = pack_content.pack(self.export, self.areas, self.base / "one.zip")
@@ -109,8 +110,9 @@ class PackContentTest(unittest.TestCase):
 		self.assertEqual(archive.read("tables/regioninfo.txt"), b"regioninfo")
 		shard = archive.read("tables/characterdata_45000.txt").decode("utf-16")
 		self.assertIn("MOB_TEST_ONE", shard)
-		self.assertNotIn("CREDDY", shard)
-		self.assertNotIn("ORIGIN", shard)
+		self.assertIn("COS_P_FOX", shard)
+		self.assertNotIn("OTHERSRV", shard)
+		self.assertNotIn("ELSEWHERE", shard)
 		self.assertEqual(len(archive.names("alpha")), report["areas"]["alpha"]["files"])
 		pin.write_text(json.dumps({"format": content_archive.PIN_FORMAT, "sha256": "0" * 64}), encoding="utf-8")
 		with self.assertRaises(SystemExit):
