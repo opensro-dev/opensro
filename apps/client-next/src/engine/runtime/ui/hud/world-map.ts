@@ -24,8 +24,7 @@ import {
 	caveDungeonFloors,
 	caveMapImage,
 	caveMapPage,
-	caveMapView,
-	cavePageCaption
+	caveMapView
 } from "@/engine/foundation/ui/cave-map";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
@@ -117,6 +116,8 @@ interface MapPaint {
 			expandedMapLabels?: readonly MapLabel[];
 			expandedMapIcons?: readonly MapIcon[];
 			zones?: Readonly<Record<string, string>>;
+			// The object and UI text (textdataname over textuisystem).
+			strings?: Readonly<Record<string, string>>;
 		}
 		| null
 		| undefined;
@@ -828,14 +829,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
 					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
 					// wide chars at 0xBD959C (space dash space), then the town's
-					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A cave
-					// floor captions with its own label instead. The later
-					// client heads a dungeon page "Underground Level <n> of
-					// <dungeon>" (issue #3238): the level is the page's
-					// authored layer and the dungeon is its entrance name.
-					caveCaption = cavePage && caveMap ? cavePageCaption( cavePage ) ?? undefined : undefined,
-					caption = caveCaption ||
-						(cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
+					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A
+					// dungeon page heads with the later client's zone name of
+					// its floor's region (issue #3238), which the catalogue
+					// carries: "Underground Level 1 of Tomb of Qin-Shi".
+					caption = (cavePage && caveMap ? cavePage.caption : undefined) ||
 						(page ?
 							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
@@ -930,6 +928,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					catalogue: huntingGuide.catalogue(),
 					characterLevel: game?.progression?.level,
 					zones: hudData.zones,
+					strings: hudData.strings,
+					levelNote: input.caveMaps?.monsterLevelNote,
+					icons: (mapProjection?.hits ?? []).map( hit => hit.rect ),
 					text,
 					page: mapPage,
 					pan: mapPan,

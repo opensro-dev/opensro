@@ -13,12 +13,11 @@ the world map.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 import { REGION_SIZE } from "@/engine/foundation/world/world-space";
-import { planeKindOf } from "@/engine/foundation/world/plane";
 import { minimapRotation } from "./hud-readouts";
-import { MAP_LOCAL_MARKER } from "./world-map";
+import { MAP_LOCAL_MARKER, TOMB_FIRST_DUNGEON, worldMapDungeonOf } from "./world-map";
 
 const CATALOG_FORMAT = "sro-later-dungeon-map";
-const CATALOG_VERSION = 1;
+const CATALOG_VERSION = 2;
 // The offset in a dungeon tile's name, as the minimap's (minimapTiles).
 const CAVE_TILE_ORIGIN = 128;
 const CAVE_MARKER_SIZE = 16;
@@ -52,6 +51,8 @@ export interface CaveMapPage {
 	readonly left: number;
 	readonly top: number;
 	readonly image: string;
+	// The page title: the later client's zone name of the floor's region.
+	readonly caption: string;
 	readonly labels: readonly CaveMapLabel[];
 	readonly signs: readonly CaveMapSign[];
 }
@@ -59,6 +60,8 @@ export interface CaveMapPage {
 export interface CaveMapCatalog {
 	readonly imageRoot: string;
 	readonly signIcon: string;
+	// The page foot's note on the level filter, in the later client's words.
+	readonly monsterLevelNote: string;
 	readonly maps: readonly CaveMapPage[];
 }
 
@@ -73,13 +76,15 @@ export function caveMapCatalog( value: unknown ): CaveMapCatalog {
 	const data = value as Partial<CaveMapCatalog> & { format?: unknown; version?: unknown; };
 	if (
 		data?.format !== CATALOG_FORMAT || data.version !== CATALOG_VERSION || !Array.isArray( data.maps ) ||
-		typeof data.imageRoot !== "string" || typeof data.signIcon !== "string"
+		typeof data.imageRoot !== "string" || typeof data.signIcon !== "string" ||
+		typeof data.monsterLevelNote !== "string" || !data.monsterLevelNote
 	) throw Error( "Invalid dungeon map catalog" );
 	for ( const map of data.maps ) {
 		if (
 			!Number.isInteger( map.regionId ) || !Number.isInteger( map.floorIndex ) ||
 			!Number.isInteger( map.layer ) || !(map.columns > 0) ||
 			!(map.rows > 0) || !(map.width > 0) || !(map.height > 0) || typeof map.image !== "string" ||
+			typeof map.caption !== "string" || !map.caption ||
 			!Array.isArray( map.labels ) || !Array.isArray( map.signs )
 		) throw Error( "Invalid dungeon map page" );
 	}
@@ -102,10 +107,9 @@ export function caveMapPage( catalog: CaveMapCatalog | undefined, regionId: numb
 caveDungeonFloors
 
 The pages of the dungeon a region belongs to, in floor order (issue
-#3167's floor selector): Donwhang's cave is one region whose pages
-differ by floorIndex; Ch'in Tomb spreads its floors over regions
-2..7 of the dungeon mask, ordered by their authored layer. A region
-in no known dungeon floors with its own pages alone.
+#3167's floor selector). Ch'in Tomb spreads its floors over six
+regions, ordered by their authored layer; Donwhang's cave, and any
+other dungeon, is one region whose pages differ by floorIndex.
 ================
 */
 export function caveDungeonFloors(
@@ -113,53 +117,14 @@ export function caveDungeonFloors(
 	regionId: number
 ): readonly CaveMapPage[] {
 	if ( !catalog ) return [];
-	const dungeon = regionId & 0x7fff;
-	if ( planeKindOf( regionId ) === "cave" && dungeon === 1 ) {
+	if ( worldMapDungeonOf( regionId ) === TOMB_FIRST_DUNGEON ) {
 		return catalog.maps
-			.filter( map => map.regionId === regionId )
-			.sort( ( a, b ) => a.floorIndex - b.floorIndex );
-	}
-	if ( planeKindOf( regionId ) === "cave" && dungeon >= 2 && dungeon <= 7 ) {
-		return catalog.maps
-			.filter( map => (map.regionId & 0x7fff) >= 2 && (map.regionId & 0x7fff) <= 7 )
+			.filter( map => worldMapDungeonOf( map.regionId ) === TOMB_FIRST_DUNGEON )
 			.sort( ( a, b ) => a.layer - b.layer );
 	}
 	return catalog.maps
 		.filter( map => map.regionId === regionId )
 		.sort( ( a, b ) => a.floorIndex - b.floorIndex );
-}
-
-/*
-================
-caveDungeonName
-
-The dungeon a page belongs to, the name both dungeon doors carry on
-the world map: region 1 of the mask is Donwhang's cave and 2..7 are
-the Ch'in Tomb. Null for a page in no known dungeon.
-================
-*/
-export function caveDungeonName( regionId: number ): string | null {
-	const dungeon = regionId & 0x7fff;
-	if ( dungeon === 1 ) return "Donwhang Cave";
-	if ( dungeon >= 2 && dungeon <= 7 ) return "Ch'in Tomb";
-	return null;
-}
-
-/*
-================
-cavePageCaption
-
-The later client's dungeon page title (issue #3238):
-"Underground Level <n> of <dungeon>", its level the page's authored
-layer. The title names the tomb "Tomb of Qin-Shi" where the doors
-and zones say "Ch'in Tomb" (the reference page head). Null when the
-page's dungeon is unknown.
-================
-*/
-export function cavePageCaption( page: CaveMapPage ): string | null {
-	const dungeon = page.regionId & 0x7fff;
-	const name = dungeon === 1 ? "Donwhang Cave" : dungeon >= 2 && dungeon <= 7 ? "Tomb of Qin-Shi" : null;
-	return name ? "Underground Level " + page.layer + " of " + name : null;
 }
 
 /*

@@ -23,7 +23,6 @@ import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import {
 	caveDungeonFloors,
-	caveDungeonName,
 	cavePageCenter,
 	type CaveMapCatalog,
 	type CaveMapPage
@@ -34,8 +33,16 @@ import {
 	type HuntingCatalogue,
 	type MonsterDirectoryRegion
 } from "@/engine/foundation/ui/hunting-guide";
-import { worldMapDungeonPose, worldMapPointMarkers, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
+import {
+	DONWHANG_CAVE_DUNGEON,
+	TOMB_FIRST_DUNGEON,
+	worldMapDungeonOf,
+	worldMapDungeonPose,
+	worldMapPointMarkers,
+	type WorldMapLayout
+} from "@/engine/foundation/ui/world-map";
 import { featuresAt } from "@/engine/foundation/world/plane";
+import { dungeonRegionId } from "@/engine/foundation/world/world-space";
 
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
@@ -47,7 +54,6 @@ const GLOBE = WMAP + "wmap_big_button_world.png";
 const PIN_AUTO = WMAP + "wmap_button_automatic.png";
 const PIN_PASSIVE = WMAP + "wmap_button_passivity.png";
 const FLOOR_UP = WMAP + "wmap_up_button.png";
-const MAP_SIGN = WMAP + "wmap_sign_huntingpoint.png";
 const FLOOR_UP_OFF = WMAP + "wmap_up_button_disable.png";
 const FLOOR_DOWN = WMAP + "wmap_down_button.png";
 const FLOOR_DOWN_OFF = WMAP + "wmap_down_button_disable.png";
@@ -63,6 +69,13 @@ const GOLD = [ .96, .83, .55, 1 ] as const;
 const DIM = [ .72, .7, .63, 1 ] as const;
 const DRAWER_WIDTH = 196;
 const ROW_HEIGHT = 18;
+// The world map's dungeon doors: the dungeon each opens and the v1.150
+// object text that names it. The doors themselves are the client's own
+// xy_dungeon icons (worldmap_localinfo rows 92033 and 92032).
+const DUNGEON_DOORS = [
+	{ dungeon: DONWHANG_CAVE_DUNGEON, name: "SN_ZONE_23002" },
+	{ dungeon: TOMB_FIRST_DUNGEON, name: "SN_ZONE_23001" }
+] as const;
 
 /*
 ================
@@ -96,6 +109,12 @@ interface MapToolsPaint {
 	catalogue: HuntingCatalogue | undefined;
 	characterLevel: number | undefined;
 	zones: Readonly<Record<string, string>> | undefined;
+	// The client's object and UI text (textdataname, textuisystem).
+	strings: Readonly<Record<string, string>> | undefined;
+	// The cave catalogue's foot note, undefined without the catalogue.
+	levelNote: string | undefined;
+	// The screen rects of the icons the world page drew (its click hits).
+	icons: readonly UiRect[];
 	text: MapToolsText;
 	page: number;
 	pan: readonly [number, number];
@@ -157,14 +176,12 @@ type RegionNamesLoad =
 dungeonKey
 
 The dungeon a region belongs to, as the floor selector counts them:
-1 is Donwhang's cave, 2 is Ch'in Tomb (regions 2..7 of the mask).
+the world map's dungeon (every Ch'in Tomb floor is one), else the
+region itself.
 ================
 */
 function dungeonKey( regionId: number ): number {
-	const dungeon = regionId & 0x7fff;
-	if ( dungeon === 1 ) return 1;
-	if ( dungeon >= 2 && dungeon <= 7 ) return 2;
-	return regionId;
+	return worldMapDungeonOf( regionId ) ?? regionId;
 }
 
 /*
@@ -398,7 +415,7 @@ export function createMapToolsHud( options: {
 				return undefined;
 			}
 			if ( dungeonView === null ) return undefined;
-			const anchor = dungeonView === 1 ? 0x8001 : 0x8002;
+			const anchor = dungeonRegionId( dungeonView );
 			const floors = caveDungeonFloors( catalog, anchor );
 			if ( floors.length === 0 ) return undefined;
 			if ( choiceDungeon !== dungeonView ) {
@@ -627,15 +644,15 @@ export function createMapToolsHud( options: {
 						disabled: downOff
 					} );
 				}
-				// The page foot (issue #3238): the level-filter note in
-				// the later client's own wording, with the span the
-				// filter really applies: the later line says 6, but
-				// the port's filter (#3167) shows MONSTER_LEVEL_FILTER_SPAN
-				// levels, and a note that names another number than the
-				// directory uses would mislead. The filter's checkbox sits at the
-				// strip's right end. One switch drives both pages:
-				// this box and the world strip's toggle are the same state.
+				// The page foot (issue #3238): a black strip with the
+				// later client's level filter note, right-aligned against
+				// its checkbox at the strip's right end. The note is the
+				// catalogue's (UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST of the
+				// archive the build imported), so its words and number are
+				// that client's own. The box is the world strip's switch:
+				// one state, and either face flips it.
 				const footY = input.window[1] + input.window[3] - 24;
+				const box: UiRect = [ mx + mw - 28, footY + 2, 16, 16 ];
 				quads.push( {
 					texture: "",
 					rect: [ mx + 4, footY, mw - 8, 20 ],
@@ -643,22 +660,31 @@ export function createMapToolsHud( options: {
 					color: [ 0, 0, 0, .92 ],
 					clip: input.full
 				} );
-				quads.push(
-					...text.quads(
-						"Will show monsters, which level is up to " + MONSTER_LEVEL_FILTER_SPAN +
-							" level higher from current characters level",
-						[ mx + 12, footY + 2, mw - 52, 16 ],
-						input.full,
-						WHITE,
-						{ hAlign: 1, vAlign: 1 }
-					)
-				);
+				if ( input.levelNote ) {
+					quads.push(
+						...text.quads(
+							input.levelNote,
+							[ mx + 12, footY + 2, box[0] - 8 - (mx + 12), 16 ],
+							input.full,
+							WHITE,
+							{ hAlign: 2, vAlign: 1 }
+						)
+					);
+				}
 				quads.push( {
 					texture: levelFilter ? CHECK_ON : CHECK_OFF,
-					rect: [ mx + mw - 28, footY + 2, 16, 16 ],
+					rect: box,
 					uv: [ 0, 0, 1, 1 ],
 					color: WHITE,
 					clip: input.full
+				} );
+				controls.push( {
+					id: "map-level-filter",
+					kind: "button",
+					label: "Monster level filter",
+					helpText: input.levelNote,
+					rect: box,
+					selected: levelFilter
 				} );
 				return { quads, controls, paths };
 			}
@@ -701,13 +727,15 @@ export function createMapToolsHud( options: {
 			// client draws it on the world too (issue #3210).
 			paths.push( PIN_AUTO, PIN_PASSIVE );
 			followPin( input, quads, controls );
-			// The dungeon entrances: their authored map points, named.
-			const anchors = !input.center ? [] : [ 1, 2 ]
-				.map( dungeon => {
-					const cave = dungeon === 1 ? 0x8001 : 0x8002;
-					return { dungeon, cave, pose: worldMapDungeonPose( cave ) };
-				} )
-				.filter( ( row ): row is { dungeon: number; cave: number; pose: Pose; } => row.pose !== null );
+			// The dungeon entrances: their authored map points, named by
+			// the client's own text. A door whose name the text lacks
+			// stays the plain icon.
+			const anchors: { dungeon: number; label: string; pose: Pose; }[] = [];
+			for ( const door of input.center ? DUNGEON_DOORS : [] ) {
+				const label = input.strings?.[door.name];
+				const pose = worldMapDungeonPose( dungeonRegionId( door.dungeon ) );
+				if ( label && pose ) anchors.push( { dungeon: door.dungeon, label, pose } );
+			}
 			for (
 				const { point, rect } of !input.center ? [] : worldMapPointMarkers( {
 					page: input.page,
@@ -719,9 +747,7 @@ export function createMapToolsHud( options: {
 				} )
 			) {
 				const anchor = anchors.find( row => row.pose === point )!;
-				// The door's pose is its overworld point, not a cave
-				// region: the name comes from the cave it opens.
-				const label = caveDungeonName( anchor.cave )!;
+				const label = anchor.label;
 				const width = Math.max( 84, text.run( label, 0, 0 ).width + 16 ),
 					left = Math.trunc( rect[0] + rect[2] / 2 - width / 2 ),
 					top = rect[1] - 22;
@@ -729,14 +755,6 @@ export function createMapToolsHud( options: {
 					left + width < input.clip[0] || left > input.clip[0] + input.clip[2] ||
 					top + 20 < input.clip[1] || top > input.clip[1] + input.clip[3]
 				) continue;
-				paths.push( MAP_SIGN );
-				quads.push( {
-					texture: MAP_SIGN,
-					rect,
-					uv: [ 0, 0, 1, 1 ],
-					color: WHITE,
-					clip: input.clip
-				} );
 				quads.push(
 					...text.quads( label, [ left, top, width, 20 ], input.clip, GOLD, { hAlign: 1, vAlign: 1 } )
 				);
@@ -747,16 +765,19 @@ export function createMapToolsHud( options: {
 					helpText: "Open the " + label + " map",
 					rect: [ left, top, width, 20 ]
 				} );
-				// The entrance's own marker opens it too, and hovering
-				// the marker shows the same "Open the ..." popup as the
-				// label (issue #3238): the hunt sign is painted at this
-				// rect, so the visible marker and its control coincide.
+				// The entrance's own icon opens it too, with the label's
+				// popup (issue #3238). The icon is the one the world page
+				// drew at the door's point (the client's xy_dungeon row),
+				// so the control covers what the player sees; the door's
+				// point rect stands in when no icon is drawn there.
+				const cx = rect[0] + rect[2] / 2, cy = rect[1] + rect[3] / 2;
+				const icon = input.icons.find( r => cx >= r[0] && cx < r[0] + r[2] && cy >= r[1] && cy < r[1] + r[3] );
 				controls.push( {
 					id: "map-dungeon-icon:" + anchor.dungeon,
 					kind: "button",
 					label: label,
 					helpText: "Open the " + label + " map",
-					rect
+					rect: icon ?? rect
 				} );
 			}
 			if ( drawerOpen ) {
