@@ -173,7 +173,10 @@ def previous_targets(prior):
 # missing(family, rows) names absent resources. Scrolls are the later
 # item rows whose associated-character column names the family (or one
 # of its rows); a kind without one cannot be obtained and is skipped.
-# Returns (char_rows, item_rows, report) with identities applied.
+# Returns (char_rows, item_rows, report) with identities applied and the
+# character rows in the v1.150 layout (alexandria_npcs.convert_character,
+# the one owner of the 104 -> 120 column map). The item rows need no map:
+# itemdata is 160 columns in every client.
 # ================
 def select_pets(native_chars, native_items, earlier_codes, later_chars, later_items, previous=None, missing=lambda family, rows: [], reserved_ids=()):
 	native_codes = {row[CHAR_CODE] for row in native_chars if len(row) > CHAR_CODE}
@@ -237,7 +240,12 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 		levels = sorted({int(row[CHAR_LEVEL]) for row in rows if len(row) > CHAR_LEVEL and row[CHAR_LEVEL].isdigit()})
 		for row in rows:
 			claim(row[CHAR_CODE], int(row[CHAR_ID]))
-			converted = list(row)
+			# The later clients' characterdata is 104 columns (VSRO and v1.696
+			# alike) and v1.150's is 120; the server and client read the v1.150
+			# layout, so a row joins in it. Copied as-is, a pet row had no column
+			# 109 and the NPC manifest wrote its material kind as null, which the
+			# client refuses ("Invalid monster material kind").
+			converted = characters.convert_character(row)
 			id_map[row[CHAR_CODE]] = {"source": int(row[CHAR_ID]), "target": targets[row[CHAR_CODE]]}
 			converted[CHAR_ID] = str(targets[row[CHAR_CODE]])
 			char_rows.append(converted)
