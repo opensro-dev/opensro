@@ -63,10 +63,6 @@ from alexandria_map_tables import (  # noqa: E402
 	merge_map_tables, overview_box, widen_overview, overview_tiles, seam_tiles, map_media_paths
 )
 import import_vsro_alexandria as stage1  # noqa: E402
-import jupiter_import as jupiter  # noqa: E402
-import muhan_import as muhan  # noqa: E402
-import hunting2_import as hunting2  # noqa: E402
-import jupiter_import as jupiter  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import prepare_client_resources as prepare  # noqa: E402
@@ -660,30 +656,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The monsters' own database rewards follow the population they describe.
 	from cap110_rewards import add_rewards
 	monster_rewards = add_rewards(vsro_root, native, out)
-	# The Sky Temple fields are their own switch and their own source (the
-	# v1.696 client), layered on the same variant after the populations
-	# whose identity space they share.
-	from skytemple_import import add_skytemple
-	sky_temple = add_skytemple(native, out)
-	# The Arabia continent is its own switch on the same two later
-	# sources, layered after the Sky Temple fields whose identity and
-	# catalogue merges it follows.
-	from arabia_import import add_arabia
-	arabia = add_arabia(native, out)
-	# Jupiter is independently optional; its off path also removes what a
-	# previous on build of a reused variant root left behind.
-	jupiter_build = jupiter.add_jupiter(native, out)
-	# Muhan is independently optional; its off path also removes what a
-	# previous on build of a reused variant root left behind.
-	muhan_build = muhan.add_muhan(native, out)
-	# The second hunting grounds are independently optional the same
-	# way; their off path reaps a previous on build's outputs.
-	hunting2_build = hunting2.add_hunting2(native, out)
-	# The gears magic stones ride the mall's own switch
-	# (SRO_MALL_CATEGORIES): on stages their item shard beside the
-	# mall layout that lists them; off reaps a previous on build.
-	import gears_stone_import as gears_stones
-	gears_build = gears_stones.add_stones(native, out)
+	# The later sources' optional layers, in their load-bearing order
+	# (variant_later_layers.py owns the order and the manifest keys).
+	from variant_later_layers import add_later_layers
+	later_layers = add_later_layers(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -693,12 +669,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	manifest = {
 		"fieldMonsters": field_monsters,
 		"monsterRewards": monster_rewards,
-		"skyTemple": sky_temple,
-		"arabia": arabia,
-		"jupiter": jupiter_build,
-		"muhan": muhan_build,
-		"hunting2": hunting2_build,
-		"gearsStones": gears_build,
+		**later_layers,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
