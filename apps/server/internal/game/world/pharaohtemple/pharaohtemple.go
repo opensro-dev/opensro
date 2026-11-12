@@ -218,3 +218,41 @@ switch is off: the two desert gates' objects.
 func HidesBuilding(code string) bool {
 	return !Enabled() && (code == DesertMerchantHunterBuilding || code == DesertThiefBuilding)
 }
+
+//============================================================================
+// The desert gates' job suit rule
+//============================================================================
+
+// The job suit numbers the rule compares (item type 4 of a job suit, see
+// enterworld.JobSuitJob). They mirror domain.JobTrader, JobThief and
+// JobHunter; this leaf imports nothing, and the portal tests pin the match.
+const (
+	SuitTrader uint8 = 1
+	SuitThief  uint8 = 2
+	SuitHunter uint8 = 3
+)
+
+/*
+================
+GateJobGate
+
+Reports whether a gate code is one of the two desert gates that check the
+worn job suit, and if so whether dressedJob (0 for no suit) is admitted.
+
+Port-only, not native-verified: the gates' teleportlink rows carry only a
+level and a transport condition, so the job rule was v1.188 code that the
+server binary here cannot be read for. Inferred from the codenames and
+their arrival points: the merchant/hunter gate admits only a trader or a
+hunter suit, the thief gate only a thief suit. The exits (the temple gates)
+are never checked.
+================
+*/
+func GateJobGate(code string, dressedJob uint8) (gated, admitted bool) {
+	switch code {
+	case DesertMerchantHunterGate:
+		return true, dressedJob == SuitTrader || dressedJob == SuitHunter
+	case DesertThiefGate:
+		return true, dressedJob == SuitThief
+	}
+	return false, true
+}

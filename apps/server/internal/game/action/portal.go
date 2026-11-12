@@ -769,6 +769,10 @@ const (
 	errCodeGateQuestBlock byte = 0x17
 	// errCodeDenJob is 0x1C18: a trader or a hunter may not enter the den.
 	errCodeDenJob byte = 0x18
+	// errCodeTempleJob is the Pharaoh Temple's wrong-job refusal. The client's
+	// teleport notices carry no text clearer for "wrong job" than the den's,
+	// so it reuses 0x1C18 (errCodeDenJob).
+	errCodeTempleJob = errCodeDenJob
 )
 
 // gateTransportRange is how far a summoned transport may stand from its
@@ -830,12 +834,12 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 			return errCodeDenJob
 		}
 	}
-	// Port-only, not native: the Pharaoh Temple's job suit rule belongs here
-	// (slice 2 of SRO_PHARAOH_TEMPLE). The temple gates' links carry only a
-	// level and a transport condition (build_alexandria_variant.py), so with
-	// the switch on any character of level 105 and over passes in this slice.
-	// The merchant/hunter and thief gates' job check is v1.188's trimmed
-	// job-server code (walkin.go item 4); restore it before the conditions.
+	// Port-only, not native-verified: the Pharaoh Temple's desert gates admit
+	// only the job suit that fits them (pharaohtemple.GateJobGate). The check
+	// runs before the link's conditions, as the den's job rule does.
+	if gated, admitted := pharaohtemple.GateJobGate(source.code, enterworld.DressedJob(c)); gated && !admitted {
+		return errCodeTempleJob
+	}
 	for _, condition := range link.conditions {
 		switch condition.kind {
 		case 1:

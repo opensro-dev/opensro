@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -229,6 +230,7 @@ func templeRoundTripFixture(t *testing.T) (*Runtime, *enterworld.Character, *[][
 	rt, c, _, _ := returnFixture(t, 30000)
 	level := int64(templeEntryLevel)
 	c.Level = &level
+	templeDress(c, pharaohtemple.SuitTrader)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 277751, RefObjID: templeDesertBuildingRef, Codename: pharaohtemple.DesertMerchantHunterBuilding,
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25}}}
@@ -252,6 +254,24 @@ func templeRoundTripFixture(t *testing.T) (*Runtime, *enterworld.Character, *[][
 
 /*
 ================
+templeDress
+
+Puts a worn job suit of the given job on the character, as the job-suit
+tests do (a mission inventory row in enterworld.JobSuitSlot), or takes the
+suit off for job 0.
+================
+*/
+func templeDress(c *enterworld.Character, job uint8) {
+	c.MissionInventory = nil
+	if job == 0 {
+		return
+	}
+	c.MissionInventory = []domain.InventoryRow{{Slot: enterworld.JobSuitSlot, RefObjID: 9101, StackCount: 1,
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, job)}}
+}
+
+/*
+================
 templeEnter
 
 Clicks the desert gate's object and asks for the Temple, the way the
@@ -267,10 +287,11 @@ func templeEnter(rt *Runtime, c *enterworld.Character) OpResult {
 ================
 TestPharaohTempleDesertGateAdmitsLevel105AndOver
 
-The desert gate's one link carries the level condition and, in this slice,
-nothing else: a level-104 player is refused with the teleport answer's 0x15
-and stays; a level-105 one enters. The job check is not here (slice 2, see
-the comment in walkin.go and portalAdmission's kind 7), so any job passes.
+The desert gate's one link carries the level condition: a level-104 player
+is refused with the teleport answer's 0x15 and stays; a level-105 one
+enters. The fixture wears the fitting trader suit, so the job rule
+(pharaohtemple.GateJobGate) passes the player before the link's condition
+is read.
 ================
 */
 func TestPharaohTempleDesertGateAdmitsLevel105AndOver(t *testing.T) {
@@ -338,5 +359,84 @@ func TestPharaohTempleRoundTrip(t *testing.T) {
 	}
 	if *c.Gold != gold {
 		t.Fatal("the walk-in charged a fee")
+	}
+}
+
+/*
+================
+TestPharaohTempleSuitValuesMatchTheDomainJobs
+
+The leaf mirrors the job numbers because it imports nothing; this pins them.
+================
+*/
+func TestPharaohTempleSuitValuesMatchTheDomainJobs(t *testing.T) {
+	if pharaohtemple.SuitTrader != uint8(domain.JobTrader) || pharaohtemple.SuitThief != uint8(domain.JobThief) ||
+		pharaohtemple.SuitHunter != uint8(domain.JobHunter) {
+		t.Fatal("the leaf's suit numbers drifted from the domain jobs")
+	}
+}
+
+/*
+================
+TestPharaohTempleDesertGatesCheckTheJobSuit
+
+Each suit (trader, hunter, thief, none) at each desert gate: admitted into
+the Temple, or refused with 0x1C18's byte and left where it stood. The
+fixture's object is the merchant/hunter gate; the thief gate is reached by
+asking for the thief link through the same object table in the catalogue
+test, so here the rule is asked of the admission directly for it.
+================
+*/
+func TestPharaohTempleDesertGatesCheckTheJobSuit(t *testing.T) {
+	cases := []struct {
+		gate  string
+		suit  uint8
+		allow bool
+	}{
+		{pharaohtemple.DesertMerchantHunterGate, pharaohtemple.SuitTrader, true},
+		{pharaohtemple.DesertMerchantHunterGate, pharaohtemple.SuitHunter, true},
+		{pharaohtemple.DesertMerchantHunterGate, pharaohtemple.SuitThief, false},
+		{pharaohtemple.DesertMerchantHunterGate, 0, false},
+		{pharaohtemple.DesertThiefGate, pharaohtemple.SuitThief, true},
+		{pharaohtemple.DesertThiefGate, pharaohtemple.SuitTrader, false},
+		{pharaohtemple.DesertThiefGate, pharaohtemple.SuitHunter, false},
+		{pharaohtemple.DesertThiefGate, 0, false},
+	}
+	rt, c, _ := templeRoundTripFixture(t)
+	level := int64(templeEntryLevel)
+	c.Level = &level
+	for _, tc := range cases {
+		templeDress(c, tc.suit)
+		got := portalAdmission(c, portalDestination{code: tc.gate}, portalLink{}, portalTraveller{})
+		if tc.allow && got != 0 || !tc.allow && got != errCodeTempleJob {
+			t.Errorf("%s with suit %d answered %#x, want allowed=%v", tc.gate, tc.suit, got, tc.allow)
+		}
+	}
+	_ = rt
+}
+
+/*
+================
+TestPharaohTempleMerchantGateRefusesTheWrongSuitAndKeepsThePlayer
+
+Through the real click: no suit and a thief suit answer {2, 0x18} and the
+player stays in the desert; the exits are never checked.
+================
+*/
+func TestPharaohTempleMerchantGateRefusesTheWrongSuitAndKeepsThePlayer(t *testing.T) {
+	rt, c, _ := templeRoundTripFixture(t)
+	before := *c.World.Spawn.RegionID
+	for _, suit := range []uint8{0, pharaohtemple.SuitThief} {
+		templeDress(c, suit)
+		out := templeEnter(rt, c)
+		if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, errCodeTempleJob}) || *c.World.Spawn.RegionID != before {
+			t.Fatalf("suit %d answered %+v and stands in region %v", suit, out, *c.World.Spawn.RegionID)
+		}
+	}
+	for _, exit := range []string{pharaohtemple.TempleMerchantHunterGate, pharaohtemple.TempleThiefGate} {
+		templeDress(c, 0)
+		if got := portalAdmission(c, portalDestination{code: exit}, portalLink{}, portalTraveller{}); got != 0 {
+			t.Errorf("exit %s is job-checked: %#x", exit, got)
+		}
 	}
 }
