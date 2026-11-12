@@ -18,9 +18,12 @@ Selection is by codename family (the codename minus its trailing level
 number): COS_P_ kinds with leveled rows are attack (growth) pets, COS_P_
 kinds with one level are pickup pets, COS_T_ are transports, COS_C_ are
 vehicles and trade animals. COS_GUARD_ and COS_GUILD_ rows are mercenary
-and guild systems, not pets, and never candidates. A kind with no server
-lane yet (fellow pets and any other prefix) is deferred and reported,
-never half imported: its rows wait for the lane that can run them.
+and guild systems, not pets, and never candidates. Fellow kinds
+(COS_F_) ride the attack-pet lane (#3328, inference recorded there):
+the persistent summoner admits them by their rows' own band and they
+fight with their native per-level rows, like every summonable kind
+without a petdesign entry. A kind of any other prefix is deferred
+and reported, never half imported: its rows wait for a lane.
 
 A chosen kind brings its characterdata rows, the summon scrolls whose
 itemdata column 119 names it, and the name text for both. The pet's model
@@ -96,8 +99,10 @@ SOURCES = (VSRO_SOURCE, V1696_SOURCE, ARCHIVE_SOURCE)
 EXCLUDED_PREFIXES = ("COS_GUARD_", "COS_GUILD_")
 LEVEL_SUFFIX = re.compile(r"_\d+$")
 # Kinds the server's COS lanes already run (the summoning, pickup, growth,
-# transport and riding lanes); anything else defers until its lane exists.
-LANE_KINDS = ("pickup", "attack", "transport", "vehicle")
+# transport, riding and fellow lanes); anything else defers until its
+# lane exists. Fellows need no petdesign entry: they run their native
+# rows, and the report's design-entry need stays attack-only.
+LANE_KINDS = ("pickup", "attack", "transport", "vehicle", "fellow")
 
 
 # ================
@@ -107,7 +112,9 @@ LANE_KINDS = ("pickup", "attack", "transport", "vehicle")
 # empty value is on, only an explicit off value turns it off. An
 # unreadable value is refused rather than guessed. The archive source
 # has its own gate (AVATARS_ENV names the pinned archive; unset imports
-# nothing).
+# nothing). Gate names, confirmed against #3262 for #3328: there is no
+# SRO_PETS_ARCHIVE; the archive source rides the shared pinned zip
+# (SRO_AVATARS_ZIP) under this same SRO_PETS switch.
 # ================
 def enabled(env=os.environ):
 	value = env.get(FLAG, "").strip().lower()
@@ -138,7 +145,11 @@ def kind_of(family, rows):
 		return "transport"
 	if family.startswith("COS_C_"):
 		return "vehicle"
-	return "fellow"
+	if family.startswith("COS_F_"):
+		return "fellow"
+	# Anything else waits for its lane (the banner's rule): a prefix
+	# this map does not name is deferred, never fellow by default.
+	return "unknown"
 
 
 # ================
@@ -233,6 +244,8 @@ def select_pets(native_chars, native_items, earlier_codes, later_chars, later_it
 		needs = ["petdesign entry"]
 		if kind == "attack":
 			needs.append("pet skill rows")
+		if kind == "fellow":
+			needs = []  # native rows only; the expansion design is attack-pet only
 		report_kinds.append({
 			"family": family, "kind": kind, "rows": len(rows),
 			"levels": [levels[0], levels[-1]] if len(levels) > 1 else levels,

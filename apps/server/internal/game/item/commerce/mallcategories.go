@@ -164,7 +164,7 @@ func gearsStoneGoods() []mallCategoryGood {
 // mallCategoryGoods is the layout's whole stock: the authored rows
 // below plus the gears stones' and the model switchers' generated
 // listings.
-var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), modelSwitcherGoods())
+var mallCategoryGoods = slices.Concat(mallLayoutGoods, gearsStoneGoods(), modelSwitcherGoods(), petScrollGoods())
 
 var mallLayoutGoods = []mallCategoryGood{
 	// Halloween Exclusive: the two attachment pieces; Models: the
@@ -213,6 +213,40 @@ func modelSwitcherGoods() []mallCategoryGood {
 			Item: item, Silk: modelSwitcherSilk, Badge: mallBadgeHot, Imported: true})
 	}
 	return goods
+}
+
+// PetScrollItems are the summon scrolls of the pet kinds the later
+// sources import (#3328: scripts/pet_import.py): the fox, an attack
+// (growth) pet, and the winter snowman, a pickup pet with an event
+// copy of its scroll. Each names its kind in itemdata column 119, so
+// the persistent summoner serves it once the import wrote its rows.
+var PetScrollItems = []string{
+	"ITEM_COS_P_FOX_SCROLL",
+	"ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
+	"ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
+}
+
+/*
+================
+petScrollGoods
+
+One Pet-shop listing per imported pet scroll, in the tabs the shipped
+mall keeps for its own kinds: growth pets in MALL_PET_A_GROWTH, the
+silk pickup pets in MALL_PET_B_SILK. The later mall's growth scrolls
+share the summon scrolls' 30-silk tier here. The rows only exist when
+the optional pet import wrote them (Imported), so a build without a
+later source lists none and still boots.
+================
+*/
+func petScrollGoods() []mallCategoryGood {
+	return []mallCategoryGood{
+		{Tab: "MALL_PET_A_GROWTH", Package: "PACKAGE_ITEM_COS_P_FOX_SCROLL",
+			Item: "ITEM_COS_P_FOX_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_SCROLL",
+			Item: "ITEM_COS_P_WINTER_SNOWMAN_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+		{Tab: "MALL_PET_B_SILK", Package: "PACKAGE_ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL",
+			Item: "ITEM_COS_P_WINTER_SNOWMAN_EVENT_SCROLL", Silk: 30, Badge: mallBadgeNew, Imported: true},
+	}
 }
 
 /*
