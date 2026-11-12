@@ -100,6 +100,37 @@ export function soloVerdicts( offenders, soloTimes, budgetSeconds ) {
 
 /*
 ================
+betterSoloTimes
+
+The better of two solo re-measures per package. The gate runs a package
+that is still over budget alone a second time and judges the better
+launch: the first launch of a freshly linked test binary can pay a
+one-off process-init toll on Windows (an AV scan of the new binary;
+measured 2026-11-12, #3306: internal/gates took 25.0s on its first
+launch and 2.0s on its second, on ~2s of test work), and that toll is
+the box, not the package. A package genuinely over budget is over on
+both launches. A package timed in neither run stays absent, so it
+keeps no verdict in its favour.
+================
+*/
+/**
+ * @param {Map<string, number>} first
+ * @param {Map<string, number>} second
+ * @returns {Map<string, number>}
+ */
+export function betterSoloTimes( first, second ) {
+	const better = new Map( first );
+	for ( const [pkg, seconds] of second ) {
+		const kept = better.get( pkg );
+		if ( kept === undefined || seconds < kept ) {
+			better.set( pkg, seconds );
+		}
+	}
+	return better;
+}
+
+/*
+================
 isLintRunnerRefusal
 
 Whether a golangci-lint run's output is its parallel-runner refusal

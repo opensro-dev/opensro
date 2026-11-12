@@ -41,7 +41,10 @@ TEST_BUDGET_SECONDS; a package over it fails the gate unless the shrinking
 ledger scripts/checks/go-test-budget.txt names it. A green run that trips
 the budget first re-measures the offenders alone (one package worker, no
 test cache) and judges those times, so a busy box cannot fail an all-green
-run (#2582); SRO_GO_BUDGET_REMEASURE=off restores judging the full run's
+run (#2582); the packages still over then get one more launch and are
+judged by their better time, because a freshly linked test binary's first
+launch can pay a one-off process-init toll that is the box, not the
+package (#3306). SRO_GO_BUDGET_REMEASURE=off restores judging the full run's
 wall times directly. `--long`
 (check:server:long, and every release freeze) runs only the test steps,
 without -short, so the sweeps run; neither tier needs a hosted CI.
@@ -79,6 +82,7 @@ import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { sharedCacheEnvironment } from "../lib/goEnvironment.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import {
+	betterSoloTimes,
 	budgetOffenders,
 	isLintRunnerRefusal,
 	overBudgetPackages,
@@ -333,11 +337,15 @@ async function withinTestBudget( output ) {
 remeasureOffenders
 
 Runs the offenders' packages alone - one package worker, no test cache -
-and judges their solo times against the budget. Returns null when the
-re-measure itself produced no verdict (its run failed), leaving the full
-run's times to judge as before; the re-measure's output tail is printed
-either way it fails, so the evidence is never silent. Prints each
-offender's two times when it does judge.
+and judges their solo times against the budget. A package still over on
+its solo time gets one more launch and is judged by its better time: the
+first launch of a freshly linked test binary can pay a one-off toll
+(process init under Windows AV scanning; #3306) that the solo run exists
+to exclude, and a package genuinely over budget is over on both launches.
+Returns null when the re-measure itself produced no verdict (its run
+failed), leaving the full run's times to judge as before; the re-measure's
+output tail is printed either way it fails, so the evidence is never
+silent. Prints each offender's two times when it does judge.
 ================
 */
 /**
@@ -375,7 +383,8 @@ async function remeasureOffenders( offenders ) {
 		console.log( (rerun?.output ?? "").split( "\n" ).slice( -40 ).join( "\n" ) );
 		return null;
 	}
-	const verdicts = soloVerdicts( offenders, packageTestTimes( rerun.output ), TEST_BUDGET_SECONDS );
+	const soloTimes = packageTestTimes( rerun.output );
+	const verdicts = soloVerdicts( offenders, soloTimes, TEST_BUDGET_SECONDS );
 	for ( const { pkg, seconds, solo } of verdicts ) {
 		console.log(
 			`test budget: ${pkg} took ${seconds}s in the full run, ${
@@ -383,7 +392,44 @@ async function remeasureOffenders( offenders ) {
 			}`
 		);
 	}
-	return verdicts.every( ( { fits } ) => fits );
+	const stillOver = verdicts.filter( ( { fits } ) => !fits );
+	if ( stillOver.length === 0 ) {
+		return true;
+	}
+	// One more launch for the packages still over, judged by the better
+	// time (betterSoloTimes): the first launch above may itself have paid
+	// the toll this re-measure exists to exclude (#3306). Only these
+	// packages pay the extra run, so a healthy gate never runs it.
+	console.log(
+		`test budget: ${stillOver.length} package(s) still over alone; one more launch each, ` +
+			"judged by the better time"
+	);
+	const second = await runStep(
+		"tests (budget re-measure)",
+		"go",
+		[ "test", "-p=1", ...tierArgs, "-count=1", ...stillOver.map( ( { pkg } ) => pkg ) ],
+		undefined
+	);
+	if ( !second.ok ) {
+		console.log( "test budget: the second solo run failed; judging the first launch's times" );
+		console.log( second.output.split( "\n" ).slice( -40 ).join( "\n" ) );
+		return false;
+	}
+	const judged = soloVerdicts(
+		offenders,
+		betterSoloTimes( soloTimes, packageTestTimes( second.output ) ),
+		TEST_BUDGET_SECONDS
+	);
+	for ( const { pkg, solo } of judged ) {
+		if ( stillOver.some( ( over ) => over.pkg === pkg ) ) {
+			console.log(
+				`test budget: ${pkg} judged by its better launch, ${
+					solo === undefined ? "no solo time" : `${solo}s alone`
+				}`
+			);
+		}
+	}
+	return judged.every( ( { fits } ) => fits );
 }
 
 /*
