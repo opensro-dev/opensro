@@ -621,12 +621,19 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	weapons = add_items(vsro_root, native, out)
 	# The mall avatars append their own shard to the manifest the item
 	# import just wrote, so they must follow it.
-	from mall_avatar_import import add_avatars
+	from mall_avatar_import import add_avatars, add_source, v1696_root, V1696_SOURCE, avatars_zip, AVATARS_SOURCE
 	mall_avatars = add_avatars(vsro_root, native, out)
+	# The v1.696 client's avatars the VSRO client lacks (SRO_V1696_ROOT,
+	# pinned by v1696_archive_pins.json). Unset removes a previous import.
+	later_avatars = add_source(v1696_root(), native, out, V1696_SOURCE)
+	# The v2.355 export's avatars from the pinned archive (SRO_AVATARS_ZIP,
+	# #3254): without it the build is byte-identical and a previous
+	# import is removed.
+	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
 	# The later clients' pets follow the avatars: their COS rows and
 	# summon scrolls append their own shards to the same manifests. The
-	# v1.696 and zip passes read their roots from the environment and
-	# skip cleanly while those sources are not on the machine.
+	# v1.696 pass and the pinned-archive pass read their sources from the
+	# environment and skip cleanly while those are not on the machine.
 	from pet_import import add_all_sources
 	pets = add_all_sources(vsro_root, native, out)
 	from cap110_skill_import import add_skills
@@ -662,6 +669,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcServices": city_services,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
+		"mallAvatarsV1696": later_avatars,
+		"mallAvatarsArchive": archive_avatars,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],
 		"petsArchive": pets["petsArchive"],
