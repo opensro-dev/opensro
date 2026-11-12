@@ -85,6 +85,45 @@ func TestNpcTravelPublicationLifecycle(t *testing.T) {
 	}
 }
 
+func TestNpcScopeFramesIntoMatchesFreshCalls(t *testing.T) {
+	npc := NpcDef{ObjectID: 200001, RefObjID: 7524, AuthoredSpawn: true, Spawn: Spawn{RegionID: 25163, X: 958.04999, Y: -155.03999, Z: 98.970001}}
+	gate := NpcDef{ObjectID: 252094, RefObjID: 2094, AuthoredSpawn: true, Spawn: npc.Spawn, Teleport: &TeleportGateBounds{Radius: 100, Height: 200}}
+	roster := []NpcDef{npc, gate}
+	near := SessionSnapshot{SessionID: "a:1", NpcsEnabled: true, PublishedObjects: []uint32{400001}, World: WorldState{Spawn: Spawn{RegionID: 25163, X: 1100, Z: 99}}}
+	admitted := near
+	admitted.SessionID = "b:1"
+	admitted.PublishedObjects = []uint32{npc.ObjectID, gate.ObjectID, 400001}
+	far := admitted
+	far.SessionID = "c:1"
+	far.World.Spawn.X = 0
+	noAuthority := near
+	noAuthority.SessionID = "d:1"
+	noAuthority.PublishedObjects = nil
+
+	buffer := &NpcScopeBuffer{}
+	for _, session := range []SessionSnapshot{near, admitted, far, near, noAuthority, admitted} {
+		want := NpcScopeFrames(roster, session, 100)
+		got := NpcScopeFramesInto(buffer, roster, session, 100)
+		if session.PublishedObjects == nil {
+			if got != nil {
+				t.Fatalf("no-authority call returned %d frames through a primed buffer", len(got))
+			}
+			continue
+		}
+		if len(got) != len(want) {
+			t.Fatalf("session %s: buffered %d frames, fresh %d", session.SessionID, len(got), len(want))
+		}
+		for i := range want {
+			if got[i].Opcode != want[i].Opcode || got[i].ScopeGID != want[i].ScopeGID ||
+				got[i].ScopeVisible != want[i].ScopeVisible || !bytes.Equal(got[i].Payload, want[i].Payload) {
+				t.Fatalf("session %s frame %d differs: %+v vs %+v", session.SessionID, i, got[i], want[i])
+			}
+		}
+		// The next iteration's comparison is the reuse check: a later
+		// call must never see this call's frames again.
+	}
+}
+
 func TestEveryAuthoredNpcHasTravelPublication(t *testing.T) {
 	tier.Long(t, "every authored NPC publishes its travel")
 	clientdata.RequireGameData(t)
