@@ -26,6 +26,8 @@ import {
 const BLOCK_SIDE = 4;
 // Added to a quad's uv turn (0-3) when it samples nearest; ui-quads decodes it.
 const NEAREST_FLAG = 4;
+// Added to the same slot when the quad's texture repeats (UiQuad.tiled).
+const TILED_FLAG = 8;
 // Resident UI texture bytes the slots may hold together.
 const UI_TEXTURE_BUDGET_BYTES = 64 << 20;
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
@@ -88,7 +90,9 @@ struct Out {
 	@location(6) @interpolate(flat) uvRect: vec4f,
 	@location(7) @interpolate(flat) nearest: f32,
 	@location(8) @interpolate(flat) rotated: f32,
-	@location(9) @interpolate(flat) rect: vec4f
+	@location(9) @interpolate(flat) rect: vec4f,
+	@location(10) @interpolate(flat) tiled: f32,
+	@location(11) @interpolate(flat) padded: f32
 };
 
 /*
@@ -113,7 +117,7 @@ const DISPLAY_GAMMA = 2.2;
 const EDGE_PAD = 2.0;
 const SCALE_EPSILON = 0.002;
 const TEXEL_EPSILON = 0.01;
-fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
+fn areaSample( t: vec2f, d: vec2f, rect: vec4f, tiled: bool, art: bool ) -> vec4f {
 	let size = vec2f( textureDimensions( tex ) );
 	// The quad's own texels: an atlas glyph never averages its neighbour.
 	// A mirrored quad (the tooltip's right edge, uv 1,1,-1,-1) runs its uv
@@ -134,7 +138,9 @@ fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 			let overlap = max( min( hi, cell + 1 ) - max( lo, cell ), vec2f( 0 ) );
 			let w = overlap.x * overlap.y;
 			if ( w > 0 ) {
-				let texel = textureLoad( tex, vec2i( clamp( cell, vec2f( 0 ), size - 1 ) ), 0 );
+				// A tiled quad's cells run past the texture: they wrap, as it repeats.
+				let wrapped = cell - floor( cell / size ) * size;
+				let texel = textureLoad( tex, vec2i( select( clamp( cell, vec2f( 0 ), size - 1 ), wrapped, tiled ) ), 0 );
 				// Premultiplied, so a transparent texel adds no colour.
 				sum += vec4f( pow( texel.rgb, vec3f( DISPLAY_GAMMA ) ) * texel.a, texel.a ) * w;
 				weight += w;
@@ -144,9 +150,13 @@ fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 	if ( weight <= 0 ) {
 		return vec4f( 0 );
 	}
-	// Over the pixel's whole footprint: the part outside the quad is
+	// Text: over the pixel's whole footprint, the part outside the quad
 	// transparent, so an edge pixel holds only the ink that reaches it.
-	let alpha = sum.a / ( d.x * d.y );
+	// Artwork: over the part the quad covers. Window art abuts other art (a
+	// frame's border against its background tile); two partial coverages
+	// of one pixel would let the world through as a thin line, where the
+	// retail client, drawing at whole pixels, leaves none.
+	let alpha = sum.a / select( d.x * d.y, weight, art );
 	// Colours average in linear light, so a mixed edge keeps its brightness.
 	let rgb = select( vec3f( 0 ), pow( sum.rgb / sum.a, vec3f( 1 / DISPLAY_GAMMA ) ), sum.a > 0 );
 	return vec4f( rgb, alpha );
@@ -183,6 +193,8 @@ vs
 	);
 	let q = quads[i];
 	let angle = q.effects.z;
+	// effects.x packs the uv turn (0-3), NEAREST_FLAG (4) and TILED_FLAG (8).
+	let flags = u32( q.effects.x );
 	// An unrotated quad grows by EDGE_PAD UI units on each side, its uv with
 	// it: a fractional scale's edge texels cover pixels whose centres lie
 	// outside the rect. fs discards the pad unless it takes the area average.
@@ -191,7 +203,7 @@ vs
 	// fragments. viewport.z is pixels per UI unit (0 = unknown: pad).
 	// A mirrored quad's uv extent is negative; its texel count is not.
 	var texels = abs( q.uv.zw ) * vec2f( textureDimensions( tex ) );
-	if ( q.effects.x % 2 == 1 ) {
+	if ( flags % 2 == 1 ) {
 		texels = texels.yx;
 	}
 	let pixelsPerTexel = viewport.z * q.rect.zw / max( texels, vec2f( 1e-6 ) );
@@ -209,8 +221,7 @@ vs
 	var o: Out;
 	o.position = vec4f( p.x / viewport.x * 2 - 1, 1 - p.y / viewport.y * 2, q.effects.w, 1 );
 	var uv = c;
-	// effects.x is the uv turn, plus NEAREST_FLAG for a nearest quad.
-	let turn = q.effects.x % 4;
+	let turn = flags % 4;
 	if ( turn == 1 ) {
 		uv = vec2f( c.y, 1 - c.x );
 	} else if ( turn == 2 ) {
@@ -225,7 +236,9 @@ vs
 	o.clip = q.clip;
 	o.maskUv = ( p - q.maskRect.xy ) / q.maskRect.zw;
 	o.uvRect = q.uv;
-	o.nearest = select( 0.0, 1.0, q.effects.x >= 4 );
+	o.nearest = select( 0.0, 1.0, ( flags / 4 ) % 2 == 1 );
+	o.tiled = select( 0.0, 1.0, ( flags / 8 ) % 2 == 1 );
+	o.padded = select( 0.0, 1.0, padded );
 	o.rotated = select( 0.0, 1.0, angle != 0 );
 	o.rect = q.rect;
 	return o;
@@ -242,7 +255,9 @@ fs
 	let d = fwidth( t );
 	// Output pixels per UI unit: 1 at 100%, 2 on a 2x display, 1.5 at 150%.
 	let scale = 1 / max( fwidth( i.point ).x, 1e-6 );
-	let sampled = textureSample( tex, samp, i.uv );
+	// A tiled quad repeats its texture: sample within one copy (fract), while
+	// t and its derivatives above keep the unwrapped, continuous uv.
+	let sampled = textureSample( tex, samp, select( i.uv, fract( i.uv ), i.tiled == 1 ) );
 	if ( any( i.point < i.clip.xy ) || any( i.point >= i.clip.xy + i.clip.zw ) ) {
 		discard;
 	}
@@ -263,12 +278,16 @@ fs
 	let area = i.rotated == 0 && all( d <= vec2f( f32( AREA_TAPS - 1 ) ) ) && ( text || art );
 	var texel = sampled;
 	if ( area ) {
-		texel = areaSample( t, d, i.uvRect );
+		texel = areaSample( t, d, i.uvRect, i.tiled == 1, art );
 		if ( i.nearest == 1 ) {
 			texel.a = perceivedCoverage( texel.a, i.color.rgb );
 		}
-	} else if ( i.rotated == 0 && ( any( i.point < i.rect.xy ) || any( i.point >= i.rect.xy + i.rect.zw ) ) ) {
+	} else if ( i.padded == 1 && ( any( i.point < i.rect.xy ) || any( i.point >= i.rect.xy + i.rect.zw ) ) ) {
 		// The vertex pad, outside the quad: the unpadded quad's pixels only.
+		// An unpadded quad already covers exactly its own pixels; testing its
+		// interpolated point again dropped the pixel whose centre lay on an
+		// edge shared with the next quad (a window on a half pixel), and the
+		// world showed through as a line.
 		discard;
 	}
 	let color = texel * i.color;
@@ -634,7 +653,8 @@ fs
 					values.set( quad.mask?.rect ?? noMask, at + 16 );
 					// Nearest quads carry NEAREST_FLAG in the turn slot (the shader's
 					// area sampling at fractional UI sizes reads it).
-					values[at + 20] = (quad.uvTurn ?? 0) + (quad.sampling === "nearest" ? NEAREST_FLAG : 0);
+					values[at + 20] = (quad.uvTurn ?? 0) + (quad.sampling === "nearest" ? NEAREST_FLAG : 0) +
+						(quad.tiled ? TILED_FLAG : 0);
 					values[at + 21] = quad.alphaCutoff ?? 0;
 					values[at + 22] = quad.rotation ?? 0;
 					values[at + 23] = quad.depth ?? 0;

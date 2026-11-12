@@ -148,10 +148,19 @@ var Settings = []Setting{
 	// jupiter-temple.txt only on that pairing, and the consumer refuses
 	// the same pairing at load). "off" is native.
 	{Env: "SRO_JUPITER_TEMPLE", NomadVar: "jupiter_temple", Default: "off", Catalogue: true},
+	// Port-only, not native: Muhan, the Battlefield of Infinity - the
+	// eight wave arenas and their twenty-wave runs (#3273). Build and
+	// server read the same switch; off leaves every imported row out
+	// of the build and the wave file unread.
+	{Env: "SRO_MUHAN", NomadVar: "muhan", Default: "off", Catalogue: true},
 	// Port-only, not native: the second hunting grounds population
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the Sky Temple fields A-D population from the
+	// v1.696 client (monster/skytemple.go). The fields ride the Alexandria
+	// variant build; the switch admits their kinds here. "off" is native.
+	{Env: "SRO_SKYTEMPLE", NomadVar: "skytemple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). The catalogue models it
 	// on the tomb monsters' drop counts, so it is a catalogue setting.
@@ -175,10 +184,15 @@ var Settings = []Setting{
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
-	// Port-only, not native: every pet bag holds five pages of 28 slots
-	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// Port-only, not native: pet bags hold pages of 28 slots (#2770). The
+	// owner approved five pages on by default (2026-11-07); "off" is
 	// native: a grab pet holds 28 slots and a transport its authored size.
+	// The shared switch sets both kinds; each kind's own setting ("on",
+	// "off" or a page count from 1 to 9) overrides it, and empty defers to
+	// it (companion/inventorypages.go).
 	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
+	{Env: "SRO_GRAB_PET_INVENTORY_PAGES", NomadVar: "grab_pet_inventory_pages", Default: ""},
+	{Env: "SRO_TRANSPORT_PET_INVENTORY_PAGES", NomadVar: "transport_pet_inventory_pages", Default: ""},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-11-07: Alt+click links an item into a chat line. Off is
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
@@ -258,6 +272,14 @@ var Settings = []Setting{
 	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
 	// (#2475). Off (native) until the carrying release turns it on.
 	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
+	// Owner, 2026-11-11: a finished dress reloads at the nearest town's
+	// spawn, so a rival cannot follow the wearer. Off (native).
+	{Env: "SRO_JOB_DRESS_TOWN_SPAWN", NomadVar: "job_dress_town_spawn", Default: "off"},
+	// Owner, 2026-11-12: no resurrection or reverse return scroll while a
+	// job suit is worn, each its own live tunable (game/tunables). 0 is
+	// native.
+	{Env: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", NomadVar: "job_block_resurrection_scroll", Default: "0"},
+	{Env: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", NomadVar: "job_block_reverse_return_scroll", Default: "0"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.

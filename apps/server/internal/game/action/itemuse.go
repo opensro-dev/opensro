@@ -598,7 +598,7 @@ func (rt *Runtime) HandleItemUse(
 			// (+0x224) for everything but pets, so a transport carries a
 			// cargo bag of its authored size; a riding horse authors none.
 			if cosRef.InventoryCapacity > 0 {
-				pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(cosRef.InventoryCapacity)}
+				pet.Container = &domain.COSContainer{Capacity: rt.PetInventoryPages.TransportCapacity(cosRef.InventoryCapacity)}
 			}
 			// Validate the complete private record before inventory debit. Native
 			// summoning automatically binds both riding and transport vehicles.

@@ -376,10 +376,10 @@ func TestForgeStackableAvatarCapsuleAndPet(t *testing.T) {
 			t.Fatalf("rental expiry = %d, want %d", pet.RentalExpiresAtUnix, want)
 		}
 	})
-	t.Run("forged pickup pet bag follows the five-page rule", func(t *testing.T) {
+	t.Run("forged pickup pet bag follows the grab pet page rule", func(t *testing.T) {
 		c := forgeTestGM()
 		rt, _ := forgeTestRuntime(c, forgeTestItems())
-		rt.PetInventoryPages = true
+		rt.PetInventoryPages = companion.PetInventoryPages{Grab: 5}
 		if _, ok := rt.ForgeGMItem(testDivision, c.Name, "SUMMON_PICKUP pet.level=1"); !ok {
 			t.Fatal("pickup pet forge refused")
 		}
