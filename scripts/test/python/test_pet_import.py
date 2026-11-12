@@ -21,11 +21,16 @@ import unittest
 import unittest.mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import alexandria_npcs as characters  # noqa: E402
 import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402
 import pet_import as importer  # noqa: E402
 
-CHAR_COLUMNS = 104
+# A later client's characterdata width (VSRO and v1.696 alike).
+CHAR_COLUMNS = characters.VSRO_CHARACTER_COLUMNS
+# The v1.150 column the NPC model builder reads the material kind from
+# (buildNpcModelAssets.mjs): later column 93, shifted by the skill pairs.
+MATERIAL_KIND_COLUMN = 109
 
 
 # ================
@@ -105,6 +110,22 @@ class SelectionTests(unittest.TestCase):
 		kind = report["added"][0]
 		self.assertEqual((kind["kind"], kind["levels"]), ("attack", [1, 40]))
 		self.assertIn("pet skill rows", kind["needs"])
+
+	# ================
+	# test_rows_join_in_the_v1150_layout
+	#
+	# A later client's 104-column row is written in v1.150's 120: the
+	# material kind (later column 93) lands at 109, where the NPC model
+	# builder reads it. Copied as-is, column 109 did not exist and the
+	# manifest wrote null, which the client refuses.
+	# ================
+	def test_rows_join_in_the_v1150_layout(self):
+		later = char_row("COS_P_FOX_001", 9001)
+		later[characters.SKILL_PAIRS_AT] = "3"
+		chars, _, _ = self.select([later], [scroll("ITEM_PET_FOX", 9003, "COS_P_FOX")])
+		self.assertEqual(len(chars[0]), characters.NATIVE_CHARACTER_COLUMNS)
+		self.assertEqual(chars[0][MATERIAL_KIND_COLUMN], "3")
+		self.assertEqual((chars[0][importer.CHAR_CODE], chars[0][importer.CHAR_MODEL]), ("COS_P_FOX_001", "cos\\newpet.bsr"))
 
 	def test_fellow_kind_rides_the_attack_lane(self):
 		# Fellows are admitted like attack kinds (#3328): rows and scroll
