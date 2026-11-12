@@ -10,8 +10,13 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/loot"
-	"strings"
 )
+
+// The v1.150 recovery grains (itemdata_5000.txt lists only the _01 rows;
+// the _02 names have no item) and the stack one arena slot pays.
+var arenaGrains = [...]string{"ITEM_ETC_HP_SPOTION_01", "ITEM_ETC_MP_SPOTION_01", "ITEM_ETC_ALL_SPOTION_01"}
+
+const arenaGrainStack = 50
 
 /*
 ================
@@ -84,12 +89,14 @@ func (rt *Runtime) arenaReward(run *sookArenaRun, c *enterworld.Character, stage
 			}
 		}
 	}
-	// Native recovery grains only; regular potions and pills are not arena rewards.
+	// Native recovery grains only; regular potions and pills are not arena
+	// rewards. Drawn straight from the grain rows: no monster drop table
+	// lists a grain, so routing through loot.SelectConsumable (#3189) could
+	// never return one and both slots fell through to gear (#3368).
 	if (index%12 == 2 || index%12 == 3) && stage != 5 {
-		if supply, exists := loot.SelectConsumable(rt.arenaDraw(4), level, uint32(rt.arenaDraw(1000000)), rt.DropRoll); exists {
-			if ref, valid := items.ItemRefByCodename(supply.Codename); valid && ref != nil && strings.Contains(supply.Codename, "_SPOTION_") {
-				return inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: 50}, true
-			}
+		code := arenaGrains[rt.arenaDraw(len(arenaGrains))]
+		if ref, valid := items.ItemRefByCodename(code); valid && ref != nil {
+			return inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: arenaGrainStack}, true
 		}
 	}
 	drop, ok := rt.prepareSelectedDrop(loot.DropItem{Codename: code, Count: 1, Plus: uint8(rt.arenaDraw(stage + 2)), FromUnique: true}, run.center, c.Name, rt.Now())
