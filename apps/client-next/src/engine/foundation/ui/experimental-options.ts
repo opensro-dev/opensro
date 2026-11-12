@@ -46,6 +46,11 @@ export interface ExperimentalOptions {
 	// (the owner's choice, 2026-10-28); off is the native four tabs with
 	// notices in All.
 	readonly eventChatTab: boolean;
+	// Port-only, not native (#3356, player ask BR-261112-0240-D42F):
+	// whisper lines stay visible on every chat tab, not only on All.
+	// The original's tab rule is unread, so off unless turned on; off
+	// is the port's current filter, a whisper landing only on All.
+	readonly whisperEveryTab: boolean;
 	// Port-only, not native: use only the male warrior loading artwork.
 	// Off by default so both original loading backgrounds remain available.
 	readonly safeLoadingScreen: boolean;
@@ -486,6 +491,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
 		eventChatTab: record.eventChatTab !== false,
+		whisperEveryTab: enabled( "whisperEveryTab" ),
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		worldMapLevelCheckbox: enabled( "worldMapLevelCheckbox" ),

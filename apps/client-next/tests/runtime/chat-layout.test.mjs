@@ -211,6 +211,34 @@ test("the Event tab holds channel-7 notices and All skips them", () => {
 	assert.ok( !event.some( label => label.includes( "hello" ) ) );
 });
 
+test("whispers stay on All only until the every-tab row is on (#3356)", () => {
+	const lines = [
+		{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
+		{ channel: 2, name: "Soyeon", text: "psst, trade you", outgoing: false }
+	];
+	const party = visibleLabels( chatLayout( input( { lines, welcome: "", eventTab: true, tab: 1 } ) ) );
+	assert.ok( party.some( label => label.includes( "hello party" ) ) );
+	assert.ok( !party.some( label => label.includes( "psst" ) ) );
+	const widened = chatLayout( input( { lines, welcome: "", eventTab: true, tab: 1, whisperEveryTab: true } ) );
+	const widenedLabels = visibleLabels( widened );
+	assert.ok( widenedLabels.some( label => label.includes( "hello party" ) ) );
+	assert.ok( widenedLabels.some( label => label.includes( "psst, trade you" ) ) );
+	// The whisper keeps its sender as its reply target on the channel tab.
+	const whisper = widened.controls.find( c => c.id.startsWith( "chat-line:" ) && c.label.includes( "psst" ) );
+	assert.equal( whisper?.whisperTarget, "Soyeon" );
+	// The channel tabs keep filtering their own channels around it.
+	const guild = visibleLabels(
+		chatLayout( input( { lines, welcome: "", eventTab: true, tab: 2, whisperEveryTab: true } ) )
+	);
+	assert.ok( guild.some( label => label.includes( "psst" ) ) );
+	assert.ok( !guild.some( label => label.includes( "hello party" ) ) );
+	const event = visibleLabels(
+		chatLayout( input( { lines, welcome: "", eventTab: true, tab: 4, whisperEveryTab: true } ) )
+	);
+	assert.ok( event.some( label => label.includes( "psst" ) ) );
+	assert.ok( !event.some( label => label.includes( "hello party" ) ) );
+});
+
 test("a saved Event selection clamps when the row is off, and five tabs fit narrow chat", () => {
 	const clamped = chatLayout( input( { lines: EVENT_LINES, welcome: "", tab: 4 } ) );
 	assert.equal( clamped.controls.find( c => c.id === "chat-tab:3" )?.selected, true );

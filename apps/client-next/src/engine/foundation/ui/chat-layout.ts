@@ -130,6 +130,11 @@ export interface ChatLayoutInput {
 	// tab holding the channel-7 event notices, which All then skips.
 	// Omitted or false keeps the native four tabs, notices in All included.
 	eventTab?: boolean;
+	// Port-only, not native (#3356, Experimental "Whispers on every chat
+	// tab"): whisper lines (channel 2) also show on the channel and Event
+	// tabs, not only on All. The original's tab rule is unread, so
+	// omitted or false keeps the port's current filter.
+	whisperEveryTab?: boolean;
 	welcome: string;
 	copy: ( key: string ) => string;
 	size: ( path: string ) => readonly [number, number] | undefined;
@@ -156,6 +161,10 @@ export interface ChatLayoutInput {
 }
 // The kind prefix of an item-link span (chat-item-links.ts chatLinkSpans).
 const CHAT_ITEM_KIND = "chat-item:";
+// The whisper channel (chat-presentation.ts paints and addresses it):
+// the one channel the "Whispers on every chat tab" row admits on
+// every tab (#3356).
+const WHISPER_CHAT_CHANNEL = 2;
 // The wraps one cache holds at most (#3176): the log keeps 128 lines, so
 // this holds several widths' worth of the whole log before the oldest
 // wraps age out.
@@ -365,10 +374,13 @@ button
 			// All skips them and the native tabs never carried them.
 			...lines.filter( l => {
 				if ( l.channel === STALL_CHAT_CHANNEL ) return false;
-				if ( !state.eventTab ) return activeTab === 0 || l.channel === channel;
-				if ( activeTab === 4 ) return l.channel === 7;
+				// #3356: behind its Experimental row, a whisper rides every
+				// tab; off, it lands on All alone, as the port always did.
+				const whisper = state.whisperEveryTab === true && l.channel === WHISPER_CHAT_CHANNEL;
+				if ( !state.eventTab ) return activeTab === 0 || l.channel === channel || whisper;
+				if ( activeTab === 4 ) return l.channel === 7 || whisper;
 				if ( activeTab === 0 ) return l.channel !== 7;
-				return l.channel === channel;
+				return l.channel === channel || whisper;
 			} ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),

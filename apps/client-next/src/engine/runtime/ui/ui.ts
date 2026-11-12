@@ -12724,6 +12724,7 @@ export function createUi( ports: UiPorts ) {
 						];
 					key.push( experimental.state().saved.noticeLinks );
 					key.push( experimental.state().saved.eventChatTab );
+					key.push( experimental.state().saved.whisperEveryTab );
 					// Port-only item links: the row and the input's labels change the layout.
 					key.push( chatLinksOn() );
 					key.push( ...chatLinkHud.labels( "chat-text" ) );
@@ -12748,6 +12749,7 @@ export function createUi( ports: UiPorts ) {
 								chatItemLinks: chatLinksOn(),
 								inputLabels: chatLinkHud.labels( "chat-text" ),
 								eventTab: experimental.state().saved.eventChatTab,
+								whisperEveryTab: experimental.state().saved.whisperEveryTab,
 								compact: compact ?
 									{
 										bottom: compact.bottom,

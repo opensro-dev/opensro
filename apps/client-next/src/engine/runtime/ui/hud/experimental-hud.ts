@@ -330,6 +330,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Event notices get their own chat tab."
 					},
 					{
+						key: "whisperEveryTab",
+						id: "experimental-whisper-every-tab",
+						label: "Whispers on every chat tab",
+						description: "Whisper messages show on every chat tab, not only on All."
+					},
+					{
 						key: "chatItemLinks",
 						id: "experimental-chat-item-links",
 						label: "Item links in chat",
