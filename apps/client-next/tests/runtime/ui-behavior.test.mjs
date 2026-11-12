@@ -2991,6 +2991,50 @@ test("GPU COS bag leaves a quick transfer's slot to the worker in either directi
 	}
 });
 
+test("COS bag blocks the cells past its capacity under pt_block", () => {
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [],
+			cosRecords: [ {
+				gid: 7,
+				refObjId: 102,
+				band: 4,
+				name: "Pet",
+				hp: 100,
+				dead: false,
+				status: 30,
+				inventory: []
+			} ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "cos-bag" } );
+		let output = f.ui.step( state, ++now );
+		const blocked = () =>
+			f.scenes.at( -1 ).quads.filter( q => String( q.texture ).endsWith( "/interface/pet/pt_block.png" ) ).length;
+		const slot = id => output.controls.find( c => c.id === id );
+		// A full first page: no cell is blocked.
+		assert.equal( slot( "cos-slot:27" )?.disabled, false );
+		assert.equal( blocked(), 0 );
+		f.ui.event( { kind: "activate", id: "cos-next" } );
+		output = f.ui.step( state, ++now ) ?? output;
+		// 30 slots: the second page holds two cells, the other 26 are blocked.
+		assert.equal( slot( "cos-slot:29" )?.disabled, false );
+		assert.equal( slot( "cos-slot:30" )?.disabled, true );
+		assert.equal( slot( "cos-slot:55" )?.disabled, true );
+		assert.equal( blocked(), 26 );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("Ctrl+click moves an item across the open pet bag in either direction", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

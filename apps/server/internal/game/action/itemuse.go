@@ -406,6 +406,11 @@ func (rt *Runtime) HandleItemUse(
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
+		if family == itemUseModelSwitcher {
+			return rt.useModelSwitcher(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
 		if family == itemUseSkinChange {
 			return rt.useSkinChangeScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,

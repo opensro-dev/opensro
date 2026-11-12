@@ -51,10 +51,15 @@ These are inferences and port choices, not native evidence:
 - **Name rows.** The later client's name table is a shard index with 17-column rows; the import follows the index
   and maps rows onto the 15-column layout the name merge reads, absent translations taking the English cell - the
   same mapping the mall avatar import applies.
-- **Interiors are not yet playable.** The four dungeon regions' geometry is the later client's DOF tree, which the
-  Data pass copies, but publishing DOF resources into the client's dungeon catalogue is a separate slice (#3295;
-  the native dungeoninfo entries stay the admission authority). Until then, and until gates land, the temple worlds
-  stand registered with their populations and no way in - the same posture the temple bands shipped in.
+- **Interiors are published, not yet enterable.** The dungeon catalogue now carries the four regions (#3295):
+  `dungeonInfo.mjs` appends their rows when the import's DOF tree sits beside `dungeoninfo.txt` in the variant
+  build, each region bound by the id its DOF header embeds (32787 `piety_boss_di`, 32788 `piety_boss_uno`,
+  32789 `piety_boss_upi`, 32790 `hide`), and the builders publish `dungeon-resources.json` plus the four region
+  bundles `0x8013`-`0x8016`. A build without the temple switch has no such files and its catalogue is
+  byte-identical. The native dungeoninfo entries stay the admission authority and no gate exists yet, so the
+  interiors stand published with no way in - the same posture the temple bands shipped in. One source quirk
+  rides along: `piety_boss_width.bms` names a lightmap file the later client's archive only ships under a spaced
+  name, so that mesh publishes without a lightmap, which is how retail draws it too.
 - **Gates and entry are a follow-up slice**, as are the area's NPCs and services. Which temple copy a gate admits
   is undecided there, not here.
 
