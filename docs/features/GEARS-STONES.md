@@ -42,8 +42,9 @@ These are inferences and port choices, not native evidence:
   Nasrun's awakening by four weeks; the jewel upgrades one. The Nasrun wearable is item type 3/1/14 —
   v1.150's avatars are 3/1/13, the later-avatar import selects 3/1/13 only and skips the Nasrun rows
   for absent resources — and no awakening clock, Nasrun alchemy (the jewel's recipe and stones) or
-  upgrade path exists here. Listing either would sell an item that can never be used, and a substitute
-  effect would be invented behaviour, so both wait for a Nasrun epic that ports the system itself.
+  upgrade path exists here yet. Listing either now would sell an item that cannot be used, and a substitute
+  effect would be invented behaviour. The owner's call (2026-11-12): port every prerequisite first. #3348
+  ports the Devil's Spirit system (the wearable, its awakening clock, Nasrun alchemy) and then lists both.
 - **The Halloween summon scrolls (#3331).** The screenshot's Joon (500 silk) and Firespirits (200)
   summon scrolls for HOT shop > Halloween Exclusive have no row in any source searched: the v1.150,
   VSRO and pinned v1.696 item tables, the ISRO-R shard census (40,691 codenames) and its game-reference

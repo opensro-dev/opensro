@@ -146,11 +146,11 @@ func TestMallCategoriesGearsAbsentWithoutImport(t *testing.T) {
 ================
 TestMallCategoriesNasrunKindsStayUnlisted
 
-The recorded #3331 drop: Sabakun's jewel and the extension gear
-serve only the Devil's Spirit, which neither v1.150 nor this port
-has, so the layout authors no listing for them - even when a build's
-item table holds their later-client rows, no offer may name them.
-Listing one without the Nasrun system behind it fails here first.
+Until the Devil's Spirit port (#3348) lands, Sabakun's jewel and
+the extension gear stay unlisted (#3331): even when a build's item
+table holds their later-client rows, no offer may name them. Listing
+one without the Nasrun system behind it fails here first; #3348
+replaces this test with the listing's own when the system stands.
 ================
 */
 func TestMallCategoriesNasrunKindsStayUnlisted(t *testing.T) {
