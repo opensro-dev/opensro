@@ -35,6 +35,68 @@ func TestProjectedConsumableNames(t *testing.T) {
 	}
 }
 
+// TestRegularElixirIconsArePerType pins the four regular (A-grade)
+// reinforcement elixirs to their own icons (#3216). itemdata_5000.txt:1519-1522
+// references the one shared archemy_reinforce_recipe_a.ddj for all four, and
+// no media ships that base-name art, so each regular elixir draws its type's
+// shipped B-grade art (the rows at 1523-1526). Before the per-item rewrite
+// every row resolved to the one shared ddj and the four drew the same icon.
+/*
+================
+TestRegularElixirIconsArePerType
+================
+*/
+func TestRegularElixirIconsArePerType(t *testing.T) {
+	clientdata.RequireGameData(t)
+	items := NewTextdataItems(gamedatatest.TextdataDir(t))
+	regular := []struct {
+		codename string
+		id       uint32
+		icon     string
+	}{
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 3675, `item\etc\archemy_reinforce_recipe_weapon_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 3676, `item\etc\archemy_reinforce_recipe_shield_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", 3677, `item\etc\archemy_reinforce_recipe_armor_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", 3678, `item\etc\archemy_reinforce_recipe_accessary_b.ddj`},
+	}
+	drawn := map[string]string{}
+	for _, row := range regular {
+		ref, ok := items.ItemRefByCodename(row.codename)
+		if !ok {
+			t.Fatalf("regular elixir missing: %s", row.codename)
+		}
+		if ref.RefObjID != row.id {
+			t.Fatalf("%s: refObjId = %d, want %d", row.codename, ref.RefObjID, row.id)
+		}
+		if ref.Icon != row.icon {
+			t.Fatalf("%s: icon = %q, want its own %q", row.codename, ref.Icon, row.icon)
+		}
+		if other, dup := drawn[ref.Icon]; dup {
+			t.Fatalf("%s and %s draw the same icon %q", other, row.codename, ref.Icon)
+		}
+		drawn[ref.Icon] = row.codename
+	}
+	// The B-grade rows keep the per-type icons they already had; the rewrite
+	// touches only the four dangling A-grade references.
+	for _, row := range []struct {
+		codename string
+		icon     string
+	}{
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", `item\etc\archemy_reinforce_recipe_weapon_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", `item\etc\archemy_reinforce_recipe_shield_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", `item\etc\archemy_reinforce_recipe_armor_b.ddj`},
+		{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", `item\etc\archemy_reinforce_recipe_accessary_b.ddj`},
+	} {
+		ref, ok := items.ItemRefByCodename(row.codename)
+		if !ok {
+			t.Fatalf("B-grade elixir missing: %s", row.codename)
+		}
+		if ref.Icon != row.icon {
+			t.Fatalf("%s: icon = %q, want its authored %q", row.codename, ref.Icon, row.icon)
+		}
+	}
+}
+
 // TestItemCommandReferencesCarryDisplayNames pins the GM console helper's
 // catalogue: every /MAKEITEM row names the item's English title beside its
 // codename, and the blade row the helper tests use keeps both.
