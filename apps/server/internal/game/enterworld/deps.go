@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
@@ -266,6 +268,13 @@ type Deps struct {
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
+	// ItemSaleNote takes one ordinary merchant sale's item evidence
+	// into the economy's per-item hourly buckets (store
+	// NoteItemSale, #3307): the sold item's codename, how many, and
+	// the gold the seller was credited. Installed by the server
+	// wiring with the authority store; nil keeps no item evidence,
+	// as a detached composition has no ledger to keep it in.
+	ItemSaleNote func(charID int64, item string, count int, gold int64) error
 	// LockPublication orders bootstrap snapshots with action/tick inventory
 	// receipts. The returned release runs only after the full batch is queued.
 	// The label names this holder class for the gate-hold report.
@@ -345,6 +354,24 @@ func (d *Deps) Mutate(character *Character, label string, mutate func()) {
 		return
 	}
 	mutate()
+}
+
+/*
+================
+NoteItemSale
+
+Notes one committed merchant sale's item evidence (ItemSaleNote);
+unwired keeps nothing. A failed note is the ledger's loss alone -
+the sale already landed - so it is logged, never returned.
+================
+*/
+func (d *Deps) NoteItemSale(charID int64, item string, count int, gold int64) {
+	if d.ItemSaleNote == nil {
+		return
+	}
+	if err := d.ItemSaleNote(charID, item, count, gold); err != nil {
+		log.Warnf("economy item sale note: %v", err)
+	}
 }
 
 // Update routes a validate-and-change operation through the conditional

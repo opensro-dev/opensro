@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS economy_ledger_char_hours (
   n       INTEGER NOT NULL,
   PRIMARY KEY (hour_ms, char_id, reason)
 );
+CREATE TABLE IF NOT EXISTS economy_ledger_char_item_hours (
+  hour_ms INTEGER NOT NULL,
+  char_id INTEGER NOT NULL,
+  item    TEXT    NOT NULL,
+  count   INTEGER NOT NULL,
+  gold    INTEGER NOT NULL,
+  PRIMARY KEY (hour_ms, char_id, item)
+);
 `
 
 // economyHourMs is the bucket width: one hour in milliseconds.
@@ -620,19 +628,27 @@ func validateEconomyLedger(db *sql.DB) error {
 	}
 	var buckets int
 	if err := db.QueryRow(`SELECT count(*) FROM sqlite_schema
-WHERE type = 'table' AND name IN ('economy_ledger_hours', 'economy_ledger_char_hours')`).Scan(&buckets); err != nil {
+WHERE type = 'table' AND name IN ('economy_ledger_hours', 'economy_ledger_char_hours', 'economy_ledger_char_item_hours')`).Scan(&buckets); err != nil {
 		return err
 	}
 	if buckets == 0 {
 		return nil
 	}
-	if buckets != 2 {
-		return fmt.Errorf("economy buckets: one of the two bucket tables is missing")
+	// The per-item table (#3307) is the youngest: a file the first
+	// bucket binary opened holds the two originals and gains it at
+	// this open, so two is a complete old set, never damage.
+	if buckets < 2 {
+		return fmt.Errorf("economy buckets: one of the bucket tables is missing")
 	}
-	for _, shape := range []string{
+	shapes := []string{
 		"SELECT hour_ms, division, reason, gain, total, low, high, n FROM economy_ledger_hours LIMIT 0",
 		"SELECT hour_ms, char_id, reason, total, n FROM economy_ledger_char_hours LIMIT 0",
-	} {
+	}
+	if buckets == 3 {
+		shapes = append(shapes,
+			"SELECT hour_ms, char_id, item, count, gold FROM economy_ledger_char_item_hours LIMIT 0")
+	}
+	for _, shape := range shapes {
 		shapeRows, err := db.Query(shape)
 		if err != nil {
 			return err
@@ -689,6 +705,92 @@ WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, reason`, charID, sinceMs/ec
 	for rows.Next() {
 		var hour LedgerCharHour
 		if err := rows.Scan(&hour.HourMs, &hour.Reason, &hour.Total, &hour.N); err != nil {
+			return nil, err
+		}
+		out = append(out, hour)
+	}
+	return out, rows.Err()
+}
+
+/*
+================
+NoteItemSale
+
+One ordinary merchant sale's item evidence (#3307): the item, how
+many, and the gold the seller was credited, folded into the
+character's per-item hourly bucket (economy_ledger_char_item_hours).
+
+The gold side needs no call - the ledger reads it off the balance at
+the door - but a balance diff cannot name what was sold, so the sale
+door notes the item itself after its commit lands. Sales are
+player-paced, so the note is its own small write under the store
+lock, after the tick's deferred rows like every direct door. The
+rows history holds predate the note and carry no item; their gold
+stays readable in the per-character buckets, and the per-item
+buckets simply begin with the first noted sale.
+================
+*/
+func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil || charID <= 0 || item == "" || count <= 0 || gold < 0 {
+		return fmt.Errorf("economy item sale: unavailable or malformed note")
+	}
+	if err := s.flushDeferredLocked(); err != nil {
+		return err
+	}
+	hourMs := s.now().UnixMilli() / economyHourMs * economyHourMs
+	_, err := s.syncDBLocked().Exec(`INSERT INTO economy_ledger_char_item_hours (hour_ms, char_id, item, count, gold)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (hour_ms, char_id, item) DO UPDATE SET
+  count = count + excluded.count, gold = gold + excluded.gold`,
+		hourMs, charID, item, count, gold)
+	if err != nil {
+		s.recordWriteFailureLocked("economy-item-sale", err)
+	}
+	return err
+}
+
+/*
+================
+LedgerCharItemHour
+
+One character's hourly sales of one item (#3307): how many went to
+the merchants, and for how much gold.
+================
+*/
+type LedgerCharItemHour struct {
+	HourMs int64
+	Item   string
+	Count  int64
+	Gold   int64
+}
+
+/*
+================
+EconomyCharacterItemHours
+
+The character's per-item hourly merchant sales since sinceMs,
+oldest first: the drill-in behind "what did they sell, and when"
+(#3307), beside EconomyCharacterHours' gold totals.
+================
+*/
+func (s *Store) EconomyCharacterItemHours(charID int64, sinceMs int64) ([]LedgerCharItemHour, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, fmt.Errorf("economy char item hours: no database open")
+	}
+	rows, err := s.db.Query(`SELECT hour_ms, item, count, gold FROM economy_ledger_char_item_hours
+WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, item`, charID, sinceMs/economyHourMs*economyHourMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LedgerCharItemHour
+	for rows.Next() {
+		var hour LedgerCharItemHour
+		if err := rows.Scan(&hour.HourMs, &hour.Item, &hour.Count, &hour.Gold); err != nil {
 			return nil, err
 		}
 		out = append(out, hour)

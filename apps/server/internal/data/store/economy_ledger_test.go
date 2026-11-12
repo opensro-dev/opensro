@@ -498,3 +498,75 @@ func TestMostWantedBountyIsATransfer(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestNoteItemSaleBuckets
+
+A noted merchant sale folds into the character's per-item hourly
+bucket (#3307): repeat sales of one item accumulate count and gold,
+another item and another character keep their own buckets, and the
+buckets survive a reopen. A malformed note is refused whole.
+================
+*/
+func TestNoteItemSaleBuckets(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	note := func(charID int64, item string, count int, gold int64) {
+		t.Helper()
+		if err := s.NoteItemSale(charID, item, count, gold); err != nil {
+			t.Fatal(err)
+		}
+	}
+	note(7, "ITEM_ETC_HP_POTION_01", 2, 30)
+	note(7, "ITEM_ETC_HP_POTION_01", 3, 45)
+	note(7, "ITEM_ETC_SCROLL_RETURN_01", 1, 40)
+	note(8, "ITEM_ETC_HP_POTION_01", 1, 15)
+	for _, bad := range []struct {
+		charID int64
+		item   string
+		count  int
+		gold   int64
+	}{
+		{0, "ITEM_ETC_HP_POTION_01", 1, 15},
+		{7, "", 1, 15},
+		{7, "ITEM_ETC_HP_POTION_01", 0, 15},
+		{7, "ITEM_ETC_HP_POTION_01", 1, -1},
+	} {
+		if err := s.NoteItemSale(bad.charID, bad.item, bad.count, bad.gold); err == nil {
+			t.Fatalf("malformed note %+v was kept", bad)
+		}
+	}
+	want := []LedgerCharItemHour{
+		{Item: "ITEM_ETC_HP_POTION_01", Count: 5, Gold: 75},
+		{Item: "ITEM_ETC_SCROLL_RETURN_01", Count: 1, Gold: 40},
+	}
+	check := func(s *Store) {
+		t.Helper()
+		hours, err := s.EconomyCharacterItemHours(7, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hours) != len(want) {
+			t.Fatalf("item hours %+v, want %+v", hours, want)
+		}
+		for i, row := range hours {
+			if row.Item != want[i].Item || row.Count != want[i].Count || row.Gold != want[i].Gold || row.HourMs <= 0 {
+				t.Fatalf("item hours %+v, want %+v", hours, want)
+			}
+		}
+		other, err := s.EconomyCharacterItemHours(8, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(other) != 1 || other[0].Count != 1 || other[0].Gold != 15 {
+			t.Fatalf("the other character's item hours %+v", other)
+		}
+	}
+	check(s)
+	s.Close()
+	reopened := openTest(t, dir, newTestClock())
+	defer reopened.Close()
+	check(reopened)
+}
