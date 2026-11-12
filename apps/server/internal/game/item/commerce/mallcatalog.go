@@ -63,16 +63,20 @@ type MallPackage struct {
 	Contents     []Content `json:"-"`
 	ItemIDs      []uint32  `json:"itemIds"`
 	MallAddress
-	PurchaseLimit uint16     `json:"purchaseLimit"`
-	PackageID     uint32     `json:"packageId"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Icon          string     `json:"icon"`
-	Silk          uint32     `json:"silk"`
-	GiftSilk      uint32     `json:"giftSilk"`
-	AllowsPoints  bool       `json:"allowsPoints"`
-	Code          string     `json:"-"`
-	Scraps        [][]string `json:"-"`
+	PurchaseLimit uint16 `json:"purchaseLimit"`
+	PackageID     uint32 `json:"packageId"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Icon          string `json:"icon"`
+	Silk          uint32 `json:"silk"`
+	GiftSilk      uint32 `json:"giftSilk"`
+	AllowsPoints  bool   `json:"allowsPoints"`
+	// Badge is the later client's N/H/R mark on the goods (issue
+	// #3257): "new", "hot" or "recommended", stamped by the categories
+	// layout (mallcategories.go); "" - and no JSON field - otherwise.
+	Badge  string     `json:"badge,omitempty"`
+	Code   string     `json:"-"`
+	Scraps [][]string `json:"-"`
 }
 
 /*
@@ -111,10 +115,12 @@ Prices are resolved by package codename; the wire package ID is checked again
 at purchase time to reject stale slot mappings. All active mall rows must have
 a package and a price, so a partial catalogue cannot silently ship. extra
 lists further packages (SRO_MALL_EXTRA_GOODS, mallextra.go); nil is the
-shipped mall. refs names the items an authored package sells.
+shipped mall. categories authors the later client's category layout
+(SRO_MALL_CATEGORIES, mallcategories.go) on top of it; false is the shipped
+mall. refs names the items an authored package sells.
 ================
 */
-func LoadMall(dir string, extra []MallExtraGood, refs enterworld.ItemRefSource) (*MallCatalog, error) {
+func LoadMall(dir string, extra []MallExtraGood, categories bool, refs enterworld.ItemRefSource) (*MallCatalog, error) {
 	tables := map[string][][]string{}
 	for _, name := range []string{
 		"refshopgroup", "refmappingshopgroup", "refmappingshopwithtab", "refshoptab",
@@ -134,7 +140,24 @@ func LoadMall(dir string, extra []MallExtraGood, refs enterworld.ItemRefSource) 
 	if err := addMallExtraRows(tables, extra, refs); err != nil {
 		return nil, err
 	}
-	return buildMallCatalog(tables)
+	var badges map[string]string
+	if categories {
+		var err error
+		badges, err = addMallCategoryRows(tables, refs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	catalog, err := buildMallCatalog(tables)
+	if err != nil {
+		return nil, err
+	}
+	// One package keeps one listing (addMallCategoryRows), so a
+	// package's badge stamps its only offer.
+	for index := range catalog.Offers {
+		catalog.Offers[index].Badge = badges[catalog.Offers[index].Code]
+	}
+	return catalog, nil
 }
 
 /*
