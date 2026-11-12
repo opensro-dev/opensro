@@ -657,6 +657,11 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# The second hunting grounds are independently optional the same
 	# way; their off path reaps a previous on build's outputs.
 	hunting2_build = hunting2.add_hunting2(native, out)
+	# The Sky Temple fields are their own switch and their own source (the
+	# v1.696 client), layered on the same variant after the populations
+	# whose identity space they share.
+	from skytemple_import import add_skytemple
+	sky_temple = add_skytemple(native, out)
 	from alexandria_npc_services import add_services
 	city_services = add_services(vsro_root, native, out, port_stock_enabled())
 
@@ -670,6 +675,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"arabia": arabia,
 		"jupiter": jupiter_build,
 		"hunting2": hunting2_build,
+		"skyTemple": sky_temple,
 		"format": "opensro-alexandria-variant-v1",
 		"portOnly": True,
 		"regions": stage_manifest["regions"],
