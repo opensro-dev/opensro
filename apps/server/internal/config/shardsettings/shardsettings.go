@@ -256,6 +256,11 @@ var Settings = []Setting{
 	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
 	// (#2475). Off (native) until the carrying release turns it on.
 	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
+	// Owner, 2026-11-12: no resurrection or reverse return scroll while a
+	// job suit is worn, each its own live tunable (game/tunables). 0 is
+	// native.
+	{Env: "SRO_JOB_BLOCK_RESURRECTION_SCROLL", NomadVar: "job_block_resurrection_scroll", Default: "0"},
+	{Env: "SRO_JOB_BLOCK_REVERSE_RETURN_SCROLL", NomadVar: "job_block_reverse_return_scroll", Default: "0"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
