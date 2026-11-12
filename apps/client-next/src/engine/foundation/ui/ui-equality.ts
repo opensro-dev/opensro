@@ -70,6 +70,7 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 	if (
 		x.occlusion !== y.occlusion || x.sampling !== y.sampling || x.texture !== y.texture || x.layer !== y.layer ||
 		!Object.is( x.depth, y.depth ) || !Object.is( x.rotation, y.rotation ) || !Object.is( x.uvTurn, y.uvTurn ) ||
+		!x.tiled !== !y.tiled ||
 		!Object.is( x.alphaCutoff, y.alphaCutoff ) || x.characterAnchor !== y.characterAnchor ||
 		x.portraitGid !== y.portraitGid ||
 		!tuple( x.rect, y.rect ) || !tuple( x.uv, y.uv ) || !tuple( x.color, y.color ) ||

@@ -43,6 +43,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -261,6 +262,9 @@ The caller holds the character's update.
 ================
 */
 func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, target reverseReturnTarget, now int64, result *OpResult) bool {
+	if rt.jobRefusesScroll(tunables.JobBlockReverseReturnScroll, c, result) {
+		return false
+	}
 	// The reference server requires the current world's reference type (+0x20) to be zero.
 	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
 		*result = itemUseFailure(errCodeReverseWorld)

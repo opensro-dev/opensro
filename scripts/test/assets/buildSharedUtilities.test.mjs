@@ -210,6 +210,30 @@ test("shared concurrency, recursive walking, binary, and dungeon readers retain 
 		{ regionId: 17, dofName: "dungeon\\alpha.dof" }
 	] );
 
+	// Port-only rows ride on file existence (#3295): the Mirror Dimension
+	// interiors join only when the import's DOFs sit beside the table.
+	const jupiterPiety = path.join( root, "jupiter", "piety" );
+	const jupiterHide = path.join( root, "jupiter", "hide" );
+	await mkdir( jupiterPiety, { recursive: true } );
+	await mkdir( jupiterHide, { recursive: true } );
+	await writeFile( path.join( jupiterPiety, "piety_boss_di.dof" ), "x" );
+	await writeFile( path.join( jupiterHide, "hide.dof" ), "x" );
+	assert.deepEqual( await readDungeonInfoRows( path.join( root, "dungeoninfo.txt" ) ), [
+		{ regionId: 17, dofName: "dungeon\\alpha.dof" },
+		{ regionId: 32787, dofName: "Dungeon\\jupiter\\piety\\piety_boss_di.dof" },
+		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" }
+	] );
+
+	// A row the table itself declares keeps its authored name and is not
+	// appended twice.
+	await writeFile( path.join( root, "dungeoninfo.txt" ), '32787 "authored\\interior.dof"\r\n' );
+	await writeFile( path.join( jupiterPiety, "piety_boss_uno.dof" ), "x" );
+	assert.deepEqual( await readDungeonInfoRows( path.join( root, "dungeoninfo.txt" ) ), [
+		{ regionId: 32787, dofName: "authored\\interior.dof" },
+		{ regionId: 32788, dofName: "Dungeon\\jupiter\\piety\\piety_boss_uno.dof" },
+		{ regionId: 32790, dofName: "Dungeon\\jupiter\\hide\\hide.dof" }
+	] );
+
 	let active = 0;
 	let maximumActive = 0;
 	const mapped = await mapWithConcurrency( [ 3, 1, 2, 0 ], 2, async ( value, index ) => {
