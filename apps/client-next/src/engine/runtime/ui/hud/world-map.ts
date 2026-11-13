@@ -34,6 +34,7 @@ import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/mini
 import {
 	worldMapDemand,
 	expandedWorldMapOn,
+	worldMapDungeonOf,
 	MAP_LOCAL_MARKER,
 	worldMapDungeonPose,
 	worldMapFrame,
@@ -223,6 +224,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	// The window drew a cave floor last frame, so a manual view holds cave
 	// coordinates rather than the dungeon's point on the world map.
 	let mapCaveShown = false;
+	// The dungeon the player stood in when the globe chose the world page
+	// (issue #3429): while they stay in it the world page holds, instead of
+	// their floor's page, until the pin, a dungeon entrance or a finished
+	// load brings the cave page back. The v1.188 globe returns to the world
+	// from any dungeon page; inferred, as the port's own floor default is
+	// otherwise re-derived from the pose every frame and overruled it.
+	let mapWorldDungeon: number | null = null;
 	// The character level the last painted frame saw; clicks arrive after
 	// a paint, and the tools' level filter reads it (issue #3167).
 	let lastLevel: number | undefined;
@@ -286,6 +294,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			mapPan = [ 0, 0 ];
 			mapCenter = null;
 			mapPose = null;
+			mapWorldDungeon = null;
 		},
 		/*
 		================
@@ -293,6 +302,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		================
 		*/
 		follow() {
+			mapWorldDungeon = null;
 			mapFollow = true;
 			mapPan = [ 0, 0 ];
 			mapCenter = null;
@@ -326,6 +336,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				!!pose && !featuresAt( pose.regionId ).worldMap
 			);
 			if ( picked !== undefined ) {
+				if ( id.startsWith( "map-dungeon" ) ) mapWorldDungeon = null;
 				if ( picked ) {
 					mapFollow = false;
 					mapPan = [ 0, 0 ];
@@ -361,6 +372,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			if ( id === "map-pin" ) {
 				mapTools.clearView();
 				mapFollow = !mapFollow;
+				if ( mapFollow ) mapWorldDungeon = null;
 				mapCenter = heldCenter( pose );
 				mapPan = [ 0, 0 ];
 				return true;
@@ -369,9 +381,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// The dungeon page's big globe (issue #3210) lands here too.
 			if ( id === "map-world" || id === "map-globe" ) {
 				mapTools.clearView();
+				mapWorldDungeon = pose && !featuresAt( pose.regionId ).worldMap ?
+					worldMapDungeonOf( pose.regionId ) ?? pose.regionId :
+					null;
 				mapPage = 0;
 				mapFollow = false;
-				mapCenter = heldCenter( pose );
+				// The world page centres on the dungeon's map point, never
+				// on the cave coordinates the floor page held.
+				const view = mapViewPose( pose );
+				mapCenter = view ? { ...view } : null;
 				mapPan = [ 0, 0 ];
 				return true;
 			}
@@ -594,7 +612,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// A dungeon floor with a page shows it; the rest keep the world map.
 			// The tools (issue #3167) may overrule the page: a chosen floor,
 			// or a dungeon opened from its entrance while the player is out.
-			const indoorPage = pose && !poseOnMap ?
+			const poseDungeon = pose && !poseOnMap ? worldMapDungeonOf( pose.regionId ) ?? pose.regionId : null;
+			if ( poseDungeon !== mapWorldDungeon ) mapWorldDungeon = null;
+			const indoorPage = pose && !poseOnMap && mapWorldDungeon === null ?
 				caveMapPage( input.caveMaps, pose.regionId, game?.navigationFloor ) :
 				undefined;
 			const toolsPage = mapTools.cavePage( input.caveMaps, pose );
