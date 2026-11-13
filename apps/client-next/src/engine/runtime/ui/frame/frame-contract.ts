@@ -162,7 +162,7 @@ export interface UiFrame {
 		has( path: string ): boolean;
 		size( path: string ): readonly [number, number] | undefined;
 		// True for an image no load will ever deliver (absent from the
-		// manifest); it draws nothing and must not hold a window (#3407).
+		// manifest); it must not hold a window (#3407).
 		absent?( path: string ): boolean;
 	};
 	readonly windowPlacement: {

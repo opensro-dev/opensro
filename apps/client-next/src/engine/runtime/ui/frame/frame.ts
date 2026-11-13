@@ -182,10 +182,12 @@ export function beginWindow( frame: UiFrame ) {
 unloadedImages
 
 The images a window drew from `from` on that are still loading: neither
-resident nor known absent. An absent image draws nothing, as a native
-static with no texture does, so it never holds a window's admission; it
-held the M window shut forever on a build without its chrome art (#3407).
-Every window admission asks this one rule.
+resident nor known absent. Native never holds a window for its art:
+CTextBoard_SetTexturePath (53FF00) keeps whatever the texture load
+returned, null for a missing file, and CIFWnd_RenderTexturedFace (5405DF)
+draws on the path flag, not the texture. So an absent image never holds a
+window's admission; it held the M window shut forever on a build without
+its chrome art (#3407). Every window admission asks this one rule.
 ================
 */
 export function unloadedImages( resources: UiFrame["resources"], paths: readonly string[], from: number ): string[] {
