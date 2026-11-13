@@ -79,6 +79,7 @@ import { buildJobs } from "./shared/buildParallelism.mjs";
 import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
+	importLaterOptionalTeleportStep,
 	importLaterTombMinimapStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
@@ -87,6 +88,7 @@ import {
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
+	laterOptionalTeleportImportPlan,
 	laterTombMinimapImportPlan,
 	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
@@ -241,6 +243,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
+	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
 	importLaterTombMinimap: importLaterTombMinimapStep,
 	packTree: packPublicTree
 } );
@@ -630,6 +633,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The M map guide's tables and art (#3387) come from the v1.696
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
+	// The reverse return map's destination table rides the v1.188 archive
+	// too, but lands in the game root for the server game-data build.
+	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
 	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
 	// rule, claimed before the pack tail.
 	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
@@ -707,6 +713,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterDungeonMaps,
 		laterWorldMapButtons,
 		laterWorldMapGuide,
+		laterOptionalTeleport,
 		laterTombMinimap,
 		packGroups,
 		claimAudit,
