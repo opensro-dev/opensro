@@ -64,7 +64,8 @@ const (
 
 // dbSchema creates a fresh current-layout database. An existing database must
 // already hold a layout inside the read window (CurrentLayoutVersion through
-// StoreReadHeadroom more) and is never altered at boot.
+// StoreReadHeadroom more); the only change boot makes is adding the empty
+// tables of additive layout steps inside that window (layout_steps.go).
 const mallAccountsSchema = `
 CREATE TABLE IF NOT EXISTS mall_accounts (
   account_id TEXT PRIMARY KEY,
@@ -157,7 +158,9 @@ const (
 // writes; it opens that layout and the StoreReadHeadroom newer ones, whose
 // extra tables it never reads or writes. It is independent from
 // CurrentVersion, which identifies the JSON character-record schema. Adding
-// a table bumps this value and requires an reviewed offline upgrade before
+// a table bumps this value and adds a classified step to layoutSteps
+// (layout_steps.go): an additive one is created at boot inside the read
+// window, anything else needs the reviewed offline upgrade before
 // deployment. sro-authority-upgrade preserves
 // layout-4 records while adding the empty mall currency and warehouse tables
 // for layout 5, the empty fortress and union tables for layout 6, the

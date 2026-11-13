@@ -7,8 +7,8 @@ Brings every schema from UpgradeFromVersion up to CurrentVersion and
 CurrentLayoutVersion. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Two tables drive it: storeSteps (schema.go) says which layouts a store
-at each schema may hold, and layoutAdditions which empty tables each
-later layout added. Existing tables and their records survive unchanged; the new record
+at each schema may hold, and layoutSteps (layout_steps.go) which tables
+each later layout added. Existing tables and their records survive unchanged; the new record
 fields are optional. The role repair makes each guild master the sole
 commander (guild_leader_role.go); it also runs on a current store that
 needs it.
@@ -87,31 +87,6 @@ func upgradeSourceLayout(schema, layout int) (int, error) {
 	return layout, nil
 }
 
-/*
-================
-layoutAddition
-
-The empty tables one layout added, and the statement that creates them.
-A source below the layout gains them; ascending order is creation order.
-================
-*/
-type layoutAddition struct {
-	layout int
-	tables []string
-	schema string
-}
-
-var layoutAdditions = []layoutAddition{
-	{5, []string{"mall_accounts", "account_storage"}, mallAccountsSchema + accountStorageSchema},
-	{6, []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}, fortressSchema + allianceSchema},
-	{7, []string{"guild_wars"}, guildWarSchema},
-	{8, []string{"fortress_item_forges"}, fortressItemForgeSchema},
-	{9, []string{"unique_kills"}, uniqueKillsSchema},
-	{10, []string{"economy_ledger"}, economyLedgerSchema},
-	{11, []string{"name_reservations"}, nameReservationsSchema},
-	{12, []string{"silk_history"}, silkHistorySchema},
-}
-
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
 var ErrAuthorityCurrent = errors.New("authority upgrade: already in the current format")
@@ -178,34 +153,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if _, err := loadDB(db, schema, sourceLayout, 0); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
-	var additions []layoutAddition
-	for _, addition := range layoutAdditions {
-		if sourceLayout < addition.layout {
-			additions = append(additions, addition)
-		}
-	}
-	for _, addition := range additions {
-		for _, table := range addition.tables {
-			var existing int
-			if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
-				return "", err
-			}
-			if existing == 0 {
-				continue
-			}
-			// An empty table in an older-layout authority is construction
-			// residue (a database created by a newer binary, then stamped
-			// down); the CREATE below is a no-op for it. Rows are the
-			// mislabeling this guard exists to catch: an old layout cannot
-			// hold data its binary never wrote.
-			var rows int
-			if err := db.QueryRow(fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&rows); err != nil {
-				return "", err
-			}
-			if rows != 0 {
-				return "", fmt.Errorf("authority upgrade: layout %d unexpectedly contains %s", sourceLayout, table)
-			}
-		}
+	pending, err := pendingLayoutSteps(db, layoutSteps, sourceLayout)
+	if err != nil {
+		return "", fmt.Errorf("authority upgrade: %w", err)
 	}
 	if !commit {
 		return "", nil
@@ -245,8 +195,8 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		return backupPath, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, addition := range additions {
-		if _, err := tx.Exec(addition.schema); err != nil {
+	for _, step := range pending {
+		if _, err := tx.Exec(step.schema); err != nil {
 			return backupPath, err
 		}
 	}

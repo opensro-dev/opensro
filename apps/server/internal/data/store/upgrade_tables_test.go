@@ -4,7 +4,7 @@
 upgrade_tables_test.go - the offline upgrade's two tables and the
 quarantine's sidecar names
 
-storeSteps' layout windows and authority_upgrade.go's additions replace
+storeSteps' layout windows and layout_steps.go's steps replace
 a switch and two hand-written comparison chains, so these tests pin what
 the chains guaranteed: each window is sane, and every layout from the
 first addition to the current one adds its tables exactly once and in
@@ -95,30 +95,33 @@ func TestUpgradeSourceLayoutRefusesOutsideTheWindow(t *testing.T) {
 
 /*
 ================
-TestLayoutAdditionsRunInOrderToTheCurrentLayout
+TestLayoutStepsRunInOrderToTheCurrentLayout
 ================
 */
-func TestLayoutAdditionsRunInOrderToTheCurrentLayout(t *testing.T) {
+func TestLayoutStepsRunInOrderToTheCurrentLayout(t *testing.T) {
 	tables := map[string]bool{}
-	for i, addition := range layoutAdditions {
-		if want := preFortressLayoutVersion + i; addition.layout != want {
-			t.Fatalf("addition %d is layout %d, want %d", i, addition.layout, want)
+	for i, step := range layoutSteps {
+		if want := preFortressLayoutVersion + i; step.layout != want {
+			t.Fatalf("step %d is layout %d, want %d", i, step.layout, want)
 		}
-		if len(addition.tables) == 0 || addition.schema == "" {
-			t.Fatalf("layout %d adds nothing", addition.layout)
+		if step.schema == "" || strings.TrimSpace(step.why) == "" {
+			t.Fatalf("layout %d has no statement or no reason", step.layout)
 		}
-		for _, table := range addition.tables {
+		if step.additive && len(step.tables) == 0 {
+			t.Fatalf("layout %d is additive but adds no table", step.layout)
+		}
+		for _, table := range step.tables {
 			if tables[table] {
 				t.Fatalf("table %s added twice", table)
 			}
 			tables[table] = true
-			if !strings.Contains(addition.schema, "CREATE TABLE IF NOT EXISTS "+table+" ") {
-				t.Fatalf("layout %d lists %s but its statement does not create it", addition.layout, table)
+			if !strings.Contains(step.schema, "CREATE TABLE IF NOT EXISTS "+table+" ") {
+				t.Fatalf("layout %d lists %s but its statement does not create it", step.layout, table)
 			}
 		}
 	}
-	if last := layoutAdditions[len(layoutAdditions)-1].layout; last != CurrentLayoutVersion {
-		t.Fatalf("additions end at layout %d, current is %d", last, CurrentLayoutVersion)
+	if last := layoutSteps[len(layoutSteps)-1].layout; last != CurrentLayoutVersion {
+		t.Fatalf("steps end at layout %d, current is %d", last, CurrentLayoutVersion)
 	}
 }
 
