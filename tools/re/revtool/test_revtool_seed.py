@@ -308,7 +308,7 @@ class ApplyTests(unittest.TestCase):
 				sent.append(text)
 		# 63 characters plus the joining newline: 64 of them fill 4096
 		# bytes exactly, the case the old cap sent as a 4095-byte line.
-		commands = [f"af+ CGObjPC_DetachAvatarItem_{n:04d}_padding_padding_pa @ 0x{0x401000 + n * 16:x}"
+		commands = [f"af+ SeedBatchProbeFunction_{n:04d}_paddingpaddingpaddin @ 0x{0x401000 + n * 16:x}"
 					for n in range(2000)]
 		self.assertEqual({len(command) for command in commands}, {63})
 		revtool_seed._batched(Recorder(), commands)
