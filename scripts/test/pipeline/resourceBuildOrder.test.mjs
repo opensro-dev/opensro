@@ -264,7 +264,8 @@ const AFTER_FAMILIES = [
 	"buildHdTexturePacks",
 	"importLaterDungeonMaps",
 	"importLaterWorldMapButtons",
-	"importLaterWorldMapGuide"
+	"importLaterWorldMapGuide",
+	"importLaterOptionalTeleport"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {

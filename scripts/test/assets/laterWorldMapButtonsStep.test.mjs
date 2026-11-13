@@ -89,6 +89,9 @@ test("one import publishes exactly the button set", () => {
 		"/assets/images/Media_extracted/interface/guide/gd_monster_tab_on.png",
 		"/assets/images/Media_extracted/interface/guide/gd_monster_tab_off.png",
 		"/assets/images/Media_extracted/interface/guide/gd_long_index_open.png",
-		"/assets/images/Media_extracted/interface/guide/gd_long_contents_event.png"
+		"/assets/images/Media_extracted/interface/guide/gd_long_contents_event.png",
+		"/assets/images/Media_extracted/interface/worldmap/map/xy_returnicon.png",
+		"/assets/images/Media_extracted/interface/worldmap/map/xy_returnicon_focus.png",
+		"/assets/images/Media_extracted/interface/worldmap/map/xy_returnicon_press.png"
 	] );
 });
