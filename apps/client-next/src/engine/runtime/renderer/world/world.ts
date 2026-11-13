@@ -36,7 +36,7 @@ import {
 	WALK_SKY,
 	WALK_TERRAIN
 } from "./walk-table";
-import { NO_WORLD_LAYERS, sameWorldLayers } from "@/engine/foundation/world/world-layers";
+import { sameWorldLayers } from "@/engine/foundation/world/world-layers";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
@@ -697,7 +697,7 @@ export function createWorldRenderer(
 	let orderLayers: (TerrainLayer | undefined)[] = [], orderDraws: (GeometryDraw | undefined)[] = [];
 	let orderVisible = new Int32Array( 0 ), orderDepth = new Float64Array( 0 );
 	// The seasonal world layers drawn (world-layers.ts), kept across scenes.
-	let eventLayers: ReadonlySet<number> = NO_WORLD_LAYERS;
+	let eventLayers: ReadonlySet<number> = new Set();
 	// The current scene's groups in walk order, with their typed bounds.
 	let walk = compileWalkTable( [], pickBounds );
 	// Instanced selection caches by walk index, so the walk does not look them up.

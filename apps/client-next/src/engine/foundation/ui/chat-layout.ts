@@ -76,11 +76,11 @@ port-only Event tab stays notice-only, as it is for every other
 channel.
 ================
 */
-const EVERY_TAB_CHAT_CHANNELS: ReadonlySet<number> = new Set( [ 2, 3, 0xa, 0xff ] );
+const EVERY_TAB_CHAT_CHANNELS: readonly number[] = [ 2, 3, 0xa, 0xff ] as const;
 
 // The channel each native tab files beside the every-tab types: All
 // (general chat), Party, Guild and Ally.
-const CHAT_TAB_CHANNELS: readonly number[] = [ 1, 4, 5, 11 ];
+const CHAT_TAB_CHANNELS: readonly number[] = [ 1, 4, 5, 11 ] as const;
 
 /*
 ================
@@ -96,7 +96,7 @@ export function chatTabShows( channel: number, tab: number, eventTab: boolean ):
 	if ( channel === STALL_CHAT_CHANNEL ) return false;
 	if ( eventTab && tab === 4 ) return channel === 7;
 	if ( tab === 0 ) return !eventTab || channel !== 7;
-	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.has( channel );
+	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.includes( channel );
 }
 
 /*
