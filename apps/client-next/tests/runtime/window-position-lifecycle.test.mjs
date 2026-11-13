@@ -66,8 +66,10 @@ const LAID_OUT = {
 		store: [ 892, 242 ],
 		storageRoom: [ 892, 242 ],
 		exchange: [ 892, 242 ],
-		worldMap: [ 314, 148 ],
-		cosWindow: [ 314, 148 ],
+		// The M window is the v1.188 650 x 422 (map-chrome.ts), centred
+		// in 1280 x 720 at (315, 149); the COS window shares its default.
+		worldMap: [ 315, 149 ],
+		cosWindow: [ 315, 149 ],
 		gameGuide: [ 100, 110 ],
 		alchemyBox: [ 100, 110 ],
 		autoPotion: [ 100, 110 ],
@@ -125,8 +127,9 @@ test("a fresh viewport mismatch clears UI-owned origins and ignores legacy quick
 	assert.equal( saved[1].width, 1024 );
 	assert.equal( saved[1].height, 768 );
 	assert.deepEqual( saved[1].windows.mainPopup, [ 636, 290 ] );
-	assert.deepEqual( saved[1].windows.worldMap, [ 186, 172 ] );
-	assert.deepEqual( saved[1].windows.extendedQuickslot, [ 186, 172 ], "old quickslot origin was not restored" );
+	assert.deepEqual( saved[1].windows.worldMap, [ 187, 173 ] );
+	// The 650 x 422 map centred in 1024 x 768; the legacy [900, 500] is ignored.
+	assert.deepEqual( saved[1].windows.extendedQuickslot, [ 187, 173 ], "old quickslot origin was not restored" );
 });
 
 test("UI disposal before world entry leaves the stored record untouched", () => {
@@ -158,7 +161,8 @@ test("mismatched placement saves authored eager origins before layout and leaves
 		f.dispose();
 		assert.equal( saved.length, 2, "the initial snapshot did not retire this session" );
 		assert.deepEqual( saved[1].windows.mainPopup, [ 1212, 422 ] );
-		assert.deepEqual( saved[1].windows.worldMap, [ 474, 238 ] );
+		// The 650 x 422 map centred in 1600 x 900.
+		assert.deepEqual( saved[1].windows.worldMap, [ 475, 239 ] );
 	} finally {
 		f.dispose();
 	}
@@ -180,7 +184,9 @@ test("resizing the map saves its displayed clamped origin rather than its old dr
 		const drag = semantics?.controls.find( control => control.id === "map-drag" );
 		assert.ok( drag, "the resized map is visibly admitted" );
 		const origin = [ drag.rect[0] - 20, drag.rect[1] - 4 ];
-		assert.deepEqual( origin, [ 148, 176 ] );
+		// Clamped into 800 x 600 by the 650-wide window and its 456-deep
+		// extent (the foot frame reaches 34 below the 422 window).
+		assert.deepEqual( origin, [ 150, 144 ] );
 		f.dispose();
 		assert.deepEqual( saved.at( -1 ).windows.worldMap, origin );
 	} finally {
