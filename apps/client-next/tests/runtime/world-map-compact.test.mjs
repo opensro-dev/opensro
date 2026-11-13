@@ -34,6 +34,9 @@ panel
 The render panel of a window box.
 ================
 */
+/**
+ * @param {number[]} box
+ */
 function panel( box ) {
 	return [ box[0] + PANEL[0], box[1] + PANEL[1], box[2] - PANEL[2], box[3] - PANEL[3] ];
 }
@@ -51,7 +54,7 @@ and the fit source.
  * @param {number} w
  * @param {number} h
  * @param {number[]} [bounds]
- * @returns {{ box: number[], auto: number[], source: number[] | undefined, pan: number[] }}
+ * @returns {{ box: number[], pin: number[], ids: string[], source: number[] | undefined, pan: number[] }}
  */
 function present( w, h, bounds ) {
 	const pose = { regionId: 97 * 256 + 160, x: 960, y: 0, z: 960, angle: 0 };
