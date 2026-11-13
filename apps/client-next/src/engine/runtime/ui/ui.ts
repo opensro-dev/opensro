@@ -11833,9 +11833,6 @@ export function createUi( ports: UiPorts ) {
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			worldShown = worldVisible;
-			if ( worldVisible && game && game.arenaChest === undefined ) {
-				sendGameplay( { kind: "arena-decision", operation: 0, id: "" } );
-			}
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
