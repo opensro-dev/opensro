@@ -297,11 +297,12 @@ export function createMapToolsHud( options: {
 	): number {
 		const text = input.text, my = input.window[1];
 		// The level filter toggle: the toolkit checkbutton, as the
-		// hunting toggle beside it draws. The Entire-map checkbox
-		// (input.levelCheckbox, #3258) draws this same switch at the
-		// window's foot instead, so the strip stands down there.
+		// hunting toggle beside it draws. The page foot draws this same
+		// switch on a dungeon page always, and on the world while the
+		// Entire-map checkbox stands (input.levelCheckbox, #3258), so the
+		// strip stands down there: one switch, one control identity.
 		paths.push( CHECK_ON, CHECK_OFF );
-		if ( !input.levelCheckbox ) {
+		if ( !input.levelCheckbox && !input.cave ) {
 			quads.push( {
 				texture: levelFilter ? CHECK_ON : CHECK_OFF,
 				rect: [ stripX, my + 10, 16, 16 ],
