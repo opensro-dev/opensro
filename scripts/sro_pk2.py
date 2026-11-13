@@ -18,6 +18,7 @@ Requires pycryptodome (scripts/requirements.txt).
 ===========================================================================
 """
 import hashlib
+import mmap
 import struct
 
 from Crypto.Cipher import Blowfish
@@ -118,6 +119,20 @@ def read_directory(data, blocks=None):
 
 	walk(ROOT_BLOCK, "")
 	return files
+
+
+def map_archive(path):
+	"""
+	A read-only memory map of the archive at path, for read_directory and
+	payload. The later client's Media.pk2 is 698 MB; read_bytes() held all of
+	it in each importer's private memory, so four importers in a build cost
+	about 0.8 GB each. A map pages in only the directory blocks and payloads
+	actually read, and the OS can drop those pages again under pressure. The
+	file handle closes at once: the map keeps its own reference to the file
+	and lives until it is garbage collected or the process exits.
+	"""
+	with open(path, "rb") as handle:
+		return mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
 
 
 def payload(data, entry):

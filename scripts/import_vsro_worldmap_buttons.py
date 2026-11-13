@@ -81,7 +81,7 @@ def main():
 	if not args.vsro_root:
 		raise SystemExit("Pass --vsro-root or set SRO_VSRO_ROOT to the pinned VSRO client folder.")
 	verify_vsro_archive(args.vsro_root, "Media")
-	data = (Path(args.vsro_root) / "Media.pk2").read_bytes()
+	data = sro_pk2.map_archive(Path(args.vsro_root) / "Media.pk2")
 	directory = sro_pk2.read_directory(data)
 	entries = {
 		entry_name(entry).lower().replace("\\", "/"): entry

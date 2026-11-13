@@ -33,7 +33,7 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 */
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { cpus } from "node:os";
+import { buildJobs } from "../shared/buildParallelism.mjs";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -81,7 +81,7 @@ options
 */
 function options( argv ) {
 	const out = {
-		jobs: Math.max( 1, cpus().length - 1 ),
+		jobs: buildJobs(),
 		only: "/assets/",
 		limit: Infinity,
 		out: null,
@@ -278,7 +278,7 @@ read the originals.
 */
 export async function buildTextureVariants( flags = {} ) {
 	flags = {
-		jobs: Math.max( 1, cpus().length - 1 ),
+		jobs: buildJobs(),
 		only: "/assets/",
 		limit: Infinity,
 		out: null,
