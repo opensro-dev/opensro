@@ -545,7 +545,8 @@ guideOverlay
 The picked monster on the world page (sub_e75d50): every hunting-ground
 tile, a white mask the importer cut from the page's colour-keyed tile,
 tinted half-alpha yellow; then wmap_monster_icon at its point.
-Returns the quads and the icon's rect (the row's hover names it).
+Returns the quads, the icon's rect (the row's hover names it) and the
+images to demand: the caller draws a quad only once its image is in.
 ================
 */
 export function guideOverlay(
@@ -553,10 +554,11 @@ export function guideOverlay(
 	index: number,
 	frame: GuideFrame,
 	clip: UiRect
-): { quads: UiQuad[]; icon: UiRect | null; } {
+): { quads: UiQuad[]; icon: UiRect | null; paths: string[]; } {
 	const quads: UiQuad[] = [];
+	const paths = () => quads.map( quad => quad.texture );
 	const monster = catalog.monsters[index], page = catalog.pages[FIELD_PAGE];
-	if ( !monster || monster.main || monster.page !== FIELD_PAGE || !page ) return { quads, icon: null };
+	if ( !monster || monster.main || monster.page !== FIELD_PAGE || !page ) return { quads, icon: null, paths: [] };
 	const sx = frame.width / (frame.right - frame.left), sy = frame.height / (frame.top - frame.bottom);
 	const screen = ( x: number, z: number ) => [ frame.ox + (x - frame.left) * sx, frame.oy + (frame.top - z) * sy ];
 	const color = tint( PICKED_TINT );
@@ -564,15 +566,19 @@ export function guideOverlay(
 		const at = tileWorld( page, tx, ty );
 		const [x, y] = screen( at.x, at.z );
 		const w = page.tile[0] * at.scale * sx, h = page.tile[1] * at.scale * sy;
+		// Edges snap to whole pixels from the unrounded corners, so
+		// neighbouring tiles share an edge: a fractional rect overlaps
+		// or gaps its neighbour and the half-alpha tint shows the seam.
+		const left = Math.round( x! ), top = Math.round( y! );
 		quads.push( {
 			texture: catalog.imageRoot + path + ".png",
-			rect: [ x!, y!, w, h ],
+			rect: [ left, top, Math.round( x! + w ) - left, Math.round( y! + h ) - top ],
 			uv: [ 0, 0, 1, 1 ],
 			color,
 			clip
 		} );
 	}
-	if ( monster.sector[0] === PAGE_POINT ) return { quads, icon: null };
+	if ( monster.sector[0] === PAGE_POINT ) return { quads, icon: null, paths: paths() };
 	const pose = pointPose( page, monster.sector, monster.point );
 	const [x, y] = screen(
 		(pose.regionId & 255) * REGION_SIZE + pose.x / POSE_UNITS,
@@ -589,5 +595,5 @@ export function guideOverlay(
 		color: [ 1, 1, 1, 1 ],
 		clip
 	} );
-	return { quads, icon };
+	return { quads, icon, paths: paths() };
 }

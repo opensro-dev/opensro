@@ -254,6 +254,7 @@ test("the picked hunting ground: its tiles tinted 0x80e9c624, the icon's corner 
 	assert.deepEqual( first.color, [ 0xe9 / 255, 0xc6 / 255, 0x24 / 255, 0x80 / 255 ] );
 	assert.equal( icon.texture, "/assets/images/Media_extracted/interface/worldmap/wmap_monster_icon.png" );
 	assert.deepEqual( ground.icon, [ 1012, 547, 32, 32 ] );
+	assert.deepEqual( ground.paths, ground.quads.map( q => q.texture ), "every mask and the icon are demanded" );
 	assert.deepEqual( guideOverlay( catalog, 0, frame, clip ).quads, [], "a main row draws nothing" );
 	assert.deepEqual( guideOverlay( catalog, 7, frame, clip ).quads, [], "a dungeon page is not the world's" );
 });

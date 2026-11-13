@@ -744,7 +744,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 							overflow: "clip"
 						} )
 					),
-					...(guideGround?.quads ?? []),
+					// A mask drawn before its image loads would tint the
+					// whole tile square: each waits for its own texture.
+					...(guideGround?.quads ?? []).filter( q => resources.has( q.texture ) ),
 					...mapProjection.overlay,
 					...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 						const width = text.run( entry.text, 0, entry.font ).width,
@@ -821,6 +823,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			if ( mapOpen ) {
 				paths.push(
 					...(mapGuide?.paths ?? []),
+					...(guideGround?.paths ?? []),
 					...mapImages.map( q => q.texture ).filter( Boolean )
 				);
 			} else if ( cavePage && input.caveMaps ) {
