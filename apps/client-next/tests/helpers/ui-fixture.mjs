@@ -71,7 +71,8 @@ export function uiFixture(
 	extensions = {},
 	// published is path -> bytes served in place of the generated tree's file,
 	// for a catalog the shared tree has not published yet, or path ->
-	// { error } for a load that fails transiently (a stalled download).
+	// { error } for a load that fails transiently (a stalled download), or
+	// path -> { absent: true } for a file the published manifest lacks.
 	published = {}
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
@@ -112,6 +113,10 @@ export function uiFixture(
 					pending.set( id, { path, error: published[path].error } );
 					return id;
 				}
+				if ( published[path]?.absent ) {
+					pending.set( id, { path, absent: true } );
+					return id;
+				}
 				try {
 					const bytes = published[path] ?? readServedBytes( path );
 					// A native .texture is container bytes the UI decodes itself (#414).
@@ -133,7 +138,10 @@ export function uiFixture(
 						} );
 					}
 				} catch {
+					// A file the tree lacks answers as the asset owner does for
+					// a path the manifest lacks: absent, never pending (#3407).
 					if ( path.endsWith( ".json" ) ) pending.set( id, { absent: true } );
+					else if ( path.endsWith( ".png" ) ) pending.set( id, { path, absent: true } );
 				}
 				return id;
 			},

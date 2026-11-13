@@ -18,7 +18,8 @@
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": [
 				"has",
-				"size"
+				"size",
+				"absent"
 			]
 		},
 		{

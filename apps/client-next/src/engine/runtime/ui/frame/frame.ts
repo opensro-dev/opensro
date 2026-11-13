@@ -206,7 +206,10 @@ export function endWindow(
 	const admittedWindow = admittedWindows.get( owner );
 	// Everything still loading is reported (tests wait on it before a raster);
 	// only the window's own art holds its admission.
-	const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
+	// An absent image is not loading: it draws nothing, as a native static
+	// with no texture does, and holding the window for it kept the M window
+	// shut forever on a build without its chrome art (#3407).
+	const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) && !resources.absent?.( path ) );
 	windowMissing.push( ...unloaded );
 	const gaps = unloaded.filter( path => !contentImages.has( path ) );
 	const key = phase + ":" + w + ":" + h;
