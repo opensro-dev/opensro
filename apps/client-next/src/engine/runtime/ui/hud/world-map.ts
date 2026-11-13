@@ -914,6 +914,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					clip: mapClip,
 					full,
 					catalogue: huntingGuide.catalogue(),
+					guidePublished: guideAvailable,
 					characterLevel: game?.progression?.level,
 					zones: hudData.zones,
 					strings: hudData.strings,

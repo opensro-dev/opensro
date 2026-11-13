@@ -305,10 +305,23 @@ export function mapFoot(
 	image( paint, FOOT_FRAME, footRect );
 	if ( foot.note ) {
 		paint.quads.push(
-			...text.quads( foot.note, [ note[0], note[1], note[2] + extra, note[3] ], paint.full, WHITE, {
-				hAlign: 2,
-				vAlign: 1
-			} )
+			// The note never leaves its box: the small window's foot is
+			// narrower than the text, which then loses its left end.
+			...text.quads(
+				foot.note,
+				[ note[0], note[1], note[2] + extra, note[3] ],
+				[
+					note[0],
+					footRect[1],
+					Math.max( 0, note[2] + extra ),
+					footRect[3]
+				],
+				WHITE,
+				{
+					hAlign: 2,
+					vAlign: 1
+				}
+			)
 		);
 	}
 	paint.paths.push( CHECK_ON, CHECK_OFF );

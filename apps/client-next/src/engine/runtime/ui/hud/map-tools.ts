@@ -106,6 +106,9 @@ interface MapToolsPaint {
 	clip: UiRect;
 	full: UiRect;
 	catalogue: HuntingCatalogue | undefined;
+	// Whether the shard publishes the hunting catalogue at all
+	// (SRO_HUNTING_GUIDE): without it the guide waits on nothing.
+	guidePublished: boolean;
 	characterLevel: number | undefined;
 	zones: Readonly<Record<string, string>> | undefined;
 	// The client's object and UI text (textdataname, textuisystem).
@@ -301,7 +304,13 @@ export function createMapToolsHud( options: {
 				full: input.full,
 				rows,
 				scroll: drawerPage,
-				empty: empty ?? (input.catalogue ? "No monsters" : "Loading..."),
+				empty: empty ?? (
+					input.catalogue ?
+						"No monsters" :
+						input.guidePublished ?
+						"Loading..." :
+						"No monster guide on this server"
+				),
 				text: input.text,
 				size: input.size
 			},

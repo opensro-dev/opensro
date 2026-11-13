@@ -260,6 +260,7 @@ function paint( hud, over = {} ) {
 		clip: [ 108, 140, 784, 500 ],
 		full: [ 0, 0, 1600, 900 ],
 		catalogue: catalogue(),
+		guidePublished: true,
 		characterLevel: 20,
 		zones: { "50": "Fixture Field" },
 		strings: { SN_ZONE_23001: "Fixture Tomb", SN_ZONE_23002: "Fixture Cave" },
