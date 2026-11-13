@@ -2267,6 +2267,12 @@ export function createCharacterEffects(
 						const u = age / 1.2, count = (3 + burst.book) * (recovery ? 2 : 1);
 						for ( let feather = 0; feather < count; feather++ ) {
 							const mote = recovery && feather % 2 === 1;
+							const model = burst.cue === 1 ?
+								"/assets/effects/crow-heal-wisp" :
+								burst.cue === 4 ?
+								"/assets/effects/crow-mana-wisp" :
+								"/assets/effects/crow-feather";
+							if ( !ready( model ) ) continue;
 							if ( recovery ) {
 								const phase = (u + feather * .61803398875) % 1;
 								const mana = burst.cue === 4, angle = feather * 2.39996323 + phase * (mana ? 2.4 : .8);

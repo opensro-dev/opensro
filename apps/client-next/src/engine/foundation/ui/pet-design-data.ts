@@ -203,7 +203,38 @@ export const PET_DESIGN = {
 			"magicalPercent": 30,
 			"defensePercent": 65,
 			"magicDefensePercent": 65,
-			"magicPrimary": false
+			"magicPrimary": false,
+			"hpPercent": 100,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 16
+				},
+				{
+					"level": 10,
+					"hp": 165
+				},
+				{
+					"level": 20,
+					"hp": 235
+				},
+				{
+					"level": 40,
+					"hp": 350
+				},
+				{
+					"level": 60,
+					"hp": 900
+				},
+				{
+					"level": 80,
+					"hp": 4500
+				},
+				{
+					"level": 90,
+					"hp": 8100
+				}
+			]
 		}
 	],
 	"skills": [
@@ -7592,7 +7623,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_twohanda_cry_a.ddj",
 			"family": "Hunting Howl",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 64,
@@ -7670,7 +7701,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\china\\fire_gigongta_b.ddj",
 			"family": "Savage Rend",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 67,
@@ -7748,7 +7779,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_onehanda_critical_a.ddj",
 			"family": "Execute",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 70,
@@ -7826,7 +7857,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warlock_dota_blooding_a.ddj",
 			"family": "Bloodscent",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 73,
@@ -7904,7 +7935,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_shieldp_defense_a.ddj",
 			"family": "Blood Hunt",
-			"tierEnd": 120
+			"tierEnd": 90
 		}
 	]
 } as const;

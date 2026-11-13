@@ -53,7 +53,7 @@ strict HP threshold crossings, fatal and absorbed hits, independent recipients,
 persisted recovery deadlines, flag-off behavior and updated HUD/descriptions.
 Generated client design data is checked against its server source.
 
-Raven's saved recipient cooldown requires a versioned offline store upgrade;
+Raven's saved recipient cooldown requires the schema 43 to 44 offline store upgrade, even with pets disabled;
 back up databases and stop writers before upgrading. Do not lower schema
 metadata or bypass version readers. Live gameplay evidence predates the final
 main integration; final source and migration checks are reported on the PR.
@@ -63,3 +63,7 @@ the original server state was restored, and existing character progression,
 inventory, pet training and equipment were checked for preservation. Database
 copies, generated assets, recordings and machine-specific operator notes are
 not distributed with this change.
+
+After integrating main, all 88 focused client tests and the client quick gate passed.
+The server changed-scope checks passed except local race execution, which requires
+a CGO compiler unavailable on this host; GitHub CI must confirm the race result.

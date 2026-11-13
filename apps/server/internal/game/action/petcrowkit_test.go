@@ -63,8 +63,11 @@ func TestRavenRefugeBooks(t *testing.T) {
 				}
 			}
 			rt.AttackPetExpansion = false
-			if rt.planRavenRefuge(testDivision, c, clock.NowMs()).book != 0 {
-				t.Fatal("flag off changed native damage")
+			off := rt.planRavenRefuge(testDivision, c, clock.NowMs())
+			deadline := c.RavenRefugeReadyAtMs
+			if off.book != 0 || ravenRefugeDamage(off, 1, maximum, 100) != 100 ||
+				ravenRefugeRecovery(off, c, before, after, maximum, clock.NowMs()) != 0 || c.RavenRefugeReadyAtMs != deadline {
+				t.Fatal("flag off changed native damage, healing or cooldown")
 			}
 		})
 	}
