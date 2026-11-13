@@ -203,6 +203,13 @@ export async function buildTitleSectorObjectResources( options ) {
 			return null;
 		}
 		const blockFormat = await blockFormatFor( source.sourcePath );
+		// The .ddj alone is not enough: a non-block lightmap publishes its
+		// converted PNG, and a lightmap naming a PNG the build never writes
+		// fails the claim audit as a material texture would.
+		if ( !(await sourceThereFor( source.sourcePath, blockFormat )) ) {
+			lightmapsMissing.push( source.sourcePath );
+			return null;
+		}
 		texturePathSet.add( source.sourcePath );
 		return {
 			sourcePath: source.sourcePath,
