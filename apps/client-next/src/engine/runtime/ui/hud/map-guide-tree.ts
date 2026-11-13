@@ -59,14 +59,13 @@ const BADGE_TEXT = "Inst.";
 
 // map1's gold group names, and sub_e6cb90's level colours: white
 // within three levels, 0xffef8282 four to six above, 0xffff0000 more,
-// 0xff80c0e5 below. Grey is the port's shut row.
+// 0xff80c0e5 below.
 const COLORS = {
 	group: [ 239 / 255, 218 / 255, 164 / 255, 1 ],
 	leaf: [ 1, 1, 1, 1 ],
 	high: [ 239 / 255, 130 / 255, 130 / 255, 1 ],
 	far: [ 1, 0, 0, 1 ],
-	low: [ 128 / 255, 192 / 255, 229 / 255, 1 ],
-	locked: [ .5, .5, .5, 1 ]
+	low: [ 128 / 255, 192 / 255, 229 / 255, 1 ]
 } as const;
 const BADGE_COLOR = [ .96, .83, .55, 1 ] as const;
 const WHITE = [ 1, 1, 1, 1 ] as const;
@@ -86,9 +85,6 @@ export interface GuideTreeRow {
 	open?: boolean;
 	lamp?: boolean;
 	color: keyof typeof COLORS;
-	// A row that takes no click; its tip says why.
-	disabled?: boolean;
-	helpText?: string;
 	badge?: boolean;
 }
 
@@ -109,6 +105,7 @@ export interface GuideTree {
 	hover: string | null;
 	pressed: string | null;
 	text: {
+		run( value: string, style: number, font: number ): { width: number; };
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style?: GlyphStyle ): UiQuad[];
 	};
 	size( path: string ): readonly [number, number] | undefined;
@@ -151,30 +148,30 @@ export function paintGuideTree(
 		} else if ( row.lamp ) {
 			image( LAMP, [ rect[0] + LAMP_RECT[0], rect[1] + LAMP_RECT[1], LAMP_RECT[2], LAMP_RECT[3] ] );
 		}
-		const badge = row.badge ? BADGE_WIDTH : 0;
-		const label: UiRect = [ rect[0] + LABEL_LEFT, rect[1], ROW_WIDTH - LABEL_LEFT - badge, ROW_HEIGHT ];
+		// The label keeps the whole bar right of the toggle: the badge
+		// takes its room only while the name still fits beside it, and a
+		// name wider than the bar ends in an ellipsis with the whole name
+		// on hover, never cut through a letter.
+		const room = ROW_WIDTH - LABEL_LEFT, width = tree.text.run( row.label, 0, 0 ).width;
+		const badge = row.badge && width <= room - BADGE_WIDTH ? BADGE_WIDTH : 0;
+		const label: UiRect = [ rect[0] + LABEL_LEFT, rect[1], room - badge, ROW_HEIGHT ];
+		const fits = width <= label[2];
 		out.quads.push(
 			...tree.text.quads( row.label, label, tree.full, COLORS[row.color], {
 				hAlign: 1,
 				vAlign: 1,
-				overflow: "clip"
+				overflow: fits ? "clip" : "ellipsis"
 			} )
 		);
 		if ( badge ) {
 			const box: UiRect = [ rect[0] + ROW_WIDTH - badge, rect[1], badge, ROW_HEIGHT ];
 			out.quads.push( ...tree.text.quads( BADGE_TEXT, box, tree.full, BADGE_COLOR, { hAlign: 1, vAlign: 1 } ) );
 		}
-		if ( row.disabled ) {
-			// A shut row still says why on hover, through a surface
-			// that takes no action.
-			out.controls.push( { id: row.id, kind: "region", label: row.label, helpText: row.helpText, rect } );
-			return;
-		}
 		out.controls.push( {
 			id: row.id,
 			kind: "button",
 			label: row.label,
-			helpText: row.helpText,
+			helpText: fits ? undefined : row.label,
 			rect,
 			selected: row.group ? row.open === true : row.lamp === true
 		} );

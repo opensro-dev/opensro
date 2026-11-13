@@ -53,9 +53,70 @@ test("confirmed target becomes a terrain-snapped GM warp line", () => {
 	assert.equal( teleport.command( target ), "/warp 24744 980.0 -10000 1100.0" );
 	teleport.clear();
 	assert.equal( teleport.pending(), null );
-	assert.equal(
-		teleport.command( { regionId: 24744, x: 1919.96, z: 0.04 } ),
-		"/warp 24744 1919.9 -10000 0.0",
+	const edge = { regionId: 24744, x: 1919.96, y: 0, z: 1100, angle: 0 };
+	teleport.view( 0, clip, [ 0, 0 ], edge );
+	const at = worldMapPresentation( edge, 0, clip, [ 0, 0 ], edge ).markers.at( -1 );
+	assert.ok( at );
+	const picked = teleport.pick( at.rect[0] + at.rect[2] / 2, at.rect[1] + at.rect[3] / 2 );
+	assert.ok( picked );
+	assert.match(
+		teleport.command( picked ),
+		/^\/warp 24744 1919\.9 -10000 /,
 		"a region-edge pick stays inside its region"
 	);
+});
+
+const { caveMapView } = await import( "../../src/engine/foundation/ui/cave-map.ts" );
+
+/*
+================
+cave page fixture
+
+One tomb floor page: 4 x 3 tiles of 128 pixels from tile column 120,
+row 130; a tile is one 1920-unit region of the floor's coordinates.
+================
+*/
+const CAVE_PAGE = {
+	regionId: 0x8007,
+	floorIndex: 0,
+	layer: 0,
+	floorLabel: "B1",
+	columns: 4,
+	rows: 3,
+	width: 512,
+	height: 384,
+	left: 120,
+	top: 130,
+	image: "jinsi1",
+	caption: "Tomb B1",
+	labels: [],
+	signs: []
+};
+const CAVE_CATALOG = { imageRoot: "/cave/", signIcon: "sign", monsterLevelNote: "", maps: [ CAVE_PAGE ] };
+
+test("a double-click on a dungeon page warps to that floor, not the last world page", () => {
+	const teleport = createMapTeleport(), field = { regionId: 24744, x: 980, y: 0, z: 1100, angle: 0 };
+	teleport.view( 0, clip, [ 0, 0 ], field );
+	const pose = { regionId: 0x8007, x: -10560, y: 0, z: 2880, angle: 0 };
+	const view = caveMapView( {
+		pose,
+		center: pose,
+		page: CAVE_PAGE,
+		catalog: CAVE_CATALOG,
+		clip,
+		pan: [ 0, 0 ],
+		local: true
+	} );
+	teleport.viewCave( view.point );
+	const marker = view.quads.at( -1 );
+	assert.ok( marker );
+	const [x, y, width, height] = marker.rect;
+	const target = teleport.pick( x + width / 2, y + height / 2 );
+	assert.ok( target );
+	assert.equal( target.regionId, 0x8007 );
+	assert.ok( Math.abs( target.x - pose.x ) < 1e-6 && Math.abs( target.z - pose.z ) < 1e-6 );
+	assert.equal( teleport.command( target ), "/warp 32775 -10560.0 -10000 2880.0", "a floor point is not clamped" );
+	assert.equal( teleport.pick( clip[0] - 5, clip[1] - 5 ), null, "off the page" );
+	teleport.hide();
+	assert.equal( teleport.pick( x + width / 2, y + height / 2 ), null, "no page painted, no pick" );
 });

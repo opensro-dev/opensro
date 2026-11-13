@@ -141,6 +141,8 @@ interface MapPaint {
 	caveMaps?: CaveMapCatalog | undefined;
 	mapTeleport: {
 		view( page: number, clip: UiRect, pan: readonly [number, number], center: Pose, layout?: WorldMapLayout ): void;
+		viewCave( pick: ( x: number, y: number ) => { regionId: number; x: number; z: number; } | null ): void;
+		hide(): void;
 	};
 	reverseScrollHud: { mapping(): boolean; };
 	text: MapText;
@@ -603,7 +605,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// The teleport's inverse pick must track the painted projection: it
 			// is only valid while the map is open and a pose exists, so record the
 			// frame under the same condition that builds the projection.
-			if ( mapOpen && pose && !caveMap ) {
+			if ( mapOpen && pose && caveMap ) {
+				mapTeleport.viewCave( caveMap.point );
+			} else if ( mapOpen && pose ) {
 				mapTeleport.view(
 					mapPage,
 					mapClip,
@@ -611,6 +615,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter ?? mapViewPose( pose ),
 					mapLayout
 				);
+			} else {
+				mapTeleport.hide();
 			}
 			const mapProjection = pose && mapOpen && !caveMap ?
 				worldMapPresentation(
@@ -927,7 +933,6 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					guidePublished: guideAvailable,
 					characterLevel: game?.progression?.level,
 					race: guideRace( next.entities.find( e => e.gid === game?.localGid )?.countryByte9c ),
-					levelCap: game?.levelCap ?? NATIVE_LEVEL_CAP,
 					hover,
 					zones: hudData.zones,
 					strings: hudData.strings,

@@ -20,7 +20,6 @@ const {
 	guideAreaTarget,
 	guideGroups,
 	guideLevelColor,
-	guideLocked,
 	guideMonsterRows,
 	guideMonsterTarget,
 	guideOverlay,
@@ -120,7 +119,7 @@ function fixture() {
 	};
 }
 
-const VIEW = { race: 0, levelCap: 90, playerLevel: 10, filterCap: undefined, open: null };
+const VIEW = { race: 0, playerLevel: 10, filterCap: undefined, open: null };
 
 test("the catalogue is refused whole when its format or a row is wrong", () => {
 	assert.throws( () => worldMapGuideCatalog( { ...fixture(), format: "other" } ), /format/ );
@@ -162,20 +161,12 @@ test("sub rows wear sub_e6cb90's colour for the level gap", () => {
 	assert.equal( guideLevelColor( 19, undefined ), "leaf" );
 });
 
-test("the cap gate shuts rows above the server's cap and names the cap that opens them", () => {
-	assert.equal( guideLocked( 91, 90 ), false, "the tomb opened with cap 90" );
-	assert.equal( guideLocked( 101, 90 ), true );
-	assert.equal( guideLocked( 101, 110 ), false );
+test("every group opens whatever its content tier: no row is shut", () => {
 	const catalog = worldMapGuideCatalog( fixture() );
 	const egypt = catalog.monsters.findIndex( row => row.name === "Egypt" );
-	let rows = guideMonsterRows( catalog, { ...VIEW, open: egypt } );
-	const shut = rows.find( row => row.index === egypt );
-	assert.ok( shut );
-	assert.deepEqual( [ shut.locked, shut.opensAt, shut.color ], [ true, 100, "locked" ] );
-	assert.equal( rows.some( row => row.label.endsWith( "Scarab" ) ), false, "a shut group does not open" );
-	rows = guideMonsterRows( catalog, { ...VIEW, levelCap: 110, open: egypt } );
+	const rows = guideMonsterRows( catalog, { ...VIEW, open: egypt } );
 	assert.deepEqual( rows.map( row => row.label ), [ "China", "Europe", "Egypt", "Lv100 Scarab" ] );
-	assert.equal( rows[3].color, "far" );
+	assert.deepEqual( rows.map( row => row.color ), [ "group", "group", "group", "far" ] );
 });
 
 test("the open group lists its monsters as Lv<level> <name>, the filter hiding those above it", () => {
@@ -186,7 +177,7 @@ test("the open group lists its monsters as Lv<level> <name>, the filter hiding t
 		[ "Lv1 Mangyang", "low" ],
 		[ "Lv30 Weasel", "far" ],
 		[ "Europe", "group" ],
-		[ "Egypt", "locked" ]
+		[ "Egypt", "group" ]
 	] );
 	assert.deepEqual(
 		guideMonsterRows( catalog, { ...VIEW, open: 0, filterCap: 16 } ).map( row => row.label ),
@@ -194,17 +185,17 @@ test("the open group lists its monsters as Lv<level> <name>, the filter hiding t
 	);
 });
 
-test("the Field tree badges instance places and shuts those above the cap", () => {
+test("the Field tree badges instance places and keeps every place open", () => {
 	const catalog = worldMapGuideCatalog( fixture() );
 	const dungeon = catalog.areas.findIndex( row => row.name === "Dungeon" );
 	const rows = guideAreaRows( catalog, { ...VIEW, open: dungeon } );
-	// Field China (1101) hangs under Town (1000), which stands shut.
-	assert.deepEqual( rows.map( row => [ row.label, !!row.locked, !!row.badge ] ), [
-		[ "Town", false, false ],
-		[ "Dungeon", false, false ],
-		[ "Tomb B3", false, false ],
-		[ "Temple", true, false ],
-		[ "Hall", true, true ]
+	// Field China (1101) hangs under Town (1000), which stays closed.
+	assert.deepEqual( rows.map( row => [ row.label, row.color, !!row.badge ] ), [
+		[ "Town", "group", false ],
+		[ "Dungeon", "group", false ],
+		[ "Tomb B3", "leaf", false ],
+		[ "Temple", "leaf", false ],
+		[ "Hall", "leaf", true ]
 	] );
 });
 
@@ -302,7 +293,6 @@ function paint( hud, over = {} ) {
 		guidePublished: false,
 		characterLevel: 10,
 		race: 0,
-		levelCap: 90,
 		hover: null,
 		zones: undefined,
 		strings: undefined,
@@ -331,8 +321,7 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 		).map( row => row.id ),
 		[ "map-guide-main:0", "map-guide-main:1", "map-guide-main:5" ]
 	);
-	const egypt = control( view, "map-guide-main:5" );
-	assert.deepEqual( [ egypt.kind, egypt.helpText ], [ "region", "Opens at level cap 100" ] );
+	assert.equal( control( view, "map-guide-main:5" ).kind, "button", "Egypt opens like any group" );
 	hud.activate( "map-guide-main:0", undefined, 10 );
 	view = paint( hud );
 	assert.equal( control( view, "map-guide-main:0" ).selected, true );
@@ -357,7 +346,7 @@ test("the Field tab fills from the guide and a dungeon row opens its floor's vie
 	hud.activate( "map-guide-main:2", undefined, 10 );
 	const view = paint( hud );
 	assert.equal( control( view, "map-guide-area:3" ).label, "Tomb B3" );
-	assert.equal( control( view, "map-guide-area:4" ).kind, "region", "the temple is shut at cap 90" );
+	assert.equal( control( view, "map-guide-area:4" ).kind, "button", "the temple takes a click" );
 	assert.equal( hud.activate( "map-guide-area:3", undefined, 10 ), null );
 	assert.equal( hud.viewingDungeon(), true );
 	hud.dispose();
@@ -438,4 +427,26 @@ test("reverse return points are xy_returnicon buttons, the old sign without that
 	assert.ok( bare.images[0].texture.endsWith( "wmap_sign_huntingpoint.png" ) );
 	assert.deepEqual( bare.hits[0].rect, [ 100, 200, 16, 16 ] );
 	assert.ok( bare.paths.some( path => path.endsWith( "xy_returnicon.png" ) ), "the art is still asked for" );
+});
+
+test("a long row name ends in an ellipsis with the whole name on hover, and gives up the badge first", () => {
+	const hud = loadedTools();
+	hud.activate( "map-guide-tab:area", undefined, 10 );
+	hud.activate( "map-guide-main:2", undefined, 10 );
+	const drawn = [];
+	const wide = {
+		...TEXT,
+		run: value => ({ width: value === "Hall" ? 200 : 40 }),
+		quads: ( value, rect, clip, color, style ) => (drawn.push( { value, rect, style } ), [])
+	};
+	const view = paint( hud, { text: wide } );
+	const hall = drawn.find( row => row.value === "Hall" );
+	assert.ok( hall );
+	assert.equal( hall.rect[2], 220, "the badge's room goes to the name" );
+	assert.equal( hall.style.overflow, "clip", "it fits without the badge" );
+	assert.equal( drawn.some( row => row.value === "Inst." ), false );
+	assert.equal( control( view, "map-guide-area:5" ).helpText, undefined );
+	const longer = paint( hud, { text: { ...wide, run: value => ({ width: value === "Hall" ? 300 : 40 }) } } );
+	assert.equal( control( longer, "map-guide-area:5" ).helpText, "Hall", "the whole name on hover" );
+	hud.dispose();
 });

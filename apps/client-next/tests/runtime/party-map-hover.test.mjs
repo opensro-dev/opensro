@@ -57,7 +57,7 @@ function fixture() {
 		hudData: { map: {} },
 		trackedQuest: 0,
 		minimapResources: { positions: () => undefined },
-		mapTeleport: { view: () => {} },
+		mapTeleport: { view: () => {}, viewCave: () => {}, hide: () => {} },
 		reverseScrollHud: { mapping: () => false },
 		text: {
 			path: () => null,

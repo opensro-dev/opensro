@@ -139,10 +139,8 @@ interface MapToolsPaint {
 	// (SRO_HUNTING_GUIDE): without it the guide waits on nothing.
 	guidePublished: boolean;
 	characterLevel: number | undefined;
-	// The guide trees' order column (worldmap-guide.ts guideRace) and
-	// the server's level cap, which shuts the rows above it.
+	// The guide trees' order column (worldmap-guide.ts guideRace).
 	race: number;
-	levelCap: number;
 	hover: string | null;
 	zones: Readonly<Record<string, string>> | undefined;
 	// The client's object and UI text (textdataname, textuisystem).
@@ -191,8 +189,7 @@ type GuideLoad =
 ================
 treeRow
 
-A guide row as the tree paints it: a shut row is grey, takes no
-click and names the cap that opens it.
+A guide row as the tree paints it.
 ================
 */
 function treeRow( row: GuideRow, prefix: string, open: number | null, picked: number | null ): GuideTreeRow {
@@ -203,8 +200,6 @@ function treeRow( row: GuideRow, prefix: string, open: number | null, picked: nu
 		open: row.main ? row.index === open : undefined,
 		lamp: !row.main && row.index === picked,
 		color: row.color,
-		disabled: row.locked,
-		helpText: row.locked ? "Opens at level cap " + row.opensAt : undefined,
 		badge: row.badge
 	};
 }
@@ -433,7 +428,6 @@ export function createMapToolsHud( options: {
 	function guideView( input: MapToolsPaint ): GuideView {
 		return {
 			race: input.race,
-			levelCap: input.levelCap,
 			playerLevel: input.characterLevel,
 			filterCap: filterCap( input.characterLevel ),
 			open: guideOpen

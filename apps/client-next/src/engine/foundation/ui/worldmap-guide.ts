@@ -17,9 +17,10 @@ and a monster row reads "Lv<level> <name>" coloured by the level gap
 (sub_e6cb90). A picked monster draws its hunting-ground tiles tinted
 0x80e9c624 and wmap_monster_icon at its point (sub_e75d50).
 
-Port-only, not native (the owner's choice, 2026-11-13): the content tier
-column greys out rows above the server's level cap and the instance list
-puts a badge on its area row. The native client never reads either.
+Port-only, not native (the owner's choice, 2026-11-13): the instance
+list puts a badge on its area row; native never reads it. Every row
+stays open whatever the server's level cap (owner, 2026-11-13: "all
+should be enabled, playable"), as the native trees show them.
 
 ===========================================================================
 */
@@ -44,12 +45,6 @@ const PICKED_TINT = 0x80e9c624;
 // sub_e6cb90's sub row colours by L = monster level, P = player level.
 const LEVEL_FAR_ABOVE = 6;
 const LEVEL_ABOVE = 3;
-// The later client's dungeon pages the port has floors for: the page
-// name's stem and the dungeon it is; the trailing number is the floor.
-const DUNGEON_PAGES: readonly (readonly [string, number])[] = [
-	[ "dunhuang", DONWHANG_CAVE_DUNGEON ],
-	[ "jinsi", TOMB_FIRST_DUNGEON ]
-];
 
 export interface GuidePage {
 	readonly origin: readonly [number, number];
@@ -100,17 +95,16 @@ export interface WorldMapGuideCatalog {
 GuideRowColor
 
 A row's text: the gold group, white, the two reds above the player's
-level, the blue below it, and grey for a row the cap keeps shut.
+level and the blue below it.
 ================
 */
-export type GuideRowColor = "group" | "leaf" | "high" | "far" | "low" | "locked";
+export type GuideRowColor = "group" | "leaf" | "high" | "far" | "low";
 
 /*
 ================
 GuideRow
 
 One tree row: index is the row's place in the catalogue's list.
-opensAt is the level cap that opens a locked row.
 ================
 */
 export interface GuideRow {
@@ -118,8 +112,6 @@ export interface GuideRow {
 	readonly main: boolean;
 	readonly label: string;
 	readonly color: GuideRowColor;
-	readonly locked: boolean;
-	readonly opensAt?: number;
 	readonly badge?: boolean;
 }
 
@@ -128,13 +120,11 @@ export interface GuideRow {
 GuideView
 
 What the trees are built for: the player's race (picks the order
-column), the server's level cap, the player's level and the level
-filter's cap (undefined shows every row), and the open main row.
+column), the player's level and the level filter's cap (undefined shows every row), and the open main row.
 ================
 */
 export interface GuideView {
 	readonly race: number;
-	readonly levelCap: number;
 	readonly playerLevel: number | undefined;
 	readonly filterCap: number | undefined;
 	readonly open: number | null;
@@ -287,19 +277,6 @@ export function guideRace( country: number | undefined ): number {
 
 /*
 ================
-guideLocked
-
-Port-only, not native: the tier column is the level cap the content
-opened at, plus one (Egypt 101 with cap 100, the tomb 91 with cap 90).
-A row is shut while its tier stands above the server's cap plus one.
-================
-*/
-export function guideLocked( tier: number, levelCap: number ): boolean {
-	return tier > levelCap + 1;
-}
-
-/*
-================
 guideLevelColor
 
 sub_e6cb90's colour for a monster row: red more than six levels above
@@ -342,10 +319,6 @@ export function guideGroups(
 	return groups;
 }
 
-function lockOf( tier: number, view: GuideView ): { locked: boolean; opensAt?: number; } {
-	return guideLocked( tier, view.levelCap ) ? { locked: true, opensAt: tier - 1 } : { locked: false };
-}
-
 /*
 ================
 guideMonsterRows
@@ -358,25 +331,16 @@ export function guideMonsterRows( catalog: WorldMapGuideCatalog, view: GuideView
 	const out: GuideRow[] = [];
 	for ( const group of guideGroups( catalog.monsters, view.race ) ) {
 		const main = catalog.monsters[group.main]!;
-		const lock = lockOf( main.tier, view );
-		out.push( {
-			index: group.main,
-			main: true,
-			label: main.name,
-			color: lock.locked ? "locked" : "group",
-			...lock
-		} );
-		if ( group.main !== view.open || lock.locked ) continue;
+		out.push( { index: group.main, main: true, label: main.name, color: "group" } );
+		if ( group.main !== view.open ) continue;
 		for ( const index of group.subs ) {
 			const monster = catalog.monsters[index]!;
 			if ( view.filterCap !== undefined && monster.level !== null && monster.level > view.filterCap ) continue;
-			const sub = lockOf( monster.tier, view );
 			out.push( {
 				index,
 				main: false,
 				label: "Lv" + (monster.level ?? "?") + " " + monster.name,
-				color: sub.locked ? "locked" : guideLevelColor( monster.level, view.playerLevel ),
-				...sub
+				color: guideLevelColor( monster.level, view.playerLevel )
 			} );
 		}
 	}
@@ -395,25 +359,16 @@ export function guideAreaRows( catalog: WorldMapGuideCatalog, view: GuideView ):
 	const out: GuideRow[] = [];
 	for ( const group of guideGroups( catalog.areas, view.race ) ) {
 		const main = catalog.areas[group.main]!;
-		const lock = lockOf( main.tier, view );
-		out.push( {
-			index: group.main,
-			main: true,
-			label: main.name,
-			color: lock.locked ? "locked" : "group",
-			...lock
-		} );
-		if ( group.main !== view.open || lock.locked ) continue;
+		out.push( { index: group.main, main: true, label: main.name, color: "group" } );
+		if ( group.main !== view.open ) continue;
 		for ( const index of group.subs ) {
 			const area = catalog.areas[index]!;
-			const sub = lockOf( area.tier, view );
 			out.push( {
 				index,
 				main: false,
 				label: area.name,
-				color: sub.locked ? "locked" : "leaf",
-				badge: area.instances.length > 0,
-				...sub
+				color: "leaf",
+				badge: area.instances.length > 0
 			} );
 		}
 	}
@@ -483,7 +438,11 @@ tomb's third floor. Null for the pages it lacks (temple, jupiter...).
 ================
 */
 function dungeonTarget( name: string ): GuideTarget {
-	for ( const [stem, dungeon] of DUNGEON_PAGES ) {
+	// The page name's stem and the dungeon it is; the trailing number is
+	// the floor. A table built per call: shared module state may only be
+	// a literal, and the dungeon ids are world-map's.
+	const pages = [ [ "dunhuang", DONWHANG_CAVE_DUNGEON ], [ "jinsi", TOMB_FIRST_DUNGEON ] ] as const;
+	for ( const [stem, dungeon] of pages ) {
 		const floor = Number( name.slice( stem.length ) );
 		if ( name.startsWith( stem ) && Number.isInteger( floor ) && floor >= 1 ) {
 			return { kind: "dungeon", dungeon, floor: floor - 1 };

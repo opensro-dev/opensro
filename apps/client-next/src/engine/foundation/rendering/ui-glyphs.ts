@@ -27,6 +27,8 @@ export interface FontAtlas {
 	atlasHeight: number;
 	fonts: Record<string, { recordHeight: number; ascent: number; descent: number; glyphs: Record<string, Glyph>; }>;
 }
+// Full-width ASCII forms and their distance from ASCII.
+const FULLWIDTH_FIRST = 0xFF01, FULLWIDTH_LAST = 0xFF5E, FULLWIDTH_OFFSET = 0xFEE0;
 export interface GlyphStyle {
 	fontIndex?: number;
 	fontStyle?: number;
@@ -41,12 +43,21 @@ drawableGlyph
 C0/C1 controls are layout directives, never drawable glyphs. Native
 CTextBoard breaks or skips them; baking the '?' replacement quad for a
 newline (as shipped guide START strings contain) invents visible glyphs.
+A full-width form (U+FF01-FF5E, the later client's "Lv.126～130") the
+atlas lacks draws as its ASCII letter rather than as '?': the native
+client draws it through a GDI font that holds the wide form, the
+port's atlas holds only the narrow one.
 ================
 */
 export function drawableGlyph( glyphs: Record<string, Glyph>, c: string ): Glyph | null {
 	const code = c.codePointAt( 0 )!;
 	if ( code < 32 || (code >= 0x7F && code <= 0x9F) ) return null;
-	return glyphs[String( code )] ?? glyphs["63"]!;
+	const own = glyphs[String( code )];
+	if ( own ) return own;
+	if ( code >= FULLWIDTH_FIRST && code <= FULLWIDTH_LAST ) {
+		return glyphs[String( code - FULLWIDTH_OFFSET )] ?? glyphs["63"]!;
+	}
+	return glyphs["63"]!;
 }
 /*
 ================
