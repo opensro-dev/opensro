@@ -169,7 +169,7 @@ const EVENT_LINES = [
 ];
 
 const TAB_LINES = [
-	{ channel: 1, name: "Peer", text: "hello all", outgoing: false },
+	{ channel: 1, name: "Peer", text: "hello everyone", outgoing: false },
 	{ channel: 2, name: "Pal", text: "psst, still there?", outgoing: false },
 	{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
 	{ channel: 5, name: "Peer", text: "hello guild", outgoing: false },
@@ -223,7 +223,9 @@ test("whisper, GM and type 10 lines show on every native chat tab beside the tab
 		assert.ok( shows( 1, "hello party" ) && !shows( 1, "hello guild" ) && !shows( 1, "hello ally" ) );
 		assert.ok( shows( 2, "hello guild" ) && !shows( 2, "hello party" ) );
 		assert.ok( shows( 3, "hello ally" ) && !shows( 3, "hello party" ) );
-		for ( const tab of [ 1, 2, 3 ] ) assert.ok( !shows( tab, "hello all" ), `general chat stays off tab ${tab}` );
+		for ( const tab of [ 1, 2, 3 ] ) {
+			assert.ok( !shows( tab, "hello everyone" ), `general chat stays off tab ${tab}` );
+		}
 	}
 });
 

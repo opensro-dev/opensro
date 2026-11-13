@@ -25,7 +25,6 @@ Bounds are grown so that rejecting them rejects every member test exactly
 import type { WorldGroup } from "@/engine/contracts/scene";
 import { instanceGroupSphere } from "@/engine/foundation/rendering/instance-bounds";
 import { hypot3 } from "@/engine/foundation/math/hypot";
-import { NO_WORLD_LAYERS } from "@/engine/foundation/world/world-layers";
 
 export const WALK_SKY = 0;
 export const WALK_TERRAIN = 1;
@@ -116,7 +115,7 @@ meshes without bounds are tested as spheres.
 export function compileWalkTable(
 	groups: readonly WorldGroup[],
 	pickBounds: WeakMap<Float32Array, readonly number[]>,
-	layers: ReadonlySet<number> = NO_WORLD_LAYERS
+	layers: ReadonlySet<number> = new Set()
 ): WalkTable {
 	const count = groups.length, slotBase = new Int32Array( count + 1 );
 	for ( let i = 0; i < count; i++ ) {

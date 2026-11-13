@@ -19,28 +19,21 @@ its group's bit 0 is set, the same bit the id-1 event weather reads.
 ===========================================================================
 */
 
-export const NO_WORLD_LAYERS: ReadonlySet<number> = new Set();
-
-const derived = new WeakMap<Readonly<Record<number, number>>, ReadonlySet<number>>();
-
 /*
 ================
 activeWorldLayers
 
-The layers to draw for the event groups. One groups record always gives
-the same set object, so a caller can compare sets by identity each frame.
+The layers to draw for the event groups: each group whose bit 0 is set.
+Stateless (a shared module holds no state, verify-ownership): the
+renderer compares the result by value (sameWorldLayers) and keeps its
+resident lists while the set is equal, so a fresh set each frame costs
+one small allocation and changes nothing drawn.
 ================
 */
 export function activeWorldLayers( groups: Readonly<Record<number, number>> | undefined ): ReadonlySet<number> {
-	if ( !groups ) return NO_WORLD_LAYERS;
-	let layers = derived.get( groups );
-	if ( !layers ) {
-		const active = Object.entries( groups ).filter( ( [, state] ) => (state & 1) !== 0 ).map( ( [id] ) =>
-			Number( id )
-		);
-		layers = active.length ? new Set( active ) : NO_WORLD_LAYERS;
-		derived.set( groups, layers );
-	}
+	const layers = new Set<number>();
+	if ( !groups ) return layers;
+	for ( const [id, state] of Object.entries( groups ) ) if ( (state & 1) !== 0 ) layers.add( Number( id ) );
 	return layers;
 }
 

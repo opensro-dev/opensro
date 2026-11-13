@@ -17,7 +17,7 @@ const src = path => import( pathToFileURL( path ).href );
 const { compileWalkTable, residentSlots, setWalkLayers } = await src(
 	"src/engine/runtime/renderer/world/walk-table.ts"
 );
-const { activeWorldLayers, sameWorldLayers, NO_WORLD_LAYERS } = await src(
+const { activeWorldLayers, sameWorldLayers } = await src(
 	"src/engine/foundation/world/world-layers.ts"
 );
 
@@ -48,12 +48,16 @@ function layeredGroup() {
 }
 
 test("an event group's bit 0 draws its layer", () => {
-	assert.equal( activeWorldLayers( undefined ), NO_WORLD_LAYERS );
-	assert.equal( activeWorldLayers( { 5: 0 } ), NO_WORLD_LAYERS );
+	assert.equal( activeWorldLayers( undefined ).size, 0 );
+	assert.equal( activeWorldLayers( { 5: 0 } ).size, 0 );
 	assert.deepEqual( [ ...activeWorldLayers( { 1: 1, 5: 1, 7: 2 } ) ].sort(), [ 1, 5 ] );
 	const groups = { 5: 1 };
-	assert.equal( activeWorldLayers( groups ), activeWorldLayers( groups ), "one record, one set" );
+	assert.ok(
+		sameWorldLayers( activeWorldLayers( groups ), activeWorldLayers( groups ) ),
+		"one record, one set of layers"
+	);
 	assert.ok( sameWorldLayers( new Set( [ 5 ] ), activeWorldLayers( { 5: 1 } ) ) );
+	assert.equal( activeWorldLayers( undefined ).size, 0, "the event ending clears the layers" );
 	assert.ok( !sameWorldLayers( new Set( [ 5 ] ), new Set( [ 7 ] ) ) );
 });
 
