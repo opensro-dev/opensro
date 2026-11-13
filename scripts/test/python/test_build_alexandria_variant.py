@@ -104,30 +104,6 @@ class AvailabilityTests(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			variant.enable_regions(b"nope" * 10, [(1, 1)])
 
-	# ================
-	# test_a_gate_on_a_region_without_terrain_is_reported
-	#
-	# A gate whose outdoor region neither the variant imports nor the native
-	# client enables would end the session on arrival; dungeon gates and
-	# gates outside codes are not this check's concern.
-	# ================
-	def test_a_gate_on_a_region_without_terrain_is_reported(self):
-		def at(teleport_id, code, region):
-			row = gate(teleport_id, code, "0", "SN")
-			row[5] = str(region)
-			return row
-		blank = variant.MFO_SIGNATURE + bytes(variant.MFO_HEADER_BYTES - len(variant.MFO_SIGNATURE) + 8192)
-		native = variant.enable_regions(blank, [(100, 100)])
-		raw = table([
-			at("1", "GATE_SD1", (90 << 8) | 48),
-			at("2", "GATE_NATIVE", (100 << 8) | 100),
-			at("3", "GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
-			at("4", "GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
-			at("5", "GATE_ELSEWHERE", (10 << 8) | 10)
-		])
-		codes = ("GATE_SD1", "GATE_NATIVE", "GATE_KINGSVALLEY_GATE", "GATE_TOMB_GATE_OUT_1")
-		self.assertEqual(variant.gates_without_terrain(raw, codes, [(48, 90)], native), ["GATE_KINGSVALLEY_GATE"])
-		self.assertEqual(variant.gates_without_terrain(raw, codes, [(48, 90), (57, 74)], native), [])
 
 
 def table(rows):

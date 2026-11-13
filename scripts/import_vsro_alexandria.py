@@ -212,6 +212,28 @@ def gate_seed_regions(teleportdata_raw, codes=CROSSING_GATE_CODES):
 
 
 # ================
+# gates_without_terrain
+#
+# The codes, among codes, of the gates that stand on an outdoor region
+# outside terrain (the variant's regions plus the native ones). The client
+# cannot load such a region, so a teleport there ends the session ("No
+# published region"); the variant build refuses it instead.
+# ================
+def gates_without_terrain(teleportdata_raw, codes, terrain):
+	missing = []
+	for row in table_rows(teleportdata_raw):
+		if len(row) <= TELEPORT_REGION_COLUMN or row[TELEPORT_CODE_COLUMN].strip() not in codes:
+			continue
+		value = row[TELEPORT_REGION_COLUMN].strip()
+		if not value.lstrip("-").isdigit():
+			continue
+		region = int(value) & 0xFFFF
+		if not region & DUNGEON_REGION_BIT and region_xy(region) not in terrain:
+			missing.append(row[TELEPORT_CODE_COLUMN].strip())
+	return sorted(missing)
+
+
+# ================
 # connected_regions
 # ================
 def connected_regions(seeds, candidates, field_seeds=()):

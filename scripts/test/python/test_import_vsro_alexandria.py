@@ -143,6 +143,28 @@ class AvailabilityTests(unittest.TestCase):
 		with self.assertRaises(SystemExit):
 			alex.gate_seed_regions(raw)
 
+	# ================
+	# test_a_gate_on_a_region_without_terrain_is_reported
+	#
+	# A gate whose outdoor region is outside the terrain (the variant's plus
+	# the native, read from the native mapinfo.mfo) would end the session on
+	# arrival; dungeon gates and gates outside codes are not this check's.
+	# ================
+	def test_a_gate_on_a_region_without_terrain_is_reported(self):
+		def at(code, region):
+			return ["1", "1", code, "0", "SN", str(region), "0", "0", "0", "50", "0", "0", "1"]
+		raw = utf16_table([
+			at("GATE_SD1", (90 << 8) | 48),
+			at("GATE_NATIVE", (100 << 8) | 100),
+			at("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			at("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			at("GATE_ELSEWHERE", (10 << 8) | 10)
+		])
+		codes = ("GATE_SD1", "GATE_NATIVE", "GATE_KINGSVALLEY_GATE", "GATE_TOMB_GATE_OUT_1")
+		terrain = {(48, 90)} | alex.mfo_regions(availability({(100, 100)}))
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain), ["GATE_KINGSVALLEY_GATE"])
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain | {(57, 74)}), [])
+
 
 class TerrainTests(unittest.TestCase):
 	def test_tile_ids_drop_the_scale_bits(self):

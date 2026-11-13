@@ -621,10 +621,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
-	stranded = gates_without_terrain(
-		gate_tables["teleportdata.txt"], GATE_CODES, regions,
-		(native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()
-	)
+	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], GATE_CODES,
+		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
 	if stranded:
 		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
 	pharaoh_temple = temple.add_temple(vsro_root, native, out)
@@ -753,32 +751,6 @@ def port_stock_enabled(environ=None):
 	if value in PORT_STOCK_ON_VALUES:
 		return True
 	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
-
-
-# ================
-# gates_without_terrain
-#
-# The codes, among codes, of the gates that stand on an outdoor region
-# neither the variant imports nor the native client enables. The client
-# cannot load such a region, so a teleport there ends the session
-# ("No published region"); the build refuses it instead.
-# ================
-def gates_without_terrain(teleportdata_raw, codes, regions, native_mapinfo):
-	imported = set(regions)
-	missing = []
-	for row in stage1.table_rows(teleportdata_raw):
-		if len(row) < TELEPORT_COLUMNS or row[stage1.TELEPORT_CODE_COLUMN] not in codes:
-			continue
-		value = row[stage1.TELEPORT_REGION_COLUMN].strip()
-		if not value.lstrip("-").isdigit():
-			continue
-		region = int(value) & 0xFFFF
-		if region & stage1.DUNGEON_REGION_BIT:
-			continue
-		x, y = stage1.region_xy(region)
-		if (x, y) not in imported and not region_available(native_mapinfo, x, y):
-			missing.append(row[stage1.TELEPORT_CODE_COLUMN])
-	return sorted(missing)
 
 
 # ================
