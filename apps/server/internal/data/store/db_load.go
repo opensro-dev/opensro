@@ -37,13 +37,18 @@ so far rode on a schema step (layouts 8 through 12 came with schemas
 */
 const StoreReadHeadroom = 0
 
-// Database loading validates the complete authority graph before Store adopts
-// it. Invalid ownership or social/group references fail boot closed.
+// StoreReadMaxVersion is the newest schema this binary opens: the top of
+// the read window, as the release contract publishes it.
+const StoreReadMaxVersion = CurrentVersion + StoreReadHeadroom
+
 /*
 ================
 loadDB
 
-Accepts a schema version in [current, current+headroom] and a layout in
+Validates the complete authority graph before Store adopts it, without
+rewriting the database: invalid ownership or social/group references
+fail boot closed. Every plane map of the result is allocated here, so
+adoptDB installs them as they are. Accepts a schema version in [current, current+headroom] and a layout in
 [currentLayout, currentLayout+headroom]; the boot passes the store's read
 headroom, every offline caller 0 (the exact version it just wrote or
 validates). Everything below current is the offline upgrader's.
@@ -123,8 +128,10 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 		guildMembers: map[string]map[int64][]domain.GuildMemberRecord{},
 		camps:        map[string]map[int64]domain.TrainingCampRecord{},
 		campMembers:  map[string]map[int64][]domain.TrainingCampMemberRecord{},
-		meta:         Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
-		residues:     recordResidues{planes: map[string]map[string]unknownFields{}},
+		// Filled from layout 11 on; an older offline load keeps it empty.
+		nameReservations: map[string]map[string]NameReservation{},
+		meta:             Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
+		residues:         recordResidues{planes: map[string]map[string]unknownFields{}},
 	}
 
 	// The stamps as stored: inside the window they may be newer than

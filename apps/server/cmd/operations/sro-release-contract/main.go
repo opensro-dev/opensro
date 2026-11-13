@@ -13,6 +13,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"opensro.online/server/internal/data/store"
@@ -32,15 +33,42 @@ runs that upgrade, with the game server stopped, before the new one starts.
 ================
 */
 func main() {
-	contract := map[string]int{
-		"protocolMin":      releaseprotocol.Current,
-		"protocolMax":      releaseprotocol.Current,
-		"storeReadMin":     store.CurrentVersion,
-		"storeReadMax":     store.CurrentVersion + store.StoreReadHeadroom,
-		"storeWrite":       store.CurrentVersion,
-		"storeUpgradeFrom": store.UpgradeFromVersion,
+	if err := json.NewEncoder(os.Stdout).Encode(releaseContract()); err != nil {
+		fmt.Fprintln(os.Stderr, "sro-release-contract:", err)
+		os.Exit(1)
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(contract); err != nil {
-		panic(err)
+}
+
+/*
+================
+contract
+
+The printed contract. Fields are declared in key order, so the output
+is byte-identical to the map this replaced (encoding/json sorts map
+keys) and compatibility.json stays comparable line for line.
+================
+*/
+type contract struct {
+	ProtocolMax      int `json:"protocolMax"`
+	ProtocolMin      int `json:"protocolMin"`
+	StoreReadMax     int `json:"storeReadMax"`
+	StoreReadMin     int `json:"storeReadMin"`
+	StoreUpgradeFrom int `json:"storeUpgradeFrom"`
+	StoreWrite       int `json:"storeWrite"`
+}
+
+/*
+================
+releaseContract
+================
+*/
+func releaseContract() contract {
+	return contract{
+		ProtocolMax:      releaseprotocol.Current,
+		ProtocolMin:      releaseprotocol.Current,
+		StoreReadMax:     store.StoreReadMaxVersion,
+		StoreReadMin:     store.CurrentVersion,
+		StoreUpgradeFrom: store.UpgradeFromVersion,
+		StoreWrite:       store.CurrentVersion,
 	}
 }
