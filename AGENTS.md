@@ -41,8 +41,13 @@ both settings. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the contributor ve
 
 ## Reverse engineering without Binary Ninja
 
-For native investigations, read [docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md)
-and [docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
+For native investigations, start with revtool
+([tools/re/revtool/README.md](tools/re/revtool/README.md), its quick start):
+rizin plus the published seed give every function's address and the
+maintainers' names (about 14,000 client and 12,000 server labels), with
+`find`, `strings`, `view` and `xref`. Then read
+[docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md) and
+[docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
 When the task requires RE, agents should set up the documented isolated Python
 environment and install its pinned packages, subject to the session's network
 and execution permissions. Do not install globally or download retail binaries.

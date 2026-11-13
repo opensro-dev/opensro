@@ -592,7 +592,11 @@ def cmd_seed_apply(args, con):
 		print(f"  {stats['respelled']} names respelled for rizin (unsafe characters -> _, repeats get _<va>)")
 	if stats.get("preexisting"):
 		print(f"  of those, {stats['preexisting']} rizin defined on load and were renamed in place")
-	print("  next: `revtool_rizin.py index` runs the reference pass (aar) that xref/strings need")
+	# The whole command, global options first: `--rzdb` after `index` is
+	# refused by the rizin parser, which is how a newcomer copying the
+	# apply line's shape met an argparse error (dogfood 2026-11-13).
+	print("  next (the reference pass xref/strings need):")
+	print(f'    revtool.py --backend rizin --binary "{binary}" --rzdb "{rzdb}" index')
 	print(f"  seed names in place {named}")
 	print(f"  sampled labelled names {sampled_ok} of {sampled} match")
 	if sampled and sampled_ok != sampled:

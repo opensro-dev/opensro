@@ -2,13 +2,13 @@
 
 Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server, so there is room for every kind of work: rendering, UI, gameplay rules, networking, tools and docs. This page tells you how to land a change smoothly.
 
-**The rules for humans and AI coding agents are the same:** [AGENTS.md](../AGENTS.md). Read it once before your first pull request.
+**The rules for humans and AI coding agents are the same:** [AGENTS.md](https://github.com/opensro-dev/opensro/blob/main/AGENTS.md). Read it once before your first pull request.
 
 ---
 
 ## 🚀 1. Get set up
 
-1. Follow [docs/guides/GETTING_STARTED.md](../docs/guides/GETTING_STARTED.md). The asset build needs your own v1.150 client.
+1. Follow [docs/guides/GETTING_STARTED.md](https://github.com/opensro-dev/opensro/blob/main/docs/guides/GETTING_STARTED.md). The asset build needs your own v1.150 client.
 2. Working only on code? `corepack pnpm check source` runs the CI gates with no game data at all.
 3. Find something to do: issues labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue), the bug reports on [Discord](https://discord.gg/RUua9HY657), or ask in #🛠️contributing.
 
@@ -25,9 +25,9 @@ OpenSRO ports the original game's behaviour; it does not reinvent it.
 
 A change that makes the game behave like the original needs no special approval; it needs evidence and tests.
 
-You do not need Binary Ninja to contribute native evidence. [Rizin is the recommended free tool](../docs/native/RIZIN.md) for native investigation, with the
-[Python tutorial](../docs/native/REVERSE_ENGINEERING.md) as the zero-install fallback; then follow
-[saving labels and research progress](../docs/native/RESEARCH_PROGRESS.md) so people and
+You do not need Binary Ninja to contribute native evidence. [revtool](https://github.com/opensro-dev/opensro/blob/main/tools/re/revtool/README.md) gives you the maintainers' function names on top of the free [Rizin](https://github.com/opensro-dev/opensro/blob/main/docs/native/RIZIN.md) disassembler, with the
+[Python tutorial](https://github.com/opensro-dev/opensro/blob/main/docs/native/REVERSE_ENGINEERING.md) as the zero-install fallback; then follow
+[saving labels and research progress](https://github.com/opensro-dev/opensro/blob/main/docs/native/RESEARCH_PROGRESS.md) so people and
 AI agents can continue your investigation later.
 
 ---
@@ -51,7 +51,7 @@ Also:
 
 ## ✍️ 4. Write code that reads like the rest
 
-- 🎨 **id Software (Quake III) style:** a banner at the top of every file saying what it owns, a banner on every function, plain data and functions, explicit `Init` / `Shutdown` / `Frame` lifecycles, named constants for every magic number. Details and examples are in [AGENTS.md](../AGENTS.md).
+- 🎨 **id Software (Quake III) style:** a banner at the top of every file saying what it owns, a banner on every function, plain data and functions, explicit `Init` / `Shutdown` / `Frame` lifecycles, named constants for every magic number. Details and examples are in [AGENTS.md](https://github.com/opensro-dev/opensro/blob/main/AGENTS.md).
 - 🧹 **Formatting:** `pnpm exec dprint fmt <path>` for JavaScript/TypeScript, `gofmt` for Go. Files are UTF-8 without a BOM, with LF line endings.
 - 🔍 **Search before you edit** (`rg`): find every caller and test of what you change, and reuse an existing helper instead of adding a second one.
 - 📏 **Files over 1000 lines** are split only at a real responsibility boundary.
@@ -69,7 +69,7 @@ Also:
 | --- | --- |
 | Anything | `corepack pnpm check source` |
 | The client | `corepack pnpm --filter @sro/client-next check` |
-| The Go server | see [apps/server/AGENTS.md](../apps/server/AGENTS.md) |
+| The Go server | see [apps/server/AGENTS.md](https://github.com/opensro-dev/opensro/blob/main/apps/server/AGENTS.md) |
 | Assets or the pipeline | `corepack pnpm check` (includes the asset build) |
 
 ---
@@ -124,6 +124,6 @@ Also:
 
 ## 🐞 Reporting bugs
 
-In the game, type `/bug` to send a report with a short replay. Otherwise post the steps and a screenshot or video in the bug reports channel on [Discord](https://discord.gg/RUua9HY657). Security problems go privately through [SECURITY.md](SECURITY.md).
+In the game, type `/bug` to send a report with a short replay. Otherwise post the steps and a screenshot or video in the bug reports channel on [Discord](https://discord.gg/RUua9HY657). Security problems go privately through [SECURITY.md](https://github.com/opensro-dev/opensro/blob/main/.github/SECURITY.md).
 
 Questions? Ask in #🛠️contributing on [Discord](https://discord.gg/RUua9HY657). Welcome aboard! 🏯
