@@ -8,7 +8,9 @@ VSRO client also has minimap_d/jinsi, on the same grid. This tool converts
 those tiles and writes their own catalogue beside the retail one, so the
 retail catalogue and its coverage gate never change. The client merges it
 into the tomb's empty floors.
-Run `pnpm assets repack` afterwards: the client loads published assets only.
+The asset build runs this step when SRO_VSRO_ROOT names the pinned archive
+(laterClientImports.mjs); run it by hand only to refresh a built tree, and
+follow it with `pnpm assets repack`: the client loads published assets only.
 No retail art is committed to Git.
 
 ===========================================================================

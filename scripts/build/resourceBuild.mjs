@@ -79,6 +79,7 @@ import { buildJobs } from "./shared/buildParallelism.mjs";
 import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
+	importLaterTombMinimapStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
@@ -86,6 +87,8 @@ import {
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
+	laterTombMinimapImportPlan,
+	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
 	laterWorldMapButtonPublicPaths,
 	laterWorldMapGuideImportPlan,
@@ -238,6 +241,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
+	importLaterTombMinimap: importLaterTombMinimapStep,
 	packTree: packPublicTree
 } );
 
@@ -626,6 +630,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The M map guide's tables and art (#3387) come from the v1.696
 	// archive under the same rule, claimed before the pack tail.
 	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
+	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
+	// rule, claimed before the pack tail.
+	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -700,6 +707,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterDungeonMaps,
 		laterWorldMapButtons,
 		laterWorldMapGuide,
+		laterTombMinimap,
 		packGroups,
 		claimAudit,
 		jsonOptimization,
