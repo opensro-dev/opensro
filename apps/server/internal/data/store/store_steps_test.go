@@ -339,3 +339,23 @@ func TestHistoricStepsAWindowCouldNotCarry(t *testing.T) {
 		t.Fatalf("additive steps with nested additions = %v, want %v", refused, want)
 	}
 }
+
+/*
+================
+TestCurrentStepFitsTheReadWindow
+
+The gate on the live constant: the step this binary adds must fit the
+read window it declares (StoreReadHeadroom, #3091). At headroom 0 the
+window holds no newer step and nothing is checked; part 4 (#3093)
+turns it on.
+================
+*/
+func TestCurrentStepFitsTheReadWindow(t *testing.T) {
+	t.Parallel()
+
+	previous, _ := frozenFieldLists(t, CurrentVersion-1)
+	current, _ := frozenFieldLists(t, CurrentVersion)
+	if violations := readWindowViolations(storeSteps, CurrentVersion, StoreReadHeadroom, previous, current); len(violations) != 0 {
+		t.Fatalf("schema %d does not fit a read window %d wide: %v", CurrentVersion, StoreReadHeadroom, violations)
+	}
+}
