@@ -205,6 +205,9 @@ type Runtime struct {
 	// tickSnaps shares one epoch-checked record copy per character
 	// and copy kind across a tick hook's steps (tick_snapshots.go).
 	tickSnaps tickSnapshots
+	// keptCasts keeps EntryActionSpeed's cast copies across ticks,
+	// under the same epoch proof (tick_snapshots.go).
+	keptCasts keptCastCopies
 
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
