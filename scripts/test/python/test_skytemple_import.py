@@ -218,6 +218,7 @@ class SkytempleHelpersTest(unittest.TestCase):
 		self.assertEqual(population["Rows"][0]["RegionID"], 21209)
 		row = population["Rows"][0]
 		self.assertEqual((row["MaxCount"], row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (1, 1, 3))
+		self.assertEqual((row["Radius"], row["GenerateRadius"]), (700, 600))
 		self.assertEqual(row["Controls"]["SightRange"], 100)
 		self.assertIsNone(row["Champion"])
 

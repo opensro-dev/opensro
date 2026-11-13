@@ -165,7 +165,8 @@ def synthesize_population(placements, refs):
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
 		rows.append({
 			"Codename": code, "NestID": nest_id, "WorldID": WORLD, "RegionID": region,
-			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"X": x, "Y": y, "Z": z, "Radius": cap110.CLIENT_NEST_RADIUS,
+			"GenerateRadius": cap110.CLIENT_NEST_GENERATE_RADIUS, "MaxCount": 1,
 			"RespawnDelayMinSec": cap110.CLIENT_NEST_RESPAWN_MIN_SEC,
 			"RespawnDelayMaxSec": cap110.CLIENT_NEST_RESPAWN_MAX_SEC,
 			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,

@@ -91,6 +91,11 @@ LAST_LEVEL = 178
 CLIENT_NEST_RESPAWN_MIN_SEC = 1
 CLIENT_NEST_RESPAWN_MAX_SEC = 3
 CLIENT_NEST_SIGHT_RANGE = 100
+# The home radius and spawn spread: the evidence's commonest for a
+# respawning nest, as cap110_monsters.py CLIENT_NEST_RADIUS explains (a
+# radius 0 nest keeps its monsters homing forever).
+CLIENT_NEST_RADIUS = 700
+CLIENT_NEST_GENERATE_RADIUS = 600
 
 
 # JMXVMAPO1001 placements, as scripts/build/world/jmx/JMXVMAPO1001.mjs:
@@ -271,9 +276,8 @@ def client_controls():
 #
 # The field nests from the placements alone, in the Version-2 envelope
 # the cap-110 populations use. One placement of an admitted kind is one
-# nest standing on its point - radius 0, the posture of a native anchor
-# whose database evidence the server does not hold - holding one
-# monster. Nest identities are sequential over the sorted placements,
+# nest standing on its point, with the evidence's commonest home radius
+# and spawn spread, holding one monster. Nest identities are sequential over the sorted placements,
 # so a rebuild of the same client writes the same file.
 # ================
 def build_population(found, refs):
@@ -282,7 +286,8 @@ def build_population(found, refs):
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
 		rows.append({
 			"Codename": code, "NestID": nest_id, "WorldID": FIELD_WORLD, "RegionID": region,
-			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"X": x, "Y": y, "Z": z, "Radius": CLIENT_NEST_RADIUS,
+			"GenerateRadius": CLIENT_NEST_GENERATE_RADIUS, "MaxCount": 1,
 			"RespawnDelayMinSec": CLIENT_NEST_RESPAWN_MIN_SEC,
 			"RespawnDelayMaxSec": CLIENT_NEST_RESPAWN_MAX_SEC,
 			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,
