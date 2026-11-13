@@ -84,7 +84,7 @@ import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/
 import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
 import { SPINE_AIM_BONE } from "@/engine/foundation/animation/spine-aim";
 import { createSpineAims } from "./spine-aims";
-import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import type { GameplayState, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
@@ -1373,12 +1373,19 @@ export function createCharacterEffects(
 					Object.assign( row, sample, { previous: clock } );
 				}
 				// 85C590 owns named PARAM_ decorations and one material register.
-				// Dead appearance and zero hp do not gate it.
+				// Dead appearance and zero hp do not gate it. The vitals index
+				// keeps find()'s first row per gid; the revisions map mutates in
+				// place - its only reader iterates the stored row inside this
+				// same step, so the per-entity copy bought nothing.
+				const vitalsByGid = new Map<number, VitalState>();
+				for ( const row of gameplay?.vitals ?? [] ) {
+					if ( !vitalsByGid.has( row.gid ) ) vitalsByGid.set( row.gid, row );
+				}
 				for ( const entity of entities ) {
-					const mask = (gameplay?.vitals ?? []).find( v => v.gid === entity.gid )?.abnormal ?? 0;
+					const mask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 					const prior = statuses.get( entity.gid );
 					const view = status.view( entity.gid, mask, entity.appearanceState?.[2] ?? 0 ); // +0x2B6 (85EC00): 1 = berserk skips the material calls
-					const revisions = new Map( prior?.revisions );
+					const revisions = prior?.revisions ?? new Map<string, number>();
 					for ( const name of view.names ) if ( !revisions.has( name ) ) revisions.set( name, clock );
 					for ( const name of revisions.keys() ) if ( !view.names.includes( name ) ) revisions.delete( name );
 					statuses.set( entity.gid, { view, revisions } );
