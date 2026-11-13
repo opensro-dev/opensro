@@ -110,7 +110,9 @@ function sourceGates() {
 		// The asset transport's recovery and resume (#3354) mock fetch and
 		// time; they read no generated file.
 		"tests/runtime/asset-download-recovery.test.mjs",
-		"tests/runtime/asset-download-resume.test.mjs"
+		"tests/runtime/asset-download-resume.test.mjs",
+		// The chat tabs' filing rule (#3370) reads no generated file.
+		"tests/runtime/chat-tabs.test.mjs"
 	];
 	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
 }
