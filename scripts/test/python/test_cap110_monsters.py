@@ -565,6 +565,60 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertNotIn("extra", staged["Properties"]["items"]["ITEM_NATIVE"])
 
 	# ================
+	# test_client_only_build_mirrors_d10_and_joins_backup_gear
+	#
+	# #3405: with no export, D11 takes D10's banding over 102-110, the
+	# backup's live expansion rows join the installed items only, the
+	# rare rows above 94 stay unrollable, and an empty row is refused.
+	# ================
+	def test_client_only_build_mirrors_d10_and_joins_backup_gear(self):
+		normal = [[0.0] * 36 for _ in range(180)]
+		for level, groups in ((91, (27,)), (94, (28,)), (95, (28, 29)), (98, (29,)), (101, (29,))):
+			for group in groups:
+				normal[level - 1][group] = 0.0035
+		for level in (92, 93):
+			normal[level - 1] = list(normal[90])
+		for level in (96, 97):
+			normal[level - 1] = list(normal[94])
+		for level in (99, 100):
+			normal[level - 1] = list(normal[97])
+		rows = {r["MonLevel"]: r for r in loot.mirrored_normal_classes(normal)}
+		self.assertEqual(rows[101]["ProbGroup30"], 0.0035)
+		self.assertEqual(rows[102]["ProbGroup31"], 0.0035)
+		self.assertEqual(rows[105]["ProbGroup32"], 0.0035)
+		self.assertEqual((rows[106]["ProbGroup32"], rows[106]["ProbGroup33"]), (0.0035, 0.0035))
+		self.assertEqual(rows[110]["ProbGroup33"], 0.0035)
+		self.assertNotIn(0.0035, [rows[105]["ProbGroup31"], rows[110]["ProbGroup32"]])
+
+		code, missing, older = "ITEM_CH_SWORD_11_A", "ITEM_EU_SWORD_11_A", "ITEM_CH_BLADE_10_A"
+		drops = {"assignments": [
+			{"service": 1, "codename": code, "item": 1, "weight": 140, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 1, "codename": missing, "item": 2, "weight": 100, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 1, "codename": older, "item": 3, "weight": 100, "absolute": 100, "class": -1, "lsn": [1]},
+			{"service": 0, "codename": older, "item": 3, "weight": 100, "absolute": 100, "class": -1, "lsn": [2]},
+			{"service": 1, "codename": "ITEM_CH_SWORD_09_A", "item": 4, "weight": 100, "absolute": 100,
+				"class": -1, "lsn": [1]},
+		]}
+		got = loot.backup_assignments(drops, {code, older, "ITEM_CH_SWORD_09_A"})
+		self.assertEqual(got, [{"CodeName128": code, "Service": 1, "Prob_Relative": 140, "Prob_Absolute": 100}])
+
+		item = ["0"] * 160
+		item[0], item[2], item[10], item[33], item[61], item[158] = "1", code, "1", "101", "31", "9"
+		item[9:13] = ["3", "1", "6", "2"]
+		rare = [[0.0] * 60 for _ in range(180)]
+		rare[101][29] = 1e-9
+		base = {"equipment.json": {"version": 2, "widths": {"normal": 36, "rare": 60},
+			"normal": normal, "rare": rare, "items": []}, "properties.json": {"items": {}, "magic": [], "assignments": []}}
+		compiled = loot.compile_field_equipment(base, [item], got, list(rows.values()), loot.authored_classes(rare))
+		loot.require_expansion_rows(compiled)
+		self.assertGreater(compiled["Equipment"]["normal"][104][31], 0)
+		self.assertEqual([i["group"] for i in compiled["Equipment"]["items"]], [30])
+		self.assertFalse(any(p > 1e-6 for p in compiled["Equipment"]["rare"][101]))
+		compiled["Equipment"]["normal"][104] = [0.0] * 36
+		with self.assertRaisesRegex(ValueError, "level 105"):
+			loot.require_expansion_rows(compiled)
+
+	# ================
 	# test_no_export_names_no_assignments
 	# ================
 	def test_no_export_names_no_assignments(self):
