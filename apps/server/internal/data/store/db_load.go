@@ -17,27 +17,52 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
+/*
+================
+StoreReadHeadroom
+
+How many store versions past its own this binary opens (#3091, part 2
+of #3082). 0 until part 4 (#3093) turns it on, which keeps today's
+rule: exactly CurrentVersion. A store inside the window may only carry
+additive steps (#3092); its newer top-level record fields survive this
+binary's writes (json.go, #3090), its meta stamps never go down
+(Store.schemaStamp, stampVersionTx), and the tables its newer layout
+added are neither read nor written here, so the newer binary boots on
+it again after a revert.
+
+The layout window is as wide as the schema window: every layout bump
+so far rode on a schema step (layouts 8 through 12 came with schemas
+21, 22, 25, 33 and 39), so K schema steps hold at most K layout bumps.
+================
+*/
+const StoreReadHeadroom = 0
+
 // Database loading validates the complete authority graph before Store adopts
 // it. Invalid ownership or social/group references fail boot closed.
 /*
 ================
 loadDB
+
+Accepts a schema version in [current, current+headroom] and a layout in
+[currentLayout, currentLayout+headroom]; the boot passes the store's read
+headroom, every offline caller 0 (the exact version it just wrote or
+validates). Everything below current is the offline upgrader's.
 ================
 */
-func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
+func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB, error) {
 	version, err := readMetaInt(db, metaKeySchemaVersion, 0)
 	if err != nil {
 		return nil, err
 	}
-	if version != current {
-		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; preserve the authority; schemas %d through the previous version are validated and upgraded offline with sro-authority-upgrade", version, current, errIncompatibleSchema, UpgradeFromVersion)
+	if version < current || version > current+headroom {
+		return nil, fmt.Errorf("database character schema version %d, binary requires %s: %w; preserve the authority; schemas %d through the previous version are validated and upgraded offline with sro-authority-upgrade", version, versionWindow(current, headroom), errIncompatibleSchema, UpgradeFromVersion)
 	}
 	layout, err := readMetaInt(db, metaKeyLayoutVersion, 0)
 	if err != nil {
 		return nil, err
 	}
-	if layout != currentLayout {
-		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; preserve the authority; supported schemas starting at %d are validated and upgraded offline with sro-authority-upgrade", layout, currentLayout, errIncompatibleSchema, UpgradeFromVersion)
+	if layout < currentLayout || layout > currentLayout+headroom {
+		return nil, fmt.Errorf("database layout version %d, binary requires %s: %w; preserve the authority; supported schemas starting at %d are validated and upgraded offline with sro-authority-upgrade", layout, versionWindow(currentLayout, headroom), errIncompatibleSchema, UpgradeFromVersion)
 	}
 
 	// Only the offline upgrader requests layout 4. Runtime callers require
@@ -102,7 +127,10 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		residues:     recordResidues{planes: map[string]map[string]unknownFields{}},
 	}
 
-	out.version = current
+	// The stamps as stored: inside the window they may be newer than
+	// this binary's, and the store writes them back unchanged.
+	out.version = version
+	out.layout = layout
 	out.meta.TradeRewards, out.residues.planes[metaKeyTradeRewards], err = loadTradeRewards(db)
 	if err != nil {
 		return nil, err
@@ -732,4 +760,18 @@ func readMetaInt64(db *sql.DB, key string, absent int64) (int64, error) {
 		return 0, fmt.Errorf("meta %s = %q: %w", key, value, err)
 	}
 	return parsed, nil
+}
+
+/*
+================
+versionWindow
+
+The refusal's wording for the versions a load accepts.
+================
+*/
+func versionWindow(lowest, headroom int) string {
+	if headroom == 0 {
+		return fmt.Sprintf("exactly %d", lowest)
+	}
+	return fmt.Sprintf("%d through %d", lowest, lowest+headroom)
 }

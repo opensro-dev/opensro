@@ -179,11 +179,11 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		return err
 	}
 
-	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", s.schemaStamp)); err != nil {
 		return err
 	}
 	// The layout stamp rides every commit like the schema stamp above.
-	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", s.layoutStamp)); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {

@@ -54,7 +54,7 @@ func TestTradeRewardPoolCommitsWithCharactersAndSurvivesReopen(t *testing.T) {
 	if got := s.TradeRewards(testDivision); got != (domain.TradeRewardPool{Hunters: 17}) {
 		t.Fatalf("reopened pool %+v", got)
 	}
-	loaded, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion)
+	loaded, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

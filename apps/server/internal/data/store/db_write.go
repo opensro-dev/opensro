@@ -33,6 +33,25 @@ func upsertMetaTx(tx sqlExecer, key, value string) error {
 	return err
 }
 
+/*
+================
+stampVersionTx
+
+Writes a version stamp (schema or layout) that never goes down: the
+stored stamp stays when it is the higher one (#3091). A binary that
+opened a newer store inside its read window must not restamp it to its
+own version, or the newer binary could never open it again after a
+revert. The comparison runs in the statement, so it holds for a stamp
+the caller never read.
+================
+*/
+func stampVersionTx(tx sqlExecer, key string, version int) error {
+	_, err := tx.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = "+
+		"CASE WHEN CAST(meta.value AS INTEGER) > CAST(excluded.value AS INTEGER) THEN meta.value ELSE excluded.value END",
+		key, fmt.Sprint(version))
+	return err
+}
+
 // characterRowTx is the ONE owner of a character-row write outside the
 // commit (persistence.go): a separate transaction that writes character
 // rows - an offline door's own commit (storage, the mall, the fortress
@@ -705,10 +724,10 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 			return err
 		}
 	}
-	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeySchemaVersion, CurrentVersion); err != nil {
 		return err
 	}
-	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", data.meta.GidCounter)); err != nil {

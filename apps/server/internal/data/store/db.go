@@ -62,8 +62,9 @@ const (
 	EnvSyncFull = "SRO_AUTHORITY_SYNC_FULL"
 )
 
-// dbSchema creates a fresh current-layout database. Existing databases must
-// already match CurrentLayoutVersion exactly and are never altered at boot.
+// dbSchema creates a fresh current-layout database. An existing database must
+// already hold a layout inside the read window (CurrentLayoutVersion through
+// StoreReadHeadroom more) and is never altered at boot.
 const mallAccountsSchema = `
 CREATE TABLE IF NOT EXISTS mall_accounts (
   account_id TEXT PRIMARY KEY,
@@ -152,10 +153,12 @@ const (
 	metaKeyUpdatedAtMs   = "updatedAtMs"
 )
 
-// CurrentLayoutVersion identifies the only physical table layout accepted by
-// this binary. It is independent from CurrentVersion, which identifies the
-// JSON character-record schema. Adding a table bumps this value and requires an
-// reviewed offline upgrade before deployment. sro-authority-upgrade preserves
+// CurrentLayoutVersion identifies the physical table layout this binary
+// writes; it opens that layout and the StoreReadHeadroom newer ones, whose
+// extra tables it never reads or writes. It is independent from
+// CurrentVersion, which identifies the JSON character-record schema. Adding
+// a table bumps this value and requires an reviewed offline upgrade before
+// deployment. sro-authority-upgrade preserves
 // layout-4 records while adding the empty mall currency and warehouse tables
 // for layout 5, the empty fortress and union tables for layout 6, the
 // guild-war tables for layout 7 and the fortress production table for
@@ -333,7 +336,10 @@ type loadedDB struct {
 	// division -> lower-cased name -> the reservation row.
 	nameReservations map[string]map[string]NameReservation
 	meta             Meta
-	version          int
+	// version and layout are the meta stamps as stored: at least the
+	// binary's, newer inside the read window (StoreReadHeadroom).
+	version int
+	layout  int
 	// halloweenSeeded reports the meta plane was derived at this load
 	// (no halloweenBoxes row: seedHalloweenBoxes over the legacy
 	// counts), so its bytes are not the disk's until a commit writes

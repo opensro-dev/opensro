@@ -95,7 +95,7 @@ func TestLoadRefusesGroundGIDCounterOutsideAllocatableRange(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
+			if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0); err == nil ||
 				!strings.Contains(err.Error(), "ground gid counter") {
 				t.Fatalf("loadDB ground gid counter %s error = %v", value, err)
 			}
@@ -128,7 +128,7 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
+		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0); err == nil ||
 			!strings.Contains(err.Error(), "outside") {
 			t.Fatalf("loadDB aliasing character id error = %v", err)
 		}
@@ -144,7 +144,7 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
+		if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0); err == nil ||
 			!strings.Contains(err.Error(), "next character id") {
 			t.Fatalf("loadDB exhausted character watermark error = %v", err)
 		}
