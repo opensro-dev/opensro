@@ -129,6 +129,23 @@ export async function buildTitleSectorObjectResources( options ) {
 		}
 		return blockFormats.get( textureSourcePath );
 	};
+	// Whether the file the copy pass publishes from exists: the block source
+	// for a DXT texture, the converted PNG otherwise (objectTextureSource).
+	// The .ddj alone is not enough: a failed conversion leaves no PNG, the
+	// copy pass skips it, and a record naming it would fail the claim audit.
+	const sourcePresent = new Map();
+	const sourceThereFor = async ( textureSourcePath, blockFormat ) => {
+		if ( !sourcePresent.has( textureSourcePath ) ) {
+			const source = objectTextureSource( {
+				textureSourcePath,
+				blockFormat,
+				extractedRoot: sourceExtractedRoot,
+				imageRoot: imageSourceRoot
+			} );
+			sourcePresent.set( textureSourcePath, await exists( source ) );
+		}
+		return sourcePresent.get( textureSourcePath );
+	};
 	for ( const materialPath of [ ...materialPathSet ].sort() ) {
 		const absolutePath = dataAssetPath( sourceExtractedRoot, materialPath );
 		if ( !(await exists( absolutePath )) ) {
@@ -141,16 +158,16 @@ export async function buildTitleSectorObjectResources( options ) {
 		for ( const material of materialSet.materials ) {
 			const textureSourcePath = resolveBmtTexturePath( materialPath, material.textureName );
 			const blockFormat = textureSourcePath ? await blockFormatFor( textureSourcePath ) : null;
+			const sourceThere = textureSourcePath ? await sourceThereFor( textureSourcePath, blockFormat ) : false;
 			if ( textureSourcePath ) {
+				// A missing source stays listed: the copy pass reports it.
 				texturePathSet.add( textureSourcePath );
 			}
 
 			materials.push( {
 				...material,
 				textureSourcePath,
-				texturePublicPath: textureSourcePath ?
-					objectTexturePublicPath( area, textureSourcePath, blockFormat ? ".texture" : ".png" ) :
-					null
+				texturePublicPath: materialTexturePublicPath( { area, textureSourcePath, blockFormat, sourceThere } )
 			} );
 		}
 
@@ -175,8 +192,15 @@ export async function buildTitleSectorObjectResources( options ) {
 	piety_boss_width.bms names piety_boss_widthlightingmap.ddj while its
 	archive ships the spaced piety_boss_width lightingmap.ddj, so that mesh
 	draws without a lightmap exactly as retail draws it (#3295). Each miss
-	is still listed in `lightmapsMissing`, which the dungeon build prints,
-	so a pipeline fault that drops every lightmap cannot pass unseen.
+	is still listed in `lightmapsMissing`, which the dungeon build prints.
+
+	A .ddj the archive does ship is different: retail draws that lightmap,
+	so a converted PNG the build failed to write is a pipeline fault. The
+	record still names no file (a never-written path would fail the claim
+	audit of a reused region), but the source joins texturePathSet, and the
+	copy pass reports the missing PNG in `missing` as it does a material
+	texture's. Outdoor, title and character-select builds print nothing
+	from `lightmapsMissing`, so that list alone would hide the fault.
 	================
 	*/
 	async function meshLightmap( source ) {
@@ -186,7 +210,12 @@ export async function buildTitleSectorObjectResources( options ) {
 			return null;
 		}
 		const blockFormat = await blockFormatFor( source.sourcePath );
+		// Listed before the check, so the copy pass reports a failed conversion.
 		texturePathSet.add( source.sourcePath );
+		if ( !(await sourceThereFor( source.sourcePath, blockFormat )) ) {
+			lightmapsMissing.push( source.sourcePath );
+			return null;
+		}
 		return {
 			sourcePath: source.sourcePath,
 			texturePublicPath: objectTexturePublicPath( area, source.sourcePath, blockFormat ? ".texture" : ".png" ),
@@ -357,6 +386,26 @@ async function copyObjectMaterialTextures( options ) {
 	}
 
 	return copied;
+}
+
+/*
+================
+materialTexturePublicPath
+
+The public path a material names for its texture, or null when it names
+none or the file it is published from is absent (objectTextureSource: the
+block source, or the converted PNG). A path to a file the
+build never writes is a broken reference: a region reused on a later run
+re-claims every path its kept records name (publicationLedger.mjs
+claimKeptOutput), and the claim audit then refuses the whole build. The
+later client's pha_altar.bmt and pha_remains.bmt name pha_gateway02.ddj,
+which its archives do not ship. Null draws the material untextured, as a
+material without a texture name already does (world-material.ts).
+================
+*/
+export function materialTexturePublicPath( { area, textureSourcePath, blockFormat, sourceThere } ) {
+	if ( !textureSourcePath || !sourceThere ) return null;
+	return objectTexturePublicPath( area, textureSourcePath, blockFormat ? ".texture" : ".png" );
 }
 
 /*
