@@ -127,9 +127,10 @@ def map_archive(path):
 	payload. The later client's Media.pk2 is 698 MB; read_bytes() held all of
 	it in the importer's private memory (725 MB peak measured; the importers
 	run one at a time in the build's tail, after the lanes). A map pages in
-	only the directory blocks and payloads actually read, and the OS can drop those pages again under pressure. The
-	file handle closes at once: the map keeps its own reference to the file
-	and lives until it is garbage collected or the process exits.
+	only the directory blocks and payloads actually read, and the OS can
+	drop those pages again under pressure. The file handle closes at once:
+	the map keeps its own reference to the file and lives until it is
+	garbage collected or the process exits.
 	"""
 	with open(path, "rb") as handle:
 		return mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)

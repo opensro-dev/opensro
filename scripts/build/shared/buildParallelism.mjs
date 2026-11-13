@@ -88,4 +88,7 @@ function currentMachine() {
 // with this size before anything starts it. An empty value means unset, as
 // buildJobs reads it (`??=` would keep the empty string).
 if ( !process.env[BUILD_JOBS_ENV] ) process.env[BUILD_JOBS_ENV] = String( buildJobs() );
-process.env.UV_THREADPOOL_SIZE ??= String( Math.min( MAX_THREADPOOL_SIZE, Math.max( 4, buildJobs() ) ) );
+// libuv reads an empty UV_THREADPOOL_SIZE as one thread.
+if ( !process.env.UV_THREADPOOL_SIZE ) {
+	process.env.UV_THREADPOOL_SIZE = String( Math.min( MAX_THREADPOOL_SIZE, Math.max( 4, buildJobs() ) ) );
+}
