@@ -113,8 +113,9 @@ export async function importLaterDungeonMapsStep() {
 
 // The later client's M window chrome (issue #3210, the v1.188 layout):
 // the big globe, the follow pin's two mode faces, the floor selector,
-// the window's foot, corner and map edges and the guide tabs, under the
-// interface folders the v1.150 extraction already publishes.
+// the window's foot, corner and map edges, the guide tabs and the reverse
+// return point's three faces (#3391), under the interface folders the
+// v1.150 extraction already publishes.
 const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/";
 
 /*
@@ -171,7 +172,10 @@ export function laterWorldMapButtonPublicPaths() {
 		"guide/gd_monster_tab_on",
 		"guide/gd_monster_tab_off",
 		"guide/gd_long_index_open",
-		"guide/gd_long_contents_event"
+		"guide/gd_long_contents_event",
+		"worldmap/map/xy_returnicon",
+		"worldmap/map/xy_returnicon_focus",
+		"worldmap/map/xy_returnicon_press"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 
@@ -300,4 +304,151 @@ export async function importLaterWorldMapGuideStep() {
 	);
 	claimPublicPaths( laterWorldMapGuidePublicPaths( catalog ) );
 	return { monsters: Array.isArray( catalog.monsters ) ? catalog.monsters.length : 0 };
+}
+
+// The reverse return map's destination table (SRO_REVERSE_RETURN_MAP):
+// the later client's refoptionalteleport.txt, written beside the v1.150
+// extraction (extracted/VsroOptionalTeleport_extracted) for the server
+// game-data build to project. Without it the server infers its points
+// from the recall gates and every unique nest, which is not the table
+// the later client offers.
+
+/*
+================
+laterOptionalTeleportImportPlan
+
+What the reverse return table step does with one environment: the same
+contract as the map buttons (SRO_VSRO_ROOT folder, else the one skip
+line), because one archive carries both. The importer verifies the
+archive against its pin before reading a byte.
+================
+*/
+export function laterOptionalTeleportImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_VSRO_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later reverse return table: skipped (SRO_VSRO_ROOT is not set; the server infers its map points)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later reverse return table: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_vsro_optional_teleport.py", "--vsro-root", root ] };
+}
+
+/*
+================
+importLaterOptionalTeleportStep
+
+Writes the import into the game root, not the public tree: the client
+receives the points from the server's world references, so nothing is
+published or claimed here. Skipped with one line without the archive.
+================
+*/
+export async function importLaterOptionalTeleportStep() {
+	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterOptionalTeleportImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[reverse-return] later-client optional teleport import",
+		cwd: rebuildRoot,
+		context: [
+			"The reverse return map's destinations are the later client's refoptionalteleport.txt; the build " +
+			"imports them from the pinned VSRO archive (SRO_VSRO_ROOT) for the server game-data build."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	return { imported: true };
+}
+
+// The Ch'in Tomb's floor minimap (the "jangan cave" radar background):
+// v1.150 ships floor art for Donwhang Stone Cave alone, the pinned later
+// client also has minimap_d/jinsi on the same grid. Its own catalogue sits
+// beside the retail one, which never changes; the client merges it into
+// the tomb's empty floors (runtime/ui/hud/minimap.ts).
+const LATER_TOMB_MINIMAP_CATALOG = "/assets/data/later-dungeon-minimap.json";
+
+/*
+================
+laterTombMinimapImportPlan
+
+What the tomb minimap step does with one environment: the same contract
+as the dungeon maps (SRO_VSRO_ROOT folder, else the one skip line),
+because one archive carries both. The importer verifies the archive
+against its pin before reading a byte.
+================
+*/
+export function laterTombMinimapImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_VSRO_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later tomb minimap: skipped (SRO_VSRO_ROOT is not set; the tomb's floors keep an empty minimap)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later tomb minimap: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_vsro_tomb_minimap.py", "--vsro-root", root ] };
+}
+
+/*
+================
+laterTombMinimapPublicPaths
+
+The public paths one import publishes, read back from its own catalogue
+so the publication ledger claims exactly what the client will ask for:
+the catalogue and every tile it names.
+================
+*/
+export function laterTombMinimapPublicPaths( catalog ) {
+	const paths = [ LATER_TOMB_MINIMAP_CATALOG ];
+	for ( const tile of catalog?.tilePaths ?? [] ) {
+		if ( typeof tile === "string" && tile ) paths.push( tile );
+	}
+	return paths;
+}
+
+/*
+================
+importLaterTombMinimapStep
+
+Before this step the import ran by hand only, so a full build retired a
+tree's tomb tiles and the radar lost its background in the tomb. Now the
+tiles land in the loose public tree with the other later-client imports,
+in time for the final pack tail, and the step claims them. Without the
+archive the build says so in one line.
+================
+*/
+export async function importLaterTombMinimapStep() {
+	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterTombMinimapImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[tomb-minimap] later-client tomb minimap import",
+		cwd: rebuildRoot,
+		context: [
+			"The Ch'in Tomb's floor minimap is native to the later client; the build imports it from the " +
+			"pinned VSRO archive (SRO_VSRO_ROOT) and publishes it with the other loose assets."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const catalog = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "data", "later-dungeon-minimap.json" ), "utf8" )
+	);
+	claimPublicPaths( laterTombMinimapPublicPaths( catalog ) );
+	return { tiles: Array.isArray( catalog.tilePaths ) ? catalog.tilePaths.length : 0 };
 }

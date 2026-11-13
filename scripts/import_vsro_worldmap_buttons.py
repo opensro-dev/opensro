@@ -37,7 +37,11 @@ ARCHIVE_ROOT = "interface/"
 # four corner edges and the guide's Field and Monster tabs in their
 # two faces. The focus and press faces of the globe and the pin stay
 # in the archive: the map tools draw one state face per frame, as they
-# already draw the checkbutton's on and off faces.
+# already draw the checkbutton's on and off faces. The reverse return
+# point's button (xy_returnicon, #3391) ships here too, with all three
+# faces: reverse-map-buttons.ts draws its focus face, so a build with only
+# this client no longer falls back to the port's old sign. This import
+# is their only producer: the v1.696 guide import leaves them out.
 BUTTONS = (
 	"worldmap/wmap_big_button_world",
 	"worldmap/wmap_button_automatic",
@@ -61,6 +65,9 @@ BUTTONS = (
 	"guide/gd_monster_tab_off",
 	"guide/gd_long_index_open",
 	"guide/gd_long_contents_event",
+	"worldmap/map/xy_returnicon",
+	"worldmap/map/xy_returnicon_focus",
+	"worldmap/map/xy_returnicon_press",
 )
 
 
