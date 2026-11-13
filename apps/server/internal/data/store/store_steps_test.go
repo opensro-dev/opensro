@@ -256,7 +256,7 @@ func TestARenamedFieldIsNotAdditive(t *testing.T) {
 	if dropped := droppedFields(previous, renamed); !slices.Equal(dropped, []string{"character: gold"}) {
 		t.Fatalf("the rename's drop = %v", dropped)
 	}
-	steps := map[int]storeStep{50: {true, "a test"}, 51: {true, "renames gold (marked additive by mistake)"}}
+	steps := map[int]storeStep{50: {additive: true, why: "a test"}, 51: {additive: true, why: "renames gold (marked additive by mistake)"}}
 	if violations := readWindowViolations(steps, 51, 2, previous, renamed); len(violations) == 0 {
 		t.Fatal("a renamed field marked additive entered the read window")
 	}
@@ -279,7 +279,7 @@ func TestReadWindowAdmitsOnlyKeptAdditions(t *testing.T) {
 	t.Parallel()
 
 	previous := fieldLists{"character": {"job", "job.type", "name"}}
-	steps := map[int]storeStep{50: {true, "a test"}, 51: {true, "a test"}, 54: {false, "a test"}}
+	steps := map[int]storeStep{50: {additive: true, why: "a test"}, 51: {additive: true, why: "a test"}, 54: {additive: false, why: "a test"}}
 	for _, test := range []struct {
 		name    string
 		version int
@@ -298,7 +298,7 @@ func TestReadWindowAdmitsOnlyKeptAdditions(t *testing.T) {
 			}
 		})
 	}
-	inside := map[int]storeStep{50: {true, "a test"}, 52: {false, "a test"}}
+	inside := map[int]storeStep{50: {additive: true, why: "a test"}, 52: {additive: false, why: "a test"}}
 	if violations := readWindowViolations(inside, 52, 2, previous, previous); len(violations) != 1 {
 		t.Fatalf("a non-additive step two versions on entered a two-wide window: %v", violations)
 	}

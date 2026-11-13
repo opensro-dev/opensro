@@ -6,9 +6,9 @@ authority_upgrade.go - the offline, preserving authority upgrade
 Brings every schema from UpgradeFromVersion up to CurrentVersion and
 CurrentLayoutVersion. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
-Two tables drive it: upgradeSources says which layouts a store at each
-schema may hold, and layoutAdditions which empty tables each later layout
-added. Existing tables and their records survive unchanged; the new record
+Two tables drive it: storeSteps (schema.go) says which layouts a store
+at each schema may hold, and layoutAdditions which empty tables each
+later layout added. Existing tables and their records survive unchanged; the new record
 fields are optional. The role repair makes each guild master the sole
 commander (guild_leader_role.go); it also runs on a current store that
 needs it.
@@ -73,65 +73,6 @@ const preSilkHistoryLayoutVersion = 11
 
 /*
 ================
-upgradeSource
-
-One schema the offline upgrade converts and the layouts a store at it may
-hold, both ends inclusive. A schema's lowest layout is the one its binary
-ran at (git history of CurrentVersion and CurrentLayoutVersion); the wider
-lower ends of schemas 16 through 29 are the legacy lab stores that ran
-those schemas at older layouts. The upper end reaches the current layout
-from schema 25 on: a store a newer binary created and stamped down holds
-the newer tables empty, which the residue guard in UpgradeAuthority
-accepts.
-================
-*/
-type upgradeSource struct {
-	schema    int
-	minLayout int
-	maxLayout int
-}
-
-var upgradeSources = []upgradeSource{
-	{UpgradeFromVersion, 4, 4},           // gains the account tables of layout 5
-	{preCompanionVersion, 5, 5},          // no companion fields
-	{preWorldPointVersion, 5, 5},         // no world points
-	{preTradeRewardVersion, 5, 7},        // no trade rewards
-	{preEndedQuestVersion, 5, 7},         // may already carry ended quests
-	{preJobRewardVersion, 5, 7},          // no job reward or rank snapshot
-	{preStallDecorationVersion, 5, 7},    // no stall decoration
-	{preItemForgeVersion, 5, 7},          // no production table
-	{preCommunityVersion, 5, 8},          // no site fields
-	{preGearPrivacyVersion, 5, 9},        // no gear privacy field
-	{preMostWantedVersion, 5, 9},         // no most-wanted streak (also prePetTrainingVersion)
-	{preLedgerVersion, 5, 9},             // no economy ledger (also preSequentialPetTreeVersion)
-	{preGuildFoundedVersion, 5, 12},      // no guild founding time
-	{preAcademyHonorVersion, 5, 12},      // no training-camp honor
-	{preMergedPetVersion, 5, 12},         // pets not yet merged
-	{preInstanceReturnVersion, 5, 12},    // no instance return point
-	{preStructureMadeVersion, 5, 12},     // no structure made time
-	{preStoredPetCastsVersion, 10, 12},   // stored pet casts are optional
-	{preBreakNoticeVersion, 10, 12},      // the break-notice opt-in is optional
-	{preRenameVersion, 10, 12},           // no name-change scroll state
-	{preHalloweenVersion, 11, 12},        // no Halloween box count
-	{preMostWantedExpiryVersion, 11, 12}, // no wanted-level lapse
-	{preHalloweenAccountVersion, 11, 12}, // Halloween boxes per character
-	{preOnlineRecordVersion, 11, 12},     // optional online fields
-	{preAcademyBuffVersion, 11, 12},      // no Academy cumulated buff
-	{preSilkHistoryVersion, 11, 12},      // no silk-history table
-	// Schema 39's wanted-lapse stamp is unread under the decay; a
-	// streak is stamped fresh at its first judging door (#2721), and
-	// its items read unbound (#1980).
-	{preWantedDecayVersion, 12, 12},
-	{preGourdCountVersion, 12, 12},       // the Gourd allowance starts at zero (#2950)
-	{preArenaChestVersion, 12, 12},       // no arena chest state
-	{preSookArenaAccountVersion, 12, 12}, // the account plane is seeded at first load (#3322)
-	// A current store still upgrades when commander roles disagree with
-	// member grades (guild_leader_role.go): the repair is its only change.
-	{CurrentVersion, 5, 12},
-}
-
-/*
-================
 upgradeSourceLayout
 
 The layout the source store is validated at: its own, once its schema is
@@ -139,16 +80,14 @@ one the upgrade converts and the layout lies inside that schema's window.
 ================
 */
 func upgradeSourceLayout(schema, layout int) (int, error) {
-	for _, source := range upgradeSources {
-		if source.schema != schema {
-			continue
-		}
-		if layout < source.minLayout || layout > source.maxLayout {
-			return 0, fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		return layout, nil
+	step, ok := storeSteps[schema]
+	if !ok {
+		return 0, fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
 	}
-	return 0, fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
+	if layout < step.minLayout || layout > step.maxLayout {
+		return 0, fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+	}
+	return layout, nil
 }
 
 /*

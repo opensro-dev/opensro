@@ -4,12 +4,12 @@
 upgrade_tables_test.go - the offline upgrade's two tables and the
 quarantine's sidecar names
 
-The tables in authority_upgrade.go replace a switch and two hand-written
-comparison chains, so these tests pin what the chains guaranteed: every
-schema from UpgradeFromVersion to CurrentVersion is listed once, each
-window is sane, and every layout from the first addition to the current
-one adds its tables exactly once and in order. The quarantine tests pin
-SQLite's sidecar pairing and generation-based retention.
+storeSteps' layout windows and authority_upgrade.go's additions replace
+a switch and two hand-written comparison chains, so these tests pin what
+the chains guaranteed: each window is sane, and every layout from the
+first addition to the current one adds its tables exactly once and in
+order. The quarantine tests pin SQLite's sidecar pairing and
+generation-based retention.
 
 ===========================================================================
 */
@@ -26,27 +26,32 @@ import (
 
 /*
 ================
-TestUpgradeSourcesCoverEverySchemaOnce
+TestEveryStoreStepHasALayoutWindow
+
+Every listed version's window lies inside the layouts the upgrade
+knows (store_steps_test.go holds that every version is listed), and the
+low ends never fall back: no schema accepts a layout below an earlier
+schema's lowest. The current schema is the exception: its wide window
+lets the role repair run on a current store at any older layout.
 ================
 */
-func TestUpgradeSourcesCoverEverySchemaOnce(t *testing.T) {
-	seen := map[int]bool{}
-	for _, source := range upgradeSources {
-		if seen[source.schema] {
-			t.Fatalf("schema %d listed twice", source.schema)
+func TestEveryStoreStepHasALayoutWindow(t *testing.T) {
+	floor := 0
+	for version := UpgradeFromVersion; version < CurrentVersion; version++ {
+		step, ok := storeSteps[version]
+		if !ok {
+			continue
 		}
-		seen[source.schema] = true
-		if source.minLayout > source.maxLayout || source.maxLayout > CurrentLayoutVersion {
-			t.Fatalf("schema %d window %d..%d", source.schema, source.minLayout, source.maxLayout)
+		if step.minLayout < preMallLayoutVersion || step.minLayout > step.maxLayout || step.maxLayout > CurrentLayoutVersion {
+			t.Fatalf("schema %d window %d..%d", version, step.minLayout, step.maxLayout)
 		}
+		if step.minLayout < floor {
+			t.Fatalf("schema %d accepts layout %d, below an earlier schema's floor %d", version, step.minLayout, floor)
+		}
+		floor = step.minLayout
 	}
-	for schema := UpgradeFromVersion; schema <= CurrentVersion; schema++ {
-		if !seen[schema] {
-			t.Fatalf("schema %d has no upgrade source", schema)
-		}
-	}
-	if len(seen) != CurrentVersion-UpgradeFromVersion+1 {
-		t.Fatalf("%d sources, want only %d..%d", len(seen), UpgradeFromVersion, CurrentVersion)
+	if step := storeSteps[CurrentVersion]; step.maxLayout != CurrentLayoutVersion {
+		t.Fatalf("the current schema's window ends at %d, not the current layout %d", step.maxLayout, CurrentLayoutVersion)
 	}
 }
 
