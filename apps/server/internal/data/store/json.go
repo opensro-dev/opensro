@@ -43,6 +43,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"opensro.online/server/internal/domain"
 )
 
 /*
@@ -429,13 +431,22 @@ recordResidues
 The unknown fields of the rows the commit rewrites from the store's own
 state, keyed by each row's identity. Filled once, at load, and only for
 records that carried unknown fields, so a store a current binary wrote
-holds none and every lookup is a miss on a nil map. Character, ground,
-guild and camp ids are never reused, so a residue cannot land on another
-record; a meta plane entry's key names its subject (an account), which
-keeps its residue for as long as the key exists. Member rows are keyed
-by their guild or camp and character; a member who leaves drops the
-residue at the next write of the member set (pruneMembers), so a later
-membership of the same character starts clean.
+holds none and every lookup is a miss on a nil map. A residue belongs
+to its row, not to its key, and some keys come back: a ground gid is a
+slot the registry hands out again once the drop on it is gone
+(Registry.nextFreeSlot, a 100,000-slot ring), and a training camp's id
+is its master's character id, so a master who disbands and opens again
+gets the same key. Every writer that deletes a row therefore drops its
+residue (forgetGroundResidue, forgetGroupResidues), and the whole-plane
+ground rewrite keeps only the residues of the rows it writes back, so
+a residue never lands on a later record. A rolled-back delete loses
+nothing: the store still holds the row as gone, and the next commit
+deletes it again. Character and guild ids come from never-reused
+watermarks; a meta plane entry's key names its subject (an account),
+which keeps its residue for as long as the key exists. Member rows are
+keyed by their guild or camp and character; a member who leaves drops
+the residue at the next write of the member set (pruneMembers), so a
+later membership of the same character starts clean.
 ================
 */
 type recordResidues struct {
@@ -512,6 +523,48 @@ the member set being written, it keeps only the rows still in it.
 func pruneMembers(residues map[memberResidueKey]unknownFields, division string, group int64, present func(charID int64) bool) {
 	for key := range residues {
 		if key.division == division && key.group == group && !present(key.charID) {
+			delete(residues, key)
+		}
+	}
+}
+
+/*
+================
+forgetGroupResidues
+
+Drops a deleted guild's or camp's own residue and its members': the
+next record under the same id (a camp its master opens again) starts
+clean.
+================
+*/
+func forgetGroupResidues(groups map[groupResidueKey]unknownFields, members map[memberResidueKey]unknownFields, division string, group int64) {
+	delete(groups, groupResidueKey{division: division, id: group})
+	pruneMembers(members, division, group, func(int64) bool { return false })
+}
+
+/*
+================
+forgetGroundResidue
+
+Drops a deleted ground row's residue: its gid is a slot the registry
+hands to a later drop.
+================
+*/
+func forgetGroundResidue(residues map[groundResidueKey]unknownFields, division string, gid uint32) {
+	delete(residues, groundResidueKey{division: division, gid: gid})
+}
+
+/*
+================
+keepGroundResidues
+
+The whole-plane rewrite's prune: only the rows it writes back keep a
+residue.
+================
+*/
+func keepGroundResidues(residues map[groundResidueKey]unknownFields, divisions map[string][]domain.GroundItemRecord) {
+	for key := range residues {
+		if !slices.ContainsFunc(divisions[key.division], func(item domain.GroundItemRecord) bool { return item.Gid == key.gid }) {
 			delete(residues, key)
 		}
 	}

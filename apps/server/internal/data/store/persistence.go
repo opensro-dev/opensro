@@ -286,7 +286,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// rows. The set is retained on a failed commit like every other
 	// dirty flag (D5) and cleared only on success.
 	for key := range s.changes.dissolvedGuild {
-		if err := deleteGuildTx(tx, key.division, key.guildID); err != nil {
+		if err := deleteGuildTx(tx, key.division, key.guildID, &s.residues); err != nil {
 			return err
 		}
 	}
@@ -315,7 +315,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	}
 
 	for key := range s.changes.dissolvedCamp {
-		if err := deleteCampTx(tx, key.division, key.campID); err != nil {
+		if err := deleteCampTx(tx, key.division, key.campID, &s.residues); err != nil {
 			return err
 		}
 	}

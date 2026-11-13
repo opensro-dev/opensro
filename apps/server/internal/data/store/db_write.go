@@ -280,6 +280,7 @@ func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[str
 			}
 		}
 	}
+	keepGroundResidues(residues, divisions)
 	return nil
 }
 
@@ -433,8 +434,11 @@ One ground row removed by gid.
 ================
 */
 func (w *groundRowWriter) deleteRow(divisionID string, gid uint32) error {
-	_, err := w.exec(&w.deleteStmt, deleteGroundSQL, divisionID, gid)
-	return err
+	if _, err := w.exec(&w.deleteStmt, deleteGroundSQL, divisionID, gid); err != nil {
+		return err
+	}
+	forgetGroundResidue(w.residues, divisionID, gid)
+	return nil
 }
 
 /*
@@ -572,13 +576,14 @@ func replaceGuildTx(tx sqlExecer, division string, guildID int64, guild domain.G
 deleteGuildTx
 ================
 */
-func deleteGuildTx(tx sqlExecer, division string, guildID int64) error {
+func deleteGuildTx(tx sqlExecer, division string, guildID int64, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM guild_members WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
 	}
+	forgetGroupResidues(residues.guilds, residues.guildMembers, division, guildID)
 	return nil
 }
 
@@ -630,13 +635,16 @@ func replaceCampTx(tx sqlExecer, division string, campID int64, camp domain.Trai
 deleteCampTx
 ================
 */
-func deleteCampTx(tx sqlExecer, division string, campID int64) error {
+func deleteCampTx(tx sqlExecer, division string, campID int64, residues *recordResidues) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM training_camp_members WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
 	}
+	// The camp id is the master's character id: a camp the master opens
+	// again must not inherit this one's residue.
+	forgetGroupResidues(residues.camps, residues.campMembers, division, campID)
 	return nil
 }
 
