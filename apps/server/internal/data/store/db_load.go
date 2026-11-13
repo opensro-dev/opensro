@@ -71,7 +71,8 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 	}
 
 	// Only the offline upgrader requests layout 4. Runtime callers require
-	// CurrentLayoutVersion and never mutate an older authority during boot.
+	// CurrentLayoutVersion; the boot's only write before this load is the
+	// empty tables of additive layout steps (createBootLayoutTables).
 	if currentLayout >= 5 {
 		if err := validateAccountStorages(db); err != nil {
 			return nil, err

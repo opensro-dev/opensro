@@ -32,10 +32,14 @@
 //
 // Production startup accepts CurrentVersion and CurrentLayoutVersion, and
 // the StoreReadHeadroom newer versions of each (0 today: exactly the
-// current ones). A newer store's stamps are never lowered. Incompatible
-// pre-release stores are replaced through explicit initialization; startup never transforms data in place. Live
-// record JSON is decoded strictly, then independently stored records are
-// validated as one authority graph before any pointer becomes visible.
+// current ones). A newer store's stamps are never lowered. A store up to
+// StoreReadHeadroom layouts older gains those layouts' empty tables at
+// boot when every step between is additive (layout_steps.go); no
+// existing table or row is touched. Incompatible pre-release stores are
+// replaced through explicit initialization; startup never transforms data
+// in place. Live record JSON is decoded strictly, then independently
+// stored records are validated as one authority graph before any pointer
+// becomes visible.
 //
 // Corrupt databases are quarantined with their WAL sidecars and recovered from
 // one checkpointed backup generation when possible. An incompatible schema is

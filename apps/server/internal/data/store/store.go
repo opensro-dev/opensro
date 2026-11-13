@@ -603,6 +603,13 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// A layout behind this binary's by additive steps inside the read
+	// window gains its empty tables first (#3094); loadDB then sees the
+	// current layout. Outside the window nothing is written.
+	if err := createBootLayoutTables(db, layoutSteps, s.readHeadroom); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, s.readHeadroom)
 	if err != nil {
 		db.Close()
