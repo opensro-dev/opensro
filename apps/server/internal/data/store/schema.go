@@ -154,6 +154,64 @@ func isVersionMismatch(err error) bool {
 // record.
 const CurrentVersion = 43
 
+/*
+================
+storeStep
+
+One schema step's class in the version log above (#3092, part 3 of
+#3082). A step is additive when it only adds record fields, list
+entries, tables or meta rows; changes no existing field's meaning,
+width or units; old records decode to the same values (absent = zero);
+and its offline upgrade rewrites no existing row. Only an additive
+step may land inside a live release's read window; a non-additive one
+skips the versions past it, so no older binary ever opens it
+(store_steps_test.go holds both rules against the frozen field lists).
+When in doubt a step is not additive: that costs a maintenance
+release, never saved data.
+================
+*/
+type storeStep struct {
+	additive bool
+	// why is the version log's reason for the class, in one line.
+	why string
+}
+
+// storeSteps classifies every schema step from UpgradeFromVersion to
+// CurrentVersion. A new version adds its entry here with its log line.
+var storeSteps = map[int]storeStep{
+	13: {false, "replaces world.dungeonMinimap with world.dungeonFloorIndex"},
+	14: {true, "optional character fields; layout 5 adds the mall and warehouse tables"},
+	15: {true, "item-owned companions in item rows; records preserved"},
+	16: {true, "optional recall/death point worlds and fortress-return cooldown; layout 6 adds tables"},
+	17: {true, "trade-cargo aliases, weekly contributions and the reward pool meta row"},
+	18: {true, "optional endedQuestIds"},
+	19: {true, "optional job.reward and the job ranking meta row"},
+	20: {true, "optional stallDecoration"},
+	21: {false, "the upgrade rewrites guild members: the master becomes the sole commander"},
+	22: {true, "optional community site fields; layout 9 adds unique_kills"},
+	23: {true, "optional publicGearHidden"},
+	24: {true, "optional mostWanted"},
+	25: {true, "no record change; layout 10 adds economy_ledger"},
+	26: {true, "optional guild foundedAtMs"},
+	27: {true, "optional training-camp honor fields and campDisbandedAtMs"},
+	28: {true, "optional companion training and treeVersion"},
+	29: {true, "optional world.instanceReturn"},
+	30: {true, "optional fortress structure madeAtMs"},
+	31: {true, "optional pet cast capacity, charges and recharge period"},
+	32: {true, "optional breakNotice"},
+	33: {true, "optional name-change scroll state; layout 11 adds name_reservations"},
+	34: {true, "optional per-character Halloween box count"},
+	35: {true, "optional mostWanted.expiresAtMs"},
+	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it"},
+	37: {true, "optional time-online record"},
+	38: {true, "optional Academy cumulated-buff fields on camp members"},
+	39: {true, "no record change; layout 12 adds silk_history"},
+	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed"},
+	41: {true, "optional account gourdCount"},
+	42: {true, "optional arena entry markers and reward chest"},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it"},
+}
+
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
 /*
