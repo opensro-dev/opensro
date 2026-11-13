@@ -44,6 +44,7 @@ export default {
 		"scripts/test/assets/laterWorldMapButtonsStep.test.mjs",
 		"scripts/test/assets/laterWorldMapGuideStep.test.mjs",
 		"scripts/test/assets/laterOptionalTeleportStep.test.mjs",
+		"scripts/test/assets/laterTombMinimapStep.test.mjs",
 		"scripts/test/assets/publishedAssetBoundary.test.mjs",
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",

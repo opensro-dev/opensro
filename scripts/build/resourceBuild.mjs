@@ -80,6 +80,7 @@ import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
 import {
 	importLaterDungeonMapsStep,
 	importLaterOptionalTeleportStep,
+	importLaterTombMinimapStep,
 	importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuideStep
 } from "./laterClientImports.mjs";
@@ -88,6 +89,8 @@ export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
 	laterOptionalTeleportImportPlan,
+	laterTombMinimapImportPlan,
+	laterTombMinimapPublicPaths,
 	laterWorldMapButtonsImportPlan,
 	laterWorldMapButtonPublicPaths,
 	laterWorldMapGuideImportPlan,
@@ -241,6 +244,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
 	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
 	importLaterOptionalTeleport: importLaterOptionalTeleportStep,
+	importLaterTombMinimap: importLaterTombMinimapStep,
 	packTree: packPublicTree
 } );
 
@@ -632,6 +636,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The reverse return map's destination table rides the v1.188 archive
 	// too, but lands in the game root for the server game-data build.
 	const laterOptionalTeleport = await timed( "laterOptionalTeleport", () => steps.importLaterOptionalTeleport() );
+	// The Ch'in Tomb's floor minimap rides the v1.188 archive under the same
+	// rule, claimed before the pack tail.
+	const laterTombMinimap = await timed( "laterTombMinimap", () => steps.importLaterTombMinimap() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -707,6 +714,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		laterWorldMapButtons,
 		laterWorldMapGuide,
 		laterOptionalTeleport,
+		laterTombMinimap,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

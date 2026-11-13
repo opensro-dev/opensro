@@ -265,7 +265,8 @@ const AFTER_FAMILIES = [
 	"importLaterDungeonMaps",
 	"importLaterWorldMapButtons",
 	"importLaterWorldMapGuide",
-	"importLaterOptionalTeleport"
+	"importLaterOptionalTeleport",
+	"importLaterTombMinimap"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {
