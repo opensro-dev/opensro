@@ -88,7 +88,7 @@ func createAuthorityDatabase(targetPath string, data *authoritySeed) (err error)
 	if err := quickCheck(context.Background(), db); err != nil {
 		return fmt.Errorf("validating authority database: %w", err)
 	}
-	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, 0); err != nil {
 		return fmt.Errorf("loading newly created authority database: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {

@@ -127,7 +127,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		return "", fmt.Errorf("authority upgrade: master roles: %w", err)
 	}
 	if schema == CurrentVersion && layout == CurrentLayoutVersion && len(repairs) == 0 {
-		if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion); err != nil {
+		if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, 0); err != nil {
 			return "", fmt.Errorf("authority upgrade: current authority validation: %w", err)
 		}
 		return "", ErrAuthorityCurrent
@@ -328,7 +328,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	default:
 		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
 	}
-	if _, err := loadDB(db, schema, sourceLayout); err != nil {
+	if _, err := loadDB(db, schema, sourceLayout, 0); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
 	var added []string
@@ -458,16 +458,16 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if err := applyLeaderRoleRepairs(tx, repairs); err != nil {
 		return backupPath, err
 	}
-	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
 		return backupPath, err
 	}
-	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprint(CurrentVersion)); err != nil {
+	if err := stampVersionTx(tx, metaKeySchemaVersion, CurrentVersion); err != nil {
 		return backupPath, err
 	}
 	if err := tx.Commit(); err != nil {
 		return backupPath, err
 	}
-	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, 0); err != nil {
 		return backupPath, fmt.Errorf("authority upgrade committed, validation failed; retain backup %s: %w", backupPath, err)
 	}
 	return backupPath, nil

@@ -97,6 +97,10 @@ type Options struct {
 	// OpenProbe is the test seam that holds an open step open; nil in
 	// production. A returned error stops the open.
 	OpenProbe func(ctx context.Context, step string) error
+	// readHeadroom widens the read window past StoreReadHeadroom; only
+	// this package's tests set it (#3091), production reads the
+	// constant alone.
+	readHeadroom int
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -272,6 +276,15 @@ type Store struct {
 	// commit rewrites from the store's own state, kept from the load so
 	// a write never drops a newer release's data (json.go, #3090).
 	residues recordResidues
+	// schemaStamp and layoutStamp are the meta version stamps every
+	// commit writes: the loaded store's, or this binary's when higher
+	// (adoptDB). A store opened inside the read window keeps its newer
+	// stamps (#3091).
+	schemaStamp int
+	layoutStamp int
+	// readHeadroom is the read window this store opens with
+	// (StoreReadHeadroom, or a test's wider one).
+	readHeadroom int
 
 	// guilds / guildMembers are the guild plane (the guilds and
 	// guild_members tables): division -> guild id -> the guild row and
@@ -429,6 +442,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		asyncCommit:      opts.AsyncCommit,
 		openCtx:          openCtx,
 		openProbe:        opts.OpenProbe,
+		readHeadroom:     max(StoreReadHeadroom, opts.readHeadroom),
 		now:              now,
 		writeFile:        writeFileAtomic,
 	}
@@ -589,7 +603,7 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
-	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion)
+	loaded, err := loadDB(db, CurrentVersion, CurrentLayoutVersion, s.readHeadroom)
 	if err != nil {
 		db.Close()
 		return nil, nil, err
@@ -718,6 +732,11 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 		s.changes.sookArenaAccounts = true
 	}
 	s.residues = loaded.residues
+	// The stamps every commit writes: never below what the store
+	// already holds (a newer store inside the read window keeps its
+	// own), never below this binary's.
+	s.schemaStamp = max(loaded.version, CurrentVersion)
+	s.layoutStamp = max(loaded.layout, CurrentLayoutVersion)
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}
