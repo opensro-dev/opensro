@@ -58,9 +58,13 @@ SEED_SIZE_LIMIT = 5_000_000
 TEXT_RUN_BYTES = 16
 # One rzpipe cmd() call drops commands past a few KB of text (seen
 # live: a 400-command rename batch applied only its first ~150), so
-# batches are capped by bytes as well as by count.
+# batches are capped by bytes as well as by count. rizin reads one
+# command line into a 4096-byte buffer: a batch of exactly 4095 bytes
+# plus rzpipe's newline lost its last character, so `af+ X @ 0x462b40`
+# landed as a zero-size function at 0x462b4 (20 rows per seed,
+# dogfood 2026-11-13). The cap keeps every batch well inside it.
 APPLY_CHUNK_COMMANDS = 200
-APPLY_CHUNK_BYTES = 4096
+APPLY_CHUNK_BYTES = 3072
 MANIFEST_NAME = "seed-manifest.json"
 BN_NAMES_FORMAT = "sro-bn-function-names"
 BN_NAMES_VERSION = 1
@@ -393,6 +397,32 @@ bound those facts imply. Names go through rizin_names.
 	return commands
 
 
+def _repair_apply(pipe, functions, preexisting, present):
+	"""Retry each seed row rizin lacks, one command at a time; remove the
+	functions no seed row and no load defined.
+
+A row can go missing because a command reached rizin damaged, and a
+damaged `af+` defines a function at a wrong address; both are
+repaired here and counted, never left for `index` to publish. A row
+that a single, intact command still cannot define (it lies inside a
+neighbour's block) stays missing and is reported by the caller.
+Returns (retried, ghosts removed).
+	"""
+	seed = {va for va, _ in functions}
+	missing = {va for va in seed if va not in present}
+	# The full list's commands, so a retried block keeps its real extent
+	# (to the next seed function), not a lone row's 16-byte default.
+	for command in _seed_commands(functions, preexisting):
+		head = command.split()
+		va = int(head[-1] if head[0] in ("af+", "afn") else head[1], 16)
+		if va in missing:
+			pipe.cmd(command)
+	ghosts = [va for va in present if va not in seed and va not in preexisting]
+	for va in ghosts:
+		pipe.cmd(f"af- @ {va:#x}")
+	return len(missing), len(ghosts)
+
+
 def apply_seed(payload, binary_path, rzdb_path, limit=0, opener=open_session, stats=None):
 	"""Define the seed's functions in rizin; save the project.
 
@@ -427,6 +457,11 @@ address inside a neighbour's block) is reported, never assumed.
 			_batched(pipe, _seed_commands(functions, preexisting))
 			rows = pipe.cmdj("aflj") or []
 			present = {row["offset"]: row.get("name", "") for row in rows}
+			stats["retried"], stats["ghosts"] = _repair_apply(
+				pipe, functions, preexisting, present)
+			if stats["retried"] or stats["ghosts"]:
+				rows = pipe.cmdj("aflj") or []
+				present = {row["offset"]: row.get("name", "") for row in rows}
 			defined = [va for va, _ in functions if va in present]
 			stats["preexisting"] = sum(1 for va, _ in functions if va in preexisting)
 			safe = rizin_names(functions)
@@ -595,6 +630,9 @@ def cmd_seed_apply(args, con):
 	# The whole command, global options first: `--rzdb` after `index` is
 	# refused by the rizin parser, which is how a newcomer copying the
 	# apply line's shape met an argparse error (dogfood 2026-11-13).
+	if stats.get("retried") or stats.get("ghosts"):
+		print(f"  repaired: {stats['retried']} row(s) retried one at a time, "
+		      f"{stats['ghosts']} misplaced function(s) removed")
 	print("  next (the reference pass xref/strings need):")
 	print(f'    revtool.py --backend rizin --binary "{binary}" --rzdb "{rzdb}" index')
 	print(f"  seed names in place {named}")
