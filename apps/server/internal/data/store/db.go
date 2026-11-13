@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -278,13 +278,23 @@ file would replay old frames into the wrong generation.
 ==================
 */
 func dbSidecars(path string) []string {
-	return []string{path + "-wal", path + "-shm"}
+	return []string{path + dbSidecarWAL, path + dbSidecarSHM}
 }
 
-// quarantineDB renames the database AND its sidecars aside.
+// dbSidecarWAL and dbSidecarSHM are SQLite's companion suffixes: it pairs
+// <main>-wal and <main>-shm with <main> and nothing else.
+const (
+	dbSidecarWAL = "-wal"
+	dbSidecarSHM = "-shm"
+)
+
 /*
 ================
 quarantineDB
+
+Renames the database AND its sidecars aside. Each sidecar keeps SQLite's
+own suffix on the quarantined name (<dest>-wal), so opening the
+quarantined copy for triage replays its WAL frames like the original.
 ================
 */
 func quarantineDB(path string, now time.Time) (string, error) {
@@ -294,7 +304,7 @@ func quarantineDB(path string, now time.Time) (string, error) {
 	}
 	for _, sidecar := range dbSidecars(path) {
 		if _, statErr := os.Stat(sidecar); statErr == nil {
-			if err := os.Rename(sidecar, dest+filepath.Ext(sidecar)); err != nil {
+			if err := os.Rename(sidecar, dest+strings.TrimPrefix(sidecar, path)); err != nil {
 				return "", fmt.Errorf("quarantining database sidecar %s: %w", sidecar, err)
 			}
 		}
@@ -352,6 +362,3 @@ type loadedDB struct {
 	// from the store's own state (json.go, #3090).
 	residues recordResidues
 }
-
-// loadDB accepts only the exact current character and layout versions. It
-// validates without rewriting the database.

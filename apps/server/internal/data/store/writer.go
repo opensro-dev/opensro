@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"opensro.online/server/internal/platform/privatepath"
@@ -207,17 +208,54 @@ const keepQuarantines = 3
 pruneQuarantines
 
 pruneQuarantines deletes all but the newest keepQuarantines quarantine
-files for the target. Names embed unix milliseconds at fixed magnitude,
-so lexicographic order is chronological for this codebase's lifetime.
+generations for the target. A generation is one quarantine's files: the
+main file and any sidecars quarantineDB moved beside it, which share its
+<base>.corrupt-<unix ms> prefix. Counting files instead would let one
+database's -wal and -shm push two older generations out, or split a
+kept database from its WAL. Names embed unix milliseconds at fixed
+magnitude, so lexicographic order is chronological for this codebase's
+lifetime.
 ==================
 */
 func pruneQuarantines(path string) {
 	matches, err := filepath.Glob(path + corruptSuffix + "*")
-	if err != nil || len(matches) <= keepQuarantines {
+	if err != nil {
 		return
 	}
-	sort.Strings(matches)
-	for _, old := range matches[:len(matches)-keepQuarantines] {
-		os.Remove(old)
+	generations := map[string][]string{}
+	for _, match := range matches {
+		key := quarantineGeneration(path, match)
+		generations[key] = append(generations[key], match)
 	}
+	if len(generations) <= keepQuarantines {
+		return
+	}
+	keys := make([]string, 0, len(generations))
+	for key := range generations {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, old := range keys[:len(keys)-keepQuarantines] {
+		for _, file := range generations[old] {
+			os.Remove(file)
+		}
+	}
+}
+
+/*
+==================
+quarantineGeneration
+
+The unix-millisecond stamp naming the quarantine a file belongs to: the
+digits after <base>.corrupt-. Whatever follows them (a sidecar suffix,
+or the ".db-wal" an older release appended) belongs to that generation.
+==================
+*/
+func quarantineGeneration(path, file string) string {
+	rest := strings.TrimPrefix(filepath.Base(file), filepath.Base(path)+corruptSuffix)
+	digits := 0
+	for digits < len(rest) && rest[digits] >= '0' && rest[digits] <= '9' {
+		digits++
+	}
+	return rest[:digits]
 }

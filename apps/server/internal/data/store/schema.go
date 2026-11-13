@@ -13,6 +13,7 @@ top-level fields survive the next write regardless (json.go, #3090).
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -198,9 +199,18 @@ var retiredCharacterFields = []string{"dressSetKeys", "weaponSetKeys"}
 /*
 ================
 stripRetiredCharacterFields
+
+A record that names no retired key is returned as it is, without the
+field-map parse: almost every record at boot. The byte test only rules a
+key out (records are json.Marshal output, which never escapes a letter
+of a key); a match (a key, or the same text inside a value) takes the
+parse, which decides.
 ================
 */
 func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
+	if !namesRetiredCharacterField(raw) {
+		return raw, nil
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
@@ -222,6 +232,20 @@ func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
 		return raw, nil
 	}
 	return json.Marshal(fields)
+}
+
+/*
+================
+namesRetiredCharacterField
+================
+*/
+func namesRetiredCharacterField(raw json.RawMessage) bool {
+	for _, name := range retiredCharacterFields {
+		if bytes.Contains(raw, []byte(`"`+name+`"`)) {
+			return true
+		}
+	}
+	return false
 }
 
 /*
