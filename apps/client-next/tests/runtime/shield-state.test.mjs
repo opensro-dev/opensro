@@ -32,7 +32,7 @@ test("Bond feedback reaches the entity animation through the world dispatcher", 
 		core.receive( { opcode: 0x3fb4, payload }, kind * 100 );
 		core.step( kind * 100, false );
 		const batch = defined( core.take() );
-		assert.ok( batch.events.some( event => event.entity?.petBondPulse?.kind === kind ) );
+		assert.ok( batch.events.some( event => event.kind === "state" && event.entity.petBondPulse?.kind === kind ) );
 		core.ack( batch.sequence );
 	}
 	core.dispose();
