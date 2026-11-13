@@ -151,15 +151,28 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 	})
 }
 
-func TestDecodeCharacterStrictRefusesUnknownField(t *testing.T) {
+/*
+================
+TestDecodeCharacterKeepsUnknownTopLevelFields
+
+A top-level field this binary does not know is a newer release's: the
+character loads and the field comes back as its residue, value for
+value (json.go, #3090). Below the top level the strict rule stands.
+================
+*/
+func TestDecodeCharacterKeepsUnknownTopLevelFields(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","mysteryKey":true}`))
-	if err == nil {
-		t.Fatal("unknown character field must refuse")
+	character, unknown, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","mysteryKey":{"b":[1, 2],"a":"x"},"another":7}`))
+	if err != nil || character.Name != "asd2" {
+		t.Fatalf("a character with unknown top-level fields must load: %v", err)
 	}
-	if !strings.Contains(err.Error(), "mysteryKey") {
-		t.Fatalf("refusal must name the unknown field: %v", err)
+	if want := unknownFields(`{"another":7,"mysteryKey":{"b":[1,2],"a":"x"}}`); unknown != want {
+		t.Fatalf("residue = %s, want %s", unknown, want)
+	}
+	_, _, err = decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","pk":{"mysteryKey":true}}`))
+	if err == nil || !strings.Contains(err.Error(), "mysteryKey") {
+		t.Fatalf("an unknown nested field must refuse by name: %v", err)
 	}
 }
 
@@ -179,16 +192,18 @@ func TestDecodeCharacterStrictDropsEmptyRetiredFields(t *testing.T) {
 		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"weaponSetKeys":[]}`,
 		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":null,"weaponSetKeys":null}`,
 	} {
-		character, err := decodeCharacterStrict([]byte(record))
+		character, _, err := decodeCharacterStrict([]byte(record))
 		if err != nil || character.Name != "asd2" {
 			t.Fatalf("retired empty fields must load: %v (%s)", err, record)
 		}
 	}
-	_, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","weaponSetKeys":["CH_M_SPEAR_01"]}`))
+	_, _, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","weaponSetKeys":["CH_M_SPEAR_01"]}`))
 	if err == nil || !strings.Contains(err.Error(), "weaponSetKeys") {
 		t.Fatalf("a populated retired field must refuse by name: %v", err)
 	}
-	if _, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"mysteryKey":true}`)); err == nil {
-		t.Fatal("stripping retired fields must not admit other unknown fields")
+	// A retired field is dropped, never kept as an unknown one.
+	_, unknown, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"mysteryKey":true}`))
+	if err != nil || unknown != `{"mysteryKey":true}` {
+		t.Fatalf("retired and unknown fields together = %s, %v", unknown, err)
 	}
 }

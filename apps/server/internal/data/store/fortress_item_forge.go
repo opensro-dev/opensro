@@ -16,7 +16,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"opensro.online/server/internal/domain"
@@ -43,7 +42,9 @@ A row's JSON must name the row's own keys and a collectable order.
 */
 func decodeFortressItemForge(fortressID, itemRefID uint32, raw string) (domain.FortressItemForgeRecord, error) {
 	var forge domain.FortressItemForgeRecord
-	if err := decodeJSONStrict([]byte(raw), &forge); err != nil {
+	// Unknown top-level fields stay on disk: saveFortressItemForgeTx
+	// reads them back before replacing the row.
+	if _, err := decodeRecordFields([]byte(raw), &forge); err != nil {
 		return forge, fmt.Errorf("fortress %d item forge %d: %w", fortressID, itemRefID, err)
 	}
 	if forge.FortressID != fortressID || forge.ItemRefID != itemRefID || forge.Count == 0 ||
@@ -123,7 +124,13 @@ func saveFortressItemForgeTx(tx *sql.Tx, division string, forge domain.FortressI
 			division, forge.FortressID, forge.ItemRefID)
 		return err
 	}
-	raw, err := json.Marshal(forge)
+	unknown, err := storedUnknownFields[domain.FortressItemForgeRecord](tx,
+		"SELECT record FROM fortress_item_forges WHERE division = ? AND fortress_id = ? AND item_ref_id = ?",
+		division, forge.FortressID, forge.ItemRefID)
+	if err != nil {
+		return err
+	}
+	raw, err := encodeRecordFields(forge, unknown)
 	if err != nil {
 		return err
 	}
@@ -241,7 +248,7 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
+	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID], &s.residues); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
 	if err = saveFortressItemForgeTx(tx.Tx, division, start.Forge, true); err != nil {

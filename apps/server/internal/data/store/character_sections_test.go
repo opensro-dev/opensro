@@ -426,7 +426,7 @@ func BenchmarkEncodeCharacterFat(b *testing.B) {
 	c := fatCharacter()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if _, err := encodeCharacter(testDivision, c); err != nil {
+		if _, err := encodeCharacter(testDivision, c, ""); err != nil {
 			b.Fatal(err)
 		}
 	}

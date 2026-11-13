@@ -20,7 +20,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -64,30 +63,32 @@ loadSookArenaAccounts
 
 The second result reports whether the row exists at all: an authority
 that predates the account count has none, and its plane is seeded from
-the legacy character counts instead (seedSookArenaAccounts). Unknown
-fields or a count past the daily allowance are corruption, not a
-reason to silently hand an account more entries.
+the legacy character counts instead (seedSookArenaAccounts). A count
+past the daily allowance is corruption, not a reason to silently hand
+an account more entries. An account's unknown top-level fields are
+returned for the next write (json.go).
 ================
 */
-func loadSookArenaAccounts(db *sql.DB) (map[string]*domain.SookArenaAccount, bool, error) {
+func loadSookArenaAccounts(db *sql.DB) (map[string]*domain.SookArenaAccount, map[string]unknownFields, bool, error) {
 	var raw string
 	err := db.QueryRow("SELECT value FROM meta WHERE key = ?", metaKeySookArenaAccounts).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return map[string]*domain.SookArenaAccount{}, false, nil
+		return map[string]*domain.SookArenaAccount{}, nil, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	accounts := map[string]*domain.SookArenaAccount{}
-	if err := decodeJSONStrict([]byte(raw), &accounts); err != nil {
-		return nil, false, fmt.Errorf("survival arena accounts: %w", err)
+	unknown, err := decodePlaneFields([]byte(raw), &accounts)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("survival arena accounts: %w", err)
 	}
 	for accountID, record := range accounts {
 		if strings.TrimSpace(accountID) != accountID || record == nil || record.Day < 0 || record.Entries > domain.SookArenaDailyEntries {
-			return nil, false, fmt.Errorf("invalid survival arena account %q", accountID)
+			return nil, nil, false, fmt.Errorf("invalid survival arena account %q", accountID)
 		}
 	}
-	return accounts, true, nil
+	return accounts, unknown, true, nil
 }
 
 /*
@@ -131,14 +132,15 @@ func seedSookArenaAccounts(characters map[string][]*domain.Character) map[string
 sookArenaAccountsRecord
 
 The meta row's bytes for the account plane; empty when no account has
-entered, in which case no writer puts a row down.
+entered, in which case no writer puts a row down. unknown holds the
+accounts' stored unknown fields.
 ================
 */
-func sookArenaAccountsRecord(accounts map[string]*domain.SookArenaAccount) (string, error) {
+func sookArenaAccountsRecord(accounts map[string]*domain.SookArenaAccount, unknown map[string]unknownFields) (string, error) {
 	if len(accounts) == 0 {
 		return "", nil
 	}
-	raw, err := json.Marshal(accounts)
+	raw, err := encodePlaneFields(accounts, unknown)
 	if err != nil {
 		return "", err
 	}
@@ -151,7 +153,7 @@ writeSookArenaAccounts
 ================
 */
 func writeSookArenaAccounts(tx *sql.Tx, accounts map[string]*domain.SookArenaAccount) error {
-	record, err := sookArenaAccountsRecord(accounts)
+	record, err := sookArenaAccountsRecord(accounts, nil)
 	if err != nil || record == "" {
 		return err
 	}

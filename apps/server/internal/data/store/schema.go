@@ -4,7 +4,9 @@
 schema.go - strict authority record versions and character decoding
 
 A version identifies the retained value graph, not just SQL tables. Older
-binaries must refuse new record fields instead of losing them on a write.
+binaries must refuse new record fields instead of losing them on a write:
+the version check refuses a newer store at boot, and a record's unknown
+top-level fields survive the next write regardless (json.go, #3090).
 
 ===========================================================================
 */
@@ -226,21 +228,24 @@ func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
 ================
 decodeCharacterStrict
 
-Refuses unknown fields and ownerless records. A current-schema load must
-never silently discard data on its next commit.
+Refuses ownerless records and unknown fields below the top level. The
+record's unknown top-level fields are returned for the store to write
+back (json.go, #3090): a current-schema load must never silently
+discard data on its next commit.
 ================
 */
-func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, error) {
+func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, unknownFields, error) {
 	raw, err := stripRetiredCharacterFields(raw)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	character := &domain.Character{}
-	if err := decodeJSONStrict(raw, character); err != nil {
-		return nil, err
+	unknown, err := decodeRecordFields(raw, character)
+	if err != nil {
+		return nil, "", err
 	}
 	if strings.TrimSpace(character.AccountID) == "" {
-		return nil, fmt.Errorf("character %q has no accountId; account ownership is mandatory in schema v%d", character.Name, CurrentVersion)
+		return nil, "", fmt.Errorf("character %q has no accountId; account ownership is mandatory in schema v%d", character.Name, CurrentVersion)
 	}
-	return character, nil
+	return character, unknown, nil
 }

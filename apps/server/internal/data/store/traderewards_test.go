@@ -75,7 +75,7 @@ func TestTradeRewardPoolRejectsUnknownShardAndInvalidRecord(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyTradeRewards, `{"lost":{"hunters":3,"thieves":2}}`); err != nil {
 		t.Fatal(err)
 	}
-	pools, err := loadTradeRewards(s.syncDBLocked())
+	pools, _, err := loadTradeRewards(s.syncDBLocked())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestTradeRewardPoolRejectsUnknownShardAndInvalidRecord(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("UPDATE meta SET value = ? WHERE key = ?", `{"lost":{"hunters":-1,"thieves":2}}`, metaKeyTradeRewards); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadTradeRewards(s.syncDBLocked()); err == nil {
+	if _, _, err := loadTradeRewards(s.syncDBLocked()); err == nil {
 		t.Fatal("negative pool accepted")
 	}
 }
@@ -121,7 +121,7 @@ func TestTradeRewardPoolAndGoldCannotCommitSeparately(t *testing.T) {
 	}) {
 		t.Fatal("admitted mutation refused")
 	}
-	pools, err := loadTradeRewards(s.syncDBLocked())
+	pools, _, err := loadTradeRewards(s.syncDBLocked())
 	if err != nil || pools[testDivision] != (domain.TradeRewardPool{}) {
 		t.Fatalf("half-committed pool %+v: %v", pools, err)
 	}
@@ -138,7 +138,7 @@ func TestTradeRewardPoolAndGoldCannotCommitSeparately(t *testing.T) {
 	if !s.UpdateCharacters([]*domain.Character{c}, "retry", func() bool { return true }) {
 		t.Fatal("retry refused")
 	}
-	pools, err = loadTradeRewards(s.syncDBLocked())
+	pools, _, err = loadTradeRewards(s.syncDBLocked())
 	if err != nil || pools[testDivision] != (domain.TradeRewardPool{Thieves: 22}) {
 		t.Fatalf("retried pool %+v: %v", pools, err)
 	}

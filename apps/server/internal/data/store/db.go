@@ -342,6 +342,9 @@ type loadedDB struct {
 	// sookArenaSeeded is the same report for the survival arena's
 	// account plane (seedSookArenaAccounts, #3322).
 	sookArenaSeeded bool
+	// residues are the unknown fields of the rows the commit rewrites
+	// from the store's own state (json.go, #3090).
+	residues recordResidues
 }
 
 // loadDB accepts only the exact current character and layout versions. It
