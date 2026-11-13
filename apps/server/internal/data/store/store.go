@@ -565,10 +565,11 @@ func (s *Store) loadDBLadder(mainExists bool) error {
 	if cErr := s.openCtx.Err(); cErr != nil {
 		return cErr
 	}
-	if isVersionMismatch(err) {
-		// A healthy database this binary cannot serve. Not corruption:
-		// the file stays exactly where it is, and the older bak
-		// generation must NOT load - that would be a silent rollback.
+	if refusedInPlace(err) {
+		// A healthy database this binary cannot serve, or one whose boot
+		// layout write failed on the volume. Not corruption: the file
+		// stays exactly where it is, and the older bak generation must
+		// NOT load - that would be a silent rollback.
 		// Refuse; the operator swaps the binary.
 		return err
 	}
@@ -676,6 +677,11 @@ func (s *Store) recoverFromDBBak(cause error) error {
 		}
 		if isVersionMismatch(err) {
 			return fmt.Errorf("%s is for a different binary version: %w", DBBakFileName, err)
+		}
+		if refusedInPlace(err) {
+			// The restored bak read cleanly; only the boot's layout write
+			// failed on the volume. Keep it in place for the next boot.
+			return fmt.Errorf("%s restored, but its boot layout write failed: %w", DBBakFileName, err)
 		}
 		if quarantined, qErr := quarantine(s.dbBakPath, s.now()); qErr == nil {
 			log.Errorf("store: %s also failed to load (%v); quarantined to %s", DBBakFileName, err, quarantined)

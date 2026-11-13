@@ -18,6 +18,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -354,6 +355,38 @@ func TestBootRefusesANewTableThatHoldsRows(t *testing.T) {
 	}
 	if got := metaStamp(t, dir, metaKeyLayoutVersion); got != strconv.Itoa(CurrentLayoutVersion-1) {
 		t.Fatalf("layout stamp = %s", got)
+	}
+}
+
+/*
+================
+TestABootLayoutWriteFailureRefusesInPlace
+
+A boot layout write that fails after every check passed (here a step
+statement the database rejects, standing in for a full or read-only
+volume) leaves the store as it was and is refused in place, never
+quarantined: the bak rung would roll back the main's progress. It is
+not an incompatible schema either: the binary fits the store.
+================
+*/
+func TestABootLayoutWriteFailureRefusesInPlace(t *testing.T) {
+	t.Parallel()
+	broken := slices.Clone(layoutSteps)
+	last := &broken[len(broken)-1]
+	last.schema += "INSERT INTO no_such_table VALUES (1);"
+	dir, clock := t.TempDir(), newTestClock()
+	olderLayoutStore(t, dir, clock, CurrentLayoutVersion-1)
+	db := connectTest(t, dir)
+	before := databaseContents(t, db)
+	err := createBootLayoutTables(db, broken, 1)
+	if !errors.Is(err, errBootLayoutWrite) || !refusedInPlace(err) || isVersionMismatch(err) {
+		t.Fatalf("the boot step = %v, want a write failure refused in place", err)
+	}
+	if after := databaseContents(t, db); !maps.Equal(before, after) {
+		t.Fatal("a failed boot layout write changed the store")
+	}
+	if !refusedInPlace(fmt.Errorf("wrapped: %w", errIncompatibleSchema)) || refusedInPlace(errors.New("corrupt")) {
+		t.Fatal("refusedInPlace must keep an incompatible store in place and let corruption reach quarantine")
 	}
 }
 

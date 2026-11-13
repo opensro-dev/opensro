@@ -19,11 +19,33 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
+
+// errBootLayoutWrite marks a boot layout step whose write failed after
+// every check passed: the store read cleanly and its layout fit the
+// window, so the fault is the volume's (a full disk, a read-only mount,
+// a held lock), not the file's. Such a store is refused in place like an
+// incompatible one: quarantining it would serve the older bak generation,
+// a rollback of everything the main holds since.
+var errBootLayoutWrite = errors.New("the boot could not add a newer layout's empty tables")
+
+/*
+================
+refusedInPlace
+
+Whether a failed load leaves the database where it is, never quarantined
+and never replaced by its bak: a healthy store this binary cannot serve
+(errIncompatibleSchema), or one whose boot layout write failed.
+================
+*/
+func refusedInPlace(err error) bool {
+	return isVersionMismatch(err) || errors.Is(err, errBootLayoutWrite)
+}
 
 /*
 ================
@@ -160,9 +182,27 @@ func createBootLayoutTables(db *sql.DB, steps []layoutStep, headroom int) error 
 	if err != nil {
 		return fmt.Errorf("boot layout step: %w: %w", err, errIncompatibleSchema)
 	}
+	created, err := writeBootLayoutSteps(db, pending)
+	if err != nil {
+		return fmt.Errorf("boot layout %d -> %d: %w: %w", layout, CurrentLayoutVersion, err, errBootLayoutWrite)
+	}
+	log.Infof("store: layout %d -> %d at boot: created the empty tables %s", layout, CurrentLayoutVersion, strings.Join(created, ", "))
+	return nil
+}
+
+/*
+================
+writeBootLayoutSteps
+
+The boot's one write: the pending steps up to this binary's layout and
+the raised stamp, in one transaction, so a failure leaves the store as
+it was. Returns the tables created.
+================
+*/
+func writeBootLayoutSteps(db *sql.DB, pending []layoutStep) ([]string, error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	var created []string
@@ -171,16 +211,15 @@ func createBootLayoutTables(db *sql.DB, steps []layoutStep, headroom int) error 
 			break
 		}
 		if _, err := tx.Exec(step.schema); err != nil {
-			return fmt.Errorf("boot layout step %d: %w", step.layout, err)
+			return nil, fmt.Errorf("layout step %d: %w", step.layout, err)
 		}
 		created = append(created, step.tables...)
 	}
 	if err := stampVersionTx(tx, metaKeyLayoutVersion, CurrentLayoutVersion); err != nil {
-		return err
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
-	log.Infof("store: layout %d -> %d at boot: created the empty tables %s", layout, CurrentLayoutVersion, strings.Join(created, ", "))
-	return nil
+	return created, nil
 }
