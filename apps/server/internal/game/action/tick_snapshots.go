@@ -172,3 +172,99 @@ func (rt *Runtime) storeTickSnapshot(kind tickSnapshotKind, character *enterworl
 	}
 	copies[character] = tickSnapshotEntry{epoch: epoch, snapshot: snapshot}
 }
+
+//============================================================================
+
+/*
+================
+keptCastCopies
+
+EntryActionSpeed's cast copies, kept across ticks (#3427). Every
+session's snapshot reads the entry action speed in prepareTick, before
+any tick hook opens the bracket above, so each read cloned the cast
+copy again: 0.82 s of a 30 s live profile at 120 sessions, about 2.7 ms
+a tick, for records that almost never change between two ticks.
+
+The bracket's invariant is what makes this sound outside a bracket
+too: a copy is served only while the live record still reports the
+write epoch read before it was cloned, and every write passes a door
+that moves the epoch. The bracket bounds a copy's lifetime, not its
+validity. Lifetime here is two generations: rotateKeptCasts (once a
+tick, from TickHook) drops the copies no read touched over the last
+full tick, so a character that leaves the world is released.
+
+Copies stay read-only, as every snapshot root's do.
+================
+*/
+type keptCastCopies struct {
+	mu   sync.Mutex
+	cur  map[*enterworld.Character]tickSnapshotEntry
+	prev map[*enterworld.Character]tickSnapshotEntry
+}
+
+/*
+================
+keptCastCopy
+
+The cast copy for one EntryActionSpeed read: the kept copy while the
+record's write epoch has not moved, else a fresh cast root whose copy
+is kept under the epoch read before it. A composition without the
+write epoch wired, and the castCopy test seam, never keep anything.
+================
+*/
+func (rt *Runtime) keptCastCopy(divisionID string, character *enterworld.Character) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	epoch, wired := rt.deps.WriteEpoch(character)
+	if !wired || rt.castCopy != nil {
+		return rt.characterSnapshotCast(divisionID, character)
+	}
+	kept := &rt.keptCasts
+	kept.mu.Lock()
+	entry, found := kept.cur[character]
+	if !found {
+		if entry, found = kept.prev[character]; found {
+			if kept.cur == nil {
+				kept.cur = make(map[*enterworld.Character]tickSnapshotEntry)
+			}
+			kept.cur[character] = entry
+			delete(kept.prev, character)
+		}
+	}
+	kept.mu.Unlock()
+	if found && entry.epoch == epoch {
+		return entry.snapshot
+	}
+	// A write landing between the epoch read and this clone keeps a
+	// newer copy under the older epoch; the next read sees the epoch
+	// moved and clones again, as tickSnapshot's callers do.
+	snapshot := rt.characterSnapshotCast(divisionID, character)
+	if snapshot == nil {
+		return nil
+	}
+	kept.mu.Lock()
+	if kept.cur == nil {
+		kept.cur = make(map[*enterworld.Character]tickSnapshotEntry)
+	}
+	kept.cur[character] = tickSnapshotEntry{epoch: epoch, snapshot: snapshot}
+	kept.mu.Unlock()
+	return snapshot
+}
+
+/*
+================
+rotateKeptCasts
+
+Ages the kept cast copies by one generation: the copies no read
+touched since the last rotation are dropped. Swapping the two maps
+reuses their storage, so the steady state allocates nothing.
+================
+*/
+func (rt *Runtime) rotateKeptCasts() {
+	kept := &rt.keptCasts
+	kept.mu.Lock()
+	defer kept.mu.Unlock()
+	kept.prev, kept.cur = kept.cur, kept.prev
+	clear(kept.cur)
+}

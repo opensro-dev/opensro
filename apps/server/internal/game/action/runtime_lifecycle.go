@@ -76,6 +76,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// panics and the ticker recovers it.
 		rt.beginTickSnapshots()
 		defer rt.endTickSnapshots()
+		// Once a tick: drop EntryActionSpeed copies no session read
+		// over the last full tick (keptCastCopy).
+		defer rt.rotateKeptCasts()
 		// Every step commits inside character doors and routes its private
 		// tail later. Each step holds the publication gate over its commit
 		// and the capture of its recipients (sealTickPrivate), ordering

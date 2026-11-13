@@ -262,3 +262,98 @@ func TestTickSnapshotsNeedTheEpoch(t *testing.T) {
 		t.Fatal("copies were shared without the write epoch wired")
 	}
 }
+
+/*
+================
+TestKeptCastCopyOutlivesTheTick
+
+EntryActionSpeed's cast copy (#3427) is read in prepareTick, outside
+any bracket: it is kept across ticks while the write epoch holds,
+retired by a door write, released once no read touches it for a full
+tick, and costs no allocation when served.
+================
+*/
+func TestKeptCastCopyOutlivesTheTick(t *testing.T) {
+	d := tickSnapshotDoorRuntime(t)
+	rt, c := d.rt, d.character
+
+	first := rt.keptCastCopy(testDivision, c)
+	rt.rotateKeptCasts()
+	second := rt.keptCastCopy(testDivision, c)
+	if first == nil || first != second {
+		t.Fatal("an unchanged record was cloned again across a tick")
+	}
+	if allocs := testing.AllocsPerRun(50, func() {
+		_ = rt.keptCastCopy(testDivision, c)
+	}); allocs != 0 {
+		t.Fatalf("a kept cast copy allocated %v per read, want 0", allocs)
+	}
+
+	if !rt.deps.Update(c, "kept-cast-test", func() bool {
+		c.DeletePending = true
+		return true
+	}) {
+		t.Fatal("the writing door refused")
+	}
+	written := rt.keptCastCopy(testDivision, c)
+	if written == second || written == nil || !written.DeletePending {
+		t.Fatal("a door write did not retire the kept copy")
+	}
+
+	rt.rotateKeptCasts()
+	rt.rotateKeptCasts()
+	if again := rt.keptCastCopy(testDivision, c); again == written {
+		t.Fatal("a copy no read touched for a full tick was still kept")
+	}
+}
+
+/*
+================
+TestKeptCastCopyUnwiredClones
+================
+*/
+func TestKeptCastCopyUnwiredClones(t *testing.T) {
+	d := openDoorRuntime(t, filepath.Join(t.TempDir(), "authority"), testCharacter())
+	rt, c := d.rt, d.character
+	if a, b := rt.keptCastCopy(testDivision, c), rt.keptCastCopy(testDivision, c); a == nil || a == b {
+		t.Fatal("without the write epoch wired the cast copy was shared")
+	}
+}
+
+/*
+================
+BenchmarkEntryActionSpeed100
+
+prepareTick's per-session EntryActionSpeed over 100 synthetic players
+(#3427): kept is a steady-state tick, where the cast copies outlive
+the tick; cloned is the pre-#3427 behaviour, where every read cloned.
+================
+*/
+func BenchmarkEntryActionSpeed100(b *testing.B) {
+	rt, characters := tickSnapshotBenchRuntime(b)
+	b.Run("kept", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			for _, c := range characters {
+				_ = rt.EntryActionSpeed(testDivision, c.Name)
+			}
+			rt.rotateKeptCasts()
+		}
+	})
+	b.Run("cloned", func(b *testing.B) {
+		// The castCopy seam bypasses the kept copies: every read clones,
+		// through the same door the cast root uses.
+		rt.castCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			var snapshot *enterworld.Character
+			rt.deps.Read(divisionID, func() { snapshot = character.SnapshotCast() })
+			return snapshot
+		}
+		defer func() { rt.castCopy = nil }()
+		b.ReportAllocs()
+		for range b.N {
+			for _, c := range characters {
+				_ = rt.EntryActionSpeed(testDivision, c.Name)
+			}
+		}
+	})
+}
