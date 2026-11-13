@@ -13,6 +13,7 @@ top-level fields survive the next write regardless (json.go, #3090).
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -154,6 +155,77 @@ func isVersionMismatch(err error) bool {
 // record.
 const CurrentVersion = 43
 
+/*
+================
+storeStep
+
+One schema step's class in the version log above (#3092, part 3 of
+#3082). A step is additive when it only adds record fields, list
+entries, tables or meta rows; changes no existing field's meaning,
+width or units; old records decode to the same values (absent = zero);
+and its offline upgrade rewrites no existing row. Only an additive
+step may land inside a live release's read window; a non-additive one
+skips the versions past it, so no older binary ever opens it
+(store_steps_test.go holds both rules against the frozen field lists).
+When in doubt a step is not additive: that costs a maintenance
+release, never saved data.
+================
+*/
+type storeStep struct {
+	additive bool
+	// why is the version log's reason for the class, in one line.
+	why string
+	// minLayout and maxLayout are the table layouts a store stamped
+	// with this version may hold, both ends inclusive: the window the
+	// offline upgrade (authority_upgrade.go) validates it at. The low
+	// end is the layout its binary ran at (git history of
+	// CurrentVersion and CurrentLayoutVersion); the wider low ends of
+	// 16 through 29 are the legacy lab stores that ran those schemas
+	// at older layouts. From 25 on the high end is the current layout:
+	// a store a newer binary created and stamped down holds the newer
+	// tables empty, which the upgrade's residue guard accepts.
+	minLayout int
+	maxLayout int
+}
+
+// storeSteps holds every schema version from UpgradeFromVersion to
+// CurrentVersion: the class of the step that made it and the layouts a
+// store at it may hold. A new version adds its entry here with its log
+// line. Columns: additive, why, minLayout, maxLayout.
+var storeSteps = map[int]storeStep{
+	13: {false, "replaces world.dungeonMinimap with world.dungeonFloorIndex", 4, 4},
+	14: {true, "optional character fields; layout 5 adds the mall and warehouse tables", 5, 5},
+	15: {true, "item-owned companions in item rows; records preserved", 5, 5},
+	16: {true, "optional recall/death point worlds and fortress-return cooldown; layout 6 adds tables", 5, 7},
+	17: {true, "trade-cargo aliases, weekly contributions and the reward pool meta row", 5, 7},
+	18: {true, "optional endedQuestIds", 5, 7},
+	19: {true, "optional job.reward and the job ranking meta row", 5, 7},
+	20: {true, "optional stallDecoration", 5, 7},
+	21: {false, "the upgrade rewrites guild members: the master becomes the sole commander", 5, 8},
+	22: {true, "optional community site fields; layout 9 adds unique_kills", 5, 9},
+	23: {true, "optional publicGearHidden", 5, 9},
+	24: {true, "optional mostWanted", 5, 9},
+	25: {true, "no record change; layout 10 adds economy_ledger", 5, 12},
+	26: {true, "optional guild foundedAtMs", 5, 12},
+	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 12},
+	28: {true, "optional companion training and treeVersion", 5, 12},
+	29: {true, "optional world.instanceReturn", 5, 12},
+	30: {true, "optional fortress structure madeAtMs", 10, 12},
+	31: {true, "optional pet cast capacity, charges and recharge period", 10, 12},
+	32: {true, "optional breakNotice", 10, 12},
+	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 12},
+	34: {true, "optional per-character Halloween box count", 11, 12},
+	35: {true, "optional mostWanted.expiresAtMs", 11, 12},
+	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 12},
+	37: {true, "optional time-online record", 11, 12},
+	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 12},
+	39: {true, "no record change; layout 12 adds silk_history", 12, 12},
+	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 12},
+	41: {true, "optional account gourdCount", 12, 12},
+	42: {true, "optional arena entry markers and reward chest", 12, 12},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 5, 12},
+}
+
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
 /*
@@ -198,9 +270,18 @@ var retiredCharacterFields = []string{"dressSetKeys", "weaponSetKeys"}
 /*
 ================
 stripRetiredCharacterFields
+
+A record that names no retired key is returned as it is, without the
+field-map parse: almost every record at boot. The byte test only rules a
+key out (records are json.Marshal output, which never escapes a letter
+of a key); a match (a key, or the same text inside a value) takes the
+parse, which decides.
 ================
 */
 func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
+	if !namesRetiredCharacterField(raw) {
+		return raw, nil
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
@@ -222,6 +303,20 @@ func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
 		return raw, nil
 	}
 	return json.Marshal(fields)
+}
+
+/*
+================
+namesRetiredCharacterField
+================
+*/
+func namesRetiredCharacterField(raw json.RawMessage) bool {
+	for _, name := range retiredCharacterFields {
+		if bytes.Contains(raw, []byte(`"`+name+`"`)) {
+			return true
+		}
+	}
+	return false
 }
 
 /*

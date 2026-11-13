@@ -3,17 +3,15 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 40 to schema 41, layout 12. Takes the same exclusive authority lock as the game
+Brings every schema from UpgradeFromVersion up to CurrentVersion and
+CurrentLayoutVersion. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
-Schema 13 also gains the two account tables from layout 5; every layout 5
-source gains the empty fortress tables of layout 6, and every layout 7
-source the empty fortress production table of layout 8, every layout 8
-source the empty unique-kill table of layout 9, every layout 10
-source the empty name-reservation table of layout 11, and every layout 11
-source the empty silk-history table of layout 12. Existing tables and
-their records survive unchanged; the new record fields are optional. The
-role repair makes each guild master the sole commander
-(guild_leader_role.go); it also runs on a current store that needs it.
+Two tables drive it: storeSteps (schema.go) says which layouts a store
+at each schema may hold, and layoutAdditions which empty tables each
+later layout added. Existing tables and their records survive unchanged; the new record
+fields are optional. The role repair makes each guild master the sole
+commander (guild_leader_role.go); it also runs on a current store that
+needs it.
 This operation is never called by server startup or a network request.
 
 ===========================================================================
@@ -56,7 +54,6 @@ const preGuildFoundedVersion = 25
 const preAcademyHonorVersion = 26
 const preMergedPetVersion = 27
 const preInstanceReturnVersion = 28
-const preStructureMadeVersion = 29
 const preStoredPetCastsVersion = 30
 const preBreakNoticeVersion = 31
 const preRenameVersion = 32
@@ -67,11 +64,53 @@ const preOnlineRecordVersion = 36
 const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
 const preWantedDecayVersion = 39
-const preGourdCountVersion = 40
-const preArenaChestVersion = 41
 const preSookArenaAccountVersion = 42
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
+
+/*
+================
+upgradeSourceLayout
+
+The layout the source store is validated at: its own, once its schema is
+one the upgrade converts and the layout lies inside that schema's window.
+================
+*/
+func upgradeSourceLayout(schema, layout int) (int, error) {
+	step, ok := storeSteps[schema]
+	if !ok {
+		return 0, fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
+	}
+	if layout < step.minLayout || layout > step.maxLayout {
+		return 0, fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+	}
+	return layout, nil
+}
+
+/*
+================
+layoutAddition
+
+The empty tables one layout added, and the statement that creates them.
+A source below the layout gains them; ascending order is creation order.
+================
+*/
+type layoutAddition struct {
+	layout int
+	tables []string
+	schema string
+}
+
+var layoutAdditions = []layoutAddition{
+	{5, []string{"mall_accounts", "account_storage"}, mallAccountsSchema + accountStorageSchema},
+	{6, []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}, fortressSchema + allianceSchema},
+	{7, []string{"guild_wars"}, guildWarSchema},
+	{8, []string{"fortress_item_forges"}, fortressItemForgeSchema},
+	{9, []string{"unique_kills"}, uniqueKillsSchema},
+	{10, []string{"economy_ledger"}, economyLedgerSchema},
+	{11, []string{"name_reservations"}, nameReservationsSchema},
+	{12, []string{"silk_history"}, silkHistorySchema},
+}
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -132,249 +171,40 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		return "", ErrAuthorityCurrent
 	}
-	sourceLayout := preFortressLayoutVersion
-	switch schema {
-	case UpgradeFromVersion:
-		sourceLayout = preMallLayoutVersion
-	case preCompanionVersion, preWorldPointVersion:
-	case preTradeRewardVersion:
-		if layout >= preGuildWarLayoutVersion && layout <= preItemForgeLayoutVersion {
-			sourceLayout = layout
-		}
-	case preEndedQuestVersion:
-		// Schema 17 ran at layouts 5 through 7. Its records may already carry
-		// endedQuestIds (the schema 17 server 491cc962 wrote them), which the
-		// current decoder reads; nothing is rewritten.
-		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preJobRewardVersion:
-		// Schema 18 ran at layouts 5 through 7 and has no job reward or
-		// ranking snapshot; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preStallDecorationVersion:
-		// Schema 19 ran at layouts 5 through 7 and has no stall decoration;
-		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preItemForgeVersion:
-		// Schema 20 ran at layouts 5 through 7 and has no production table;
-		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preCommunityVersion:
-		// Schema 21 ran at layouts 5 through 8 and has no site fields or
-		// unique-kill table; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preUniqueKillLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preGearPrivacyVersion:
-		// Schema 22 ran at layouts 5 through 9 and has no gear privacy field;
-		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preMostWantedVersion:
-		// Schema 23 ran at layouts 5 through 9 and has no most-wanted streak;
-		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preLedgerVersion:
-		// Schema 24 ran at layouts 5 through 9 and has no economy ledger;
-		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preGuildFoundedVersion:
-		// Schema 25 ran at layouts 5 through 10 and has no guild founding
-		// time; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preStoredPetCastsVersion, preBreakNoticeVersion:
-		// Stored-cast fields and the break-notice opt-in are optional;
-		// old records read unchanged. These schemas ran at layout 10.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preRenameVersion:
-		// Schema 32 ran at layout 10 and has no name-change scroll state
-		// or reservation table; its records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preHalloweenVersion:
-		// Schema 33 ran at layout 11 and has no Halloween box count; its
-		// records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preMostWantedExpiryVersion:
-		// Schema 34 ran at layout 11 and has no wanted-level lapse; its
-		// streaks read unchanged and lapse at their next level.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preHalloweenAccountVersion:
-		// Schema 35 ran at layout 11 and counted Halloween boxes per
-		// character; the account plane starts absent and is seeded from
-		// those counts at first load (#2547). Records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preOnlineRecordVersion:
-		// Schema 36 ran at layout 11. Optional online fields read
-		// absent without rewriting any character; its
-		// characters read unchanged and start counting at their next
-		// login (#2675). Records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preAcademyBuffVersion:
-		// Schema 37 ran at layout 11 and has no Academy cumulated-buff
-		// state on its camp members; they read with no buff held
-		// (#2270). Records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preSilkHistoryVersion:
-		// Schema 38 ran at layout 11 and has no silk-history table; its
-		// wallet movements were never recorded and its records read
-		// unchanged (#2269).
-		if layout < preSilkHistoryLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-
-	case preWantedDecayVersion:
-		// Schema 39 ran at layout 12 and stamped the wanted level's
-		// seven-day lapse; under the decay that stamp is unread and a
-		// streak is stamped fresh at its first judging door, so no
-		// saved streak decays early (#2721). It also has no forge-bound
-		// mark on its item rows; its items read unbound (#1980).
-		// Records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preGourdCountVersion, preArenaChestVersion:
-		// Schema 40 ran at layout 12 and counted every Halloween box
-		// against the one account cap; its account rows carry no
-		// Gourd count and start the Gourd allowance at zero (#2950).
-		// Records read unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preSookArenaAccountVersion:
-		// Schema 42 ran at layout 12 and counted survival arena entries
-		// per character; the account plane starts absent and is seeded
-		// from those counts at first load (#3322). Records read
-		// unchanged.
-		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preAcademyHonorVersion, preMergedPetVersion:
-		// Schema 26 ran at layouts 5 through 10 and has no training-camp
-		// honor/evaluation fields or disband timestamp; its records read
-		// unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preInstanceReturnVersion:
-		// Schema 28 ran at layouts 5 through 10 and has no instance return
-		// anchor; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case preStructureMadeVersion:
-		// Schema 29 ran at layouts 5 through 10 and has no structure made
-		// time; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	case CurrentVersion:
-		// A current store still upgrades when commander roles disagree with
-		// member grades (guild_leader_role.go): the repair is its only change.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
-			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
-		}
-		sourceLayout = layout
-	default:
-		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
+	sourceLayout, err := upgradeSourceLayout(schema, layout)
+	if err != nil {
+		return "", err
 	}
 	if _, err := loadDB(db, schema, sourceLayout, 0); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
-	var added []string
-	if sourceLayout < preGuildWarLayoutVersion {
-		added = []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}
-	}
-	if sourceLayout < preItemForgeLayoutVersion {
-		added = append(added, "guild_wars")
-	}
-	if sourceLayout < preUniqueKillLayoutVersion {
-		added = append(added, "fortress_item_forges")
-	}
-	if sourceLayout < preLedgerLayoutVersion {
-		added = append(added, "unique_kills")
-	}
-	if sourceLayout <= preLedgerLayoutVersion {
-		added = append(added, "economy_ledger")
-	}
-	if sourceLayout <= preNameReservationLayoutVersion {
-		added = append(added, "name_reservations")
-	}
-	if sourceLayout <= preSilkHistoryLayoutVersion {
-		added = append(added, "silk_history")
-	}
-	if sourceLayout == preMallLayoutVersion {
-		added = append(added, "mall_accounts", "account_storage")
-	}
-	for _, table := range added {
-		var existing int
-		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
-			return "", err
+	var additions []layoutAddition
+	for _, addition := range layoutAdditions {
+		if sourceLayout < addition.layout {
+			additions = append(additions, addition)
 		}
-		if existing == 0 {
-			continue
-		}
-		// An empty table in an older-layout authority is construction
-		// residue (a database created by a newer binary, then stamped
-		// down); the CREATE below is a no-op for it. Rows are the
-		// mislabeling this guard exists to catch: an old layout cannot
-		// hold data its binary never wrote.
-		var rows int
-		if err := db.QueryRow(fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&rows); err != nil {
-			return "", err
-		}
-		if rows != 0 {
-			return "", fmt.Errorf("authority upgrade: layout %d unexpectedly contains %s", sourceLayout, table)
+	}
+	for _, addition := range additions {
+		for _, table := range addition.tables {
+			var existing int
+			if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
+				return "", err
+			}
+			if existing == 0 {
+				continue
+			}
+			// An empty table in an older-layout authority is construction
+			// residue (a database created by a newer binary, then stamped
+			// down); the CREATE below is a no-op for it. Rows are the
+			// mislabeling this guard exists to catch: an old layout cannot
+			// hold data its binary never wrote.
+			var rows int
+			if err := db.QueryRow(fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&rows); err != nil {
+				return "", err
+			}
+			if rows != 0 {
+				return "", fmt.Errorf("authority upgrade: layout %d unexpectedly contains %s", sourceLayout, table)
+			}
 		}
 	}
 	if !commit {
@@ -415,43 +245,8 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		return backupPath, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if sourceLayout == preMallLayoutVersion {
-		if _, err := tx.Exec(mallAccountsSchema + accountStorageSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout < preGuildWarLayoutVersion {
-		if _, err := tx.Exec(fortressSchema + allianceSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout < preItemForgeLayoutVersion {
-		if _, err := tx.Exec(guildWarSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout < preUniqueKillLayoutVersion {
-		if _, err := tx.Exec(fortressItemForgeSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout < preLedgerLayoutVersion {
-		if _, err := tx.Exec(uniqueKillsSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout <= preLedgerLayoutVersion {
-		if _, err := tx.Exec(economyLedgerSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout <= preNameReservationLayoutVersion {
-		if _, err := tx.Exec(nameReservationsSchema); err != nil {
-			return backupPath, err
-		}
-	}
-	if sourceLayout <= preSilkHistoryLayoutVersion {
-		if _, err := tx.Exec(silkHistorySchema); err != nil {
+	for _, addition := range additions {
+		if _, err := tx.Exec(addition.schema); err != nil {
 			return backupPath, err
 		}
 	}

@@ -689,37 +689,14 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.rebuildAllCharacterLookupsLocked()
 	s.deleted = loaded.deleted
 	s.ground.loadedRecords = loaded.ground
+	// loadDB allocates every plane map, so none is nil here.
 	s.mailboxes = loaded.mailboxes
-	if s.mailboxes == nil {
-		s.mailboxes = map[string]map[int64][]domain.LetterRecord{}
-	}
 	s.guilds = loaded.guilds
-	if s.guilds == nil {
-		s.guilds = map[string]map[int64]domain.GuildRecord{}
-	}
 	s.guildMembers = loaded.guildMembers
-	if s.guildMembers == nil {
-		s.guildMembers = map[string]map[int64][]domain.GuildMemberRecord{}
-	}
 	s.camps = loaded.camps
-	if s.camps == nil {
-		s.camps = map[string]map[int64]domain.TrainingCampRecord{}
-	}
 	s.campMembers = loaded.campMembers
-	if s.campMembers == nil {
-		s.campMembers = map[string]map[int64][]domain.TrainingCampMemberRecord{}
-	}
 	s.nameReservations = loaded.nameReservations
-	if s.nameReservations == nil {
-		s.nameReservations = map[string]map[string]NameReservation{}
-	}
 	s.meta = loaded.meta
-	if s.meta.NextCharID == nil {
-		s.meta.NextCharID = map[string]int64{}
-	}
-	if s.meta.NextGuildID == nil {
-		s.meta.NextGuildID = map[string]int64{}
-	}
 	// A load-seeded halloween plane (loadedDB.halloweenSeeded) holds
 	// derived bytes, not the disk's: flag it so the first commit
 	// writes its row, as every commit did before the plane skip.
