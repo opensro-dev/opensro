@@ -62,7 +62,9 @@ export const CHECK_TASKS = [
 		requires: [],
 		timeoutClass: "short",
 		command: "node",
-		args: [ "--test", "scripts/test/pipeline/*.test.mjs" ]
+		// A hung test fails by name in two minutes instead of stalling the
+		// job silently until CI kills it (the slowest passes in ~10 s).
+		args: [ "--test", "--test-timeout=120000", "scripts/test/pipeline/*.test.mjs" ]
 	} ),
 	commandTask( {
 		name: "check:release",

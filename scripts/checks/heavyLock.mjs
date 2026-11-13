@@ -34,6 +34,9 @@ const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const repoRoot = path.resolve( scriptDir, "..", ".." );
 const DEFAULT_POLL_MS = 2000;
 const MAX_ANCESTOR_HOPS = 64;
+// A CIM query that has not answered by now is a stalled WMI service, not
+// a slow one (a loaded PC answers in a few seconds).
+const PARENT_TABLE_TIMEOUT_MS = 30000;
 
 /*
 ================
@@ -107,6 +110,12 @@ PowerShell spawn per level costs seconds on a loaded machine), /proc on
 POSIX (comm sits in parens and may itself contain parens; ppid is the
 second field after the closing paren). A process's ancestors never
 change while it lives, so the cache cannot go stale for its one caller.
+
+The CIM query is bounded (PARENT_TABLE_TIMEOUT_MS): a stalled WMI service
+froze the whole caller inside spawnSync with no output, as the pipeline
+contracts did on CI's Windows runners. A query that fails answers an
+empty table, uncached: no ancestor is known, so the caller waits on the
+holder and says so, and the next acquisition asks again.
 ================
 */
 function parentMap() {
@@ -123,8 +132,11 @@ function parentMap() {
 				"-Command",
 				'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }'
 			],
-			{ encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 }
+			{ encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: PARENT_TABLE_TIMEOUT_MS }
 		);
+		if ( out.error || out.status !== 0 ) {
+			return map;
+		}
 		for ( const line of String( out.stdout ?? "" ).split( /\r?\n/ ) ) {
 			const [pid, parent] = line.trim().split( " " ).map( ( part ) => Number.parseInt( part, 10 ) );
 			if ( Number.isInteger( pid ) && pid > 0 ) {
