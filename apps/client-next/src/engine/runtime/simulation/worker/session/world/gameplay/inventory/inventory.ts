@@ -976,6 +976,18 @@ visitor (67D0AE), the gacha machine (67D0CB) and the stall network (67D0D6).
 		},
 		/*
 ================
+tradePinned
+
+The player keeps a stall, stands at one or has an exchange open: the
+server's interaction gate (action PlayerInteractionLocked, #3433) refuses
+its walks and its skills until the window closes.
+================
+		*/
+		tradePinned() {
+			return stall.phase === "owner" || stall.phase === "visitor" || exchange.open;
+		},
+		/*
+================
 stallCommand
 ================
 		*/

@@ -111,6 +111,10 @@ type Runtime struct {
 	// MotionLocked is the move handler's motion gate: a knocked-down player (motion 8)
 	// drops its ground command. Nil admits.
 	MotionLocked func(divisionID, characterName string) bool
+	// InteractionLocked is the move handler's interaction gate: a player
+	// keeping a stall, visiting one or trading drops its ground command
+	// until the stall or exchange closes (#3433). Nil admits.
+	InteractionLocked func(divisionID, characterName string) bool
 	// AdvanceResidentRegion commits a crossed live region before this command
 	// replaces the segment. The population owner owns the saved-return effect.
 	AdvanceResidentRegion func(divisionID, characterName string, nowMs int64)
@@ -653,6 +657,9 @@ func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character,
 	}
 	if rt.MotionLocked != nil && rt.MotionLocked(divisionID, character.Name) {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "knockedDown"}
+	}
+	if rt.InteractionLocked != nil && rt.InteractionLocked(divisionID, character.Name) {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "interactionLocked"}
 	}
 	return admission, nil
 }

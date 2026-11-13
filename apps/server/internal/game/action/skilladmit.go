@@ -180,6 +180,14 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	if rt.sookDecisionHolds(division, c) {
 		return 0x3005
 	}
+	// INFERENCE (#3433): a player keeping a stall, visiting one or trading
+	// casts nothing, so a teleport (Ghost Walk, a dash) cannot carry it out
+	// of the stall or the exchange. 0x3009 is the client's silent refusal.
+	// An item's own skill keeps the item-use door's rule instead (refused
+	// at a stall, allowed in an exchange).
+	if !context.Indirect && rt.stallBusy(division, c.Name) {
+		return 0x3009
+	}
 	// Natively frozen, asleep or stunned refuses, unless the skill has nmf.
 	// The codename exemptions (MOB_RM_SEALSTONE, MSKILL_SD_SETH_ATTACK10)
 	// are monster-only.
