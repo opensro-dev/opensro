@@ -54,7 +54,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 				log.Errorf("store: character %s/%s has a matured deletion reservation but still belongs to a guild or training camp; NOT reaping it", divisionID, c.Name)
 				continue
 			}
-			raw, err := json.Marshal(c)
+			raw, err := encodeRecordFields(c, s.residues.characters[committedCharacterKey{division: divisionID, id: c.ID}])
 			if err != nil {
 				log.Errorf("store: archiving %s/%s failed to marshal (%v); NOT reaping it", divisionID, c.Name, err)
 				continue
@@ -172,7 +172,7 @@ func (s *Store) friendUpdatesForReapLocked(victims []reapVictim) ([]reapFriendUp
 			}
 			record := *character
 			record.Friends = next
-			raw, err := json.Marshal(&record)
+			raw, err := encodeRecordFields(&record, s.residues.characters[committedCharacterKey{division: divisionID, id: character.ID}])
 			if err != nil {
 				return nil, fmt.Errorf("marshaling friend cleanup for %s/%s: %w", divisionID, character.Name, err)
 			}

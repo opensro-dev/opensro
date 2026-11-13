@@ -173,7 +173,8 @@ TestSookArenaAccountsRefuseCorruptRows
 
 A count past the daily allowance, a negative day or a blank account
 key is corruption, not a reason to grant or forget entries: the load
-refuses it, like the Halloween plane.
+refuses it, like the Halloween plane. An unknown field is a newer
+release's, kept for the next write (json.go), not corruption.
 ================
 */
 func TestSookArenaAccountsRefuseCorruptRows(t *testing.T) {
@@ -185,19 +186,18 @@ func TestSookArenaAccountsRefuseCorruptRows(t *testing.T) {
 	if _, err := s.syncDBLocked().Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeySookArenaAccounts, `{"account-a":{"day":1,"entries":3}}`); err != nil {
 		t.Fatal(err)
 	}
-	if accounts, present, err := loadSookArenaAccounts(s.syncDBLocked()); err != nil || !present || accounts["account-a"].Entries != 3 {
+	if accounts, _, present, err := loadSookArenaAccounts(s.syncDBLocked()); err != nil || !present || accounts["account-a"].Entries != 3 {
 		t.Fatalf("a spent account = %+v present %v: %v", accounts, present, err)
 	}
 	for _, row := range []string{
 		`{"account-a":{"day":1,"entries":4}}`,
 		`{"account-a":{"day":-1,"entries":1}}`,
 		`{" ":{"day":1,"entries":1}}`,
-		`{"account-a":{"day":1,"entries":1,"spare":true}}`,
 	} {
 		if _, err := s.syncDBLocked().Exec("UPDATE meta SET value = ? WHERE key = ?", row, metaKeySookArenaAccounts); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := loadSookArenaAccounts(s.syncDBLocked()); err == nil {
+		if _, _, _, err := loadSookArenaAccounts(s.syncDBLocked()); err == nil {
 			t.Fatalf("corrupt row %s loaded", row)
 		}
 	}

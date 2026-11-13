@@ -189,7 +189,7 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 		}
 	}
 	for id, guild := range guilds {
-		if err := replaceGuildTx(tx.Tx, division, id, guild, s.guildMembers[division][id]); err != nil {
+		if err := replaceGuildTx(tx.Tx, division, id, guild, s.guildMembers[division][id], &s.residues); err != nil {
 			return nil, err
 		}
 	}

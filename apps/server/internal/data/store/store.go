@@ -268,6 +268,10 @@ type Store struct {
 	// wire order (domain.LetterStore contract); mutation is
 	// copy-then-swap through MutateMailbox only.
 	mailboxes map[string]map[int64][]domain.LetterRecord
+	// residues are the unknown top-level fields of the rows the
+	// commit rewrites from the store's own state, kept from the load so
+	// a write never drops a newer release's data (json.go, #3090).
+	residues recordResidues
 
 	// guilds / guildMembers are the guild plane (the guilds and
 	// guild_members tables): division -> guild id -> the guild row and
@@ -713,6 +717,7 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	if loaded.sookArenaSeeded {
 		s.changes.sookArenaAccounts = true
 	}
+	s.residues = loaded.residues
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}

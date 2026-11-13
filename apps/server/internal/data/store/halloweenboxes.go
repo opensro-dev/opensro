@@ -18,7 +18,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -62,30 +61,32 @@ loadHalloweenBoxes
 
 The second result reports whether the row exists at all: an authority
 that predates the account count has none, and its plane is seeded from
-the legacy character counts instead (seedHalloweenBoxes). Unknown
-fields or a negative count are corruption, not a reason to silently
-discard a day's progress.
+the legacy character counts instead (seedHalloweenBoxes). A negative
+count is corruption, not a reason to silently discard a day's progress.
+An account's unknown top-level fields are returned for the next write
+(json.go).
 ================
 */
-func loadHalloweenBoxes(db *sql.DB) (map[string]*domain.HalloweenBoxAccount, bool, error) {
+func loadHalloweenBoxes(db *sql.DB) (map[string]*domain.HalloweenBoxAccount, map[string]unknownFields, bool, error) {
 	var raw string
 	err := db.QueryRow("SELECT value FROM meta WHERE key = ?", metaKeyHalloweenBoxes).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return map[string]*domain.HalloweenBoxAccount{}, false, nil
+		return map[string]*domain.HalloweenBoxAccount{}, nil, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	accounts := map[string]*domain.HalloweenBoxAccount{}
-	if err := decodeJSONStrict([]byte(raw), &accounts); err != nil {
-		return nil, false, fmt.Errorf("halloween box accounts: %w", err)
+	unknown, err := decodePlaneFields([]byte(raw), &accounts)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("halloween box accounts: %w", err)
 	}
 	for accountID, record := range accounts {
 		if strings.TrimSpace(accountID) != accountID || record == nil || record.Count < 0 || record.GourdCount < 0 {
-			return nil, false, fmt.Errorf("invalid halloween box account %q", accountID)
+			return nil, nil, false, fmt.Errorf("invalid halloween box account %q", accountID)
 		}
 	}
-	return accounts, true, nil
+	return accounts, unknown, true, nil
 }
 
 /*
@@ -126,14 +127,15 @@ func seedHalloweenBoxes(characters map[string][]*domain.Character) map[string]*d
 halloweenBoxesRecord
 
 The meta row's bytes for the account plane; empty when no account has
-minted, in which case no writer puts a row down.
+minted, in which case no writer puts a row down. unknown holds the
+accounts' stored unknown fields.
 ================
 */
-func halloweenBoxesRecord(accounts map[string]*domain.HalloweenBoxAccount) (string, error) {
+func halloweenBoxesRecord(accounts map[string]*domain.HalloweenBoxAccount, unknown map[string]unknownFields) (string, error) {
 	if len(accounts) == 0 {
 		return "", nil
 	}
-	raw, err := json.Marshal(accounts)
+	raw, err := encodePlaneFields(accounts, unknown)
 	if err != nil {
 		return "", err
 	}
@@ -146,7 +148,7 @@ writeHalloweenBoxes
 ================
 */
 func writeHalloweenBoxes(tx *sql.Tx, accounts map[string]*domain.HalloweenBoxAccount) error {
-	record, err := halloweenBoxesRecord(accounts)
+	record, err := halloweenBoxesRecord(accounts, nil)
 	if err != nil || record == "" {
 		return err
 	}
