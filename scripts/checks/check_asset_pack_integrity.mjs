@@ -30,6 +30,7 @@
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import {
 	ASSET_PACK_HEADER_FORMAT,
+	ASSET_PACK_INDEX_MAX_BYTES,
 	ASSET_PACK_MAGIC,
 	ASSET_PACK_VERSION,
 	decodeStoredMember,
@@ -64,6 +65,14 @@ const cachePath = process.env.SRO_ASSET_INTEGRITY_CACHE_PATH ?
 	path.join( rebuildRoot, ".state", "asset-integrity-hash-cache.json" );
 const hashCache = cacheDisabledBy ? null : await openFileHashCache( cachePath );
 
+// The browser refuses a bigger index outright (packs.ts PACK_INDEX_LIMIT_BYTES),
+// so every asset of the build would fail to load: refuse it here first.
+const manifestBytes = (await stat( manifestPath )).size;
+if ( manifestBytes > ASSET_PACK_INDEX_MAX_BYTES ) {
+	throw new Error(
+		`pack index ${manifestPath} is ${manifestBytes} bytes; the client reads at most ${ASSET_PACK_INDEX_MAX_BYTES}`
+	);
+}
 const manifest = JSON.parse( await readFile( manifestPath, "utf8" ) );
 const packByPath = new Map();
 const packGroupByPath = new Map();

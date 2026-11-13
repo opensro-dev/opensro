@@ -19,7 +19,12 @@ import test from "node:test";
 import { reconcileAssetPackGroupFromLooseAuthority } from "../../build/assetPackGroupAuthority.mjs";
 import { buildAssetPacks } from "../../build/assetPacks.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "../../build/sparseAssetPackGroupRefresh.mjs";
-import { decodeStoredMember, parsePackHeader, storedMemberBytes } from "../../build/shared/packFormat.mjs";
+import {
+	ASSET_PACK_INDEX_MAX_BYTES,
+	decodeStoredMember,
+	parsePackHeader,
+	storedMemberBytes
+} from "../../build/shared/packFormat.mjs";
 
 const execFileAsync = promisify( execFile );
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
@@ -305,4 +310,23 @@ test("successive sparse appends preserve every pack still referenced by the encl
 	}
 	assert.equal( index.assets.length, 3 );
 	assert.equal( index.groups[0].packs.length, 3 );
+});
+
+test("integrity check refuses a pack index larger than the client reads", async ( t ) => {
+	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-integrity-" ) );
+	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
+
+	const { manifestPath } = await buildFixturePacks( tempRoot );
+	const cachePath = path.join( tempRoot, "integrity-hash-cache.json" );
+	// Whitespace keeps the index valid JSON: only its size is wrong.
+	const index = await readFile( manifestPath, "utf8" );
+	const padded = index.trimEnd() + " ".repeat( ASSET_PACK_INDEX_MAX_BYTES ) + "\n";
+	await writeFile( manifestPath, padded, "utf8" );
+	const oversized = await runIntegrityCheck( manifestPath, cachePath );
+	assert.notEqual( oversized.code, 0, "an index past the client's limit must fail the build" );
+	assert.match( oversized.output, /the client reads at most/ );
+
+	await writeFile( manifestPath, index, "utf8" );
+	const fits = await runIntegrityCheck( manifestPath, cachePath );
+	assert.equal( fits.code, 0, fits.output );
 });

@@ -23,6 +23,11 @@ export const ASSET_PACK_MAGIC = "SROPACK2";
 export const ASSET_PACK_VERSION = 2;
 export const ASSET_PACK_HEADER_FORMAT = "sro-asset-pack";
 export const ASSET_PACK_PREFIX_BYTES = 12;
+// The largest pack index (manifest.json) the browser reads: the client's
+// PACK_INDEX_LIMIT_BYTES (apps/client-next/.../packs/packs.ts) holds the same
+// value. check_asset_pack_integrity.mjs refuses a bigger index, so a build
+// that outgrows it fails here instead of in every player's browser.
+export const ASSET_PACK_INDEX_MAX_BYTES = 64 << 20;
 // Members are stored gzip-compressed: every browser decodes gzip natively
 // (DecompressionStream), so the client needs no decoder of its own.
 export const MEMBER_ENCODING_GZIP = "gzip";
