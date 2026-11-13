@@ -6,10 +6,11 @@ world-map-compact.test.mjs - the M map on a phone keeps native scale
 Port-only, below the native 800x600 minimum: the map window shrinks to the
 compact layout's window area instead of being scaled down whole (labels at
 a fraction of their size), its buttons stay inside it, and the fit measures
-the window rect rather than the page tiles that reach past it through the
-map clip. The desktop window keeps its authored 652 x 424, and the
-renewal row's follow pin keeps its distance from the clip's right edge
-on either (there is no captioned AUTO_MOVE button to anchor).
+the window rect and its foot rather than the page tiles that reach past
+it through the map clip. The desktop window keeps v1.188's 650 x 422
+(worldmapguide.2dt) with the 34-deep foot below it, and the follow pin
+keeps its distance from the window's right edge on either (there is no
+captioned AUTO_MOVE button to anchor).
 
 ===========================================================================
 */
@@ -19,10 +20,23 @@ import assert from "node:assert/strict";
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { createWorldMapHud } = await import( "../../src/engine/runtime/ui/hud/world-map.ts" );
 
-// The renewal pin's distance from the map clip's right edge (594 + 36
-// in a 645-wide render panel), and the window chrome beside the clip.
-const PIN_RIGHT = 51;
-const CHROME_RIGHT = 6;
+// The pin's distance from the window's right edge (605 in a 650 window),
+// the render panel's inset (5,33 and 5 on the other sides) and the foot
+// below the window (412 + 44 - 422).
+const PIN_RIGHT = 45;
+const PANEL = [ 5, 33, 10, 38 ];
+const FOOT_DEPTH = 34;
+
+/*
+================
+panel
+
+The render panel of a window box.
+================
+*/
+function panel( box ) {
+	return [ box[0] + PANEL[0], box[1] + PANEL[1], box[2] - PANEL[2], box[3] - PANEL[3] ];
+}
 
 /*
 ================
@@ -105,28 +119,30 @@ function present( w, h, bounds ) {
 test("a phone's map window fits the compact area at native scale, its buttons inside", () => {
 	const bounds = [ 0, 0, 375, 510 ];
 	const { box, pan, pin, ids, source } = present( 375, 667, bounds );
-	// 375 - 2 x 4 wide, the authored height (fits under 510 - 8).
-	assert.deepEqual( [ box[2], box[3] ], [ 367, 424 ] );
-	assert.ok( box[0] >= 0 && box[0] + box[2] <= 375 && box[1] >= 0 && box[1] + box[3] <= 510 );
-	// The pan surface is the window less its chrome, as on the desktop.
-	assert.deepEqual( pan, [ box[0] + 6, box[1] + 34, box[2] - 12, box[3] - 40 ] );
+	// 375 - 2 x 4 wide, the authored height (its foot fits under 510 - 8).
+	assert.deepEqual( [ box[2], box[3] ], [ 367, 422 ] );
+	assert.ok( box[0] >= 0 && box[0] + box[2] <= 375 && box[1] >= 0 && box[1] + box[3] + FOOT_DEPTH <= 510 );
+	// The pan surface is the render panel, as on the desktop.
+	assert.deepEqual( pan, panel( box ) );
 	// The pin keeps its distance from the right edge, inside the window.
 	assert.ok( pin[0] + pin[2] <= box[0] + box[2] );
-	assert.equal( pan[0] + pan[2] - pin[0], PIN_RIGHT );
+	assert.equal( box[0] + box[2] - pin[0], PIN_RIGHT );
 	assert.equal( ids.includes( "map-follow" ), false, "no captioned AUTO_MOVE button" );
-	// The fit measures the window, not the page tiles past the clip.
-	assert.deepEqual( source, box );
+	// The fit measures the window and its foot, not the page tiles past
+	// the clip.
+	assert.deepEqual( source, [ box[0], box[1], box[2], box[3] + FOOT_DEPTH ] );
 });
 
 test("a short compact area shortens the window instead of scaling it", () => {
 	const { box } = present( 375, 667, [ 0, 0, 375, 300 ] );
-	assert.deepEqual( [ box[2], box[3] ], [ 367, 292 ] );
+	// 300 - 2 x 4, less the foot below the window.
+	assert.deepEqual( [ box[2], box[3] ], [ 367, 300 - 8 - FOOT_DEPTH ] );
 });
 
-test("the desktop keeps the authored 652 x 424 window", () => {
+test("the desktop keeps the authored 650 x 422 window", () => {
 	const { box, pin, ids } = present( 1200, 900 );
-	assert.deepEqual( [ box[2], box[3] ], [ 652, 424 ] );
-	assert.equal( pin[0] - box[0], 652 - CHROME_RIGHT - PIN_RIGHT );
+	assert.deepEqual( [ box[2], box[3] ], [ 650, 422 ] );
+	assert.deepEqual( pin, [ box[0] + 605, box[1] + 39, 36, 36 ], "the pin at its layout place" );
 	assert.equal( ids.includes( "map-follow" ), false, "no captioned AUTO_MOVE button" );
 });
 
@@ -134,12 +150,12 @@ test("a compact area away from the origin clamps the window to the area, not the
 	// Above the quickslots the compact window area starts below the
 	// phone's status rows: its origin is not the screen's origin.
 	const { box, pan, pin, source } = present( 375, 667, [ 16, 200, 340, 300 ] );
-	// 340 - 2 x 4 wide, 300 - 8 high; the resting 100,100 is clamped
-	// into the area on both axes (the far side measures from the
-	// area's origin too).
-	assert.deepEqual( box, [ 24, 200, 332, 292 ] );
-	assert.deepEqual( pan, [ box[0] + 6, box[1] + 34, box[2] - 12, box[3] - 40 ] );
+	// 340 - 2 x 4 wide, 300 - 8 high with the foot; the resting 100,100
+	// is clamped into the area on both axes (the far side measures from
+	// the area's origin too).
+	assert.deepEqual( box, [ 24, 200, 332, 300 - 8 - FOOT_DEPTH ] );
+	assert.deepEqual( pan, panel( box ) );
 	assert.ok( pin[0] + pin[2] <= box[0] + box[2] );
-	assert.equal( pan[0] + pan[2] - pin[0], PIN_RIGHT );
-	assert.deepEqual( source, box );
+	assert.equal( box[0] + box[2] - pin[0], PIN_RIGHT );
+	assert.deepEqual( source, [ box[0], box[1], box[2], box[3] + FOOT_DEPTH ] );
 });

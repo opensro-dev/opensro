@@ -111,10 +111,11 @@ export async function importLaterDungeonMapsStep() {
 	return { maps: Array.isArray( catalog.maps ) ? catalog.maps.length : 0 };
 }
 
-// The later client's dungeon-page map chrome (issue #3210): the big
-// globe, the follow pin's two mode faces and the floor selector, under
-// the same worldmap folder the v1.150 extraction already publishes.
-const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/worldmap/";
+// The later client's M window chrome (issue #3210, the v1.188 layout):
+// the big globe, the follow pin's two mode faces, the floor selector,
+// the window's foot, corner and map edges and the guide tabs, under the
+// interface folders the v1.150 extraction already publishes.
+const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/";
 
 /*
 ================
@@ -149,18 +150,28 @@ once so the step claims exactly what the map tools will ask for.
 */
 export function laterWorldMapButtonPublicPaths() {
 	return [
-		"wmap_big_button_world",
-		"wmap_button_automatic",
-		"wmap_button_passivity",
-		"wmap_up_button",
-		"wmap_up_button_disable",
-		"wmap_down_button",
-		"wmap_down_button_disable",
-		"wmap_floor_box",
-		"wmap_floor_choice_box",
-		"wmap_floor_big_box",
-		"wmap_button_location",
-		"wmap_sign_location"
+		"worldmap/wmap_big_button_world",
+		"worldmap/wmap_button_automatic",
+		"worldmap/wmap_button_passivity",
+		"worldmap/wmap_up_button",
+		"worldmap/wmap_up_button_disable",
+		"worldmap/wmap_down_button",
+		"worldmap/wmap_down_button_disable",
+		"worldmap/wmap_floor_box",
+		"worldmap/wmap_floor_choice_box",
+		"worldmap/wmap_floor_big_box",
+		"worldmap/wmap_wnd_bottom_frame",
+		"worldmap/wmap_wnd_corner_02",
+		"worldmap/wmap_window_edge_1",
+		"worldmap/wmap_window_edge_2",
+		"worldmap/wmap_window_edge_3",
+		"worldmap/wmap_window_edge_4",
+		"guide/gd_area_tab_on",
+		"guide/gd_area_tab_off",
+		"guide/gd_monster_tab_on",
+		"guide/gd_monster_tab_off",
+		"guide/gd_long_index_open",
+		"guide/gd_long_contents_event"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 

@@ -207,8 +207,8 @@
     "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
-    "src/engine/runtime/ui/hud/map-buttons.ts": "src/engine/runtime/ui/hud/map-tools.ts",
-    "src/engine/runtime/ui/hud/map-drawer.ts": "src/engine/runtime/ui/hud/map-tools.ts",
+    "src/engine/runtime/ui/hud/map-chrome.ts": "src/engine/runtime/ui/hud/map-tools.ts",
+    "src/engine/runtime/ui/hud/map-guide-tree.ts": "src/engine/runtime/ui/hud/map-tools.ts",
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",

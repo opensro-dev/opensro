@@ -45,9 +45,19 @@ import {
 } from "@/engine/foundation/ui/world-map";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { createHuntingGuideHud } from "./hunting-guide";
-import { createMapToolsHud } from "./map-tools";
+import {
+	MAP_WINDOW_EXTENT,
+	MAP_WINDOW_HEIGHT,
+	MAP_WINDOW_WIDTH,
+	createMapToolsHud,
+	mapLeftReach,
+	mapPanel
+} from "./map-tools";
 
-const WORLD_MAP_WIDTH = 652, WORLD_MAP_HEIGHT = 424;
+// The M window is the v1.188 client's (worldmapguide.2dt, map-chrome.ts):
+// 650 x 422 with its foot frame reaching 34 below.
+const WORLD_MAP_WIDTH = MAP_WINDOW_WIDTH, WORLD_MAP_HEIGHT = MAP_WINDOW_HEIGHT;
+const MAP_FOOT_DEPTH = MAP_WINDOW_EXTENT - MAP_WINDOW_HEIGHT;
 // Port-only, not native (screens below the native 800x600 minimum): the map
 // window shrinks to the screen, less this margin per side, and keeps the map
 // at native scale for panning; the generic window fit would otherwise draw
@@ -337,26 +347,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			// 575E90 flips AUTO MOVE only; keep the last automatic centre.
-			// The later client's renewal window has no captioned AUTO_MOVE
-			// button: its follow pin (issue #3210) is the one switch.
+			// The v1.188 window has no captioned AUTO_MOVE button: its
+			// follow pin (issue #3210) is the one switch.
 			if ( id === "map-pin" ) {
 				mapTools.clearView();
 				mapFollow = !mapFollow;
 				mapCenter = heldCenter( pose );
 				mapPan = [ 0, 0 ];
-				return true;
-			}
-			// The renewal window's location button (v1.696 id 19): the
-			// map tools mark the player's point with the location sign;
-			// the view goes back to the player so the sign is on screen
-			// (an inference: the press path is not read yet, the sign's
-			// own handler E73C80 only marks a point).
-			if ( id === "map-locate" ) {
-				if ( mapTools.locate( pose ) ) {
-					mapTools.clearView();
-					mapCenter = mapFollow ? null : heldCenter( pose );
-					mapPan = [ 0, 0 ];
-				}
 				return true;
 			}
 			// 57F410 selects the world and Manual Movement State.
@@ -477,20 +474,22 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				),
 				mapHeight = Math.min(
 					mapSmall ? 296 : WORLD_MAP_HEIGHT,
-					Math.max( 0, area[3] - COMPACT_MAP_MARGIN * 2 )
+					Math.max( 0, area[3] - COMPACT_MAP_MARGIN * 2 - MAP_FOOT_DEPTH )
 				);
-			const mapLeft = Math.max( area[0], Math.min( mapX, area[0] + area[2] - mapWidth ) ),
-				mapTop = Math.max( area[1], Math.min( mapY, area[1] + area[3] - mapHeight ) );
+			// The side tab, and the guide while it is open, stand left of
+			// the window: keep them on the screen where the area allows.
+			const mapRight = area[0] + area[2] - mapWidth,
+				mapLeftMost = Math.min(
+					area[0] + mapLeftReach( mapTools.drawerOpen() ),
+					Math.max( area[0], mapRight )
+				);
+			const mapLeft = Math.max( mapLeftMost, Math.min( mapX, mapRight ) ),
+				mapTop = Math.max( area[1], Math.min( mapY, area[1] + area[3] - mapHeight - MAP_FOOT_DEPTH ) );
 			mapX = mapLeft;
 			mapY = mapTop;
 			if ( mapPage !== 0 && hover?.startsWith( HUNTING_AREA_PREFIX ) ) hover = null;
 			const mapGuideEnabled = guideAvailable && experimental.state().saved.monsterGuide;
-			const mapClip: UiRect = [
-				mapLeft + 6,
-				mapTop + 34,
-				mapWidth - 12,
-				mapHeight - 40
-			];
+			const mapClip: UiRect = mapPanel( [ mapLeft, mapTop, mapWidth, mapHeight ] );
 			const mapHits: UiControl[] = [];
 			// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 			// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -565,10 +564,6 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 					} );
 				}
-				// The location button's sign (v1.696 E73CE0), this
-				// tick's frame of its strip, over everything placed.
-				const sign = mapTools.locationSign();
-				if ( sign ) mapMarkers.push( { ...sign, rotation: 0 } );
 			}
 			// A closed map only demands its images, so opening it is instant: the
 			// demand is computed without the projection (worldMapDemand). Its label
@@ -790,7 +785,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			}
 			// Port-only: the reverse return map points while the map holds a scroll.
 			if ( mapOpen && pose && !caveMap && reverseScrollHud.mapping() ) {
-				const clip: UiRect = [ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ];
+				const clip: UiRect = mapClip;
 				for (
 					const { point, rect } of worldMapPointMarkers( {
 						page: mapPage,
@@ -904,16 +899,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					"map-size",
 					"Change map size"
 				);
-				if ( (mapPage !== 0 && !caveMap) || mapTools.viewingDungeon() ) {
-					authoredButton(
-						{ ...nodes.GDR_WM_BTN_TO_WMAP!, rect: [ mw - 62, 10, 16, 16 ] },
-						mx,
-						my,
-						"map-world",
-						"World map"
-					);
-				}
-				closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
+				closeButton( mx + mw - 26, my + 10, panelCloseId( "Map" ) );
 				// The tools strip and drawer (issue #3167) draw inside
 				// the window, above the map and its hits.
 				const tools = mapTools.present( {
@@ -938,15 +924,14 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					pan: mapPan,
 					center: pose ? mapCenter ?? mapViewPose( pose ) : null,
 					layout: mapLayout,
-					huntingVisible: guideAvailable && mapPage === 0 && !caveMap,
-					levelCheckbox: experimental.state().saved.worldMapLevelCheckbox
+					size: path => input.resources.size( path )
 				} );
 				paths.push( ...tools.paths );
 				quads.push( ...tools.quads );
 				controls.push( ...tools.controls );
 				// The page tiles reach past the window through mapClip; the
 				// window rect is what the compact fit must measure.
-				endWindow( admission, "primary", [ mx, my, mw, mh ] );
+				endWindow( admission, "primary", [ mx, my, mw, mh + MAP_FOOT_DEPTH ] );
 			}
 			return hover;
 		},

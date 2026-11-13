@@ -2773,7 +2773,6 @@
 				"windowBox",
 				"image",
 				"authoredButton",
-				"authoredLabeledButton",
 				"closeButton",
 				"endWindow",
 				"rect"
@@ -2830,17 +2829,39 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/ui/hud/map-tools.ts",
-			"provider": "src/engine/runtime/ui/hud/map-drawer.ts",
-			"functions": [
-				"paintDrawer"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/hud/map-drawer.ts",
+			"consumer": "src/engine/runtime/ui/hud/map-chrome.ts",
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": [
 				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-chrome.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-chrome.ts",
+			"functions": [
+				"mapLeftReach",
+				"mapPanel"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/chat-scrollbar.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": [
+				"size"
 			]
 		},
 		{
