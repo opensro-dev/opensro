@@ -203,7 +203,6 @@ apps/client-next/tests/browser/helpers/hold-runtime.mjs
 apps/client-next/tests/browser/helpers/native-button-oracle.mjs
 apps/client-next/tests/browser/helpers/ui-admission-reference.mjs
 apps/client-next/tests/browser/hit-light.test.mjs
-apps/client-next/tests/browser/hud-readouts.test.mjs
 apps/client-next/tests/browser/karakoram-ice-live.test.mjs
 apps/client-next/tests/browser/live-champion-aggro.test.mjs
 apps/client-next/tests/browser/live-pursuit.test.mjs
@@ -277,7 +276,6 @@ apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs
 apps/client-next/tests/browser/world-loading-recovery.test.mjs
-apps/client-next/tests/browser/world-map-interaction.test.mjs
 apps/client-next/tests/browser/world-refresh.test.mjs
 apps/client-next/tests/browser/world-surfaces.test.mjs
 apps/client-next/tests/browser/world.test.mjs

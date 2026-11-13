@@ -46,6 +46,20 @@ import {
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
 import { DRAWER_WIDTH, paintDrawer } from "./map-drawer";
+import {
+	GLOBE,
+	LOCATION,
+	LOCATION_SIGN,
+	PIN_AUTO,
+	PIN_PASSIVE,
+	followPin,
+	globeButton,
+	locationButton,
+	locationSignFrame,
+	locationSignMarker,
+	WMAP,
+	type LocationSignMarker
+} from "./map-buttons";
 
 const ROOT = "/assets/images/Media_extracted/";
 const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
@@ -54,12 +68,12 @@ const CHECK_OFF = ROOT + "interface/ifcommon/com_checkbutton_off.png";
 // the foot checkbox (the dungeon catalogue already carries them as
 // its monsterLevelNote, issue #3238).
 const LEVEL_FILTER_NOTE_KEY = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST";
-// The later client's dungeon-page chrome (issue #3210), published by
-// import_vsro_worldmap_buttons.py beside the v1.150 worldmap art.
-const WMAP = ROOT + "interface/worldmap/";
-const GLOBE = WMAP + "wmap_big_button_world.png";
-const PIN_AUTO = WMAP + "wmap_button_automatic.png";
-const PIN_PASSIVE = WMAP + "wmap_button_passivity.png";
+// The later client's dungeon-page floor stepper (issue #3210), published
+// by import_vsro_worldmap_buttons.py beside the v1.150 worldmap art; the
+// renewal button row and its art are map-buttons.ts's.
+// The floor spinner (id 4) at 602,93: below the row's right end.
+const FLOOR_RIGHT = 43;
+const FLOOR_TOP = 60;
 const FLOOR_UP = WMAP + "wmap_up_button.png";
 const FLOOR_UP_OFF = WMAP + "wmap_up_button_disable.png";
 const FLOOR_DOWN = WMAP + "wmap_down_button.png";
@@ -133,42 +147,6 @@ interface MapToolsPaint {
 
 /*
 ================
-followPin
-
-The follow pin at the map's top right corner, on the world and on a
-dungeon page alike (issue #3210). The later client keeps the captioned
-AUTO_MOVE button of the window layout and draws this one big button
-over the map itself: the art names its two faces for the captioned
-modes, wmap_button_automatic while the map follows the character and
-wmap_button_passivity while it stands where it was put, and the
-screenshots show the passive face in town and in the tomb alike. The
-press lands on the map HUD's own follow state, the same state the
-title bar's captioned button flips; the pin only shows it at the map.
-================
-*/
-function followPin( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ) {
-	const rect: UiRect = [ input.clip[0] + input.clip[2] - 40, input.clip[1] + 4, 36, 36 ];
-	quads.push( {
-		texture: input.followed ? PIN_AUTO : PIN_PASSIVE,
-		rect,
-		uv: [ 0, 0, 1, 1 ],
-		color: WHITE,
-		clip: input.clip
-	} );
-	controls.push( {
-		id: "map-pin",
-		kind: "button",
-		label: input.followed ? "Auto move" : "Manual move",
-		helpText: input.followed ?
-			"The map follows you; press for manual move" :
-			"The map stands where you put it; press for auto move",
-		rect,
-		selected: input.followed
-	} );
-}
-
-/*
-================
 RegionNamesLoad
 ================
 */
@@ -200,8 +178,15 @@ createMapToolsHud
 export function createMapToolsHud( options: {
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
 	base: string;
+	// The clock the location sign animates on; tests inject one.
+	now?: () => number;
 } ) {
 	const assets = options.assets;
+	const now = options.now ?? (() => performance.now());
+	// The point the location sign marks (v1.696 E73C80), null when
+	// cleared, and the strip frame last presented.
+	let located: { regionId: number; x: number; z: number; } | null = null;
+	let locatedFrame = -1;
 	let levelFilter = true;
 	let drawerOpen = false;
 	let drawerRegion: number | null = null;
@@ -456,7 +441,8 @@ export function createMapToolsHud( options: {
 		*/
 		step( panel: string ): boolean {
 			if ( regionLoad.kind === "disposed" ) return false;
-			let changed = false;
+			// The location sign's strip steps on its own clock.
+			let changed = panel === "Map" && located !== null && locationSignFrame( now() ) !== locatedFrame;
 			if ( panel === "Map" && regionLoad.kind === "idle" && assets.available() > 0 ) {
 				regionLoad = {
 					kind: "loading",
@@ -506,6 +492,36 @@ export function createMapToolsHud( options: {
 		*/
 		drawerOpen(): boolean {
 			return drawerOpen;
+		},
+		/*
+		================
+		locate
+
+		The location button: marks the player's point, or clears the
+		mark already standing. True when a mark was set.
+		================
+		*/
+		locate( pose: Pose | null | undefined ): boolean {
+			if ( located || !pose ) {
+				located = null;
+				return false;
+			}
+			located = { regionId: pose.regionId, x: pose.x, z: pose.z };
+			return true;
+		},
+		/*
+		================
+		locationSign
+
+		The location sign as a map marker, this tick's frame of its
+		strip; null without a mark. A dungeon point has no world
+		projection, so the sign stands on the world pages only.
+		================
+		*/
+		locationSign(): LocationSignMarker | null {
+			if ( !located ) return null;
+			locatedFrame = locationSignFrame( now() );
+			return locationSignMarker( located, locatedFrame );
 		},
 		/*
 		================
@@ -727,6 +743,7 @@ export function createMapToolsHud( options: {
 				shownFloors = input.floors;
 				shownFloor = input.floor;
 				paths.push(
+					LOCATION,
 					GLOBE,
 					PIN_AUTO,
 					PIN_PASSIVE,
@@ -741,27 +758,15 @@ export function createMapToolsHud( options: {
 					CHECK_OFF
 				);
 				const clip = input.clip, right = clip[0] + clip[2];
-				quads.push( {
-					texture: GLOBE,
-					rect: [ right - 84, clip[1] + 4, 36, 36 ],
-					uv: [ 0, 0, 1, 1 ],
-					color: WHITE,
-					clip
-				} );
-				controls.push( {
-					id: "map-globe",
-					kind: "button",
-					label: "World map",
-					helpText: "Back to the world map",
-					rect: [ right - 84, clip[1] + 4, 36, 36 ]
-				} );
-				followPin( input, quads, controls );
+				locationButton( clip, located !== null, quads, controls );
+				globeButton( clip, quads, controls );
+				followPin( input.clip, input.followed, quads, controls );
 				// The strip and the floor's monster list stay on the
 				// dungeon page (issue #3239).
 				stripToggles( input, quads, controls, paths, mx + 8 );
 				const index = input.floors.findIndex( floor => floor === input.floor );
 				if ( input.floor && index >= 0 && clip[3] >= 140 ) {
-					const sx = right - 32, sy = clip[1] + 48;
+					const sx = right - FLOOR_RIGHT, sy = clip[1] + FLOOR_TOP;
 					const upOff = index >= input.floors.length - 1, downOff = index <= 0;
 					quads.push( {
 						texture: FLOOR_TRACK,
@@ -824,10 +829,16 @@ export function createMapToolsHud( options: {
 				return { quads, controls, paths };
 			}
 			stripX = stripToggles( input, quads, controls, paths, stripX );
-			// The follow pin at the map's own corner, as the later
-			// client draws it on the world too (issue #3210).
-			paths.push( PIN_AUTO, PIN_PASSIVE );
-			followPin( input, quads, controls );
+			// The renewal row on the world too (issue #3210): the
+			// location button, the globe off the world page, the pin.
+			paths.push( LOCATION, PIN_AUTO, PIN_PASSIVE );
+			if ( located ) paths.push( LOCATION_SIGN );
+			locationButton( input.clip, located !== null, quads, controls );
+			if ( input.page !== 0 ) {
+				paths.push( GLOBE );
+				globeButton( input.clip, quads, controls );
+			}
+			followPin( input.clip, input.followed, quads, controls );
 			// The dungeon entrances: their authored map points, named by
 			// the client's own text. A door whose name the text lacks
 			// stays the plain icon.

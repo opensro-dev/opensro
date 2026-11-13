@@ -80,7 +80,6 @@ function fixture() {
 		endWindow: () => {},
 		windowBox: () => {},
 		authoredButton: () => {},
-		authoredLabeledButton: () => {},
 		closeButton: () => {},
 		image: () => {}
 	};
@@ -183,7 +182,7 @@ test("the name follows a live pose and disappears on leave or map close", () => 
 test("roster hover areas pan with the map and clip to its visible area", () => {
 	const { hud, input, paint } = fixture();
 	try {
-		hud.activate( "map-follow", input.pose );
+		hud.activate( "map-pin", input.pose );
 		const before = paint()[1];
 		hud.drag( { kind: "drag", id: before.id, dx: 20, dy: 10 } );
 		const after = paint()[1];

@@ -20,8 +20,6 @@ const { experimentalOptions } = await import( "../../src/engine/foundation/ui/ex
 const { createWorldMapHud } = await import( "../../src/engine/runtime/ui/hud/world-map.ts" );
 const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
 
-// The authored automatic-move button sits near the 652-wide window's right edge.
-const AUTO_MOVE_RECT = [ 560, 8, 80, 22 ];
 // Jangan town (page 1): sector 168 x 97 sits inside its authored bounds.
 const JANGAN_POSE = { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 };
 // Ch'in Tomb B1: dungeon region 0x8007, no page on the world map.
@@ -61,7 +59,7 @@ function present( poses ) {
 			h: 900,
 			full: [ 0, 0, 1200, 900 ],
 			hover: null,
-			hudData: { map: { GDR_WM_BTN_AUTO_MOVE: { rect: AUTO_MOVE_RECT } } },
+			hudData: { map: {} },
 			trackedQuest: 0,
 			minimapResources: { positions: () => undefined },
 			mapTeleport: { view: () => {} },
@@ -83,7 +81,6 @@ function present( poses ) {
 				seen.caption = caption;
 			},
 			authoredButton: () => {},
-			authoredLabeledButton: () => {},
 			closeButton: () => {},
 			image: () => {}
 		};

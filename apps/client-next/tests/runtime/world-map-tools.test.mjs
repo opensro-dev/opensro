@@ -509,8 +509,9 @@ test("the dungeon page's monster list fills for its floor and a pick marks the s
 test("the floor selector is one compact stepper and the page foot names the level filter", () => {
 	const hud = tools();
 	const floors = caveDungeonFloors( CAVE, 32769 );
-	// The selector's pieces stack on one 28x56 plate at the clip's
-	// right edge below the globe row: up chevron, the B-floor box,
+	// The selector's pieces stack on one 28x56 plate where the renewal
+	// window's spinner stands (602,93: 43 in from the clip's right, 60
+	// down, below the button row): up chevron, the B-floor box,
 	// down chevron. No tall track stretches down the edge (#3238).
 	const written = [];
 	const text = {
@@ -519,12 +520,12 @@ test("the floor selector is one compact stepper and the page foot names the leve
 	};
 	const view = paint( hud, { cave: true, floors, floor: floors[0], text } );
 	const plate = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_big_box.png" ) );
-	assert.deepEqual( plate?.rect, [ 860, 188, 28, 56 ], "one compact plate, not the 228px track" );
+	assert.deepEqual( plate?.rect, [ 849, 200, 28, 56 ], "one compact plate, not the 228px track" );
 	const up = defined( control( view, "map-floor-up" ) ), down = defined( control( view, "map-floor-down" ) );
-	assert.deepEqual( up.rect, [ 860, 194, 28, 12 ], "the up chevron heads the stepper" );
-	assert.deepEqual( down.rect, [ 860, 230, 28, 12 ], "the down chevron closes the stepper" );
+	assert.deepEqual( up.rect, [ 849, 206, 28, 12 ], "the up chevron heads the stepper" );
+	assert.deepEqual( down.rect, [ 849, 242, 28, 12 ], "the down chevron closes the stepper" );
 	const box = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_box.png" ) );
-	assert.deepEqual( box?.rect, [ 862, 208, 24, 20 ], "the floor box sits between the chevrons" );
+	assert.deepEqual( box?.rect, [ 851, 220, 24, 20 ], "the floor box sits between the chevrons" );
 	// The page foot carries the later client's filter note in its
 	// black strip, with the switch that drives the same state.
 	const note = view.quads.find( quad => quad.texture === "" && quad.rect[1] === 676 && quad.rect[3] === 20 );
@@ -813,4 +814,54 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 	} finally {
 		f.dispose();
 	}
+});
+
+test("the renewal button row: location, the globe off the world page, then the pin", () => {
+	const hud = tools();
+	// The clip's right edge is 892 and its top 140: the v1.696 row
+	// stands 129, 90 and 51 in from that edge and 14 down, 36 square.
+	let view = paint( hud );
+	assert.deepEqual( defined( control( view, "map-locate" ) ).rect, [ 763, 154, 36, 36 ] );
+	assert.deepEqual( defined( control( view, "map-pin" ) ).rect, [ 841, 154, 36, 36 ] );
+	assert.equal( control( view, "map-globe" ), undefined, "the world page needs no way back to itself" );
+	assert.equal( control( view, "map-follow" ), undefined, "no captioned AUTO_MOVE button" );
+	assert.ok( view.paths.some( path => path.endsWith( "wmap_button_location.png" ) ) );
+	view = paint( hud, { page: 1 } );
+	assert.deepEqual( defined( control( view, "map-globe" ) ).rect, [ 802, 154, 36, 36 ], "a town page shows it" );
+	assert.ok( view.paths.some( path => path.endsWith( "wmap_big_button_world.png" ) ) );
+	hud.dispose();
+});
+
+test("the location button marks the player's point with the animated sign and clears it", () => {
+	let clock = 0;
+	const hud = createMapToolsHud( {
+		assets: { available: () => 0, request: () => 1, take: () => null, cancel: () => {} },
+		base: "https://fixture.invalid/",
+		now: () => clock
+	} );
+	const pose = { regionId: 250, x: 480, y: 0, z: 960, angle: 0 };
+	assert.equal( hud.locationSign(), null );
+	assert.equal( hud.locate( pose ), true, "a press marks" );
+	let sign = defined( hud.locationSign() );
+	assert.deepEqual( [ sign.regionId, sign.x, sign.z, sign.size ], [ 250, 480, 960, 32 ] );
+	assert.ok( sign.path.endsWith( "wmap_sign_location.png" ) );
+	assert.deepEqual( sign.uv, [ 0, 0, 1 / 12, 1 ], "the first of the strip's 12 frames" );
+	assert.equal( defined( control( paint( hud ), "map-locate" ) ).selected, true );
+	assert.ok( paint( hud ).paths.some( path => path.endsWith( "wmap_sign_location.png" ) ) );
+	// Each 100 ms steps one frame; the map redraws only on a new frame.
+	clock = 50;
+	assert.equal( hud.step( "Map" ), false );
+	clock = 350;
+	assert.equal( hud.step( "Map" ), true );
+	sign = defined( hud.locationSign() );
+	assert.deepEqual( sign.uv, [ 3 / 12, 0, 1 / 12, 1 ] );
+	assert.equal( hud.step( "Map" ), false, "the presented frame is current" );
+	clock = 1250;
+	assert.deepEqual( defined( hud.locationSign() ).uv, [ 0, 0, 1 / 12, 1 ], "the strip wraps after 12" );
+	assert.equal( hud.step( "Inventory" ), false, "a closed map does not animate" );
+	assert.equal( hud.locate( pose ), false, "a second press clears" );
+	assert.equal( hud.locationSign(), null );
+	assert.equal( hud.locate( null ), false, "no pose, no mark" );
+	assert.equal( hud.locationSign(), null );
+	hud.dispose();
 });

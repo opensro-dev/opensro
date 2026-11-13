@@ -31,7 +31,8 @@ from sro_paths import PUBLIC_ROOT
 ARCHIVE_ROOT = "interface/worldmap/"
 # One button each: the globe, the follow pin's two mode faces, the floor
 # arrows in their working and disabled faces, and the floor boxes over
-# their track. The focus and press faces of the globe and the pin stay
+# their track, and the renewal row's location button with the 12-frame
+# location sign strip it shows (v1.696 E73CE0). The focus and press faces of the globe and the pin stay
 # in the archive: the map tools draw one state face per frame, as they
 # already draw the checkbutton's on and off faces.
 BUTTONS = (
@@ -45,6 +46,8 @@ BUTTONS = (
 	"wmap_floor_box",
 	"wmap_floor_choice_box",
 	"wmap_floor_big_box",
+	"wmap_button_location",
+	"wmap_sign_location",
 )
 
 

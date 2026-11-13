@@ -69,7 +69,6 @@ function captionAt( pose ) {
 					caption = title;
 				},
 				authoredButton: () => {},
-				authoredLabeledButton: () => {},
 				closeButton: () => {},
 				image: () => {}
 			})

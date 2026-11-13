@@ -140,7 +140,6 @@ interface MapPaint {
 	endWindow: ( mark: readonly [number, number, number, number], owner?: string, source?: UiRect ) => void;
 	windowBox: ( title: string, x: number, y: number, width: number, height: number ) => void;
 	authoredButton: ( node: AuthoredControl, x: number, y: number, id: string, label: string ) => void;
-	authoredLabeledButton: MapPaint["authoredButton"];
 	closeButton: ( x: number, y: number, id: ReturnType<typeof panelCloseId> ) => void;
 	image: ( rect: UiRect, path: string ) => void;
 }
@@ -338,12 +337,26 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			// 575E90 flips AUTO MOVE only; keep the last automatic centre.
-			// The map's own follow pin (issue #3210) lands here too.
-			if ( id === "map-follow" || id === "map-pin" ) {
+			// The later client's renewal window has no captioned AUTO_MOVE
+			// button: its follow pin (issue #3210) is the one switch.
+			if ( id === "map-pin" ) {
 				mapTools.clearView();
 				mapFollow = !mapFollow;
 				mapCenter = heldCenter( pose );
 				mapPan = [ 0, 0 ];
+				return true;
+			}
+			// The renewal window's location button (v1.696 id 19): the
+			// map tools mark the player's point with the location sign;
+			// the view goes back to the player so the sign is on screen
+			// (an inference: the press path is not read yet, the sign's
+			// own handler E73C80 only marks a point).
+			if ( id === "map-locate" ) {
+				if ( mapTools.locate( pose ) ) {
+					mapTools.clearView();
+					mapCenter = mapFollow ? null : heldCenter( pose );
+					mapPan = [ 0, 0 ];
+				}
 				return true;
 			}
 			// 57F410 selects the world and Manual Movement State.
@@ -434,7 +447,6 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				endWindow = input.endWindow,
 				windowBox = input.windowBox,
 				authoredButton = input.authoredButton,
-				authoredLabeledButton = input.authoredLabeledButton,
 				closeButton = input.closeButton,
 				image = input.image;
 
@@ -553,6 +565,10 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 					} );
 				}
+				// The location button's sign (v1.696 E73CE0), this
+				// tick's frame of its strip, over everything placed.
+				const sign = mapTools.locationSign();
+				if ( sign ) mapMarkers.push( { ...sign, rotation: 0 } );
 			}
 			// A closed map only demands its images, so opening it is instant: the
 			// demand is computed without the projection (worldMapDemand). Its label
@@ -896,26 +912,6 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						"map-world",
 						"World map"
 					);
-				}
-				if ( !mapSmall ) {
-					// Anchored to the window's right edge: a compact window is narrower
-					// than the authored 652 and the button must stay inside it.
-					const authored = nodes.GDR_WM_BTN_AUTO_MOVE!,
-						node = mw < WORLD_MAP_WIDTH ?
-							{
-								...authored,
-								rect: [
-									authored.rect[0] - (WORLD_MAP_WIDTH - mw),
-									authored.rect[1],
-									authored.rect[2],
-									authored.rect[3]
-								] as UiRect
-							} :
-							authored,
-						caption = hudCopy(
-							mapFollow ? "UIIT_STT_WORLDMAP_AUTO_MOVE" : "UIIT_STT_WORLDMAP_MANUAL_MOVE"
-						);
-					authoredLabeledButton( node, mx, my, "map-follow", caption );
 				}
 				closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
 				// The tools strip and drawer (issue #3167) draw inside

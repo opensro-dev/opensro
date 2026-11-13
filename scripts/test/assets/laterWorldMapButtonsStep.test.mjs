@@ -77,6 +77,8 @@ test("one import publishes exactly the button set", () => {
 		"/assets/images/Media_extracted/interface/worldmap/wmap_down_button_disable.png",
 		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_box.png",
 		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_choice_box.png",
-		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_big_box.png"
+		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_big_box.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_button_location.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_sign_location.png"
 	] );
 });

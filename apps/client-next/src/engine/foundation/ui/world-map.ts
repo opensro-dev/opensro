@@ -370,6 +370,10 @@ export interface MapMarker {
 	readonly z: number;
 	readonly rotation: number;
 	readonly path: string;
+	// A frame of a sprite strip (the location sign's), else the whole image.
+	readonly uv?: UiRect;
+	// The drawn square's side, else MAP_MARKER_SIZE.
+	readonly size?: number;
 }
 /*
 ================
@@ -543,10 +547,12 @@ export function worldMapPresentation(
 		x: number,
 		z: number,
 		texture: string,
-		rotation: number
+		rotation: number,
+		uv: UiRect = [ 0, 0, 1, 1 ],
+		size: number = MAP_MARKER_SIZE
 	) {
-		const rect = worldMapMarkerRect( frame, { regionId, x, z } );
-		if ( rect && sprite( markerQuads, texture, rect, [ 0, 0, 1, 1 ], rotation ) ) markerRows.push( row );
+		const rect = worldMapMarkerRect( frame, { regionId, x, z }, size );
+		if ( rect && sprite( markerQuads, texture, rect, uv, rotation ) ) markerRows.push( row );
 	}
 	if ( page ) {
 		const picture = "picture" in page ? page.picture : page.size;
@@ -584,7 +590,9 @@ export function worldMapPresentation(
 	// Caller-supplied passes first, then the local player, matching 57fe60's
 	// order (quest NPCs, hunting points, apprenticeship, party) and 57ce80's
 	// decision to draw mm_sign_character last.
-	markers.forEach( ( row, index ) => marker( index, row.regionId, row.x, row.z, row.path, row.rotation ) );
+	markers.forEach( ( row, index ) =>
+		marker( index, row.regionId, row.x, row.z, row.path, row.rotation, row.uv, row.size )
+	);
 	marker(
 		markers.length,
 		p.regionId,
@@ -785,13 +793,14 @@ One projection owns the native markers and the reverse return map points
 */
 function worldMapMarkerRect(
 	frame: ReturnType<typeof worldMapFrame>,
-	point: { readonly regionId: number; readonly x: number; readonly z: number; }
+	point: { readonly regionId: number; readonly x: number; readonly z: number; },
+	size: number = MAP_MARKER_SIZE
 ): UiRect | null {
 	if ( !featuresAt( point.regionId ).worldMap ) return null;
 	const { left, right, top, bottom, width, height, ox, oy } = frame;
 	const x = ((sectorX( point.regionId ) * MAP_REGION_UNITS + point.x / 10 - left) / (right - left)) * width;
 	const y = ((top - (sectorY( point.regionId ) * MAP_REGION_UNITS + point.z / 10)) / (top - bottom)) * height;
-	return [ ox + x - MAP_MARKER_SIZE / 2, oy + y - MAP_MARKER_SIZE / 2, MAP_MARKER_SIZE, MAP_MARKER_SIZE ];
+	return [ ox + x - size / 2, oy + y - size / 2, size, size ];
 }
 
 /*

@@ -158,7 +158,9 @@ export function laterWorldMapButtonPublicPaths() {
 		"wmap_down_button_disable",
 		"wmap_floor_box",
 		"wmap_floor_choice_box",
-		"wmap_floor_big_box"
+		"wmap_floor_big_box",
+		"wmap_button_location",
+		"wmap_sign_location"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 
