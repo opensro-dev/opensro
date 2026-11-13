@@ -356,7 +356,9 @@ func TestSookEarlyStagesNeverRollSun(t *testing.T) {
 	rt.deps.(*enterworld.Deps).Items = enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	rt.AttackPetExpansion = true
 	n := uint32(17)
-	rt.DropRoll = func() (uint32, error) { n = n*1664525 + 1013904223; return n, nil }
+	// DropRoll is combat.Roll32767 in production; loot's million draw
+	// refuses a wider value, so the fixture keeps the 15-bit contract.
+	rt.DropRoll = func() (uint32, error) { n = n*1664525 + 1013904223; return n >> 17, nil }
 	for stage := 1; stage <= 2; stage++ {
 		for index := 0; index < 300; index++ {
 			item, ok := rt.arenaReward(rt.sookRun(testDivision, c), c, stage, index)
