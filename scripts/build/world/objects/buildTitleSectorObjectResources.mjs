@@ -192,8 +192,15 @@ export async function buildTitleSectorObjectResources( options ) {
 	piety_boss_width.bms names piety_boss_widthlightingmap.ddj while its
 	archive ships the spaced piety_boss_width lightingmap.ddj, so that mesh
 	draws without a lightmap exactly as retail draws it (#3295). Each miss
-	is still listed in `lightmapsMissing`, which the dungeon build prints,
-	so a pipeline fault that drops every lightmap cannot pass unseen.
+	is still listed in `lightmapsMissing`, which the dungeon build prints.
+
+	A .ddj the archive does ship is different: retail draws that lightmap,
+	so a converted PNG the build failed to write is a pipeline fault. The
+	record still names no file (a never-written path would fail the claim
+	audit of a reused region), but the source joins texturePathSet, and the
+	copy pass reports the missing PNG in `missing` as it does a material
+	texture's. Outdoor, title and character-select builds print nothing
+	from `lightmapsMissing`, so that list alone would hide the fault.
 	================
 	*/
 	async function meshLightmap( source ) {
@@ -203,14 +210,12 @@ export async function buildTitleSectorObjectResources( options ) {
 			return null;
 		}
 		const blockFormat = await blockFormatFor( source.sourcePath );
-		// The .ddj alone is not enough: a non-block lightmap publishes its
-		// converted PNG, and a lightmap naming a PNG the build never writes
-		// fails the claim audit as a material texture would.
+		// Listed before the check, so the copy pass reports a failed conversion.
+		texturePathSet.add( source.sourcePath );
 		if ( !(await sourceThereFor( source.sourcePath, blockFormat )) ) {
 			lightmapsMissing.push( source.sourcePath );
 			return null;
 		}
-		texturePathSet.add( source.sourcePath );
 		return {
 			sourcePath: source.sourcePath,
 			texturePublicPath: objectTexturePublicPath( area, source.sourcePath, blockFormat ? ".texture" : ".png" ),
