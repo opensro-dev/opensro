@@ -25,6 +25,7 @@ import type { CharacterActor } from "@/engine/contracts/character";
 import type { DamageText } from "@/engine/contracts/damage-text";
 import type { EffectTrigger, EffectImpactEvent, HawkImpact, ImpactFeedback } from "@/engine/contracts/effects";
 import type { Renderer } from "@/engine/contracts/runtime";
+import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import type { Resource, PresentationOutput } from "./internal/presentation-contract";
 
 /*
@@ -335,7 +336,10 @@ export function createPresentationEvents() {
 					const cursor = trigger.event === 0 ?
 						0 :
 						phase?.definition.trackEvents.filter( row => row.eventCode === 1 )[trigger.event - 1]?.cursorMs;
-					const rows = [ ...output.displayed.values() ].map( actor => {
+					// The resolver reads only the queried actor and its mount
+					// chain; shifting every displayed actor per query was the
+					// quadratic this pass did not need.
+					const rows = actorQueryRows( output.displayed, [ output.displayed.get( gid ) ] ).map( actor => {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
 						// A held body launches bone projectiles from its held
@@ -534,7 +538,15 @@ export function createPresentationEvents() {
 					effects.impactSource( caster?.gid, target.gid, gameplay?.attachedEffects ?? [], cast ) :
 					{ gid: cast.caster, skill: hit.soundSkill ?? 0, defensive: false };
 				if ( effectDetail && caster && hit.source !== "hawk" ) {
-					const shown = [ ...output.displayed.values() ].map( actor => {
+					// The matrix resolves the caster through its mount chain and
+					// each local matrix reads one actor; re-posing the whole
+					// displayed set per hit was the same quadratic the socket
+					// callback dropped.
+					const shown = actorQueryRows( output.displayed, [
+							output.displayed.get( caster.gid ),
+							output.displayed.get( target.gid ),
+							target.mountedOn !== undefined ? output.displayed.get( target.mountedOn ) : undefined
+						] ).map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
 							const pose = drawnPoses.get( actor.gid ) ?? logicalPose( entity );
