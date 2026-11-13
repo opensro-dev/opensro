@@ -305,3 +305,65 @@ export async function importLaterWorldMapGuideStep() {
 	claimPublicPaths( laterWorldMapGuidePublicPaths( catalog ) );
 	return { monsters: Array.isArray( catalog.monsters ) ? catalog.monsters.length : 0 };
 }
+
+// The reverse return map's destination table (SRO_REVERSE_RETURN_MAP):
+// the later client's refoptionalteleport.txt, written beside the v1.150
+// extraction (extracted/VsroOptionalTeleport_extracted) for the server
+// game-data build to project. Without it the server infers its points
+// from the recall gates and every unique nest, which is not the table
+// the later client offers.
+
+/*
+================
+laterOptionalTeleportImportPlan
+
+What the reverse return table step does with one environment: the same
+contract as the map buttons (SRO_VSRO_ROOT folder, else the one skip
+line), because one archive carries both. The importer verifies the
+archive against its pin before reading a byte.
+================
+*/
+export function laterOptionalTeleportImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_VSRO_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later reverse return table: skipped (SRO_VSRO_ROOT is not set; the server infers its map points)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later reverse return table: skipped (no Media.pk2 under SRO_VSRO_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_vsro_optional_teleport.py", "--vsro-root", root ] };
+}
+
+/*
+================
+importLaterOptionalTeleportStep
+
+Writes the import into the game root, not the public tree: the client
+receives the points from the server's world references, so nothing is
+published or claimed here. Skipped with one line without the archive.
+================
+*/
+export async function importLaterOptionalTeleportStep() {
+	const root = (process.env.SRO_VSRO_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterOptionalTeleportImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[reverse-return] later-client optional teleport import",
+		cwd: rebuildRoot,
+		context: [
+			"The reverse return map's destinations are the later client's refoptionalteleport.txt; the build " +
+			"imports them from the pinned VSRO archive (SRO_VSRO_ROOT) for the server game-data build."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	return { imported: true };
+}
