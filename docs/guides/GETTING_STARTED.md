@@ -83,7 +83,8 @@ The second `assets build` and `assets ledger` check the tree against the
 publication ledger: every packed file must come from a current build step,
 so nothing that only exists on your machine reaches a release.
 [ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md) explains the ledger, and how to
-size the build with `SRO_BUILD_JOBS` (default: every core but one).
+size the build with `SRO_BUILD_JOBS` (default: every core but one, fewer when free memory is short;
+`SRO_BUILD_MEMORY_MB` sets the memory budget).
 
 The results land in the ignored `.generated/` folder: browser assets in
 `.generated/client-public/assets/`, the server projection in

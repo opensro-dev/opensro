@@ -10,6 +10,7 @@ is refused instead of silently falling back.
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { buildJobs, JOB_MEMORY_MB } from "../../build/shared/buildParallelism.mjs";
 
@@ -42,6 +43,23 @@ test("a job count that is not a positive integer is refused", () => {
 	for ( const raw of [ "0", "-2", "1.5", "many" ] ) {
 		assert.throws( () => buildJobs( { SRO_BUILD_JOBS: raw } ), /SRO_BUILD_JOBS must be a positive integer/ );
 	}
+});
+
+test("an empty SRO_BUILD_JOBS is replaced by the run's job count", () => {
+	// `??=` keeps "", which left every stage re-reading free memory and
+	// every Python child on the core-only default.
+	const moduleUrl = new URL( "../../build/shared/buildParallelism.mjs", import.meta.url ).href;
+	const child = spawnSync(
+		process.execPath,
+		[
+			"--input-type=module",
+			"-e",
+			`await import(${JSON.stringify( moduleUrl )}); console.log(process.env.SRO_BUILD_JOBS)`
+		],
+		{ env: { ...process.env, SRO_BUILD_JOBS: "" }, encoding: "utf8" }
+	);
+	assert.equal( child.status, 0, child.stderr );
+	assert.match( child.stdout.trim(), /^[1-9][0-9]*$/ );
 });
 
 test("the module fixes one job count for the run and sizes libuv's pool", () => {

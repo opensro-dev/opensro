@@ -278,8 +278,10 @@ from the archive folder; the path under the reason folder mirrors
 ## Build parallelism
 
 One setting sizes every parallel stage of the asset build:
-`SRO_BUILD_JOBS`, a positive integer, defaulting to every core but one
-(`scripts/build/shared/buildParallelism.mjs`). It sets:
+`SRO_BUILD_JOBS`, a positive integer. The default is every core but one,
+capped at the jobs that fit in half the memory free when the build starts
+(256 MB a job; `SRO_BUILD_MEMORY_MB` sets the budget instead), from
+`scripts/build/shared/buildParallelism.mjs`. It sets:
 
 | Stage | Before | Now |
 | --- | --- | --- |

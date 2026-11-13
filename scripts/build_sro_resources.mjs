@@ -60,7 +60,7 @@ async function checkPythonBuildDeps() {
 if ( process.argv.length > 2 ) {
 	console.error(
 		`build_sro_resources: takes no arguments; got ${process.argv.slice( 2 ).join( " " )}\n` +
-			"Settings are environment variables: SRO_BUILD_JOBS, SRO_FORCE_RESOURCE_BUILD, SRO_LANE_MEMO."
+			"Settings are environment variables: SRO_BUILD_JOBS, SRO_BUILD_MEMORY_MB, SRO_FORCE_RESOURCE_BUILD, SRO_LANE_MEMO."
 	);
 	process.exit( 2 );
 }

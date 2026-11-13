@@ -15,7 +15,9 @@ that was free when the build started) at JOB_MEMORY_MB each. A core-only
 default ran 15 lanes on a 16-core laptop whose other programs held 10 GB,
 and the system stopped the build for low memory (2026-11-14). The budget
 is taken once, at load, and exported as SRO_BUILD_JOBS so every stage and
-every Python child agrees on one number for the whole run.
+every Python child agrees on one number for the whole run. A Python step
+run on its own (build_parallelism.py) has no free-memory reading and
+defaults to every core but one; set SRO_BUILD_JOBS for it by hand.
 
 Outputs never depend on the setting - every stage writes the same bytes
 whatever the concurrency - so it is not part of the build fingerprint.
@@ -83,6 +85,7 @@ function currentMachine() {
 }
 
 // One number for the whole run and every child process; the pool must exist
-// with this size before anything starts it.
-process.env[BUILD_JOBS_ENV] ??= String( buildJobs() );
+// with this size before anything starts it. An empty value means unset, as
+// buildJobs reads it (`??=` would keep the empty string).
+if ( !process.env[BUILD_JOBS_ENV] ) process.env[BUILD_JOBS_ENV] = String( buildJobs() );
 process.env.UV_THREADPOOL_SIZE ??= String( Math.min( MAX_THREADPOOL_SIZE, Math.max( 4, buildJobs() ) ) );

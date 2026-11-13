@@ -125,9 +125,9 @@ def map_archive(path):
 	"""
 	A read-only memory map of the archive at path, for read_directory and
 	payload. The later client's Media.pk2 is 698 MB; read_bytes() held all of
-	it in each importer's private memory, so four importers in a build cost
-	about 0.8 GB each. A map pages in only the directory blocks and payloads
-	actually read, and the OS can drop those pages again under pressure. The
+	it in the importer's private memory (725 MB peak measured; the importers
+	run one at a time in the build's tail, after the lanes). A map pages in
+	only the directory blocks and payloads actually read, and the OS can drop those pages again under pressure. The
 	file handle closes at once: the map keeps its own reference to the file
 	and lives until it is garbage collected or the process exits.
 	"""
