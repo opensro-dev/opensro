@@ -21,7 +21,7 @@ const RETURN_ICON_SIZE = 32;
 const RETURN_ICON_STRIP: UiRect = [ 0, 0, .5, 1 ];
 const FULL_UV: UiRect = [ 0, 0, 1, 1 ];
 const WHITE = [ 1, 1, 1, 1 ] as const;
-export const REVERSE_MAP_POINT = "reverse-map-point:";
+const REVERSE_MAP_POINT = "reverse-map-point:";
 
 /*
 ================
