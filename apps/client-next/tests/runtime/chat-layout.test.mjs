@@ -173,7 +173,10 @@ const TAB_LINES = [
 	{ channel: 2, name: "Pal", text: "psst, still there?", outgoing: false },
 	{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
 	{ channel: 5, name: "Peer", text: "hello guild", outgoing: false },
-	{ channel: 11, name: "Peer", text: "hello ally", outgoing: false }
+	{ channel: 11, name: "Peer", text: "hello ally", outgoing: false },
+	{ channel: 3, name: "", gid: 7, text: "gm speaking", outgoing: false },
+	{ channel: 10, name: "", text: "type ten line", outgoing: false },
+	{ channel: 0xff, name: "", text: "type ff line", outgoing: false }
 ];
 
 /*
@@ -195,23 +198,32 @@ test("without the Event tab the four native tabs keep notices in All", () => {
 	assert.ok( visibleLabels( result ).some( label => label.includes( "Seal Of Star" ) ) );
 });
 
-// Native filings put a whisper on every native tab (6ad280 files type 2
-// into the All, Party, Guild and Ally lists alike), so each channel tab
-// shows its own channel beside the whisper and nothing else; the
-// port-only Event tab stays notice-only, whisper included out.
-test("whisper lines show on every native chat tab beside the tab's own channel", () => {
+// Native filings put a whisper, a GM line and the type 10 and 0xff lines
+// on every native tab (6ad280 files types 2, 3, 0xa and 0xff into the
+// All, Party, Guild and Ally lists alike), so each channel tab shows its
+// own channel beside them and nothing else; the port-only Event tab
+// stays notice-only, those lines included out (#3356, #3370).
+test("whisper, GM and type 10 lines show on every native chat tab beside the tab's own channel", () => {
 	for ( const eventTab of [ false, true ] ) {
 		const shows = ( tab, text ) =>
-			visibleLabels( chatLayout( input( { lines: TAB_LINES, welcome: "", eventTab, tab, rows: 6 } ) ) )
+			visibleLabels( chatLayout( input( { lines: TAB_LINES, welcome: "", eventTab, tab, rows: 12 } ) ) )
 				.some( label => label.includes( text ) );
 		// The addressed sender prefix pins the whisper row even where its
 		// text wraps onto a second displayed row.
-		const whisper = "Pal(UIIT_CHATERR_WHISPER_FROM_MESSAGE):psst";
-		for ( const tab of [ 0, 1, 2, 3 ] ) assert.ok( shows( tab, whisper ), `tab ${tab}` );
+		const everyTab = [
+			"Pal(UIIT_CHATERR_WHISPER_FROM_MESSAGE):psst",
+			"gm speaking",
+			"type ten line",
+			"type ff line"
+		];
+		for ( const text of everyTab ) {
+			for ( const tab of [ 0, 1, 2, 3 ] ) assert.ok( shows( tab, text ), `${text} on tab ${tab}` );
+			if ( eventTab ) assert.ok( !shows( 4, text ), `${text}: the Event tab stays notice-only` );
+		}
 		assert.ok( shows( 1, "hello party" ) && !shows( 1, "hello guild" ) && !shows( 1, "hello ally" ) );
 		assert.ok( shows( 2, "hello guild" ) && !shows( 2, "hello party" ) );
 		assert.ok( shows( 3, "hello ally" ) && !shows( 3, "hello party" ) );
-		if ( eventTab ) assert.ok( !shows( 4, whisper ), "Event tab stays notice-only" );
+		for ( const tab of [ 1, 2, 3 ] ) assert.ok( !shows( tab, "hello all" ), `general chat stays off tab ${tab}` );
 	}
 });
 

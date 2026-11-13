@@ -59,20 +59,45 @@ const CONTRIBUTOR_TAG_STYLE = { fontStyle: 2 } as const;
 
 /*
 ================
-WHISPER_CHAT_CHANNEL
+EVERY_TAB_CHAT_CHANNELS
 
-Whispers (chat type 2) land on every native chat tab, never only on
-All: the native viewer files each incoming line into the All block and
-a whisper into the Party, Guild and Ally blocks as well
-(ClientChat_PresentChannelMessage 752800 presents by raw type;
-CIFChatViewer_AppendLineByType 6ad280 files type 2 into all four
-lists), so switching tabs must not hide a conversation. The channel
+The chat types that land on every native chat tab, never only on All:
+the native viewer files each incoming line into the All block, and
+these types into the Party, Guild and Ally blocks as well
+(CIFChatViewer_AppendLineByType 6ad280: after the type table at 6ad5d8,
+the branch on type 2, 0xff, 0xa or 3 appends to this+0x44c/0x450/0x454;
+ClientChat_PresentChannelMessage 752800 presents by raw type). Type 2
+is the whisper (#3356) and type 3 the GM's chat (#3370), so switching
+tabs must not hide a conversation or a GM line. Types 10 and 0xff are
+filed the same way; this port's chat decoder does not produce them
+today, and the rule holds for them the moment it does. The channel
 tabs otherwise keep filtering to their own channel alone. The
 port-only Event tab stays notice-only, as it is for every other
 channel.
 ================
 */
-const WHISPER_CHAT_CHANNEL = 2;
+const EVERY_TAB_CHAT_CHANNELS: ReadonlySet<number> = new Set( [ 2, 3, 0xa, 0xff ] );
+
+// The channel each native tab files beside the every-tab types: All
+// (general chat), Party, Guild and Ally.
+const CHAT_TAB_CHANNELS: readonly number[] = [ 1, 4, 5, 11 ];
+
+/*
+================
+chatTabShows
+
+Whether a line of the given chat channel shows on the given tab. Stall
+lines belong to the stall window's own chat box. With the port-only
+Event tab offered (tab 4), channel-7 event notices live only there:
+All skips them and the native tabs never carried them.
+================
+*/
+export function chatTabShows( channel: number, tab: number, eventTab: boolean ): boolean {
+	if ( channel === STALL_CHAT_CHANNEL ) return false;
+	if ( eventTab && tab === 4 ) return channel === 7;
+	if ( tab === 0 ) return !eventTab || channel !== 7;
+	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.has( channel );
+}
 
 /*
 ================
@@ -377,7 +402,7 @@ button
 				}
 			} );
 		}
-		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][activeTab];
+		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ];
 		const all = [
 			...(activeTab === 0 && lines.length < 128 ?
 				chatWrappedLines(
@@ -399,18 +424,7 @@ button
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
-			// Stall lines belong to the stall window's own chat box. With the
-			// Event tab offered, channel-7 event notices live only there:
-			// All skips them and the native tabs never carried them.
-			...lines.filter( l => {
-				if ( l.channel === STALL_CHAT_CHANNEL ) return false;
-				if ( !state.eventTab ) {
-					return activeTab === 0 || l.channel === channel || l.channel === WHISPER_CHAT_CHANNEL;
-				}
-				if ( activeTab === 4 ) return l.channel === 7;
-				if ( activeTab === 0 ) return l.channel !== 7;
-				return l.channel === channel || l.channel === WHISPER_CHAT_CHANNEL;
-			} ).flatMap(
+			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab ) ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
