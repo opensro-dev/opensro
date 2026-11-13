@@ -347,7 +347,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_UNIQUE_POP_TICKET", "off", nil, "droptables", ""},
 		{"SRO_UNIQUE_MAX_LEVEL_LOOT", "on", nil, "droptables", ""},
 		{"SRO_UNIQUE_SEAL_DROPS", "on", nil, "droptables", ""},
-		{"SRO_BETA_MASTERY", "off", nil, "levels", ""},
+		{"SRO_BETA_MASTERY", "on", nil, "levels", ""},
 		{"SRO_BETA_GROWTH_BANDS", "1-110:2", growth, "quests", ""},
 		{"SRO_LEVEL_CAP", "110", nil, "levels", ""},
 		{"SRO_STACK_SIZES", "off", nil, "items", ""},

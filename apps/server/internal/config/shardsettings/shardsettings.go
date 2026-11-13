@@ -97,7 +97,7 @@ var Settings = []Setting{
 	// world at once, one per tab (the closed beta, owner 2026-11-11).
 	// "off" is native: one world seat per account (#3137).
 	{Env: "SRO_BETA_MULTI_CHARACTER", NomadVar: "beta_multi_character", Default: "off", Validation: ValueSwitch},
-	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
+	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "off", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
 	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
 	// the native 90 (the non-native rule: the off value is native); the
