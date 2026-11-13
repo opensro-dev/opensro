@@ -205,6 +205,7 @@
     "src/engine/runtime/ui/hud/hunting-guide.ts": "src/engine/runtime/ui/hud/world-map.ts",
     "src/engine/runtime/ui/hud/map-tools.ts": "src/engine/runtime/ui/hud/world-map.ts",
     "src/engine/runtime/ui/hud/reverse-map-buttons.ts": "src/engine/runtime/ui/hud/world-map.ts",
+    "src/engine/runtime/ui/hud/unique-nests.ts": "src/engine/runtime/ui/hud/world-map.ts",
     "src/engine/runtime/ui/hud/companion-potions.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {

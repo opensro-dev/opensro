@@ -2792,6 +2792,16 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/unique-nests.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": [

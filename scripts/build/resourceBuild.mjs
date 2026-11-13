@@ -47,6 +47,7 @@ import { buildQuestDataAsset } from "./data/buildQuestDataAsset.mjs";
 import { buildCharacterDataCountryAsset } from "./data/buildCharacterDataCountryAsset.mjs";
 import { buildCosPresentationAsset } from "./data/buildCosPresentationAsset.mjs";
 import { buildFortressMapAsset } from "./data/buildFortressMapAsset.mjs";
+import { buildUniqueNestsAsset } from "./data/buildUniqueNestsAsset.mjs";
 import { buildGInterfaceSectionsAsset } from "./data/buildGInterfaceSectionsAsset.mjs";
 import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
@@ -215,6 +216,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildCharacterDataCountryAsset,
 	buildCosPresentationAsset,
 	buildFortressMapAsset,
+	buildUniqueNestsAsset,
 	buildGInterfaceSectionsAsset,
 	buildSiegeFortressDataAsset,
 	buildMissionPresentationAsset,
@@ -563,6 +565,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The battle aide's fortress map: its pages, placed zones and structure
 	// references (fortressMap.json, decoded by foundation/gameplay/fortress-map.ts).
 	const fortressMap = await steps.buildFortressMapAsset();
+	// Port-only: the world map's unique nests (uniqueNests.json, decoded by
+	// foundation/ui/unique-nests.ts for the Experimental unique spawn signs).
+	const uniqueNests = await steps.buildUniqueNestsAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
 	// through the REAL CIFWnd_CreateChildrenFromLayout CreateControlsFromSection deserializer).
@@ -700,6 +705,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		characterDataCountry,
 		cosPresentation,
 		fortressMap,
+		uniqueNests,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,
@@ -776,6 +782,7 @@ export function formatResourceBuildSummary( results ) {
 		characterDataCountry,
 		cosPresentation,
 		fortressMap,
+		uniqueNests,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,

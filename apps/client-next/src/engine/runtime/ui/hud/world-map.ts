@@ -6,7 +6,8 @@ world-map.ts - world map navigation and presentation
 Owns map placement, page, follow mode and the optional hunting guide. The UI
 calls its explicit input, frame and shutdown entry points; map details never
 become additional state in createUi. Native marker order stays here beside
-the map projection. Hunting guidance is port-only, not native.
+the map projection. Hunting guidance and the unique nest signs are
+port-only, not native.
 
 ===========================================================================
 */
@@ -46,7 +47,9 @@ import {
 import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
+import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
+import { createUniqueNestsHud } from "./unique-nests";
 import { reverseMapButtons } from "./reverse-map-buttons";
 import {
 	MAP_WINDOW_EXTENT,
@@ -210,6 +213,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	const experimental = options.experimental;
 	const huntingGuide = createHuntingGuideHud( options.assets, options.base );
 	const mapTools = createMapToolsHud( options );
+	const uniqueNests = createUniqueNestsHud( options.assets, options.base );
 	let mapSmall = false, mapFollow = true, mapPage = 0, mapX = 100, mapY = 100;
 	let mapPan: [number, number] = [ 0, 0 ], mapCenter: Pose | null = null;
 	// The last pose the world map could place. 5758D0 finds no page for a
@@ -420,7 +424,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				panel === "Map" && (experimental.state().saved.monsterGuide || mapTools.drawerOpen()),
 				panel === "Map" && page === 0 && experimental.state().saved.monsterGuide
 			);
-			return mapTools.step( panel ) || guideChanged;
+			// Two switches, both needed: the Experimental row offers the
+			// M window's unique spawns box, and the box (off by default)
+			// draws the signs. Nothing loads before both are on.
+			const nestsChanged = uniqueNests.step(
+				panel === "Map" && experimental.state().saved.uniqueSpawnPoints && mapTools.uniqueSpawns()
+			);
+			return mapTools.step( panel ) || guideChanged || nestsChanged;
 		},
 		/*
 		================
@@ -507,6 +517,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			const mapMarkers: MapMarker[] = [];
 			const roster = pose ? rosterPositions( pose, game ?? null, next.entities ) : [];
 			let rosterStart = 0;
+			// Port-only, not native: the unique nest signs, under every native
+			// pass. Only an open map lists them; a closed one demands the one
+			// sign image below, never a path per nest.
+			const nestSigns = experimental.state().saved.uniqueSpawnPoints && mapTools.uniqueSpawns();
+			if ( pose && nestSigns && panel === "Map" ) mapMarkers.push( ...uniqueNests.nests() );
 			if ( pose ) {
 				for (
 					const id of questMarkerTargets(
@@ -846,6 +861,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapLayout
 				);
 				for ( const row of mapMarkers ) paths.push( row.path );
+				if ( nestSigns ) paths.push( UNIQUE_NEST_SIGN );
 				paths.push( MAP_LOCAL_MARKER );
 			}
 			if ( panel === "Map" && hudData ) {
@@ -937,6 +953,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					zones: hudData.zones,
 					strings: hudData.strings,
 					levelNote: input.caveMaps?.monsterLevelNote,
+					offerUniqueSpawns: experimental.state().saved.uniqueSpawnPoints,
 					icons: (mapProjection?.hits ?? []).map( hit => hit.rect ),
 					text,
 					page: mapPage,
@@ -975,6 +992,7 @@ dispose
 		dispose() {
 			mapTools.dispose();
 			huntingGuide.dispose();
+			uniqueNests.dispose();
 		}
 	};
 }

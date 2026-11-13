@@ -71,6 +71,13 @@ export const MAP_WINDOW_EXTENT = FOOT[1] + FOOT[3];
 // glyphs centre one higher than the client's in the same rect).
 const NOTE: UiRect = [ 23, 429, 583, 10 ];
 const CHECK: UiRect = [ 614, 426, 16, 16 ];
+// Port-only, not native: the unique spawns switch at the foot's left
+// end, in the level filter's checkbox faces, shown only while the
+// Experimental row is on. The level note then starts after its label.
+const SPAWN_CHECK: UiRect = [ 23, 426, 16, 16 ];
+const SPAWN_LABEL: UiRect = [ 43, 429, 96, 10 ];
+const SPAWN_REACH = SPAWN_LABEL[0] + SPAWN_LABEL[2] - NOTE[0] + 4;
+export const UNIQUE_SPAWNS_LABEL = "Unique spawns";
 // The globe (id 6) and the pin (id 20).
 const GLOBE_RECT: UiRect = [ 567, 39, 36, 36 ];
 const PIN_RECT: UiRect = [ 605, 39, 36, 36 ];
@@ -294,11 +301,12 @@ The note is the client's UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST text.
 export function mapFoot(
 	paint: MapChromePaint,
 	text: MapChromeText,
-	foot: { note: string | undefined; checked: boolean; }
+	foot: { note: string | undefined; checked: boolean; spawns?: boolean; }
 ) {
 	const extra = paint.window[2] - MAP_WINDOW_WIDTH;
 	const frame = place( paint.window, FOOT ), note = place( paint.window, NOTE ), check = place( paint.window, CHECK );
 	const footRect: UiRect = [ frame[0], frame[1], frame[2] + extra, frame[3] ];
+	const noteShift = foot.spawns === undefined ? 0 : SPAWN_REACH;
 	// The foot reaches below the window frame: its surface keeps clicks
 	// off the world as the window's own does.
 	paint.controls.push( { id: "map-foot", label: "Map foot", kind: "region", rect: footRect } );
@@ -309,11 +317,11 @@ export function mapFoot(
 			// narrower than the text, which then loses its left end.
 			...text.quads(
 				foot.note,
-				[ note[0], note[1], note[2] + extra, note[3] ],
+				[ note[0] + noteShift, note[1], note[2] + extra - noteShift, note[3] ],
 				[
-					note[0],
+					note[0] + noteShift,
 					footRect[1],
-					Math.max( 0, note[2] + extra ),
+					Math.max( 0, note[2] + extra - noteShift ),
 					footRect[3]
 				],
 				WHITE,
@@ -334,6 +342,19 @@ export function mapFoot(
 		rect: check,
 		selected: foot.checked
 	} );
+	if ( foot.spawns !== undefined ) {
+		const box = place( paint.window, SPAWN_CHECK ), label = place( paint.window, SPAWN_LABEL );
+		image( paint, foot.spawns ? CHECK_ON : CHECK_OFF, box );
+		paint.quads.push( ...text.quads( UNIQUE_SPAWNS_LABEL, label, label, WHITE, { hAlign: 0, vAlign: 1 } ) );
+		paint.controls.push( {
+			id: "map-unique-spawns",
+			kind: "button",
+			label: "Show unique spawns",
+			helpText: "Show every nest a unique may spawn from",
+			rect: [ box[0], box[1], label[0] + label[2] - box[0], box[3] ],
+			selected: foot.spawns
+		} );
+	}
 }
 
 /*

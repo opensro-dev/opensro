@@ -977,13 +977,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"academy-dismiss",
@@ -1921,13 +1924,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"academy-combo:1",
@@ -2730,13 +2736,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"academy-honor-close",
@@ -3977,13 +3986,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"action:1000",
@@ -6021,8 +6033,11 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [
@@ -6034,7 +6049,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"alchemy-empty:0",
@@ -7486,13 +7501,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Auto Potion",
@@ -8490,13 +8508,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"blocking-add",
@@ -10715,13 +10736,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "12ca062573eba209",
+					"hash": "7df6437d8edb5b23",
 					"panel": "Map",
 					"removed": [
 						"close-window:COS inventory",
@@ -11813,13 +11837,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Character",
@@ -12557,13 +12584,16 @@
 						"chat-whispers",
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"chat-channel:1",
@@ -14543,13 +14573,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9afe67a0fe84e640",
+					"hash": "502a954c390f1658",
 					"panel": "Map",
 					"removed": [
 						"close-window:Inventory",
@@ -15178,6 +15211,7 @@
 						"experimental-exchange-click-shortcuts",
 						"experimental-fit-window-labels",
 						"experimental-grey-disabled-tabs",
+						"experimental-mall-categories",
 						"experimental-seal-under-heading",
 						"experimental-set-bonus-tooltip",
 						"experimental-silk-history",
@@ -15185,7 +15219,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "569c1a45cb0804b1",
+					"hash": "79b03fde81258636",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15241,11 +15275,12 @@
 				"experimental-tab:3": {
 					"added": [
 						"experimental-quest-tracker-markers",
-						"experimental-sun-drop-marker"
+						"experimental-sun-drop-marker",
+						"experimental-unique-spawn-points"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "39d2058fd3d66922",
+					"hash": "32f5d9442c5bcb12",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15844,13 +15879,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Experimental",
@@ -16736,13 +16774,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "e2fa76fc01e0d1a5",
+					"hash": "be22d893bcda94b3",
 					"panel": "Map",
 					"removed": [
 						"fortress-map-close",
@@ -17607,13 +17648,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "24a5de7eb8b480ae",
+					"hash": "9ed0a16c96b005db",
 					"panel": "Map",
 					"removed": [
 						"fortress-production-close",
@@ -18483,13 +18527,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "e2fa76fc01e0d1a5",
+					"hash": "be22d893bcda94b3",
 					"panel": "Map",
 					"removed": [
 						"fortress-tax-close",
@@ -19290,13 +19337,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "e2fa76fc01e0d1a5",
+					"hash": "be22d893bcda94b3",
 					"panel": "Map",
 					"removed": []
 				},
@@ -20132,13 +20182,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "e2fa76fc01e0d1a5",
+					"hash": "be22d893bcda94b3",
 					"panel": "Map",
 					"removed": [
 						"fortress-schedule-close",
@@ -20928,13 +20981,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Game Guide",
@@ -21576,13 +21632,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": "wholechat-text",
-					"hash": "a9f6b859a60f2b90",
+					"hash": "52aec708f83c3039",
 					"panel": "Map",
 					"removed": []
 				},
@@ -22540,13 +22599,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Guild",
@@ -23488,13 +23550,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Guild",
@@ -25284,13 +25349,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Inventory",
@@ -26157,13 +26225,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"job-rank-close",
@@ -26961,8 +27032,11 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [
@@ -26974,7 +27048,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Magic Pang",
@@ -28717,8 +28791,11 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [
@@ -28730,7 +28807,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"companion-close",
@@ -28942,8 +29019,11 @@
 				"mall-notice-close",
 				"mall-notice-enter",
 				"map-drag",
-				"map-follow",
+				"map-foot",
+				"map-level-filter",
 				"map-pan",
+				"map-pin",
+				"map-side-tab",
 				"map-size",
 				"minimap-in",
 				"minimap-out",
@@ -28954,13 +29034,13 @@
 				"toggle-window:System"
 			],
 			"focus": null,
-			"hash": "a684cc5ad3daef45",
+			"hash": "3573cdbde7e0173b",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": []
 				},
@@ -28973,8 +29053,11 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				},
@@ -28994,7 +29077,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c2033bc76a2dbb65",
+					"hash": "ef20728e7ad1c58c",
 					"panel": "Map",
 					"removed": [
 						"hotbar:1",
@@ -29024,7 +29107,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0881cc268e8b3cea",
+					"hash": "835090ed8806d58c",
 					"panel": "Map",
 					"removed": [
 						"hotbar:1",
@@ -29054,7 +29137,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "f9f3313af9d6f52d",
+					"hash": "a8eed8b806dbae8e",
 					"panel": "Map",
 					"removed": [
 						"hotbar:1",
@@ -29078,7 +29161,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "a9a998dbe2237ffd",
+					"hash": "0dfd60a0550ad635",
 					"panel": "Map",
 					"removed": [
 						"chat-line:0",
@@ -29108,7 +29191,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": []
 				},
@@ -29116,7 +29199,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "d5dd63f48797957c",
+					"hash": "ab6c58f4ce14f79a",
 					"panel": "Map",
 					"removed": [
 						"chat-line:0",
@@ -29131,7 +29214,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "d5dd63f48797957c",
+					"hash": "ab6c58f4ce14f79a",
 					"panel": "Map",
 					"removed": [
 						"chat-line:0",
@@ -29146,7 +29229,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "d5dd63f48797957c",
+					"hash": "ab6c58f4ce14f79a",
 					"panel": "Map",
 					"removed": [
 						"chat-line:0",
@@ -29161,7 +29244,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "d5dd63f48797957c",
+					"hash": "ab6c58f4ce14f79a",
 					"panel": "Map",
 					"removed": [
 						"chat-line:0",
@@ -29183,8 +29266,11 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				},
@@ -29194,7 +29280,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "aeb8412aaadd0127",
+					"hash": "1fc2aa7f71585caf",
 					"panel": "Map",
 					"removed": [
 						"hotbar:41",
@@ -29221,7 +29307,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "93b12cc64f56cdb0",
+					"hash": "9712a99bfde4ce00",
 					"panel": "Map",
 					"removed": []
 				},
@@ -29241,7 +29327,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "c2033bc76a2dbb65",
+					"hash": "ef20728e7ad1c58c",
 					"panel": "Map",
 					"removed": [
 						"hotbar:1",
@@ -29271,7 +29357,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "f9f3313af9d6f52d",
+					"hash": "a8eed8b806dbae8e",
 					"panel": "Map",
 					"removed": [
 						"hotbar:1",
@@ -29328,8 +29414,11 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				},
@@ -29428,8 +29517,11 @@
 						"mall-notice-close",
 						"mall-notice-enter",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size",
 						"minimap-in",
 						"minimap-out",
@@ -29444,7 +29536,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "08c0db23e59f2308",
+					"hash": "6fde15b2c9aef2ad",
 					"panel": "Map",
 					"removed": [
 						"mall-notice-close",
@@ -29546,8 +29638,11 @@
 						"mall-notice-close",
 						"mall-notice-enter",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size",
 						"minimap-in",
 						"minimap-out",
@@ -29559,18 +29654,26 @@
 					]
 				},
 				"map-drag": null,
-				"map-follow": null,
+				"map-foot": null,
+				"map-level-filter": null,
 				"map-pan": null,
-				"map-size": {
-					"added": [],
+				"map-pin": null,
+				"map-side-tab": {
+					"added": [
+						"map-guide",
+						"map-guide-scroll-down",
+						"map-guide-scroll-thumb",
+						"map-guide-scroll-up",
+						"map-guide-tab:area",
+						"map-guide-tab:monster"
+					],
 					"commands": [],
 					"focus": null,
-					"hash": "791efd7807322db8",
+					"hash": "c1968f8c348fdbc8",
 					"panel": "Map",
-					"removed": [
-						"map-follow"
-					]
+					"removed": []
 				},
+				"map-size": null,
 				"minimap-in": null,
 				"minimap-out": null,
 				"self-target": {
@@ -29585,7 +29688,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": []
 				},
@@ -29613,8 +29716,11 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				},
@@ -29627,8 +29733,11 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				},
@@ -29649,15 +29758,18 @@
 					"removed": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					]
 				}
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 63
+				"noop": 66
 			}
 		},
 		"Option": {
@@ -30842,13 +30954,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Option",
@@ -32009,13 +32124,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Party",
@@ -32971,13 +33089,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Party Matching",
@@ -33994,13 +34115,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Quests",
@@ -36376,13 +36500,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Shop",
@@ -38300,13 +38427,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d5375662edf4469a",
+					"hash": "ce15326269fd47f9",
 					"panel": "Map",
 					"removed": [
 						"close-window:COS inventory",
@@ -39426,13 +39556,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Skills",
@@ -40364,13 +40497,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"skin-cancel",
@@ -42599,13 +42735,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "607401febf2b643d",
+					"hash": "af9bcaf9a87bda57",
 					"panel": "Map",
 					"removed": [
 						"close-window:Inventory",
@@ -42844,10 +42983,18 @@
 				},
 				"Escape": {
 					"added": [],
-					"commands": [],
+					"commands": [
+						{
+							"command": {
+								"kind": "stall-network-open",
+								"open": false
+							},
+							"kind": "gameplay"
+						}
+					],
 					"focus": null,
 					"hash": "c53a4400d1d041bb",
-					"panel": "",
+					"panel": "Stall network",
 					"removed": []
 				},
 				"F1": null,
@@ -43523,13 +43670,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "b836dfd94ba8a278",
+					"hash": "dfd7faabbb55990f",
 					"panel": "Map",
 					"removed": []
 				},
@@ -46217,13 +46367,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:Storage",
@@ -47328,13 +47481,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": [
 						"close-window:System",
@@ -48051,13 +48207,16 @@
 					"added": [
 						"close-window:Map",
 						"map-drag",
-						"map-follow",
+						"map-foot",
+						"map-level-filter",
 						"map-pan",
+						"map-pin",
+						"map-side-tab",
 						"map-size"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "a684cc5ad3daef45",
+					"hash": "3573cdbde7e0173b",
 					"panel": "Map",
 					"removed": []
 				},

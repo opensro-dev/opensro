@@ -340,7 +340,7 @@ func (s *MonsterState) nestDelay(nest monster.NestRow, ratePct float32) (uint32,
 	minSec, maxSec := nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec
 	unique := false
 	if ref, ok := s.template.Refs[nest.RefObjID]; ok {
-		unique = nestIsUnique(nest, ref)
+		unique = monster.NestIsUnique(nest, ref)
 	}
 	if BetaUniqueRespawnEnabled() && nest.Respawn && unique {
 		minSec, maxSec = betaUniqueRespawnMinSec, betaUniqueRespawnMaxSec

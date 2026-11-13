@@ -702,6 +702,19 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	);
 });
 
+test("unique spawn points default on, only an explicit false turns them off, and stay out of the worker", () => {
+	for ( const value of [ undefined, null, {}, { uniqueSpawnPoints: 0 }, { uniqueSpawnPoints: "false" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.uniqueSpawnPoints, true );
+		assert.equal( "uniqueSpawnPoints" in experimentalGameplay( options ), false );
+		assert.equal( "uniqueSpawnPoints" in experimentalVideo( options ), false );
+	}
+	assert.equal( experimentalOptions( { uniqueSpawnPoints: false } ).uniqueSpawnPoints, false );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "uniqueSpawnPoints" ) )
+	);
+});
+
 test("attack-pet training has no experimental toggle or saved opt-out", () => {
 	for ( const enabled of [ false, true ] ) {
 		assert.equal(

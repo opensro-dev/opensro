@@ -274,6 +274,14 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
+	// Port-only, not native: the world map (M, never the minimap) offers a
+	// "Unique spawns" box at its foot, off until ticked; with both on it
+	// draws one unique sign on every nest a unique may spawn from, all
+	// candidates of a unique together (foundation/ui/unique-nests.ts). A
+	// place only: no hover, no alive or dead state, no timer. The row is on
+	// by default (the owner's choice, 2026-11-07), the box off (2026-11-13);
+	// row off is the native map.
+	readonly uniqueSpawnPoints: boolean;
 	// Port-only, not native (#1640): the player's own degree-9-or-higher
 	// Seal of Sun drops get a gold name plate and a soft ground ring, so
 	// the top seal reads differently the moment it lands. Other players'
@@ -461,7 +469,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -535,6 +543,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
+		uniqueSpawnPoints: record.uniqueSpawnPoints !== false,
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
 		sealUnderHeading: enabled( "sealUnderHeading" ),

@@ -147,6 +147,9 @@ interface MapToolsPaint {
 	strings: Readonly<Record<string, string>> | undefined;
 	// The cave catalogue's foot note, undefined without the catalogue.
 	levelNote: string | undefined;
+	// Port-only: whether the foot offers the unique spawns switch (the
+	// Experimental row uniqueSpawnPoints is on).
+	offerUniqueSpawns?: boolean;
 	// The screen rects of the icons the world page drew (its click hits).
 	icons: readonly UiRect[];
 	text: MapToolsText;
@@ -228,6 +231,9 @@ export function createMapToolsHud( options: {
 } ) {
 	const assets = options.assets;
 	let levelFilter = true;
+	// Port-only, not native: the foot's unique spawns switch, off until
+	// the player ticks it, kept for the session as the level filter is.
+	let uniqueSpawns = false;
 	// The side tab's guide panel, and the tab it shows.
 	let drawerOpen = false;
 	let guideTab: "area" | "monster" = "monster";
@@ -580,6 +586,17 @@ export function createMapToolsHud( options: {
 		filterCap,
 		/*
 		================
+		uniqueSpawns
+
+		Whether the foot's unique spawns switch is ticked. The map draws
+		the nest signs only while it and the Experimental row are both on.
+		================
+		*/
+		uniqueSpawns(): boolean {
+			return uniqueSpawns;
+		},
+		/*
+		================
 		drawerOpen
 
 		Whether the region and monster list is open: the catalogue
@@ -733,6 +750,10 @@ export function createMapToolsHud( options: {
 			if ( id === "map-level-filter" ) {
 				levelFilter = !levelFilter;
 				drawerPage = 0;
+				return null;
+			}
+			if ( id === "map-unique-spawns" ) {
+				uniqueSpawns = !uniqueSpawns;
 				return null;
 			}
 			if ( id === "map-side-tab" ) {
@@ -922,7 +943,8 @@ export function createMapToolsHud( options: {
 			}
 			mapFoot( paint, text, {
 				note: input.levelNote ?? input.strings?.[LEVEL_FILTER_NOTE_KEY],
-				checked: levelFilter
+				checked: levelFilter,
+				spawns: input.offerUniqueSpawns ? uniqueSpawns : undefined
 			} );
 			sideTab( paint, drawerOpen );
 			if ( drawerOpen ) {
