@@ -319,9 +319,11 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	) []Packet
-	// EntryEventFrames are a running event's notices for a login (not a
-	// re-entry): port-only, action/halloween_waves.go; nil or empty sends
-	// nothing.
+	// EntryEventFrames are a login's (not a re-entry's) port-only seeds:
+	// a running event's notices (action/halloween_waves.go) and the saved
+	// Survival Arena chest (action/sookarena_chest.go, #3376). It runs
+	// after the publication gate opens and takes the division lock
+	// itself; nil or empty sends nothing.
 	EntryEventFrames func(divisionID string, character *Character) []Packet
 	// EntryEventGroups are the running events' groups every entry lists
 	// beside the character's own (the entered tail and the JSON entry):

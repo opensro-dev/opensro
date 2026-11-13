@@ -94,6 +94,9 @@ jobs:
       - name: Source encoding
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:source-encoding
+      - name: Doc links
+        if: ${{ !cancelled() }}
+        run: node scripts/task.mjs check:doc-links
       - name: Generated root
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:generated-root

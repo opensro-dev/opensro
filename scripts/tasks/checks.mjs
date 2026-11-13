@@ -154,6 +154,16 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_server_citations.mjs" ]
 	} ),
 	commandTask( {
+		name: "check:doc-links",
+		description: "Every relative Markdown link lands; home-page community files link absolutely",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_doc_links.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:source-encoding",
 		description: "Enforce UTF-8 without BOM and LF line endings on maintained source",
 		kind: "check",
@@ -310,6 +320,7 @@ const sourceTasks = [
 	"check:pipeline-contracts",
 	"check:source-size",
 	"check:source-encoding",
+	"check:doc-links",
 	"check:generated-root",
 	"check:world-space",
 	"check:plane-branches",
@@ -356,6 +367,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "pipeline-contracts", task: "check:pipeline-contracts", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
+		{ id: "doc-links", task: "check:doc-links", after: [] },
 		{ id: "generated-root", task: "check:generated-root", after: [] },
 		{ id: "world-space", task: "check:world-space", after: [] },
 		{ id: "plane-branches", task: "check:plane-branches", after: [] },

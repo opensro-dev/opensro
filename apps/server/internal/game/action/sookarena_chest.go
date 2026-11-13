@@ -29,6 +29,28 @@ const arenaChestLimit = 200
 
 /*
 ================
+EntryEventFrames - login notices and port-only saved arena rewards.
+
+Entry encoding runs after the publication gate opens. Keep run inspection
+and projection under the division lock; a recovered town snapshot cannot
+match a previous socket's arena lease.
+================
+*/
+func (rt *Runtime) EntryEventFrames(division string, c *enterworld.Character) []enterworld.Packet {
+	packets := rt.HalloweenEntryFrames(division, c)
+	if c == nil || rt.sookArena == nil {
+		return packets
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	for _, frame := range rt.arenaChestFrames(c, rt.sookRun(division, c), "") {
+		packets = append(packets, enterworld.NewPacket(frame.Opcode, frame.Payload))
+	}
+	return packets
+}
+
+/*
+================
 PrepareSookShutdown - distinguish a server drain from a player's combat forfeit.
 ================
 */

@@ -7,6 +7,51 @@ beside rizin's reading of the retail binary), and it gates claims with
 the label-debt and evidence rules the port follows. It shipped here
 from the research tree; the research copy stays for its own tests.
 
+## Quick start: a contributor with no Binary Ninja
+
+Everything below was run end to end on Windows 11 with Python 3.13 on
+2026-11-13 (seed apply about 70 s, index about 2 min 20 s). You need
+your own retail `SRO_Client.exe` (v1.150, SHA-256
+`375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a`)
+or the v1.188 `SR_GameServer.exe`; the seed is useless without it.
+
+1. Rizin 0.8.2 on PATH: [docs/native/RIZIN.md](../../../docs/native/RIZIN.md)
+   section 1. On Windows the zip unpacks into
+   `rizin-win-installer-clang_cl-64\`; its `bin` is the folder to add.
+2. The venv, from the repository root:
+
+   ```
+   py -3 -m venv .state/re-venv
+   .state/re-venv/Scripts/python.exe -m pip install --only-binary=:all: pefile==2024.8.26 capstone==5.0.9 rzpipe==0.6.2
+   ```
+
+3. The seed: the latest `revtool-seed-*` release on
+   [the releases page](https://github.com/opensro-dev/opensro/releases)
+   (`gh release download <tag> -R opensro-dev/opensro -p revtool-seed-client.xz`).
+   `seed-manifest.json` pins its hash; a different download is refused.
+4. Verify, apply, index (global options always go before the command):
+
+   ```
+   set RT=.state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py
+   %RT% seed verify revtool-seed-client.xz --binary SRO_Client.exe
+   %RT% --binary SRO_Client.exe seed apply revtool-seed-client.xz --rzdb SRO_Client.rzdb
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb index
+   ```
+
+5. Work: every command takes the same three global options.
+
+   ```
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb doctor
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb find CIFMainFrame
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb strings GUILD_RECALL
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb view <name or sub_xxxxxx>
+   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb xref <name or sub_xxxxxx>
+   ```
+
+Save what you learn the way [RESEARCH_PROGRESS.md](../../../docs/native/RESEARCH_PROGRESS.md)
+says, and cite the binary hash and the address in your pull request's
+native-claims table.
+
 ## Layout
 
 | file | owns |
@@ -34,9 +79,9 @@ from the research tree; the research copy stays for its own tests.
 
 ## Setup
 
-Python 3.12, no third-party packages for the dump backend. The rizin
-backend and the live commands use the pinned venv from
-`docs/native/REVERSE_ENGINEERING.md` (`.state/re-venv`, rzpipe).
+Python 3.12 or newer, no third-party packages for the dump backend.
+The rizin backend and the live commands use the venv from the quick
+start above (`.state/re-venv`: pefile, capstone, rzpipe 0.6.2).
 
 Per-machine state (overlay DB, JSONL ledger, evidence lock, derived
 evidence tree) lives in `.state/revtool/` inside the repo and is never
@@ -159,9 +204,10 @@ every function's address and current (overlay-applied) name, plus
 the target's JSONL evidence ledger. No executable bytes, no
 decompiler text: the payload is JSON, and `seed verify` proves no
 16-byte run of the binary's `.text` appears in it. Both seeds are
-~0.2 MB against a 5 MB cap. Publication as release assets waits on
-the owner's go; `seed-manifest.json` beside the tool pins the hashes
-either way.
+~0.3-0.4 MB against a 5 MB cap. They ship as assets of a dated
+`revtool-seed-<date>` release (a refresh is a new tag, never an
+overwritten asset), and `seed-manifest.json` beside the tool pins the
+current pair.
 
 ```
 rem maintainer: build (hashes must agree across DB, ledger, binary)
@@ -180,12 +226,17 @@ lock, so two applies at one `.rzdb` refuse rather than race: client
 the locked save (the rest are import thunks rizin already owns),
 sampled labelled names 20/20. Functions rizin defines on load (entry0
 and the like) are renamed in place rather than re-added. Then run
-`revtool_rizin.py index` for the reference pass.
+`revtool.py --backend rizin ... index` for the reference pass; apply
+prints the exact line.
 
 `--names` merges the Binary Ninja labels, which are the bulk of the
 RE: without it the seed carries only the dump index's names and
 revtool claims (1,373 of the client's 95,290 functions named, against
-13,814 in the BN database, 2026-11-09). Precedence: a revtool claim,
+13,814 in the BN database, 2026-11-09). The first published pair
+(`revtool-seed-2026-11-09`) was built that way and carried 996 real
+client names; the 2026-11-13 pair carries 14,070 client and 12,027
+server names. `seed build` prints the `names:` split, so check it
+before publishing. Precedence: a revtool claim,
 then the BN name, then the dump's; an anonymous `sub_` never replaces
 a real name, and BN functions the dump lacks are added. The export
 is one JSON file per target, written from the Binary Ninja executor
@@ -193,6 +244,8 @@ is one JSON file per target, written from the Binary Ninja executor
 
 ```
 import json
+# `bv` follows the active tab, which may be another database: check it.
+assert bv.file.filename.replace("\\", "/").endswith("SRO_Client.exe.trimmed.bndb"), bv.file.filename
 rows = [[f.start, f.name] for f in bv.functions]
 json.dump({"format": "sro-bn-function-names", "version": 1,
            "target": "client", "source": bv.file.filename.split("/")[-1],
