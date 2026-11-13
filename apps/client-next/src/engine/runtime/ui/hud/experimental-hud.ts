@@ -441,6 +441,14 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-monster-guide",
 						label: "Monster hunting guide",
 						description: "Monster portraits and approximate level ranges on M."
+					},
+					{
+						// Port-only, not native: on by default (the owner's choice,
+						// 2026-11-07); the M window only, never the minimap.
+						key: "uniqueSpawnPoints",
+						id: "experimental-unique-spawn-points",
+						label: "Unique spawn points",
+						description: "Show every nest a unique may spawn from on M."
 					}
 				]
 			},

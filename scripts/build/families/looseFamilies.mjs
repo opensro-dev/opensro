@@ -36,6 +36,7 @@ import { buildPetItemIcons } from "../shared/petItemIcons.mjs";
 import { completeItemText } from "../shared/itemTextCompletions.mjs";
 import { buildSkillDataAsset } from "../data/buildSkillDataAsset.mjs";
 import { buildFortressMapAsset } from "../data/buildFortressMapAsset.mjs";
+import { buildUniqueNestsAsset } from "../data/buildUniqueNestsAsset.mjs";
 import { parseWeatherEvents } from "../char/weatherEvents.mjs";
 import { buildEffectProgramsAsset } from "../effects/buildEffectPrograms.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
@@ -790,6 +791,18 @@ export const LOOSE_FAMILIES = {
 			await buildFortressMapAsset();
 			const icons = await buildFortressMapIconResources();
 			return { files: [ ...await packedJson( [ "/assets/data/fortressMap.json" ] ), ...icons.copiedImages ] };
+		}
+	},
+	// Port-only, not native: the world map's unique nests (the Experimental
+	// unique spawn signs; their image is the minimap's mm_sign_unique).
+	"unique-nests": {
+		kind: "refresh",
+		label: "world map unique nests",
+		packFolder: "unique-nests",
+		defaultGroup: "game-data",
+		async produce() {
+			await buildUniqueNestsAsset();
+			return { files: await packedJson( [ "/assets/data/uniqueNests.json" ] ) };
 		}
 	},
 	// build-skill-ui.py projects the skill window data into assets/data/skillUi.json,

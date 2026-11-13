@@ -120,6 +120,8 @@ export const OFF = Object.freeze( {
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
+	// On by default (owner 2026-11-07): the world map's unique nest signs.
+	uniqueSpawnPoints: true,
 	// Off by default (#1640): only the native plate and no ground ring.
 	sunDropMarker: false,
 	// Off by default: port-only portal-out cue on arrival; the native
