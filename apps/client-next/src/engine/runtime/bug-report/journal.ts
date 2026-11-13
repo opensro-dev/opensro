@@ -22,6 +22,12 @@ game said and how the page was doing:
 Keys typed into a text field (chat, login, the report itself) are not
 recorded at all: they are messages and passwords, not game input.
 
+Uncaught errors are the one kind that outlives the window. The first
+throw of each distinct failure is kept for the page's life with a repeat
+count, so a report of a storm that began minutes earlier still carries
+the stack that names it (#3425: a once-a-frame RangeError that started
+before the window left no stack at all).
+
 ===========================================================================
 */
 
@@ -34,9 +40,12 @@ const MAX_SCRIPTS = 3;
 const FRAME_GROUP_MS = 1000;
 const MAX_ERROR_MESSAGE = 500;
 const MAX_ERROR_STACK = 1600;
-// An error storm (the same throw inside a per-frame loop) must not evict
-// the input history the report exists for: at most this many error events
-// per rolling window, and never the same failure twice in a row.
+// The distinct failures kept for the page's life, each its first throw plus
+// a repeat count. Past this many, new failures fall back to the ring.
+const MAX_KEPT_ERRORS = 8;
+// An error storm in the ring must not evict the input history the report
+// exists for: at most this many ring error events per rolling window, and
+// never the same failure twice in a row.
 const ERROR_RATE_LIMIT = 10;
 const ERROR_RATE_WINDOW_MS = 60000;
 
@@ -152,6 +161,8 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 	let events: JournalEvent[] = [];
 	let next = 0, count = 0, frameSlot = -1;
 	let errorTimes: number[] = [], lastErrorSignature = "";
+	// signature -> the failure's first throw, its count and its last time.
+	let keptErrors = new Map<string, JournalEvent>();
 
 	/*
 	================
@@ -200,15 +211,28 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 	================
 	recordError
 
-	One uncaught failure for the timeline, rate-limited: repeats of the
-	same failure and storms past ERROR_RATE_LIMIT in the window are
+	One uncaught failure for the timeline. A failure (message and top
+	frame) is kept on its first throw, outside the ring and for the page's
+	life; its repeats only raise that event's count and lastAtMs, the
+	fields a grouped frame spike carries. Only once MAX_KEPT_ERRORS
+	distinct failures are kept do new ones go to the ring, rate-limited:
+	repeats in a row and storms past ERROR_RATE_LIMIT in the window are
 	dropped, so a throwing loop cannot evict the player's input history.
 	================
 	*/
 	function recordError( error: unknown, fallback: string ) {
 		const fields = errorEventFields( error, fallback ),
 			signature = fields.message + "\n" + (fields.stack?.split( "\n" )[1] ?? ""),
-			atMs = performance.now();
+			atMs = performance.now(),
+			kept = keptErrors.get( signature );
+		if ( kept ) {
+			keptErrors.set( signature, { ...kept, count: Number( kept.count ) + 1, lastAtMs: atMs } );
+			return;
+		}
+		if ( keptErrors.size < MAX_KEPT_ERRORS ) {
+			keptErrors.set( signature, { ...fields, atMs, kind: "error", count: 1, lastAtMs: atMs } );
+			return;
+		}
 		errorTimes = errorTimes.filter( time => atMs - time < ERROR_RATE_WINDOW_MS );
 		if ( signature === lastErrorSignature || errorTimes.length >= ERROR_RATE_LIMIT ) return;
 		lastErrorSignature = signature;
@@ -314,6 +338,10 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 		/*
 		================
 		since
+
+		The ring's events from fromMs on, plus every kept failure however
+		old its first throw: a storm that began before the window still
+		names its stack.
 		================
 		*/
 		since( fromMs ) {
@@ -322,6 +350,7 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 				const event = events[(next - count + i + MAX_EVENTS) % MAX_EVENTS]!;
 				if ( event.atMs >= cutoff ) result.push( event );
 			}
+			result.push( ...keptErrors.values() );
 			// Long-frame observers report start time after later input has arrived.
 			return result.sort( ( a, b ) => a.atMs - b.atMs );
 		},
@@ -338,6 +367,7 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 			frameSlot = -1;
 			errorTimes = [];
 			lastErrorSignature = "";
+			keptErrors = new Map();
 		}
 	};
 }
