@@ -129,7 +129,7 @@ func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) 
 TestCrowPassiveTicksRefuseUnslottedCrowsBeforeTheCopy
 
 advanceTailwind and advanceCrowKit run per crow per tick and copied the
-owner before learning the crow had no Tailwind or Guiding Feathers
+owner before learning the crow had no Tailwind or Raven's Refuge
 slotted (#1943). An unslotted crow is refused below the copy and keeps
 no Tailwind source or kit; a slotted crow still charges Tailwind.
 ================
@@ -140,7 +140,7 @@ func TestCrowPassiveTicksRefuseUnslottedCrowsBeforeTheCopy(t *testing.T) {
 	rt.AttackPetExpansion = true
 	roarField(t, rt, c, clock)
 	gid, now := c.ActiveCOS.GID, clock.NowMs()
-	if hasPassive(c.ActiveCOS, "Tailwind") || hasPassive(c.ActiveCOS, "Guiding Feathers") {
+	if hasPassive(c.ActiveCOS, "Tailwind") || hasPassive(c.ActiveCOS, "Raven's Refuge") {
 		t.Fatal("fixture crow has a passive slotted")
 	}
 	step, ok := rt.elementalCompanion(testDivision, c, gid, "Crow", now)
@@ -152,8 +152,8 @@ func TestCrowPassiveTicksRefuseUnslottedCrowsBeforeTheCopy(t *testing.T) {
 	if _, found := rt.tailwinds.sources[step.key]; found {
 		t.Fatal("unslotted crow became a Tailwind source")
 	}
-	if kit := step.state.crow; len(kit.precision) != 0 || len(kit.views) != 0 {
-		t.Fatal("unslotted crow kept a Guiding Feathers kit")
+	if kit := step.state.crow; len(kit.views) != 0 {
+		t.Fatal("unslotted crow kept a Raven's Refuge kit")
 	}
 
 	// The admitted lane keeps its verdict: a Tailwind crow charges.

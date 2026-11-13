@@ -11,6 +11,32 @@ const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
 );
 const { shieldGauge, shieldGaugeFill } = await import( "../../src/engine/foundation/ui/shield-gauge.ts" );
+const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
+
+test("Bond feedback reaches the entity animation through the world dispatcher", () => {
+	const core = createWorldCore( () => {} );
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		character: { name: "fixture", skills: [] },
+		localPlayerEntry: { modelRef: 1907, startProfile: { regionId: 257, x: 0, y: 0, z: 0, angle: 0 } }
+	} );
+	core.receive( { opcode: 0x32a6, payload: Uint8Array.of( 7, 0, 0, 0, 0, 0, 0, 0 ) }, 0 );
+	for ( const kind of [ 1, 2 ] ) {
+		const payload = Buffer.alloc( kind === 1 ? 13 : 9 );
+		payload.writeUInt32LE( 7, 0 );
+		payload.writeUInt32LE( 8, 4 );
+		payload[8] = kind;
+		if ( kind === 1 ) payload.writeUInt32LE( 20, 9 );
+		core.receive( { opcode: 0x3fb4, payload }, kind * 100 );
+		core.step( kind * 100, false );
+		const batch = defined( core.take() );
+		assert.ok( batch.events.some( event => event.entity?.petBondPulse?.kind === kind ) );
+		core.ack( batch.sequence );
+	}
+	core.dispose();
+});
 
 /*
 ================

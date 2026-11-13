@@ -52,7 +52,6 @@ export function petSkillStack( state: PetTraining, design: PetSkillDesign, skill
 	if ( design.family === "Blood Hunt" ) return c.hunt ?? null;
 	if ( design.family === "Execute" && design.option === 3 ) return c.wolfExecute ?? null;
 	if ( design.family === "Crushing Paw" ) return c.bearHits;
-	if ( design.family === "Guiding Feathers" ) return state.guidance?.stacks ?? 0;
 	return null;
 }
 
@@ -224,9 +223,10 @@ export function petRowHelp( state: PetTraining, row: number, now: number ): stri
 			);
 		}
 	}
-	if ( d?.family === "Guiding Feathers" ) {
-		lines.push( "Top right: Precision stacks.", "Five stacks: next damaging skill empowered." );
+	if ( d?.family === "Raven's Refuge" ) {
+		lines.push( "Protection applies only below the HP threshold.", "Nearby crows do not stack damage reduction." );
 	}
+
 	if ( d?.pet === "Bear" ) lines.push( "PvE only; unavailable in town.", "No jobs, PvP or instances." );
 	if ( d?.family === "Challenging Roar" ) {
 		lines.push( "No target required; no damage.", "Unique monsters resist taunt." );

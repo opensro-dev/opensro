@@ -148,13 +148,14 @@ func EffectiveLevel(p *domain.CharacterCOS, s SkillDef, m Modifiers) uint8 {
 NextLevelRequirement
 
 The pet level the skill's next level needs; 0 at its maximum.
+Port-only: an equal unlock/end level admits point spending at the level cap.
 ================
 */
 func NextLevelRequirement(s SkillDef, current uint8) uint8 {
 	if current >= s.MaxLevel {
 		return 0
 	}
-	if s.TierEnd > s.UnlockLevel && s.MaxLevel > 1 {
+	if s.TierEnd != 0 && s.TierEnd >= s.UnlockLevel && s.MaxLevel > 1 {
 		return s.UnlockLevel + uint8((int(current)*int(s.TierEnd-s.UnlockLevel)+int(s.MaxLevel)-2)/(int(s.MaxLevel)-1))
 	}
 	return uint8(min(255, int(s.UnlockLevel)+int(current)*int(D.Rules.PetLevelsPerSkillLevel)))

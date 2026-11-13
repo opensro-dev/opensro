@@ -16,7 +16,29 @@ func Profile(codename string) PetDef {
 	if p := petByName(D, PetKind(codename)); p != nil {
 		return *p
 	}
-	return PetDef{PhysicalPercent: 100, MagicalPercent: 100, DefensePercent: 100, MagicDefensePercent: 100}
+	return PetDef{HPPercent: 100, PhysicalPercent: 100, MagicalPercent: 100, DefensePercent: 100, MagicDefensePercent: 100}
+}
+
+/*
+================
+BaseHealth
+
+Port-only survival curve; native HP remains the fallback for unconfigured rows.
+================
+*/
+func BaseHealth(codename string, level uint8, native uint32) uint32 {
+	p := Profile(codename)
+	if level == 0 || len(p.HealthByLevel) == 0 {
+		return uint32(float64(native) * p.HPPercent / 100)
+	}
+	previous := p.HealthByLevel[0]
+	for _, point := range p.HealthByLevel[1:] {
+		if level <= point.Level {
+			return previous.HP + uint32(uint64(point.HP-previous.HP)*uint64(level-previous.Level)/uint64(point.Level-previous.Level))
+		}
+		previous = point
+	}
+	return previous.HP
 }
 
 /*

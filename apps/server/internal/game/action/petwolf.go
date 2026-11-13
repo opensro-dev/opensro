@@ -66,7 +66,7 @@ elementalQuery
 
 Which pet an eligibility walk looks for. passive, when set, admits only
 a pet with that passive slotted: the per-tick passive lanes (Tailwind,
-Guiding Feathers) refuse every other crow before copying its owner.
+Raven's Refuge) refuse every other crow before copying its owner.
 ================
 */
 type elementalQuery struct {
@@ -74,6 +74,7 @@ type elementalQuery struct {
 	kind      string
 	allowTown bool
 	passive   string
+	gear      bool // Gear effects may use hatched clones, never eggs or learned abilities.
 }
 
 /*
@@ -89,7 +90,7 @@ the selected pet) rejects too, so admission never changes the outcome.
 func hasElementalCandidate(c *enterworld.Character, q elementalQuery) bool {
 	found := false
 	c.VisitCompanions(func(pet *domain.CharacterCOS) bool {
-		found = pet.BroodStage == 0 && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
+		found = (pet.BroodStage == 0 || q.gear && pet.BroodStage == 2) && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
 			companion.PetKind(pet.Codename) == q.kind && (q.passive == "" || hasPassive(pet, q.passive))
 		return !found
 	})
@@ -153,8 +154,11 @@ capture never folded - and the caller then walks as before.
 ================
 */
 func (f *elementalWalkFacts) walkRefused(q elementalQuery) (refused, answered bool) {
+	if q.gear {
+		return false, false // The ordinary passive memo deliberately excludes brood actors.
+	}
 	switch q.passive {
-	case "", "Tailwind", "Guiding Feathers":
+	case "", "Tailwind", "Raven's Refuge":
 	default:
 		return false, false
 	}
@@ -164,7 +168,7 @@ func (f *elementalWalkFacts) walkRefused(q elementalQuery) (refused, answered bo
 	candidate := false
 	for _, pet := range f.pets {
 		if (q.gid == 0 || pet.gid == q.gid) && pet.kind == q.kind &&
-			(q.passive == "" || q.passive == "Tailwind" && pet.tailwind || q.passive == "Guiding Feathers" && pet.feathers) {
+			(q.passive == "" || q.passive == "Tailwind" && pet.tailwind || q.passive == "Raven's Refuge" && pet.feathers) {
 			candidate = true
 			break
 		}
@@ -226,7 +230,7 @@ func (rt *Runtime) armElementalFactsSession(key petOwnerKey, state *petSession, 
 					gid:      pet.GID,
 					kind:     companion.PetKind(pet.Codename),
 					tailwind: hasPassive(pet, "Tailwind"),
-					feathers: hasPassive(pet, "Guiding Feathers"),
+					feathers: hasPassive(pet, "Raven's Refuge"),
 				})
 			}
 			return true
@@ -471,7 +475,7 @@ func (rt *Runtime) elementalSelect(division string, snapshot *enterworld.Charact
 	var step petCombatStep
 	gid, kind, allowTown := q.gid, q.kind, q.allowTown
 	for _, pet := range snapshot.Companions() {
-		if pet.BroodStage != 0 {
+		if pet.BroodStage != 0 && !(q.gear && pet.BroodStage == 2) {
 			continue
 		}
 		if gid != 0 && pet.GID != gid || companion.PetKind(pet.Codename) != kind || !pet.Summoned || pet.CurrentHP == 0 || !rt.petExpansionAllowed(snapshot, pet) {
@@ -483,7 +487,8 @@ func (rt *Runtime) elementalSelect(division string, snapshot *enterworld.Charact
 		}
 		from := state.follower.Position(now)
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
-		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || !allowTown && townRegion(from.RegionID) {
+		// Travel support survives the owner blinking ahead of its following pet.
+		if !samePlaneAdjacent(from, at) || q.passive != "Tailwind" && areaDistance(from, at) > 20*petAreaPerMeter || !allowTown && townRegion(from.RegionID) {
 			continue
 		}
 		ref, found := rt.cosReference(pet)

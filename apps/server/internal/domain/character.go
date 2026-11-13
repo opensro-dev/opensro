@@ -491,6 +491,8 @@ type Character struct {
 	// the owner, one lane per pet-potion TID4 the v1.150 client sends (4,
 	// 5, 7).
 	PetPotionCooldowns [3]int64 `json:"petPotionCooldowns,omitempty"`
+	// Port-only recipient cooldown survives relogging and changing crows.
+	RavenRefugeReadyAtMs int64 `json:"ravenRefugeReadyAtMs,omitempty"`
 
 	// Job is the job guild membership (the v1.188 job record at player
 	// object +0x1FB4).

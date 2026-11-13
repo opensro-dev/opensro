@@ -137,14 +137,16 @@ type petSession struct {
 	public         []wire.Frame
 	// trained is the attack-pet expansion's unsaved combat memory
 	// (pettrained.go): attack counter and running self buffs.
-	counterView [22]byte
-	counterSent bool
-	wolf        wolfKitState
-	penguin     penguinRuntime
-	crow        crowKit
-	wolfBook    uint8
-	wolfHits    [2]uint8
-	trained     petTrainedRuntime
+	counterView         [22]byte
+	counterSent         bool
+	wolf                wolfKitState
+	penguin             penguinRuntime
+	crow                crowKit
+	crowManaRestored    uint64
+	tailwindStunReadyAt int64
+	wolfBook            uint8
+	wolfHits            [2]uint8
+	trained             petTrainedRuntime
 	// bond's spent budget is read by planPetBond and written by
 	// commitPetBond under rt.petMu: concurrent victim hits in one
 	// division share the bear's budget (checklist item 5).

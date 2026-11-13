@@ -424,8 +424,11 @@ advanced book descriptions
 test("advanced tooltips include inherited proficiency in the current effect", () => {
 	const mend = petSkillDesign( 47 ), mark = petSkillDesign( 50 ), howl = petSkillDesign( 2 );
 	assert.ok( mend && mark && howl );
-	assert.match( petEffect( mend, 20, 1 ), /20% maximum HP: half immediately, half over 5 seconds/ );
-	assert.match( petEffect( mark, 20, 1 ), /hatches after 30 s.*Stores 3 casts/ );
+	assert.match(
+		petEffect( mend, 20, 1 ),
+		/20% maximum HP.*Half immediately; half over 5 s.*Cleanses all negative effects/
+	);
+	assert.match( petEffect( mark, 20, 1 ), /hatches after 30 s.*3 stored casts/ );
 	assert.match( petEffect( howl, 20, 1 ), /Attack speed \+20%.*Wolf and owner/ );
 	const paw = petSkillDesign( 30 ), feathers = petSkillDesign( 42 ), murder = petSkillDesign( 60 );
 	assert.ok( paw && feathers && murder );
@@ -457,8 +460,8 @@ test("advanced tooltips include inherited proficiency in the current effect", ()
 		/Proficiency/
 	);
 	assert.match( petEffect( feathers, 10, 1 ), /Maximum stacks 5/ );
-	assert.match( petEffect( murder, 200, 1 ), /Crow hits grant/ );
-	assert.match( petEffect( murder, 200, 1 ), /Party members within 20 m/ );
+	assert.match( petEffect( murder, 40, 1 ), /Below 40% HP/ );
+	assert.match( petEffect( murder, 40, 1 ), /party members within 20 m/ );
 });
 
 /*
@@ -605,7 +608,7 @@ test("each skill family uses its atlas cell and stack badges reuse native level 
 		assert.ok( uv[0] >= 0 && uv[1] >= 0 && uv[0] + uv[2] <= 1 && uv[1] + uv[3] <= 1 );
 		if ( d.family === "Crushing Paw" ) assert.equal( petSkillStack( state, d, skill ), 9 );
 		if ( d.family === "Unbroken Spirit" ) assert.equal( petSkillStack( state, d, skill ), 10 );
-		if ( d.family === "Guiding Feathers" ) assert.equal( petSkillStack( state, d, skill ), 0 );
+		if ( d.family === "Raven's Refuge" ) assert.equal( petSkillStack( state, d, skill ), null );
 		assert.equal( petSkillStack( state, d, { ...skill, level: 0 } ), null );
 	}
 	assert.equal( cells.size, 20 );
@@ -732,12 +735,12 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 	const preScaled = { ...training, stats: { ...training.stats, maxHp: 1400 } };
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 1400 );
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 1000 );
-	// The level-90 native row (39,434, the #2567 penguin) is the base at any
-	// level argument: no species percent and no level curve bend it.
+	// Expansion state carries the authored level-90 bear maximum; native off stays untouched.
 	const native90 = { ...baseRef, maxHp: 39434 };
-	const at90 = { ...training, stats: { ...training.stats, maxHp: 39434 } };
-	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 55207 );
-	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 39434 );
+	const at90 = { ...training, stats: { ...training.stats, maxHp: 11000 } };
+	assert.equal( petReference( native90, undefined, undefined, 1000, 90 ), native90 );
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 15399 );
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 11000 );
 });
 
 /*
@@ -994,4 +997,23 @@ test("individual pet skill blues name the skill rather than a generic skill bonu
 		assert.equal( petAffixLine( encoded.toString() ), a.effect.replaceAll( "{v}", "5" ) );
 		assert.deepEqual( a.slots, [ "Collar", "Harness", "Charm" ] );
 	}
+});
+
+/*
+================
+Cumulative crow books
+================
+*/
+test("third crow books keep earlier effects and explain the new mechanics", () => {
+	const text = id => {
+		const d = petSkillDesign( id );
+		assert.ok( d );
+		return petEffect( d, 30, 10 );
+	};
+	assert.match( text( 48 ), /Half immediately.*heals the crow.*all negative effects.*Party range/ );
+	assert.match( text( 51 ), /gear blues.*3 stored casts.*500%/ );
+	assert.match( text( 54 ), /Restore MP.*Owner and party.*10,000 MP.*5,000 true damage.*5 m/ );
+	assert.doesNotMatch( text( 54 ), /reuse -0.5|cooldown recovery/ );
+	assert.match( text( 57 ), /Only taking damage.*before damage.*keeps stacks.*30 s.*Party members/ );
+	assert.doesNotMatch( text( 46 ), /Cleanses|Party range/ );
 });

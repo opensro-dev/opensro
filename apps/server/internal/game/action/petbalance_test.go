@@ -3,9 +3,8 @@
 petbalance_test.go - native survival against same-level party giants.
 
 Retail default attacks use their normal midpoint roll, without criticals,
-passives or shields. Pet HP is the native per-level characterdata row,
-equal across species (issue #2567); what separates the species in combat
-is their defense, so the survival gap runs Bear > Wolf > Penguin = Raven.
+passives or shields. The expansion-only authored HP curve targets
+Bear/Wolf/Penguin/Crow survival of 3/2/1/1 landed hits.
 This is a benchmark, not a per-hit override.
 ===========================================================================
 */
@@ -41,12 +40,11 @@ func TestPetPartyGiantSurvival(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Equal native HP across species (issue #2567): the survival
-		// order comes from defense alone, so the bear outlives the wolf
-		// and the wolf outlives the two equal-defense birds.
-		survival := map[string]uint32{}
-		for _, code := range []string{"BEAR", "WOLF", "PENGUIN", "RAVEN"} {
-			name := fmt.Sprintf("COS_P_%s_%03d", code, lv)
+		for _, kind := range []struct {
+			code string
+			hits uint32
+		}{{"BEAR", 3}, {"WOLF", 2}, {"PENGUIN", 1}, {"RAVEN", 1}} {
+			name := fmt.Sprintf("COS_P_%s_%03d", kind.code, lv)
 			pet, ok := items.CharacterRefByCodename(name)
 			if !ok {
 				t.Fatal(name)
@@ -63,10 +61,10 @@ func TestPetPartyGiantSurvival(t *testing.T) {
 			if result.Damage == 0 {
 				t.Fatal("benchmark dealt no damage")
 			}
-			survival[code] = (pet.MaxHP + result.Damage - 1) / result.Damage
-		}
-		if !(survival["BEAR"] > survival["WOLF"] && survival["WOLF"] > survival["PENGUIN"] && survival["PENGUIN"] == survival["RAVEN"]) {
-			t.Errorf("level %d survival order %v, want Bear > Wolf > Penguin = Raven", lv, survival)
+			hits := (pet.MaxHP + result.Damage - 1) / result.Damage
+			if hits != kind.hits {
+				t.Errorf("%s HP=%d damage=%d dies in %d hits, want %d", name, pet.MaxHP, result.Damage, hits, kind.hits)
+			}
 		}
 	}
 }

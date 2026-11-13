@@ -40,7 +40,7 @@ func (rt *Runtime) petGearProcs(division string, owner *enterworld.Character, gi
 	if pet == nil {
 		return
 	}
-	step, ok := rt.elementalCompanion(division, owner, gid, companion.PetKind(pet.Codename), now)
+	step, ok := rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: companion.PetKind(pet.Codename), gear: true}, now)
 	if !ok || now < step.state.trained.procReadyAt {
 		return
 	}
@@ -219,7 +219,7 @@ func (rt *Runtime) advancePetGearFieldsSession(key petOwnerKey, state *petSessio
 		state.trained.gearFields = nil
 		return
 	}
-	step, ok := rt.elementalCompanion(key.division, state.character, key.gid, companion.PetKind(pet.Codename), now)
+	step, ok := rt.elementalCompanionMatching(key.division, state.character, elementalQuery{gid: key.gid, kind: companion.PetKind(pet.Codename), gear: true}, now)
 	if !ok {
 		state.trained.gearFields = nil
 		return

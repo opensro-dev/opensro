@@ -211,22 +211,25 @@ func (rt *Runtime) clearTailwindSource(key petOwnerKey, now int64) {
 
 /*
 ================
-tailwindDamage
+tailwindIntercept
 
-Consume before status application: neither splash nor several crows can stun twice.
-Only a living monster receives the stun; player combat still removes travel speed.
+One successful pre-hit stun per recipient per thirty seconds, shared across crows.
+An intercepted hit commits no damage, so its travel stacks remain intact.
 ================
 */
-func (rt *Runtime) tailwindDamage(division string, c *enterworld.Character, target uint32, now int64) []wire.Frame {
-	if c == nil {
-		return nil
+func (rt *Runtime) tailwindIntercept(division string, c *enterworld.Character, target uint32, now int64) bool {
+	if !rt.AttackPetExpansion || c == nil {
+		return false
+	}
+	recipient := rt.petSessionFor(division, c.Name, 0)
+	if recipient == nil {
+		return false
 	}
 	gid := enterworld.ObjectIDForCharacter(c)
 	var sources []struct {
 		key  petOwnerKey
 		book uint8
 	}
-	changed := false
 	rt.tailwinds.Lock()
 	for key, rows := range rt.tailwinds.sources {
 		row, found := rows[gid]
@@ -239,21 +242,26 @@ func (rt *Runtime) tailwindDamage(division string, c *enterworld.Character, targ
 				book uint8
 			}{key, row.book})
 		}
-		changed = changed || row.stacks != 0
-		row.stacks, row.next = 0, now+tailwindPeriod
-		rows[gid] = row
 	}
 	rt.tailwinds.Unlock()
-	if changed {
-		rt.publishTailwind(division, gid, now)
+	if len(sources) == 0 {
+		return false
 	}
+	rt.petMu.Lock()
+	previous := recipient.tailwindStunReadyAt
+	if now < previous {
+		rt.petMu.Unlock()
+		return false
+	}
+	recipient.tailwindStunReadyAt = now + 30000
+	rt.petMu.Unlock()
 	for _, source := range sources {
 		key := source.key
 		state := rt.petSessionFor(division, key.name, key.gid)
 		if state == nil {
 			continue
 		}
-		step, ok := rt.elementalCompanion(division, state.character, key.gid, "Crow", now)
+		step, ok := rt.elementalCompanionMatching(division, state.character, elementalQuery{gid: key.gid, kind: "Crow", passive: "Tailwind"}, now)
 		if !ok {
 			continue
 		}
@@ -268,24 +276,42 @@ func (rt *Runtime) tailwindDamage(division string, c *enterworld.Character, targ
 			if victim, ok := rt.resolvePetCombatTarget(step, target); ok {
 				rt.queueCrowVisual(division, crowVisual{gid: target, kind: crowStunVisual, book: uint8(skill.Option), at: victim.at})
 			}
+			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target, Frames: simFrames(frames)}})
+			return true
 		}
-		return frames
 	}
-	return nil
+	rt.petMu.Lock()
+	recipient.tailwindStunReadyAt = previous
+	rt.petMu.Unlock()
+	return false
 }
 
 /*
 ================
-tailwindCommittedDamage
+tailwindDamage
 
-Travel charges are spent by a landed impact, never a refused or blocked cast.
+Only received HP damage spends travel stacks; outgoing attacks and teleports do not.
 ================
 */
-func (rt *Runtime) tailwindCommittedDamage(division string, c *enterworld.Character, target uint32, impacts []simulation.MonsterDamageResult, now int64) []wire.Frame {
-	for _, impact := range impacts {
-		if impact.Damage > 0 {
-			return rt.tailwindDamage(division, c, target, now)
+func (rt *Runtime) tailwindDamage(division string, c *enterworld.Character, target uint32, now int64) []wire.Frame {
+	if !rt.AttackPetExpansion || c == nil {
+		return nil
+	}
+	gid := enterworld.ObjectIDForCharacter(c)
+	changed := false
+	rt.tailwinds.Lock()
+	for key, rows := range rt.tailwinds.sources {
+		row, found := rows[gid]
+		if key.division != division || !found {
+			continue
 		}
+		changed = changed || row.stacks != 0
+		row.stacks, row.next = 0, now+tailwindPeriod
+		rows[gid] = row
+	}
+	rt.tailwinds.Unlock()
+	if changed {
+		rt.publishTailwind(division, gid, now)
 	}
 	return nil
 }

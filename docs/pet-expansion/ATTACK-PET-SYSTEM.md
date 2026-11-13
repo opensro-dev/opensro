@@ -48,6 +48,63 @@ toggle is required. Legacy saved client opt-outs are ignored. With the server
 flag off, state probes are silent and the pet window stays native.
 Open pet information with **Insert**.
 
+### Level-90 balance correction (12 November 2026)
+
+With the server expansion enabled, the authored ungeared HP curve targets
+three ordinary same-level party-giant hits for a bear, two for a wolf and
+one for a penguin or crow (normal midpoint rolls, no criticals, gear or
+passive protection). Gear and defensive skills increase actual survival.
+With the flag off, pets retain native characterdata HP and native care.
+Changing the flag requires a server restart; never rewrite stored gear or
+training ranks to switch it.
+
+Books unlock at pet levels **10 / 40 / 90**. The first two books reach rank
+10 at levels 40 and 90. All ten ranks of the third book are available at
+level 90, still costing skill points and requiring the previous book at
+rank 10. This changes requirements, not the point budget: one starter point
+plus one point per two pet levels. Players must choose where to spend them.
+
+
+### Cumulative books and crow revision (13 November 2026)
+
+For every pet, a higher book upgrades the same skill family: it retains the
+earlier books' behavior and adds its own effect. Only the highest learned
+passive book runs; earlier passive icons are not separately selectable.
+
+The crow revision remains behind `SRO_ATTACK_PET_EXPANSION`. Learned ranks and
+gear remain intact. Values below scale across the three books' learned ranks,
+reaching the maximum at the final rank available at pet level 90.
+
+| Family | Book I | Book II adds | Book III adds |
+| --- | --- | --- | --- |
+| Rejuvenating Plume | Owner healing, 10–30% total maximum HP; half immediately, half over five seconds. Base cooldown 20–15 seconds. | Crow healing and removal of all negative abnormal effects. | Party healing/cleansing within 20 m; healing decreases 20% per additional recipient. |
+| Stormbrood | Egg hatches after 30 seconds; unhealable clone lives ten minutes, copies stats and gear blues, but no learned skills. Base recharge 20–15 minutes. | Three stored casts. | Existing 500% death burst. Maximum ten live eggs/clones remains. |
+| Mana Spring | Actual crow damage restores 10–30% as owner MP. | Also restores nearby party MP. | Every 10,000 actual MP restored deals 5,000 true monster damage within 5 m of the crow. Unused progress carries; full MP grants no progress. Replaces the former cooldown recovery. |
+| Tailwind | One stack every five seconds, ten stacks maximum; full-stack movement bonus scales 20–50%. Only received HP damage clears stacks. Safe-zone stacking remains. | At full stacks, stuns an attacking monster before its damaging hit, keeping stacks. Successful guard has a 30-second recipient cooldown. | Party members gain their own stacks and guard cooldown. |
+
+Crow attacks now use magic damage with a 112% profile, versus the penguin's
+160% (70% of the penguin profile, before differing gear and skills). Flag-off
+native attacks are unchanged. Raven's Refuge replaces Guiding Feathers.
+
+### Raven's Refuge
+
+Replaces Guiding Feathers, preserving book IDs 58/59/60, learned ranks and
+existing individual-skill gear bonuses. All books are cumulative. HP trigger threshold scales from
+20% at the first learned rank to 40% at the final rank available at pet level
+90. Below that threshold, damage reduction is a fixed 15%.
+
+Book II adds an emergency heal for 10% maximum HP when incoming damage first
+crosses the threshold. Its base cooldown scales from 300 seconds at the first
+rank to 120 seconds at maximum progression. Book III extends both protection
+and healing to party members within 20 m; each recipient has an independent
+heal cooldown. Healing above the threshold ends damage reduction. These values
+are capped even with equipment skill bonuses. A fatal hit cannot trigger the
+heal: this is protection, not resurrection. Cooldowns persist on each recipient
+through relogging, changing crows and server restarts. Several crows do not stack
+the 15% reduction or bypass that recovery cooldown. Direct monster attacks and
+monster damage-over-time both use the protection; native flag-off care/combat
+is unchanged. The buff icon appears only while below the threshold.
+
 ### Bear: Iron Hide shields
 
 Iron Hide now grants absorption separately from HP for **5 seconds**. Tier I
@@ -77,7 +134,7 @@ gear-rank and Unbroken Spirit empowerment bonuses still apply.
 | Bear | High HP/defense; lower attack | Challenging Roar; Iron Hide | Unbroken Spirit; Guardian’s Bond; Crushing Paw |
 | Wolf | Physical offense | Hunting Howl; Savage Rend | Execute; Bloodscent; Blood Hunt |
 | Penguin | Ranged magic/control; lower HP | Ice Lance; Blizzard | Shatter; Arcane Resonance; Frozen Hourglass |
-| Three Footed Crow | Owner support | Mend; Mark Prey | Carrion Feast; Swift Wings; Murder of Crows |
+| Three Footed Crow | Ranged owner/party support | Rejuvenating Plume; Stormbrood | Mana Spring; Tailwind; Raven's Refuge |
 
 Bear **Guardian’s Bond** replaces Last Stand; learned book IDs and ranks are
 retained. A living summoned bear must be within 12 m. This expansion applies to

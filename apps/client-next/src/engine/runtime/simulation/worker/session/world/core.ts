@@ -343,7 +343,8 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 				undefined;
 		const oldNameContext = nameContext(), oldSocial = gameplay.nameInputs().social;
 		const stallReceipt: { title?: string; } | undefined = frame.opcode === 0xb1a8 ? {} : undefined;
-		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) ) {
+		// Port-only Bond carries both paid damage feedback and an entity animation cue.
+		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) || frame.opcode === 0x3fb4 ) {
 			entities.receive( frame, now );
 		}
 		// The owner's edit receipt carries no title; gameplay resolves the

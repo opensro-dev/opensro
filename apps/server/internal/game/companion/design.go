@@ -56,14 +56,28 @@ PetDef
 ================
 */
 type PetDef struct {
-	Name                string  `json:"name"`
-	Role                string  `json:"role"`
-	CodenamePrefix      string  `json:"codenamePrefix"`
-	PhysicalPercent     float64 `json:"physicalPercent"`
-	MagicalPercent      float64 `json:"magicalPercent"`
-	DefensePercent      float64 `json:"defensePercent"`
-	MagicDefensePercent float64 `json:"magicDefensePercent"`
-	MagicPrimary        bool    `json:"magicPrimary"`
+	HealthByLevel       []PetHealth `json:"healthByLevel"`
+	Name                string      `json:"name"`
+	Role                string      `json:"role"`
+	CodenamePrefix      string      `json:"codenamePrefix"`
+	HPPercent           float64     `json:"hpPercent"`
+	PhysicalPercent     float64     `json:"physicalPercent"`
+	MagicalPercent      float64     `json:"magicalPercent"`
+	DefensePercent      float64     `json:"defensePercent"`
+	MagicDefensePercent float64     `json:"magicDefensePercent"`
+	MagicPrimary        bool        `json:"magicPrimary"`
+}
+
+/*
+================
+PetHealth
+
+An authored survival benchmark; intermediate levels interpolate.
+================
+*/
+type PetHealth struct {
+	Level uint8  `json:"level"`
+	HP    uint32 `json:"hp"`
 }
 
 /*
@@ -317,6 +331,15 @@ func (s SkillDef) ValueAt(level uint8) float64 {
 	if s.Family == "Hunting Howl" {
 		return min(500, value) // +skills equipment must respect the howl's ceiling too.
 	}
+	if s.Family == "Rejuvenating Plume" || s.Family == "Mana Spring" {
+		return min(30, value)
+	}
+	if s.Family == "Raven's Refuge" {
+		return min(40, value)
+	}
+	if s.Family == "Tailwind" {
+		return min(5, value)
+	}
 	return value
 }
 
@@ -328,7 +351,17 @@ func (s SkillDef) CooldownAt(level uint8) float64 {
 	if s.CooldownPerLevel != nil {
 		per = *s.CooldownPerLevel
 	}
-	return *s.Cooldown + per*float64(max(level, 1)-1)
+	value := *s.Cooldown + per*float64(max(level, 1)-1)
+	if s.Family == "Rejuvenating Plume" {
+		return max(15, value)
+	}
+	if s.Family == "Raven's Refuge" {
+		return max(120, value)
+	}
+	if s.Family == BroodSkill {
+		return max(900, value)
+	}
+	return value
 }
 
 /*

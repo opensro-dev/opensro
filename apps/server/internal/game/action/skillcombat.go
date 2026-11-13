@@ -325,8 +325,6 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return rt.installPeriodicCast(periodicCast{division: divisionID, character: character,
 			snapshot: snapshot, skill: skill, cast: cast, target: primary, attacker: attacker, now: nowMs, release: release, doors: doors})
 	}
-	_, precision := rt.crowPlayerBonuses(divisionID, snapshot, target.Gid, skill, nowMs)
-	attacker.HitRate *= 1 + precision/100
 	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
 	if skill.Threat.Only {
 		return rt.releaseTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot,
@@ -370,7 +368,6 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return OpResult{}, skillCastRefused
 	}
 	rt.penguinOwnerShatter(divisionID, snapshot, target, formulas, nowMs)
-	rt.crowPlayerDamage(divisionID, snapshot, target, skill, formulas, nowMs)
 	damagePlans, planned := rt.planMonsterImpacts(divisionID, snapshot, skill, target, formulas, nowMs)
 	if !planned {
 		return OpResult{}, skillCastRefused
@@ -603,14 +600,10 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// its burst like the other damage-application state changes.
 	actorFrames = append(actorFrames, battleFrames...)
 	broadcastFrames = append(broadcastFrames, battleFrames...)
-	travelFrames := rt.tailwindCommittedDamage(divisionID, character, target.Gid, committed, nowMs)
-	broadcastFrames = append(broadcastFrames, travelFrames...)
-	actorFrames = append(actorFrames, travelFrames...)
 	if rootID == 0 {
 		for _, impact := range committed {
 			if impact.Damage > 0 {
 				rt.penguinOwnerHit(divisionID, character, skill, []monster.Instance{target}, formulas, nowMs)
-				rt.crowPlayerAttack(divisionID, character, skill, []uint32{target.Gid}, nowMs)
 				rt.wolfExecuteAttack(divisionID, character, 0, 1, []uint32{target.Gid}, nowMs)
 				break
 			}

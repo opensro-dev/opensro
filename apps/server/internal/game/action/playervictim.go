@@ -74,6 +74,7 @@ type playerStruck struct {
 	// before is the victim's HP ahead of each impact (a drain's cap).
 	before        []uint32
 	fatal, struck bool
+	refugeHealed  bool
 	warCombat     domain.GuildWarCombat
 	killer        *enterworld.Character
 	// mpSpent is what dgmp took from MP; mp is the MP it left.
@@ -133,12 +134,21 @@ func (rt *Runtime) planPlayerStrike(s *playerStrike,
 	if len(s.formulas) == 0 {
 		return false
 	}
+	// Port-only Tailwind intercepts a damaging monster attack before any HP/status commit.
+	if !s.linkedShare && s.killer.monster != nil {
+		for _, formula := range s.formulas {
+			if formula.Damage > 0 && !formula.Blocked && rt.tailwindIntercept(s.division, s.victim, s.killer.monster.Gid, s.now) {
+				return false
+			}
+		}
+	}
 	if !s.linkedShare {
 		s.quotaMembers = rt.planQuotaMembers(s.division, s.victim, s.now)
 	}
 	s.owner = rt.newPlayerAbnormalOwner(s.division, s.victim, s.now)
 	if !s.linkedShare && s.killer.monster != nil {
 		s.owner.bond = rt.planPetBond(s.division, s.victim, s.now)
+		s.owner.refuge = rt.planRavenRefuge(s.division, s.victim, s.now)
 	}
 	s.killer = rt.prepareDeathKiller(s.division, s.victim, s.killer)
 	s.owner.sources = rt.capturePlayerAbnormalSources(s.division, s.victim, s.owner.block, s.records)
@@ -188,12 +198,23 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		if !formula.Slain && s.owner != nil {
 			formula.Damage = sharePetBond(s.owner.bond, formula.Damage)
 		}
+		maximum := int64(0)
+		if s.owner != nil && s.owner.refuge.book != 0 && !formula.Slain {
+			maximum = int64(s.owner.MaxHP())
+			formula.Damage = ravenRefugeDamage(s.owner.refuge, remaining, maximum, formula.Damage)
+		}
 		out.before = append(out.before, uint32(remaining))
 		debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
 		if formula.Slain {
 			debit = remaining // the ck kill marks the target dead
 		}
+		before := remaining
 		remaining -= debit
+		if maximum > 0 {
+			heal := ravenRefugeRecovery(s.owner.refuge, c, before, remaining, maximum, s.now)
+			remaining += heal
+			out.refugeHealed = out.refugeHealed || heal > 0
+		}
 		out.fatal = remaining == 0
 		out.impacts = append(out.impacts, wire.SkillCastTargetImpact{
 			ResultFlags: formula.ResultFlags,
@@ -287,15 +308,16 @@ func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Charac
 			continue
 		}
 		public = append(public, rt.tailwindDamage(division, victim, struck.attacker, now)...)
-		if struck.killer != nil {
-			public = append(public, rt.tailwindDamage(division, struck.killer, enterworld.ObjectIDForCharacter(victim), now)...)
-		}
 		break
 	}
 	if struck.mpSpent != 0 {
 		// The redirected MP reaches its owner alone, as a combat-sourced 0x3057.
 		private = append(private, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 			Payload: simulation.MPRefreshPayload(enterworld.ObjectIDForCharacter(victim), simulation.VitalsSourceCombatDamage, struck.mp)})
+	}
+	if struck.refugeHealed && !struck.fatal {
+		public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(victim), simulation.VitalsSourceSkillRecovery, uint32(enterworld.CurrentHP(victim)))})
+		public = append(public, crowVisualFrame(crowVisual{gid: enterworld.ObjectIDForCharacter(victim), kind: crowPlumeVisual, book: 1, at: rt.LiveSpawnFor(division, victim)}))
 	}
 	statuses := rt.playerAbnormalPublication(division, victim, struck.owner)
 	public = append(public, statuses.public...)

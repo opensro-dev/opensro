@@ -151,3 +151,37 @@ test("Stormbrood shows charges while a sequential recharge is running", async ()
 	state.rows[1].left = 0;
 	assert.equal( petRowCooldown( state, 1, 1000 ), "300s" );
 });
+
+/*
+================
+Raven's Refuge inherits protection and healing without Precision stacks.
+================
+*/
+test("Raven's Refuge books retain earlier behavior", () => {
+	for ( const id of [ 58, 59, 60 ] ) {
+		const d = petSkillDesign( id );
+		assert.ok( d );
+		const text = petEffect( d, 40, 10 );
+		assert.match( text, /Below 40% HP.*15%/ );
+		assert.equal( /recover 10%/.test( text ), id >= 59 );
+		assert.equal( /party members within 20 m/.test( text ), id === 60 );
+		assert.doesNotMatch( text, /Precision|Hit ratio|next damaging skill/ );
+	}
+});
+
+/*
+================
+Refuge uses the existing recipient-buff frame without a Precision counter.
+================
+*/
+test("Raven's Refuge HUD shows protection rather than Precision", async () => {
+	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+	const row = buffBoard( {
+		localGid: 100002,
+		vitals: [],
+		petGuidance: { gid: 100002, book: 60, stacks: 1, hitPercent: 15 }
+	}, 0 ).find( r => r.id === "pet-guidance" );
+	assert.equal( row?.label, "Raven's Refuge" );
+	assert.match( row?.helpText ?? "", /Damage taken -15%/ );
+	assert.equal( row?.stack, undefined );
+});

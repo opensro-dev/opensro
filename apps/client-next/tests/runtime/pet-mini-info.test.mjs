@@ -50,8 +50,8 @@ test("gauges follow 6B34C0", () => {
 		{ stacks: 10, tier: 3, untilMs: 5000 },
 		1000
 	);
-	// The native row (1000) is the base; ten Resolve stacks project 1300 HP.
-	assert.equal( resolved?.hp, Math.fround( 128 / 1300 ) );
+	// Server-admitted Resolve uses the authored level-12 bear base (197).
+	assert.equal( resolved?.hp, Math.fround( 128 / 256 ) );
 });
 
 test("the HP caution blinks while 0 < HP <= 30%", () => {

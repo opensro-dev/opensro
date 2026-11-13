@@ -47,6 +47,7 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 	o := rt.newPlayerAbnormalOwner(division, c, now)
 	o.sources = rt.capturePlayerAbnormalSources(division, c, o.block, nil)
 	o.bond = rt.planPetBond(division, c, now)
+	o.refuge = rt.planRavenRefuge(division, c, now)
 	committed := rt.deps.UpdateDeferred(c, "player-abnormal", func() bool {
 		if c.DeletePending {
 			return false

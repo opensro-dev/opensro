@@ -39,7 +39,38 @@ export const PET_DESIGN = {
 			"magicalPercent": 20,
 			"defensePercent": 100,
 			"magicDefensePercent": 100,
-			"magicPrimary": false
+			"magicPrimary": false,
+			"hpPercent": 220,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 20
+				},
+				{
+					"level": 10,
+					"hp": 185
+				},
+				{
+					"level": 20,
+					"hp": 245
+				},
+				{
+					"level": 40,
+					"hp": 390
+				},
+				{
+					"level": 60,
+					"hp": 1025
+				},
+				{
+					"level": 80,
+					"hp": 5000
+				},
+				{
+					"level": 90,
+					"hp": 11000
+				}
+			]
 		},
 		{
 			"name": "Wolf",
@@ -49,7 +80,38 @@ export const PET_DESIGN = {
 			"magicalPercent": 25,
 			"defensePercent": 70,
 			"magicDefensePercent": 70,
-			"magicPrimary": false
+			"magicPrimary": false,
+			"hpPercent": 100,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 16
+				},
+				{
+					"level": 10,
+					"hp": 165
+				},
+				{
+					"level": 20,
+					"hp": 235
+				},
+				{
+					"level": 40,
+					"hp": 350
+				},
+				{
+					"level": 60,
+					"hp": 900
+				},
+				{
+					"level": 80,
+					"hp": 4500
+				},
+				{
+					"level": 90,
+					"hp": 8100
+				}
+			]
 		},
 		{
 			"name": "Penguin",
@@ -59,17 +121,79 @@ export const PET_DESIGN = {
 			"magicalPercent": 160,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": true
+			"magicPrimary": true,
+			"hpPercent": 70,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 10
+				},
+				{
+					"level": 10,
+					"hp": 100
+				},
+				{
+					"level": 20,
+					"hp": 160
+				},
+				{
+					"level": 40,
+					"hp": 230
+				},
+				{
+					"level": 60,
+					"hp": 590
+				},
+				{
+					"level": 80,
+					"hp": 3000
+				},
+				{
+					"level": 90,
+					"hp": 4800
+				}
+			]
 		},
 		{
 			"name": "Crow",
 			"role": "Support",
 			"codenamePrefix": "COS_P_RAVEN",
-			"physicalPercent": 55,
-			"magicalPercent": 95,
+			"physicalPercent": 35,
+			"magicalPercent": 112,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": false
+			"magicPrimary": true,
+			"hpPercent": 90,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 10
+				},
+				{
+					"level": 10,
+					"hp": 100
+				},
+				{
+					"level": 20,
+					"hp": 160
+				},
+				{
+					"level": 40,
+					"hp": 230
+				},
+				{
+					"level": 60,
+					"hp": 590
+				},
+				{
+					"level": 80,
+					"hp": 3000
+				},
+				{
+					"level": 90,
+					"hp": 4800
+				}
+			]
 		}
 	],
 	"skills": [
@@ -1460,19 +1584,19 @@ export const PET_DESIGN = {
 			"active": false,
 			"theme": "Omen",
 			"option": 1,
-			"name": "Guiding Feathers",
-			"effect": "Each stack grants the owner +{v}% hit ratio for 10 s.",
-			"trigger": "Attacks",
-			"cooldown": 0,
-			"cooldownUnit": "none",
-			"cooldownPerLevel": 0,
-			"value": 2,
-			"valuePerLevel": 0.5,
-			"valueUnit": "% hit ratio per stack",
+			"name": "Raven's Refuge",
+			"effect": "Below {v}% HP, take 15% less damage.",
+			"trigger": "Timer",
+			"cooldown": 300.0,
+			"cooldownUnit": "s",
+			"cooldownPerLevel": -6.206896551724138,
+			"value": 20.0,
+			"valuePerLevel": 0.6896551724137931,
+			"valueUnit": "% HP threshold",
 			"maxLevel": 10,
 			"unlockLevel": 30,
-			"rank2": "At 5 stacks, the next damaging skill gains bonus damage and consumes Precision.",
-			"rank3": "Party members within 20 m gain independent Precision pools.",
+			"rank2": "Crossing below the threshold heals 10% maximum HP; independent recovery cooldown.",
+			"rank3": "Retains protection and healing; also protects party members within 20 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\rog_bowa_fast_a.ddj"
@@ -4716,7 +4840,7 @@ export const PET_DESIGN = {
 		},
 		{
 			"id": "Skill58",
-			"name": "of Guiding Feathers",
+			"name": "of Raven's Refuge",
 			"kind": "Suffix",
 			"group": "OneSkill",
 			"category": "Skills",
@@ -4725,7 +4849,7 @@ export const PET_DESIGN = {
 				"Harness",
 				"Charm"
 			],
-			"effect": "+{v} to Guiding Feathers (Crow)",
+			"effect": "+{v} to Raven's Refuge (Crow)",
 			"tier": 1,
 			"minDegree": 2,
 			"min": 1,
@@ -5413,21 +5537,21 @@ export const PET_DESIGN = {
 	"procs": [
 		{
 			"name": "Chain Lightning",
-			"effect": "Gear-degree lightning damage; each of up to 5 targets retains 80% of the previous hit. Normal D9: 1,500–2,000 first-hit damage.",
+			"effect": "Gear-degree lightning damage; each of up to 5 targets retains 80% of the previous hit. Normal D9: 1,500Ã¢â‚¬â€œ2,000 first-hit damage.",
 			"base": 20,
 			"perLevel": 15,
 			"unit": "damage"
 		},
 		{
 			"name": "Blizzard",
-			"effect": "Gear-degree damage across four ticks in 5 m; attempts frostbite slow, with 10% freeze chance on the last tick. Normal D9: 1,000–1,500 total damage.",
+			"effect": "Gear-degree damage across four ticks in 5 m; attempts frostbite slow, with 10% freeze chance on the last tick. Normal D9: 1,000Ã¢â‚¬â€œ1,500 total damage.",
 			"base": 15,
 			"perLevel": 12,
 			"unit": "damage"
 		},
 		{
 			"name": "Fire Burst",
-			"effect": "Gear-degree damage in 3 m, with 25% chance to burn. Normal D9: 1,000–3,000 immediate damage, plus native burn damage.",
+			"effect": "Gear-degree damage in 3 m, with 25% chance to burn. Normal D9: 1,000Ã¢â‚¬â€œ3,000 immediate damage, plus native burn damage.",
 			"base": 18,
 			"perLevel": 14,
 			"unit": "damage"
@@ -5538,7 +5662,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_twohanda_cry_a.ddj",
 			"family": "Hunting Howl",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 4,
@@ -5616,7 +5740,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\china\\fire_gigongta_b.ddj",
 			"family": "Savage Rend",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 7,
@@ -5694,7 +5818,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_onehanda_critical_a.ddj",
 			"family": "Execute",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 10,
@@ -5772,7 +5896,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warlock_dota_blooding_a.ddj",
 			"family": "Bloodscent",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 13,
@@ -5850,7 +5974,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_shieldp_defense_a.ddj",
 			"family": "Blood Hunt",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 16,
@@ -5928,7 +6052,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_frenzya_tount_area_a.ddj",
 			"family": "Challenging Roar",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 19,
@@ -6006,7 +6130,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
 			"family": "Iron Hide",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 22,
@@ -6084,7 +6208,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\china\\cold_ganggi_b.ddj",
 			"family": "Unbroken Spirit",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 25,
@@ -6162,7 +6286,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\china\\fire_ganggi_b.ddj",
 			"family": "Guardian's Bond",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 28,
@@ -6240,7 +6364,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_duala_stun_a.ddj",
 			"family": "Crushing Paw",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 31,
@@ -6318,7 +6442,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_colda_area_a.ddj",
 			"family": "Ice Lance",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 34,
@@ -6396,7 +6520,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_colda_point_b.ddj",
 			"family": "Blizzard",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 37,
@@ -6417,7 +6541,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6443,7 +6567,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6458,7 +6582,7 @@ export const PET_DESIGN = {
 			"theme": "Frozen prey",
 			"option": 3,
 			"name": "Shatter III",
-			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus. Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus. Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6469,12 +6593,12 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
 			"family": "Shatter",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 40,
@@ -6552,7 +6676,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\china\\lightning_storm_c.ddj",
 			"family": "Arcane Resonance",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 43,
@@ -6630,7 +6754,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_eartha_guard_b.ddj",
 			"family": "Frozen Hourglass",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 46,
@@ -6642,16 +6766,16 @@ export const PET_DESIGN = {
 			"name": "Rejuvenating Plume I",
 			"effect": "Restore {v}% maximum HP: half immediately and half over 5 seconds.",
 			"trigger": "Timer",
-			"cooldown": 20,
+			"cooldown": 20.0,
 			"cooldownUnit": "s",
-			"cooldownPerLevel": -0.5,
-			"value": 8.0,
-			"valuePerLevel": 1.2,
+			"cooldownPerLevel": -0.1724137931034483,
+			"value": 10.0,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% HP",
 			"maxLevel": 10,
 			"unlockLevel": 10,
-			"rank2": "Also heals the crow and removes one poison or burn effect from the owner.",
-			"rank3": "Nearby party members are healed, each additional recipient receiving 20% less than the previous.",
+			"rank2": "Also heals the crow and cleanses all negative abnormal effects from healed recipients.",
+			"rank3": "Nearby party members are healed and cleansed, each additional recipient receiving 20% less healing.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\cleric_heala_target_a.ddj",
@@ -6668,16 +6792,16 @@ export const PET_DESIGN = {
 			"name": "Rejuvenating Plume II",
 			"effect": "Restore {v}% maximum HP: half immediately and half over 5 seconds.",
 			"trigger": "Timer",
-			"cooldown": 20,
+			"cooldown": 18.275862068965516,
 			"cooldownUnit": "s",
-			"cooldownPerLevel": -0.5,
-			"value": 20.0,
-			"valuePerLevel": 1.2,
+			"cooldownPerLevel": -0.1724137931034483,
+			"value": 16.89655172413793,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% HP",
 			"maxLevel": 10,
 			"unlockLevel": 40,
-			"rank2": "Also heals the crow and removes one poison or burn effect from the owner.",
-			"rank3": "Nearby party members are healed, each additional recipient receiving 20% less than the previous.",
+			"rank2": "Also heals the crow and cleanses all negative abnormal effects from healed recipients.",
+			"rank3": "Nearby party members are healed and cleansed, each additional recipient receiving 20% less healing.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\cleric_heala_target_a.ddj",
@@ -6694,21 +6818,21 @@ export const PET_DESIGN = {
 			"name": "Rejuvenating Plume III",
 			"effect": "Restore {v}% maximum HP: half immediately and half over 5 seconds.",
 			"trigger": "Timer",
-			"cooldown": 20,
+			"cooldown": 16.551724137931036,
 			"cooldownUnit": "s",
-			"cooldownPerLevel": -0.5,
-			"value": 32.0,
-			"valuePerLevel": 1.2,
+			"cooldownPerLevel": -0.1724137931034483,
+			"value": 23.79310344827586,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% HP",
 			"maxLevel": 10,
 			"unlockLevel": 90,
-			"rank2": "Also heals the crow and removes one poison or burn effect from the owner.",
-			"rank3": "Nearby party members are healed, each additional recipient receiving 20% less than the previous.",
+			"rank2": "Also heals the crow and cleanses all negative abnormal effects from healed recipients.",
+			"rank3": "Nearby party members are healed and cleansed, each additional recipient receiving 20% less healing.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\cleric_heala_target_a.ddj",
 			"family": "Rejuvenating Plume",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 49,
@@ -6718,11 +6842,11 @@ export const PET_DESIGN = {
 			"theme": "Stormbrood",
 			"option": 1,
 			"name": "Stormbrood I",
-			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats and normal attacks only. Maximum 10 eggs/clones.",
+			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats, gear blues and normal attacks, but no learned skills. Maximum 10 eggs/clones.",
 			"trigger": "Timer",
-			"cooldown": 600,
+			"cooldown": 1200.0,
 			"cooldownUnit": "seconds",
-			"cooldownPerLevel": -33.333333333333336,
+			"cooldownPerLevel": -10.344827586206897,
 			"value": 30,
 			"valuePerLevel": 0,
 			"valueUnit": "seconds to hatch",
@@ -6744,11 +6868,11 @@ export const PET_DESIGN = {
 			"theme": "Stormbrood",
 			"option": 2,
 			"name": "Stormbrood II",
-			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats and normal attacks only. Maximum 10 eggs/clones.",
+			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats, gear blues and normal attacks, but no learned skills. Maximum 10 eggs/clones.",
 			"trigger": "Timer",
-			"cooldown": 600,
+			"cooldown": 1096.551724137931,
 			"cooldownUnit": "seconds",
-			"cooldownPerLevel": -33.333333333333336,
+			"cooldownPerLevel": -10.344827586206897,
 			"value": 30,
 			"valuePerLevel": 0,
 			"valueUnit": "seconds to hatch",
@@ -6770,11 +6894,11 @@ export const PET_DESIGN = {
 			"theme": "Stormbrood",
 			"option": 3,
 			"name": "Stormbrood III",
-			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats and normal attacks only. Maximum 10 eggs/clones.",
+			"effect": "Lay a destructible egg. After 30 s it hatches into an unhealable crow clone lasting 10 min. Copies stats, gear blues and normal attacks, but no learned skills. Maximum 10 eggs/clones.",
 			"trigger": "Timer",
-			"cooldown": 600,
+			"cooldown": 993.1034482758621,
 			"cooldownUnit": "seconds",
-			"cooldownPerLevel": -33.333333333333336,
+			"cooldownPerLevel": -10.344827586206897,
 			"value": 30,
 			"valuePerLevel": 0,
 			"valueUnit": "seconds to hatch",
@@ -6786,7 +6910,7 @@ export const PET_DESIGN = {
 			"status": "Implemented",
 			"icon": "skill\\europe\\rog_stealtha_point_a.ddj",
 			"family": "Stormbrood",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 52,
@@ -6796,18 +6920,18 @@ export const PET_DESIGN = {
 			"theme": "Mana Spring",
 			"option": 1,
 			"name": "Mana Spring I",
-			"effect": "Bird damage restores {v}% of actual damage as owner MP. Higher books share recovery and reduce character and pet cooldowns.",
+			"effect": "Bird damage restores {v}% of actual damage as owner MP.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 10,
-			"valuePerLevel": 0,
+			"value": 10.0,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% damage as MP",
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Party members within 20 m recover the same MP.",
-			"rank3": "Each damaging bird attack removes 0.5 s from owner and nearby party character and pet cooldowns, including stored-cast recharge.",
+			"rank3": "Every 10,000 MP actually restored releases a 5 m burst around the crow for 5,000 true damage. Unspent restored MP carries forward.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warlock_confusiona_heal_a.ddj",
@@ -6822,18 +6946,18 @@ export const PET_DESIGN = {
 			"theme": "Mana Spring",
 			"option": 2,
 			"name": "Mana Spring II",
-			"effect": "Bird damage restores {v}% of actual damage as owner MP. Higher books share recovery and reduce character and pet cooldowns.",
+			"effect": "Bird damage restores {v}% of actual damage as owner MP.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 10,
-			"valuePerLevel": 0,
+			"value": 16.89655172413793,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% damage as MP",
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Party members within 20 m recover the same MP.",
-			"rank3": "Each damaging bird attack removes 0.5 s from owner and nearby party character and pet cooldowns, including stored-cast recharge.",
+			"rank3": "Every 10,000 MP actually restored releases a 5 m burst around the crow for 5,000 true damage. Unspent restored MP carries forward.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warlock_confusiona_heal_a.ddj",
@@ -6848,23 +6972,23 @@ export const PET_DESIGN = {
 			"theme": "Mana Spring",
 			"option": 3,
 			"name": "Mana Spring III",
-			"effect": "Bird damage restores {v}% of actual damage as owner MP. Higher books share recovery and reduce character and pet cooldowns.",
+			"effect": "Bird damage restores {v}% of actual damage as owner MP.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 10,
-			"valuePerLevel": 0,
+			"value": 23.79310344827586,
+			"valuePerLevel": 0.6896551724137931,
 			"valueUnit": "% damage as MP",
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Party members within 20 m recover the same MP.",
-			"rank3": "Each damaging bird attack removes 0.5 s from owner and nearby party character and pet cooldowns, including stored-cast recharge.",
+			"rank3": "Every 10,000 MP actually restored releases a 5 m burst around the crow for 5,000 true damage. Unspent restored MP carries forward.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warlock_confusiona_heal_a.ddj",
 			"family": "Mana Spring",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 55,
@@ -6874,18 +6998,18 @@ export const PET_DESIGN = {
 			"theme": "Tailwind",
 			"option": 1,
 			"name": "Tailwind I",
-			"effect": "Gain one travel stack every 5 seconds without dealing or taking damage, up to 10. Each stack grants +{v}% movement speed. Damage removes all stacks.",
+			"effect": "Gain one travel stack every 5 seconds, up to 10. Each stack grants +{v}% movement speed. Only taking damage removes stacks.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 5,
-			"valuePerLevel": 0,
+			"value": 2.0,
+			"valuePerLevel": 0.10344827586206896,
 			"valueUnit": "% movement per stack",
 			"maxLevel": 10,
 			"unlockLevel": 10,
-			"rank2": "At 10 stacks, the next damaging hit dealt or received attempts a 2-second stun on that enemy, consuming all stacks.",
-			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack stun.",
+			"rank2": "At 10 stacks, stun an attacking monster for 2 s before its damage lands. A successful stun prevents that attack, retains stacks and has a 30 s cooldown.",
+			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack protection.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\bard_speedupa_hitrate_a.ddj",
@@ -6900,18 +7024,18 @@ export const PET_DESIGN = {
 			"theme": "Tailwind",
 			"option": 2,
 			"name": "Tailwind II",
-			"effect": "Gain one travel stack every 5 seconds without dealing or taking damage, up to 10. Each stack grants +{v}% movement speed. Damage removes all stacks.",
+			"effect": "Gain one travel stack every 5 seconds, up to 10. Each stack grants +{v}% movement speed. Only taking damage removes stacks.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 5,
-			"valuePerLevel": 0,
+			"value": 3.0344827586206895,
+			"valuePerLevel": 0.10344827586206896,
 			"valueUnit": "% movement per stack",
 			"maxLevel": 10,
 			"unlockLevel": 40,
-			"rank2": "At 10 stacks, the next damaging hit dealt or received attempts a 2-second stun on that enemy, consuming all stacks.",
-			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack stun.",
+			"rank2": "At 10 stacks, stun an attacking monster for 2 s before its damage lands. A successful stun prevents that attack, retains stacks and has a 30 s cooldown.",
+			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack protection.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\bard_speedupa_hitrate_a.ddj",
@@ -6926,23 +7050,23 @@ export const PET_DESIGN = {
 			"theme": "Tailwind",
 			"option": 3,
 			"name": "Tailwind III",
-			"effect": "Gain one travel stack every 5 seconds without dealing or taking damage, up to 10. Each stack grants +{v}% movement speed. Damage removes all stacks.",
+			"effect": "Gain one travel stack every 5 seconds, up to 10. Each stack grants +{v}% movement speed. Only taking damage removes stacks.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
 			"cooldownPerLevel": null,
-			"value": 5,
-			"valuePerLevel": 0,
+			"value": 4.068965517241379,
+			"valuePerLevel": 0.10344827586206896,
 			"valueUnit": "% movement per stack",
 			"maxLevel": 10,
 			"unlockLevel": 90,
-			"rank2": "At 10 stacks, the next damaging hit dealt or received attempts a 2-second stun on that enemy, consuming all stacks.",
-			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack stun.",
+			"rank2": "At 10 stacks, stun an attacking monster for 2 s before its damage lands. A successful stun prevents that attack, retains stacks and has a 30 s cooldown.",
+			"rank3": "Nearby party members within 20 m receive independent travel stacks and the same full-stack protection.",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\bard_speedupa_hitrate_a.ddj",
 			"family": "Tailwind",
-			"tierEnd": 120
+			"tierEnd": 90
 		},
 		{
 			"id": 58,
@@ -6951,23 +7075,23 @@ export const PET_DESIGN = {
 			"active": false,
 			"theme": "Omen",
 			"option": 1,
-			"name": "Guiding Feathers I",
-			"effect": "Each stack grants the owner +{v}% hit ratio for 10 s.",
-			"trigger": "Attacks",
-			"cooldown": 0,
-			"cooldownUnit": "none",
-			"cooldownPerLevel": 0,
-			"value": 2,
-			"valuePerLevel": 0.5,
-			"valueUnit": "% hit ratio per stack",
+			"name": "Raven's Refuge I",
+			"effect": "Below {v}% HP, take 15% less damage.",
+			"trigger": "Timer",
+			"cooldown": 300.0,
+			"cooldownUnit": "s",
+			"cooldownPerLevel": -6.206896551724138,
+			"value": 20.0,
+			"valuePerLevel": 0.6896551724137931,
+			"valueUnit": "% HP threshold",
 			"maxLevel": 10,
 			"unlockLevel": 10,
-			"rank2": "At 5 stacks, the next damaging skill gains bonus damage and consumes Precision.",
-			"rank3": "Party members within 20 m gain independent Precision pools.",
+			"rank2": "Crossing below the threshold heals 10% maximum HP; independent recovery cooldown.",
+			"rank3": "Retains protection and healing; also protects party members within 20 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\rog_bowa_fast_a.ddj",
-			"family": "Guiding Feathers",
+			"family": "Raven's Refuge",
 			"tierEnd": 40
 		},
 		{
@@ -6977,23 +7101,23 @@ export const PET_DESIGN = {
 			"active": false,
 			"theme": "Omen",
 			"option": 2,
-			"name": "Guiding Feathers II",
-			"effect": "Each stack grants the owner +{v}% hit ratio for 10 s.",
-			"trigger": "Attacks",
-			"cooldown": 0,
-			"cooldownUnit": "none",
-			"cooldownPerLevel": 0,
-			"value": 2,
-			"valuePerLevel": 0.5,
-			"valueUnit": "% hit ratio per stack",
+			"name": "Raven's Refuge II",
+			"effect": "Below {v}% HP, take 15% less damage.",
+			"trigger": "Timer",
+			"cooldown": 237.9310344827586,
+			"cooldownUnit": "s",
+			"cooldownPerLevel": -6.206896551724138,
+			"value": 26.89655172413793,
+			"valuePerLevel": 0.6896551724137931,
+			"valueUnit": "% HP threshold",
 			"maxLevel": 10,
 			"unlockLevel": 40,
-			"rank2": "At 5 stacks, the next damaging skill gains bonus damage and consumes Precision.",
-			"rank3": "Party members within 20 m gain independent Precision pools.",
+			"rank2": "Crossing below the threshold heals 10% maximum HP; independent recovery cooldown.",
+			"rank3": "Retains protection and healing; also protects party members within 20 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\rog_bowa_fast_a.ddj",
-			"family": "Guiding Feathers",
+			"family": "Raven's Refuge",
 			"tierEnd": 90
 		},
 		{
@@ -7003,24 +7127,24 @@ export const PET_DESIGN = {
 			"active": false,
 			"theme": "Omen",
 			"option": 3,
-			"name": "Guiding Feathers III",
-			"effect": "Each stack grants the owner +{v}% hit ratio for 10 s.",
-			"trigger": "Attacks",
-			"cooldown": 0,
-			"cooldownUnit": "none",
-			"cooldownPerLevel": 0,
-			"value": 2,
-			"valuePerLevel": 0.5,
-			"valueUnit": "% hit ratio per stack",
+			"name": "Raven's Refuge III",
+			"effect": "Below {v}% HP, take 15% less damage.",
+			"trigger": "Timer",
+			"cooldown": 175.86206896551724,
+			"cooldownUnit": "s",
+			"cooldownPerLevel": -6.206896551724138,
+			"value": 33.79310344827586,
+			"valuePerLevel": 0.6896551724137931,
+			"valueUnit": "% HP threshold",
 			"maxLevel": 10,
 			"unlockLevel": 90,
-			"rank2": "At 5 stacks, the next damaging skill gains bonus damage and consumes Precision.",
-			"rank3": "Party members within 20 m gain independent Precision pools.",
+			"rank2": "Crossing below the threshold heals 10% maximum HP; independent recovery cooldown.",
+			"rank3": "Retains protection and healing; also protects party members within 20 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\rog_bowa_fast_a.ddj",
-			"family": "Guiding Feathers",
-			"tierEnd": 120
+			"family": "Raven's Refuge",
+			"tierEnd": 90
 		}
 	]
 } as const;

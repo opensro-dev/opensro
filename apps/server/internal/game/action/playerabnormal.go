@@ -235,6 +235,7 @@ type playerAbnormalOwner struct {
 	now      int64
 	sources  map[uint32]abnormalSourceState
 	bond     *petBondPlan
+	refuge   ravenRefugeGrant
 
 	maskBefore   uint32
 	changed      bool
@@ -543,9 +544,14 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	}
 	if o.sources[source].killer.monster != nil {
 		damage = sharePetBond(o.bond, damage)
+		damage = ravenRefugeDamage(o.refuge, remaining, int64(o.MaxHP()), damage)
 	}
 	debit := int64(vitals.HitDebit(uint32(remaining), damage))
+	before := remaining
 	remaining -= debit
+	if o.sources[source].killer.monster != nil {
+		remaining += ravenRefugeRecovery(o.refuge, o.c, before, remaining, int64(o.MaxHP()), o.now)
+	}
 	o.c.CurrentHP = &remaining
 	o.hpChanged = true
 	// The native hit path publishes the authored hit independently of the saturated debit.
@@ -790,7 +796,6 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 			continue
 		}
 		if source := rt.findCharacterByGid(division, hit.source); source != nil {
-			out.public = append(out.public, rt.tailwindDamage(division, source, gid, o.now)...)
 			out.sources = append(out.sources, privateFrames{source.ID, []wire.Frame{frame}})
 		}
 	}

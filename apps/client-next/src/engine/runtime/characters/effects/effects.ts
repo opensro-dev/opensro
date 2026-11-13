@@ -349,6 +349,7 @@ export function createCharacterEffects(
 		cue: number;
 		book: number;
 		started?: number;
+		queuedAt?: number;
 	}[] = [];
 	let catalog: EffectCatalog | null = null,
 		models:
@@ -2203,6 +2204,19 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
+					burst.queuedAt ??= now;
+					const model = burst.cue === 0 ?
+						"/assets/effects/crow-wind-burst" :
+						burst.cue === 1 ?
+						"/assets/effects/crow-heal-wisp" :
+						burst.cue === 4 ?
+						"/assets/effects/crow-mana-wisp" :
+						"/assets/effects/crow-feather";
+					// Port-only cues come from the server's enabled pet expansion.
+					if ( !ready( model ) ) {
+						if ( now - burst.queuedAt >= UNREADY_ONE_SHOT_SECONDS ) crowEffects.splice( i, 1 );
+						continue;
+					}
 					burst.started ??= now;
 					const age = now - burst.started;
 					if ( age >= 1.2 ) {
@@ -2211,12 +2225,6 @@ export function createCharacterEffects(
 					}
 					if ( burst.cue > 0 ) {
 						// Native unlit materials bypass instance tint; recovery colors live in the textures.
-						const model = burst.cue === 1 ?
-							"/assets/effects/crow-heal-wisp" :
-							burst.cue === 4 ?
-							"/assets/effects/crow-mana-wisp" :
-							"/assets/effects/crow-feather";
-						if ( !ready( model ) ) continue;
 						const tint: readonly [number, number, number] = burst.cue === 2 ?
 							[ .8, .65, .4 ] :
 							burst.cue >= 6 && burst.cue <= 7 ?
@@ -2293,7 +2301,6 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
-					if ( !ready( "/assets/effects/crow-wind-burst" ) ) continue;
 					for ( let band = 0; band < 3; band++ ) {
 						const u = (age - band * .1) / .9;
 						if ( u < 0 || u >= 1 ) continue;
