@@ -666,9 +666,11 @@ Retail 0x72902a restores destination mode after the loading UI retires.
 		/*
 ================
 clear
+
+keepChat: a re-entry keeps the conversation (gameplay clearState).
 ================
 		*/
-		clear() {
+		clear( keepChat = false ) {
 			awaitingTravelBootstrap = false;
 			nameTimer = undefined;
 			capeTeams.clear();
@@ -680,7 +682,7 @@ clear
 			retainedGmCatalog = undefined;
 			seenGmCatalog = undefined;
 			invalidateProjection();
-			gameplay.reset();
+			gameplay.reset( keepChat );
 			entities.clear();
 		},
 		/*

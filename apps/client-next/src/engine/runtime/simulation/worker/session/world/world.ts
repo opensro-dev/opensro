@@ -637,7 +637,9 @@ enter
 			cancel();
 			departure.reset();
 			completedDeparture = 0;
-			core.clear();
+			// A departure or a forgetting disconnect already cleared the chat;
+			// what is left is the log this character was away from (#3435).
+			core.clear( true );
 			hasWorld = false;
 			resume = undefined;
 			entryAttempt = true;
