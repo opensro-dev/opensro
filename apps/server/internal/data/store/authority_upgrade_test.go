@@ -51,7 +51,7 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preTradeRewardVersion, preItemForgeLayoutVersion); err != nil {
+	if _, err := loadDB(old, preTradeRewardVersion, preItemForgeLayoutVersion, 0); err != nil {
 		t.Fatal(err)
 	}
 	s = openTest(t, dir, newTestClock())
@@ -206,7 +206,7 @@ func TestMallUpgradePreservesAuthorityAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	oldGraph, err := loadDB(old, UpgradeFromVersion, preMallLayoutVersion)
+	oldGraph, err := loadDB(old, UpgradeFromVersion, preMallLayoutVersion, 0)
 	if err != nil || len(oldGraph.characters[testDivision]) != 1 {
 		t.Fatal("backup does not restore the pre-upgrade graph", err)
 	}
@@ -282,7 +282,7 @@ WHEN NEW.key = 'layoutVersion' BEGIN SELECT RAISE(ABORT, 'injected failure'); EN
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := loadDB(db, UpgradeFromVersion, preMallLayoutVersion); err != nil {
+	if _, err := loadDB(db, UpgradeFromVersion, preMallLayoutVersion, 0); err != nil {
 		t.Fatal("failed upgrade changed the original authority", err)
 	}
 	for _, table := range []string{"mall_accounts", "account_storage"} {
@@ -350,7 +350,7 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preCompanionVersion, preFortressLayoutVersion); err != nil {
+	if _, err := loadDB(old, preCompanionVersion, preFortressLayoutVersion, 0); err != nil {
 		t.Fatal("backup invalid", err)
 	}
 	reopened := openTest(t, dir, newTestClock())
@@ -512,7 +512,7 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preEndedQuestVersion, preItemForgeLayoutVersion); err != nil {
+	if _, err := loadDB(old, preEndedQuestVersion, preItemForgeLayoutVersion, 0); err != nil {
 		t.Fatalf("schema 17 backup no longer validates: %v", err)
 	}
 	reopened := openTest(t, dir, newTestClock())

@@ -24,8 +24,9 @@ import (
 main
 
 A server speaks exactly one release protocol (releaseprotocol.Require
-refuses every other) and one authority schema. A protocol change ships only
-as a coordinated server and client release. storeUpgradeFrom is the oldest
+refuses every other) and writes one authority schema; it opens that
+schema and the store.StoreReadHeadroom newer ones (#3091). A protocol
+change ships only as a coordinated server and client release. storeUpgradeFrom is the oldest
 schema its offline upgrade (sro-authority-upgrade) converts; the receiver
 runs that upgrade, with the game server stopped, before the new one starts.
 ================
@@ -35,7 +36,7 @@ func main() {
 		"protocolMin":      releaseprotocol.Current,
 		"protocolMax":      releaseprotocol.Current,
 		"storeReadMin":     store.CurrentVersion,
-		"storeReadMax":     store.CurrentVersion,
+		"storeReadMax":     store.CurrentVersion + store.StoreReadHeadroom,
 		"storeWrite":       store.CurrentVersion,
 		"storeUpgradeFrom": store.UpgradeFromVersion,
 	}
