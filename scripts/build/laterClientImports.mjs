@@ -113,8 +113,9 @@ export async function importLaterDungeonMapsStep() {
 
 // The later client's M window chrome (issue #3210, the v1.188 layout):
 // the big globe, the follow pin's two mode faces, the floor selector,
-// the window's foot, corner and map edges and the guide tabs, under the
-// interface folders the v1.150 extraction already publishes.
+// the window's foot, corner and map edges, the guide tabs and the reverse
+// return point's three faces (#3391), under the interface folders the
+// v1.150 extraction already publishes.
 const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/";
 
 /*
@@ -171,7 +172,10 @@ export function laterWorldMapButtonPublicPaths() {
 		"guide/gd_monster_tab_on",
 		"guide/gd_monster_tab_off",
 		"guide/gd_long_index_open",
-		"guide/gd_long_contents_event"
+		"guide/gd_long_contents_event",
+		"worldmap/map/xy_returnicon",
+		"worldmap/map/xy_returnicon_focus",
+		"worldmap/map/xy_returnicon_press"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 
