@@ -155,13 +155,29 @@ type admitContext struct {
 
 /*
 ================
+sookDecisionHolds
+
+Port-only, not native (#3189): while a Survival Arena chest decision is
+open (paused, no countdown yet) no skill starts, so nothing is prepared on
+a frozen stage clock. The countdown that follows allows self buffs. Every
+skill entry asks this one owner: the instant self-effect path admits
+outside contextSkillAdmission and used to skip it (#3368).
+================
+*/
+func (rt *Runtime) sookDecisionHolds(division string, c *enterworld.Character) bool {
+	run := rt.sookRun(division, c)
+	return run != nil && run.program.PausedAt != 0 && run.program.ResumeAt == 0
+}
+
+/*
+================
 contextSkillAdmission
 
 Preserve native prerequisite order across direct and item-owned skill paths.
 ================
 */
 func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, target *admitTarget, prepared *pendingProjectileCast, mask admitMask, context admitContext) uint16 {
-	if run := rt.sookRun(division, c); run != nil && run.program.PausedAt != 0 && run.program.ResumeAt == 0 {
+	if rt.sookDecisionHolds(division, c) {
 		return 0x3005
 	}
 	// Natively frozen, asleep or stunned refuses, unless the skill has nmf.

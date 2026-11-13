@@ -78,6 +78,12 @@ function untilCancelled<T>( work: Promise<T>, signal: AbortSignal ): Promise<T> 
 	} );
 }
 
+// The largest pack index (assets/packs/manifest.json, hd/packs/manifest.json)
+// the client reads. The build refuses a bigger index against the same value
+// (ASSET_PACK_INDEX_MAX_BYTES, scripts/build/shared/packFormat.mjs). The old
+// 16 MiB read cap failed every asset once the Alexandria variant's index
+// reached 17.5 MB, while the build saw nothing wrong.
+const PACK_INDEX_LIMIT_BYTES = 64 << 20;
 // Packs up to this size are fetched and persisted whole; larger ones by member.
 const SMALL_PACK_BYTES = 4 << 20;
 // Whole small packs kept in memory after their read: eight of them. A
@@ -257,7 +263,7 @@ export function createPacks(
 		if ( !index ) {
 			const operation = download(
 				base + "/assets/packs/manifest.json",
-				16 << 20,
+				PACK_INDEX_LIMIT_BYTES,
 				lifetime.signal,
 				undefined,
 				validator => {
@@ -308,7 +314,7 @@ export function createPacks(
 	*/
 	function hdRegistry( base: string ): Promise<Index | null> {
 		if ( !hdIndex ) {
-			hdIndex = download( base + "/hd/packs/manifest.json", 16 << 20, lifetime.signal )
+			hdIndex = download( base + "/hd/packs/manifest.json", PACK_INDEX_LIMIT_BYTES, lifetime.signal )
 				.then( bytes =>
 					parser.manifest(
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ),
@@ -695,7 +701,7 @@ export function createPacks(
 				if ( live !== null ) return live !== manifestValidator;
 			}
 			if ( manifestDigest === null ) return false;
-			const bytes = await download( url, 16 << 20, lifetime.signal );
+			const bytes = await download( url, PACK_INDEX_LIMIT_BYTES, lifetime.signal );
 			return await digest( bytes ) !== manifestDigest;
 		},
 		/*
