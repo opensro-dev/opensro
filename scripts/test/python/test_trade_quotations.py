@@ -6,13 +6,13 @@ Synthetic fixed SQL records exercise the production importer without a
 licensed backup. Active/disabled rows and conflicting keys are independent.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import struct
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_trade_quotations import read_quotations
 
 VALID_ROW = (1, 1, 2010, 2151, 1.1, 1.05, 1.2, 50000, 250, 50000)

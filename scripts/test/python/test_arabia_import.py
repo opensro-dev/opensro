@@ -3,6 +3,7 @@
 test_arabia_import.py - the Arabia import's admission and build rules.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 import os
 import tempfile

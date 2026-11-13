@@ -11,11 +11,11 @@ size and texts.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import alexandria_npcs as npcs  # noqa: E402
 
 

@@ -10,12 +10,12 @@ reads: the encrypted one when the archive has it.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import skilldata_enc as enc  # noqa: E402
 
 # The pinned VSRO Media.pk2's SkillData_5000ENC.txt opens with these bytes;

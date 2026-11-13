@@ -11,13 +11,13 @@ sha256 and re-opens only against its pin.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import alexandria_npcs as text_tables
 import content_archive

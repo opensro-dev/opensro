@@ -3,13 +3,12 @@
 test_identity_parity.py - the client/server identity comparison.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "analysis"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import check_identity_parity as parity  # noqa: E402
 
 

@@ -10,12 +10,12 @@ No licensed input or generated output is read or written.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_compiled_quest_evidence import parse_initializer
 from generate_compiled_quests import Unsupported, check_fields, conditions, project
 

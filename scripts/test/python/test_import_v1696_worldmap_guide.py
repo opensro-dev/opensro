@@ -9,6 +9,7 @@ its pin.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import struct
 import sys
 import tempfile
@@ -17,7 +18,6 @@ from pathlib import Path
 
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import import_v1696_worldmap_guide as guide  # noqa: E402
 
 MONSTER_MAIN = ["1", "k", "FIELD_CHINA", "field", "main", "10100", "10800", "10100", "0", "0", "0", "0", "0", "0",

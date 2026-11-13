@@ -6,11 +6,11 @@ buildEventInterfaceLayout publishes for the native file: an Open of 0
 closes, a missing Open opens, colors go from "a,r,g,b" to [r,g,b,a] 0..1,
 and only the fields the file actually names are published.
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from import_vsro_event_interface import parse_event_layout
 

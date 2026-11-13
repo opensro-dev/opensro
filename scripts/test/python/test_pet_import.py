@@ -11,6 +11,7 @@ refusal and removal, all without a real client tree.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
 import json
 import os
@@ -20,7 +21,6 @@ import tempfile
 import unittest
 import unittest.mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import alexandria_npcs as characters  # noqa: E402
 import avatar_archive  # noqa: E402
 import cap110_items as items  # noqa: E402

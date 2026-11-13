@@ -18,6 +18,7 @@ convert_images therefore refuses to run unless its roots sit in SCRATCH.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import importlib
 import os
 import shutil
@@ -31,7 +32,6 @@ from PIL import Image
 SCRATCH = Path(tempfile.mkdtemp(prefix="sro-convert-"))
 SCRATCH_ENV = {"SRO_GAME_ROOT": str(SCRATCH / "game"), "SRO_GENERATED_ROOT": str(SCRATCH / "generated")}
 TOUCHED_ENV = [*SCRATCH_ENV, "SRO_BUILD_JOBS", "SRO_FORCE_IMAGE_CONVERT"]
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import sro_paths  # noqa: E402
 
 SOURCE_COUNT = 40

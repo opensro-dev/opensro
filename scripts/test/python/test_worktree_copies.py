@@ -11,6 +11,7 @@ broken or not - is reported, unless that tree's override names another one.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 import shutil
 import sys
@@ -18,7 +19,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import sro_paths  # noqa: E402
 
 
