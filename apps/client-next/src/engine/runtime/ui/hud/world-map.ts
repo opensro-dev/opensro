@@ -52,6 +52,7 @@ import { UNIQUE_NEST_SIGN } from "@/engine/foundation/ui/unique-nests";
 import { createHuntingGuideHud } from "./hunting-guide";
 import { createUniqueNestsHud } from "./unique-nests";
 import { reverseMapButtons } from "./reverse-map-buttons";
+import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
 	MAP_WINDOW_EXTENT,
 	MAP_WINDOW_HEIGHT,
@@ -71,18 +72,12 @@ const MAP_FOOT_DEPTH = MAP_WINDOW_EXTENT - MAP_WINDOW_HEIGHT;
 // the whole window, labels included, at a fraction of their size.
 const COMPACT_MAP_MARGIN = 4;
 const ROOT = "/assets/images/Media_extracted/";
-const white = [ 1, 1, 1, 1 ] as const;
 // 57CE80's roster passes (apprenticeship 57D2FC, party 57D7D8) test the
 // pointer the map stores on every move (57FB9E, +0x7C8/+0x7CC) against each
-// sign inset by 2.0 (C46208), then draw that member's name (829F30's
-// text, white font 0) centred on the sign and 8.0 (BCDC80) above its
-// centre, so the name sits on the sign's top edge.
+// sign inset by 2.0 (C46208), then draw that member's name above the
+// sign's centre (mapSignName, map-cave-page.ts).
 const MAP_ROSTER_PREFIX = "map-roster:";
 const MAP_ROSTER_HOVER_INSET = 2;
-const MAP_ROSTER_LABEL_RISE = 8;
-const MAP_ROSTER_LABEL_FONT = 0;
-// A dungeon page's gate signs, hovered by index.
-const CAVE_SIGN_PREFIX = "map-cave-sign:";
 
 /*
 ================
@@ -721,55 +716,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				// Native names at most one member per pass (flag reset at 57D4DF);
 				// one hover names one member in all. Inference: the name is clipped
 				// to the map area like the signs it belongs to.
-				const name = hovered.point.name, rect = hovered.rect;
-				const width = text.run( name, 0, MAP_ROSTER_LABEL_FONT ).width,
-					height = text.extentHeight( MAP_ROSTER_LABEL_FONT );
-				const label: UiRect = [
-					Math.trunc( rect[0] + rect[2] / 2 - Math.trunc( width / 2 ) ),
-					Math.trunc( rect[1] + rect[3] / 2 - MAP_ROSTER_LABEL_RISE - height ),
-					width,
-					height
-				];
+				const rect = hovered.rect;
 				mapSigns.splice(
 					signAt + 1,
 					0,
-					...text.quads( name, label, mapClip, white, {
-						fontIndex: MAP_ROSTER_LABEL_FONT,
-						hAlign: 0,
-						vAlign: 0
-					} )
+					...mapSignName( text, hovered.point.name, rect[0] + rect[2] / 2, rect[1] + rect[3] / 2, mapClip )
 				);
 			}
 			const mapImages = caveMap ?
-				[
-					...caveMap.quads,
-					...caveMap.labels.flatMap( label => {
-						const width = text.run( label.text, 0, label.font ).width,
-							height = text.extentHeight( label.font ),
-							box: UiRect = [ label.x - Math.floor( width / 2 ), label.y, width, height ];
-						return text.quads( label.text, box, mapClip, label.color, {
-							fontIndex: label.font,
-							hAlign: 0,
-							vAlign: 0
-						} );
-					} ),
-					...caveMap.signs.flatMap( ( sign, index ) => {
-						if ( hover !== CAVE_SIGN_PREFIX + index ) return [];
-						const width = text.run( sign.name, 0, MAP_ROSTER_LABEL_FONT ).width,
-							height = text.extentHeight( MAP_ROSTER_LABEL_FONT ),
-							box: UiRect = [
-								Math.trunc( sign.rect[0] + sign.rect[2] / 2 - Math.trunc( width / 2 ) ),
-								Math.trunc( sign.rect[1] - MAP_ROSTER_LABEL_RISE - height ),
-								width,
-								height
-							];
-						return text.quads( sign.name, box, mapClip, white, {
-							fontIndex: MAP_ROSTER_LABEL_FONT,
-							hAlign: 0,
-							vAlign: 0
-						} );
-					} )
-				] :
+				cavePageImages( caveMap, text, mapClip, hover ) :
 				mapProjection ?
 				[
 					...mapProjection.background,
@@ -805,15 +760,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					...mapSigns
 				] :
 				[];
-			caveMap?.signs.forEach( ( sign, index ) => {
-				mapHits.push( {
-					id: CAVE_SIGN_PREFIX + index,
-					label: sign.name,
-					rect: sign.rect,
-					kind: "region",
-					draggable: true
-				} );
-			} );
+			if ( caveMap ) mapHits.push( ...cavePageHits( caveMap ) );
 			for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 				const page = worldMapPages( mapLayout ).find( p => p.id === icon.destination );
 				if ( page ) {
