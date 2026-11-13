@@ -320,6 +320,21 @@ test("the Entire-map foot checkbox stands in for the strip toggle behind its row
 	hud.dispose();
 });
 
+test("a dungeon page has one level filter switch, its foot checkbox", () => {
+	// The strip toggle and the page foot both drew map-level-filter on a
+	// dungeon page, and the UI refused the frame ("Duplicate UI control
+	// identity: map-level-filter").
+	const hud = tools();
+	const floors = caveDungeonFloors( CAVE, 32769 );
+	for ( const levelCheckbox of [ false, true ] ) {
+		const view = paint( hud, { cave: true, floors, floor: floors[0], levelCheckbox } );
+		const switches = view.controls.filter( row => row.id === "map-level-filter" );
+		assert.equal( switches.length, 1, "levelCheckbox " + levelCheckbox );
+		assert.equal( new Set( ids( view ) ).size, view.controls.length, "every control identity is unique" );
+	}
+	hud.dispose();
+});
+
 test("the drawer walks regions to species and a pick returns the anchor pose", () => {
 	const hud = tools();
 	const cat = catalogue();
