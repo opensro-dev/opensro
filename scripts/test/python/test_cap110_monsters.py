@@ -650,6 +650,24 @@ class Cap110MonstersTest(unittest.TestCase):
 		])
 
 	# ================
+	# test_client_nest_radii_are_the_evidence_commonest
+	# ================
+	def test_client_nest_radii_are_the_evidence_commonest(self):
+		# The synthesized radii are the commonest of the native population
+		# evidence's respawning nests, as the respawn window and sight are.
+		evidence = (Path(__file__).resolve().parents[3] / "apps" / "server" / "internal" / "game" /
+			"world" / "monster" / "data" / "v1188_population_evidence.tsv")
+		radii, generate = {}, {}
+		for line in evidence.read_text(encoding="utf-8").splitlines():
+			columns = line.split("\t")
+			if line.startswith("#") or len(columns) != 22 or columns[11] != "1":
+				continue
+			radii[float(columns[5])] = radii.get(float(columns[5]), 0) + 1
+			generate[float(columns[6])] = generate.get(float(columns[6]), 0) + 1
+		self.assertEqual(max(radii, key=radii.get), monsters.CLIENT_NEST_RADIUS)
+		self.assertEqual(max(generate, key=generate.get), monsters.CLIENT_NEST_GENERATE_RADIUS)
+
+	# ================
 	# test_client_population_stands_at_the_placements
 	#
 	# One outdoor placement of an admitted species is one nest on its
@@ -670,7 +688,12 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual([(r["NestID"], r["RegionID"], r["X"], r["Z"]) for r in rows],
 			[(1, 19001, 10.5, 20.25), (2, 19002, 30.0, 40.0)])
 		row = rows[0]
-		self.assertEqual((row["WorldID"], row["MaxCount"], row["Radius"], row["GenerateRadius"]), (1, 1, 0, 0))
+		# A nest with controls but radius 0 is always outside its home for
+		# the server (InsideHome: distance < radius), so it never wanders
+		# or pursues: the synthesized posture carries a real radius.
+		self.assertEqual((row["WorldID"], row["MaxCount"], row["Radius"], row["GenerateRadius"]),
+			(1, 1, monsters.CLIENT_NEST_RADIUS, monsters.CLIENT_NEST_GENERATE_RADIUS))
+		self.assertGreater(row["Radius"], 0)
 		self.assertEqual((row["Respawn"], row["RespawnDelayMinSec"], row["RespawnDelayMaxSec"]), (True, 1, 3))
 		self.assertIsNone(row["Champion"])
 		self.assertEqual(row["Controls"]["SightRange"], monsters.CLIENT_NEST_SIGHT_RANGE)

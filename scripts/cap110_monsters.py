@@ -113,6 +113,14 @@ FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY)
 CLIENT_NEST_RESPAWN_MIN_SEC = 1
 CLIENT_NEST_RESPAWN_MAX_SEC = 3
 CLIENT_NEST_SIGHT_RANGE = 100
+# The nest's home radius and spawn spread, the same evidence's commonest
+# values for a respawning nest (700 and 600). The server gives a nest with
+# controls its home test (monster/pursuit_controls.go InsideHome: distance
+# < radius), so radius 0 left every client-only monster outside its home
+# forever: homing, never wandering or pursuing (Alexandria's field stood
+# still and never fought back).
+CLIENT_NEST_RADIUS = 700
+CLIENT_NEST_GENERATE_RADIUS = 600
 
 
 # ================
@@ -394,10 +402,9 @@ def client_claimed_codes(placements):
 #
 # The field nests from the client's placements alone, in the same
 # Version-2 envelope project_population writes. One outdoor placement
-# of an admitted species is one nest standing on its point - radius 0,
-# the posture of a native anchor whose database evidence the server
-# does not hold - holding one monster, with the synthesized ordinary
-# controls. Nest identities are sequential over the sorted placements,
+# of an admitted species is one nest standing on its point, with the
+# evidence's commonest home radius and spawn spread, holding one monster,
+# with the synthesized ordinary controls. Nest identities are sequential over the sorted placements,
 # so a rebuild of the pinned client writes the same file. Drops and AI
 # follow the server's rules for any nest; the export's authored rows
 # are the enrichment, never a requirement.
@@ -409,7 +416,8 @@ def client_field_population(placements, refs):
 	for nest_id, (code, region, x, y, z) in enumerate(ordered, 1):
 		rows.append({
 			"Codename": code, "NestID": nest_id, "WorldID": FIELD_WORLD, "RegionID": region,
-			"X": x, "Y": y, "Z": z, "Radius": 0, "GenerateRadius": 0, "MaxCount": 1,
+			"X": x, "Y": y, "Z": z, "Radius": CLIENT_NEST_RADIUS,
+			"GenerateRadius": CLIENT_NEST_GENERATE_RADIUS, "MaxCount": 1,
 			"RespawnDelayMinSec": CLIENT_NEST_RESPAWN_MIN_SEC,
 			"RespawnDelayMaxSec": CLIENT_NEST_RESPAWN_MAX_SEC,
 			"Respawn": True, "InitialDir": 0, "ChampionGenPercentage": 0,
