@@ -31,6 +31,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { codeClosure } from "./codeStamp.mjs";
+import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
 import { extractedRoot, gameRoot, generatedRoot, publicRoot, rebuildRoot } from "../world/paths.mjs";
@@ -54,6 +55,10 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the server's Qin-Shi tomb overlays join the
 	// client bake (shared/qinshiTomb.mjs).
 	"SRO_QINSHI_TOMB",
+	// Port-only, not native: the server's Muhan teleport overlays join
+	// the teleport bake (shared/muhan.mjs, #3314).
+	"SRO_MUHAN",
+	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",
@@ -83,6 +88,7 @@ registry flip skip the bake and ship the other posture's assets, the
 export function buildKnobLines() {
 	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
 	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
+	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
 	return lines;
 }
 
@@ -94,6 +100,7 @@ const CODE_ENTRIES = [
 ];
 
 const FINGERPRINT_ROOTS = [
+	{ label: "survival-art", absolutePath: path.join( rebuildRoot, "docs", "features", "assets", "survival" ) },
 	{ label: "extracted", absolutePath: extractedRoot },
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
 	// The effects builder checks the archive itself against its evidence.
@@ -134,7 +141,13 @@ const FINGERPRINT_ROOTS = [
 // The retail and converted inputs every lane may read (laneMemo.mjs): not
 // the code, not the public tree, and not the server sources, which only
 // the NPC lane's roster export runs (serverRosterRoots).
-const DATA_ROOT_LABELS = new Set( [ "extracted", "client-executable", "particle-archive", "rebuild-assets" ] );
+const DATA_ROOT_LABELS = new Set( [
+	"extracted",
+	"client-executable",
+	"particle-archive",
+	"rebuild-assets",
+	"survival-art"
+] );
 
 /*
 ================

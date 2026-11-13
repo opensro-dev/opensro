@@ -113,7 +113,16 @@ test("a second acquirer waits for the holder, then takes the lock", async ( t ) 
 	const holder = await spawnHolder( t, dir, target );
 	const lines = [];
 	let acquired = false;
-	const pending = acquireHeavyLock( { target, owner: "waiter", pollMs: 25, log: ( line ) => lines.push( line ) } )
+	// The holder is this process's child, never its ancestor; the injected
+	// table keeps the test off the OS process query (WMI on Windows).
+	const parentOf = () => 0;
+	const pending = acquireHeavyLock( {
+		target,
+		owner: "waiter",
+		pollMs: 25,
+		log: ( line ) => lines.push( line ),
+		parentOf
+	} )
 		.then( ( hold ) => {
 			acquired = true;
 			return hold;
@@ -184,7 +193,7 @@ test("a lock held by this process is not taken again", async ( t ) => {
 		target.lockPath,
 		JSON.stringify( { owner: "ancestor", pid: process.pid, since: "?", cmd: "pnpm check" } )
 	);
-	const hold = await acquireHeavyLock( { target, pollMs: 25, log: () => {} } );
+	const hold = await acquireHeavyLock( { target, pollMs: 25, log: () => {}, parentOf: () => 0 } );
 	hold.release();
 	assert.equal( fs.existsSync( target.lockPath ), true, "the ancestor's lock was released from under it" );
 	await rm( target.lockPath, { force: true } );

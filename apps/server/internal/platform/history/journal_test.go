@@ -260,6 +260,59 @@ func TestFailedCheckpointRetainsLossCounters(t *testing.T) {
 
 /*
 ================
+TestCheckpointBudgetsEventsPerAccount
+
+#3307: two accounts looping sessions filled the 200,000-row raw window
+and pruned everyone else's recent history with it. A checkpoint keeps
+one account to its newest MaxEventsPerAccount raw events, the kept
+rows are the newest ones, a quiet account inside its budget is
+untouched, and a second checkpoint changes nothing.
+================
+*/
+func TestCheckpointBudgetsEventsPerAccount(t *testing.T) {
+	j := testJournal(t)
+	// Seed by direct insert: crossing the budget through put() would
+	// take MaxEventsPerAccount transactions.
+	seed := func(account string, firstAt int64, count int) {
+		t.Helper()
+		if _, err := j.db.Exec(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < ?)
+INSERT INTO events(id,at,account,character,session,kind,category,level,fingerprint,data)
+SELECT ? || '-' || x, ? + x, ?, '', '', 'log', 'unknown', 'info', '', '{}' FROM n`,
+			count, account, firstAt, account); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func(account string) (int, int64) {
+		t.Helper()
+		var n int
+		var minAt int64
+		if err := j.db.QueryRow(`SELECT count(*), COALESCE(min(at), 0) FROM events WHERE account = ?`, account).Scan(&n, &minAt); err != nil {
+			t.Fatal(err)
+		}
+		return n, minAt
+	}
+	seed("loud", 1_000_000, MaxEventsPerAccount+25)
+	seed("quiet", 2_000_000, 25)
+	// Inside the raw window and the 90 days, so only the budget prunes.
+	if err := j.checkpoint(3_000_000); err != nil {
+		t.Fatal(err)
+	}
+	if n, minAt := count("loud"); n != MaxEventsPerAccount || minAt != 1_000_026 {
+		t.Fatalf("loud account holds %d events from %d, want the newest %d from %d", n, minAt, MaxEventsPerAccount, 1_000_026)
+	}
+	if n, minAt := count("quiet"); n != 25 || minAt != 2_000_001 {
+		t.Fatalf("quiet account holds %d events from %d, want its untouched 25 from %d", n, minAt, 2_000_001)
+	}
+	if err := j.checkpoint(3_000_000); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := count("loud"); n != MaxEventsPerAccount {
+		t.Fatalf("second checkpoint moved the loud account to %d events", n)
+	}
+}
+
+/*
+================
 TestPlayersListsEachCharacterNewestFirst
 
 The operator's player list: one row per account and character, newest

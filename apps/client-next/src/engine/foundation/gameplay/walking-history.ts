@@ -108,6 +108,20 @@ export function rewindWalkingHistory( points: readonly Pose[] | undefined, corne
 
 /*
 ================
+appendWalkingHistory
+
+A cached lookahead tail joins the accepted history as it stands now. The
+join keeps the newest points within the same representation budget as any
+other extension.
+================
+*/
+export function appendWalkingHistory( points: readonly Pose[], tail: readonly Pose[] ): readonly Pose[] {
+	const joined = [ ...points, ...tail ];
+	return joined.length > MAX_HISTORY_POINTS ? joined.slice( -MAX_HISTORY_POINTS ) : joined;
+}
+
+/*
+================
 correctWalkingHistory
 
 An authoritative endpoint adjustment does not revoke the accepted walk

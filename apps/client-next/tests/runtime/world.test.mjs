@@ -3652,7 +3652,12 @@ test("crow skill cues accept bounded books/kinds and reject malformed positions"
 		book: 3,
 		source: { regionId: 257, x: 12, y: 3, z: 34 }
 	} ] );
-	for ( const [offset, bad] of [ [ 4, 0 ], [ 4, 9 ], [ 5, 0 ], [ 5, 4 ] ] ) {
+	for ( const cue of [ 9, 10 ] ) {
+		p[4] = cue;
+		owner.receive( { opcode: 0x3fbb, payload: p } );
+		assert.equal( flush( owner ).events[0].cue, cue, "arena position cue admitted" );
+	}
+	for ( const [offset, bad] of [ [ 4, 0 ], [ 4, 11 ], [ 5, 0 ], [ 5, 4 ] ] ) {
 		const invalid = Buffer.from( p );
 		invalid[offset] = bad;
 		assert.throws( () => owner.receive( { opcode: 0x3fbb, payload: invalid } ) );

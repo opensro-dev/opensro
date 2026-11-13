@@ -28,7 +28,8 @@ petSkillIconUV
 ================
 */
 export function petSkillIconUV( design: PetSkillDesign ): UiRect {
-	const row = [ "Wolf", "Bear", "Penguin", "Crow" ].indexOf( design.pet );
+	// Fox books reuse the Wolf families; the painted atlas has four pet rows.
+	const row = [ "Wolf", "Bear", "Penguin", "Crow" ].indexOf( design.pet === "Fox" ? "Wolf" : design.pet );
 	return [ design.row / 5, row / 4, 1 / 5, 1 / 4 ];
 }
 

@@ -4,7 +4,7 @@ The port follows the original game, so a claim about the original needs evidence
 
 - **review** Check a native claim in the disassembly. Decompiler output is a hypothesis, and function names in a
   database have been wrong. Port code is never evidence of native behaviour.
-- **docs** [RIZIN.md](../native/RIZIN.md) is the recommended free tool for native investigation; keep its hash/RVA discipline when you cross-check a claim with it.
+- **docs** Start with [revtool](../../tools/re/revtool/README.md): rizin plus the published seed carry the maintainers' function names, so `find` / `strings` / `xref` reach a labelled function in minutes. [RIZIN.md](../native/RIZIN.md) is the free tool underneath; keep its hash/RVA discipline when you cross-check a claim with it.
 - **review** Search everything before saying something does not exist: the client's data files and text tables as well
   as the executable. Client strings are often UTF-16, so an ASCII search can miss them.
 - **review** Label each unnamed function you read while tracing, and save the labels, so the next reader starts ahead.

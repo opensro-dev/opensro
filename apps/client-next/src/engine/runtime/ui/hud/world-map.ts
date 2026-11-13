@@ -24,7 +24,8 @@ import {
 	caveDungeonFloors,
 	caveMapImage,
 	caveMapPage,
-	caveMapView
+	caveMapView,
+	cavePageLocal
 } from "@/engine/foundation/ui/cave-map";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
@@ -34,19 +35,32 @@ import {
 	expandedWorldMapOn,
 	MAP_LOCAL_MARKER,
 	worldMapDungeonPose,
+	worldMapFrame,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
 	worldMapPointMarkers,
-	REVERSE_MAP_MARKER,
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
+import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
+import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { createHuntingGuideHud } from "./hunting-guide";
-import { createMapToolsHud } from "./map-tools";
+import { reverseMapButtons } from "./reverse-map-buttons";
+import {
+	MAP_WINDOW_EXTENT,
+	MAP_WINDOW_HEIGHT,
+	MAP_WINDOW_WIDTH,
+	createMapToolsHud,
+	mapLeftReach,
+	mapPanel
+} from "./map-tools";
 
-const WORLD_MAP_WIDTH = 652, WORLD_MAP_HEIGHT = 424;
+// The M window is the v1.188 client's (worldmapguide.2dt, map-chrome.ts):
+// 650 x 422 with its foot frame reaching 34 below.
+const WORLD_MAP_WIDTH = MAP_WINDOW_WIDTH, WORLD_MAP_HEIGHT = MAP_WINDOW_HEIGHT;
+const MAP_FOOT_DEPTH = MAP_WINDOW_EXTENT - MAP_WINDOW_HEIGHT;
 // Port-only, not native (screens below the native 800x600 minimum): the map
 // window shrinks to the screen, less this margin per side, and keeps the map
 // at native scale for panning; the generic window fit would otherwise draw
@@ -116,6 +130,8 @@ interface MapPaint {
 			expandedMapLabels?: readonly MapLabel[];
 			expandedMapIcons?: readonly MapIcon[];
 			zones?: Readonly<Record<string, string>>;
+			// The object and UI text (textdataname over textuisystem).
+			strings?: Readonly<Record<string, string>>;
 		}
 		| null
 		| undefined;
@@ -125,6 +141,8 @@ interface MapPaint {
 	caveMaps?: CaveMapCatalog | undefined;
 	mapTeleport: {
 		view( page: number, clip: UiRect, pan: readonly [number, number], center: Pose, layout?: WorldMapLayout ): void;
+		viewCave( pick: ( x: number, y: number ) => { regionId: number; x: number; z: number; } | null ): void;
+		hide(): void;
 	};
 	reverseScrollHud: { mapping(): boolean; };
 	text: MapText;
@@ -137,7 +155,6 @@ interface MapPaint {
 	endWindow: ( mark: readonly [number, number, number, number], owner?: string, source?: UiRect ) => void;
 	windowBox: ( title: string, x: number, y: number, width: number, height: number ) => void;
 	authoredButton: ( node: AuthoredControl, x: number, y: number, id: string, label: string ) => void;
-	authoredLabeledButton: MapPaint["authoredButton"];
 	closeButton: ( x: number, y: number, id: ReturnType<typeof panelCloseId> ) => void;
 	image: ( rect: UiRect, path: string ) => void;
 }
@@ -335,8 +352,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				return true;
 			}
 			// 575E90 flips AUTO MOVE only; keep the last automatic centre.
-			// The map's own follow pin (issue #3210) lands here too.
-			if ( id === "map-follow" || id === "map-pin" ) {
+			// The v1.188 window has no captioned AUTO_MOVE button: its
+			// follow pin (issue #3210) is the one switch.
+			if ( id === "map-pin" ) {
 				mapTools.clearView();
 				mapFollow = !mapFollow;
 				mapCenter = heldCenter( pose );
@@ -370,6 +388,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		================
 		*/
 		drag( event: Extract<UiEvent, { kind: "drag"; }> ) {
+			if ( mapTools.drag( event.id, event.dy ) ) return;
 			if ( event.id === "map-drag" ) {
 				mapX = Math.max( 0, mapX + event.dx );
 				mapY = Math.max( 0, mapY + event.dy );
@@ -431,7 +450,6 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				endWindow = input.endWindow,
 				windowBox = input.windowBox,
 				authoredButton = input.authoredButton,
-				authoredLabeledButton = input.authoredLabeledButton,
 				closeButton = input.closeButton,
 				image = input.image;
 
@@ -462,20 +480,22 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				),
 				mapHeight = Math.min(
 					mapSmall ? 296 : WORLD_MAP_HEIGHT,
-					Math.max( 0, area[3] - COMPACT_MAP_MARGIN * 2 )
+					Math.max( 0, area[3] - COMPACT_MAP_MARGIN * 2 - MAP_FOOT_DEPTH )
 				);
-			const mapLeft = Math.max( area[0], Math.min( mapX, area[0] + area[2] - mapWidth ) ),
-				mapTop = Math.max( area[1], Math.min( mapY, area[1] + area[3] - mapHeight ) );
+			// The side tab, and the guide while it is open, stand left of
+			// the window: keep them on the screen where the area allows.
+			const mapRight = area[0] + area[2] - mapWidth,
+				mapLeftMost = Math.min(
+					area[0] + mapLeftReach( mapTools.drawerOpen() ),
+					Math.max( area[0], mapRight )
+				);
+			const mapLeft = Math.max( mapLeftMost, Math.min( mapX, mapRight ) ),
+				mapTop = Math.max( area[1], Math.min( mapY, area[1] + area[3] - mapHeight - MAP_FOOT_DEPTH ) );
 			mapX = mapLeft;
 			mapY = mapTop;
 			if ( mapPage !== 0 && hover?.startsWith( HUNTING_AREA_PREFIX ) ) hover = null;
 			const mapGuideEnabled = guideAvailable && experimental.state().saved.monsterGuide;
-			const mapClip: UiRect = [
-				mapLeft + 6,
-				mapTop + 34,
-				mapWidth - 12,
-				mapHeight - 40
-			];
+			const mapClip: UiRect = mapPanel( [ mapLeft, mapTop, mapWidth, mapHeight ] );
 			const mapHits: UiControl[] = [];
 			// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 			// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -564,6 +584,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				undefined;
 			const toolsPage = mapTools.cavePage( input.caveMaps, pose );
 			const cavePage = toolsPage?.page ?? indoorPage;
+			const caveMark = mapTools.mark();
 			const caveMap = mapOpen && pose && cavePage && input.caveMaps ?
 				caveMapView( {
 					pose,
@@ -572,7 +593,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					page: cavePage,
 					catalog: input.caveMaps,
 					clip: mapClip,
-					pan: mapFollow ? [ 0, 0 ] : mapPan
+					pan: mapFollow ? [ 0, 0 ] : mapPan,
+					// The "you are here" sign stands only on the floor
+					// the player is on (issue #3239).
+					local: cavePageLocal( input.caveMaps, cavePage, pose, game?.navigationFloor ),
+					mark: caveMark && caveMark.regionId === cavePage.regionId ? caveMark : null
 				} ) :
 				null;
 			mapCaveShown = caveMap !== null;
@@ -580,7 +605,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// The teleport's inverse pick must track the painted projection: it
 			// is only valid while the map is open and a pose exists, so record the
 			// frame under the same condition that builds the projection.
-			if ( mapOpen && pose && !caveMap ) {
+			if ( mapOpen && pose && caveMap ) {
+				mapTeleport.viewCave( caveMap.point );
+			} else if ( mapOpen && pose ) {
 				mapTeleport.view(
 					mapPage,
 					mapClip,
@@ -588,6 +615,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter ?? mapViewPose( pose ),
 					mapLayout
 				);
+			} else {
+				mapTeleport.hide();
 			}
 			const mapProjection = pose && mapOpen && !caveMap ?
 				worldMapPresentation(
@@ -622,6 +651,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					hover,
 					mapLayout,
 					mapTools.filterCap( game?.progression?.level )
+				) :
+				null;
+			// The monster picked in the guide (sub_e75d50, issue #3390):
+			// its hunting ground tinted on the world page, under the labels.
+			const guidePick = mapProjection && mapPage === 0 && pose ? mapTools.guidePick() : null;
+			const guideGround = guidePick && pose ?
+				guideOverlay(
+					guidePick.catalog,
+					guidePick.index,
+					worldMapFrame( mapPage, mapClip, mapPan, mapCenter ?? mapViewPose( pose ), mapLayout ),
+					mapClip
 				) :
 				null;
 			const fontPath = text.path();
@@ -710,6 +750,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 							overflow: "clip"
 						} )
 					),
+					// A mask drawn before its image loads would tint the
+					// whole tile square: each waits for its own texture.
+					...(guideGround?.quads ?? []).filter( q => resources.has( q.texture ) ),
 					...mapProjection.overlay,
 					...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 						const width = text.run( entry.text, 0, entry.font ).width,
@@ -766,35 +809,27 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			}
 			// Port-only: the reverse return map points while the map holds a scroll.
 			if ( mapOpen && pose && !caveMap && reverseScrollHud.mapping() ) {
-				const clip: UiRect = [ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ];
-				for (
-					const { point, rect } of worldMapPointMarkers( {
+				const buttons = reverseMapButtons( {
+					points: worldMapPointMarkers( {
 						page: mapPage,
-						clip,
+						clip: mapClip,
 						pan: mapPan,
 						center: mapCenter ?? mapViewPose( pose ),
 						points: game?.reverseMapPoints ?? [],
 						layout: mapLayout
-					} )
-				) {
-					mapImages.push( {
-						rect,
-						texture: REVERSE_MAP_MARKER,
-						uv: [ 0, 0, 1, 1 ],
-						color: [ 1, 1, 1, 1 ],
-						clip
-					} );
-					mapHits.push( {
-						id: "reverse-map-point:" + point.id,
-						label: point.name,
-						rect,
-						kind: "button"
-					} );
-				}
+					} ),
+					clip: mapClip,
+					hover,
+					has: path => resources.has( path )
+				} );
+				paths.push( ...buttons.paths );
+				mapImages.push( ...buttons.images );
+				mapHits.push( ...buttons.hits );
 			}
 			if ( mapOpen ) {
 				paths.push(
 					...(mapGuide?.paths ?? []),
+					...(guideGround?.paths ?? []),
 					...mapImages.map( q => q.texture ).filter( Boolean )
 				);
 			} else if ( cavePage && input.caveMaps ) {
@@ -827,9 +862,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
 					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
 					// wide chars at 0xBD959C (space dash space), then the town's
-					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A cave
-					// floor captions with its own label instead.
-					caption = (cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
+					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A
+					// dungeon page heads with the later client's zone name of
+					// its floor's region (issue #3238), which the catalogue
+					// carries: "Underground Level 1 of Tomb of Qin-Shi".
+					caption = (cavePage && caveMap ? cavePage.caption : undefined) ||
 						(page ?
 							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
@@ -878,36 +915,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					"map-size",
 					"Change map size"
 				);
-				if ( (mapPage !== 0 && !caveMap) || mapTools.viewingDungeon() ) {
-					authoredButton(
-						{ ...nodes.GDR_WM_BTN_TO_WMAP!, rect: [ mw - 62, 10, 16, 16 ] },
-						mx,
-						my,
-						"map-world",
-						"World map"
-					);
-				}
-				if ( !mapSmall ) {
-					// Anchored to the window's right edge: a compact window is narrower
-					// than the authored 652 and the button must stay inside it.
-					const authored = nodes.GDR_WM_BTN_AUTO_MOVE!,
-						node = mw < WORLD_MAP_WIDTH ?
-							{
-								...authored,
-								rect: [
-									authored.rect[0] - (WORLD_MAP_WIDTH - mw),
-									authored.rect[1],
-									authored.rect[2],
-									authored.rect[3]
-								] as UiRect
-							} :
-							authored,
-						caption = hudCopy(
-							mapFollow ? "UIIT_STT_WORLDMAP_AUTO_MOVE" : "UIIT_STT_WORLDMAP_MANUAL_MOVE"
-						);
-					authoredLabeledButton( node, mx, my, "map-follow", caption );
-				}
-				closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
+				closeButton( mx + mw - 26, my + 10, panelCloseId( "Map" ) );
 				// The tools strip and drawer (issue #3167) draw inside
 				// the window, above the map and its hits.
 				const tools = mapTools.present( {
@@ -922,21 +930,27 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					clip: mapClip,
 					full,
 					catalogue: huntingGuide.catalogue(),
+					guidePublished: guideAvailable,
 					characterLevel: game?.progression?.level,
+					race: guideRace( next.entities.find( e => e.gid === game?.localGid )?.countryByte9c ),
+					hover,
 					zones: hudData.zones,
+					strings: hudData.strings,
+					levelNote: input.caveMaps?.monsterLevelNote,
+					icons: (mapProjection?.hits ?? []).map( hit => hit.rect ),
 					text,
 					page: mapPage,
 					pan: mapPan,
 					center: pose ? mapCenter ?? mapViewPose( pose ) : null,
 					layout: mapLayout,
-					huntingVisible: guideAvailable && mapPage === 0 && !caveMap
+					size: path => input.resources.size( path )
 				} );
 				paths.push( ...tools.paths );
 				quads.push( ...tools.quads );
 				controls.push( ...tools.controls );
 				// The page tiles reach past the window through mapClip; the
 				// window rect is what the compact fit must measure.
-				endWindow( admission, "primary", [ mx, my, mw, mh ] );
+				endWindow( admission, "primary", [ mx, my, mw, mh + MAP_FOOT_DEPTH ] );
 			}
 			return hover;
 		},

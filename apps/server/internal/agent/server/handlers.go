@@ -592,9 +592,29 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 	if contentType := response.Header.Get("Content-Type"); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
+	if seconds, ok := relayedRetryAfter(response.Header.Get("Retry-After")); ok {
+		w.Header().Set("Retry-After", seconds)
+	}
 	server.rememberBrowserCharacter(w, r, body, responseBody, response.StatusCode)
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(responseBody)
+}
+
+/*
+================
+relayedRetryAfter
+
+The GameWorld's Retry-After for the browser, so a paced ticket mint
+(429 RATE_LIMITED) tells the client when to ask again. Only a delay in
+whole seconds passes; anything else is dropped.
+================
+*/
+func relayedRetryAfter(value string) (string, bool) {
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 0 {
+		return "", false
+	}
+	return strconv.Itoa(seconds), true
 }
 
 /*

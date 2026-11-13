@@ -145,6 +145,22 @@ func loadQinShiTombRefs(textdataDir string) map[uint32]MonsterRef {
 
 /*
 ================
+WithQinShiArenaRefs - port-only combat references without opening the cave.
+================
+*/
+func (t Template) WithQinShiArenaRefs(textdataDir string) (Template, error) {
+	withTomb, err := t.WithQinShiTomb(textdataDir)
+	if err != nil {
+		return Template{}, err
+	}
+	out := TemplateFromParts(withTomb.Refs, t.Nests)
+	out.SummonRefs = slices.Clone(t.SummonRefs)
+	out.EvidenceMatches = t.EvidenceMatches
+	return out, nil
+}
+
+/*
+================
 WithQinShiTomb
 
 Returns a copy of the Template with the 78 Qin-Shi Emperor Tomb monster

@@ -77,6 +77,18 @@ test("one import publishes exactly the button set", () => {
 		"/assets/images/Media_extracted/interface/worldmap/wmap_down_button_disable.png",
 		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_box.png",
 		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_choice_box.png",
-		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_big_box.png"
+		"/assets/images/Media_extracted/interface/worldmap/wmap_floor_big_box.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_wnd_bottom_frame.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_wnd_corner_02.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_window_edge_1.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_window_edge_2.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_window_edge_3.png",
+		"/assets/images/Media_extracted/interface/worldmap/wmap_window_edge_4.png",
+		"/assets/images/Media_extracted/interface/guide/gd_area_tab_on.png",
+		"/assets/images/Media_extracted/interface/guide/gd_area_tab_off.png",
+		"/assets/images/Media_extracted/interface/guide/gd_monster_tab_on.png",
+		"/assets/images/Media_extracted/interface/guide/gd_monster_tab_off.png",
+		"/assets/images/Media_extracted/interface/guide/gd_long_index_open.png",
+		"/assets/images/Media_extracted/interface/guide/gd_long_contents_event.png"
 	] );
 });

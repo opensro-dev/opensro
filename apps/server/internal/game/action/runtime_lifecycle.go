@@ -132,6 +132,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		}
 		step("retireGroundApproaches", rt.retireGroundApproaches)
 		step("advanceResidentRegions", func() { rt.advanceResidentRegions(nowMs) })
+		step("advanceSookArena", func() { rt.advanceSookArena(nowMs) })
 		step("tickInstanceWorlds", func() { rt.tickInstanceWorlds(nowMs) })
 		step("advanceWalkIns", func() { rt.advanceWalkIns(nowMs) })
 		if rt.AdvanceQuestCalendar != nil {
@@ -148,6 +149,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
+		frames("advanceHalloweenLayer", rt.advanceHalloweenLayer)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -697,6 +699,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.forgetPetSession(divisionID, characterName)
 	rt.retirePetShields(divisionID, characterName)
 	rt.forgetRecoverySession(divisionID, characterName)
+	rt.forgetSookArena(divisionID, characterName)
 	rt.Worlds.Forget(simulation.WorldKey(divisionID, characterName))
 	rt.groundApproachStops.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, characterName))
@@ -739,6 +742,9 @@ preloading its catalog.
 */
 func (rt *Runtime) StaticRefItemCodenames() []string {
 	candidates := loot.MonsterDropRefItemCodenames()
+	if rt.sookArena != nil {
+		candidates = append(candidates, sookDamageScroll, sookShockBomb, sookBox)
+	}
 	candidates = append(candidates, rt.alchemyOutputCodenames()...)
 	candidates = append(candidates, rt.GachaCatalog.RewardCodenames()...)
 	if catalog := rt.GachaCatalog; catalog != nil {

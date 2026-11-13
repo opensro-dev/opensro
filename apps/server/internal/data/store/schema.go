@@ -4,13 +4,16 @@
 schema.go - strict authority record versions and character decoding
 
 A version identifies the retained value graph, not just SQL tables. Older
-binaries must refuse new record fields instead of losing them on a write.
+binaries must refuse new record fields instead of losing them on a write:
+the version check refuses a newer store at boot, and a record's unknown
+top-level fields survive the next write regardless (json.go, #3090).
 
 ===========================================================================
 */
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -143,7 +146,85 @@ func isVersionMismatch(err error) bool {
 // against their own daily cap, so ordinary grinding no longer starves
 // a wave. Rows saved earlier carry no Gourd count and start at zero;
 // the offline upgrade rewrites no record.
-const CurrentVersion = 41
+// Version 42 adds optional arena entry markers and its durable reward chest.
+// Version 43 moves the survival arena's daily entry count to the account
+// (the sookArenaAccounts metadata plane, port-only, #3322): the three
+// entries a UTC day count per account, not per character. The character
+// sookArenaDay/sookArenaEntries fields stay as the seed the account
+// record is derived from at first load; the offline upgrade rewrites no
+// record.
+const CurrentVersion = 43
+
+/*
+================
+storeStep
+
+One schema step's class in the version log above (#3092, part 3 of
+#3082). A step is additive when it only adds record fields, list
+entries, tables or meta rows; changes no existing field's meaning,
+width or units; old records decode to the same values (absent = zero);
+and its offline upgrade rewrites no existing row. Only an additive
+step may land inside a live release's read window; a non-additive one
+skips the versions past it, so no older binary ever opens it
+(store_steps_test.go holds both rules against the frozen field lists).
+When in doubt a step is not additive: that costs a maintenance
+release, never saved data.
+================
+*/
+type storeStep struct {
+	additive bool
+	// why is the version log's reason for the class, in one line.
+	why string
+	// minLayout and maxLayout are the table layouts a store stamped
+	// with this version may hold, both ends inclusive: the window the
+	// offline upgrade (authority_upgrade.go) validates it at. The low
+	// end is the layout its binary ran at (git history of
+	// CurrentVersion and CurrentLayoutVersion); the wider low ends of
+	// 16 through 29 are the legacy lab stores that ran those schemas
+	// at older layouts. From 25 on the high end is the current layout:
+	// a store a newer binary created and stamped down holds the newer
+	// tables empty, which the upgrade's residue guard accepts.
+	minLayout int
+	maxLayout int
+}
+
+// storeSteps holds every schema version from UpgradeFromVersion to
+// CurrentVersion: the class of the step that made it and the layouts a
+// store at it may hold. A new version adds its entry here with its log
+// line. Columns: additive, why, minLayout, maxLayout.
+var storeSteps = map[int]storeStep{
+	13: {false, "replaces world.dungeonMinimap with world.dungeonFloorIndex", 4, 4},
+	14: {true, "optional character fields; layout 5 adds the mall and warehouse tables", 5, 5},
+	15: {true, "item-owned companions in item rows; records preserved", 5, 5},
+	16: {true, "optional recall/death point worlds and fortress-return cooldown; layout 6 adds tables", 5, 7},
+	17: {true, "trade-cargo aliases, weekly contributions and the reward pool meta row", 5, 7},
+	18: {true, "optional endedQuestIds", 5, 7},
+	19: {true, "optional job.reward and the job ranking meta row", 5, 7},
+	20: {true, "optional stallDecoration", 5, 7},
+	21: {false, "the upgrade rewrites guild members: the master becomes the sole commander", 5, 8},
+	22: {true, "optional community site fields; layout 9 adds unique_kills", 5, 9},
+	23: {true, "optional publicGearHidden", 5, 9},
+	24: {true, "optional mostWanted", 5, 9},
+	25: {true, "no record change; layout 10 adds economy_ledger", 5, 12},
+	26: {true, "optional guild foundedAtMs", 5, 12},
+	27: {true, "optional training-camp honor fields and campDisbandedAtMs", 5, 12},
+	28: {true, "optional companion training and treeVersion", 5, 12},
+	29: {true, "optional world.instanceReturn", 5, 12},
+	30: {true, "optional fortress structure madeAtMs", 10, 12},
+	31: {true, "optional pet cast capacity, charges and recharge period", 10, 12},
+	32: {true, "optional breakNotice", 10, 12},
+	33: {true, "optional name-change scroll state; layout 11 adds name_reservations", 11, 12},
+	34: {true, "optional per-character Halloween box count", 11, 12},
+	35: {true, "optional mostWanted.expiresAtMs", 11, 12},
+	36: {false, "the Halloween count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 11, 12},
+	37: {true, "optional time-online record", 11, 12},
+	38: {true, "optional Academy cumulated-buff fields on camp members", 11, 12},
+	39: {true, "no record change; layout 12 adds silk_history", 12, 12},
+	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 12},
+	41: {true, "optional account gourdCount", 12, 12},
+	42: {true, "optional arena entry markers and reward chest", 12, 12},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 5, 12},
+}
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -172,6 +253,10 @@ type Meta struct {
 	// record inside its door and the commit stages it, exactly like a
 	// character record.
 	HalloweenBoxes map[string]*domain.HalloweenBoxAccount `json:"halloweenBoxes,omitempty"`
+	// SookArenaAccounts is the per-account survival arena daily entry
+	// count (#3322), keyed by account id, with HalloweenBoxes' pointer
+	// discipline: the entry mutates the one record inside its door.
+	SookArenaAccounts map[string]*domain.SookArenaAccount `json:"sookArenaAccounts,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records
@@ -185,9 +270,18 @@ var retiredCharacterFields = []string{"dressSetKeys", "weaponSetKeys"}
 /*
 ================
 stripRetiredCharacterFields
+
+A record that names no retired key is returned as it is, without the
+field-map parse: almost every record at boot. The byte test only rules a
+key out (records are json.Marshal output, which never escapes a letter
+of a key); a match (a key, or the same text inside a value) takes the
+parse, which decides.
 ================
 */
 func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
+	if !namesRetiredCharacterField(raw) {
+		return raw, nil
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
@@ -213,23 +307,40 @@ func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
 
 /*
 ================
-decodeCharacterStrict
-
-Refuses unknown fields and ownerless records. A current-schema load must
-never silently discard data on its next commit.
+namesRetiredCharacterField
 ================
 */
-func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, error) {
+func namesRetiredCharacterField(raw json.RawMessage) bool {
+	for _, name := range retiredCharacterFields {
+		if bytes.Contains(raw, []byte(`"`+name+`"`)) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+decodeCharacterStrict
+
+Refuses ownerless records and unknown fields below the top level. The
+record's unknown top-level fields are returned for the store to write
+back (json.go, #3090): a current-schema load must never silently
+discard data on its next commit.
+================
+*/
+func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, unknownFields, error) {
 	raw, err := stripRetiredCharacterFields(raw)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	character := &domain.Character{}
-	if err := decodeJSONStrict(raw, character); err != nil {
-		return nil, err
+	unknown, err := decodeRecordFields(raw, character)
+	if err != nil {
+		return nil, "", err
 	}
 	if strings.TrimSpace(character.AccountID) == "" {
-		return nil, fmt.Errorf("character %q has no accountId; account ownership is mandatory in schema v%d", character.Name, CurrentVersion)
+		return nil, "", fmt.Errorf("character %q has no accountId; account ownership is mandatory in schema v%d", character.Name, CurrentVersion)
 	}
-	return character, nil
+	return character, unknown, nil
 }

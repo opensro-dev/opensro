@@ -18,6 +18,62 @@ import fc from "fast-check";
 const { createCharacterSelection } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/character-selection.ts" ).href
 );
+
+test("arena reservation retains all fifty enemies under a saturated spell-effect budget", () => {
+	const entities = Array.from(
+		{ length: 51 },
+		( _, i ) => ({ gid: i + 1, kind: i ? "monster" : "local-player", regionId: 17989, x: i * 4, y: 31, z: 914 })
+	);
+	const owner = createCharacterSelection( 512, () => Array( 512 ).fill( 0 ) );
+	assert.equal(
+		owner.select( entities, entities[0], 1, undefined ).length,
+		1,
+		"shared effects reproduce invisible enemies"
+	);
+	assert.equal(
+		owner.select( entities, entities[0], 1, undefined, undefined, true ).length,
+		51,
+		"arena reserves visible, pickable enemy bodies first"
+	);
+	assert.equal(
+		createCharacterSelection( 12 ).select( entities, entities[0], 1, undefined, undefined, true ).length,
+		12,
+		"renderer cap remains enforced"
+	);
+});
+
+test("arena enemies and power eggs remain visible before dense tenfold loot", () => {
+	const entities = Array.from(
+		{ length: 51 },
+		( _, i ) => ({ gid: i + 1, kind: i ? "monster" : "local-player", regionId: 17989, x: 100 + i, y: 31, z: 914 })
+	);
+	const loot = Array.from(
+		{ length: 600 },
+		( _, i ) => ({
+			gid: 1000 + i,
+			refObjId: 99,
+			kind: "npc",
+			groundItem: {},
+			regionId: 17989,
+			x: 101,
+			y: 31,
+			z: 914
+		})
+	);
+	const egg = { ...loot[0], gid: 2000, refObjId: 9272 };
+	const selected = createCharacterSelection( 512, () => Array( 512 ).fill( 0 ) ).select(
+		[ ...entities, ...loot, egg ],
+		entities[0],
+		1,
+		undefined,
+		undefined,
+		true
+	);
+	assert.equal( selected.length, 512 );
+	for ( const e of [ ...entities, egg ] ) {
+		assert.ok( selected.includes( e ), `live encounter/power ${e.gid} was evicted by loot` );
+	}
+});
 function oracle( entities, anchor, local, mount, limit ) {
 	const priority = e => e.gid === local ? 0 : e.gid === mount ? 1 : 2;
 	const distance = e =>

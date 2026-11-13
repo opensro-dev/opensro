@@ -380,7 +380,8 @@ noteMaterial
 					range: p.lodGroupIndex === 2 ? 2020 : 480,
 					sceneryRange: p.lodGroupIndex === 2,
 					cellRadius: p.lodGroupIndex === 2 ? 15 : 7,
-					cells: placementCells.get( key )!
+					cells: placementCells.get( key )!,
+					...(p.layer === undefined ? {} : { layer: p.layer })
 				};
 				for ( const [branchIndex, ref] of branches.entries() ) {
 					const refEntry = refMaterial( ref ),
@@ -395,7 +396,10 @@ noteMaterial
 								radians( p.yaw )
 							);
 					const animation = animatedByPath.get( ref.sourcePath === undefined ? "" : lower( ref.sourcePath ) );
-					const emitters = sceneryParticles(
+					// A seasonal layer member's emitters are left out: emitters have
+					// no per-layer switch yet, and a lantern flame must not burn
+					// in a town whose decoration is hidden.
+					const emitters = p.layer !== undefined ? [] : sceneryParticles(
 						ref.modifiers?.particleModifiers,
 						key,
 						branchIndex,
@@ -496,7 +500,9 @@ noteMaterial
 						// BSR's per-mesh dword (A7CAB0) only when the BSR carries one. Keep
 						// opted-out parts drawn, but never admit them as camera obstacles.
 						reserve( 256 );
-						if ( ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
+						// Seasonal decoration is never a camera obstacle: it can be
+						// hidden, and the camera must not stop on a prop it cannot see.
+						if ( p.layer === undefined && ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
 							group.collision.push( {
 								instance: group.matrices.length / 16,
 								object: key,

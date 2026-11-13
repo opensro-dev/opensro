@@ -299,7 +299,7 @@ func TestACrashBeforeTheAcknowledgementRewritesIdempotently(t *testing.T) {
 		f.s.mu.Unlock()
 		t.Fatal(err)
 	}
-	if err := writeGroundChangesTx(tx, &f.s.encodeScratch, f.s.ground.loadedRecords, &changes); err != nil {
+	if err := writeGroundChangesTx(tx, &f.s.encodeScratch, f.s.ground.loadedRecords, &changes, nil); err != nil {
 		f.s.mu.Unlock()
 		t.Fatal(err)
 	}

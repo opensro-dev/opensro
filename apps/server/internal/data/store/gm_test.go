@@ -49,14 +49,14 @@ func TestGMPrivilegePersistsAcrossReopen(t *testing.T) {
 func TestGMPrivilegeAbsentKeyDecodesNonGM(t *testing.T) {
 	t.Parallel()
 
-	ordinary, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"Ordinary"}`))
+	ordinary, _, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"Ordinary"}`))
 	if err != nil {
 		t.Fatalf("decoding a keyless record: %v", err)
 	}
 	if ordinary.GMPrivilege {
 		t.Error("record without the gmPrivilege key decoded as GM")
 	}
-	promoted, err := decodeCharacterStrict([]byte(`{"id":2,"accountId":"test-account","name":"Gm","gmPrivilege":true}`))
+	promoted, _, err := decodeCharacterStrict([]byte(`{"id":2,"accountId":"test-account","name":"Gm","gmPrivilege":true}`))
 	if err != nil {
 		t.Fatalf("decoding a promoted record: %v", err)
 	}

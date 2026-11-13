@@ -194,6 +194,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 			carry() {}
 		},
 		published: {
+			catalog: new Map(),
 			animationStates: new Map(),
 			bloodEffects: new Map(),
 			dress: {},

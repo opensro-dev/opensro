@@ -208,6 +208,29 @@ if the uncapped sum is 100% or 150%. Counters round to integer events with a
 minimum of one. Cooldown blues currently roll on harnesses/charms, not collars.
 The total 80% ceiling is source policy, **not a DB setting**.
 
+## Imported pet kinds (#3328)
+
+The later-source pet import (`scripts/pet_import.py`, from #3262/#3283)
+adds the kinds only a later source holds. Gate names, confirmed for
+#3328: there is **no** `SRO_PETS_ARCHIVE`. The pass as a whole rides
+`SRO_PETS` (default on, explicit off values only), and the archive
+source rides the one shared pinned zip, `SRO_AVATARS_ZIP`, under that
+same switch — one optional supply chain, not two.
+
+What each imported kind still owes is named by the import report; the
+server side shipped here:
+
+| Kind | Kind of pet | Server rule |
+| --- | --- | --- |
+| Fox (`COS_P_FOX`, levels 1–140) | attack | The design's fifth pet: `pets` entry (120/30/65/65) plus 15 `skills` and 15 `treeSkills` rows on the wolf's implemented families, so the expansion serves it whole when `SRO_ATTACK_PET_EXPANSION` is on. |
+| Winter snowman (`COS_P_WINTER_SNOWMAN`) | pickup | No design entry: the pickup lane is generic. Its two scrolls (ordinary and event copy) summon it through the persistent summoner. |
+| Fellow kinds (`COS_F_*`) | fellow | Inference, recorded in `pet_import.py`: fellows ride the attack-pet lane — summoned by their rows' own band, fighting with their native per-level rows, no `petdesign` entry (the design is attack-pet only). |
+
+Summon scrolls sell in the Item Mall's Pet shop (`SRO_MALL_CATEGORIES`
+on): the fox in Growth, the snowman's two scrolls with the silk pickup
+pets, each its own authored package at 30 silk, listed only when the
+import wrote the item row.
+
 ## Configuration map
 
 | Control | Where | Apply with |

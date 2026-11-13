@@ -23,9 +23,10 @@ const DropPlusNoticeChannel = 0x81
 // BreakNoticeChannel is the 0x3667 channel of the item-break announcement
 // (#1738, port-only, not native, like JobKillNoticeChannel): the browser
 // client shows it as channel 7 unless the Experimental "Item break notices"
-// row is off, and a client without the row drops it. The frame is the plain
-// channel-7 layout: a break notice links nothing, so the alias it names can
-// never lead to a character.
+// row is off, and a client without the row drops it. A break notice links
+// nothing at all. A failed-reinforcement notice (#3260) may carry the
+// drop/plus link section holding only its item's body - never a player
+// name - so the alias it names can still never lead to a character.
 const BreakNoticeChannel = 0x82
 
 // RenameNoticeChannel is the 0x3667 channel of the name-change notice
@@ -61,9 +62,16 @@ func JobKillNotificationFrame(message string) Frame {
 	return notificationFrameOn(JobKillNoticeChannel, message)
 }
 
-// BreakNotificationFrame is NotificationFrame on BreakNoticeChannel.
-func BreakNotificationFrame(message string) Frame {
-	return notificationFrameOn(BreakNoticeChannel, message)
+// BreakNotificationFrame is a notice on BreakNoticeChannel. An empty
+// body writes the plain channel-7 layout, byte for byte what the frame
+// has always been; a body appends the drop/plus link section after the
+// text. The frame takes the item body alone, so its name is always
+// empty: no caller can make this channel name a player (#1738's rule).
+func BreakNotificationFrame(message string, body []byte) Frame {
+	if len(body) == 0 {
+		return notificationFrameOn(BreakNoticeChannel, message)
+	}
+	return linkedNotificationFrame(BreakNoticeChannel, message, NoticeLink{Body: body})
 }
 
 // RenameNotificationFrame is NotificationFrame on RenameNoticeChannel.
@@ -78,10 +86,16 @@ func RenameNotificationFrame(message string) Frame {
 //
 // nameLen 0 names no player; bodyLen 0 links no item.
 func DropPlusNotificationFrame(message string, link NoticeLink) Frame {
+	return linkedNotificationFrame(DropPlusNoticeChannel, message, link)
+}
+
+// linkedNotificationFrame writes one notification on a channel followed
+// by the drop/plus link section, [u16 nameLen][name][u16 bodyLen][body].
+func linkedNotificationFrame(channel uint8, message string, link NoticeLink) Frame {
 	if len(link.Player) > 0xffff || len(link.Body) > 0xffff {
 		panic("notice link exceeds its length fields")
 	}
-	text := notificationFrameOn(DropPlusNoticeChannel, message).Payload
+	text := notificationFrameOn(channel, message).Payload
 	w := NewWriter(len(text) + 4 + len(link.Player) + len(link.Body)).Bytes(text).
 		Str(link.Player).U16(uint16(len(link.Body))).Bytes(link.Body)
 	return Frame{Opcode: 0x3667, Payload: w.Payload()}

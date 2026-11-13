@@ -155,23 +155,35 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// layout stamps are build constants and take the same skip.
 	stagedMeta := map[string][32]byte{}
 	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyTradeRewards, s.changes.tradeRewards,
-		len(s.meta.TradeRewards) > 0, func() (string, error) { return tradeRewardsRecord(s.meta.TradeRewards) }); err != nil {
+		len(s.meta.TradeRewards) > 0, func() (string, error) {
+			return tradeRewardsRecord(s.meta.TradeRewards, s.residues.planes[metaKeyTradeRewards])
+		}); err != nil {
 		return err
 	}
 	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyJobRankings, s.changes.jobRankings,
-		len(s.meta.JobRankings) > 0, func() (string, error) { return jobRankingsRecord(s.meta.JobRankings) }); err != nil {
+		len(s.meta.JobRankings) > 0, func() (string, error) {
+			return jobRankingsRecord(s.meta.JobRankings, s.residues.planes[metaKeyJobRankings])
+		}); err != nil {
 		return err
 	}
 	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, s.changes.halloweenBoxes,
-		len(s.meta.HalloweenBoxes) > 0, func() (string, error) { return halloweenBoxesRecord(s.meta.HalloweenBoxes) }); err != nil {
+		len(s.meta.HalloweenBoxes) > 0, func() (string, error) {
+			return halloweenBoxesRecord(s.meta.HalloweenBoxes, s.residues.planes[metaKeyHalloweenBoxes])
+		}); err != nil {
+		return err
+	}
+	if err := s.commitMetaPlaneTx(tx, stagedMeta, rows, metaKeySookArenaAccounts, s.changes.sookArenaAccounts,
+		len(s.meta.SookArenaAccounts) > 0, func() (string, error) {
+			return sookArenaAccountsRecord(s.meta.SookArenaAccounts, s.residues.planes[metaKeySookArenaAccounts])
+		}); err != nil {
 		return err
 	}
 
-	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", s.schemaStamp)); err != nil {
 		return err
 	}
 	// The layout stamp rides every commit like the schema stamp above.
-	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", s.layoutStamp)); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {
@@ -184,7 +196,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	stagedRows := map[committedCharacterKey]*domain.Character{}
 	rowCommit := characterRowCommit{tx: tx, scratch: &s.encodeScratch, committed: s.committedDigests,
 		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode],
-		committedRows: s.committedRows, stagedRows: stagedRows}
+		committedRows: s.committedRows, stagedRows: stagedRows, residues: s.residues.characters}
 	// The attempt's prepared character upsert (#1943 W3) goes back
 	// with the attempt, committed or rolled back.
 	defer rowCommit.close()
@@ -251,7 +263,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		// member set is bounded by the client's u8 member count.
 		for divisionID, guilds := range s.guilds {
 			for guildID, guild := range guilds {
-				if err := replaceGuildTx(tx, divisionID, guildID, guild, s.guildMembers[divisionID][guildID]); err != nil {
+				if err := replaceGuildTx(tx, divisionID, guildID, guild, s.guildMembers[divisionID][guildID], &s.residues); err != nil {
 					return err
 				}
 			}
@@ -262,7 +274,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 			if !ok {
 				return fmt.Errorf("dirty guild %s/%d has no live row", key.division, key.guildID)
 			}
-			if err := replaceGuildTx(tx, key.division, key.guildID, guild, s.guildMembers[key.division][key.guildID]); err != nil {
+			if err := replaceGuildTx(tx, key.division, key.guildID, guild, s.guildMembers[key.division][key.guildID], &s.residues); err != nil {
 				return err
 			}
 		}
@@ -274,7 +286,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// rows. The set is retained on a failed commit like every other
 	// dirty flag (D5) and cleared only on success.
 	for key := range s.changes.dissolvedGuild {
-		if err := deleteGuildTx(tx, key.division, key.guildID); err != nil {
+		if err := deleteGuildTx(tx, key.division, key.guildID, &s.residues); err != nil {
 			return err
 		}
 	}
@@ -285,7 +297,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if s.changes.all {
 		for divisionID, camps := range s.camps {
 			for campID, camp := range camps {
-				if err := replaceCampTx(tx, divisionID, campID, camp, s.campMembers[divisionID][campID]); err != nil {
+				if err := replaceCampTx(tx, divisionID, campID, camp, s.campMembers[divisionID][campID], &s.residues); err != nil {
 					return err
 				}
 			}
@@ -296,25 +308,28 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 			if !ok {
 				return fmt.Errorf("dirty training camp %s/%d has no live row", key.division, key.campID)
 			}
-			if err := replaceCampTx(tx, key.division, key.campID, camp, s.campMembers[key.division][key.campID]); err != nil {
+			if err := replaceCampTx(tx, key.division, key.campID, camp, s.campMembers[key.division][key.campID], &s.residues); err != nil {
 				return err
 			}
 		}
 	}
 
 	for key := range s.changes.dissolvedCamp {
-		if err := deleteCampTx(tx, key.division, key.campID); err != nil {
+		if err := deleteCampTx(tx, key.division, key.campID, &s.residues); err != nil {
 			return err
 		}
 	}
 
 	if ground != nil {
-		if err := writeGroundChangesTx(tx, &s.encodeScratch, s.ground.loadedRecords, ground); err != nil {
+		if err := writeGroundChangesTx(tx, &s.encodeScratch, s.ground.loadedRecords, ground, s.residues.ground); err != nil {
 			return err
 		}
 	}
 
 	if err := flushLedgerTx(tx, s.ledger.pending); err != nil {
+		return err
+	}
+	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
 		return err
 	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
@@ -341,6 +356,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	s.batch.pending = false
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
+	s.ledger.items = nil
 
 	if ground != nil {
 		s.retainGroundChangesLocked(ground)
@@ -389,7 +405,7 @@ Store::commitMetaPlaneTx
 One whole-plane meta row for the commit. The plane is marshaled only
 when a door touched it since the last commit (the change set's plane
 flags, set where the plane is written: UpdateTrade, CloseJobWeek,
-HalloweenAccount). An untouched populated plane counts as skipped
+HalloweenAccount, SookArenaAccount). An untouched populated plane counts as skipped
 without deriving its bytes (an unpopulated one has no row to skip,
 exactly as its empty record counted before); a touched one marshals
 (an empty plane still writes no row) and takes upsertMetaRowTx's
@@ -589,6 +605,8 @@ type characterRowCommit struct {
 	// copies a skip reads, and the fresh copies this attempt stages.
 	committedRows map[committedCharacterKey]*domain.Character
 	stagedRows    map[committedCharacterKey]*domain.Character
+	// residues are the characters' stored unknown fields (json.go).
+	residues map[committedCharacterKey]unknownFields
 }
 
 /*
@@ -669,7 +687,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		return nil
 	}
 	start := w.now()
-	record, err := encodeCharacterBorrowed(w.scratch, division, c)
+	record, err := encodeCharacterBorrowed(w.scratch, division, c, w.residues[key])
 	*w.encode += w.now().Sub(start)
 	if err != nil {
 		return err

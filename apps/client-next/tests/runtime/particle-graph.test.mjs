@@ -399,3 +399,32 @@ test("a child keeps following a moving holder after its followed parent expires 
 		assert.equal( offset, offsets[0], "the child rode the holder: " + offsets.join( "," ) );
 	}
 });
+test("an hour-old looping effect replays one window and shows the same live elements as a full replay", () => {
+	const graph = [
+		emitter( { frames: 20, loop: true } ),
+		emitter( {
+			parent: 0,
+			frames: 7,
+			emission: { start: 0, duration: 20, period: 2, limit: 4, rate: 1 },
+			capacity: 8
+		} ),
+		emitter( { parent: 1, parents: [ 0 ], births: [ 1 ], frames: 3 } )
+	];
+	const hour = 3600 * 20, after = 100;
+	const live = state => state.elements.map( rows => rows.filter( e => e?.alive ).map( e => e.age ).sort() );
+	// The reference ticks from the effect's creation, as a live actor does.
+	const full = createParticleGraph( graph, 0 );
+	for ( let tick = 0; tick <= hour; tick++ ) advanceParticleGraph( full, graph, tick / 20, identity(), table );
+	// A history recreated at the hour mark.
+	const late = createParticleGraph( graph, 0 );
+	advanceParticleGraph( late, graph, hour / 20, identity(), table );
+	assert.equal( late.startTick + late.frame, hour );
+	assert.equal( late.startTick % 20, 0, "the late clock keeps the root's phase" );
+	assert.ok( late.frame < 100, `replayed ${late.frame} ticks` );
+	for ( let tick = hour; tick <= hour + after; tick++ ) {
+		advanceParticleGraph( full, graph, tick / 20, identity(), table );
+		advanceParticleGraph( late, graph, tick / 20, identity(), table );
+		assert.deepEqual( live( late ), live( full ), `tick ${tick}` );
+	}
+	assert.ok( live( full )[1].length > 0 );
+});

@@ -1,34 +1,262 @@
-import {test} from 'node:test';
-import assert from 'node:assert/strict';
-import {mkdir,writeFile} from 'node:fs/promises';
-import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
-import {CLIENT_NEXT_BASE_URL} from '../../../../scripts/lib/probeEndpoints.mjs';
-import {holdProbeRuntime} from './helpers/hold-runtime.mjs';
-test('native HUD renders a real portrait, live readouts, ability controls and authored map',{timeout:60000},async()=>{
- const {browser,page}=await launchProbeBrowser();try{
-  await holdProbeRuntime(page);await page.setViewportSize({width:1200,height:900});await page.goto(CLIENT_NEXT_BASE_URL);
-  const result=await page.evaluate(async()=>{
-   const {createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createRenderer}=await import('/src/engine/runtime/renderer/renderer.ts'),{createUi}=await import('/src/engine/runtime/ui/ui.ts');
-   const canvas=document.createElement('canvas');document.body.append(canvas);const renderer=createRenderer(canvas),assets=createAssets();let scene,semantics;
-   const ui=createUi({assets,commands:()=>{},publish:s=>{scene=s;renderer.setUi(s);},texture:(id,image)=>renderer.setUiTexture(id,image),base:location.origin,apiBase:'http://fixture.invalid'});
-   const pose={regionId:105*256+79,x:1000,y:0,z:1000,angle:0},state={session:{phase:'world',revision:1,character:'Explorer',characters:[{name:'Explorer',level:1,maxHp:200,maxMp:200}]},gameplay:{localGid:1,pose,inventory:[],vitals:[{gid:1,hp:200,mp:200}],casts:[],guide:{country:1,seenMask:0xffffffff},progression:{level:1,experience:'59',skillPoints:123,skillExperience:200,masteries:[],stats:{strength:20,intellect:20,physicalMin:10,physicalMax:20,magicalMin:15,magicalMax:30,physicalDefense:5,magicalDefense:6,hit:7,parry:8,maxHp:200,maxMp:200}}},entities:[],width:1200,height:900,worldReady:true};
-   async function settle(){const end=performance.now()+20000;let stable=0;while(performance.now()<end){semantics=ui.step(state,performance.now())??semantics;renderer.frame({width:1200,height:900});if(renderer.error())throw Error(renderer.error());if(ui.stats().pending===0&&scene?.quads.some(q=>q.texture.includes('ub_window_01'))){if(++stable>12)return;}else stable=0;await new Promise(requestAnimationFrame);}throw Error('HUD resources did not settle');}
-   const capture=()=>{const out=document.createElement('canvas');out.width=out.height=48;const r=scene.quads.find(q=>q.portraitGid===1).rect;out.getContext('2d').drawImage(canvas,...r,0,0,48,48);return [...out.getContext('2d').getImageData(0,0,48,48).data];};
-   try{
-    await settle();const before=capture(),path='/assets/char/preview/europe/europewoman_witch.glb',id=assets.request(new URL(path,location.origin).href,16<<20,'character');let model;const end=performance.now()+20000;while(!(model=assets.take(id))){if(performance.now()>end)throw Error('Portrait model deadline');await new Promise(requestAnimationFrame);}if(model.kind!=='character')throw Error(model.error??'Expected model');
-    renderer.setCharacterModel(path,model.model,model.images);renderer.setCharacterActors([{gid:1,model:path,pose:{...pose,yaw:0},clip:model.model.clips[0]?.name??'',time:0,loop:true,scale:1}]);
-    await settle();const after=capture();let changed=0;for(let i=0;i<before.length;i+=4)if(Math.abs(before[i]-after[i])+Math.abs(before[i+1]-after[i+1])+Math.abs(before[i+2]-after[i+2])>12)changed++;
-    const portrait=canvas.toDataURL(),race=scene.quads.some(q=>q.texture.endsWith('com_kindred_europe.png')),angle0=scene.quads.find(q=>q.texture.endsWith('mm_sign_character.png'))?.rotation;
-    state.gameplay.pose={...pose,angle:16384};ui.event({kind:'hover',id:'ability-details'});await settle();const tooltip=canvas.toDataURL(),chromeControls=semantics.controls.map(c=>c.id),tooltipChrome=scene.quads.filter(q=>q.texture.includes("com_tooltip_")).length;const angle1=scene.quads.find(q=>q.texture.endsWith('mm_sign_character.png'))?.rotation;
-    ui.event({kind:'hover',id:'status-panel'});await settle();chromeControls.push(...semantics.controls.map(c=>c.id));const statusChrome=scene.quads.some(q=>q.texture.endsWith('com_scroll_bar.png')&&q.rect[0]>1000);ui.event({kind:'hover',id:null});await settle();const statusHidden=!scene.quads.some(q=>q.texture.endsWith('com_scroll_bar.png')&&q.rect[0]>1000);ui.event({kind:'activate',id:'ability-details'});await settle();const details=scene.quads.some(q=>q.texture.endsWith('window_all.png')&&q.rect[2]===135&&q.rect[3]===189);
-    ui.event({kind:'hover',id:null});ui.event({kind:'key',code:'KeyM'});await settle();const map=canvas.toDataURL(),mapTextures=scene.quads.filter(q=>q.texture.includes('/worldmap/map/')).map(q=>q.texture),mapControls=semantics.controls.map(c=>c.id);
-    ui.event({kind:'key',code:'KeyM'});ui.step(state,performance.now());ui.event({kind:'key',code:'KeyM'});ui.step(state,performance.now());const immediateMap=scene.quads.some(q=>q.texture.includes('/worldmap/map/'));ui.event({kind:'activate',id:'map-size'});await settle();const small=semantics.controls.find(c=>c.id==='map-pan').rect,minimapWithMap=semantics.controls.some(c=>c.id==='minimap-in');
-    renderer.setCharacterActors([]);await settle();const retired=capture();renderer.setCharacterActors([{gid:1,model:path,pose:{...pose,yaw:0},clip:model.model.clips[0]?.name??'',time:0,loop:true,scale:1}]);await settle();const restored=capture();
-    let retiredDifference=0,restoredDifference=0;for(let i=0;i<before.length;i++){retiredDifference+=Math.abs(before[i]-retired[i]);restoredDifference+=Math.abs(after[i]-restored[i]);}
-    return {statusChrome,statusHidden,tooltip,tooltipChrome,chromeControls,immediateMap,minimapWithMap,retiredDifference,restoredDifference,changed,race,angle0,angle1,details,portrait,map,mapTextures,mapControls,small,failed:ui.stats().failed};
-   }finally{ui.dispose();renderer.dispose();assets.dispose();canvas.remove();}
-  });
-  await mkdir('temp/artifacts/hud',{recursive:true});await writeFile('temp/artifacts/hud/ability-tooltip.png',Buffer.from(result.tooltip.split(',')[1],'base64'));await writeFile('temp/artifacts/hud/portrait-and-readouts.png',Buffer.from(result.portrait.split(',')[1],'base64'));await writeFile('temp/artifacts/hud/native-map.png',Buffer.from(result.map.split(',')[1],'base64'));
-  assert.equal(result.statusChrome,true);assert.equal(result.statusHidden,true);assert.equal(result.immediateMap,true,'reopening map publishes its resident image in the first frame');assert.equal(result.tooltipChrome,8);for(const id of ['chat-whispers','chat-hide','chat-scroll-up','chat-scroll-down','chat-scroll-thumb','status-filter','status-scroll-up','status-scroll-down','status-scroll-thumb'])assert.ok(result.chromeControls.includes(id),id);assert.equal(result.minimapWithMap,true);assert.equal(result.retiredDifference,0);assert.equal(result.restoredDifference,0);assert.ok(result.changed>200,`real portrait changed only ${result.changed} pixels`);assert.equal(result.race,true);assert.ok(Math.abs(result.angle0-result.angle1)>1.5);assert.equal(result.details,true);assert.ok(result.mapTextures.some(p=>p.endsWith('map_constantinople.png')));assert.ok(result.mapControls.includes('map-follow'));assert.deepEqual(result.small.slice(2),[256,256]);assert.deepEqual(result.failed,[]);
- }finally{await browser.close();}
-});
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
+import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
+import { holdProbeRuntime } from "./helpers/hold-runtime.mjs";
+test(
+	"native HUD renders a real portrait, live readouts, ability controls and authored map",
+	{ timeout: 60000 },
+	async () => {
+		const { browser, page } = await launchProbeBrowser();
+		try {
+			await holdProbeRuntime( page );
+			await page.setViewportSize( { width: 1200, height: 900 } );
+			await page.goto( CLIENT_NEXT_BASE_URL );
+			const result = await page.evaluate( async () => {
+				const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" ),
+					{ createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" ),
+					{ createUi } = await import( "/src/engine/runtime/ui/ui.ts" );
+				const canvas = document.createElement( "canvas" );
+				document.body.append( canvas );
+				const renderer = createRenderer( canvas ), assets = createAssets();
+				let scene, semantics;
+				const ui = createUi( {
+					assets,
+					commands: () => {},
+					publish: s => {
+						scene = s;
+						renderer.setUi( s );
+					},
+					texture: ( id, image ) => renderer.setUiTexture( id, image ),
+					base: location.origin,
+					apiBase: "http://fixture.invalid"
+				} );
+				const pose = { regionId: 105 * 256 + 79, x: 1000, y: 0, z: 1000, angle: 0 },
+					state = {
+						session: {
+							phase: "world",
+							revision: 1,
+							character: "Explorer",
+							characters: [ { name: "Explorer", level: 1, maxHp: 200, maxMp: 200 } ]
+						},
+						gameplay: {
+							localGid: 1,
+							pose,
+							inventory: [],
+							vitals: [ { gid: 1, hp: 200, mp: 200 } ],
+							casts: [],
+							guide: { country: 1, seenMask: 0xffffffff },
+							progression: {
+								level: 1,
+								experience: "59",
+								skillPoints: 123,
+								skillExperience: 200,
+								masteries: [],
+								stats: {
+									strength: 20,
+									intellect: 20,
+									physicalMin: 10,
+									physicalMax: 20,
+									magicalMin: 15,
+									magicalMax: 30,
+									physicalDefense: 5,
+									magicalDefense: 6,
+									hit: 7,
+									parry: 8,
+									maxHp: 200,
+									maxMp: 200
+								}
+							}
+						},
+						entities: [],
+						width: 1200,
+						height: 900,
+						worldReady: true
+					};
+				async function settle() {
+					const end = performance.now() + 20000;
+					let stable = 0;
+					while ( performance.now() < end ) {
+						semantics = ui.step( state, performance.now() ) ?? semantics;
+						renderer.frame( { width: 1200, height: 900 } );
+						if ( renderer.error() ) throw Error( renderer.error() );
+						if (
+							ui.stats().pending === 0 && scene?.quads.some( q => q.texture.includes( "ub_window_01" ) )
+						) { if ( ++stable > 12 ) return; } else stable = 0;
+						await new Promise( requestAnimationFrame );
+					}
+					throw Error( "HUD resources did not settle" );
+				}
+				const capture = () => {
+					const out = document.createElement( "canvas" );
+					out.width = out.height = 48;
+					const r = scene.quads.find( q => q.portraitGid === 1 ).rect;
+					out.getContext( "2d" ).drawImage( canvas, ...r, 0, 0, 48, 48 );
+					return [ ...out.getContext( "2d" ).getImageData( 0, 0, 48, 48 ).data ];
+				};
+				try {
+					await settle();
+					const before = capture(),
+						path = "/assets/char/preview/europe/europewoman_witch.glb",
+						id = assets.request( new URL( path, location.origin ).href, 16 << 20, "character" );
+					let model;
+					const end = performance.now() + 20000;
+					while ( !(model = assets.take( id )) ) {
+						if ( performance.now() > end ) throw Error( "Portrait model deadline" );
+						await new Promise( requestAnimationFrame );
+					}
+					if ( model.kind !== "character" ) throw Error( model.error ?? "Expected model" );
+					renderer.setCharacterModel( path, model.model, model.images );
+					renderer.setCharacterActors( [ {
+						gid: 1,
+						model: path,
+						pose: { ...pose, yaw: 0 },
+						clip: model.model.clips[0]?.name ?? "",
+						time: 0,
+						loop: true,
+						scale: 1
+					} ] );
+					await settle();
+					const after = capture();
+					let changed = 0;
+					for ( let i = 0; i < before.length; i += 4 ) {
+						if (
+							Math.abs( before[i] - after[i] ) + Math.abs( before[i + 1] - after[i + 1] ) +
+									Math.abs( before[i + 2] - after[i + 2] ) > 12
+						) changed++;
+					}
+					const portrait = canvas.toDataURL(),
+						race = scene.quads.some( q => q.texture.endsWith( "com_kindred_europe.png" ) ),
+						angle0 = scene.quads.find( q => q.texture.endsWith( "mm_sign_character.png" ) )?.rotation;
+					state.gameplay.pose = { ...pose, angle: 16384 };
+					ui.event( { kind: "hover", id: "ability-details" } );
+					await settle();
+					const tooltip = canvas.toDataURL(),
+						chromeControls = semantics.controls.map( c => c.id ),
+						tooltipChrome = scene.quads.filter( q => q.texture.includes( "com_tooltip_" ) ).length;
+					const angle1 = scene.quads.find( q => q.texture.endsWith( "mm_sign_character.png" ) )?.rotation;
+					ui.event( { kind: "hover", id: "status-panel" } );
+					await settle();
+					chromeControls.push( ...semantics.controls.map( c => c.id ) );
+					const statusChrome = scene.quads.some( q =>
+						q.texture.endsWith( "com_scroll_bar.png" ) && q.rect[0] > 1000
+					);
+					ui.event( { kind: "hover", id: null } );
+					await settle();
+					const statusHidden = !scene.quads.some( q =>
+						q.texture.endsWith( "com_scroll_bar.png" ) && q.rect[0] > 1000
+					);
+					ui.event( { kind: "activate", id: "ability-details" } );
+					await settle();
+					const details = scene.quads.some( q =>
+						q.texture.endsWith( "window_all.png" ) && q.rect[2] === 135 && q.rect[3] === 189
+					);
+					ui.event( { kind: "hover", id: null } );
+					ui.event( { kind: "key", code: "KeyM" } );
+					await settle();
+					const map = canvas.toDataURL(),
+						mapTextures = scene.quads.filter( q => q.texture.includes( "/worldmap/map/" ) ).map( q =>
+							q.texture
+						),
+						mapControls = semantics.controls.map( c => c.id );
+					ui.event( { kind: "key", code: "KeyM" } );
+					ui.step( state, performance.now() );
+					ui.event( { kind: "key", code: "KeyM" } );
+					ui.step( state, performance.now() );
+					const immediateMap = scene.quads.some( q => q.texture.includes( "/worldmap/map/" ) );
+					ui.event( { kind: "activate", id: "map-size" } );
+					await settle();
+					const small = semantics.controls.find( c => c.id === "map-pan" ).rect,
+						minimapWithMap = semantics.controls.some( c => c.id === "minimap-in" );
+					renderer.setCharacterActors( [] );
+					await settle();
+					const retired = capture();
+					renderer.setCharacterActors( [ {
+						gid: 1,
+						model: path,
+						pose: { ...pose, yaw: 0 },
+						clip: model.model.clips[0]?.name ?? "",
+						time: 0,
+						loop: true,
+						scale: 1
+					} ] );
+					await settle();
+					const restored = capture();
+					let retiredDifference = 0, restoredDifference = 0;
+					for ( let i = 0; i < before.length; i++ ) {
+						retiredDifference += Math.abs( before[i] - retired[i] );
+						restoredDifference += Math.abs( after[i] - restored[i] );
+					}
+					return {
+						statusChrome,
+						statusHidden,
+						tooltip,
+						tooltipChrome,
+						chromeControls,
+						immediateMap,
+						minimapWithMap,
+						retiredDifference,
+						restoredDifference,
+						changed,
+						race,
+						angle0,
+						angle1,
+						details,
+						portrait,
+						map,
+						mapTextures,
+						mapControls,
+						small,
+						failed: ui.stats().failed
+					};
+				} finally {
+					ui.dispose();
+					renderer.dispose();
+					assets.dispose();
+					canvas.remove();
+				}
+			} );
+			await mkdir( "temp/artifacts/hud", { recursive: true } );
+			await writeFile(
+				"temp/artifacts/hud/ability-tooltip.png",
+				Buffer.from( result.tooltip.split( "," )[1], "base64" )
+			);
+			await writeFile(
+				"temp/artifacts/hud/portrait-and-readouts.png",
+				Buffer.from( result.portrait.split( "," )[1], "base64" )
+			);
+			await writeFile( "temp/artifacts/hud/native-map.png", Buffer.from( result.map.split( "," )[1], "base64" ) );
+			assert.equal( result.statusChrome, true );
+			assert.equal( result.statusHidden, true );
+			assert.equal( result.immediateMap, true, "reopening map publishes its resident image in the first frame" );
+			assert.equal( result.tooltipChrome, 8 );
+			for (
+				const id of [
+					"chat-whispers",
+					"chat-hide",
+					"chat-scroll-up",
+					"chat-scroll-down",
+					"chat-scroll-thumb",
+					"status-filter",
+					"status-scroll-up",
+					"status-scroll-down",
+					"status-scroll-thumb"
+				]
+			) assert.ok( result.chromeControls.includes( id ), id );
+			assert.equal( result.minimapWithMap, true );
+			assert.equal( result.retiredDifference, 0 );
+			assert.equal( result.restoredDifference, 0 );
+			assert.ok( result.changed > 200, `real portrait changed only ${result.changed} pixels` );
+			assert.equal( result.race, true );
+			assert.ok( Math.abs( result.angle0 - result.angle1 ) > 1.5 );
+			assert.equal( result.details, true );
+			assert.ok( result.mapTextures.some( p => p.endsWith( "map_constantinople.png" ) ) );
+			assert.ok( result.mapControls.includes( "map-pin" ) );
+			assert.deepEqual( result.small.slice( 2 ), [ 256, 256 ] );
+			assert.deepEqual( result.failed, [] );
+		} finally {
+			await browser.close();
+		}
+	}
+);

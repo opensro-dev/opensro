@@ -27,6 +27,7 @@ import {
 	compileWalkTable,
 	fadeKeeps,
 	residentSlots,
+	setWalkLayers,
 	FADE_KEEPS_IN,
 	FADE_KEEPS_OUT,
 	SLOT_SCENERY,
@@ -35,6 +36,7 @@ import {
 	WALK_SKY,
 	WALK_TERRAIN
 } from "./walk-table";
+import { sameWorldLayers } from "@/engine/foundation/world/world-layers";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
@@ -694,6 +696,8 @@ export function createWorldRenderer(
 	// selection walk's scratch (visible order indices, transparent depths).
 	let orderLayers: (TerrainLayer | undefined)[] = [], orderDraws: (GeometryDraw | undefined)[] = [];
 	let orderVisible = new Int32Array( 0 ), orderDepth = new Float64Array( 0 );
+	// The seasonal world layers drawn (world-layers.ts), kept across scenes.
+	let eventLayers: ReadonlySet<number> = new Set();
 	// The current scene's groups in walk order, with their typed bounds.
 	let walk = compileWalkTable( [], pickBounds );
 	// Instanced selection caches by walk index, so the walk does not look them up.
@@ -717,7 +721,7 @@ export function createWorldRenderer(
 		orderDraws = groups.map( group => draws.get( group ) );
 		orderVisible = new Int32Array( groups.length );
 		orderDepth = new Float64Array( groups.length );
-		walk = compileWalkTable( sceneGroups, pickBounds );
+		walk = compileWalkTable( sceneGroups, pickBounds, eventLayers );
 		walkCaches = new Array( sceneGroups.length );
 		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
 		shadowSurfaces.reset();
@@ -1413,6 +1417,18 @@ export function createWorldRenderer(
 		weather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ) {
 			weatherOptions = value;
 			weather.set( value );
+		},
+		/*
+		================
+		worldLayers
+
+		The seasonal layers to draw; an equal set keeps the resident lists.
+		================
+		*/
+		worldLayers( value: ReadonlySet<number> ) {
+			if ( sameWorldLayers( value, eventLayers ) ) return;
+			eventLayers = value;
+			setWalkLayers( walk, value );
 		},
 		/*
 		================

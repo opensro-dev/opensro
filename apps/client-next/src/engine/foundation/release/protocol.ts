@@ -18,6 +18,9 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 17 filters the seasonal decoration by its world layer (a region
+// bundle placement's `layer`, world-layers.ts), which 16 ignored and drew
+// every season's props at once.
 // Protocol 16 names the pet a chat item link means ([u32 gid] after the
 // slot of a pet-source ref; chat-item-links.ts), which 15 misread.
 // Protocol 15 adds pet passive cooldowns, paid Bond feedback and public
@@ -44,7 +47,8 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 16;
+// Protocol 17 also adds survival checkpoint rewards (#3189).
+export const RELEASE_PROTOCOL = 17;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

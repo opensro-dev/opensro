@@ -17,27 +17,57 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
-// Database loading validates the complete authority graph before Store adopts
-// it. Invalid ownership or social/group references fail boot closed.
+/*
+================
+StoreReadHeadroom
+
+How many store versions past its own this binary opens (#3091, part 2
+of #3082). 0 until part 4 (#3093) turns it on, which keeps today's
+rule: exactly CurrentVersion. A store inside the window may only carry
+additive steps (#3092); its newer top-level record fields survive this
+binary's writes (json.go, #3090), its meta stamps never go down
+(Store.schemaStamp, stampVersionTx), and the tables its newer layout
+added are neither read nor written here, so the newer binary boots on
+it again after a revert.
+
+The layout window is as wide as the schema window: every layout bump
+so far rode on a schema step (layouts 8 through 12 came with schemas
+21, 22, 25, 33 and 39), so K schema steps hold at most K layout bumps.
+================
+*/
+const StoreReadHeadroom = 0
+
+// StoreReadMaxVersion is the newest schema this binary opens: the top of
+// the read window, as the release contract publishes it.
+const StoreReadMaxVersion = CurrentVersion + StoreReadHeadroom
+
 /*
 ================
 loadDB
+
+Validates the complete authority graph before Store adopts it, without
+rewriting the database: invalid ownership or social/group references
+fail boot closed. Every plane map of the result is allocated here, so
+adoptDB installs them as they are. Accepts a schema version in [current, current+headroom] and a layout in
+[currentLayout, currentLayout+headroom]; the boot passes the store's read
+headroom, every offline caller 0 (the exact version it just wrote or
+validates). Everything below current is the offline upgrader's.
 ================
 */
-func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
+func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB, error) {
 	version, err := readMetaInt(db, metaKeySchemaVersion, 0)
 	if err != nil {
 		return nil, err
 	}
-	if version != current {
-		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; preserve the authority; schemas %d through the previous version are validated and upgraded offline with sro-authority-upgrade", version, current, errIncompatibleSchema, UpgradeFromVersion)
+	if version < current || version > current+headroom {
+		return nil, fmt.Errorf("database character schema version %d, binary requires %s: %w; preserve the authority; schemas %d through the previous version are validated and upgraded offline with sro-authority-upgrade", version, versionWindow(current, headroom), errIncompatibleSchema, UpgradeFromVersion)
 	}
 	layout, err := readMetaInt(db, metaKeyLayoutVersion, 0)
 	if err != nil {
 		return nil, err
 	}
-	if layout != currentLayout {
-		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; preserve the authority; supported schemas starting at %d are validated and upgraded offline with sro-authority-upgrade", layout, currentLayout, errIncompatibleSchema, UpgradeFromVersion)
+	if layout < currentLayout || layout > currentLayout+headroom {
+		return nil, fmt.Errorf("database layout version %d, binary requires %s: %w; preserve the authority; supported schemas starting at %d are validated and upgraded offline with sro-authority-upgrade", layout, versionWindow(currentLayout, headroom), errIncompatibleSchema, UpgradeFromVersion)
 	}
 
 	// Only the offline upgrader requests layout 4. Runtime callers require
@@ -98,20 +128,31 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		guildMembers: map[string]map[int64][]domain.GuildMemberRecord{},
 		camps:        map[string]map[int64]domain.TrainingCampRecord{},
 		campMembers:  map[string]map[int64][]domain.TrainingCampMemberRecord{},
-		meta:         Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
+		// Filled from layout 11 on; an older offline load keeps it empty.
+		nameReservations: map[string]map[string]NameReservation{},
+		meta:             Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
+		residues:         recordResidues{planes: map[string]map[string]unknownFields{}},
 	}
 
-	out.version = current
-	out.meta.TradeRewards, err = loadTradeRewards(db)
+	// The stamps as stored: inside the window they may be newer than
+	// this binary's, and the store writes them back unchanged.
+	out.version = version
+	out.layout = layout
+	out.meta.TradeRewards, out.residues.planes[metaKeyTradeRewards], err = loadTradeRewards(db)
 	if err != nil {
 		return nil, err
 	}
-	out.meta.JobRankings, err = loadJobRankings(db)
+	out.meta.JobRankings, out.residues.planes[metaKeyJobRankings], err = loadJobRankings(db)
 	if err != nil {
 		return nil, err
 	}
 	halloweenBoxesPresent := false
-	out.meta.HalloweenBoxes, halloweenBoxesPresent, err = loadHalloweenBoxes(db)
+	out.meta.HalloweenBoxes, out.residues.planes[metaKeyHalloweenBoxes], halloweenBoxesPresent, err = loadHalloweenBoxes(db)
+	if err != nil {
+		return nil, err
+	}
+	sookArenaAccountsPresent := false
+	out.meta.SookArenaAccounts, out.residues.planes[metaKeySookArenaAccounts], sookArenaAccountsPresent, err = loadSookArenaAccounts(db)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +174,7 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		if err := rows.Scan(&division, &id, &nameLower, &record); err != nil {
 			return nil, err
 		}
-		c, err := decodeCharacterStrict(json.RawMessage(record))
+		c, unknown, err := decodeCharacterStrict(json.RawMessage(record))
 		if err != nil {
 			return nil, fmt.Errorf("division %s character %d record: %w", division, id, err)
 		}
@@ -143,6 +184,7 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		if strings.ToLower(c.Name) != nameLower {
 			return nil, fmt.Errorf("division %s character %d name index %q disagrees with record name %q", division, id, nameLower, c.Name)
 		}
+		keepResidue(&out.residues.characters, committedCharacterKey{division: division, id: id}, unknown)
 		out.characters[division] = append(out.characters[division], c)
 	}
 	if err := rows.Err(); err != nil {
@@ -158,6 +200,12 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	if !halloweenBoxesPresent {
 		out.meta.HalloweenBoxes = seedHalloweenBoxes(out.characters)
 		out.halloweenSeeded = len(out.meta.HalloweenBoxes) > 0
+	}
+	// The survival arena counted per character until schema 43 (#3322):
+	// the same first-load seed, for the same reason.
+	if !sookArenaAccountsPresent {
+		out.meta.SookArenaAccounts = seedSookArenaAccounts(out.characters)
+		out.sookArenaSeeded = len(out.meta.SookArenaAccounts) > 0
 	}
 
 	delRows, err := db.Query("SELECT division, record FROM deleted_characters ORDER BY division, seq")
@@ -187,9 +235,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		item := domain.GroundItemRecord{}
-		if err := decodeJSONStrict([]byte(record), &item); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &item)
+		if err != nil {
 			return nil, fmt.Errorf("division %s ground record: %w", division, err)
 		}
+		keepResidue(&out.residues.ground, groundResidueKey{division: division, gid: item.Gid}, unknown)
 		out.ground[division] = append(out.ground[division], item)
 	}
 	if err := groundRows.Err(); err != nil {
@@ -209,9 +259,13 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		letter := domain.LetterRecord{}
-		if err := decodeJSONStrict([]byte(record), &letter); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &letter)
+		if err != nil {
 			return nil, fmt.Errorf("division %s char %d memo record: %w", division, charID, err)
 		}
+		// A letter has no identity but its place in the mailbox, so the
+		// letter itself carries its unknown fields (json.go).
+		letter.UnknownFields = string(unknown)
 		if out.mailboxes[division] == nil {
 			out.mailboxes[division] = map[int64][]domain.LetterRecord{}
 		}
@@ -235,9 +289,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		guild := domain.GuildRecord{}
-		if err := decodeJSONStrict([]byte(record), &guild); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &guild)
+		if err != nil {
 			return nil, fmt.Errorf("division %s guild %d record: %w", division, guildID, err)
 		}
+		keepResidue(&out.residues.guilds, groupResidueKey{division: division, id: guildID}, unknown)
 		if guild.ID != guildID {
 			return nil, fmt.Errorf("division %s guild table id %d disagrees with record id %d", division, guildID, guild.ID)
 		}
@@ -262,9 +318,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		member := domain.GuildMemberRecord{}
-		if err := decodeJSONStrict([]byte(record), &member); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &member)
+		if err != nil {
 			return nil, fmt.Errorf("division %s guild %d member record: %w", division, guildID, err)
 		}
+		keepResidue(&out.residues.guildMembers, memberResidueKey{division: division, group: guildID, charID: charID}, unknown)
 		if member.CharID != charID {
 			return nil, fmt.Errorf("division %s guild %d member table character id %d disagrees with record id %d", division, guildID, charID, member.CharID)
 		}
@@ -297,9 +355,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		camp := domain.TrainingCampRecord{}
-		if err := decodeJSONStrict([]byte(record), &camp); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &camp)
+		if err != nil {
 			return nil, fmt.Errorf("division %s training camp %d record: %w", division, campID, err)
 		}
+		keepResidue(&out.residues.camps, groupResidueKey{division: division, id: campID}, unknown)
 		if camp.ID != campID {
 			return nil, fmt.Errorf("division %s training camp table id %d disagrees with record id %d", division, campID, camp.ID)
 		}
@@ -324,9 +384,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, err
 		}
 		member := domain.TrainingCampMemberRecord{}
-		if err := decodeJSONStrict([]byte(record), &member); err != nil {
+		unknown, err := decodeRecordFields([]byte(record), &member)
+		if err != nil {
 			return nil, fmt.Errorf("division %s training camp %d member record: %w", division, campID, err)
 		}
+		keepResidue(&out.residues.campMembers, memberResidueKey{division: division, group: campID, charID: charID}, unknown)
 		if member.CharID != charID {
 			return nil, fmt.Errorf("division %s training camp %d member table character id %d disagrees with record id %d", division, campID, charID, member.CharID)
 		}
@@ -705,4 +767,18 @@ func readMetaInt64(db *sql.DB, key string, absent int64) (int64, error) {
 		return 0, fmt.Errorf("meta %s = %q: %w", key, value, err)
 	}
 	return parsed, nil
+}
+
+/*
+================
+versionWindow
+
+The refusal's wording for the versions a load accepts.
+================
+*/
+func versionWindow(lowest, headroom int) string {
+	if headroom == 0 {
+		return fmt.Sprintf("exactly %d", lowest)
+	}
+	return fmt.Sprintf("%d through %d", lowest, lowest+headroom)
 }

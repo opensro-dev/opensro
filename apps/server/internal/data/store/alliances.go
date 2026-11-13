@@ -13,7 +13,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -114,7 +113,9 @@ A row's JSON must name the row's own union.
 */
 func decodeAllianceRecord(id int64, raw string) (domain.AllianceRecord, error) {
 	var record domain.AllianceRecord
-	if err := decodeJSONStrict([]byte(raw), &record); err != nil {
+	// Unknown top-level fields stay on disk: SaveAlliance reads them
+	// back before replacing the row.
+	if _, err := decodeRecordFields([]byte(raw), &record); err != nil {
 		return record, fmt.Errorf("alliance %d: %w", id, err)
 	}
 	if record.AllianceID != id {
@@ -184,8 +185,16 @@ func (door storeAllianceDoor) SaveAlliance(divisionID string, record domain.Alli
 		if err = checkAllianceRecord(record); err != nil {
 			return err
 		}
+		// The game builds a union record from its own state, so the
+		// replaced row's unknown fields are read back here (json.go).
+		var unknown unknownFields
+		unknown, err = storedUnknownFields[domain.AllianceRecord](s.syncDBLocked(),
+			"SELECT record FROM alliances WHERE division = ? AND alliance_id = ?", divisionID, record.AllianceID)
+		if err != nil {
+			return err
+		}
 		var raw []byte
-		if raw, err = json.Marshal(record); err != nil {
+		if raw, err = encodeRecordFields(record, unknown); err != nil {
 			return err
 		}
 		_, err = s.syncDBLocked().Exec(

@@ -106,7 +106,13 @@ function sourceGates() {
 		"tests/runtime/cos-item-use.test.mjs",
 		"tests/runtime/cos-hud.test.mjs",
 		"tests/runtime/release-smoke.test.mjs",
-		"tests/runtime/terrain-frustum-cull.test.mjs"
+		"tests/runtime/terrain-frustum-cull.test.mjs",
+		// The asset transport's recovery and resume (#3354) mock fetch and
+		// time; they read no generated file.
+		"tests/runtime/asset-download-recovery.test.mjs",
+		"tests/runtime/asset-download-resume.test.mjs",
+		// The chat tabs' filing rule (#3370) reads no generated file.
+		"tests/runtime/chat-tabs.test.mjs"
 	];
 	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
 }

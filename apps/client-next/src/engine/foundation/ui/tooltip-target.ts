@@ -31,6 +31,9 @@ export function tooltipItems(
 	gachaCard?: InventoryItem
 ): readonly InventoryItem[] {
 	let item: InventoryItem | undefined;
+	if ( id.startsWith( "arena-chest-item:" ) ) {
+		return game.arenaChest?.items.filter( row => row.slot === Number( id.slice( 17 ) ) ) ?? [];
+	}
 	if ( id.startsWith( "slot:" ) ) item = game.inventory.find( row => row.slot === Number( id.slice( 5 ) ) );
 	else if ( id.startsWith( "item-mall-slot:" ) ) {
 		item = game.inventory.find( row => row.slot === Number( id.slice( "item-mall-slot:".length ) ) );

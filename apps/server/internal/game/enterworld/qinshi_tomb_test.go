@@ -207,3 +207,22 @@ func TestQinShiTombGeneralFourthSkills(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestArenaLoadsCaveSkillsWithoutOpeningTomb
+================
+*/
+func TestArenaLoadsCaveSkillsWithoutOpeningTomb(t *testing.T) {
+	t.Setenv(monster.EnvQinShiTomb, "off")
+	for _, value := range []string{"", "off", "on"} {
+		t.Setenv("SRO_SOOK_SURVIVAL_ARENA", value)
+		skills := NewTextdataSkills(t.TempDir())
+		if skills.tomb != (value == "on") {
+			t.Fatalf("arena=%q cave skill overlay=%v", value, skills.tomb)
+		}
+		if monster.QinShiTombFromEnv() {
+			t.Fatal("arena opened tomb")
+		}
+	}
+}

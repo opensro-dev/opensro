@@ -82,8 +82,10 @@ export const DROP_PLUS_NOTICE_CHANNEL = 0x81;
 // Port-only, not native: the shard's item-break announcement channel
 // (server wire.BreakNoticeChannel; SRO_ALCHEMY_BREAK_NOTICE, #1738),
 // shown as channel 7 unless the Experimental "Item break notices" row
-// is off. The frame is the plain channel-7 layout: a break notice links
-// nothing, so the job alias it names never leads to a character.
+// is off. A break notice links nothing; a failed-reinforcement notice
+// (#3260) may carry the drop/plus link section holding only its item's
+// body - never a player name - so the job alias it names never leads
+// to a character.
 export const BREAK_NOTICE_CHANNEL = 0x82;
 
 // Port-only, not native: the name-change notice channel (server
@@ -229,8 +231,9 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	if ( p.length < 3 ) throw Error( "Truncated server notification" );
 	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 1, true );
 	// Port-only: a drop/plus notice may carry its links after the text
-	// (notice-links.ts); the banner shows the text alone.
-	const links = p[0] === DROP_PLUS_NOTICE_CHANNEL && p.length > 3 + 2 * n;
+	// (notice-links.ts), and so may a failed-reinforcement notice on the
+	// break channel (#3260); the banner shows the text alone either way.
+	const links = (p[0] === DROP_PLUS_NOTICE_CHANNEL || p[0] === BREAK_NOTICE_CHANNEL) && p.length > 3 + 2 * n;
 	if ( n > 100 || !links && p.length !== 3 + 2 * n || p.length < 3 + 2 * n ) {
 		throw Error( "Invalid server notification length" );
 	}

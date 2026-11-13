@@ -391,6 +391,16 @@ type Character struct {
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
+	// SookArenaActive marks a character inside (or entering) an Event
+	// So-ok survival run (port-only, not native: SRO_SOOK_SURVIVAL_ARENA).
+	// SookArenaDay and SookArenaEntries were the schema 42 per-character
+	// daily count; since schema 43 the account's SookArenaAccount owns it
+	// (#3322), and these two are only the seed that record is derived
+	// from at first load, kept so schema 42 records still load.
+	SookArenaActive  bool        `json:"sookArenaActive,omitempty"`
+	SookArenaDay     int32       `json:"sookArenaDay,omitempty"`
+	SookArenaEntries uint8       `json:"sookArenaEntries,omitempty"`
+	SookChest        *ArenaChest `json:"sookChest,omitempty"`
 	// HalloweenBoxDay is the 04:00-UTC day (progression.HalloweenDayKey)
 	// the character's daily jewelry-box count belongs to, and
 	// HalloweenBoxCount the boxes minted that day from every source

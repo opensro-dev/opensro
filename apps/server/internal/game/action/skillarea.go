@@ -771,6 +771,20 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	public = append(public, battleFrames...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private,
 		Recipients: append(commit.settlements.others, published.recipients...)}
+	for _, victim := range plan.victims {
+		if victim.sequence < 0 {
+			continue
+		}
+		damaged := false
+		for _, impact := range commit.committed[victim.sequence] {
+			damaged = damaged || impact.Damage > 0
+		}
+		if !damaged {
+			continue
+		}
+		rt.transferSookDamage(sookTransferHit{division: division, character: character, at: simulation.Spawn{RegionID: victim.pose.RegionID, X: victim.pose.X, Y: victim.pose.Y, Z: victim.pose.Z}, impacts: commit.committed[victim.sequence], now: nowMs})
+		break
+	}
 	if rootID == 0 {
 		var targets []uint32
 		for _, victim := range plan.victims {

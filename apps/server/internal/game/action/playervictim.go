@@ -208,12 +208,22 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		if formula.Slain {
 			debit = remaining // the ck kill marks the target dead
 		}
+		if rt.sookPowerActive(s.division, c, sookInvincible, s.now) {
+			debit = min(debit, max(int64(0), remaining-1))
+			formula.Damage, formula.Slain = uint32(debit), false
+		}
+		if run := rt.sookRun(s.division, c); run != nil && run.program.PausedAt != 0 {
+			debit, formula.Damage, formula.Slain = 0, 0, false
+		}
 		before := remaining
 		remaining -= debit
 		if maximum > 0 {
 			heal := ravenRefugeRecovery(s.owner.refuge, c, before, remaining, maximum, s.now)
 			remaining += heal
 			out.refugeHealed = out.refugeHealed || heal > 0
+		}
+		if s.owner != nil {
+			s.owner.noteSookReflection(out.attacker, uint32(debit))
 		}
 		out.fatal = remaining == 0
 		out.impacts = append(out.impacts, wire.SkillCastTargetImpact{
@@ -254,7 +264,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 			out.wear.public = append(out.wear.public, taken.public...)
 		}
 	}
-	if !out.fatal && s.displacement != nil && s.displaceAt < len(out.impacts) && out.struck {
+	if !out.fatal && s.displacement != nil && s.displaceAt < len(out.impacts) && out.struck && !rt.sookPowerActive(s.division, c, sookUnstoppable, s.now) {
 		if point, withdrawn, ok := rt.commitPlayerDisplacementInDoor(s.division, c, s.displacement); ok {
 			if s.displacement.down {
 				out.impacts[s.displaceAt].Knockdown = point
@@ -270,6 +280,14 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		// Death clears statuses, but the already absorbed bond cost still belongs to this hit.
 		owner := out.owner
 		out.owner = rt.clearPlayerAbnormalInDoor(s.division, c, s.now)
+		if owner != nil && len(owner.sookReflected) > 0 {
+			if out.owner == nil {
+				out.owner = owner
+			} else if out.owner != owner {
+				out.owner.sookReflected = append(out.owner.sookReflected, owner.sookReflected...)
+				owner.sookReflected = nil
+			}
+		}
 		if owner != nil && owner.bond != nil {
 			if out.owner == nil {
 				out.owner = owner

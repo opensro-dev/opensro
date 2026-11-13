@@ -113,7 +113,7 @@ func TestReapCascadesFriendEdgesAtomically(t *testing.T) {
 	s.MutateCharacter(survivor, "inject-one-sided-friend", func() {
 		enterworld.SwapFriends(survivor, []enterworld.FriendRecord{{ID: doomed.ID, Name: doomed.Name}})
 	})
-	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
+	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion, 0); err == nil ||
 		!strings.Contains(err.Error(), "no reciprocal edge") {
 		t.Fatalf("one-sided friend load error = %v", err)
 	}

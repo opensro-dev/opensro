@@ -30,6 +30,7 @@ import {
 	createCosSelection,
 	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
+import { ARENA_CHEST_OPCODE } from "@/engine/foundation/gameplay/arena-chest";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
@@ -341,6 +342,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createCaravanStars } from "./caravan-stars/caravan-stars";
+import { createContributorTitles } from "./contributor-titles/contributor-titles";
 import { createTradeProgress } from "./trade-progress/trade-progress";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createMostWanted } from "./most-wanted/most-wanted";
@@ -595,6 +597,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		caravanStars = createCaravanStars(),
+		contributorTitles = createContributorTitles(),
 		tradeProgress = createTradeProgress(),
 		uniqueRank = createUniqueDamageRank(),
 		mostWanted = createMostWanted(),
@@ -1598,6 +1601,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		caravanStars.clear();
+		contributorTitles.clear();
 		uniqueRank.clear();
 		mostWanted.clear();
 		petTraining.clear();
@@ -2219,6 +2223,19 @@ state here before a command can claim a native wire conversation.
 			}
 			dirty = true;
 			soundClock = now;
+			if ( command.kind === "arena-decision" ) {
+				if ( command.operation === 0 && !inventory.requestArenaState() ) return null;
+				if ( !localGid || ![ 0, 1, 2 ].includes( command.operation ) || command.id.length > 128 ) {
+					throw Error( "Invalid arena decision" );
+				}
+				const id = new TextEncoder().encode( command.id );
+				if ( id.length > 128 ) throw Error( "Invalid arena identity" );
+				return sendFrame( { opcode: 0x7fca, payload: Uint8Array.of( command.operation, ...id ) } );
+			}
+			if ( command.kind === "arena-dismiss" ) {
+				inventory.dismissArena();
+				return null;
+			}
 			if ( command.kind === "local-notice" ) {
 				// A refusal the UI found before sending (guild-names.ts) joins the
 				// notices the server's refusals use, so both show alike.
@@ -4118,6 +4135,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( contributorTitles.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( tradeProgress.receive( frame ) ) {
 					dirty = true;
 					return true;
@@ -5388,6 +5409,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
+					const chest = inventory.state().arenaChest;
+					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
+				}
 				if ( item ) {
 					cosPickup.spaceChanged();
 					// A settled move can change the suit the server stamps
@@ -5640,9 +5665,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					const selection = targeting.state();
 					if (
 						frame.opcode === 0xb45a && frame.payload[0] === 1 && previousTarget.targetPending &&
-						!selection.targetPending && ((selection.targetCapabilities ?? 0) & 0xc3)
+						!selection.targetPending && targeting.opensTalkPane()
 					) npcConversation.select( selection.target );
 					else if ( !selection.target ) npcConversation.clear();
+				}
+				if ( frame.opcode === ARENA_CHEST_OPCODE ) {
+					const chest = inventory.state().arenaChest;
+					if ( chest?.skillCooldowns ) combat.restoreCooldowns( chest, catalog, now );
 				}
 				if ( item ) {
 					guide = queueGuide(
@@ -6163,6 +6192,9 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				caravanStars: caravanStars.gids(),
+				// Port-only (#3358): the shown Contributor roster
+				// (contributor-titles.ts), under SRO_CONTRIBUTOR_TITLES.
+				contributorTitles: contributorTitles.names(),
 				uniqueDamageRank: uniqueRank.current(),
 				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),

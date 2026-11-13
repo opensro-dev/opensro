@@ -338,6 +338,46 @@ test("native retry classes expire on simulation time and stale results cannot re
 	assert.equal( f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 4 }, 9000 ), true );
 });
 
+/*
+================
+an owner-bag refusal holds back only its own drop
+
+Port-only (smartPetPickup): 0xB5 says the owner's player bag is full, which
+only a drop bound for that bag (a personal quest item) needs. The pet's own
+bag still has room, so the next drop (here equipment) is proposed at once;
+the refused drop returns after its hold or when bag space changes.
+================
+*/
+test("smartPetPickup: an owner-bag refusal holds back only its own drop, never the pet", () => {
+	const f = fixture();
+	f.drop( 10, 1, 0x4ec, 1 );
+	f.drop( 11, 5, 0x82c, 1 );
+	assert.deepEqual( f.owner.step( f.frame ), [ cosPickupRequest( 2, 10 ) ] );
+	assert.equal( f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 0, true ), false );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 1, smartPetPickup: true } ), [ cosPickupRequest( 2, 11 ) ] );
+	f.owner.result( { subtype: 1, selector: 8, gid: 2, itemGid: 11 }, 2, true );
+	f.entities.delete( 11 );
+	f.owner.track( { kind: "despawn", gid: 11 } );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 29999, smartPetPickup: true } ), [] );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 30000, smartPetPickup: true } ), [ cosPickupRequest( 2, 10 ) ] );
+	f.owner.result( { subtype: 2, selector: 8, result: 0xb5, gid: 2, itemGid: 10 }, 30000, true );
+	f.owner.spaceChanged();
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 30001, smartPetPickup: true } ), [ cosPickupRequest( 2, 10 ) ] );
+	// An item-share retry (0x9C) holds back the drop, not the pet.
+	const share = fixture();
+	share.drop( 10, 1, 0x4ec, 1 );
+	share.drop( 11, 5, 0x82c, 1 );
+	share.owner.step( share.frame );
+	share.owner.result( { subtype: 2, selector: 8, result: 0x9c, gid: 2, itemGid: 10 }, 0, true );
+	assert.deepEqual( share.owner.step( { ...share.frame, now: 1, smartPetPickup: true } ), [
+		cosPickupRequest( 2, 11 )
+	] );
+	// The pet's own full bag (0xB4) still pauses every non-gold drop.
+	f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 10 }, 30002, true );
+	f.drop( 12, 5, 0x82c, 1 );
+	assert.deepEqual( f.owner.step( { ...f.frame, now: 40000, smartPetPickup: true } ), [] );
+});
+
 test("smartPetPickup keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items without spam, and resumes when bag space changes", () => {
 	const f = fixture();
 	const sent = [];

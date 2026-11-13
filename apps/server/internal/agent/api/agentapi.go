@@ -35,6 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/world/worldarea"
+	"opensro.online/server/internal/platform/pacer"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 )
@@ -271,6 +272,11 @@ type API struct {
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
 	revocations    accountRevoker
+
+	// transportTickets and enterWorldTickets pace the two ticket mints
+	// per account (ticket_pace.go).
+	transportTickets  *pacer.Keyed
+	enterWorldTickets *pacer.Keyed
 }
 
 // New builds the API. A configured accounts file that fails to load is a
@@ -342,6 +348,9 @@ func New(config Config) (*API, error) {
 		allowedOrigins:          allowedOrigins,
 		revocations:             newAccountRevoker(),
 	}
+	// The pacers read the API's clock through api.now, so a clock the
+	// tests install later paces them too.
+	api.transportTickets, api.enterWorldTickets = newTicketPacers(func() time.Time { return api.now() })
 	if err := api.revocations.bindPath(revocationPath); err != nil {
 		return nil, fmt.Errorf("agentapi: account revocations: %w", err)
 	}

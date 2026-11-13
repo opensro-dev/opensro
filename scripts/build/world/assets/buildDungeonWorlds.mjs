@@ -70,6 +70,12 @@ export async function buildDungeonWorlds( manifest, options = {} ) {
 			if ( objects.missingCount ) {
 				throw Error( "Incomplete dungeon render resources: " + JSON.stringify( objects.missing ) );
 			}
+			if ( objects.lightmapsMissing.length ) {
+				console.log(
+					`${resource.normalizedName}: ${objects.lightmapsMissing.length} mesh lightmap(s) absent, drawn ` +
+						"without one as retail does: " + objects.lightmapsMissing.join( ", " )
+				);
+			}
 			built.set( resource.normalizedName, objects );
 			for ( const image of objects.textures ) {
 				textures.add( image.imagePublicPath );

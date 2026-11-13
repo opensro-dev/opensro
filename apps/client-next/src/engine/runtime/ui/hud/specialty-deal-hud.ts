@@ -159,9 +159,14 @@ export function createSpecialtyDealHud() {
 					deal = { ...deal, dealing: { ...dealing, phase: "pending" } };
 					return null;
 				}
-				if ( now - dealing.sentAt < DEAL_REQUEST_TIMEOUT_MS ) return null;
-				deal = null;
-				return 0;
+				// A request the worker took and settled between two frames (a
+				// local server answers within one) never shows as pending: its
+				// moved stock is the settlement (see the header).
+				if ( stock === dealing.baseline ) {
+					if ( now - dealing.sentAt < DEAL_REQUEST_TIMEOUT_MS ) return null;
+					deal = null;
+					return 0;
+				}
 			}
 			if ( pending ) return null;
 			const delta = Math.abs( stock - dealing.baseline );

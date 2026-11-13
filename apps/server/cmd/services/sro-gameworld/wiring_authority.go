@@ -402,6 +402,7 @@ func newBootstrapDependencies(
 		return authorityStore.UpdateCharacter(character, label, update)
 	}
 	deps.UpdateCharacters = authorityStore.UpdateCharacters
+	deps.ItemSaleNote = authorityStore.NoteItemSale
 	deps.MutateCharacterDeferred = func(character *enterworld.Character, label string, mutate func()) {
 		if character != nil {
 			label += " " + character.Name
@@ -418,6 +419,7 @@ func newBootstrapDependencies(
 	deps.UpdateCharactersDeferred = authorityStore.UpdateCharactersDeferred
 	deps.UpdateTrade = authorityStore.UpdateTrade
 	deps.HalloweenAccountRecord = authorityStore.HalloweenAccount
+	deps.SookArenaAccountRecord = authorityStore.SookArenaAccount
 	deps.CloseJobWeek = authorityStore.CloseJobWeek
 	deps.JobRankings = authorityStore.JobRankings
 	deps.ReadCharacter = func(divisionID string, read func()) {

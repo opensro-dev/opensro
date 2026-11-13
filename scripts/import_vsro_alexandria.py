@@ -382,8 +382,15 @@ def field_seed_regions(vsro_root):
 	return client_outdoor_regions(vsro_root)
 
 
+# ================
+# table_text
+#
+# One textdata table's bytes. archive_index keys are lower-case, and a
+# manifest names its shards in mixed case (CharacterData_5000.txt), so
+# the name is lowered here, once, for every caller.
+# ================
 def table_text(media, index, name):
-	entry = index.get(TEXTDATA + name)
+	entry = index.get(TEXTDATA + name.lower())
 	if entry is None:
 		raise SystemExit(f"Media.pk2 has no {TEXTDATA}{name}")
 	return sro_pk2.payload(media, entry)

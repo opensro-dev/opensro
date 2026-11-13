@@ -15,6 +15,7 @@ export default {
 	runner: "node",
 	files: [
 		"scripts/test/assets/petItemIcons.test.mjs",
+		"scripts/test/assets/survivalBuffIcons.test.mjs",
 		"scripts/test/assets/petLootCollar.test.mjs",
 		"scripts/test/assets/portItemRows.test.mjs",
 		"scripts/test/assets/meshCloth.test.mjs",
@@ -41,6 +42,7 @@ export default {
 		"scripts/test/assets/resourceBuildGraph.test.mjs",
 		"scripts/test/assets/laterDungeonMapStep.test.mjs",
 		"scripts/test/assets/laterWorldMapButtonsStep.test.mjs",
+		"scripts/test/assets/laterWorldMapGuideStep.test.mjs",
 		"scripts/test/assets/publishedAssetBoundary.test.mjs",
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",
@@ -55,6 +57,7 @@ export default {
 		"scripts/test/assets/effectRemapGuard.test.mjs",
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/qinshiTombOverlay.test.mjs",
+		"scripts/test/assets/muhanOverlay.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
 		"scripts/test/assets/npcAnimationContactMarkers.test.mjs",

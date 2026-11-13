@@ -202,6 +202,66 @@ test("past the actor room the nearest effects draw, and the probe hears how many
 	assert.ok( !next.has( -1 ) && !next.has( -3 ), "the two farthest give way" );
 });
 
+test("arena effects displace only distant ordinary loot when the actor room is full", async () => {
+	const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
+	const { createAuxiliaryPresentation } = await import(
+		"../../src/engine/runtime/characters/presentation-auxiliary.ts"
+	);
+	for ( const arena of [ false, true ] ) {
+		const pose = { regionId: 257, x: 0, y: 0, z: 0, yaw: radians( 0 ) };
+		const body = { model: "body", clip: "stand", time: 0, loop: true, scale: 1, pose };
+		const next = new Map( Array.from( { length: 512 }, ( _, i ) => [ i + 1, { ...body, gid: i + 1 } ] ) );
+		const loot = [ 510, 511, 512 ].map( gid => ({
+			gid,
+			refObjId: 99,
+			name: "loot",
+			kind: "npc",
+			groundItem: { typeFlags: 0, goldAmount: 1, tint: 0 },
+			regionId: 257,
+			x: gid,
+			y: 0,
+			z: 0,
+			heading: 0
+		}) );
+		const effectActors = [ -1, -2 ].map( gid => ({
+			gid,
+			model: "fx",
+			clip: "effect",
+			time: 0,
+			loop: false,
+			scale: 1,
+			pose
+		}) );
+		const animationHolders = [ ...next.values() ].map( actor => ({ actor, sets: [] }) );
+		const particleHolders = [ ...next.values() ].map( actor => ({ actor, particles: [] }) );
+		createAuxiliaryPresentation( () => 0 ).presentStages(
+			{
+				orbActors: [],
+				effectActors,
+				next,
+				seconds: 0,
+				animationHolders,
+				particleHolders,
+				player: { regionId: 257, x: 0, z: 0 },
+				arenaLoot: arena ? loot : undefined
+			},
+			{
+				renderer: { setCharacterAssembly() {} },
+				resources: { duration: () => 1 },
+				effects: { animationModel: () => undefined, takeBudget: () => ({ actors: 2, gaveWay: 0 }) },
+				probe: undefined
+			}
+		);
+		assert.equal( next.size, 512, "the renderer bound stays fixed" );
+		for ( const holder of [ ...animationHolders, ...particleHolders ] ) {
+			assert.ok( next.has( holder.actor.gid ), "culled loot cannot leave a dangling emitter" );
+		}
+		assert.equal( next.has( -1 ) && next.has( -2 ), arena );
+		assert.equal( next.has( 511 ) || next.has( 512 ), !arena, "only the farthest loot gives way" );
+		for ( let gid = 1; gid <= 510; gid++ ) assert.ok( next.has( gid ), "bodies and the nearest loot remain" );
+	}
+});
+
 test("in the shared actor room a near effect takes a far character's place; the player always stays", () => {
 	const ranked = [ { priority: 0, distance: 900 }, { priority: 2, distance: 1 }, { priority: 2, distance: 25 } ];
 	// Room 3: the player (always first), the character at 1, then the

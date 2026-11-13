@@ -77,13 +77,19 @@ import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
 import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
-import { importLaterDungeonMapsStep, importLaterWorldMapButtonsStep } from "./laterClientImports.mjs";
+import {
+	importLaterDungeonMapsStep,
+	importLaterWorldMapButtonsStep,
+	importLaterWorldMapGuideStep
+} from "./laterClientImports.mjs";
 
 export {
 	laterDungeonMapImportPlan,
 	laterDungeonMapPublicPaths,
 	laterWorldMapButtonsImportPlan,
-	laterWorldMapButtonPublicPaths
+	laterWorldMapButtonPublicPaths,
+	laterWorldMapGuideImportPlan,
+	laterWorldMapGuidePublicPaths
 } from "./laterClientImports.mjs";
 import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
 import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
@@ -231,6 +237,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildHdTexturePacks: buildHdTexturePacksStep,
 	importLaterDungeonMaps: importLaterDungeonMapsStep,
 	importLaterWorldMapButtons: importLaterWorldMapButtonsStep,
+	importLaterWorldMapGuide: importLaterWorldMapGuideStep,
 	packTree: packPublicTree
 } );
 
@@ -616,6 +623,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// The dungeon pages' own buttons ride the same archive and rule
 	// (issue #3210): the step claims them before the pack tail.
 	const laterWorldMapButtons = await timed( "laterWorldMapButtons", () => steps.importLaterWorldMapButtons() );
+	// The M map guide's tables and art (#3387) come from the v1.696
+	// archive under the same rule, claimed before the pack tail.
+	const laterWorldMapGuide = await timed( "laterWorldMapGuide", () => steps.importLaterWorldMapGuide() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -689,6 +699,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		hdTexturePacks,
 		laterDungeonMaps,
 		laterWorldMapButtons,
+		laterWorldMapGuide,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

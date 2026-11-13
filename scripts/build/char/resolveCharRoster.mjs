@@ -24,7 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { listTextDataShardNamesSync, readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
-import { loadQinShiTombCharacterRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { loadQinShiTombCharacterRows, qinshiTombCombatEnabled } from "../shared/qinshiTomb.mjs";
 
 const CODENAME_COL = 2;
 
@@ -135,7 +135,7 @@ export function loadCharacterDataRows(
 	// resolves the Tomb references the flag-on server can spawn. Callers
 	// that feed the server's own game-data projection stay out: the server
 	// appends the overlay itself and would meet its rows twice.
-	if ( qinshiTombOverlay && qinshiTombEnabled() ) {
+	if ( qinshiTombOverlay && qinshiTombCombatEnabled() ) {
 		const { sourcePath, rows: overlayRows } = loadQinShiTombCharacterRows();
 		for ( const [index, cols] of overlayRows.entries() ) {
 			admit( cols, `${path.basename( sourcePath )}:${index + 1}` );

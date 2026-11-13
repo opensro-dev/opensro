@@ -70,4 +70,3 @@ The evening live follow-up reproduced a further client regression: combat consum
 Actual live checks now include a natural ten-minute crow clone expiry (observed 599,994 ms, 200 ms polling), wind-burst animation and 14,231 dummy damage; owner full-HP/EXP revival and cooldown refusal; party full-HP/EXP revival with gold animation on recipient and observer; party Howl, Tailwind, Guiding Feathers, shields, Plume/Mana Spring visuals, and approximately 500 ms party pet cooldown endpoint reductions.
 
 The precise setup, failed/interrupted attempts, evidence filenames, cleanup, deployment limits and remaining unverified cases are in `CLAUDE-HANDOFF-2026-11-12.md`, under “Evening follow-up.” All live work used copied databases. Seven original characters and their gear/skills/EXP/gold were verified unchanged, and the temporary account was disabled. This is expanded live coverage, not a claim that every skill rank and sound passed fresh release acceptance.
-

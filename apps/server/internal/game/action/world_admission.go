@@ -21,6 +21,7 @@ type populationAdmission struct {
 }
 
 func (rt *Runtime) admitPopulationSession(division, name string, session uint64) error {
+	rt.recoverSookArena(division, rt.findCharacter(division, name))
 	c := rt.characterSnapshot(division, rt.findCharacter(division, name))
 	if c == nil || session == 0 || rt.Monsters == nil {
 		return fmt.Errorf("missing actor, session or population authority")

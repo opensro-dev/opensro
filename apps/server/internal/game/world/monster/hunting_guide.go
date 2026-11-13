@@ -40,6 +40,12 @@ type HuntingGuideEntry struct {
 	Name     string              `json:"name"`
 	Level    uint8               `json:"level"`
 	Points   []HuntingGuidePoint `json:"points"`
+	// DungeonPoints are the species' anchors in dungeon regions
+	// (regionID with the 0x8000 sector bit), in region-local
+	// coordinates. They ride apart from Points so the outdoor atlas
+	// keeps its meaning: the M window's dungeon pages list a floor's
+	// species from them (issue #3239). Older clients ignore the field.
+	DungeonPoints []HuntingGuidePoint `json:"dungeonPoints,omitempty"`
 }
 
 /*
@@ -50,7 +56,9 @@ Port-only, not native; off by default behind Experimental → World → monsterG
 The effective template supplies locations and
 disabled caps. Infer a conservative beginner scope: ordinary default-world
 retail anchors only, excluding resource-authored event/development areas.
-No bounds are invented from roaming, home radii or current creature positions.
+Dungeon anchors ride in DungeonPoints under the same gates, apart from the
+outdoor points (issue #3239). No bounds are invented from roaming, home radii
+or current creature positions.
 ================
 */
 func (t Template) HuntingGuide() []HuntingGuideEntry {
@@ -59,7 +67,7 @@ func (t Template) HuntingGuide() []HuntingGuideEntry {
 	for _, nest := range t.Nests {
 		ref, ok := t.Refs[nest.RefObjID]
 		if !ok || ref.Structure || ref.TypeID4 != 1 || ref.MonsterType != 0 || ref.Level == 0 ||
-			ref.Name == "" || ref.Name == "xxx" || nest.RegionID&0x8000 != 0 ||
+			ref.Name == "" || ref.Name == "xxx" ||
 			nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT" || nest.EventStructID != 0 ||
 			nest.StartVacant || nest.InstanceLimit() == 0 ||
 			nest.PolicyPinned && !nest.RetailEvidence {
@@ -72,19 +80,25 @@ func (t Template) HuntingGuide() []HuntingGuideEntry {
 		}
 		entry := entries[ref.RefObjID]
 		if entry == nil {
-			entry = &HuntingGuideEntry{RefObjID: ref.RefObjID, NameKey: ref.NameStrID, Name: ref.Name, Level: ref.Level}
+			entry = &HuntingGuideEntry{RefObjID: ref.RefObjID, NameKey: ref.NameStrID, Name: ref.Name, Level: ref.Level,
+				Points: []HuntingGuidePoint{}}
 			entries[ref.RefObjID] = entry
 			seen[ref.RefObjID] = make(map[HuntingGuidePoint]bool)
 		}
 		if !seen[ref.RefObjID][point] {
-			entry.Points = append(entry.Points, point)
+			// A dungeon anchor never enters the outdoor points: the
+			// atlas projections key points by outdoor sector.
+			if nest.RegionID&0x8000 != 0 {
+				entry.DungeonPoints = append(entry.DungeonPoints, point)
+			} else {
+				entry.Points = append(entry.Points, point)
+			}
 			seen[ref.RefObjID][point] = true
 		}
 	}
-	result := make([]HuntingGuideEntry, 0, len(entries))
-	for _, entry := range entries {
-		sort.Slice(entry.Points, func(i, j int) bool {
-			a, b := entry.Points[i], entry.Points[j]
+	sortPoints := func(points []HuntingGuidePoint) {
+		sort.Slice(points, func(i, j int) bool {
+			a, b := points[i], points[j]
 			if a.RegionID != b.RegionID {
 				return a.RegionID < b.RegionID
 			}
@@ -93,6 +107,11 @@ func (t Template) HuntingGuide() []HuntingGuideEntry {
 			}
 			return a.Z < b.Z
 		})
+	}
+	result := make([]HuntingGuideEntry, 0, len(entries))
+	for _, entry := range entries {
+		sortPoints(entry.Points)
+		sortPoints(entry.DungeonPoints)
 		result = append(result, *entry)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].RefObjID < result[j].RefObjID })

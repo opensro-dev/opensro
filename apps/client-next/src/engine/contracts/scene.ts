@@ -136,6 +136,9 @@ export interface WorldGroup {
 		readonly sceneryRange?: boolean;
 		readonly cells: readonly (readonly [number, number])[];
 		readonly cellRadius: number;
+		// A seasonal world layer member: drawn only while its event group
+		// is active (foundation/world/world-layers.ts).
+		readonly layer?: number;
 	}[];
 	readonly animation?: { readonly model: string; readonly primitive: number; readonly clip: string; };
 	readonly instanceRadius?: number;

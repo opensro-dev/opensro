@@ -12,7 +12,7 @@ CIFWorldMap's paint order. Pure layout; the UI owns the window state.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 import { featuresAt } from "@/engine/foundation/world/plane";
-import { REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { dungeonId, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { minimapRotation } from "./hud-readouts";
 const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 // The overview page is tiles of 128 pixels; tile names count four regions per
@@ -27,12 +27,11 @@ const WORLD_MAP_ORIGIN_SECTOR_X = 0x87;
 const WORLD_MAP_ORIGIN_SECTOR_Z = 0x5c;
 const WORLD_MAP_SECTOR_UNITS = 192;
 const WORLD_MAP_POSE_SCALE = 10;
-const DUNGEON_REGION_MASK = 0x7fff;
 // 5757EB: Donwhang Stone Cave is dungeon 1 (floats at BD929C and BD9298).
-const DONWHANG_CAVE_DUNGEON = 1;
+export const DONWHANG_CAVE_DUNGEON = 1;
 const DONWHANG_CAVE_MAP_POINT = [ 2465, 2693 ] as const;
 // 575827: every Ch'in Tomb floor, dungeons 2 to 7 (BD9294 and BD9290).
-const TOMB_FIRST_DUNGEON = 2;
+export const TOMB_FIRST_DUNGEON = 2;
 const TOMB_LAST_DUNGEON = 7;
 const TOMB_MAP_POINT = [ 7200, 2102 ] as const;
 
@@ -269,6 +268,24 @@ function worldMapTownPages() {
 }
 /*
 ================
+worldMapDungeonOf
+
+The world map's dungeon of a region, the one 5757EB and 575827 test for:
+DONWHANG_CAVE_DUNGEON for Donwhang Stone Cave, TOMB_FIRST_DUNGEON for any
+Ch'in Tomb floor (dungeons 2 to 7 are one dungeon on the map), null for
+the open world and every other dungeon.
+================
+*/
+export function worldMapDungeonOf( regionId: number ): number | null {
+	if ( featuresAt( regionId ).worldMap ) return null;
+	const dungeon = dungeonId( regionId );
+	if ( dungeon === DONWHANG_CAVE_DUNGEON ) return DONWHANG_CAVE_DUNGEON;
+	if ( dungeon >= TOMB_FIRST_DUNGEON && dungeon <= TOMB_LAST_DUNGEON ) return TOMB_FIRST_DUNGEON;
+	return null;
+}
+
+/*
+================
 worldMapDungeonPose
 
 The outdoor pose of a dungeon's place on the world map, or null when the
@@ -277,11 +294,10 @@ to centre the view, so it moves the map and never the player's sign.
 ================
 */
 export function worldMapDungeonPose( regionId: number ): Pose | null {
-	if ( featuresAt( regionId ).worldMap ) return null;
-	const dungeon = regionId & DUNGEON_REGION_MASK;
+	const dungeon = worldMapDungeonOf( regionId );
 	const point = dungeon === DONWHANG_CAVE_DUNGEON ?
 		DONWHANG_CAVE_MAP_POINT :
-		dungeon >= TOMB_FIRST_DUNGEON && dungeon <= TOMB_LAST_DUNGEON ?
+		dungeon === TOMB_FIRST_DUNGEON ?
 		TOMB_MAP_POINT :
 		null;
 	if ( !point ) return null;

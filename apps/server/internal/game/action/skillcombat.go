@@ -600,6 +600,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// its burst like the other damage-application state changes.
 	actorFrames = append(actorFrames, battleFrames...)
 	broadcastFrames = append(broadcastFrames, battleFrames...)
+	rt.transferSookDamage(sookTransferHit{division: divisionID, character: character, at: targetAt, impacts: committed, now: nowMs})
 	if rootID == 0 {
 		for _, impact := range committed {
 			if impact.Damage > 0 {

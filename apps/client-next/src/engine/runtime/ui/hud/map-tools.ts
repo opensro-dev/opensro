@@ -1,19 +1,22 @@
 /*
 ===========================================================================
 
-map-tools.ts - the world map's own tools (issue #3167)
+map-tools.ts - the world map's tools and the state its chrome shows
 
-Port-only presentation the owner asked for, on by default: a monster
-level filter and a region and monster drawer in the map window's top
-strip and right edge, clickable dungeon entrances, and the later
-client's dungeon page chrome (issue #3210): the globe back to the
-world and the follow pin at the map's top right corner, the floor
-selector down its right edge, in art the build imports from the later
-client. One owner for that state; the map HUD keeps the window, the
-pages and the cave view itself. Monster levels and anchors come from
-the hunting catalogue the session publishes; dungeon pages from the
-cave catalogue; region names from the published regioncode table
-read through the zone text.
+The M window is the v1.188 client's (res_ui/worldmapguide.2dt, drawn by
+map-chrome.ts): the follow pin and the globe at the map's top right,
+the floor spinner on a dungeon page, the foot with the monster level
+note and its checkbox, and the side tab that opens the guide panel at
+the window's left. Its Monster and Field tabs are the later client's
+own trees (worldmap-guide.ts, issues #3388 and #3389) when the build
+publishes the guide catalogue; without it the Monster tab lists the
+shard's hunting catalogue by region (issue #3167). A dungeon page
+lists the shown floor's species (issue #3239). Port-only, on by default: the named, clickable dungeon
+entrances on the world page. One owner for that state; the map HUD
+keeps the window, the pages and the cave view itself. Monster levels
+and anchors come from the hunting catalogue the session publishes;
+dungeon pages from the cave catalogue; region names from the published
+regioncode table read through the zone text.
 
 ===========================================================================
 */
@@ -29,36 +32,78 @@ import {
 } from "@/engine/foundation/ui/cave-map";
 import {
 	MONSTER_LEVEL_FILTER_SPAN,
+	dungeonDirectory,
 	monsterDirectory,
 	type HuntingCatalogue,
 	type MonsterDirectoryRegion
 } from "@/engine/foundation/ui/hunting-guide";
-import { worldMapDungeonPose, worldMapPointMarkers, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
+import {
+	DONWHANG_CAVE_DUNGEON,
+	TOMB_FIRST_DUNGEON,
+	worldMapDungeonOf,
+	worldMapDungeonPose,
+	worldMapFrame,
+	worldMapPointMarkers,
+	type WorldMapLayout
+} from "@/engine/foundation/ui/world-map";
+import {
+	WORLDMAP_GUIDE_CATALOG,
+	guideAreaRows,
+	guideAreaTarget,
+	guideMonsterRows,
+	guideMonsterTarget,
+	worldMapGuideCatalog,
+	type GuideRow,
+	type GuideTarget,
+	type GuideView,
+	type WorldMapGuideCatalog
+} from "@/engine/foundation/ui/worldmap-guide";
 import { featuresAt } from "@/engine/foundation/world/plane";
+import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import {
+	GUIDE_SCROLL_ID,
+	GUIDE_SCROLL_THUMB,
+	GUIDE_SCROLL_TRAVEL,
+	GUIDE_TREE_ROWS,
+	paintGuideTree,
+	type GuideTreeRow
+} from "./map-guide-tree";
+import {
+	GUIDE_WIDTH,
+	floorSpinner,
+	guideLeft,
+	followPin,
+	globeButton,
+	guidePanel,
+	mapFoot,
+	sideTab,
+	windowCorners,
+	type MapChromePaint
+} from "./map-chrome";
+// The window's size and panel for the map HUD, which places the window.
+export { MAP_WINDOW_EXTENT, MAP_WINDOW_HEIGHT, MAP_WINDOW_WIDTH, mapLeftReach, mapPanel } from "./map-chrome";
 
-const ROOT = "/assets/images/Media_extracted/";
-const CHECK_ON = ROOT + "interface/ifcommon/com_checkbutton_on.png";
-const CHECK_OFF = ROOT + "interface/ifcommon/com_checkbutton_off.png";
-// The later client's dungeon-page chrome (issue #3210), published by
-// import_vsro_worldmap_buttons.py beside the v1.150 worldmap art.
-const WMAP = ROOT + "interface/worldmap/";
-const GLOBE = WMAP + "wmap_big_button_world.png";
-const PIN_AUTO = WMAP + "wmap_button_automatic.png";
-const PIN_PASSIVE = WMAP + "wmap_button_passivity.png";
-const FLOOR_UP = WMAP + "wmap_up_button.png";
-const FLOOR_UP_OFF = WMAP + "wmap_up_button_disable.png";
-const FLOOR_DOWN = WMAP + "wmap_down_button.png";
-const FLOOR_DOWN_OFF = WMAP + "wmap_down_button_disable.png";
-const FLOOR_BOX = WMAP + "wmap_floor_box.png";
-const FLOOR_CHOICE_BOX = WMAP + "wmap_floor_choice_box.png";
-const FLOOR_TRACK = WMAP + "wmap_floor_big_box.png";
+// The level filter note's UI text key: the later client's words for
+// the foot checkbox (the dungeon catalogue already carries them as
+// its monsterLevelNote, issue #3238).
+const LEVEL_FILTER_NOTE_KEY = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST";
 const REGIONCODE_PATH = "/assets/text/regioncode.json";
+const GUIDE_BYTE_LIMIT = 4 << 20;
+// The guide trees' row ids: a main row, a monster, a place.
+const GUIDE_MAIN = "map-guide-main:";
+const GUIDE_MONSTER = "map-guide-monster:";
+const GUIDE_AREA = "map-guide-area:";
+// Any pose: a page's bounds and size do not depend on the view.
+const ORIGIN_POSE: Pose = { regionId: 0, x: 0, y: 0, z: 0, angle: 0 };
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const GOLD = [ .96, .83, .55, 1 ] as const;
-const DIM = [ .72, .7, .63, 1 ] as const;
-const DRAWER_WIDTH = 196;
-const ROW_HEIGHT = 18;
-const DUNGEON_NAMES: Readonly<Record<number, string>> = { 1: "Donwhang Cave", 2: "Ch'in Tomb" };
+// The world map's dungeon doors: the dungeon each opens and the v1.150
+// object text that names it. The doors themselves are the client's own
+// xy_dungeon icons (worldmap_localinfo rows 92033 and 92032).
+const DUNGEON_DOORS = [
+	{ dungeon: DONWHANG_CAVE_DUNGEON, name: "SN_ZONE_23002" },
+	{ dungeon: TOMB_FIRST_DUNGEON, name: "SN_ZONE_23001" }
+] as const;
 
 /*
 ================
@@ -90,50 +135,27 @@ interface MapToolsPaint {
 	clip: UiRect;
 	full: UiRect;
 	catalogue: HuntingCatalogue | undefined;
+	// Whether the shard publishes the hunting catalogue at all
+	// (SRO_HUNTING_GUIDE): without it the guide waits on nothing.
+	guidePublished: boolean;
 	characterLevel: number | undefined;
+	// The guide trees' order column (worldmap-guide.ts guideRace).
+	race: number;
+	hover: string | null;
 	zones: Readonly<Record<string, string>> | undefined;
+	// The client's object and UI text (textdataname, textuisystem).
+	strings: Readonly<Record<string, string>> | undefined;
+	// The cave catalogue's foot note, undefined without the catalogue.
+	levelNote: string | undefined;
+	// The screen rects of the icons the world page drew (its click hits).
+	icons: readonly UiRect[];
 	text: MapToolsText;
 	page: number;
 	pan: readonly [number, number];
 	center: Pose | null;
 	layout?: WorldMapLayout;
-	huntingVisible: boolean;
-}
-
-/*
-================
-followPin
-
-The follow pin at the map's top right corner, on the world and on a
-dungeon page alike (issue #3210). The later client keeps the captioned
-AUTO_MOVE button of the window layout and draws this one big button
-over the map itself: the art names its two faces for the captioned
-modes, wmap_button_automatic while the map follows the character and
-wmap_button_passivity while it stands where it was put, and the
-screenshots show the passive face in town and in the tomb alike. The
-press lands on the map HUD's own follow state, the same state the
-title bar's captioned button flips; the pin only shows it at the map.
-================
-*/
-function followPin( input: MapToolsPaint, quads: UiQuad[], controls: UiControl[] ) {
-	const rect: UiRect = [ input.clip[0] + input.clip[2] - 40, input.clip[1] + 4, 36, 36 ];
-	quads.push( {
-		texture: input.followed ? PIN_AUTO : PIN_PASSIVE,
-		rect,
-		uv: [ 0, 0, 1, 1 ],
-		color: WHITE,
-		clip: input.clip
-	} );
-	controls.push( {
-		id: "map-pin",
-		kind: "button",
-		label: input.followed ? "Auto move" : "Manual move",
-		helpText: input.followed ?
-			"The map follows you; press for manual move" :
-			"The map stands where you put it; press for auto move",
-		rect,
-		selected: input.followed
-	} );
+	// A published image's size, for the guide panel's frames and tiles.
+	size( path: string ): readonly [number, number] | undefined;
 }
 
 /*
@@ -150,17 +172,49 @@ type RegionNamesLoad =
 
 /*
 ================
+GuideLoad
+
+The guide catalogue's load. A build without it (no pinned v1.696
+client) answers 404 and the tabs fall back to the shard's catalogue.
+================
+*/
+type GuideLoad =
+	| { kind: "idle"; }
+	| { kind: "loading"; id: number; }
+	| { kind: "ready"; catalog: WorldMapGuideCatalog; }
+	| { kind: "absent"; }
+	| { kind: "disposed"; };
+
+/*
+================
+treeRow
+
+A guide row as the tree paints it.
+================
+*/
+function treeRow( row: GuideRow, prefix: string, open: number | null, picked: number | null ): GuideTreeRow {
+	return {
+		id: (row.main ? GUIDE_MAIN : prefix) + row.index,
+		label: row.label,
+		group: row.main,
+		open: row.main ? row.index === open : undefined,
+		lamp: !row.main && row.index === picked,
+		color: row.color,
+		badge: row.badge
+	};
+}
+
+/*
+================
 dungeonKey
 
 The dungeon a region belongs to, as the floor selector counts them:
-1 is Donwhang's cave, 2 is Ch'in Tomb (regions 2..7 of the mask).
+the world map's dungeon (every Ch'in Tomb floor is one), else the
+region itself.
 ================
 */
 function dungeonKey( regionId: number ): number {
-	const dungeon = regionId & 0x7fff;
-	if ( dungeon === 1 ) return 1;
-	if ( dungeon >= 2 && dungeon <= 7 ) return 2;
-	return regionId;
+	return worldMapDungeonOf( regionId ) ?? regionId;
 }
 
 /*
@@ -174,7 +228,10 @@ export function createMapToolsHud( options: {
 } ) {
 	const assets = options.assets;
 	let levelFilter = true;
+	// The side tab's guide panel, and the tab it shows.
 	let drawerOpen = false;
+	let guideTab: "area" | "monster" = "monster";
+	// The guide tree's open group (one at a time) and its first shown row.
 	let drawerRegion: number | null = null;
 	let drawerPage = 0;
 	let mark: { regionId: number; x: number; z: number; refObjId: number; } | null = null;
@@ -191,6 +248,20 @@ export function createMapToolsHud( options: {
 	let shownFloors: readonly CaveMapPage[] = [];
 	let shownFloor: CaveMapPage | undefined;
 	let regionLoad: RegionNamesLoad = { kind: "idle" };
+	let guideLoad: GuideLoad = { kind: "idle" };
+	// The guide trees' open main row (one per tab, as the tab switch
+	// shuts it), the picked monster (its overlay), and the floor a
+	// picked dungeon row asks for until the cave catalogue resolves it.
+	let guideOpen: number | null = null;
+	let guidePicked: number | null = null;
+	let pendingFloor: number | null = null;
+	// The rows the last paint showed past one page, and the thumb's
+	// unspent drag in rows, so a slow drag still moves.
+	let guideRange = 0;
+	let thumbCarry = 0;
+	// The last painted frame's layout: a town page point becomes a pose
+	// through that page's bounds.
+	let lastLayout: WorldMapLayout | undefined;
 	let directoryFor: {
 		catalogue: HuntingCatalogue;
 		cap: number | undefined;
@@ -252,6 +323,86 @@ export function createMapToolsHud( options: {
 
 	/*
 	================
+	caveDrawer
+
+	The guide's monster list on a dungeon page (issue #3239): the
+	shown floor's species from the catalogue's dungeon anchors. The
+	level filter caps it as it caps the world list.
+	================
+	*/
+	function caveDrawer( input: MapToolsPaint, paint: MapChromePaint ) {
+		const floor = input.floor;
+		if ( !floor ) return;
+		const region = input.catalogue ?
+			dungeonDirectory( input.catalogue, floor.regionId, filterCap( input.characterLevel ) ) :
+			undefined;
+		guideTree(
+			input,
+			paint,
+			(region?.monsters ?? []).map( entry =>
+				speciesRow( "map-cave-monster:" + entry.region + ":", entry, input.characterLevel )
+			)
+		);
+	}
+
+	/*
+	================
+	speciesRow
+
+	A species row under its group: "Lv21 Megalopa", its lamp lit while
+	the map marks it, red when it stands above the character's level
+	(map1 shows Lv25 in red under a Lv24 character's Lv21-25 list; the
+	exact rule is not read from the binary, so above-own-level is an
+	inference).
+	================
+	*/
+	function speciesRow(
+		prefix: string,
+		entry: { region: number; monster: { refObjId: number; name: string; level: number; }; },
+		characterLevel: number | undefined
+	): GuideTreeRow {
+		return {
+			id: prefix + entry.monster.refObjId,
+			label: "Lv" + entry.monster.level + " " + entry.monster.name,
+			group: false,
+			lamp: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region,
+			color: characterLevel !== undefined && entry.monster.level > characterLevel ? "high" : "leaf"
+		};
+	}
+
+	/*
+	================
+	guideTree
+
+	Paints the rows on the open guide panel and keeps the clamped scroll.
+	================
+	*/
+	function guideTree( input: MapToolsPaint, paint: MapChromePaint, rows: GuideTreeRow[], empty?: string ) {
+		guideRange = Math.max( 0, rows.length - GUIDE_TREE_ROWS );
+		drawerPage = paintGuideTree(
+			{
+				panel: [ guideLeft( input ), input.window[1], GUIDE_WIDTH, 0 ],
+				full: input.full,
+				rows,
+				scroll: drawerPage,
+				hover: input.hover,
+				pressed: null,
+				empty: empty ?? (
+					input.catalogue ?
+						"No monsters" :
+						input.guidePublished ?
+						"Loading..." :
+						"No monster guide on this server"
+				),
+				text: input.text,
+				size: input.size
+			},
+			paint
+		);
+	}
+
+	/*
+	================
 	regionName
 
 	A region's shown name: the zone text by sector key, else the
@@ -267,18 +418,128 @@ export function createMapToolsHud( options: {
 		return "Region " + region;
 	}
 
+	/*
+	================
+	guideView
+
+	The trees' inputs for this frame.
+	================
+	*/
+	function guideView( input: MapToolsPaint ): GuideView {
+		return {
+			race: input.race,
+			playerLevel: input.characterLevel,
+			filterCap: filterCap( input.characterLevel ),
+			open: guideOpen
+		};
+	}
+
+	/*
+	================
+	guideTarget
+
+	A picked row's target as the view takes it: a pose to centre on
+	(a town page's point read through that page's bounds), or null
+	after a dungeon floor was put up or when the port has no page.
+	================
+	*/
+	function guideTarget( target: GuideTarget ): Pose | null {
+		if ( !target ) return null;
+		if ( target.kind === "world" ) return target.pose;
+		if ( target.kind === "dungeon" ) {
+			dungeonView = target.dungeon;
+			floorChoice = null;
+			choiceDungeon = target.dungeon;
+			pendingFloor = target.floor;
+			return null;
+		}
+		const frame = worldMapFrame( target.page, [ 0, 0, 0, 0 ], [ 0, 0 ], ORIGIN_POSE, lastLayout );
+		if ( !frame.page ) return null;
+		const x = frame.left + (target.point[0] / frame.width) * (frame.right - frame.left),
+			z = frame.top - (target.point[1] / frame.height) * (frame.top - frame.bottom);
+		const rx = Math.floor( x / 192 ), rz = Math.floor( z / 192 );
+		return { regionId: (rz << 8) | rx, x: (x - rx * 192) * 10, y: 0, z: (z - rz * 192) * 10, angle: 0 };
+	}
+
+	/*
+	================
+	guideActivate
+
+	The guide trees' ids. A main row opens in place and shuts the one
+	before; a monster row marks its hunting ground; a place row moves
+	the view. Undefined when the id is not the trees'.
+	================
+	*/
+	function guideActivate( id: string ): Pose | null | undefined {
+		const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;
+		const prefix = [ GUIDE_MAIN, GUIDE_MONSTER, GUIDE_AREA ].find( value => id.startsWith( value ) );
+		if ( !prefix ) return undefined;
+		const index = Number( id.slice( prefix.length ) );
+		if ( !catalog || !Number.isInteger( index ) ) return null;
+		if ( prefix === GUIDE_MAIN ) {
+			guideOpen = guideOpen === index ? null : index;
+			return null;
+		}
+		if ( prefix === GUIDE_MONSTER ) {
+			guidePicked = index;
+			mark = null;
+			return guideTarget( guideMonsterTarget( catalog, index ) );
+		}
+		return guideTarget( guideAreaTarget( catalog, index ) );
+	}
+
+	/*
+	================
+	guideRows
+
+	The open tab's rows from the guide catalogue.
+	================
+	*/
+	function guideRows( catalog: WorldMapGuideCatalog, input: MapToolsPaint ): GuideTreeRow[] {
+		const view = guideView( input );
+		return guideTab === "area" ?
+			guideAreaRows( catalog, view ).map( row => treeRow( row, GUIDE_AREA, guideOpen, null ) ) :
+			guideMonsterRows( catalog, view ).map( row => treeRow( row, GUIDE_MONSTER, guideOpen, guidePicked ) );
+	}
+
 	return {
 		/*
 		================
 		step
 
-		Drives the regioncode load while the map is open; true when a
-		load landed and the frame should redraw.
+		Drives the regioncode and guide loads while the map is open;
+		true when a load landed and the frame should redraw.
 		================
 		*/
 		step( panel: string ): boolean {
 			if ( regionLoad.kind === "disposed" ) return false;
 			let changed = false;
+			if ( panel === "Map" && drawerOpen && guideLoad.kind === "idle" && assets.available() > 0 ) {
+				guideLoad = {
+					kind: "loading",
+					id: assets.request( new URL( WORLDMAP_GUIDE_CATALOG, options.base ).href, GUIDE_BYTE_LIMIT )
+				};
+			}
+			if ( guideLoad.kind === "loading" ) {
+				const result = assets.take( guideLoad.id );
+				if ( result ) {
+					try {
+						if ( result.kind !== "bytes" ) throw Error( "no worldmap guide in this build" );
+						guideLoad = {
+							kind: "ready",
+							catalog: worldMapGuideCatalog(
+								JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
+							)
+						};
+					} catch ( error ) {
+						// The tabs keep the shard's catalogue; the warning
+						// names why, so a stale tree names its rebuild.
+						console.warn( "[SRO map guide] " + (error instanceof Error ? error.message : String( error )) );
+						guideLoad = { kind: "absent" };
+					}
+					changed = true;
+				}
+			}
 			if ( panel === "Map" && regionLoad.kind === "idle" && assets.available() > 0 ) {
 				regionLoad = {
 					kind: "loading",
@@ -342,6 +603,42 @@ export function createMapToolsHud( options: {
 		},
 		/*
 		================
+		guidePick
+
+		The guide catalogue and the monster picked from it, whose hunting
+		ground the map HUD tints (worldmap-guide.ts guideOverlay); null
+		until a monster row is picked.
+		================
+		*/
+		guidePick(): { catalog: WorldMapGuideCatalog; index: number; } | null {
+			if ( guideLoad.kind !== "ready" || guidePicked === null ) return null;
+			return { catalog: guideLoad.catalog, index: guidePicked };
+		},
+		/*
+		================
+		drag
+
+		The guide's thumb: the drag moves the scroll by the rows its
+		pixels stand for over the thumb's travel. False for other ids.
+		================
+		*/
+		drag( id: string, dy: number ): boolean {
+			if ( id !== GUIDE_SCROLL_THUMB ) return false;
+			if ( guideRange <= 0 ) return true;
+			thumbCarry += (dy * guideRange) / GUIDE_SCROLL_TRAVEL;
+			// A hair under a whole row still counts as one: a drag across
+			// the whole travel must reach the last row.
+			const step = Math.trunc( thumbCarry + (thumbCarry > 0 ? 1e-6 : -1e-6) );
+			thumbCarry -= step;
+			const next = drawerPage + step;
+			drawerPage = Math.max( 0, Math.min( guideRange, next ) );
+			// Past either end the thumb holds there, and so does the drag:
+			// pixels spent beyond the end are not owed back on the return.
+			if ( next !== drawerPage ) thumbCarry = 0;
+			return true;
+		},
+		/*
+		================
 		viewingDungeon
 
 		Whether a dungeon page is being viewed from outside it.
@@ -394,12 +691,22 @@ export function createMapToolsHud( options: {
 				return undefined;
 			}
 			if ( dungeonView === null ) return undefined;
-			const anchor = dungeonView === 1 ? 0x8001 : 0x8002;
+			const anchor = dungeonRegionId( dungeonView );
 			const floors = caveDungeonFloors( catalog, anchor );
 			if ( floors.length === 0 ) return undefined;
 			if ( choiceDungeon !== dungeonView ) {
 				choiceDungeon = dungeonView;
 				floorChoice = null;
+			}
+			if ( pendingFloor !== null ) {
+				// A guide row named its floor by number (jinsi3 is the
+				// third); the catalogue lists the floors in that order.
+				const asked = floors[pendingFloor];
+				pendingFloor = null;
+				if ( asked ) {
+					floorChoice = { regionId: asked.regionId, floorIndex: asked.floorIndex };
+					choiceFromView = true;
+				}
 			}
 			if ( floorChoice && !choiceFromView ) floorChoice = null;
 			const chosen = floorChoice ?
@@ -428,28 +735,35 @@ export function createMapToolsHud( options: {
 				drawerPage = 0;
 				return null;
 			}
-			if ( id === "map-list" ) {
+			if ( id === "map-side-tab" ) {
 				drawerOpen = !drawerOpen;
 				drawerRegion = null;
+				guideOpen = null;
 				drawerPage = 0;
 				return null;
 			}
-			if ( id === "map-drawer-back" ) {
+			if ( id === "map-guide-tab:area" || id === "map-guide-tab:monster" ) {
+				guideTab = id === "map-guide-tab:area" ? "area" : "monster";
 				drawerRegion = null;
+				guideOpen = null;
 				drawerPage = 0;
 				return null;
 			}
-			if ( id === "map-drawer-prev" || id === "map-drawer-next" ) {
-				drawerPage += id === "map-drawer-next" ? 1 : -1;
-				if ( drawerPage < 0 ) drawerPage = 0;
+			const guided = guideActivate( id );
+			if ( guided !== undefined ) return guided;
+			// The guide panel's and the foot's surfaces only keep clicks
+			// off the world.
+			if ( id === "map-guide" || id === "map-foot" ) return null;
+			if ( id === GUIDE_SCROLL_ID + "-up" || id === GUIDE_SCROLL_ID + "-down" ) {
+				// The paint clamps the far end against the rows.
+				drawerPage = Math.max( 0, drawerPage + (id === GUIDE_SCROLL_ID + "-down" ? 1 : -1) );
 				return null;
 			}
 			if ( id.startsWith( "map-region:" ) ) {
+				// A group's toggle opens it in place and shuts the one
+				// open before (map1 shows a single open group).
 				const region = Number( id.slice( "map-region:".length ) );
-				if ( Number.isInteger( region ) ) {
-					drawerRegion = region;
-					drawerPage = 0;
-				}
+				if ( Number.isInteger( region ) ) drawerRegion = drawerRegion === region ? null : region;
 				return null;
 			}
 			if ( id.startsWith( "map-monster:" ) ) {
@@ -476,9 +790,23 @@ export function createMapToolsHud( options: {
 							angle: 0
 						};
 						mark = { regionId: pose.regionId, x: pose.x, z: pose.z, refObjId };
+						guidePicked = null;
 						return pose;
 					}
 				}
+				return null;
+			}
+			if ( id.startsWith( "map-cave-monster:" ) ) {
+				// A species picked on a dungeon page marks where it
+				// lives on that page; the view stays on the floor.
+				const [regionId, refObjId] = id.slice( "map-cave-monster:".length ).split( ":" ).map( Number );
+				if (
+					regionId === undefined || refObjId === undefined ||
+					!Number.isInteger( regionId ) || !Number.isInteger( refObjId ) || !catalogue
+				) return null;
+				const entry = dungeonDirectory( catalogue, regionId, filterCap( characterLevel ) )
+					?.monsters.find( row => row.monster.refObjId === refObjId );
+				if ( entry ) mark = { regionId, x: entry.x, z: entry.z, refObjId };
 				return null;
 			}
 			if ( id.startsWith( "map-dungeon:" ) || id.startsWith( "map-dungeon-icon:" ) ) {
@@ -511,159 +839,43 @@ export function createMapToolsHud( options: {
 		================
 		present
 
-		The strip (level filter and list toggles on the world), the
-		dungeon entrances and the follow pin on the world, the dungeon
-		page's globe, pin and floor selector in a cave, and the drawer
-		when it is open.
+		The v1.188 window's chrome (map-chrome.ts) with this frame's
+		state: the corner and panel edges, the globe off the world page,
+		the follow pin, the floor spinner on a dungeon page, the named
+		dungeon entrances on the world page, the foot with the level
+		filter, and the side tab with the guide panel when it is open.
 		================
 		*/
 		present( input: MapToolsPaint ): { quads: UiQuad[]; controls: UiControl[]; paths: string[]; } {
 			const quads: UiQuad[] = [], controls: UiControl[] = [], paths: string[] = [];
 			if ( !input.open ) return { quads, controls, paths };
-			const [mx, my, mw] = input.window;
 			const text = input.text;
-			let stripX = mx + (input.huntingVisible && !input.cave ? 88 : 8);
+			lastLayout = input.layout;
+			const paint: MapChromePaint = { window: input.window, full: input.full, quads, controls, paths };
+			windowCorners( paint );
+			if ( input.cave || input.page !== 0 ) globeButton( paint );
+			followPin( paint, input.followed );
 			if ( input.cave ) {
-				// The later client's dungeon chrome (issue #3210): the
-				// big globe back to the world beside the follow pin at
-				// the map's top right, and the floor selector down its
-				// right edge - up arrow, the floor box, down arrow over
-				// their track. The up arrow takes the next floor down:
-				// on the first floor the later client greys the down
-				// arrow, not the up one, and the ends hold.
 				shownFloors = input.floors;
 				shownFloor = input.floor;
-				paths.push(
-					GLOBE,
-					PIN_AUTO,
-					PIN_PASSIVE,
-					FLOOR_UP,
-					FLOOR_UP_OFF,
-					FLOOR_DOWN,
-					FLOOR_DOWN_OFF,
-					FLOOR_BOX,
-					FLOOR_CHOICE_BOX,
-					FLOOR_TRACK
-				);
-				const clip = input.clip, right = clip[0] + clip[2];
-				quads.push( {
-					texture: GLOBE,
-					rect: [ right - 84, clip[1] + 4, 36, 36 ],
-					uv: [ 0, 0, 1, 1 ],
-					color: WHITE,
-					clip
-				} );
-				controls.push( {
-					id: "map-globe",
-					kind: "button",
-					label: "World map",
-					helpText: "Back to the world map",
-					rect: [ right - 84, clip[1] + 4, 36, 36 ]
-				} );
-				followPin( input, quads, controls );
 				const index = input.floors.findIndex( floor => floor === input.floor );
-				if ( input.floor && index >= 0 && clip[3] >= 140 ) {
-					const sx = right - 32, sy = clip[1] + 48;
-					const upOff = index >= input.floors.length - 1, downOff = index <= 0;
-					quads.push( {
-						texture: FLOOR_TRACK,
-						rect: [ sx, sy, 28, Math.min( 228, clip[1] + clip[3] - sy - 4 ) ],
-						uv: [ 0, 0, 1, 1 ],
-						color: WHITE,
-						clip
-					} );
-					quads.push( {
-						texture: upOff ? FLOOR_UP_OFF : FLOOR_UP,
-						rect: [ sx, sy + 6, 28, 12 ],
-						uv: [ 0, 0, 1, 1 ],
-						color: WHITE,
-						clip
-					} );
-					controls.push( {
-						id: "map-floor-up",
-						kind: "button",
-						label: "Next floor",
-						helpText: "Show the next floor down",
-						rect: [ sx, sy + 6, 28, 12 ],
-						disabled: upOff
-					} );
-					quads.push( {
-						texture: floorChoice ? FLOOR_CHOICE_BOX : FLOOR_BOX,
-						rect: [ sx + 2, sy + 20, 24, 20 ],
-						uv: [ 0, 0, 1, 1 ],
-						color: WHITE,
-						clip
-					} );
-					quads.push(
-						...text.quads(
-							"B" + input.floor.layer,
-							[ sx + 2, sy + 20, 24, 20 ],
-							clip,
-							WHITE,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
-					quads.push( {
-						texture: downOff ? FLOOR_DOWN_OFF : FLOOR_DOWN,
-						rect: [ sx, sy + 42, 28, 12 ],
-						uv: [ 0, 0, 1, 1 ],
-						color: WHITE,
-						clip
-					} );
-					controls.push( {
-						id: "map-floor-down",
-						kind: "button",
-						label: "Previous floor",
-						helpText: "Show the floor before",
-						rect: [ sx, sy + 42, 28, 12 ],
-						disabled: downOff
+				if ( input.floor && index >= 0 ) {
+					floorSpinner( paint, text, {
+						label: "B" + input.floor.layer,
+						upOff: index >= input.floors.length - 1,
+						downOff: index <= 0
 					} );
 				}
-				return { quads, controls, paths };
 			}
-			// The level filter toggle: the toolkit checkbutton, as the
-			// hunting toggle beside it draws.
-			paths.push( CHECK_ON, CHECK_OFF );
-			quads.push( {
-				texture: levelFilter ? CHECK_ON : CHECK_OFF,
-				rect: [ stripX, my + 10, 16, 16 ],
-				uv: [ 0, 0, 1, 1 ],
-				color: WHITE,
-				clip: input.full
-			} );
-			quads.push(
-				...text.quads( "Lv filter", [ stripX + 20, my + 10, 56, 17 ], input.full, GOLD, { vAlign: 1 } )
-			);
-			controls.push( {
-				id: "map-level-filter",
-				kind: "button",
-				label: "Monster level filter",
-				helpText: (levelFilter ? "Hide" : "Show") + " only monsters up to " +
-					MONSTER_LEVEL_FILTER_SPAN + " levels above you",
-				rect: [ stripX - 2, my + 7, 80, 20 ],
-				selected: levelFilter
-			} );
-			stripX += 84;
-			// The drawer toggle.
-			quads.push(
-				...text.quads( "Monsters", [ stripX + 2, my + 10, 64, 17 ], input.full, GOLD, { vAlign: 1 } )
-			);
-			controls.push( {
-				id: "map-list",
-				kind: "button",
-				label: "Monster list",
-				helpText: (drawerOpen ? "Close" : "Open") + " the region and monster list",
-				rect: [ stripX, my + 7, 68, 20 ],
-				selected: drawerOpen
-			} );
-			// The follow pin at the map's own corner, as the later
-			// client draws it on the world too (issue #3210).
-			paths.push( PIN_AUTO, PIN_PASSIVE );
-			followPin( input, quads, controls );
-			// The dungeon entrances: their authored map points, named.
-			const anchors = !input.center ? [] : [ 1, 2 ]
-				.map( dungeon => ({ dungeon, pose: worldMapDungeonPose( dungeon === 1 ? 0x8001 : 0x8002 ) }) )
-				.filter( ( row ): row is { dungeon: number; pose: Pose; } => row.pose !== null );
+			// The dungeon entrances: their authored map points, named by
+			// the client's own text. A door whose name the text lacks
+			// stays the plain icon.
+			const anchors: { dungeon: number; label: string; pose: Pose; }[] = [];
+			for ( const door of input.center && !input.cave ? DUNGEON_DOORS : [] ) {
+				const label = input.strings?.[door.name];
+				const pose = worldMapDungeonPose( dungeonRegionId( door.dungeon ) );
+				if ( label && pose ) anchors.push( { dungeon: door.dungeon, label, pose } );
+			}
 			for (
 				const { point, rect } of !input.center ? [] : worldMapPointMarkers( {
 					page: input.page,
@@ -675,7 +887,7 @@ export function createMapToolsHud( options: {
 				} )
 			) {
 				const anchor = anchors.find( row => row.pose === point )!;
-				const label = DUNGEON_NAMES[anchor.dungeon]!;
+				const label = anchor.label;
 				const width = Math.max( 84, text.run( label, 0, 0 ).width + 16 ),
 					left = Math.trunc( rect[0] + rect[2] / 2 - width / 2 ),
 					top = rect[1] - 22;
@@ -693,126 +905,59 @@ export function createMapToolsHud( options: {
 					helpText: "Open the " + label + " map",
 					rect: [ left, top, width, 20 ]
 				} );
-				// The entrance's own icon opens it too (issue #3210):
-				// the name alone took the click before.
+				// The entrance's own icon opens it too, with the label's
+				// popup (issue #3238). The icon is the one the world page
+				// drew at the door's point (the client's xy_dungeon row),
+				// so the control covers what the player sees; the door's
+				// point rect stands in when no icon is drawn there.
+				const cx = rect[0] + rect[2] / 2, cy = rect[1] + rect[3] / 2;
+				const icon = input.icons.find( r => cx >= r[0] && cx < r[0] + r[2] && cy >= r[1] && cy < r[1] + r[3] );
 				controls.push( {
 					id: "map-dungeon-icon:" + anchor.dungeon,
 					kind: "button",
 					label: label,
 					helpText: "Open the " + label + " map",
-					rect
+					rect: icon ?? rect
 				} );
 			}
+			mapFoot( paint, text, {
+				note: input.levelNote ?? input.strings?.[LEVEL_FILTER_NOTE_KEY],
+				checked: levelFilter
+			} );
+			sideTab( paint, drawerOpen );
 			if ( drawerOpen ) {
-				const dw = DRAWER_WIDTH,
-					dx = mx + mw - dw - 6,
-					dy = input.clip[1],
-					dh = input.clip[3];
-				quads.push( {
-					texture: "",
-					rect: [ dx, dy, dw, dh ],
-					uv: [ 0, 0, 1, 1 ],
-					color: [ .05, .06, .055, .97 ],
-					clip: input.full
-				} );
-				const cap = filterCap( input.characterLevel );
-				const regions = directory( input.catalogue, cap );
-				const region = drawerRegion === null ?
-					undefined :
-					regions.find( row => row.region === drawerRegion );
-				const title = region ? regionName( region.region, input.zones ) : "Regions";
-				quads.push(
-					...text.quads( title, [ dx + 10, dy + 6, dw - 20, 18 ], input.full, GOLD, {
-						fontStyle: 2,
-						overflow: "clip"
-					} )
-				);
-				if ( region ) {
-					controls.push( {
-						id: "map-drawer-back",
-						kind: "button",
-						label: "All regions",
-						rect: [ dx + dw - 58, dy + 4, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Back", [ dx + dw - 58, dy + 6, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} )
+				guidePanel( paint, { tab: guideTab, size: input.size } );
+				const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;
+				if ( input.cave && guideTab === "monster" ) {
+					caveDrawer( input, paint );
+				} else if ( catalog ) {
+					guideTree( input, paint, guideRows( catalog, input ) );
+				} else if ( guideTab === "area" ) {
+					// The Field tree is the guide catalogue's alone.
+					guideTree(
+						input,
+						paint,
+						[],
+						guideLoad.kind === "absent" ? "No field guide in this build" : "Loading..."
 					);
-				}
-				const rows = region ?
-					region.monsters.map( entry => ({
-						id: "map-monster:" + entry.region + ":" + entry.monster.refObjId,
-						label: entry.monster.name + "  Lv. " + entry.monster.level,
-						selected: mark?.refObjId === entry.monster.refObjId && mark?.regionId === entry.region
-					}) ) :
-					regions.map( row => ({
-						id: "map-region:" + row.region,
-						label: regionName( row.region, input.zones ) + "  Lv. " +
-							(row.minLevel === row.maxLevel ? row.minLevel : row.minLevel + "-" + row.maxLevel),
-						selected: false
-					}) );
-				const visible = Math.max( 1, Math.floor( (dh - 56) / ROW_HEIGHT ) );
-				const pages = Math.max( 1, Math.ceil( rows.length / visible ) );
-				if ( drawerPage >= pages ) drawerPage = pages - 1;
-				if ( rows.length === 0 ) {
-					quads.push(
-						...text.quads(
-							input.catalogue ? "No monsters" : "Loading...",
-							[ dx + 10, dy + 30, dw - 20, 18 ],
-							input.full,
-							DIM,
-							{ overflow: "clip" }
-						)
-					);
-				}
-				rows.slice( drawerPage * visible, drawerPage * visible + visible ).forEach( ( row, index ) => {
-					const top = dy + 28 + index * ROW_HEIGHT;
-					controls.push( {
-						id: row.id,
-						kind: "button",
-						label: row.label,
-						rect: [ dx + 4, top, dw - 8, ROW_HEIGHT ],
-						selected: row.selected
-					} );
-					quads.push(
-						...text.quads(
-							row.label,
-							[ dx + 10, top, dw - 16, ROW_HEIGHT ],
-							input.full,
-							row.selected ? GOLD : WHITE,
-							{ vAlign: 1, overflow: "clip" }
-						)
-					);
-				} );
-				if ( pages > 1 ) {
-					controls.push( {
-						id: "map-drawer-prev",
-						kind: "button",
-						label: "Previous page",
-						rect: [ dx + 4, dy + dh - 22, 52, 18 ]
-					} );
-					controls.push( {
-						id: "map-drawer-next",
-						kind: "button",
-						label: "Next page",
-						rect: [ dx + dw - 56, dy + dh - 22, 52, 18 ]
-					} );
-					quads.push(
-						...text.quads( "< Prev", [ dx + 10, dy + dh - 22, 52, 18 ], input.full, WHITE, { vAlign: 1 } ),
-						...text.quads( "Next >", [ dx + dw - 62, dy + dh - 22, 52, 18 ], input.full, WHITE, {
-							hAlign: 2,
-							vAlign: 1
-						} ),
-						...text.quads(
-							(drawerPage + 1) + "/" + pages,
-							[ dx + 56, dy + dh - 22, dw - 112, 18 ],
-							input.full,
-							DIM,
-							{ hAlign: 1, vAlign: 1 }
-						)
-					);
+				} else {
+					const rows: GuideTreeRow[] = [];
+					for ( const region of directory( input.catalogue, filterCap( input.characterLevel ) ) ) {
+						const open = region.region === drawerRegion;
+						rows.push( {
+							id: "map-region:" + region.region,
+							label: regionName( region.region, input.zones ) + "  Lv." + region.minLevel + "~" +
+								region.maxLevel,
+							group: true,
+							open,
+							color: "group"
+						} );
+						if ( !open ) continue;
+						for ( const entry of region.monsters ) {
+							rows.push( speciesRow( "map-monster:" + entry.region + ":", entry, input.characterLevel ) );
+						}
+					}
+					guideTree( input, paint, rows );
 				}
 			}
 			return { quads, controls, paths };
@@ -824,7 +969,9 @@ export function createMapToolsHud( options: {
 		*/
 		dispose() {
 			if ( regionLoad.kind === "loading" ) assets.cancel( regionLoad.id );
+			if ( guideLoad.kind === "loading" ) assets.cancel( guideLoad.id );
 			regionLoad = { kind: "disposed" };
+			guideLoad = { kind: "disposed" };
 		}
 	};
 }

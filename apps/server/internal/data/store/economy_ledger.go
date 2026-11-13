@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS economy_ledger_char_hours (
   n       INTEGER NOT NULL,
   PRIMARY KEY (hour_ms, char_id, reason)
 );
+CREATE TABLE IF NOT EXISTS economy_ledger_char_item_hours (
+  hour_ms INTEGER NOT NULL,
+  char_id INTEGER NOT NULL,
+  item    TEXT    NOT NULL,
+  count   INTEGER NOT NULL,
+  gold    INTEGER NOT NULL,
+  PRIMARY KEY (hour_ms, char_id, item)
+);
 `
 
 // economyHourMs is the bucket width: one hour in milliseconds.
@@ -177,6 +185,9 @@ gold per reason and direction, for the metrics endpoint.
 type economyLedger struct {
 	seen    map[*domain.Character]int64
 	pending []ledgerRow
+	// items are the merchant sales' per-item folds (#3307) awaiting
+	// the same commit as pending.
+	items map[ledgerItemBucketKey]*ledgerItemFold
 	// warned names the unattributed doors already logged, once each.
 	warned map[string]bool
 	mu     sync.Mutex
@@ -620,19 +631,27 @@ func validateEconomyLedger(db *sql.DB) error {
 	}
 	var buckets int
 	if err := db.QueryRow(`SELECT count(*) FROM sqlite_schema
-WHERE type = 'table' AND name IN ('economy_ledger_hours', 'economy_ledger_char_hours')`).Scan(&buckets); err != nil {
+WHERE type = 'table' AND name IN ('economy_ledger_hours', 'economy_ledger_char_hours', 'economy_ledger_char_item_hours')`).Scan(&buckets); err != nil {
 		return err
 	}
 	if buckets == 0 {
 		return nil
 	}
-	if buckets != 2 {
-		return fmt.Errorf("economy buckets: one of the two bucket tables is missing")
+	// The per-item table (#3307) is the youngest: a file the first
+	// bucket binary opened holds the two originals and gains it at
+	// this open, so two is a complete old set, never damage.
+	if buckets < 2 {
+		return fmt.Errorf("economy buckets: one of the bucket tables is missing")
 	}
-	for _, shape := range []string{
+	shapes := []string{
 		"SELECT hour_ms, division, reason, gain, total, low, high, n FROM economy_ledger_hours LIMIT 0",
 		"SELECT hour_ms, char_id, reason, total, n FROM economy_ledger_char_hours LIMIT 0",
-	} {
+	}
+	if buckets == 3 {
+		shapes = append(shapes,
+			"SELECT hour_ms, char_id, item, count, gold FROM economy_ledger_char_item_hours LIMIT 0")
+	}
+	for _, shape := range shapes {
 		shapeRows, err := db.Query(shape)
 		if err != nil {
 			return err
@@ -689,6 +708,160 @@ WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, reason`, charID, sinceMs/ec
 	for rows.Next() {
 		var hour LedgerCharHour
 		if err := rows.Scan(&hour.HourMs, &hour.Reason, &hour.Total, &hour.N); err != nil {
+			return nil, err
+		}
+		out = append(out, hour)
+	}
+	return out, rows.Err()
+}
+
+/*
+================
+NoteItemSale
+
+One ordinary merchant sale's item evidence (#3307): the item, how
+many, and the gold the seller was credited, folded into the
+character's per-item hourly bucket (economy_ledger_char_item_hours).
+
+The gold side needs no call - the ledger reads it off the balance at
+the door - but a balance diff cannot name what was sold, so the sale
+door notes the item itself after its commit lands. The note is a fold
+in memory and never commits by itself, inside a tick batch or not:
+it marks the batch pending, and the next transaction carries it
+(flushLedgerItemsTx) - any door's commit, the tick's flush, or the
+flush at Close. Shop requests reach the store outside the tick batch,
+so a note that committed on its own cost a second transaction per
+sale, and a bot selling one item at a time doubled the store's work
+for nothing. Now a sale costs one map fold, and however many sales a
+tick sees, they share at most one extra transaction. A failed commit
+keeps the fold pending, as it keeps the gold rows. The rows history
+holds predate the note and carry no item; their gold stays readable
+in the per-character buckets, and the per-item buckets simply begin
+with the first noted sale.
+================
+*/
+func (s *Store) NoteItemSale(charID int64, item string, count int, gold int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil || charID <= 0 || item == "" || count <= 0 || gold < 0 {
+		return fmt.Errorf("economy item sale: unavailable or malformed note")
+	}
+	key := ledgerItemBucketKey{hourMs: s.now().UnixMilli() / economyHourMs * economyHourMs, charID: charID, item: item}
+	if s.ledger.items == nil {
+		s.ledger.items = map[ledgerItemBucketKey]*ledgerItemFold{}
+	}
+	fold := s.ledger.items[key]
+	if fold == nil {
+		fold = &ledgerItemFold{}
+		s.ledger.items[key] = fold
+	}
+	fold.count += int64(count)
+	fold.gold += gold
+	s.batch.pending = true
+	return nil
+}
+
+/*
+================
+ledgerItemBucketKey
+
+One character's hourly bucket of one sold item.
+================
+*/
+type ledgerItemBucketKey struct {
+	hourMs int64
+	charID int64
+	item   string
+}
+
+/*
+================
+ledgerItemFold
+
+The sales a bucket gathered since the last commit.
+================
+*/
+type ledgerItemFold struct {
+	count, gold int64
+}
+
+/*
+================
+flushLedgerItemsTx
+
+Writes the pending per-item folds into their hourly buckets, in key
+order so a batch's statements are deterministic. It rides the
+caller's transaction, beside flushLedgerTx.
+================
+*/
+func flushLedgerItemsTx(tx sqlExecer, items map[ledgerItemBucketKey]*ledgerItemFold) error {
+	keys := make([]ledgerItemBucketKey, 0, len(items))
+	for key := range items {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.hourMs != b.hourMs {
+			return a.hourMs < b.hourMs
+		}
+		if a.charID != b.charID {
+			return a.charID < b.charID
+		}
+		return a.item < b.item
+	})
+	for _, key := range keys {
+		fold := items[key]
+		if _, err := tx.Exec(`INSERT INTO economy_ledger_char_item_hours (hour_ms, char_id, item, count, gold)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (hour_ms, char_id, item) DO UPDATE SET
+  count = count + excluded.count, gold = gold + excluded.gold`,
+			key.hourMs, key.charID, key.item, fold.count, fold.gold); err != nil {
+			return fmt.Errorf("economy ledger char item hours: %w", err)
+		}
+	}
+	return nil
+}
+
+/*
+================
+LedgerCharItemHour
+
+One character's hourly sales of one item (#3307): how many went to
+the merchants, and for how much gold.
+================
+*/
+type LedgerCharItemHour struct {
+	HourMs int64
+	Item   string
+	Count  int64
+	Gold   int64
+}
+
+/*
+================
+EconomyCharacterItemHours
+
+The character's per-item hourly merchant sales since sinceMs,
+oldest first: the drill-in behind "what did they sell, and when"
+(#3307), beside EconomyCharacterHours' gold totals.
+================
+*/
+func (s *Store) EconomyCharacterItemHours(charID int64, sinceMs int64) ([]LedgerCharItemHour, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, fmt.Errorf("economy char item hours: no database open")
+	}
+	rows, err := s.db.Query(`SELECT hour_ms, item, count, gold FROM economy_ledger_char_item_hours
+WHERE char_id = ? AND hour_ms >= ? ORDER BY hour_ms, item`, charID, sinceMs/economyHourMs*economyHourMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LedgerCharItemHour
+	for rows.Next() {
+		var hour LedgerCharItemHour
+		if err := rows.Scan(&hour.HourMs, &hour.Item, &hour.Count, &hour.Gold); err != nil {
 			return nil, err
 		}
 		out = append(out, hour)

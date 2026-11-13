@@ -30,9 +30,10 @@
 //
 // # Startup and failure
 //
-// Production startup accepts exactly CurrentVersion and
-// CurrentLayoutVersion. Incompatible pre-release stores are replaced through
-// explicit initialization; startup never transforms data in place. Live
+// Production startup accepts CurrentVersion and CurrentLayoutVersion, and
+// the StoreReadHeadroom newer versions of each (0 today: exactly the
+// current ones). A newer store's stamps are never lowered. Incompatible
+// pre-release stores are replaced through explicit initialization; startup never transforms data in place. Live
 // record JSON is decoded strictly, then independently stored records are
 // validated as one authority graph before any pointer becomes visible.
 //

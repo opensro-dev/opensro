@@ -22,6 +22,7 @@ import {
 	particleElementMatrix,
 	type ParticleGraphState
 } from "@/engine/foundation/animation/particle-graph";
+import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
 import { HOLDER_FOLLOW, holderFollow } from "@/engine/foundation/animation/particle-holder-link";
 import { createActorSnapshots } from "./actor-snapshots";
@@ -1360,6 +1361,7 @@ the next full prepare pass, so this may run between frames.
 		// Graph ribbons are strips through their elements' drawn
 		// frames; other graph primitives are drawn from their tick
 		// records by the GPU pass (particle-streams.ts).
+		const fraction = particleGraphTime( graph, actor.time ) * PARTICLE_TICKS_PER_SECOND - graph.frame;
 		for ( let p = 0; p < model.primitives.length; p++ ) {
 			const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
 			if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
@@ -1372,7 +1374,7 @@ the next full prepare pass, so this may run between frames.
 					element,
 					matrices,
 					b * 16,
-					actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,
+					fraction,
 					rotationWork,
 					history.link
 				);
@@ -2046,6 +2048,8 @@ the next full prepare pass, so this may run between frames.
 			undefined :
 			history.graph?.elements[primitive.particleEmitter];
 		const count = orderRibbonElements( elements, emission.births.length );
+		// Graph elements are born on the graph's own clock.
+		const graphTime = history.graph ? particleGraphTime( history.graph, actor.time ) : actor.time;
 		groupChains.clear();
 		ribbonGroups.length = 0;
 		for ( let k = 0; k < count; k++ ) {
@@ -2065,7 +2069,7 @@ the next full prepare pass, so this may run between frames.
 				groupChains.set( key, points );
 				ribbonGroups.push( points );
 			}
-			const elapsed = actor.time - birth,
+			const elapsed = (element ? graphTime : actor.time) - birth,
 				age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
 			if (
 				age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )

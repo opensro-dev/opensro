@@ -45,9 +45,26 @@ func TestJobKillNotificationFrameUsesItsOwnChannel(t *testing.T) {
 }
 
 func TestBreakNotificationFrameUsesItsOwnChannel(t *testing.T) {
-	f := BreakNotificationFrame("A")
+	// An empty link keeps the plain layout byte for byte.
+	f := BreakNotificationFrame("A", nil)
 	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, []byte{BreakNoticeChannel, 1, 0, 65, 0}) {
 		t.Fatalf("break notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
+	}
+}
+
+// TestBreakNotificationFrameLinksOnlyTheItem pins the #3260 fail
+// notice's vector: the text, then an empty name (this channel never
+// names a player to link) and the item's body.
+func TestBreakNotificationFrameLinksOnlyTheItem(t *testing.T) {
+	potion := ItemBody{RefObjID: 0x01020304, TypeFlags: PackTypeFlags(3, 3, 1, 1), Quantity: 3}
+	f := BreakNotificationFrame("A", potion.Encode())
+	want := []byte{
+		BreakNoticeChannel, 1, 0, 65, 0,
+		0, 0,
+		6, 0, 0x04, 0x03, 0x02, 0x01, 3, 0,
+	}
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, want) {
+		t.Fatalf("linked break payload % X, want % X", f.Payload, want)
 	}
 }
 

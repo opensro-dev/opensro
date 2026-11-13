@@ -310,6 +310,8 @@ export interface Renderer extends Disposable {
 	): import("./character").CharacterActor["pose"] | null;
 	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean, filtered?: boolean ): number | null;
 	setWeather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ): void;
+	/** The seasonal world layers to draw (foundation/world/world-layers.ts). */
+	setWorldLayers( value: ReadonlySet<number> ): void;
 	setWorldClock( value: { timeOfDay: number; lunarDay: number; } | null ): void;
 	setUi( scene: import("./ui").UiScene | null ): void;
 	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
