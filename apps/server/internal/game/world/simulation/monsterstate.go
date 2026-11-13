@@ -716,7 +716,7 @@ func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
 	var points []monster.SpawnPoint
 	for _, nest := range s.template.Nests {
 		ref, ok := s.template.Refs[nest.RefObjID]
-		if !ok || !nestIsUnique(nest, ref) || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
+		if !ok || !monster.NestIsUnique(nest, ref) || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
 			!FeaturesAt(nest.RegionID).UniqueReturnAnchors {
 			continue
 		}

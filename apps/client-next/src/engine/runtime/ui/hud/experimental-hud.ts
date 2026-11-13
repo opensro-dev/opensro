@@ -448,7 +448,8 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "uniqueSpawnPoints",
 						id: "experimental-unique-spawn-points",
 						label: "Unique spawn points",
-						description: "Show every nest a unique may spawn from on M."
+						description:
+							"Adds a Unique spawns box to M; tick it to show every nest a unique may spawn from."
 					}
 				]
 			},

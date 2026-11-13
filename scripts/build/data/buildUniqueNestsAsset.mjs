@@ -4,126 +4,86 @@
 buildUniqueNestsAsset.mjs - the world map's unique nests (port-only)
 
 Port-only, not native: the v1.150 world map draws no unique nest. This step
-projects the anchors the server's population template holds for uniques, so
-the M window can show every candidate spawn of each unique as one sign.
+publishes the nest table the server's own population template names
+(sro-evidence unique-nests: monster.Template.UniqueNests), so the M window
+can show every candidate spawn of each unique as one sign.
 
-The rule is the server's, read from the same tables
-(apps/server/internal/game/world/monster):
-	- LoadTemplate turns every npcpos.txt row (refObjID, regionID, x, y, z)
-	  whose reference is a served monster into one nest;
-	- LoadMonsterRefs keeps a characterdata row only when column 0 is 1 and
-	  its packed TypeID word passes monsterTidGate ((W & 0x7FE) == 0x0C6);
-	- LoadMonsterRefs refuses a rarity (column 15) above 0x0F, and
-	  nestIsUnique (simulation/unique_states.go) reads it & 15 == 3:
-	  template nests never carry an override.
-The flag-gated port-only populations (Cap110, Pharaoh Tomb, temple) are
-left out: the client cannot know a shard's switches, and they stand in
-places the native world map does not draw.
+The rule lives in Go only (monster.NestIsUnique, the same rule the unique
+tracker reads); the build checks the table's shape and writes it, and
+decides nothing of its own, so a server-side nest change cannot drift
+from the map (the creatable-monster roster's posture, npcModelRoster.mjs).
 
 Output: /assets/data/uniqueNests.json, { format, version, nests }, each nest
 { refObjId, regionId, x, z } in npcpos order.
 
 ===========================================================================
 */
+import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
-import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/textDataIo.mjs";
-import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { publicRoot, rebuildRoot, retailTextdataRoot } from "../world/paths.mjs";
 
 const FORMAT = "sro-unique-nests";
 const VERSION = 1;
 export const UNIQUE_NESTS_FILE = "uniqueNests.json";
-
-// characterdata*.txt (monster/textdata.go col* constants)
-const CHAR_COLUMN_SERVICE = 0;
-const CHAR_COLUMN_ID = 1;
-const CHAR_COLUMN_CHAR_BIT = 8;
-const CHAR_COLUMN_TID1 = 9;
-const CHAR_COLUMN_TID2 = 10;
-const CHAR_COLUMN_TID3 = 11;
-const CHAR_COLUMN_RARITY = 15;
-const CHAR_COLUMN_MAX_HP = 59;
-// monsterTidGate: the CICMonster class word (client 851420).
-const MONSTER_TID_MASK = 0x7fe;
-const MONSTER_TID_WORD = 0x0c6;
-// LoadMonsterRefs keeps rarity 0..0x0F; nestIsUnique: rarity & 15 == 3.
-const RARITY_MAX = 0x0f;
-const RARITY_MASK = 15;
-const RARITY_UNIQUE = 3;
-
-// npcpos.txt: refObjID, regionID, x, y, z.
-const NPCPOS_COLUMNS = 5;
-const REGION_MASK = 0xffff;
+const EXPORT_MAX_BYTES = 4 * 1024 * 1024;
+const REGION_MAX = 0xffff;
 
 /*
 ================
-tidWord
+checkUniqueNestTable
 
-The packed RefObj TypeID word (tidWordFromColumns).
+The server's table, refused whole when its shape is not the client's
+contract (foundation/ui/unique-nests.ts) or it names no nest: shipped
+textdata always holds uniques, so an empty table is a missing input.
 ================
 */
-function tidWord( cols ) {
-	const word = (Number( cols[CHAR_COLUMN_TID1] ) & 7) << 2 |
-		(Number( cols[CHAR_COLUMN_TID2] ) & 3) << 5 |
-		(Number( cols[CHAR_COLUMN_TID3] ) & 15) << 7;
-	return Number( cols[CHAR_COLUMN_CHAR_BIT] ) !== 0 ? word | 2 : word;
+export function checkUniqueNestTable( table ) {
+	if ( table?.format !== FORMAT || table.version !== VERSION || !Array.isArray( table.nests ) ) {
+		throw Error( `[unique-nests] the server export is not a ${FORMAT} v${VERSION} table` );
+	}
+	if ( table.nests.length === 0 ) throw Error( "[unique-nests] the server export names no nest" );
+	for ( const nest of table.nests ) {
+		const valid = Number.isSafeInteger( nest?.refObjId ) && nest.refObjId > 0 &&
+			Number.isInteger( nest.regionId ) && nest.regionId >= 0 && nest.regionId <= REGION_MAX &&
+			Number.isFinite( nest.x ) && Number.isFinite( nest.z );
+		if ( !valid ) {
+			throw Error( `[unique-nests] the server export holds a malformed nest: ${JSON.stringify( nest )}` );
+		}
+	}
+	return { format: FORMAT, version: VERSION, nests: table.nests };
 }
 
 /*
 ================
-uniqueReferences
+exportServerUniqueNests
 
-The served monster references whose rarity is unique, by RefObj id.
+Asks the server's classifier for the table over the build's textdata.
 ================
 */
-export function uniqueReferences( characterRows ) {
-	const ids = new Set();
-	for ( const cols of characterRows ) {
-		if ( cols[CHAR_COLUMN_SERVICE]?.trim() !== "1" || cols.length <= CHAR_COLUMN_MAX_HP ) continue;
-		if ( (tidWord( cols ) & MONSTER_TID_MASK) !== MONSTER_TID_WORD ) continue;
-		const rarity = Number( cols[CHAR_COLUMN_RARITY] );
-		if ( !Number.isInteger( rarity ) || rarity < 0 || rarity > RARITY_MAX ) continue;
-		if ( (rarity & RARITY_MASK) !== RARITY_UNIQUE ) continue;
-		const id = Number( cols[CHAR_COLUMN_ID] );
-		if ( Number.isSafeInteger( id ) && id > 0 ) ids.add( id );
+export function exportServerUniqueNests( textdataDir = retailTextdataRoot, env = process.env ) {
+	const serverRoot = path.resolve( env.SRO_SERVER_SOURCE_ROOT ?? path.join( rebuildRoot, "apps", "server" ) );
+	const result = spawnSync(
+		"go",
+		[ "run", "./cmd/tools/sro-evidence", "unique-nests", "-textdata-dir", textdataDir ],
+		{
+			cwd: serverRoot,
+			// Compiled once for every checkout (goEnvironment.mjs).
+			env: sharedCacheEnvironment( env ),
+			encoding: "utf8",
+			maxBuffer: EXPORT_MAX_BYTES
+		}
+	);
+	if ( result.error || result.status !== 0 ) {
+		throw Error(
+			`[unique-nests] export failed (go run ./cmd/tools/sro-evidence unique-nests in ${serverRoot}): ` +
+				`${result.error ?? ""} ${result.stderr ?? ""}`.trim()
+		);
 	}
-	return ids;
-}
-
-/*
-================
-uniqueNests
-
-Every npcpos anchor of a unique reference. A unique with several anchors
-keeps them all: each is a candidate spawn. Unparsable rows are skipped as
-LoadSpawnPoints skips them.
-================
-*/
-export function uniqueNests( npcposRows, uniques ) {
-	const nests = [];
-	for ( const cols of npcposRows ) {
-		if ( cols.length < NPCPOS_COLUMNS ) continue;
-		const [refObjId, region, x, y, z] = cols.slice( 0, NPCPOS_COLUMNS ).map( Number );
-		if ( !uniques.has( refObjId ) ) continue;
-		if ( !Number.isInteger( region ) || ![ x, y, z ].every( Number.isFinite ) ) continue;
-		nests.push( { refObjId, regionId: region & REGION_MASK, x, z } );
-	}
-	return nests;
-}
-
-/*
-================
-readUniqueNestSources
-================
-*/
-export function readUniqueNestSources( textdataRoot = retailTextdataRoot ) {
-	const characterRows = [];
-	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
-		characterRows.push( ...readTextDataRowsSync( path.join( textdataRoot, shard ) ) );
-	}
-	return { characterRows, npcposRows: readTextDataRowsSync( path.join( textdataRoot, "npcpos.txt" ) ) };
+	return JSON.parse( result.stdout );
 }
 
 /*
@@ -132,16 +92,15 @@ buildUniqueNestsAsset
 ================
 */
 export async function buildUniqueNestsAsset( options = {} ) {
-	const sources = options.sources ?? readUniqueNestSources();
-	const nests = uniqueNests( sources.npcposRows, uniqueReferences( sources.characterRows ) );
+	const table = checkUniqueNestTable( options.table ?? exportServerUniqueNests() );
 	const { outPath } = exportDataAsset( {
 		publicRoot: options.publicRoot ?? publicRoot,
 		outputFileName: UNIQUE_NESTS_FILE,
-		value: { format: FORMAT, version: VERSION, nests }
+		value: table
 	} );
 	await refreshPrecompressedSidecars( [ outPath ], { onlyWhenStale: true } );
-	console.log( `[unique-nests] wrote ${nests.length} nest(s)` );
-	return { outPath, nests: nests.length };
+	console.log( `[unique-nests] wrote ${table.nests.length} nest(s)` );
+	return { outPath, nests: table.nests.length };
 }
 
 if ( isMainScript( import.meta.url ) ) await buildUniqueNestsAsset();

@@ -4,9 +4,9 @@
 unique-nests.ts - loads the world map's unique nest table (port-only)
 
 Port-only, not native. One bounded byte request, started only while the M
-window is open with the Experimental row on; the decoded markers are kept
-for the session. A failed load stays failed: the map simply draws no
-nest signs.
+window is open with both the Experimental row and the window's Unique
+spawns box on; the decoded markers are kept for the session. A failed
+load stays failed: the map simply draws no nest signs.
 
 ===========================================================================
 */

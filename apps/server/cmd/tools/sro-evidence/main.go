@@ -23,6 +23,7 @@ var evidenceCommands = []evidenceCommand{
 	{name: "spawnable-npcs", summary: "emit the evidence-filtered NPC asset roster", run: runSpawnableNPCs},
 	{name: "creatable-monsters", summary: "emit every monster reference the server can create (the bake roster)", run: runCreatableMonsters},
 	{name: "fortress-structures", summary: "emit the fortress structure asset roster", run: runFortressStructures},
+	{name: "unique-nests", summary: "emit the world map's unique nest table (port-only)", run: runUniqueNests},
 }
 
 func main() {

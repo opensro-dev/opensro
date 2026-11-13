@@ -274,11 +274,13 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
-	// Port-only, not native: the world map (M, never the minimap) draws one
-	// unique sign on every nest a unique may spawn from, all candidates of
-	// a unique together (foundation/ui/unique-nests.ts). A place only: no
-	// hover, no alive or dead state, no timer. On by default (the owner's
-	// choice, 2026-11-07); off is the native map.
+	// Port-only, not native: the world map (M, never the minimap) offers a
+	// "Unique spawns" box at its foot, off until ticked; with both on it
+	// draws one unique sign on every nest a unique may spawn from, all
+	// candidates of a unique together (foundation/ui/unique-nests.ts). A
+	// place only: no hover, no alive or dead state, no timer. The row is on
+	// by default (the owner's choice, 2026-11-07), the box off (2026-11-13);
+	// row off is the native map.
 	readonly uniqueSpawnPoints: boolean;
 	// Port-only, not native (#1640): the player's own degree-9-or-higher
 	// Seal of Sun drops get a gold name plate and a soft ground ring, so

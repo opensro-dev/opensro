@@ -424,7 +424,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				panel === "Map" && (experimental.state().saved.monsterGuide || mapTools.drawerOpen()),
 				panel === "Map" && page === 0 && experimental.state().saved.monsterGuide
 			);
-			const nestsChanged = uniqueNests.step( panel === "Map" && experimental.state().saved.uniqueSpawnPoints );
+			// Two switches, both needed: the Experimental row offers the
+			// M window's unique spawns box, and the box (off by default)
+			// draws the signs. Nothing loads before both are on.
+			const nestsChanged = uniqueNests.step(
+				panel === "Map" && experimental.state().saved.uniqueSpawnPoints && mapTools.uniqueSpawns()
+			);
 			return mapTools.step( panel ) || guideChanged || nestsChanged;
 		},
 		/*
@@ -515,7 +520,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// Port-only, not native: the unique nest signs, under every native
 			// pass. Only an open map lists them; a closed one demands the one
 			// sign image below, never a path per nest.
-			const nestSigns = experimental.state().saved.uniqueSpawnPoints;
+			const nestSigns = experimental.state().saved.uniqueSpawnPoints && mapTools.uniqueSpawns();
 			if ( pose && nestSigns && panel === "Map" ) mapMarkers.push( ...uniqueNests.nests() );
 			if ( pose ) {
 				for (
@@ -948,6 +953,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					zones: hudData.zones,
 					strings: hudData.strings,
 					levelNote: input.caveMaps?.monsterLevelNote,
+					offerUniqueSpawns: experimental.state().saved.uniqueSpawnPoints,
 					icons: (mapProjection?.hits ?? []).map( hit => hit.rect ),
 					text,
 					page: mapPage,

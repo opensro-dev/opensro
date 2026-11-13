@@ -55,21 +55,6 @@ type UniqueState struct {
 
 /*
 ================
-nestIsUnique
-
-A nest spawns a unique when its rarity (the nest's override, else the
-reference's monster type) has low nibble 3, as Instance.Rarity reads it.
-================
-*/
-func nestIsUnique(nest monster.NestRow, ref monster.MonsterRef) bool {
-	if nest.HasRarityOverride {
-		return nest.RarityOverride&15 == 3
-	}
-	return ref.MonsterType&15 == 3
-}
-
-/*
-================
 markUniqueSpawn
 ================
 */
@@ -117,7 +102,7 @@ func (s *MonsterState) UniqueStates(division string) []UniqueState {
 	byRef := map[uint32]*UniqueState{}
 	for _, nest := range s.template.Nests {
 		ref, ok := s.template.Refs[nest.RefObjID]
-		if !ok || !nestIsUnique(nest, ref) {
+		if !ok || !monster.NestIsUnique(nest, ref) {
 			continue
 		}
 		entry := byRef[ref.RefObjID]
