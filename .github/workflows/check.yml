@@ -69,7 +69,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       # check:client-preparation reads synthetic PK2 archives (pycryptodome).
-      - run: python -m pip install --disable-pip-version-check -r scripts/requirements-build.txt
+      # The gates run the interpreter that received these packages: without
+      # SRO_PYTHON the task runner prefers `py -3`, which picks the newest
+      # Python on the image, and once the image gained 3.15 beside the 3.12
+      # on PATH every Pillow/pycryptodome import failed there.
+      - name: Install the build packages and pin the gates to that interpreter
+        run: |
+          python -m pip install --disable-pip-version-check -r scripts/requirements-build.txt
+          "SRO_PYTHON=$(python -c 'import sys; print(sys.executable)')" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: Require dependency inputs to remain unchanged
         run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
       - run: pnpm check source-portable
