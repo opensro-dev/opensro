@@ -8,6 +8,7 @@ degree-12 link trimming, translation ownership and off/on/off rebuilds.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 from pathlib import Path
 import sys
@@ -15,7 +16,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import cap110_items as items  # noqa: E402
 import cap110_item_import as importer  # noqa: E402
 from test_client_preparation import ArchiveBuilder  # noqa: E402

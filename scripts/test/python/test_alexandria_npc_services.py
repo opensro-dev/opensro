@@ -3,11 +3,11 @@
 test_alexandria_npc_services.py - complete city shop and map dependencies
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 from pathlib import Path
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import alexandria_npc_services as services
 import alexandria_npcs as npcs
 import import_vsro_alexandria as tables

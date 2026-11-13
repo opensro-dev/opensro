@@ -11,6 +11,7 @@ must stay as authored. Premultiplied resizing turned such texels black.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import struct
 import sys
 import tempfile
@@ -19,7 +20,6 @@ from pathlib import Path
 
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "build"))
 import native_texture_mips as mips  # noqa: E402
 
 SIDE = 16

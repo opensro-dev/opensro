@@ -8,6 +8,7 @@ model dependency with the production publisher's parsers.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import hashlib
 import json
@@ -17,7 +18,6 @@ from contextlib import ExitStack
 from unittest.mock import patch
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import import_survival_colosseum as arena
 
 

@@ -6,13 +6,13 @@ Synthetic SQL rows exercise the same decoder as the real backup. Expected
 zones follow Caravan_GetContinentZone's ten case-insensitive comparisons.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import struct
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_caravan_evidence import read_zones
 
 

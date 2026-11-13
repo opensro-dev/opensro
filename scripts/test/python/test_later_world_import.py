@@ -13,6 +13,7 @@ always reaped. The self-driven worlds enter that reap through
 their public add functions, pinned below.
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 import os
 import sys
@@ -21,7 +22,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
 import later_world_import as later  # noqa: E402

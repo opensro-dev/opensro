@@ -5,11 +5,11 @@ test_import_vsro_tomb_minimap.py - tomb tile selection and its catalogue
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import import_vsro_tomb_minimap as importer
 

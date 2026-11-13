@@ -11,13 +11,13 @@ record.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import sro_pk2  # noqa: E402
 import world_layer_import as layers  # noqa: E402
 

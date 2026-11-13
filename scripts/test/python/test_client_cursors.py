@@ -9,6 +9,7 @@ PNG written for the browser must carry exactly those pixels (BUG-068).
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 
 import pathlib
 import struct
@@ -16,7 +17,6 @@ import sys
 import unittest
 import zlib
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from extract_client_cursors import cursor_png, dib_rgba
 
 RED, BLUE = (255, 0, 0), (0, 0, 255)

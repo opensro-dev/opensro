@@ -14,6 +14,7 @@ process against scratch game roots.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import os
 import struct
 import subprocess
@@ -23,7 +24,6 @@ import unittest
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import prepare_client_resources as prepare  # noqa: E402
 import sro_pk2  # noqa: E402
 
