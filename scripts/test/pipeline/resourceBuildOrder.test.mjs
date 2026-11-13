@@ -173,6 +173,11 @@ for ( const laneCount of [ 1, 8 ] ) {
 			position( events, "end:importLaterWorldMapButtons" ) < tail,
 			"the world map button import finishes before the final pack tail"
 		);
+		// The M map guide's tables and art too (issue #3387).
+		assert.ok(
+			position( events, "end:importLaterWorldMapGuide" ) < tail,
+			"the world map guide import finishes before the final pack tail"
+		);
 		assert.deepEqual(
 			events.slice( -2 ),
 			[ "start:packTree", "end:packTree" ],
@@ -258,7 +263,8 @@ const AFTER_FAMILIES = [
 	"packTree",
 	"buildHdTexturePacks",
 	"importLaterDungeonMaps",
-	"importLaterWorldMapButtons"
+	"importLaterWorldMapButtons",
+	"importLaterWorldMapGuide"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {

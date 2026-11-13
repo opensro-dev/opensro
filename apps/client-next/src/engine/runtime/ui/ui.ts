@@ -13666,7 +13666,6 @@ export function createUi( ports: UiPorts ) {
 					endWindow,
 					windowBox,
 					authoredButton,
-					authoredLabeledButton,
 					closeButton,
 					image
 				} );

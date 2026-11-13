@@ -50,7 +50,7 @@ function captionAt( pose ) {
 				hudData: { map: {} },
 				trackedQuest: 0,
 				minimapResources: { positions: () => undefined },
-				mapTeleport: { view: () => {} },
+				mapTeleport: { view: () => {}, viewCave: () => {}, hide: () => {} },
 				reverseScrollHud: { mapping: () => false },
 				text: {
 					path: () => null,
@@ -69,7 +69,6 @@ function captionAt( pose ) {
 					caption = title;
 				},
 				authoredButton: () => {},
-				authoredLabeledButton: () => {},
 				closeButton: () => {},
 				image: () => {}
 			})

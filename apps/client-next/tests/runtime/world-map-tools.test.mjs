@@ -4,11 +4,13 @@
 world-map-tools.test.mjs - the world map's own tools (issue #3167)
 
 Pins the monster directory and the level filter at the foundation, the
-tools' own state (drawer walk, species pick, floor choice, dungeon
-view) against a stub text sink, and the whole window end to end in the
-UI fixture: the filter and the list are on by default, the drawer
-walks regions to species, a pick marks the species, the dungeon
-entrances open their maps, and a dungeon starts on the player's floor.
+tools' own state (guide tree, species pick, floor choice, dungeon view)
+and the v1.188 chrome's places (worldmapguide.2dt, matched against the
+v1.188 screenshots) against a stub text sink, and the whole window end
+to end in the UI fixture: the filter is on by default, the side tab
+opens the guide, a group opens to its species, a pick marks the
+species, the dungeon entrances open their maps, and a dungeon starts on
+the player's floor.
 
 ===========================================================================
 */
@@ -258,6 +260,7 @@ function paint( hud, over = {} ) {
 		clip: [ 108, 140, 784, 500 ],
 		full: [ 0, 0, 1600, 900 ],
 		catalogue: catalogue(),
+		guidePublished: true,
 		characterLevel: 20,
 		zones: { "50": "Fixture Field" },
 		strings: { SN_ZONE_23001: "Fixture Tomb", SN_ZONE_23002: "Fixture Cave" },
@@ -267,8 +270,7 @@ function paint( hud, over = {} ) {
 		page: 0,
 		pan: [ 0, 0 ],
 		center: { regionId: 250, x: 0, y: 0, z: 0, angle: 0 },
-		huntingVisible: false,
-		levelCheckbox: false,
+		size: () => undefined,
 		...over
 	} );
 }
@@ -294,68 +296,59 @@ test("the level filter starts on and its toggle lifts the cap", () => {
 	hud.dispose();
 });
 
-test("the Entire-map foot checkbox stands in for the strip toggle behind its row", () => {
+test("the foot's checkbox is the one level filter switch, at its layout place", () => {
 	const hud = tools();
-	// Row off (the default): the strip's own toggle is the switch, at
-	// the strip (window top + 7), and no foot box stands.
-	const strip = paint( hud ).controls.filter( row => row.id === "map-level-filter" );
-	assert.equal( strip.length, 1 );
-	assert.equal( strip[0].rect[1], 107 );
-	// Row on: one switch still, now the foot checkbox at the window's
-	// foot (window 100,100 800x600: foot strip 676, box 678), and the
-	// strip toggle stands down.
-	const foot = paint( hud, { levelCheckbox: true } ).controls.filter( row => row.id === "map-level-filter" );
-	assert.equal( foot.length, 1 );
-	assert.deepEqual( foot[0].rect, [ 872, 678, 16, 16 ] );
-	// Either face flips the one state: the cap lifts and returns.
+	// Window 100,100 800x600: the checkbox (614,426 in the 650x422
+	// layout) keeps its distance from the right edge and the bottom.
+	const view = paint( hud );
+	const switches = view.controls.filter( row => row.id === "map-level-filter" );
+	assert.equal( switches.length, 1 );
+	assert.deepEqual( switches[0].rect, [ 864, 704, 16, 16 ] );
+	assert.equal( switches[0].selected, true );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
 	assert.equal( hud.filterCap( 20 ), undefined );
-	assert.equal(
-		paint( hud, { levelCheckbox: true } ).controls
-			.find( row => row.id === "map-level-filter" )?.selected,
-		false
-	);
-	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
+	assert.equal( control( paint( hud ), "map-level-filter" )?.selected, false );
+	assert.ok( paint( hud ).quads.some( quad => quad.texture.endsWith( "com_checkbutton_off.png" ) ) );
 	hud.dispose();
 });
 
 test("a dungeon page has one level filter switch, its foot checkbox", () => {
-	// The strip toggle and the page foot both drew map-level-filter on a
-	// dungeon page, and the UI refused the frame ("Duplicate UI control
-	// identity: map-level-filter").
+	// Two painters once drew map-level-filter on a dungeon page, and the
+	// UI refused the frame ("Duplicate UI control identity").
 	const hud = tools();
 	const floors = caveDungeonFloors( CAVE, 32769 );
-	for ( const levelCheckbox of [ false, true ] ) {
-		const view = paint( hud, { cave: true, floors, floor: floors[0], levelCheckbox } );
-		const switches = view.controls.filter( row => row.id === "map-level-filter" );
-		assert.equal( switches.length, 1, "levelCheckbox " + levelCheckbox );
-		assert.equal( new Set( ids( view ) ).size, view.controls.length, "every control identity is unique" );
-	}
+	hud.activate( "map-side-tab", catalogue(), 20 );
+	const view = paint( hud, { cave: true, floors, floor: floors[0] } );
+	assert.equal( view.controls.filter( row => row.id === "map-level-filter" ).length, 1 );
+	assert.equal( new Set( ids( view ) ).size, view.controls.length, "every control identity is unique" );
 	hud.dispose();
 });
 
-test("the drawer walks regions to species and a pick returns the anchor pose", () => {
+test("the guide tree opens a group in place and a pick returns the anchor pose", () => {
 	const hud = tools();
 	const cat = catalogue();
-	assert.equal( ids( paint( hud ) ).includes( "map-region:50" ), false, "the drawer starts closed" );
-	hud.activate( "map-list", cat, 20 );
+	assert.equal( ids( paint( hud ) ).includes( "map-region:50" ), false, "the guide starts shut" );
+	hud.activate( "map-side-tab", cat, 20 );
 	let view = paint( hud );
-	// At level 20 the cap is 30: the Giant's region 200 is hidden whole.
+	defined( control( view, "map-guide" ) );
+	// At level 20 the cap is 26: the Giant's region 200 is hidden whole.
 	assert.deepEqual(
 		ids( view ).filter( id => id.startsWith( "map-region:" ) ),
 		[ "map-region:50", "map-region:100" ]
 	);
-	assert.equal(
-		view.controls.find( row => row.id === "map-region:50" )?.label?.startsWith( "Fixture Field" ),
-		true
-	);
+	assert.equal( control( view, "map-region:50" )?.label?.startsWith( "Fixture Field  Lv." ), true );
+	// The first row stands at 14,37 of the guide panel (here at the
+	// screen's left edge: the window at 100 leaves no room beside it).
+	assert.deepEqual( control( view, "map-region:50" )?.rect, [ 14, 137, 248, 28 ] );
 	hud.activate( "map-region:100", cat, 20 );
 	view = paint( hud );
+	assert.equal( control( view, "map-region:100" )?.selected, true, "the group stands open" );
 	assert.deepEqual(
-		ids( view ).filter( id => id.startsWith( "map-monster:" ) ),
-		[ "map-monster:100:101", "map-monster:100:102" ]
+		ids( view ).filter( id => id.startsWith( "map-region:" ) || id.startsWith( "map-monster:" ) ),
+		[ "map-region:50", "map-region:100", "map-monster:100:101", "map-monster:100:102" ],
+		"the open group's species follow it"
 	);
+	assert.equal( control( view, "map-monster:100:102" )?.label, "Lv25 Bandit" );
 	// The Tiger's first anchor in region 100 is world (19250, 30): the
 	// sector is (100, 0), so the pose is local x10.
 	assert.deepEqual( hud.activate( "map-monster:100:101", cat, 20 ), {
@@ -366,8 +359,12 @@ test("the drawer walks regions to species and a pick returns the anchor pose", (
 		angle: 0
 	} );
 	assert.deepEqual( hud.mark(), { regionId: 100, x: 500, z: 300, refObjId: 101 } );
-	assert.equal( paint( hud ).controls.find( row => row.id === "map-monster:100:101" )?.selected, true );
-	// The same species picked from region 50's list centres there instead.
+	view = paint( hud );
+	assert.equal( control( view, "map-monster:100:101" )?.selected, true, "the picked species' lamp" );
+	assert.ok( view.quads.some( quad => quad.texture.endsWith( "gd_contents_lamp.png" ) ) );
+	// The same species picked from region 50's group centres there instead.
+	hud.activate( "map-region:50", cat, 20 );
+	assert.equal( ids( paint( hud ) ).includes( "map-monster:100:101" ), false, "one group open at a time" );
 	assert.deepEqual( hud.activate( "map-monster:50:101", cat, 20 ), {
 		regionId: 50,
 		x: 500,
@@ -376,13 +373,61 @@ test("the drawer walks regions to species and a pick returns the anchor pose", (
 		angle: 0
 	} );
 	// Lifting the filter brings the Giant and its region back.
+	hud.activate( "map-region:100", cat, 20 );
 	hud.activate( "map-level-filter", cat, 20 );
+	view = paint( hud );
 	assert.deepEqual(
-		ids( paint( hud ) ).filter( id => id.startsWith( "map-monster:" ) ),
+		ids( view ).filter( id => id.startsWith( "map-monster:" ) ),
 		[ "map-monster:100:101", "map-monster:100:102", "map-monster:100:103" ]
 	);
-	hud.activate( "map-drawer-back", cat, 20 );
-	assert.equal( ids( paint( hud ) ).includes( "map-region:200" ), true );
+	assert.equal( ids( view ).includes( "map-region:200" ), true );
+	// The toggle shuts the group again.
+	hud.activate( "map-region:100", cat, 20 );
+	assert.equal( ids( paint( hud ) ).some( id => id.startsWith( "map-monster:" ) ), false );
+	hud.dispose();
+});
+
+test("the guide panel: its frame, the Field and Monster tabs and the tree's scrollbar", () => {
+	const hud = tools();
+	const cat = catalogue();
+	hud.activate( "map-side-tab", cat, 20 );
+	// A screen reaching left of the window: the panel stands beside it,
+	// 298 wide, and the side tab moves to its left edge, pointing back.
+	let view = paint( hud, { full: [ -400, 0, 2000, 900 ] } );
+	assert.deepEqual( control( view, "map-guide" )?.rect, [ -198, 100, 298, 296 ] );
+	assert.deepEqual( control( view, "map-side-tab" )?.rect, [ -198 - 15, 196, 12, 96 ] );
+	assert.ok( view.quads.some( quad => quad.texture.endsWith( "com_side_button.png" ) ) );
+	assert.deepEqual( control( view, "map-guide-tab:area" )?.rect, [ -178, 108, 56, 24 ] );
+	assert.deepEqual( control( view, "map-guide-tab:monster" )?.rect, [ -118, 108, 56, 24 ] );
+	assert.equal( control( view, "map-guide-tab:monster" )?.selected, true, "the Monster tab opens first" );
+	assert.deepEqual( control( view, "map-guide-scroll-up" )?.rect, [ 66, 156, 16, 16 ] );
+	assert.deepEqual( control( view, "map-guide-scroll-down" )?.rect, [ 66, 334, 16, 16 ] );
+	// Port-only: a screen too narrow for both stops the panel at its edge.
+	view = paint( hud );
+	assert.deepEqual( control( view, "map-guide" )?.rect, [ 0, 100, 298, 296 ] );
+	assert.deepEqual( control( view, "map-side-tab" )?.rect, [ -15, 196, 12, 96 ] );
+	// The arrows step one row and hold at either end; six rows (three
+	// groups, three species) fit the eight, so both ends are row 0.
+	hud.activate( "map-level-filter", cat, 20 );
+	hud.activate( "map-region:100", cat, 20 );
+	const first = () =>
+		paint( hud ).controls.find( row => row.id.startsWith( "map-region:" ) || row.id.startsWith( "map-monster:" ) )
+			?.id;
+	assert.equal( first(), "map-region:50" );
+	hud.activate( "map-guide-scroll-up", cat, 20 );
+	assert.equal( first(), "map-region:50", "the top end holds" );
+	hud.activate( "map-guide-scroll-down", cat, 20 );
+	assert.equal( first(), "map-region:50", "the bottom end holds" );
+	// The Field tab stands with its own (empty) tree.
+	hud.activate( "map-guide-tab:area", cat, 20 );
+	view = paint( hud );
+	assert.equal( control( view, "map-guide-tab:area" )?.selected, true );
+	assert.equal( ids( view ).some( id => id.startsWith( "map-region:" ) ), false );
+	// The side tab shuts it all.
+	hud.activate( "map-side-tab", cat, 20 );
+	view = paint( hud );
+	assert.equal( control( view, "map-guide" ), undefined );
+	assert.deepEqual( control( view, "map-side-tab" )?.rect, [ 85, 196, 12, 96 ] );
 	hud.dispose();
 });
 
@@ -482,12 +527,12 @@ test("the dungeon page's monster list fills for its floor and a pick marks the s
 	const hud = tools();
 	const cat = catalogue();
 	const floors = caveDungeonFloors( CAVE, 32769 );
-	// Closed, the cave page carries the list toggle; opening it lists
+	// Shut, the cave page carries the side tab; opening the guide lists
 	// the shown floor's species from the catalogue, not "Loading...".
 	let view = paint( hud, { cave: true, floors, floor: floors[0] } );
-	defined( control( view, "map-list" ) );
+	defined( control( view, "map-side-tab" ) );
 	assert.equal( ids( view ).some( id => id.startsWith( "map-cave-monster:" ) ), false );
-	hud.activate( "map-list", cat, 20 );
+	hud.activate( "map-side-tab", cat, 20 );
 	view = paint( hud, { cave: true, floors, floor: floors[0] } );
 	assert.deepEqual(
 		ids( view ).filter( id => id.startsWith( "map-cave-monster:" ) ),
@@ -521,42 +566,30 @@ test("the dungeon page's monster list fills for its floor and a pick marks the s
 	hud.dispose();
 });
 
-test("the floor selector is one compact stepper and the page foot names the level filter", () => {
+test("the floor spinner and the foot note stand at their layout places", () => {
 	const hud = tools();
 	const floors = caveDungeonFloors( CAVE, 32769 );
-	// The selector's pieces stack on one 28x56 plate at the clip's
-	// right edge below the globe row: up chevron, the B-floor box,
-	// down chevron. No tall track stretches down the edge (#3238).
+	// Window 100,100 800x600: the spinner (611,90 in the 650x422 layout)
+	// keeps its distance from the right edge; map2 shows its black box
+	// only between the arrows' outer rows.
 	const written = [];
 	const text = {
 		...TEXT,
 		quads: ( value, rect, clip, color, style ) => (written.push( { value, rect, style } ), [])
 	};
 	const view = paint( hud, { cave: true, floors, floor: floors[0], text } );
-	const plate = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_big_box.png" ) );
-	assert.deepEqual( plate?.rect, [ 860, 188, 28, 56 ], "one compact plate, not the 228px track" );
-	const up = defined( control( view, "map-floor-up" ) ), down = defined( control( view, "map-floor-down" ) );
-	assert.deepEqual( up.rect, [ 860, 194, 28, 12 ], "the up chevron heads the stepper" );
-	assert.deepEqual( down.rect, [ 860, 230, 28, 12 ], "the down chevron closes the stepper" );
-	const box = view.quads.find( quad => quad.texture.endsWith( "wmap_floor_box.png" ) );
-	assert.deepEqual( box?.rect, [ 862, 208, 24, 20 ], "the floor box sits between the chevrons" );
-	// The page foot carries the later client's filter note in its
-	// black strip, with the switch that drives the same state.
-	const note = view.quads.find( quad => quad.texture === "" && quad.rect[1] === 676 && quad.rect[3] === 20 );
-	assert.deepEqual( note?.color, [ 0, 0, 0, .92 ], "the note strip is the black bar at the page foot" );
-	const check = view.quads.find(
-		quad => quad.texture.endsWith( "com_checkbutton_on.png" ) && quad.rect[1] > 600
-	);
-	assert.deepEqual( check?.rect, [ 872, 678, 16, 16 ], "the foot shows the filter's checkbox at its right end" );
+	const box = view.quads.find( quad => quad.texture === "" && quad.rect[2] === 28 && quad.rect[3] === 45 );
+	assert.deepEqual( box?.rect, [ 861, 190, 28, 45 ], "the black box behind the arrows" );
+	assert.deepEqual( defined( control( view, "map-floor-up" ) ).rect, [ 862, 190, 28, 12 ] );
+	assert.deepEqual( defined( control( view, "map-floor-down" ) ).rect, [ 862, 223, 28, 12 ] );
+	const label = written.find( row => row.value === "B1" );
+	assert.deepEqual( label?.rect, [ 865, 206, 23, 17 ] );
 	// The note is the catalogue's own string, right-aligned against the box.
 	const line = written.find( row => row.value === "Fixture note" );
 	assert.equal( line?.style?.hAlign, 2 );
-	assert.equal( (line?.rect[0] ?? 0) + (line?.rect[2] ?? 0), 864 );
-	// The box is a control: it flips the same filter as the world strip.
-	// (Both faces draw the filter's checkbox - the strip's at the
-	// window's head, the foot's here - so the foot's is the low one.)
-	const filter = view.controls.find( row => row.id === "map-level-filter" && row.rect[1] > 600 );
-	assert.deepEqual( filter?.rect, check?.rect );
+	assert.deepEqual( line?.rect, [ 123, 707, 733, 10 ] );
+	assert.ok( view.quads.some( quad => quad.texture.endsWith( "wmap_wnd_bottom_frame.png" ) ) );
+	const filter = control( view, "map-level-filter" );
 	assert.equal( filter?.helpText, "Fixture note" );
 	hud.activate( "map-level-filter", undefined, undefined );
 	assert.equal( hud.filterCap( 20 ), undefined, "the foot's box lifts the filter" );
@@ -701,8 +734,8 @@ test("the map opens with the filter and list on, and the drawer honours the filt
 	try {
 		let view = f.activate( "open-window:Map" );
 		assert.equal( defined( control( view, "map-level-filter" ) ).selected, true, "the filter is on by default" );
-		defined( control( view, "map-list" ) );
-		view = f.activate( "map-list" );
+		defined( control( view, "map-side-tab" ) );
+		view = f.activate( "map-side-tab" );
 		defined( control( view, "map-region:" + REGION_A ) );
 		defined( control( view, "map-region:" + REGION_B ) );
 		assert.equal( control( view, "map-region:" + REGION_C ), undefined, "the Giant's region is over the cap" );
@@ -788,7 +821,7 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 			);
 		assert.equal( caveMarker(), false, "no player sign on a dungeon viewed from outside" );
 		// The page's monster list fills from the catalogue (issue #3239).
-		view = f.activate( "map-list" );
+		view = f.activate( "map-side-tab" );
 		defined( control( view, "map-cave-monster:32769:101" ) );
 		defined( control( view, "map-cave-monster:32769:102" ) );
 		view = f.activate( "map-floor-up" );
@@ -797,11 +830,11 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 		defined( control( view, "map-cave-monster:32769:101" ), "the second floor lists its species too" );
 		// The globe is the way back.
 		view = f.activate( "map-globe" );
-		defined( control( view, "map-list" ), "the world tools are back" );
+		defined( control( view, "map-side-tab" ), "the world page's side tab is back" );
 		assert.equal( control( view, "map-floor-up" ), undefined );
 		// Inside on the second floor, the selector starts there.
 		view = f.moveTo( { regionId: 32769, x: 100, y: 0, z: 100, angle: 0 }, { navigationFloor: 1 } );
-		defined( control( view, "map-list" ), "the strip stays on the cave page (issue #3239)" );
+		defined( control( view, "map-side-tab" ), "the side tab stays on the cave page (issue #3239)" );
 		assert.equal(
 			view.controls.some( row => row.id.startsWith( "map-region:" ) ),
 			false,
@@ -828,4 +861,19 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 	} finally {
 		f.dispose();
 	}
+});
+
+test("the globe stands off the world page beside the pin, at their layout places", () => {
+	const hud = tools();
+	// Window 100,100 800x600: the pin (605,39) and the globe (567,39)
+	// keep their distance from the window's right edge.
+	let view = paint( hud );
+	assert.deepEqual( defined( control( view, "map-pin" ) ).rect, [ 855, 139, 36, 36 ] );
+	assert.equal( control( view, "map-globe" ), undefined, "the world page needs no way back to itself" );
+	assert.equal( control( view, "map-follow" ), undefined, "no captioned AUTO_MOVE button" );
+	assert.equal( control( view, "map-locate" ), undefined, "v1.188 has no location button" );
+	view = paint( hud, { page: 1 } );
+	assert.deepEqual( defined( control( view, "map-globe" ) ).rect, [ 817, 139, 36, 36 ], "a town page shows it" );
+	assert.ok( view.paths.some( path => path.endsWith( "wmap_big_button_world.png" ) ) );
+	hud.dispose();
 });

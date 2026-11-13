@@ -111,10 +111,11 @@ export async function importLaterDungeonMapsStep() {
 	return { maps: Array.isArray( catalog.maps ) ? catalog.maps.length : 0 };
 }
 
-// The later client's dungeon-page map chrome (issue #3210): the big
-// globe, the follow pin's two mode faces and the floor selector, under
-// the same worldmap folder the v1.150 extraction already publishes.
-const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/worldmap/";
+// The later client's M window chrome (issue #3210, the v1.188 layout):
+// the big globe, the follow pin's two mode faces, the floor selector,
+// the window's foot, corner and map edges and the guide tabs, under the
+// interface folders the v1.150 extraction already publishes.
+const LATER_WORLDMAP_BUTTON_ROOT = "/assets/images/Media_extracted/interface/";
 
 /*
 ================
@@ -149,16 +150,28 @@ once so the step claims exactly what the map tools will ask for.
 */
 export function laterWorldMapButtonPublicPaths() {
 	return [
-		"wmap_big_button_world",
-		"wmap_button_automatic",
-		"wmap_button_passivity",
-		"wmap_up_button",
-		"wmap_up_button_disable",
-		"wmap_down_button",
-		"wmap_down_button_disable",
-		"wmap_floor_box",
-		"wmap_floor_choice_box",
-		"wmap_floor_big_box"
+		"worldmap/wmap_big_button_world",
+		"worldmap/wmap_button_automatic",
+		"worldmap/wmap_button_passivity",
+		"worldmap/wmap_up_button",
+		"worldmap/wmap_up_button_disable",
+		"worldmap/wmap_down_button",
+		"worldmap/wmap_down_button_disable",
+		"worldmap/wmap_floor_box",
+		"worldmap/wmap_floor_choice_box",
+		"worldmap/wmap_floor_big_box",
+		"worldmap/wmap_wnd_bottom_frame",
+		"worldmap/wmap_wnd_corner_02",
+		"worldmap/wmap_window_edge_1",
+		"worldmap/wmap_window_edge_2",
+		"worldmap/wmap_window_edge_3",
+		"worldmap/wmap_window_edge_4",
+		"guide/gd_area_tab_on",
+		"guide/gd_area_tab_off",
+		"guide/gd_monster_tab_on",
+		"guide/gd_monster_tab_off",
+		"guide/gd_long_index_open",
+		"guide/gd_long_contents_event"
 	].map( ( name ) => LATER_WORLDMAP_BUTTON_ROOT + name + ".png" );
 }
 
@@ -201,4 +214,90 @@ export async function importLaterWorldMapButtonsStep() {
 	}
 	claimPublicPaths( paths );
 	return { buttons: paths.length };
+}
+
+// The renewal M map's guide (issue #3387): its tables, the hunting
+// ground masks and the guide's own art, from the operator's pinned
+// v1.696 client (SRO_V1696_ROOT), the only client that ships them.
+const LATER_WORLDMAP_GUIDE_CATALOG = "/assets/data/worldmap-guide.json";
+
+/*
+================
+laterWorldMapGuideImportPlan
+
+What the guide step does with one environment: run the importer
+against SRO_V1696_ROOT's folder, or skip with the one line the build
+prints. The importer verifies the archive against its pin first.
+================
+*/
+export function laterWorldMapGuideImportPlan( env = process.env, archiveThere = false ) {
+	const root = (env.SRO_V1696_ROOT ?? "").trim();
+	if ( !root ) {
+		return {
+			run: false,
+			line: "Later world map guide: skipped (SRO_V1696_ROOT is not set; the M map guide stays empty)"
+		};
+	}
+	if ( !archiveThere ) {
+		return { run: false, line: `Later world map guide: skipped (no Media.pk2 under SRO_V1696_ROOT ${root})` };
+	}
+	return { run: true, root, args: [ "scripts/import_v1696_worldmap_guide.py", "--v1696-root", root ] };
+}
+
+/*
+================
+laterWorldMapGuidePublicPaths
+
+The public paths one guide import publishes, read back from its own
+catalogue: the catalogue, its art and every monster's tile masks.
+================
+*/
+export function laterWorldMapGuidePublicPaths( catalog ) {
+	const paths = [ LATER_WORLDMAP_GUIDE_CATALOG ];
+	if ( catalog && typeof catalog.imageRoot === "string" ) {
+		for ( const name of catalog.art ?? [] ) {
+			if ( typeof name === "string" && name ) paths.push( catalog.imageRoot + name + ".png" );
+		}
+		for ( const monster of catalog.monsters ?? [] ) {
+			for ( const tile of monster?.tiles ?? [] ) {
+				if ( typeof tile?.[2] === "string" && tile[2] ) paths.push( catalog.imageRoot + tile[2] + ".png" );
+			}
+		}
+	}
+	return paths;
+}
+
+/*
+================
+importLaterWorldMapGuideStep
+
+The guide's data and art are imported loose beside the v1.150 interface
+images after the preload sweep, claimed for the publication ledger, and
+skipped with one line without the archive, as the steps above.
+================
+*/
+export async function importLaterWorldMapGuideStep() {
+	const root = (process.env.SRO_V1696_ROOT ?? "").trim();
+	const archiveThere = root !== "" &&
+		await stat( path.join( root, "Media.pk2" ) ).then( ( entry ) => entry.isFile(), () => false );
+	const plan = laterWorldMapGuideImportPlan( process.env, archiveThere );
+	if ( !plan.run ) {
+		console.log( plan.line );
+		return { skipped: true };
+	}
+	const result = await runPython( plan.args, {
+		task: "[worldmap-guide] later-client world map guide import",
+		cwd: rebuildRoot,
+		context: [
+			"The M map guide's tables and art are native to the v1.696 client (#3387); the build imports " +
+			"them from the pinned archive (SRO_V1696_ROOT) and publishes them with the other loose assets."
+		]
+	} );
+	const output = result.stdout.trim();
+	if ( output ) console.log( output );
+	const catalog = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "data", "worldmap-guide.json" ), "utf8" )
+	);
+	claimPublicPaths( laterWorldMapGuidePublicPaths( catalog ) );
+	return { monsters: Array.isArray( catalog.monsters ) ? catalog.monsters.length : 0 };
 }

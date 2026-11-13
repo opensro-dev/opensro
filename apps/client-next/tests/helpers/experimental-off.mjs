@@ -23,7 +23,6 @@ export const OFF = Object.freeze( {
 	eventChatTab: true,
 	safeLoadingScreen: false,
 	monsterGuide: false,
-	worldMapLevelCheckbox: false,
 	developerDiagnostics: false,
 	postProcessing: false,
 	anisotropicFiltering: false,

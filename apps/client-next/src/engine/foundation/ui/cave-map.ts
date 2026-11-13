@@ -228,7 +228,8 @@ caveMapView
 
 The page image, gate signs, a picked species' sign and the player's
 sign (only on their own floor) in paint order, its room names at
-screen positions, and the pan after clamping.
+screen positions, the pan after clamping, and the inverse pick from a
+screen pixel back to the floor region's coordinates.
 ================
 */
 export function caveMapView( input: CaveMapInput ) {
@@ -311,5 +312,17 @@ export function caveMapView( input: CaveMapInput ) {
 		page.width <= clip[2] ? 0 : offsetX - (clip[2] / 2 - mapX( center.x )),
 		page.height <= clip[3] ? 0 : offsetY - (clip[3] / 2 - mapY( center.z ))
 	];
-	return { quads, labels, signs, pan: clampedPan };
+	// The inverse of mapX / mapY: the page point under a screen pixel,
+	// in the floor region's own coordinates; null off the page or the
+	// view (the GM double-click warp, map-teleport.ts).
+	const point = ( sx: number, sy: number ) => {
+		if ( sx < Math.max( left, clip[0] ) || sx >= Math.min( left + page.width, clip[0] + clip[2] ) ) return null;
+		if ( sy < Math.max( top, clip[1] ) || sy >= Math.min( top + page.height, clip[1] + clip[3] ) ) return null;
+		return {
+			regionId: page.regionId,
+			x: ((sx - left) / unitX + page.left - CAVE_TILE_ORIGIN) * REGION_SIZE,
+			z: (page.top + 1 - CAVE_TILE_ORIGIN - (sy - top) / unitY) * REGION_SIZE
+		};
+	};
+	return { quads, labels, signs, pan: clampedPan, point };
 }
