@@ -116,6 +116,33 @@ class AvailabilityTests(unittest.TestCase):
 	def test_the_seeds_stay_even_with_no_candidates(self):
 		self.assertEqual(alex.connected_regions([(5, 6), (4, 6)], set()), [(4, 6), (5, 6)])
 
+	# ================
+	# test_crossing_gates_seed_the_terrain_at_their_far_end
+	#
+	# Delta West's link lands in Kings Valley: that region and the terrain
+	# touching it are imported, so the teleport has somewhere to land.
+	# ================
+	def test_crossing_gates_seed_the_terrain_at_their_far_end(self):
+		def gate(code, region):
+			return ["1", "181", code, "27758", "SN_ZONE", str(region), "910", "221", "1793", "50", "0", "0", "1"]
+		raw = utf16_table([
+			gate("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			gate("GATE_STORMDESERT_GATE", (84 << 8) | 65),
+			gate("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			gate("GATE_SD1", (90 << 8) | 48)
+		])
+		crossings = alex.gate_seed_regions(raw)
+		self.assertEqual(crossings, {(57, 74), (65, 84)})
+		self.assertEqual(alex.gate_seed_regions(raw, ("GATE_TOMB_GATE_OUT_1",)), set())
+		candidates = {(57, 74), (58, 74), (65, 84), (90, 90)}
+		self.assertEqual(alex.connected_regions([(48, 90)], candidates, crossings),
+			[(57, 74), (58, 74), (65, 84), (48, 90)])
+
+	def test_a_missing_crossing_gate_stops_the_import(self):
+		raw = utf16_table([["1", "180", "GATE_STORMDESERT_GATE", "0", "SN", str((84 << 8) | 65)]])
+		with self.assertRaises(SystemExit):
+			alex.gate_seed_regions(raw)
+
 
 class TerrainTests(unittest.TestCase):
 	def test_tile_ids_drop_the_scale_bits(self):

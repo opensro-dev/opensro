@@ -75,6 +75,17 @@ CITY_NAME_PREFIX = "RN_SD_EGYPT01"
 # Gate codes of the city's own ferry and sand-desert gates (teleportdata).
 CITY_GATE_PREFIX = "GATE_SD"
 CITY_GATE_EXTRA = ("GATE_NPC_SD_M_AREA_FERRY",)
+# Port-only, not native: the far ends of the city's two outdoor crossings
+# (Delta West to Kings Valley, Delta East to the Storm Desert), which the
+# variant links (build_alexandria_variant GATE_CODES). Their regions seed
+# terrain components like the field's, so a crossing never lands on a
+# region the client has no terrain for.
+CROSSING_GATE_CODES = ("GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE")
+# teleportdata columns: code name, and the gate's own region id.
+TELEPORT_CODE_COLUMN = 2
+TELEPORT_REGION_COLUMN = 5
+# A region id with this bit set names a dungeon, not an outdoor sector.
+DUNGEON_REGION_BIT = 0x8000
 
 TEXTDATA = "server_dep/silkroad/textdata/"
 MAP_EXTENSIONS = (".m", ".o", ".o2", ".t")
@@ -172,6 +183,31 @@ def mfo_regions(mapinfo):
 	for region_id in range(width * height):
 		if mapinfo[MFO_HEADER_BYTES + (region_id >> 3)] & (0x80 >> (region_id & 7)):
 			found.add(region_xy(region_id))
+	return found
+
+
+# ================
+# gate_seed_regions
+#
+# The outdoor (sectorX, sectorY) of each gate in codes, read from a
+# teleportdata table. A code the table lacks stops the build: a crossing
+# with no far end would be linked to nothing.
+# ================
+def gate_seed_regions(teleportdata_raw, codes=CROSSING_GATE_CODES):
+	found, seen = set(), set()
+	for row in table_rows(teleportdata_raw):
+		if len(row) <= TELEPORT_REGION_COLUMN or row[TELEPORT_CODE_COLUMN].strip() not in codes:
+			continue
+		value = row[TELEPORT_REGION_COLUMN].strip()
+		if not value.lstrip("-").isdigit():
+			continue
+		seen.add(row[TELEPORT_CODE_COLUMN].strip())
+		region = int(value) & 0xFFFF
+		if not region & DUNGEON_REGION_BIT:
+			found.add(region_xy(region))
+	missing = sorted(set(codes) - seen)
+	if missing:
+		raise SystemExit(f"teleportdata.txt has no outdoor gate {', '.join(missing)}")
 	return found
 
 
@@ -442,8 +478,11 @@ def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 		# terrain components, not an exhaustive list of regions worth importing.
 		# Empty connecting terrain and mountain sectors have no monster nests.
 		fields = field_seed_regions(vsro_root)
-		regions = connected_regions(city, vsro_only_regions(data_data, data_index, native_mapinfo), fields)
-		log(f"{len(city)} city regions, {len(regions)} regions with the fields around it")
+		crossings = gate_seed_regions(table_text(media_data, media_index, "teleportdata.txt"))
+		regions = connected_regions(
+			city, vsro_only_regions(data_data, data_index, native_mapinfo), set(fields) | crossings
+		)
+		log(f"{len(city)} city regions, {len(regions)} regions with the fields and crossings around it")
 
 		tile_ids, copied, missing = set(), [], []
 		for sector_x, sector_y in regions:
