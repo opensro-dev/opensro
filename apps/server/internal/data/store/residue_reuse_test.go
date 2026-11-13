@@ -89,7 +89,7 @@ func TestDisbandedCampForgetsItsResidues(t *testing.T) {
 	t.Parallel()
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
-	master := guildTestCharacter("residuemaster")
+	master := guildTestCharacter("residuemstr")
 	if err := s.CreateCharacter(testDivision, "account-a", master); err != nil {
 		t.Fatal(err)
 	}
