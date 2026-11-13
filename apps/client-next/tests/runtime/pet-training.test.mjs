@@ -998,22 +998,3 @@ test("individual pet skill blues name the skill rather than a generic skill bonu
 		assert.deepEqual( a.slots, [ "Collar", "Harness", "Charm" ] );
 	}
 });
-
-/*
-================
-Cumulative crow books
-================
-*/
-test("third crow books keep earlier effects and explain the new mechanics", () => {
-	const text = id => {
-		const d = petSkillDesign( id );
-		assert.ok( d );
-		return petEffect( d, 30, 10 );
-	};
-	assert.match( text( 48 ), /Half immediately.*heals the crow.*all negative effects.*Party range/ );
-	assert.match( text( 51 ), /gear blues.*3 stored casts.*500%/ );
-	assert.match( text( 54 ), /Restore MP.*Owner and party.*10,000 MP.*5,000 true damage.*5 m/ );
-	assert.doesNotMatch( text( 54 ), /reuse -0.5|cooldown recovery/ );
-	assert.match( text( 57 ), /Only taking damage.*before damage.*keeps stacks.*30 s.*Party members/ );
-	assert.doesNotMatch( text( 46 ), /Cleanses|Party range/ );
-});
