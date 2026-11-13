@@ -10,7 +10,7 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
 
 1. Follow [docs/guides/GETTING_STARTED.md](https://github.com/opensro-dev/opensro/blob/main/docs/guides/GETTING_STARTED.md). The asset build needs your own v1.150 client.
 2. Working only on code? `corepack pnpm check source` runs the CI gates with no game data at all.
-3. Find something to do: issues labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue), the bug reports on [Discord](https://discord.gg/RUua9HY657), or ask in #🛠️contributing.
+3. Find something to do: the bug reports on [Discord](https://discord.gg/RUua9HY657), or ask in #🛠️contributing.
 
 ---
 
