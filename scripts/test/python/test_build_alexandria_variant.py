@@ -415,6 +415,29 @@ class MapTests(unittest.TestCase):
 		self.assertEqual(names["SN_ZONE_11050"], "Blacksmith")
 
 	# ================
+	# test_city_labels_name_shops_and_districts_not_npcs
+	#
+	# A town page of either client labels its shops and districts; an NPC
+	# name label on the city page would print every NPC on the zoomed map.
+	# ================
+	def test_city_labels_name_shops_and_districts_not_npcs(self):
+		native, vsro = self.tables()
+		shop = pin("11050", "SN_ZONE_11050")
+		npc = pin("99010", "SN_NPC_SD_M_AREA_POTION")
+		vsro["worldmap_localinfo.txt"] = variant.append_rows(vsro["worldmap_localinfo.txt"],
+			[["1"] + row + ["0"] for row in [shop, npc]])
+		vsro["textdata_object.txt"] = variant.append_rows(vsro["textdata_object.txt"], [
+			text("SN_ZONE_11050", "k", "t", "s", "j", "Blacksmith"),
+			text("SN_NPC_SD_M_AREA_POTION", "k", "t", "s", "j", "Potion Merchant Titi")
+		])
+		merged, _ = variant.merge_map_tables(native, vsro, self.REGIONS)
+		rows = {r[0]: r for r in stage1.table_rows(merged["worldmap_localinfo.txt"])}
+		self.assertEqual(rows["11050"], shop)
+		self.assertNotIn("99010", rows)
+		names = {r[1] for r in stage1.table_rows(merged["textdataname.txt"]) if len(r) > 1}
+		self.assertNotIn("SN_NPC_SD_M_AREA_POTION", names)
+
+	# ================
 	# test_overview_labels_follow_the_imported_field_regions
 	# ================
 	def test_overview_labels_follow_the_imported_field_regions(self):
