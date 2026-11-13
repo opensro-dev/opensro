@@ -23,9 +23,32 @@ export const ASSET_PACK_MAGIC = "SROPACK2";
 export const ASSET_PACK_VERSION = 2;
 export const ASSET_PACK_HEADER_FORMAT = "sro-asset-pack";
 export const ASSET_PACK_PREFIX_BYTES = 12;
+// The largest pack index (manifest.json) the browser reads: the client's
+// PACK_INDEX_LIMIT_BYTES (apps/client-next/.../packs/packs.ts) holds the same
+// value. Both index writers refuse a bigger one (assertPackIndexFits), so a
+// build that outgrows it fails instead of every player's browser.
+export const ASSET_PACK_INDEX_MAX_BYTES = 64 << 20;
 // Members are stored gzip-compressed: every browser decodes gzip natively
 // (DecompressionStream), so the client needs no decoder of its own.
 export const MEMBER_ENCODING_GZIP = "gzip";
+
+/*
+================
+assertPackIndexFits
+
+Refuses a pack index the browser could not read. Every index writer calls
+it before publishing: assetPacks.mjs (the full build) and
+publishAssetPackManifest (focused refreshes and delivery). The variant
+build's 17.5 MB index once passed both while the client read 16 MiB.
+================
+*/
+export function assertPackIndexFits( bytes, label ) {
+	if ( bytes.length > ASSET_PACK_INDEX_MAX_BYTES ) {
+		throw new Error(
+			`pack index ${label} is ${bytes.length} bytes; the client reads at most ${ASSET_PACK_INDEX_MAX_BYTES}`
+		);
+	}
+}
 
 /*
 ================

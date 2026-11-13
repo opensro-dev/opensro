@@ -36,7 +36,12 @@ import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { createLimiter, mapWithConcurrency, settleAll } from "./shared/asyncUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { openMemberCompression } from "./shared/memberCompression.mjs";
-import { ASSET_PACK_HEADER_FORMAT, ASSET_PACK_MAGIC, ASSET_PACK_VERSION } from "./shared/packFormat.mjs";
+import {
+	ASSET_PACK_HEADER_FORMAT,
+	ASSET_PACK_MAGIC,
+	ASSET_PACK_VERSION,
+	assertPackIndexFits
+} from "./shared/packFormat.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
 import { sha256Hex } from "./shared/hash.mjs";
 import { archiveGeneratedArtifact } from "./artifacts/generatedArtifactArchive.mjs";
@@ -614,6 +619,7 @@ possible with rename-over on the readers that hit this path.
 ================
 */
 async function publishIndex( indexPath, bytes ) {
+	assertPackIndexFits( bytes, indexPath );
 	await publishBytesAtomically( indexPath, bytes, { logLabel: "asset-packs" } );
 }
 
