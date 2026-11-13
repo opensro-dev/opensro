@@ -2843,6 +2843,27 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/reverse-map-buttons.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": [
+				"has"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/reverse-map-buttons.ts",
+			"functions": [
+				"reverseMapButtons"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
+			"provider": "src/engine/runtime/ui/hud/world-map.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": [

@@ -10,15 +10,15 @@ a lamp, eight rows at a time beside the stock vertical scrollbar. Every
 offset here was matched to the pixel against the v1.188 screenshot of
 an open guide (map1): rows at 14,37 of the panel on a 30 pitch, the
 toggle at 3,3 of its row, the lamp at 34,7, the scrollbar's up arrow at
-264,56 and its down arrow at 264,234. This module paints one frame of
-the tree; the map tools own which group is open, the scroll and the
-rows themselves.
+264,56 and its down arrow at 264,234. The scrollbar is the guide's own
+(interface/guide/gd_scroll_*, issue #3392): the line, the arrows and a
+thumb that drags. This module paints one frame of the tree; the map
+tools own which group is open, the scroll and the rows themselves.
 
 ===========================================================================
 */
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
-import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
 
 const GUIDE = "/assets/images/Media_extracted/interface/guide/";
 const GROUP_BAR = GUIDE + "gd_long_index_open.png";
@@ -27,6 +27,12 @@ const LEAF_BAR = GUIDE + "gd_long_contents_event.png";
 const TOGGLE_CLOSED = GUIDE + "gd_index_button_close.png";
 const TOGGLE_OPEN = GUIDE + "gd_index_button_open.png";
 const LAMP = GUIDE + "gd_contents_lamp.png";
+const SCROLL_LINE = GUIDE + "gd_scroll_line.png";
+const SCROLL_UP = GUIDE + "gd_scroll_up";
+const SCROLL_DOWN = GUIDE + "gd_scroll_down";
+const SCROLL_THUMB = GUIDE + "gd_scroll_button";
+// A button's faces: normal, hover, pressed.
+const FACES = [ ".png", "_focus.png", "_press.png" ] as const;
 
 const ROW_LEFT = 14, ROW_TOP = 37, ROW_PITCH = 30;
 const ROW_WIDTH = 248, ROW_HEIGHT = 28;
@@ -37,17 +43,32 @@ const LAMP_RECT: UiRect = [ 34, 7, 8, 16 ];
 // bars leave their first 28 columns to the toggle or the lamp's slot).
 const LABEL_LEFT = 28;
 // The scrollbar's track: the up arrow sits above it, the down arrow
-// below, the thumb travels its height (CIFVerticalScroll's layout).
+// below, the thumb's top travels its height (CIFVerticalScroll's
+// layout), and the 12 px line stands centred in the 16 px column.
 const SCROLL_TRACK: UiRect = [ 264, 72, 16, 146 ];
+const SCROLL_BUTTON = 16;
+const SCROLL_LINE_WIDTH = 12;
+const SCROLL_LINE_HEIGHT = 292;
 export const GUIDE_SCROLL_ID = "map-guide-scroll";
+export const GUIDE_SCROLL_THUMB = GUIDE_SCROLL_ID + "-thumb";
+// The thumb's travel in pixels, for turning a drag into rows.
+export const GUIDE_SCROLL_TRAVEL = SCROLL_TRACK[3];
+// The badge's room at a row's right end (port-only instance badge).
+const BADGE_WIDTH = 44;
+const BADGE_TEXT = "Inst.";
 
-// map1's text: gold group names, white species, and a species above the
-// character's level in red.
+// map1's gold group names, and sub_e6cb90's level colours: white
+// within three levels, 0xffef8282 four to six above, 0xffff0000 more,
+// 0xff80c0e5 below. Grey is the port's shut row.
 const COLORS = {
 	group: [ 239 / 255, 218 / 255, 164 / 255, 1 ],
 	leaf: [ 1, 1, 1, 1 ],
-	high: [ 239 / 255, 130 / 255, 130 / 255, 1 ]
+	high: [ 239 / 255, 130 / 255, 130 / 255, 1 ],
+	far: [ 1, 0, 0, 1 ],
+	low: [ 128 / 255, 192 / 255, 229 / 255, 1 ],
+	locked: [ .5, .5, .5, 1 ]
 } as const;
+const BADGE_COLOR = [ .96, .83, .55, 1 ] as const;
 const WHITE = [ 1, 1, 1, 1 ] as const;
 const FULL_UV: UiRect = [ 0, 0, 1, 1 ];
 
@@ -65,6 +86,10 @@ export interface GuideTreeRow {
 	open?: boolean;
 	lamp?: boolean;
 	color: keyof typeof COLORS;
+	// A row that takes no click; its tip says why.
+	disabled?: boolean;
+	helpText?: string;
+	badge?: boolean;
 }
 
 /*
@@ -81,6 +106,8 @@ export interface GuideTree {
 	rows: readonly GuideTreeRow[];
 	scroll: number;
 	empty: string;
+	hover: string | null;
+	pressed: string | null;
 	text: {
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style?: GlyphStyle ): UiQuad[];
 	};
@@ -106,7 +133,7 @@ export function paintGuideTree(
 		out.paths.push( texture );
 		out.quads.push( { texture, rect, uv: FULL_UV, color: WHITE, clip: tree.full } );
 	};
-	out.paths.push( GROUP_BAR, LEAF_BAR, TOGGLE_CLOSED, TOGGLE_OPEN, LAMP );
+	out.paths.push( GROUP_BAR, LEAF_BAR, TOGGLE_CLOSED, TOGGLE_OPEN, LAMP, SCROLL_LINE );
 	if ( tree.rows.length === 0 ) {
 		const rect: UiRect = [ left + ROW_LEFT, top + ROW_TOP, ROW_WIDTH, ROW_HEIGHT ];
 		out.quads.push( ...tree.text.quads( tree.empty, rect, tree.full, WHITE, { hAlign: 1, vAlign: 1 } ) );
@@ -124,34 +151,80 @@ export function paintGuideTree(
 		} else if ( row.lamp ) {
 			image( LAMP, [ rect[0] + LAMP_RECT[0], rect[1] + LAMP_RECT[1], LAMP_RECT[2], LAMP_RECT[3] ] );
 		}
-		const label: UiRect = [ rect[0] + LABEL_LEFT, rect[1], ROW_WIDTH - LABEL_LEFT, ROW_HEIGHT ];
+		const badge = row.badge ? BADGE_WIDTH : 0;
+		const label: UiRect = [ rect[0] + LABEL_LEFT, rect[1], ROW_WIDTH - LABEL_LEFT - badge, ROW_HEIGHT ];
 		out.quads.push(
-			...tree.text.quads( row.label, label, tree.full, COLORS[row.color], { hAlign: 1, vAlign: 1 } )
+			...tree.text.quads( row.label, label, tree.full, COLORS[row.color], {
+				hAlign: 1,
+				vAlign: 1,
+				overflow: "clip"
+			} )
 		);
+		if ( badge ) {
+			const box: UiRect = [ rect[0] + ROW_WIDTH - badge, rect[1], badge, ROW_HEIGHT ];
+			out.quads.push( ...tree.text.quads( BADGE_TEXT, box, tree.full, BADGE_COLOR, { hAlign: 1, vAlign: 1 } ) );
+		}
+		if ( row.disabled ) {
+			// A shut row still says why on hover, through a surface
+			// that takes no action.
+			out.controls.push( { id: row.id, kind: "region", label: row.label, helpText: row.helpText, rect } );
+			return;
+		}
 		out.controls.push( {
 			id: row.id,
 			kind: "button",
 			label: row.label,
+			helpText: row.helpText,
 			rect,
 			selected: row.group ? row.open === true : row.lamp === true
 		} );
 	} );
-	const bar = chatScrollbar(
-		GUIDE_SCROLL_ID,
-		[ left + SCROLL_TRACK[0], top + SCROLL_TRACK[1], SCROLL_TRACK[2], SCROLL_TRACK[3] ],
-		tree.rows.length,
-		GUIDE_TREE_ROWS,
-		// The bar counts its offset up from the end (a chat log's
-		// tail); the tree's scroll counts down from the first row.
-		range - scroll,
-		tree.size,
-		tree.full,
-		null,
-		null
-	);
-	out.quads.push( ...bar.quads );
-	out.paths.push( ...bar.paths );
-	// The thumb is a drag handle in the chat; here the arrows step.
-	out.controls.push( ...bar.controls.filter( control => control.id !== GUIDE_SCROLL_ID + "-thumb" ) );
+	paintScrollbar( tree, range, scroll, out );
 	return scroll;
+}
+
+/*
+================
+paintScrollbar
+
+The guide's own bar: gd_scroll_line from the track's top to the down
+arrow, the arrows above and below, and the thumb, whose top travels
+the track as the scroll runs from the first row to the last.
+================
+*/
+function paintScrollbar(
+	tree: GuideTree,
+	range: number,
+	scroll: number,
+	out: { quads: UiQuad[]; controls: UiControl[]; paths: string[]; }
+) {
+	const x = tree.panel[0] + SCROLL_TRACK[0], y = tree.panel[1] + SCROLL_TRACK[1];
+	const height = SCROLL_TRACK[3] + SCROLL_BUTTON;
+	// The line art is taller than the track: its top part shows rather
+	// than a squeezed whole, so its knots keep their spacing.
+	out.quads.push( {
+		texture: SCROLL_LINE,
+		rect: [ x + (SCROLL_BUTTON - SCROLL_LINE_WIDTH) / 2, y, SCROLL_LINE_WIDTH, height ],
+		uv: [ 0, 0, 1, Math.min( 1, height / SCROLL_LINE_HEIGHT ) ],
+		color: WHITE,
+		clip: tree.full
+	} );
+	const button = ( id: string, art: string, label: string, rect: UiRect, draggable: boolean ) => {
+		// The hover and press faces come with the later client's art
+		// only (the v1.188 media has the plain face): one is asked for
+		// while it applies and drawn once it is there, so a build without
+		// it never holds the window for a face that will not come.
+		const normal = art + FACES[0];
+		const state = tree.pressed === id ? art + FACES[2] : tree.hover === id ? art + FACES[1] : normal;
+		out.paths.push( normal );
+		if ( state !== normal ) out.paths.push( state );
+		const face = tree.size( state ) ? state : normal;
+		out.quads.push( { texture: face, rect, uv: FULL_UV, color: WHITE, clip: tree.full } );
+		out.controls.push( { id, kind: "button", label, rect, draggable } );
+	};
+	const thumb = range > 0 ? Math.round( (scroll * SCROLL_TRACK[3]) / range ) : 0;
+	const size = SCROLL_BUTTON;
+	button( GUIDE_SCROLL_ID + "-up", SCROLL_UP, "Scroll up", [ x, y - size, size, size ], false );
+	button( GUIDE_SCROLL_ID + "-down", SCROLL_DOWN, "Scroll down", [ x, y + height, size, size ], false );
+	button( GUIDE_SCROLL_THUMB, SCROLL_THUMB, "Scroll the guide", [ x, y + thumb, size, size ], true );
 }

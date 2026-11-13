@@ -35,16 +35,19 @@ import {
 	expandedWorldMapOn,
 	MAP_LOCAL_MARKER,
 	worldMapDungeonPose,
+	worldMapFrame,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
 	worldMapPointMarkers,
-	REVERSE_MAP_MARKER,
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
+import { guideOverlay, guideRace } from "@/engine/foundation/ui/worldmap-guide";
+import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { createHuntingGuideHud } from "./hunting-guide";
+import { reverseMapButtons } from "./reverse-map-buttons";
 import {
 	MAP_WINDOW_EXTENT,
 	MAP_WINDOW_HEIGHT,
@@ -383,6 +386,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		================
 		*/
 		drag( event: Extract<UiEvent, { kind: "drag"; }> ) {
+			if ( mapTools.drag( event.id, event.dy ) ) return;
 			if ( event.id === "map-drag" ) {
 				mapX = Math.max( 0, mapX + event.dx );
 				mapY = Math.max( 0, mapY + event.dy );
@@ -643,6 +647,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapTools.filterCap( game?.progression?.level )
 				) :
 				null;
+			// The monster picked in the guide (sub_e75d50, issue #3390):
+			// its hunting ground tinted on the world page, under the labels.
+			const guidePick = mapProjection && mapPage === 0 && pose ? mapTools.guidePick() : null;
+			const guideGround = guidePick && pose ?
+				guideOverlay(
+					guidePick.catalog,
+					guidePick.index,
+					worldMapFrame( mapPage, mapClip, mapPan, mapCenter ?? mapViewPose( pose ), mapLayout ),
+					mapClip
+				) :
+				null;
 			const fontPath = text.path();
 			if ( !mapOpen && fontPath ) paths.push( fontPath );
 			const rosterSigns = mapOpen && pose && !caveMap ?
@@ -729,6 +744,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 							overflow: "clip"
 						} )
 					),
+					...(guideGround?.quads ?? []),
 					...mapProjection.overlay,
 					...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 						const width = text.run( entry.text, 0, entry.font ).width,
@@ -785,31 +801,22 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			}
 			// Port-only: the reverse return map points while the map holds a scroll.
 			if ( mapOpen && pose && !caveMap && reverseScrollHud.mapping() ) {
-				const clip: UiRect = mapClip;
-				for (
-					const { point, rect } of worldMapPointMarkers( {
+				const buttons = reverseMapButtons( {
+					points: worldMapPointMarkers( {
 						page: mapPage,
-						clip,
+						clip: mapClip,
 						pan: mapPan,
 						center: mapCenter ?? mapViewPose( pose ),
 						points: game?.reverseMapPoints ?? [],
 						layout: mapLayout
-					} )
-				) {
-					mapImages.push( {
-						rect,
-						texture: REVERSE_MAP_MARKER,
-						uv: [ 0, 0, 1, 1 ],
-						color: [ 1, 1, 1, 1 ],
-						clip
-					} );
-					mapHits.push( {
-						id: "reverse-map-point:" + point.id,
-						label: point.name,
-						rect,
-						kind: "button"
-					} );
-				}
+					} ),
+					clip: mapClip,
+					hover,
+					has: path => resources.has( path )
+				} );
+				paths.push( ...buttons.paths );
+				mapImages.push( ...buttons.images );
+				mapHits.push( ...buttons.hits );
 			}
 			if ( mapOpen ) {
 				paths.push(
@@ -916,6 +923,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					catalogue: huntingGuide.catalogue(),
 					guidePublished: guideAvailable,
 					characterLevel: game?.progression?.level,
+					race: guideRace( next.entities.find( e => e.gid === game?.localGid )?.countryByte9c ),
+					levelCap: game?.levelCap ?? NATIVE_LEVEL_CAP,
+					hover,
 					zones: hudData.zones,
 					strings: hudData.strings,
 					levelNote: input.caveMaps?.monsterLevelNote,
