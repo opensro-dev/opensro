@@ -49,7 +49,7 @@ function monster( name, order, over = {} ) {
 		colours: [ 0x80000005 ],
 		tier: 1,
 		continent: 0,
-		tiles: [],
+		tiles: /** @type {unknown[]} */ ([]),
 		...over
 	};
 }
@@ -170,6 +170,7 @@ test("the cap gate shuts rows above the server's cap and names the cap that open
 	const egypt = catalog.monsters.findIndex( row => row.name === "Egypt" );
 	let rows = guideMonsterRows( catalog, { ...VIEW, open: egypt } );
 	const shut = rows.find( row => row.index === egypt );
+	assert.ok( shut );
 	assert.deepEqual( [ shut.locked, shut.opensAt, shut.color ], [ true, 100, "locked" ] );
 	assert.equal( rows.some( row => row.label.endsWith( "Scarab" ) ), false, "a shut group does not open" );
 	rows = guideMonsterRows( catalog, { ...VIEW, levelCap: 110, open: egypt } );
@@ -243,7 +244,7 @@ test("the picked hunting ground: its tiles tinted 0x80e9c624, the icon's corner 
 		ox: 0,
 		oy: 0
 	};
-	const clip = [ 0, 0, 4000, 3000 ];
+	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 4000, 3000 ]);
 	const ground = guideOverlay( catalog, 2, frame, clip );
 	assert.equal( ground.quads.length, 3 );
 	const [first, second, icon] = ground.quads;
@@ -274,7 +275,7 @@ function loadedTools( body = fixture() ) {
 		assets: {
 			available: () => 1,
 			request: () => 7,
-			take: id => id === 7 ? { kind: "bytes", buffer: bytes.buffer } : null,
+			take: id => id === 7 ? { kind: /** @type {const} */ ("bytes"), id, buffer: bytes.buffer } : null,
 			cancel: () => {}
 		},
 		base: "https://fixture.invalid/"
@@ -366,7 +367,7 @@ test("a build without the guide keeps the shard's Monster tab and says so on the
 		assets: {
 			available: () => 1,
 			request: () => 7,
-			take: () => ({ kind: "error", error: "404" }),
+			take: () => ({ kind: /** @type {const} */ ("error"), id: 7, error: "404" }),
 			cancel: () => {}
 		},
 		base: "https://fixture.invalid/"
@@ -419,8 +420,11 @@ test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", (
 
 test("reverse return points are xy_returnicon buttons, the old sign without that art", async () => {
 	const { reverseMapButtons } = await import( "../../src/engine/runtime/ui/hud/reverse-map-buttons.ts" );
-	const points = [ { point: { id: 4, name: "Jangan" }, rect: [ 100, 200, 16, 16 ] } ];
-	const clip = [ 0, 0, 800, 600 ];
+	const points = [ {
+		point: { id: 4, name: "Jangan" },
+		rect: /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 100, 200, 16, 16 ])
+	} ];
+	const clip = /** @type {import("../../src/engine/contracts/ui").UiRect} */ ([ 0, 0, 800, 600 ]);
 	const art = reverseMapButtons( { points, clip, hover: null, has: () => true } );
 	assert.deepEqual( art.images[0].rect, [ 92, 192, 32, 32 ], "centred on the point" );
 	assert.deepEqual( art.images[0].uv, [ 0, 0, .5, 1 ], "the strip's left half" );
