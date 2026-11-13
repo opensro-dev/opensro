@@ -129,6 +129,23 @@ export async function buildTitleSectorObjectResources( options ) {
 		}
 		return blockFormats.get( textureSourcePath );
 	};
+	// Whether the file the copy pass publishes from exists: the block source
+	// for a DXT texture, the converted PNG otherwise (objectTextureSource).
+	// The .ddj alone is not enough: a failed conversion leaves no PNG, the
+	// copy pass skips it, and a record naming it would fail the claim audit.
+	const sourcePresent = new Map();
+	const sourceThereFor = async ( textureSourcePath, blockFormat ) => {
+		if ( !sourcePresent.has( textureSourcePath ) ) {
+			const source = objectTextureSource( {
+				textureSourcePath,
+				blockFormat,
+				extractedRoot: sourceExtractedRoot,
+				imageRoot: imageSourceRoot
+			} );
+			sourcePresent.set( textureSourcePath, await exists( source ) );
+		}
+		return sourcePresent.get( textureSourcePath );
+	};
 	for ( const materialPath of [ ...materialPathSet ].sort() ) {
 		const absolutePath = dataAssetPath( sourceExtractedRoot, materialPath );
 		if ( !(await exists( absolutePath )) ) {
@@ -141,9 +158,7 @@ export async function buildTitleSectorObjectResources( options ) {
 		for ( const material of materialSet.materials ) {
 			const textureSourcePath = resolveBmtTexturePath( materialPath, material.textureName );
 			const blockFormat = textureSourcePath ? await blockFormatFor( textureSourcePath ) : null;
-			const sourceThere = textureSourcePath ?
-				await exists( dataAssetPath( sourceExtractedRoot, textureSourcePath ) ) :
-				false;
+			const sourceThere = textureSourcePath ? await sourceThereFor( textureSourcePath, blockFormat ) : false;
 			if ( textureSourcePath ) {
 				// A missing source stays listed: the copy pass reports it.
 				texturePathSet.add( textureSourcePath );
@@ -366,7 +381,8 @@ async function copyObjectMaterialTextures( options ) {
 materialTexturePublicPath
 
 The public path a material names for its texture, or null when it names
-none or its source is absent from the extracted tree. A path to a file the
+none or the file it is published from is absent (objectTextureSource: the
+block source, or the converted PNG). A path to a file the
 build never writes is a broken reference: a region reused on a later run
 re-claims every path its kept records name (publicationLedger.mjs
 claimKeptOutput), and the claim audit then refuses the whole build. The

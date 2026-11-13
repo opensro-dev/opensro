@@ -17,7 +17,8 @@ import test from "node:test";
 
 import {
 	materialTexturePublicPath,
-	objectTextureRecord
+	objectTextureRecord,
+	objectTextureSource
 } from "../../build/world/objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot } from "../../build/world/paths.mjs";
 
@@ -77,6 +78,18 @@ test("a material whose texture source is present names its published file", () =
 		materialTexturePublicPath( { area: "outdoor", textureSourcePath, blockFormat: "dxt1", sourceThere: true } ),
 		"/assets/world/outdoor/object-textures/prim/mtrl/particle/pokpo1.texture"
 	);
+});
+
+test("a material's texture is judged by the file the copy pass publishes from", () => {
+	// A present .ddj whose PNG conversion is missing must name no texture:
+	// the copy pass reads the PNG, so the PNG is the file whose presence counts.
+	const imageRoot = path.join( "/proof", "images" );
+	const options = { textureSourcePath, extractedRoot, imageRoot };
+	assert.equal(
+		objectTextureSource( { ...options, blockFormat: null } ),
+		path.join( imageRoot, "Data_extracted", "prim", "mtrl", "particle", "pokpo1.png" )
+	);
+	assert.equal( path.extname( objectTextureSource( { ...options, blockFormat: "dxt5" } ) ), ".ddj" );
 });
 
 test("a block source keeps its game-relative name", () => {
