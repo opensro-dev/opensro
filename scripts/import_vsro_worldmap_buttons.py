@@ -40,8 +40,8 @@ ARCHIVE_ROOT = "interface/"
 # already draw the checkbutton's on and off faces. The reverse return
 # point's button (xy_returnicon, #3391) ships here too, with all three
 # faces: reverse-map-buttons.ts draws its focus face, so a build with only
-# this client no longer falls back to the port's old sign. The v1.696
-# guide import publishes the same three files when it runs.
+# this client no longer falls back to the port's old sign. This import
+# is their only producer: the v1.696 guide import leaves them out.
 BUTTONS = (
 	"worldmap/wmap_big_button_world",
 	"worldmap/wmap_button_automatic",

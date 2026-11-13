@@ -19,6 +19,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import import_v1696_worldmap_guide as guide  # noqa: E402
+import import_vsro_worldmap_buttons as buttons  # noqa: E402
 
 MONSTER_MAIN = ["1", "k", "FIELD_CHINA", "field", "main", "10100", "10800", "10100", "0", "0", "0", "0", "0", "0",
 	"xxx", "1", "0"]
@@ -37,6 +38,14 @@ def ddj(width, height, pixels):
 	struct.pack_into("<I", header, 88, 32)
 	dds = bytes(header) + struct.pack(f"<{len(pixels)}I", *pixels)
 	return b"JMXVDDJ 1000" + struct.pack("<II", len(dds), 0) + dds
+
+
+class ArtOwnerTest(unittest.TestCase):
+	def test_guide_art_and_buttons_share_no_path(self):
+		# One producer per published image: the v1.188 buttons own the
+		# reverse return icons, and a path in both lists would let the
+		# step that runs last decide the bytes.
+		self.assertEqual(set(guide.ART) & set(buttons.BUTTONS), set())
 
 
 class TablesTest(unittest.TestCase):
