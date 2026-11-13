@@ -6,7 +6,8 @@ objectTextureRecord.test.mjs - a published texture names no build location
 Two builds of the same sources into differently named generated roots must
 publish the same bytes, so a texture's image source is named relative to
 the tree that holds it: the licensed game tree for a block source, the
-generated tree's intermediate images for a converted PNG.
+generated tree's intermediate images for a converted PNG. A material whose
+texture source is absent names no texture at all.
 
 ===========================================================================
 */
@@ -14,7 +15,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import { objectTextureRecord } from "../../build/world/objects/buildTitleSectorObjectResources.mjs";
+import {
+	materialTexturePublicPath,
+	objectTextureRecord
+} from "../../build/world/objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot } from "../../build/world/paths.mjs";
 
 const textureSourcePath = "prim/mtrl/particle/pokpo1.ddj";
@@ -44,6 +48,35 @@ test("a converted image keeps its name when the build root's name changes", () =
 	assert.deepEqual( fix, branch );
 	assert.equal( fix.imageSourcePath, "Data_extracted/prim/mtrl/particle/pokpo1.png" );
 	assert.equal( fix.imagePublicPath, "/assets/world/outdoor/object-textures/prim/mtrl/particle/pokpo1.png" );
+});
+
+test("a material whose texture source is absent names no texture", () => {
+	// A named path the build never writes would be re-claimed when the region
+	// is reused, and the claim audit would refuse the build.
+	assert.equal(
+		materialTexturePublicPath( { area: "outdoor", textureSourcePath, blockFormat: null, sourceThere: false } ),
+		null
+	);
+	assert.equal(
+		materialTexturePublicPath( {
+			area: "outdoor",
+			textureSourcePath: null,
+			blockFormat: null,
+			sourceThere: false
+		} ),
+		null
+	);
+});
+
+test("a material whose texture source is present names its published file", () => {
+	assert.equal(
+		materialTexturePublicPath( { area: "outdoor", textureSourcePath, blockFormat: null, sourceThere: true } ),
+		"/assets/world/outdoor/object-textures/prim/mtrl/particle/pokpo1.png"
+	);
+	assert.equal(
+		materialTexturePublicPath( { area: "outdoor", textureSourcePath, blockFormat: "dxt1", sourceThere: true } ),
+		"/assets/world/outdoor/object-textures/prim/mtrl/particle/pokpo1.texture"
+	);
 });
 
 test("a block source keeps its game-relative name", () => {

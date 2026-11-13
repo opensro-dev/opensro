@@ -141,16 +141,18 @@ export async function buildTitleSectorObjectResources( options ) {
 		for ( const material of materialSet.materials ) {
 			const textureSourcePath = resolveBmtTexturePath( materialPath, material.textureName );
 			const blockFormat = textureSourcePath ? await blockFormatFor( textureSourcePath ) : null;
+			const sourceThere = textureSourcePath ?
+				await exists( dataAssetPath( sourceExtractedRoot, textureSourcePath ) ) :
+				false;
 			if ( textureSourcePath ) {
+				// A missing source stays listed: the copy pass reports it.
 				texturePathSet.add( textureSourcePath );
 			}
 
 			materials.push( {
 				...material,
 				textureSourcePath,
-				texturePublicPath: textureSourcePath ?
-					objectTexturePublicPath( area, textureSourcePath, blockFormat ? ".texture" : ".png" ) :
-					null
+				texturePublicPath: materialTexturePublicPath( { area, textureSourcePath, blockFormat, sourceThere } )
 			} );
 		}
 
@@ -357,6 +359,25 @@ async function copyObjectMaterialTextures( options ) {
 	}
 
 	return copied;
+}
+
+/*
+================
+materialTexturePublicPath
+
+The public path a material names for its texture, or null when it names
+none or its source is absent from the extracted tree. A path to a file the
+build never writes is a broken reference: a region reused on a later run
+re-claims every path its kept records name (publicationLedger.mjs
+claimKeptOutput), and the claim audit then refuses the whole build. The
+later client's pha_altar.bmt and pha_remains.bmt name pha_gateway02.ddj,
+which its archives do not ship. Null draws the material untextured, as a
+material without a texture name already does (world-material.ts).
+================
+*/
+export function materialTexturePublicPath( { area, textureSourcePath, blockFormat, sourceThere } ) {
+	if ( !textureSourcePath || !sourceThere ) return null;
+	return objectTexturePublicPath( area, textureSourcePath, blockFormat ? ".texture" : ".png" );
 }
 
 /*
