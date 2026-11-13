@@ -158,7 +158,13 @@ export interface UiFrame {
 	readonly text: {
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style?: GlyphStyle ): UiQuad[];
 	};
-	readonly resources: { has( path: string ): boolean; size( path: string ): readonly [number, number] | undefined; };
+	readonly resources: {
+		has( path: string ): boolean;
+		size( path: string ): readonly [number, number] | undefined;
+		// True for an image no load will ever deliver (absent from the
+		// manifest); it must not hold a window (#3407).
+		absent?( path: string ): boolean;
+	};
 	readonly windowPlacement: {
 		frame(
 			id: string,

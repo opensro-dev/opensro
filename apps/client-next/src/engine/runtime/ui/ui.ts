@@ -17459,7 +17459,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					paths.push( ...output.paths );
 					// Independent window admission: a cold NPC must not reuse another popup's
 					// retained image or expose hit regions before its chrome/font is ready.
-					const missing = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
+					const missing = frameDraw.unloadedImages( resources, paths, mark[3] );
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mark[0];
@@ -26939,7 +26939,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								] );}
 						}
 					}
-					const missing = paths.slice( mallAdmission[3] ).filter( path => !resources.has( path ) );
+					const missing = frameDraw.unloadedImages( resources, paths, mallAdmission[3] );
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mallAdmission[0];

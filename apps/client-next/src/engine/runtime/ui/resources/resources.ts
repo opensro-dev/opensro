@@ -279,6 +279,7 @@ export function createUiAssets(
 			return { pending, failed: [ ...failures.keys() ] };
 		},
 		has: ( path: string ) => loaded.has( path ),
+		absent: ( path: string ) => missing.has( path ),
 		/*
 		================
 		residentAll

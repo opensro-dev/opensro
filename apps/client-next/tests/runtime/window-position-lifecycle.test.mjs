@@ -168,6 +168,35 @@ test("mismatched placement saves authored eager origins before layout and leaves
 	}
 });
 
+test("the map opens without its chrome art when the build lacks it", () => {
+	// #3407: a build made before the later client's map art was imported
+	// has none of these files. They draw nothing, as a native static with
+	// no texture does; they never load, so they must not hold the window.
+	const WMAP = "/assets/images/Media_extracted/interface/worldmap/";
+	const absent = Object.fromEntries( [
+		...[ 1, 2, 3, 4 ].map( n => "wmap_window_edge_" + n + ".png" ),
+		"wmap_wnd_bottom_frame.png",
+		"wmap_wnd_corner_02.png",
+		"wmap_button_automatic.png",
+		"wmap_button_passivity.png"
+	].map( name => [ WMAP + name, { absent: true } ] ) );
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {}, absent );
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyM" } );
+		// A frame that changes nothing publishes no semantics, so look at
+		// every frame's product.
+		let admitted = false;
+		for ( let frame = 1; frame <= 3; frame++ ) {
+			const semantics = f.ui.step( f.state, frame );
+			admitted ||= !!semantics?.controls.some( control => control.id === "map-drag" );
+		}
+		assert.ok( admitted, "the map is admitted without its chrome art" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("resizing the map saves its displayed clamped origin rather than its old drag coordinates", () => {
 	const saved = [];
 	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {

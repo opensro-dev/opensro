@@ -179,6 +179,23 @@ export function beginWindow( frame: UiFrame ) {
 
 /*
 ================
+unloadedImages
+
+The images a window drew from `from` on that are still loading: neither
+resident nor known absent. Native never holds a window for its art:
+CTextBoard_SetTexturePath (53FF00) keeps whatever the texture load
+returned, null for a missing file, and CIFWnd_RenderTexturedFace (5405DF)
+draws on the path flag, not the texture. So an absent image never holds a
+window's admission; it held the M window shut forever on a build without
+its chrome art (#3407). Every window admission asks this one rule.
+================
+*/
+export function unloadedImages( resources: UiFrame["resources"], paths: readonly string[], from: number ): string[] {
+	return paths.slice( from ).filter( path => !resources.has( path ) && !resources.absent?.( path ) );
+}
+
+/*
+================
 endWindow
 ================
 */
@@ -206,7 +223,7 @@ export function endWindow(
 	const admittedWindow = admittedWindows.get( owner );
 	// Everything still loading is reported (tests wait on it before a raster);
 	// only the window's own art holds its admission.
-	const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
+	const unloaded = unloadedImages( resources, paths, mark[3] );
 	windowMissing.push( ...unloaded );
 	const gaps = unloaded.filter( path => !contentImages.has( path ) );
 	const key = phase + ":" + w + ":" + h;
