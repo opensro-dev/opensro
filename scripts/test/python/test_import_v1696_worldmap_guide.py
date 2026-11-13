@@ -97,7 +97,9 @@ class MaskTest(unittest.TestCase):
 		with tempfile.TemporaryDirectory() as folder:
 			target = Path(folder) / "m.png"
 			guide.write_mask(ddj(3, 2, pixels), [0x80000005, 0x00ffffff], target)
-			alpha = list(Image.open(target).split()[-1].tobytes())
+			mask = Image.open(target)
+			self.assertEqual(mask.mode, "RGBA")
+			alpha = list(mask.split()[-1].tobytes())
 		self.assertEqual(alpha, [255, 0, 0, 0, 0, 255])
 
 	def test_compressed_tile_is_refused(self):

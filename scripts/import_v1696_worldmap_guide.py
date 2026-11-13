@@ -371,7 +371,9 @@ def write_mask(raw, colours, target):
 	width, height, pixels = tile_pixels(raw)
 	keep = set(colours)
 	alpha = bytes(255 if pixel in keep and pixel not in UNKEYED_PIXELS else 0 for pixel in pixels)
-	image = Image.new("LA", (width, height), 255)
+	# RGBA, not grey + alpha: Safari misreads grey PNGs through
+	# copyExternalImageToTexture (WebKit bug 296208).
+	image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
 	image.putalpha(Image.frombytes("L", (width, height), alpha))
 	target.parent.mkdir(parents=True, exist_ok=True)
 	image.save(target)
