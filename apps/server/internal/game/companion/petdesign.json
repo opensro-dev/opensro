@@ -5937,21 +5937,21 @@
 	"procs": [
 		{
 			"name": "Chain Lightning",
-			"effect": "Gear-degree lightning damage; each of up to 5 targets retains 80% of the previous hit. Normal D9: 1,500Ã¢â‚¬â€œ2,000 first-hit damage.",
+			"effect": "Gear-degree lightning damage; each of up to 5 targets retains 80% of the previous hit. Normal D9: 1,500–2,000 first-hit damage.",
 			"base": 20,
 			"perLevel": 15,
 			"unit": "damage"
 		},
 		{
 			"name": "Blizzard",
-			"effect": "Gear-degree damage across four ticks in 5 m; attempts frostbite slow, with 10% freeze chance on the last tick. Normal D9: 1,000Ã¢â‚¬â€œ1,500 total damage.",
+			"effect": "Gear-degree damage across four ticks in 5 m; attempts frostbite slow, with 10% freeze chance on the last tick. Normal D9: 1,000–1,500 total damage.",
 			"base": 15,
 			"perLevel": 12,
 			"unit": "damage"
 		},
 		{
 			"name": "Fire Burst",
-			"effect": "Gear-degree damage in 3 m, with 25% chance to burn. Normal D9: 1,000Ã¢â‚¬â€œ3,000 immediate damage, plus native burn damage.",
+			"effect": "Gear-degree damage in 3 m, with 25% chance to burn. Normal D9: 1,000–3,000 immediate damage, plus native burn damage.",
 			"base": 18,
 			"perLevel": 14,
 			"unit": "damage"
@@ -6941,7 +6941,7 @@
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6967,7 +6967,7 @@
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6982,7 +6982,7 @@
 			"theme": "Frozen prey",
 			"option": 3,
 			"name": "Shatter III",
-			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus. Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus. Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6993,7 +6993,7 @@
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attackÃ¢â‚¬â„¢s damage (1,000 damage killing hit: 500 per nearby monster).",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
