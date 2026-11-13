@@ -327,6 +327,13 @@ export interface Renderer extends Disposable {
 		clip: import("@/engine/foundation/animation/native-clip").NativeClip
 	): number;
 	setTeleportGates( entities: readonly import("./world").EntityState[] ): void;
+	/**
+	 * The release half of a frame for a tab that cannot display one: a hidden
+	 * page still adopts scenes and retires actors, and without this drain
+	 * their scenes, draws and texture sources wait for the next visible
+	 * frame (BUG-070). Optional so test stubs stay valid.
+	 */
+	maintenance?(): void;
 	setCharacterActors(
 		actors: readonly import("./character").CharacterActor[],
 		portraits?: readonly import("./character").CharacterActor[]

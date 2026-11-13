@@ -206,6 +206,63 @@ test("the renderer settles only the drawn frontend scene at full detail, and a l
 	assert.equal( world.stats().lostSceneId, null );
 });
 
+/*
+================
+wideScene
+
+A scene with more groups than one prepare's upload budget admits, so its
+first prepare leaves it pending with uploaded draws.
+================
+*/
+function wideScene( id, count ) {
+	const groups = [];
+	for ( let i = 0; i < count; i++ ) {
+		groups.push( {
+			id: `${id}-${i}`,
+			center: [ 960, 0, 960 ],
+			radius: 10000,
+			material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true },
+			geometry: {
+				positions: new Float32Array( [ 0, 0, 0, 1, 0, 0, 0, 1, 0 ] ),
+				normals: new Float32Array( 9 ),
+				uvs: new Float32Array( 6 ),
+				indices: new Uint32Array( [ 0, 1, 2 ] ),
+				instances: identity(),
+				transform: identity()
+			}
+		} );
+	}
+	return { id, originRegion: 1, warnings: [], residency: "frontend", terrainDetail: "full", groups };
+}
+
+test("a hidden tab releases a superseded pending scene's draws without a frame (BUG-070)", () => {
+	const released = [];
+	const geometry = {
+		upload: () => ({}),
+		release: draw => released.push( draw ),
+		updateInstances: draw => draw,
+		updateIndices() {},
+		streamVertices() {},
+		dropMirror() {}
+	};
+	const textures = { upload: () => ({}), release() {} };
+	const world = createWorldRenderer();
+	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, -1 ], near: 1, far: 1000, fov: Math.PI / 3 } );
+	world.scene( wideScene( "wide", 12 ) );
+	world.prepare( geometry, textures, 1, 0 );
+	assert.equal( world.stats().sceneId, null, "the wide scene is still pending after one budgeted prepare" );
+	world.scene( frontendScene( "next" ) );
+	assert.equal( released.length, 0, "nothing released yet: no further prepare ran, exactly a hidden tab" );
+	// The maintenance drain replaces the release half of the prepare that
+	// cannot run while the page is hidden.
+	world.releaseRetired( geometry, textures );
+	assert.ok( released.length > 0, "the superseded pending's uploaded draws release without a frame" );
+	const drained = released.length;
+	world.prepare( geometry, textures, 1, 0 );
+	assert.equal( world.stats().sceneId, "next", "the world still commits after the out-of-frame drain" );
+	assert.equal( released.length, drained, "the later prepare releases nothing the drain already took" );
+});
+
 test("the title stage settles once ready and loads its scene again after a loss", () => {
 	let serial = 0, sceneId = null, lostSceneId = null;
 	const results = new Map(), requests = [], settles = [];
