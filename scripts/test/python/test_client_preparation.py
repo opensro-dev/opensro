@@ -111,6 +111,19 @@ class ReaderTests(unittest.TestCase):
 			"nested/deep.bin": b"deep bytes",
 		})
 
+	def test_a_mapped_archive_reads_as_its_bytes(self):
+		# The importers read Media.pk2 through map_archive, not read_bytes.
+		with tempfile.TemporaryDirectory() as scratch:
+			path = Path(scratch) / "Media.pk2"
+			path.write_bytes(sample_archive())
+			mapped = sro_pk2.map_archive(path)
+			try:
+				entries = {e.path: sro_pk2.payload(mapped, e) for e in sro_pk2.read_directory(mapped)}
+			finally:
+				mapped.close()
+		self.assertEqual(entries["텍스쳐/검.ddj"], b"\x01\x02\x03")
+		self.assertEqual(entries["nested/deep.bin"], b"deep bytes")
+
 	def test_folds_ascii_only(self):
 		# str.lower() would also fold non-ASCII letters: on Latin-1-decoded
 		# CP949 bytes that corrupts Korean lead bytes (0xC0-0xDE).

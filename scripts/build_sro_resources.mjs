@@ -55,6 +55,16 @@ async function checkPythonBuildDeps() {
 	console.log( `[resource-preflight] ${probe.command}: ${probe.stdout.trim()}` );
 }
 
+// The build takes no arguments. It used to ignore them, so `--help` started
+// a full build of the shared generated tree.
+if ( process.argv.length > 2 ) {
+	console.error(
+		`build_sro_resources: takes no arguments; got ${process.argv.slice( 2 ).join( " " )}\n` +
+			"Settings are environment variables: SRO_BUILD_JOBS, SRO_BUILD_MEMORY_MB, SRO_FORCE_RESOURCE_BUILD, SRO_LANE_MEMO."
+	);
+	process.exit( 2 );
+}
+
 await withGeneratedAssetsLock( "SRO resource build", async () => {
 	assertClientInputs( "asset build" );
 	// Skip the whole pipeline when nothing it reads or writes has changed since
