@@ -1,7 +1,7 @@
 """
 ===========================================================================
 
-alexandria_npc_services.py - optional city shop and map-label dependencies
+alexandria_npc_services.py - optional city shop dependencies
 
 Port-only, not native. Called only by the Alexandria variant builder.
 Native rows win. Missing item packages are reported, never partly granted.
@@ -22,10 +22,6 @@ SHOP_TABLES = (
 	"refpricepolicyofitem.txt", "refconditiontosellpackageitem.txt", "refrewardpolicytosellpackageitem.txt"
 )
 IDENTITY_TABLES = {"refshopgroup.txt", "refshop.txt", "refshoptabgroup.txt", "refshoptab.txt", "refpackageitem.txt"}
-REGION_UNITS = 192
-POSITION_SCALE = 10
-LOCAL_MAP_COLUMNS = 20
-CITY_MAP_ID = "12"
 RESTORED_STORE_NPCS = {"NPC_SD_M_AREA_ACCESSORY", "NPC_SD_T_AREA_ACCESSORY"}
 GOODS_TAB = 2
 GOODS_SLOT = 4
@@ -123,39 +119,6 @@ def merge_shops(native, later, item_codes, npc_codes):
 
 
 # ================
-# npc_map_labels
-#
-# Port-only: later NPC map records name an NPC but omit pixel coordinates.
-# Project the restored npcpos through the same page bounds as world-map.ts,
-# emitting native kind-1 labels so the existing M window draws the names.
-# ================
-def npc_map_labels(mapinfo, positions, characters, original):
-	page = next((r for r in tables.table_rows(mapinfo) if r[0] == CITY_MAP_ID), None)
-	if page is None:
-		return original, 0
-	left, top, right, bottom = [float(page[i]) * REGION_UNITS + float(page[i + 4]) for i in range(10, 14)]
-	width, height = float(page[8]), float(page[9])
-	by_id = {r[1]: r for r in characters if len(r) > 5 and r[2].startswith("NPC_SD_")}
-	known = {r[2] for r in tables.table_rows(original) if len(r) == LOCAL_MAP_COLUMNS and r[7] == CITY_MAP_ID}
-	occupied = {int(r[0]) for r in tables.table_rows(original) if r and r[0].isdigit()}
-	next_id = max(occupied, default=0) + 1
-	added = []
-	for pose in tables.table_rows(positions):
-		row = by_id.get(pose[0])
-		if row is None or row[5] in known:
-			continue
-		region = int(pose[1]) & 0xffff
-		x = ((region & 255) * REGION_UNITS + float(pose[2]) / POSITION_SCALE - left) / (right - left) * width
-		y = (top - ((region >> 8) * REGION_UNITS + float(pose[4]) / POSITION_SCALE)) / (top - bottom) * height
-		if not 0 <= x < width or not 0 <= y < height:
-			continue
-		added.append([str(next_id), "1", row[5], "", "", "", "0", CITY_MAP_ID, "-1", "-1", str(round(x)), str(round(y)), "0", "0", "255", "255", "255", "0", "0", "1"])
-		known.add(row[5])
-		next_id += 1
-	return npcs.append_rows(original, added), len(added)
-
-
-# ================
 # add_services
 #
 # port_stock (#2846; build_alexandria_variant's
@@ -191,8 +154,5 @@ def add_services(vsro_root, native, output, port_stock=False):
 	for name, raw in geared.items():
 		replace_file(root / name, raw)
 	summary["degree11"] = gear_summary
-	labels, count = npc_map_labels((root / "worldmap_mapinfo.txt").read_bytes(), (root / "npcpos.txt").read_bytes(), characters, (root / "worldmap_localinfo.txt").read_bytes())
-	replace_file(root / "worldmap_localinfo.txt", labels)
-	summary["mapLabels"] = count
 	summary["portStock"] = port_stock
 	return summary

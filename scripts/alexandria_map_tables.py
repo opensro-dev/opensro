@@ -78,7 +78,8 @@ def merge_map_tables(native, vsro, regions):
 	region code of each city region (regioncode.txt), its zone names
 	(textzonename.txt), the local map (worldmap_mapinfo.txt), the landmark,
 	world-map and gate rows of worldmap_localinfo.txt and the SN_ texts they
-	name (textdataname.txt), including the city's authored shop/NPC markers.
+	name (textdataname.txt), including the city's authored shop/NPC markers;
+	the city's labels name shops and districts only, as on a native town page.
 	Returns {name: bytes} and a summary.
 	"""
 	region_ids = {(y << 8) | x for x, y in regions}
@@ -119,10 +120,13 @@ def merge_map_tables(native, vsro, regions):
 			continue
 		# Later tables also carry NPC lookup-only rows without a glyph or
 		# coordinates. Only complete static records enter the v1.150 map table.
-		city_label = row[8] == MAP_ALEXANDRIA_ID and row[2] == "1" and row[3].startswith("SN_")
+		# A town page labels its shops and districts (SN_ZONE_), never its
+		# NPCs: no v1.150 or v1.188 town page names an NPC (the 1.188 table's
+		# Alexandria page has only 11050-11068 and 26000-26009).
+		city_label = row[8] == MAP_ALEXANDRIA_ID and row[2] == "1" and row[3].startswith("SN_ZONE_")
 		city_icon = row[8] == MAP_ALEXANDRIA_ID and row[2] == "2" and row[3].lower().endswith(".ddj")
 		city_icon = city_icon and all(value.isdigit() and int(value) > 0 for value in row[13:15])
-		field_label = row[8] == OVERVIEW_ID and row[2] == "1" and row[3].startswith("SN_")
+		field_label = row[8] == OVERVIEW_ID and row[2] == "1" and row[3].startswith("SN_ZONE_")
 		field_label = field_label and all(value.isdigit() for value in row[9:11])
 		field_label = field_label and ((int(row[10]) << 8) | int(row[9])) in region_ids
 		# The overview's own icons (teleports, gates) inside the widened region
