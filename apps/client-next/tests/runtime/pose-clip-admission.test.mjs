@@ -181,7 +181,10 @@ test("an initially empty clip catalog admits its first animated branch", () => {
 	const actual = createCharacterPose( { ...model, clips: [] } );
 	const expected = createCharacterPose( { ...model, clips: [ added ] } );
 	actual.evaluate( "", 0 );
-	assert.throws( () => actual.evaluate( added.name, .5 ), /Missing animation/ );
+	// Before admission the clip is missing: it plays the rest pose and is
+	// reported, never thrown (missing-clip.test.mjs).
+	actual.evaluate( added.name, .5 );
+	assert.deepEqual( actual.takeMissingClips(), [ added.name ] );
 	assert.equal( actual.admitClip( added ), true );
 	actual.evaluate( added.name, .5, true, undefined, true );
 	expected.evaluate( added.name, .5 );

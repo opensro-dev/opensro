@@ -230,6 +230,9 @@ const MAX_ATTACHMENT_DEPTH = 8;
 // model, which names its program in the effect bundle.
 const EQUIPMENT_SOCKET_PREFIX = "equipment:";
 const EFFECT_PROGRAMS = "/effects/programs.json#";
+// Missing-clip reports one renderer holds between takes: each pose evaluator
+// already reports a name once, so this only bounds an undrained owner.
+const MAX_POSE_DEGRADATIONS = 32;
 
 /*
 ================
@@ -243,6 +246,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// Account it separately from admission: caching must not remove actors
 	// that fit the existing draw budget. Actor snapshots bound both arrays.
 	const rowStreams: RowStreams = {};
+	const poseDegradations: import("@/engine/contracts/network").Degradation[] = [];
 	/*
  ================
  clothRandom
@@ -705,6 +709,16 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				deferPoses && resource!.plan.sharedPalette
 			)
 		) poseEvaluations++;
+		// A clip the model lacks played the rest pose (animation-pose.ts):
+		// report it once, naming the model, instead of failing the renderer.
+		for ( const clip of state.pose.takeMissingClips() ) {
+			if ( poseDegradations.length < MAX_POSE_DEGRADATIONS ) {
+				poseDegradations.push( {
+					code: "animation-clip-missing",
+					message: `Missing animation ${clip} on ${actor.model}`
+				} );
+			}
+		}
 		state.sampled = poseSeconds;
 		state.clip = actor.clip;
 		if ( optional && frameWork ) frameWork.spend( performance.now() - started );
@@ -3223,7 +3237,11 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		takeDegradations(): import("@/engine/contracts/network").Degradation[] {
-			return [ ...snapshots.takeDegradations(), ...portraitSnapshots.takeDegradations() ];
+			return [
+				...snapshots.takeDegradations(),
+				...portraitSnapshots.takeDegradations(),
+				...poseDegradations.splice( 0 )
+			];
 		},
 		/*
 		================
