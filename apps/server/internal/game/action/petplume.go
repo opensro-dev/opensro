@@ -58,7 +58,7 @@ func (rt *Runtime) castCrowPlume(division string, owner *enterworld.Character, g
 	}) {
 		return petTrainingReceipt("The ability could not be applied.")
 	}
-	frames = append(frames, crowVisualFrame(crowVisual{gid: gid, kind: crowPlumeVisual, book: uint8(skill.Option), at: step.state.follower.Position(now)}))
+	frames = append(frames, crowVisualFrame(crowVisual{gid: gid, kind: crowPlumeVisual, book: uint8(skill.Option), at: step.state.mover.AnyFollower().Position(now)}))
 	members := rt.crowSupportRecipients(step, skill.Option == 3, false)
 	ownerGID := enterworld.ObjectIDForCharacter(step.snapshot)
 	var ordered []uint32

@@ -128,7 +128,7 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 		if !valid || target.monster == nil || !samePlaneAdjacent(at, target.at) || areaDistance(at, target.at) > radius {
 			continue
 		}
-		world, _ := step.state.follower.Presentation()
+		world, _ := step.state.mover.AnyFollower().Presentation()
 		if rt.LineOfSight != nil && !rt.LineOfSight(at, world.LiveOwnerAt(step.nowMs), target.at) {
 			continue
 		}
@@ -175,7 +175,7 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 			if !valid || victim.monster == nil || seen[gid] || !samePlaneAdjacent(at, victim.at) || areaDistance(at, victim.at) > 80 {
 				continue
 			}
-			world, _ := step.state.follower.Presentation()
+			world, _ := step.state.mover.AnyFollower().Presentation()
 			if rt.LineOfSight != nil && !rt.LineOfSight(at, world.LiveOwnerAt(step.nowMs), victim.at) {
 				continue
 			}

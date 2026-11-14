@@ -56,7 +56,7 @@ func TestPetAreaRechecksFreeBattleTeam(t *testing.T) {
 				}
 				state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
 				at := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
-				state.follower = simulation.NewPetFollower(owner.ActiveCOS.GID, at)
+				state.mover.FollowFrom(owner.ActiveCOS.GID, at)
 				step := petCombatStep{
 					key:   petOwnerKey{division: testDivision, name: owner.Name, gid: owner.ActiveCOS.GID},
 					state: state, snapshot: owner, pet: owner.ActiveCOS, ref: ref, nowMs: clock.NowMs(),

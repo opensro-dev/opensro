@@ -44,7 +44,7 @@ native stuck handler (or BATTLE's override) answers it.
 ================
 */
 func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *enterworld.Character, pet *enterworld.CharacterCOS, tid uint16, nowMs int64) []simulation.Frame {
-	if state.follower == nil || !state.follower.TakeStuck() {
+	if state.mover.AnyFollower() == nil || !state.mover.AnyFollower().TakeStuck() {
 		return nil
 	}
 	switch monster.NativeStuckResponse(state.combat != nil, petStuckTraceSelector, tid) {
@@ -54,8 +54,8 @@ func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *
 		// The native stuck handler's other branch: the tactics release drops the
 		// order and the handler enters state 1 (a state change), both
 		// clearing the count; the next step issues a fresh order.
-		frames := state.follower.Stop(nowMs)
-		state.follower.ResetStuck()
+		frames := state.mover.AnyFollower().Stop(nowMs)
+		state.mover.AnyFollower().ResetStuck()
 		return frames
 	}
 	return nil
@@ -75,8 +75,8 @@ func (rt *Runtime) relocateStuckPet(key petOwnerKey, state *petSession, snapshot
 	world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, snapshot.Name), func() simulation.WorldState {
 		return simulation.SeedWorldState(snapshot)
 	})
-	from, owner := state.follower.Position(nowMs), world.LiveSpawnAt(nowMs)
-	frames := state.follower.Stop(nowMs)
+	from, owner := state.mover.AnyFollower().Position(nowMs), world.LiveSpawnAt(nowMs)
+	frames := state.mover.AnyFollower().Stop(nowMs)
 	resetPetStuck(state)
 	if state.pickup != nil {
 		result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
@@ -84,7 +84,7 @@ func (rt *Runtime) relocateStuckPet(key petOwnerKey, state *petSession, snapshot
 	}
 	rt.releasePetFormation(key, state)
 	if rt.CompanionSurfaceHeight == nil || from.RegionID&0x8000 == 0 && owner.RegionID&0x8000 != 0 ||
-		!state.follower.RelocateTo(owner, nowMs, rt.CompanionSurfaceHeight) {
+		!state.mover.AnyFollower().RelocateTo(owner, nowMs, rt.CompanionSurfaceHeight) {
 		return frames
 	}
 	return append(frames, rt.publishPetRelocation(key, state, pet, nowMs)...)
@@ -120,7 +120,7 @@ clears the pet's stuck count.
 ================
 */
 func resetPetStuck(state *petSession) {
-	if state != nil && state.follower != nil {
-		state.follower.ResetStuck()
+	if state != nil && state.mover.AnyFollower() != nil {
+		state.mover.AnyFollower().ResetStuck()
 	}
 }

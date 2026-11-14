@@ -155,7 +155,7 @@ func TestStalledPetApproachIsLogged(t *testing.T) {
 	rt.ConstrainMovement = func(_ string, from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return from, nil }
 	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
 	live, _ := rt.Monsters.Get(testDivision, m.Gid)
-	state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, simulation.Spawn{RegionID: live.Spawn.RegionID, X: live.Spawn.X - 60, Y: live.Spawn.Y, Z: live.Spawn.Z})
+	state.mover.FollowFrom(c.ActiveCOS.GID, simulation.Spawn{RegionID: live.Spawn.RegionID, X: live.Spawn.X - 60, Y: live.Spawn.Y, Z: live.Spawn.Z})
 	rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, m.Gid))
 	for range 40 {
 		clock.now = clock.now.Add(100 * time.Millisecond)

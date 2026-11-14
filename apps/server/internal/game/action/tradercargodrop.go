@@ -163,7 +163,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 		public = append(public, wire.Frame{Opcode: wire.OpCosRideState,
 			Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(c), false, gid)})
 	}
-	pet.Mounted = false
+	rt.unmountCompanion(division, c, pet, now)
 	pet.Summoned = false
 	pet.StateFlags &^= cosStateSummoned
 	public = append(public, rt.retireCosRuntime(division, c, gid)...)

@@ -39,7 +39,7 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 	skill, _ := companion.PetSkill(pet, id)
 	state := rt.petSessionFor(division, owner.Name, gid)
 	ref, found := rt.cosReference(pet)
-	if state == nil || state.follower == nil || !found {
+	if state == nil || state.mover.AnyFollower() == nil || !found {
 		return petTrainingReceipt("The pet is not ready.")
 	}
 	switch skill.EffectName() {
@@ -47,7 +47,7 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 		return rt.castCrowBrood(division, owner, gid, skill, now)
 	case "Challenging Roar":
 		level := companion.EffectiveLevel(pet, skill, companion.ModifiersFor(pet))
-		if rt.inTown(division, snapshot) || townRegion(state.follower.Position(now).RegionID) {
+		if rt.inTown(division, snapshot) || townRegion(state.mover.AnyFollower().Position(now).RegionID) {
 			return petTrainingReceipt("Challenging Roar cannot be cast in town.")
 		}
 		empowered := false
@@ -70,7 +70,7 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 		}
 		state.roar = &petRoarCast{skill: skill, level: level, releaseAtMs: now + petRoarCastMs, empowered: empowered}
 		var public []wire.Frame
-		for _, frame := range state.follower.Stop(now) {
+		for _, frame := range state.mover.AnyFollower().Stop(now) {
 			public = append(public, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 		}
 		if empowered {
@@ -183,7 +183,7 @@ func (rt *Runtime) advancePetRoar(step petCombatStep) bool {
 	if cast == nil {
 		return false
 	}
-	if rt.inTown(step.key.division, step.snapshot) || townRegion(step.state.follower.Position(step.nowMs).RegionID) {
+	if rt.inTown(step.key.division, step.snapshot) || townRegion(step.state.mover.AnyFollower().Position(step.nowMs).RegionID) {
 		step.state.roar = nil
 		return false
 	}
@@ -198,7 +198,7 @@ func (rt *Runtime) advancePetRoar(step petCombatStep) bool {
 	if !ok {
 		return true
 	}
-	at := step.state.follower.Position(step.nowMs)
+	at := step.state.mover.AnyFollower().Position(step.nowMs)
 	limit := 3
 	if cast.skill.Option == 3 {
 		limit = 6

@@ -89,14 +89,14 @@ func (rt *Runtime) wolfHuntRend(step petCombatStep, primary petCombatTarget, str
 	if !found {
 		return
 	}
-	world, _ := step.state.follower.Presentation()
+	world, _ := step.state.mover.AnyFollower().Presentation()
 	count := 0
 	for _, candidate := range rt.Monsters.CombatCandidatesInPopulation(step.key.division, lease, primary.at, wolfHuntRadius, step.nowMs, false) {
 		target, valid := rt.resolvePetCombatTarget(step, candidate.Gid)
 		if !valid || target.monster == nil || target.gid == primary.gid || !petTargetBleeds(*target.monster) || !samePlaneAdjacent(primary.at, target.at) || areaDistance(primary.at, target.at) > wolfHuntRadius {
 			continue
 		}
-		if rt.LineOfSight != nil && !rt.LineOfSight(step.state.follower.Position(step.nowMs), world.LiveOwnerAt(step.nowMs), target.at) {
+		if rt.LineOfSight != nil && !rt.LineOfSight(step.state.mover.AnyFollower().Position(step.nowMs), world.LiveOwnerAt(step.nowMs), target.at) {
 			continue
 		}
 		rt.wolfBonusHit(step, *target.monster, bonus/2, "wolf-blood-hunt-burst")

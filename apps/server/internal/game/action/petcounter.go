@@ -80,7 +80,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 		return nil
 	}
 	state := rt.petSessionFor(hit.division, owner.Name, pet.GID)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		return nil
 	}
 	ref, found := rt.cosReference(pet)

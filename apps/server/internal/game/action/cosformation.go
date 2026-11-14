@@ -83,7 +83,7 @@ func (rt *Runtime) advanceOwnerFormation(step petCombatStep) []simulation.Frame 
 			return simulation.SeedWorldState(step.snapshot)
 		})
 	}
-	from, target := state.follower.Position(step.nowMs), world.LiveSpawnAt(step.nowMs)
+	from, target := state.mover.AnyFollower().Position(step.nowMs), world.LiveSpawnAt(step.nowMs)
 	distance := monster.NativeOwnerFollowDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Z: from.Z}, monster.Pose{RegionID: target.RegionID, X: target.X, Z: target.Z})
 	var frames []simulation.Frame
 	if distance > monster.OwnerFollowDistance && monster.FollowLocationCompatible(from.RegionID, target.RegionID) {
@@ -99,7 +99,7 @@ func (rt *Runtime) advanceOwnerFormation(step petCombatStep) []simulation.Frame 
 		}
 	}
 	relocated := false
-	frames = append(frames, state.follower.FollowFormation(simulation.PetFormationStep{
+	frames = append(frames, state.mover.AnyFollower().FollowFormation(simulation.PetFormationStep{
 		Relocated: &relocated, Owner: world, Slots: &owner.formationSlots, Slot: &state.formationSlot,
 		BodyRadius: float32(uint16(step.ref.Parameters.BodyRadius)), Speed: rt.cosPacedRun(step.ref, step.run), Now: step.nowMs,
 		Surface: rt.CompanionSurfaceHeight, Constrain: step.constraint,
@@ -132,7 +132,7 @@ func (rt *Runtime) setCompanionFollowSpeed(step petCombatStep, factor float32) [
 		step.pet.FollowRunFactor, step.pet.FollowRunSet = factor, true
 		block := rt.cosAbnormal(step.key.division, step.snapshot.Name, pet.GID)
 		walk, run := rt.cosMovementSpeeds(step.ref, pet, block)
-		step.state.follower.SetMovementSpeeds(walk, run, step.nowMs)
+		step.state.mover.AnyFollower().SetMovementSpeeds(walk, run, step.nowMs)
 		frames = []simulation.Frame{{Opcode: movementSpeedOpcode, Payload: wire.NewWriter(movementSpeedBytes).U32(pet.GID).F32(walk).F32(run).Payload()}}
 		step.state.public = append(step.state.public, wire.Frame{Opcode: frames[0].Opcode, Payload: frames[0].Payload})
 	})

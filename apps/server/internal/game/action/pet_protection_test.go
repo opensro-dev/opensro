@@ -120,7 +120,7 @@ func TestPlayerProtectionRetiresPreparedPetAttack(t *testing.T) {
 				t.Fatal("initial attack order refused")
 			}
 			at := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
-			state.follower = simulation.NewPetFollower(gid, at)
+			state.mover.FollowFrom(gid, at)
 			skills := rt.deps.SkillData().(staticSkillSource)
 			skill := skills[2]
 			skill.ActionCastingTimeMs, skill.ActionCastingTimePinned = 500, true

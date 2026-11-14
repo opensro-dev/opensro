@@ -478,10 +478,10 @@ func (rt *Runtime) elementalSelect(division string, snapshot *enterworld.Charact
 			continue
 		}
 		state := rt.petSessionFor(division, snapshot.Name, pet.GID)
-		if state == nil || !state.ready || state.follower == nil {
+		if state == nil || !state.ready || state.mover.AnyFollower() == nil {
 			continue
 		}
-		from := state.follower.Position(now)
+		from := state.mover.AnyFollower().Position(now)
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || !allowTown && townRegion(from.RegionID) {
 			continue
@@ -582,7 +582,7 @@ func (rt *Runtime) wolfExecuteAttack(division string, owner *enterworld.Characte
 	if step.state.wolfHits[actor] != 0 {
 		return
 	}
-	from := step.state.follower.Position(now)
+	from := step.state.mover.AnyFollower().Position(now)
 	if actor == 1 {
 		from = rt.liveSpawn(simulation.WorldKey(division, step.snapshot.Name), step.snapshot, now)
 	}
@@ -597,7 +597,7 @@ func (rt *Runtime) wolfExecuteAttack(division string, owner *enterworld.Characte
 	}
 	_, nav := rt.liveNav(simulation.WorldKey(division, step.snapshot.Name), step.snapshot, now)
 	if actor == 0 {
-		world, _ := step.state.follower.Presentation()
+		world, _ := step.state.mover.AnyFollower().Presentation()
 		nav = world.LiveOwnerAt(now)
 	}
 	for _, mob := range rt.Monsters.CombatCandidatesInPopulation(division, lease, from, 10*petAreaPerMeter, now, false) {

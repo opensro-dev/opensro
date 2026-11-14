@@ -109,7 +109,7 @@ func TestCompanionVictimKnockdownOwnsPositionAndHold(t *testing.T) {
 		skill := shippedOffense(t, "SKILL_CH_SWORD_KNOCKDOWN_A_01")
 		skill.Knockdown.Chance = 100
 		state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
-		before := state.follower.Position(clock.NowMs())
+		before := state.mover.AnyFollower().Position(clock.NowMs())
 		from := monster.Pose{RegionID: before.RegionID, X: before.X, Y: before.Y, Z: before.Z}
 		from.X = before.X - 100
 		from.RegionID, from.Z = before.RegionID, before.Z
@@ -127,7 +127,7 @@ func TestCompanionVictimKnockdownOwnsPositionAndHold(t *testing.T) {
 		if state.displacement == nil || !state.displacement.down {
 			t.Fatal("knockdown missing")
 		}
-		if after := state.follower.Position(clock.NowMs()); after.X != before.X+20 {
+		if after := state.mover.AnyFollower().Position(clock.NowMs()); after.X != before.X+20 {
 			t.Fatalf("position %v -> %v", before, after)
 		}
 		hold := state.displacement.untilMs
