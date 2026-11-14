@@ -139,6 +139,9 @@ export type SessionState = Readonly<{
 		readonly framesReceived: number;
 		readonly refusal?: string;
 		readonly closeReason?: string;
+		// The native error code a refused EnterWorld result carried; the
+		// character screen shows its message (characterStatus).
+		readonly nativeErrorCode?: number;
 	};
 	// The transport session the world is on (NetworkOwner
 	// .transportSessionId): the world_entry_rejected incident joins
