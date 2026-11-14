@@ -34,7 +34,13 @@ export function createCharacterResources(
 	origin: string
 ) {
 	const durations = new Map<string, ReadonlyMap<string, number>>();
-	const loaded = new Set<string>();
+	// Decoded sources, each with the use stamp of its last admission: the
+	// cache retires the least recently used first. A stamp, not a delete and
+	// re-add per use: that churned a long-lived set every frame, and V8 puts
+	// such a set's next table in the old generation, where only a full
+	// collection frees it.
+	const loaded = new Map<string, number>();
+	let useStamp = 0;
 	// The frame's admission intent. begin starts each frame with new sets
 	// instead of clearing these: a long-lived set's next table is allocated
 	// in the old generation, where only a full collection frees it.
@@ -248,7 +254,7 @@ export function createCharacterResources(
 						completed.path,
 						new Map( model.clips.map( clip => [ clip.name, clip.duration ] ) )
 					);
-					loaded.add( completed.path );
+					loaded.set( completed.path, ++useStamp );
 					failures.delete( completed.path );
 				} else if ( completed.animation && result.kind === "bytes" ) {
 					const { body, name } = completed.animation,
@@ -357,7 +363,7 @@ export function createCharacterResources(
 						path,
 						new Map( built.model.clips.map( clip => [ clip.name, clip.duration ] ) )
 					);
-					loaded.add( path );
+					loaded.set( path, ++useStamp );
 				}
 			} else {
 				request( path, true );
@@ -365,8 +371,7 @@ export function createCharacterResources(
 			if ( !loaded.has( path ) ) return false;
 			// Most recently used last: the cache retires the oldest inactive
 			// source first when the frame takes its room back.
-			loaded.delete( path );
-			loaded.add( path );
+			loaded.set( path, ++useStamp );
 			return true;
 		},
 
@@ -390,7 +395,8 @@ export function createCharacterResources(
 					(reserved !== null || (job !== null && !costs.has( job.path )) ? CHARACTER_SOURCE_BYTES : 0),
 				count = planned.size;
 			const keep = new Set( planned );
-			for ( const path of [ ...loaded ].reverse() ) {
+			const recentFirst = [ ...loaded.keys() ].sort( ( a, b ) => loaded.get( b )! - loaded.get( a )! );
+			for ( const path of recentFirst ) {
 				if ( !keep.has( path ) ) {
 					const cost = costs.get( path )!;
 					if ( count < CHARACTER_MODELS && bytes + cost <= CHARACTER_RESIDENT_BYTES ) {
@@ -400,7 +406,7 @@ export function createCharacterResources(
 					}
 				}
 			}
-			for ( const path of loaded ) {
+			for ( const path of loaded.keys() ) {
 				if ( !keep.has( path ) ) {
 					loaded.delete( path );
 					durations.delete( path );
@@ -412,7 +418,7 @@ export function createCharacterResources(
 					failures.delete( path );
 				}
 			}
-			renderer.retainCharacterModels( [ ...wanted, ...loaded, ...assemblies ] );
+			renderer.retainCharacterModels( [ ...wanted, ...loaded.keys(), ...assemblies ] );
 		},
 
 		/*

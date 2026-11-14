@@ -387,7 +387,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// ownedModels counts the owned entries of models (decoded sources); the
 	// rest are borrowed or assembled views, so their count is the difference.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0;
-	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
+	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
@@ -395,7 +395,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// the frame's command buffer before the deferred continuation runs, so the
 	// continuation may not release or resize them: their buffers must outlive
 	// the submit. The next full pass retires what the frame left behind.
-	const submitted = new Set<string>();
+	// The batches the frame's first pass submitted. Each first pass starts a
+	// new set rather than clearing this one: V8 puts a long-lived set's next
+	// table in the old generation, where only a full collection frees it.
+	let submitted = new Set<string>();
 	// Assembly requests precede actor publication. Protect every requested
 	// assembly, including cache hits, until that publication takes ownership.
 	const requestedAssemblies = new Set<string>();
@@ -3020,12 +3023,12 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		retain( ids: readonly string[] ) {
-			retainedScratch.clear();
-			for ( const id of ids ) retainedScratch.add( id );
-			if ( !retained || retained.size !== retainedScratch.size || ids.some( id => !retained!.has( id ) ) ) {
-				const previous = retained;
-				retained = retainedScratch;
-				retainedScratch = previous ?? new Set();
+			// A new set each call, not a long-lived scratch cleared and refilled
+			// every frame: V8 allocates a long-lived set's next table in the old
+			// generation, where only a full collection frees it.
+			const next = new Set( ids );
+			if ( !retained || retained.size !== next.size || ids.some( id => !retained!.has( id ) ) ) {
+				retained = next;
 				residencyDirty = true;
 			}
 		},
@@ -3374,7 +3377,7 @@ the next full prepare pass, so this may run between frames.
 			probe?.characterBegin();
 			if ( !continuation ) {
 				poseFrame++;
-				submitted.clear();
+				submitted = new Set();
 			}
 			if ( !continuation ) deferred.begin( seconds, hasDeferred ? actors : [], deferredEnabled, night );
 			deferPoses = !!geometry.prepareGpuBones;
@@ -3543,7 +3546,6 @@ the next full prepare pass, so this may run between frames.
 			portraits = [];
 			retained?.clear();
 			retained = null;
-			retainedScratch.clear();
 			actors = [];
 			requestedAssemblies.clear();
 		}
