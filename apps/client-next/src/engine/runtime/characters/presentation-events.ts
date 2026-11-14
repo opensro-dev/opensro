@@ -320,6 +320,9 @@ export function createPresentationEvents() {
 					inventory: gameplay.inventory,
 					petTraining: gameplay.petTraining,
 					attachedEffects: gameplay.attachedEffects,
+					movementRevision: gameplay.movementRevision,
+					movementPath: gameplay.movementPath,
+					movementTransition: gameplay.movementTransition,
 					...(gameplay.homingProjectiles ? { homingProjectiles: gameplay.homingProjectiles } : {})
 				} :
 				gameplay;

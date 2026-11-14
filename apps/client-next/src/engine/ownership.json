@@ -135,6 +135,7 @@
     "src/engine/runtime/audio/audio.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/characters/sounds/sounds.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/effects/effects.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/effects/correction-carry.ts": "src/engine/runtime/characters/effects/effects.ts",
     "src/engine/runtime/characters/effects/spine-aims.ts": "src/engine/runtime/characters/effects/effects.ts",
     "src/engine/runtime/characters/effects/survival-effects.ts": "src/engine/runtime/characters/effects/effects.ts",
     "src/engine/runtime/assets/worker/effects/effects.ts": "src/engine/runtime/assets/worker/loader.ts",
