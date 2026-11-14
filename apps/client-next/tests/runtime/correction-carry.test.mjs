@@ -99,6 +99,9 @@ correction to SERVER (the drawn body still at AHEAD, as on the burst
 frame), and answers the static's pose before and after.
 ================
 */
+/**
+ * @param {{ token: number; predictedToken?: number; movementPath?: { displacement: boolean; }; }} options
+ */
 function castThenCorrect( { token, predictedToken, movementPath } ) {
 	const effects = makeEffects();
 	const cast = { token, caster: 1, target: 2, skill: 1, ...(predictedToken ? { predictedToken } : {}) };
