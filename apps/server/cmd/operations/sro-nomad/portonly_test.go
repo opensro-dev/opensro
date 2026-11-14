@@ -4,7 +4,7 @@
 portonly_test.go - the port-only switches reach the GameWorld job
 
 Storage auto-stack and the alchemy rates default to on (owner decisions
-2026-10-11); /SETSPEED defaults to on (2026-10-12); the enhancement cap and the mall goods default to on (2026-10-13); the team-death revive defaults to on, native (2026-10-13); the reverse return map defaults to off. A deployer's value, including "off", passes
+2026-10-11); /SETSPEED defaults to on (2026-10-12); the enhancement cap and the mall goods default to on (2026-10-13), with the stat recall scroll (2026-11-14); the team-death revive defaults to on, native (2026-10-13); the reverse return map defaults to off. A deployer's value, including "off", passes
 through unchanged.
 
 ===========================================================================
@@ -23,7 +23,7 @@ func TestPortOnlyJobVariables(t *testing.T) {
 		stack, reverse, rates, speed, cap, mall                         string
 		wantStack, wantReverse, wantRates, wantSpeed, wantCap, wantMall string
 	}{
-		{"", "", "", "", "", "", "on", "", "on", "on", "off", "on"},
+		{"", "", "", "", "", "", "on", "", "on", "on", "off", "on,statrecall"},
 		{"off", "on", "off", "off", "off", "off", "off", "on", "off", "off", "off", "off"},
 		{"on", "off", "100,50", "on", "9", "MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT", "on", "off", "100,50", "on", "9",
 			"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT"},
