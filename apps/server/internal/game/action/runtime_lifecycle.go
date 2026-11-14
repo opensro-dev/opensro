@@ -205,6 +205,14 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		})
 		frames("advanceNaturalRecovery", rt.advanceNaturalRecovery)
 		frames("advancePets", rt.advancePets)
+		// The steps since the first drain queue frames on the monster leg
+		// too: above all a pet's result-less hits (a bonus hit, gear poison,
+		// the brood's burst), whose HP frame carries the HP the hit left.
+		// The second drain sends them in the tick that committed them. Held
+		// for the next tick's first drain, they went out behind the hits
+		// that tick commits first (a prepared cast's release), with an HP
+		// those hits had already lowered.
+		step("drainMonsterLegRecipientsAfterPets", func() { out = append(out, rt.drainMonsterLegRecipients()...) })
 		// The caravan tick after the pets: a fired caravan reads the transport's
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
