@@ -60,7 +60,7 @@ func TestAuthoredBasicWeaponRangesAndCasterPursuit(t *testing.T) {
 				weapon.TypeIDs[3] = int64(tc.kind)
 				c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
 				rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
-				result := rt.beginBasicAttack(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}, rt.Now().UnixMilli())
+				result := rt.beginBasicAttack(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}, rt.Now().UnixMilli(), rt.handlerDoors())
 				if result.DiagnosticRefusal != "" {
 					t.Fatal(result.DiagnosticRefusal)
 				}

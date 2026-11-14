@@ -396,7 +396,7 @@ beginBasicAttack
 Run the whole transition at the caller's one simulation instant.
 ================
 */
-func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Character, engage wire.BasicAttackEngage, nowMs int64) OpResult {
+func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Character, engage wire.BasicAttackEngage, nowMs int64, doors characterDoors) OpResult {
 	if character == nil || rt.Monsters == nil || engage.TargetGid == 0 {
 		return OpResult{DiagnosticRefusal: "attack-context-unavailable"}
 	}
@@ -446,7 +446,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		NextActionMs: skillCooldownDeadline(snapshot, skill),
 	}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(character, intent, nowMs, rt.handlerDoors())
+	return rt.advanceBasicAttackIntent(character, intent, nowMs, doors)
 }
 
 /*
@@ -463,7 +463,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	intent.WaitUntilMs = 0
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
-		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
+		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload, doors)
 	}
 	if intent.FollowTarget {
 		return rt.advanceFollowIntent(character, intent, nowMs, doors)
