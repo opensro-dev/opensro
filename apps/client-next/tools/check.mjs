@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { withHeavyLock } from "../../../scripts/checks/heavyLock.mjs";
 import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
+import { LIST_PATH as ASSET_BACKED_LIST } from "./list-asset-backed-tests.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
@@ -91,29 +92,12 @@ function sourceGates() {
 		.filter( ( name ) => name.endsWith( ".test.mjs" ) && !ASSET_ARCHITECTURE_TESTS.has( name ) )
 		.sort()
 		.map( ( name ) => `tests/architecture/${name}` );
-	const tests = [
-		"tools/run-tests.mjs",
-		...architecture,
-		"tests/runtime/lifecycle.test.mjs",
-		"tests/runtime/device-recovery.test.mjs",
-		"tests/runtime/renderer-diagnostics.test.mjs",
-		"tests/runtime/input-network.test.mjs",
-		"tests/runtime/beta-release.test.mjs",
-		"tests/runtime/runtime-text-admission.test.mjs",
-		"tests/runtime/persistent-recovery.test.mjs",
-		"tests/runtime/persistent-settlement.test.mjs",
-		"tests/runtime/application-release.test.mjs",
-		"tests/runtime/cos-item-use.test.mjs",
-		"tests/runtime/cos-hud.test.mjs",
-		"tests/runtime/release-smoke.test.mjs",
-		"tests/runtime/terrain-frustum-cull.test.mjs",
-		// The asset transport's recovery and resume (#3354) mock fetch and
-		// time; they read no generated file.
-		"tests/runtime/asset-download-recovery.test.mjs",
-		"tests/runtime/asset-download-resume.test.mjs",
-		// The chat tabs' filing rule (#3370) reads no generated file.
-		"tests/runtime/chat-tabs.test.mjs"
-	];
+	// Every runtime file but the asset-backed ones (ops #335 row 1: the lane
+	// ran a hand-picked 17 of 766, so the rest regressed unseen until a
+	// release build). The list is derived from what each file read
+	// (tools/list-asset-backed-tests.mjs).
+	const skip = "--skip=" + path.relative( clientRoot, ASSET_BACKED_LIST ).replaceAll( "\\", "/" );
+	const tests = [ "tools/run-tests.mjs", ...architecture, skip, "tests/runtime" ];
 	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
 }
 

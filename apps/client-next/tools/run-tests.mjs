@@ -42,6 +42,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
+import { recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
 import { decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
@@ -49,12 +50,9 @@ import { logPathFor } from "./lib/test-input-recorder.mjs";
 const CACHE_FORMAT = 2;
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
-const CACHE_SUBDIR = path.join( ".state", "client-test-cache" );
-// SRO_TEST_CACHE_DIR (the runner's own tests) holds both files in one folder.
-const cacheDir = process.env.SRO_TEST_CACHE_DIR ?? path.join( resolveMainCheckout( repoRoot ), CACHE_SUBDIR );
-const statsDir = process.env.SRO_TEST_CACHE_DIR ?? path.join( repoRoot, CACHE_SUBDIR );
-const indexPath = path.join( cacheDir, "index.json" );
-const statsPath = path.join( statsDir, "stats.json" );
+const SKIP_FLAG = "--skip=";
+const indexPath = recordsPath( repoRoot );
+const statsPath = statsFilePath( repoRoot );
 const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-recorder.mjs" ) ).href;
 const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
 // The environment a test can see beyond its files.
@@ -136,15 +134,26 @@ function fileBudgets() {
 /*
 ================
 testFiles
+
+The files the targets name. A directory gives its test files except those a
+--skip=<list.json> argument names (a {"tests": [file name...]} list, as
+tests/runtime/asset-backed-tests.json): CI's source lane runs a directory
+minus its asset-backed files without one argument per file, which would
+pass Windows' 32 KiB command line at ~600 files.
 ================
 */
-function testFiles( targets ) {
+function testFiles( args ) {
+	const skip = new Set();
+	for ( const arg of args.filter( ( a ) => a.startsWith( SKIP_FLAG ) ) ) {
+		const list = path.resolve( clientRoot, arg.slice( SKIP_FLAG.length ) );
+		for ( const name of JSON.parse( fs.readFileSync( list, "utf8" ) ).tests ) skip.add( name );
+	}
 	const files = [];
-	for ( const target of targets ) {
+	for ( const target of args.filter( ( a ) => !a.startsWith( SKIP_FLAG ) ) ) {
 		const full = path.resolve( clientRoot, target );
 		if ( fs.statSync( full ).isDirectory() ) {
 			for ( const name of fs.readdirSync( full ).sort() ) {
-				if ( name.endsWith( ".test.mjs" ) ) files.push( path.join( full, name ) );
+				if ( name.endsWith( ".test.mjs" ) && !skip.has( name ) ) files.push( path.join( full, name ) );
 			}
 		} else files.push( full );
 	}
