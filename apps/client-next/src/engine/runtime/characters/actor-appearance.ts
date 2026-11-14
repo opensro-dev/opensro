@@ -14,6 +14,8 @@ import { fortressAppearance } from "@/engine/foundation/animation/fortress-appea
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
 import { assembleEquipmentAppearance } from "@/engine/foundation/animation/equipment-appearance";
+import { stallAttachments } from "@/engine/foundation/animation/emote";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { groundVisualClock, advanceGroundVisual } from "@/engine/foundation/animation/ground-visual";
 import { referenceAppearanceItems } from "@/engine/foundation/animation/reference-appearance";
@@ -262,6 +264,13 @@ export function createActorAppearance( owner: ActorOwner ) {
 					);
 					const player = entity.kind === "player" || entity.kind === "local-player",
 						local = localEntity;
+					// An emote or a stall keeper's greeting empties the hands (emote.ts).
+					const attachmentsHidden = !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden ||
+						stallAttachments(
+							player,
+							entity.appearanceState?.[6] === STALL_TITLE_MODE,
+							!!states.get( entity.gid )?.dead
+						);
 					const fortressIndex = player && local ?
 						fortressAppearance(
 							states.get( entity.gid )?.fortressIndex ?? -1,
@@ -287,7 +296,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 						Number( jobSuitHidesArmor ) + ":" + Number( moonlitThiefSuit ) + ":" +
 						Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 						Number( weaponHidden ) + ":" +
-						Number( !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
+						Number( attachmentsHidden ) + ":" +
 						wornSignature( equipment ) + "|" + avatarSignature( avatars );
 					let appearance = appearances.get( entity.gid );
 					if (
@@ -304,8 +313,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 							hwanHair,
 							mounted: entity.mountedOn !== undefined,
 							weaponHidden,
-							attachmentsHidden: !!presentationState.idleStates.get( entity.gid )
-								?.attachmentsHidden,
+							attachmentsHidden,
 							fortressIndex,
 							player,
 							ownerless: false,
