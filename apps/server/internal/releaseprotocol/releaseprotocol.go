@@ -183,6 +183,23 @@ state, and the browser sends the declared request next.
 ================
 */
 func Require(next http.Handler) http.Handler {
+	return RequireRetiring(nil, next)
+}
+
+/*
+================
+RequireRetiring
+
+Require for a route whose job is to forget browser state: leaving the
+world for character select, or logging out. An outdated tab's request is
+still refused, so the tab learns to reload, but retire runs first on
+the refused request. Forgetting is subtractive and its wire shape has
+never changed, and a forget that only a current tab could make left an
+outdated tab's remembered character in place, so its next reload walked
+straight back into the world (ops #329). retire may be nil.
+================
+*/
+func RequireRetiring(retire func(http.ResponseWriter, *http.Request), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
@@ -190,6 +207,9 @@ func Require(next http.Handler) http.Handler {
 		}
 		declared, err := strconv.Atoi(r.Header.Get(Header))
 		if err != nil || declared != Current {
+			if retire != nil {
+				retire(w, r)
+			}
 			refuse(w)
 			return
 		}

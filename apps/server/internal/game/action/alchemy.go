@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+alchemy.go - alchemy catalog wiring and runtime entry points
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -15,6 +23,14 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
+/*
+================
+ConfigureAlchemy
+
+ConfigureAlchemy loads the alchemy reference catalog and applies the server's
+reinforcement rate/max-plus configuration to the runtime.
+================
+*/
 func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	c, err := alchemy.LoadCatalog(dir, rt.deps.ItemReferences())
 	if err != nil {
@@ -34,6 +50,13 @@ func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	return nil
 }
 
+/*
+================
+AlchemyMagicOptionIDs
+
+The loaded alchemy catalogue's magic option ids, sorted.
+================
+*/
 func (rt *Runtime) AlchemyMagicOptionIDs() []uint32 {
 	if rt.Alchemy == nil {
 		return nil
@@ -46,6 +69,13 @@ func (rt *Runtime) AlchemyMagicOptionIDs() []uint32 {
 	return ids
 }
 
+/*
+================
+secureAlchemyRoll
+
+The live alchemy roll: a crypto-random value in 0..32767.
+================
+*/
 func secureAlchemyRoll() (uint32, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(32768))
 	if err != nil {
@@ -54,6 +84,13 @@ func secureAlchemyRoll() (uint32, error) {
 	return uint32(n.Uint64()), nil
 }
 
+/*
+================
+registerAlchemy
+
+Registers the alchemy request handlers on the transport hub.
+================
+*/
 func (rt *Runtime) registerAlchemy(hub *transport.Hub) {
 	for _, opcode := range []uint16{alchemy.OpCompound, alchemy.OpDissolve} {
 		hub.Handle(opcode, func(session *transport.Session, opcode uint16, payload []byte) {
@@ -79,6 +116,14 @@ func (rt *Runtime) registerAlchemy(hub *transport.Hub) {
 	})
 }
 
+/*
+================
+alchemyFailure
+
+The answer frame for a failed alchemy request: [2][code] for a refusal the
+client names, else a bare [0] (logged).
+================
+*/
 func alchemyFailure(op uint16, err error) []wire.Frame {
 	var refusal alchemy.Refusal
 	if errors.As(err, &refusal) {
@@ -90,6 +135,14 @@ func alchemyFailure(op uint16, err error) []wire.Frame {
 	return []wire.Frame{{Opcode: op, Payload: []byte{0}}}
 }
 
+/*
+================
+alchemyOutputCodenames
+
+The manufactured item codenames (stones, elements, potion tablets) whose
+references must reach the client before an alchemy grant hands one out.
+================
+*/
 func (rt *Runtime) alchemyOutputCodenames() []string {
 	var names []string
 	if rt.Alchemy != nil {
@@ -106,9 +159,15 @@ func (rt *Runtime) alchemyOutputCodenames() []string {
 	return names
 }
 
-// HandleAlchemyReinforce shares the same division lock and durable character
-// door as item moves, purchases and Gacha. No live row is modified until the
-// complete detached outcome and ordered reply have been constructed.
+/*
+================
+HandleAlchemyReinforce
+
+HandleAlchemyReinforce shares the same division lock and durable character
+door as item moves, purchases and Gacha. No live row is modified until the
+complete detached outcome and ordered reply have been constructed.
+================
+*/
 func (rt *Runtime) HandleAlchemyReinforce(division string, character *enterworld.Character, p []byte) []wire.Frame {
 	slots, err := alchemy.DecodeReinforce(p)
 	if err != nil {
@@ -117,6 +176,13 @@ func (rt *Runtime) HandleAlchemyReinforce(division string, character *enterworld
 	return rt.applyAlchemy(division, character, alchemy.OpReinforceResult, slots, false)
 }
 
+/*
+================
+HandleAlchemyStone
+
+One magic or attribute stone request; see applyAlchemy.
+================
+*/
 func (rt *Runtime) HandleAlchemyStone(division string, character *enterworld.Character, p []byte) []wire.Frame {
 	slots, magic, err := alchemy.DecodeStone(p)
 	if err != nil {
@@ -125,6 +191,13 @@ func (rt *Runtime) HandleAlchemyStone(division string, character *enterworld.Cha
 	return rt.applyAlchemy(division, character, alchemy.OpStoneResult, slots, magic)
 }
 
+/*
+================
+applyAlchemy
+
+Runs one alchemy operation on a detached bag and commits the outcome.
+================
+*/
 func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character, op uint16, slots []uint8, magic bool) []wire.Frame {
 	if character == nil || rt.Alchemy == nil {
 		return alchemyFailure(op, nil)
@@ -190,9 +263,15 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	return frames
 }
 
-// Preserve the exact persisted rows outside the changed slots. Re-arming an
-// entire bag would otherwise normalize unrelated legacy quantity/variance
-// fields merely because the character performed Alchemy.
+/*
+================
+alchemyRows
+
+Preserve the exact persisted rows outside the changed slots. Re-arming an
+entire bag would otherwise normalize unrelated legacy quantity/variance
+fields merely because the character performed Alchemy.
+================
+*/
 func alchemyRows(rows []enterworld.InventoryRow, before, after []inventory.Item) []enterworld.InventoryRow {
 	previous := map[int64]inventory.Item{}
 	next := map[int64]inventory.Item{}

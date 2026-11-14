@@ -11,6 +11,11 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
 1. Follow [docs/guides/GETTING_STARTED.md](https://github.com/opensro-dev/opensro/blob/main/docs/guides/GETTING_STARTED.md). The asset build needs your own v1.150 client.
 2. Working only on code? `corepack pnpm check source` runs the CI gates with no game data at all.
 3. Find something to do: the bug reports on [Discord](https://discord.gg/RUua9HY657), or ask in #🛠️contributing.
+4. **Claim it before you start.** Comment `/claim` on the issue. You are assigned and the issue gets `status: claimed`, so nobody else (our agents included) starts the same work. An issue that already carries the label is taken: the claim reply says by whom and until when, so ask there or pick another.
+   - A claim lasts 72 hours. Pushing to a pull request that links the issue keeps it alive, and commenting `/claim` again renews it by hand.
+   - Comment `/unclaim` if you stop. An idle claim is released on its own once it expires.
+   - One account holds at most two claims at a time. Finish or `/unclaim` one before you claim a third.
+   - Investigation work counts. Claim the issue before you start reading the binaries.
 
 ---
 

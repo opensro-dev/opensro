@@ -123,7 +123,11 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		tables[name] = rows
 	}
 	tabIDs := map[string]int32{}
-	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: enterworld.NewTextdataMagicOptions(dir), tabIDs: tabIDs}
+	magic := enterworld.NewTextdataMagicOptions(dir)
+	if err := magic.Load(); err != nil {
+		return nil, fmt.Errorf("commerce: %w", err)
+	}
+	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: magic, tabIDs: tabIDs}
 	for _, r := range tables["refshoptab"] {
 		if len(r) >= 6 && r[0] == "1" {
 			n, e := strconv.ParseInt(r[2], 10, 32)

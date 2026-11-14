@@ -64,6 +64,13 @@ const STALL_CHAT_ROW = 15;
 // CIFEdit geometry is not yet located, so the width and the line box
 // below are inference from the authored-layout model (#2615).
 const EDIT_CARET_WIDTH = 2;
+import {
+	AVATAR_STORAGE_SLOTS,
+	avatarSocket,
+	isAvatarItem,
+	SPIRIT_SLOT,
+	SPIRIT_SOCKET
+} from "@/engine/foundation/gameplay/avatar-socket";
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -2607,20 +2614,26 @@ export function createUi( ports: UiPorts ) {
 		const bag = game.inventory,
 			avatars = game.avatarInventory ?? [],
 			item = (equip ? bag : avatars).find( i => i.slot === source );
-		if ( !item || (item.typeFlags & 0x7fe) !== 0x6ac ) return;
+		if ( !item || !isAvatarItem( item.typeFlags ) ) return;
+		const socket = avatarSocket( item.typeFlags );
 		if ( equip ) {
-			if ( avatars.some( i => i.typeFlags >>> 11 === item.typeFlags >>> 11 ) ) {
+			if ( avatars.some( i => avatarSocket( i.typeFlags ) === socket ) ) {
 				hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
 				return;
 			}
 			// 594BC7: an attachment (class 3) with no dress (class 2) worn
 			// refuses with this line (ChatSystemMessage type 5, as the
 			// class refusal above); no move is sent.
-			if ( item.typeFlags >>> 11 === 3 && !avatars.some( i => i.typeFlags >>> 11 === 2 ) ) {
+			if ( socket === 3 && !avatars.some( i => avatarSocket( i.typeFlags ) === 2 ) ) {
 				hudMessages.append( hudCopy( "UIIT_STT_AVATAR_MAIL_ONLY_WEAR" ), 0xffff7070 );
 				return;
 			}
-			destination = Array.from( { length: 4 }, ( _, i ) => i ).find( i => !avatars.some( a => a.slot === i ) );
+			// The Spirit has storage slot 4 to itself (avatar-socket.ts, port-only).
+			destination = socket === SPIRIT_SOCKET ?
+				SPIRIT_SLOT :
+				Array.from( { length: AVATAR_STORAGE_SLOTS }, ( _, i ) => i ).find( i =>
+					!avatars.some( a => a.slot === i )
+				);
 		} else {destination ??= Array.from( { length: Math.max( 0, (game.inventorySlotCount ?? 13) - 13 ) }, ( _, i ) =>
 				i + 13 ).find( i =>
 					!bag.some( a =>
@@ -8411,7 +8424,7 @@ export function createUi( ports: UiPorts ) {
 						gachaHud.frame( gachaInput() ).cardSlot :
 						avatar ?
 						view?.gameplay?.avatarInventory?.find( i =>
-							i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+							avatarSocket( i.typeFlags ) === Number( event.id.slice( 7 ) )
 						)?.slot :
 						Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) );
 				if ( slot === undefined ) return;
@@ -8978,13 +8991,13 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
-					if ( item && (item.typeFlags & 0x7fe) === 0x6ac ) moveAvatar( true, item.slot );
+					if ( item && isAvatarItem( item.typeFlags ) ) moveAvatar( true, item.slot );
 					else if ( item && useInventorySlot( item.slot ) ) dirty = true;
 					return;
 				}
 				if ( event.id.startsWith( "avatar:" ) ) {
 					const item = view.gameplay.avatarInventory?.find( row =>
-						row.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+						avatarSocket( row.typeFlags ) === Number( event.id.slice( 7 ) )
 					);
 					if ( item ) moveAvatar( false, item.slot );
 					return;
@@ -9008,7 +9021,7 @@ export function createUi( ports: UiPorts ) {
 				if ( event.shift ) return;
 				if ( event.id.startsWith( "avatar:" ) ) {
 					const item = view?.gameplay?.avatarInventory?.find( i =>
-						i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+						avatarSocket( i.typeFlags ) === Number( event.id.slice( 7 ) )
 					);
 					if ( item ) moveAvatar( false, item.slot );
 					return;
@@ -9019,7 +9032,7 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( event.id.startsWith( "slot:" ) && view?.gameplay ) {
 					const avatar = view.gameplay.inventory.find( i =>
-						i.slot === Number( event.id.slice( 5 ) ) && (i.typeFlags & 0x7fe) === 0x6ac
+						i.slot === Number( event.id.slice( 5 ) ) && isAvatarItem( i.typeFlags )
 					);
 					if ( avatar ) {
 						moveAvatar( true, avatar.slot );
@@ -15633,12 +15646,32 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// 592C50: avatar mode retains the special-dress socket, replaces the
 					// other twelve equipment controls, and swaps buttons 13/14 in place.
 					if ( avatarView ) {
-						for ( const node of Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 ) ) {
-							const type = node.id - 112,
-								r = authoredRect( node, ex, ey ),
-								item = game?.avatarInventory?.find( i => i.typeFlags >>> 11 === type ),
+						const sockets = Object.values( equipment ).filter( n => n.id >= 113 && n.id <= 116 )
+							.sort( ( a, b ) => a.id - b.id )
+							.map( node => ({ type: node.id - 112, r: authoredRect( node, ex, ey ) }) );
+						// Port-only, not native (SRO_NASRUN, #3456): a worn Devil's Spirit
+						// gets a fifth socket one socket pitch past the flag's. The
+						// v1.150 layout has no node for it; only a server with the
+						// switch on stores a Spirit, so a native shard draws four.
+						if (
+							sockets.length === 4 &&
+							game?.avatarInventory?.some( i => avatarSocket( i.typeFlags ) === SPIRIT_SOCKET )
+						) {
+							const third = sockets[2]!, fourth = sockets[3]!;
+							sockets.push( {
+								type: SPIRIT_SOCKET,
+								r: [
+									fourth.r[0] * 2 - third.r[0],
+									fourth.r[1] * 2 - third.r[1],
+									fourth.r[2],
+									fourth.r[3]
+								]
+							} );
+						}
+						for ( const { type, r } of sockets ) {
+							const item = game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === type ),
 								path = ROOT + "interface/equipment/equip_slot_" +
-									[ "helm", "cloth", "pandernt", "plag" ][type - 1] + ".png";
+									[ "helm", "cloth", "pandernt", "plag", "helm" ][type - 1] + ".png";
 							paths.push( path );
 							if ( resources.has( path ) ) {
 								rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, path );
@@ -15653,7 +15686,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							// 5965E0: a one-piece dress (data byte +0x51d == 0) disables
 							// the empty attachment slot under the int_effect overlay.
 							const attachmentBlocked = type === 3 && avatarAttachmentBlocked(
-								game?.avatarInventory?.find( i => i.typeFlags >>> 11 === 2 ),
+								game?.avatarInventory?.find( i => avatarSocket( i.typeFlags ) === 2 ),
 								item
 							);
 							if ( attachmentBlocked ) {

@@ -82,11 +82,17 @@ measurable against it.
 ## Scope
 
 This is the source lane (`check.mjs --source`) — the only client check CI
-runs at main. The full `pnpm --filter @sro/client-next check` adds gates
-(`verify:ui-action-census`, the asset audits, the whole `tests/runtime`
-lane) that need the retail asset build, so no CI run at main measures them;
-their cost lives on licensed asset workspaces. The slowest-30 table above
-is therefore the source lane's 27 files, whole.
+runs at main. Since ops #335 it is two jobs on two runners:
+`--source=gates` (client-source: the architecture suites and the
+typechecks, the lane measured above) and `--source=runtime`
+(client-runtime: every `tests/runtime` file except the asset-backed ones
+in `tests/runtime/asset-backed-tests.json`, which
+`tools/list-asset-backed-tests.mjs` derives from the test cache's records).
+The full `pnpm --filter @sro/client-next check` adds the gates that need the
+retail asset build (`verify:ui-action-census`, the asset audits, the
+asset-backed runtime files), so no CI run at main measures them; their cost
+lives on licensed asset workspaces. The slowest-30 table above is the
+client-source lane's 27 files, whole, as measured before the split.
 
 ## Tightening (2026-11-08, #2929)
 
