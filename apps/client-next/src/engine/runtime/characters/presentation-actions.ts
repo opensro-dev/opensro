@@ -27,7 +27,8 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose, CastState } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
-import { degradePresentation, type Resource, type PresentationOutput } from "./internal/presentation-contract";
+import type { Resource, PresentationOutput } from "./internal/presentation-contract";
+import { recordDegradation } from "@/engine/foundation/session/degradation-record";
 
 /*
 ================
@@ -380,7 +381,7 @@ export function createPresentationActions() {
 						} )
 					);
 					if ( alternatives.some( table => table.some( phase => phase === undefined ) ) ) {
-						degradePresentation(
+						recordDegradation(
 							output,
 							"presentation-action-timeline",
 							`Missing action phase timeline ${resource.codename} (skill ${cast.skill})`
