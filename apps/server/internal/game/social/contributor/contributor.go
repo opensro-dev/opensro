@@ -5,25 +5,32 @@ contributor.go - the Contributor title (port-only, not native, #3358)
 
 Owner, 2026-11-12: every Discord member holding the Contributor role
 carries a yellow "Contributor" title in game, seen the same way by every
-viewer. The v1.150 client has no title of its own to reuse (no Hwan or
+viewer. Owner, 2026-11-14 (#3488): on one account per member - their
+first by default, which they can move to another of their own
+("/contributor here") - since invite keys link any number of accounts
+to one Discord id. The v1.150 client has no title of its own to reuse (no Hwan or
 honor title over a name; the textuisystem UIO_SECOND_HWAN rows are data
 for later builds only), so the title is this port's own frame and the
 browser client draws it.
 
 Two files in the shard's authority directory, one owner each:
 
-  - contributors.json, {"accounts":["<account id>", ...]}, written by
-    the operations sync (Discord role members mapped to their linked
-    game accounts). In production it lives in the sync's own directory
+  - contributors.json, written by the operations sync: {"members":
+    [{"member":"<label>","accounts":["<oldest>", ...]}], "accounts":
+    [...]}, each role member's linked game accounts oldest first under a
+    hashed label. A file with only the flat "accounts" list (a sync
+    older than members) makes each account its own member. In production it lives in the sync's own directory
     and SRO_CONTRIBUTORS_FILE names it: the sync runs as the bot's
     user and never writes into the GameWorld's authority directory.
     Unset, it is the shard directory's contributors.json (a local
     world). This package only reads it, re-reading when its size or
     modification time changes. A missing file is an empty set; a
     corrupt one keeps the last good set and logs.
-  - contributor-titles.json, {"hidden":["<account id>", ...]}, owned
-    here: a contributor's own "/contributor off" choice. It is a server
-    setting, so every viewer sees the same state.
+  - contributor-titles.json, {"hidden":["<account id>", ...],
+    "chosen":{"<label>":"<account id>"}}, owned here: a contributor's
+    own "/contributor off" and "/contributor here" choices. They are
+    server settings, so every viewer sees the same state. A chosen
+    account the member no longer has falls back to their first.
 
 Gated by SRO_CONTRIBUTOR_TITLES; off (the default, native) builds no
 registry, sends no frame and leaves "/contributor" ordinary chat text.
@@ -80,9 +87,15 @@ const (
 	answerNotMember = "Only members with the Contributor role on Discord carry the Contributor title."
 	answerShown     = "Your Contributor title is shown. Type /contributor off to hide it."
 	answerHidden    = "Your Contributor title is hidden. Type /contributor on to show it."
-	answerUsage     = "Usage: /contributor on, or /contributor off."
+	answerElsewhere = "Your Contributor title is on another of your accounts. Type /contributor here to move it to this one."
+	answerMoved     = "Your Contributor title is now on this account."
+	answerUsage     = "Usage: /contributor on, /contributor off, or /contributor here."
 	answerBusy      = "The title setting could not be saved; please try again in a moment."
 )
+
+// flatMemberPrefix labels an account read from a flat "accounts" list:
+// each is its own member.
+const flatMemberPrefix = "account:"
 
 /*
 ================
@@ -129,17 +142,25 @@ type fileStamp struct {
 ================
 Registry
 
-Who is a contributor, who hid the title, and what roster each session
-last received. One mutex: the chat handler and the tick hook are the
-only callers, and each holds it for a map lookup or a short pass.
+Who is a contributor, which one account carries each member's title,
+who hid it, and what roster each session last received. One mutex: the
+chat handler and the tick hook are the only callers, and each holds it
+for a map lookup or a short pass.
 ================
 */
 type Registry struct {
-	mu           sync.Mutex
-	membersPath  string
-	hiddenPath   string
-	write        func(string, []byte) error
-	members      map[string]bool
+	mu          sync.Mutex
+	membersPath string
+	hiddenPath  string
+	write       func(string, []byte) error
+	// groups is each member's linked accounts, oldest first; memberOf
+	// is its inverse; titled is the one account per member that carries
+	// the title (resolveLocked).
+	groups   map[string][]string
+	memberOf map[string]string
+	titled   map[string]bool
+	// chosen is each member's "/contributor here" account (persisted).
+	chosen       map[string]string
 	hidden       map[string]bool
 	stamp        fileStamp
 	reloadDueMs  int64
@@ -165,39 +186,65 @@ func Open(dir, membersPath string, write func(string, []byte) error) (*Registry,
 		membersPath: membersPath,
 		hiddenPath:  filepath.Join(dir, HiddenFileName),
 		write:       write,
-		members:     map[string]bool{},
-		hidden:      map[string]bool{},
+		groups:      map[string][]string{},
+		memberOf:    map[string]string{},
+		titled:      map[string]bool{},
 		sent:        map[string]bool{},
 	}
-	hidden, err := readHidden(r.hiddenPath)
+	choices, err := readChoices(r.hiddenPath)
 	if err != nil {
 		return nil, err
 	}
-	r.hidden = hidden
+	r.hidden, r.chosen = choices.hidden, choices.chosen
 	r.reloadLocked()
 	return r, nil
 }
 
+// choices is the opt-out file's contents.
+type choices struct {
+	hidden map[string]bool
+	chosen map[string]string
+}
+
+// choicesFile is the opt-out file's JSON shape.
+type choicesFile struct {
+	Hidden []string          `json:"hidden"`
+	Chosen map[string]string `json:"chosen,omitempty"`
+}
+
 /*
 ================
-readHidden
+readChoices
 ================
 */
-func readHidden(path string) (map[string]bool, error) {
+func readChoices(path string) (choices, error) {
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]bool{}, nil
+		return choices{hidden: map[string]bool{}, chosen: map[string]string{}}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("contributor titles: %w", err)
+		return choices{}, fmt.Errorf("contributor titles: %w", err)
 	}
-	var file struct {
-		Hidden []string `json:"hidden"`
-	}
+	var file choicesFile
 	if err := json.Unmarshal(body, &file); err != nil {
-		return nil, fmt.Errorf("contributor titles: %s: %w", path, err)
+		return choices{}, fmt.Errorf("contributor titles: %s: %w", path, err)
 	}
-	return accountSet(file.Hidden), nil
+	chosen := make(map[string]string, len(file.Chosen))
+	for member, account := range file.Chosen {
+		if boundedID(member) && boundedID(account) {
+			chosen[member] = account
+		}
+	}
+	return choices{hidden: accountSet(file.Hidden), chosen: chosen}, nil
+}
+
+/*
+================
+boundedID
+================
+*/
+func boundedID(id string) bool {
+	return id != "" && len(id) <= maxAccountIDBytes && strings.TrimSpace(id) == id
 }
 
 /*
@@ -231,7 +278,8 @@ every title at once.
 func (r *Registry) reloadLocked() {
 	info, err := os.Stat(r.membersPath)
 	if errors.Is(err, os.ErrNotExist) {
-		r.members, r.stamp = map[string]bool{}, fileStamp{}
+		r.groups, r.stamp = map[string][]string{}, fileStamp{}
+		r.resolveLocked()
 		return
 	}
 	if err != nil {
@@ -252,14 +300,76 @@ func (r *Registry) reloadLocked() {
 		return
 	}
 	var file struct {
+		Members *[]struct {
+			Member   string   `json:"member"`
+			Accounts []string `json:"accounts"`
+		} `json:"members"`
 		Accounts []string `json:"accounts"`
 	}
 	if err := json.Unmarshal(body, &file); err != nil {
 		log.WithError(err).Warn("contributor titles: members file corrupt; keeping the last set")
 		return
 	}
-	r.members, r.stamp = accountSet(file.Accounts), stamp
-	log.Infof("contributor titles: %d contributor accounts", len(r.members))
+	groups := map[string][]string{}
+	if file.Members != nil {
+		for _, row := range *file.Members {
+			if !boundedID(row.Member) {
+				continue
+			}
+			for _, id := range row.Accounts {
+				id = strings.TrimSpace(id)
+				if id != "" && len(id) <= maxAccountIDBytes {
+					groups[row.Member] = append(groups[row.Member], id)
+				}
+			}
+		}
+	} else {
+		for id := range accountSet(file.Accounts) {
+			groups[flatMemberPrefix+id] = []string{id}
+		}
+	}
+	r.groups, r.stamp = groups, stamp
+	r.resolveLocked()
+	log.Infof("contributor titles: %d contributors", len(r.groups))
+}
+
+/*
+================
+resolveLocked
+
+Rebuilds memberOf and titled from groups and chosen: each member's
+title sits on its chosen account while that account is still one of
+its own, else on its first (oldest). An account listed under two
+members (it should not happen) stays with the first member read, in
+label order, so the answer never depends on map order.
+================
+*/
+func (r *Registry) resolveLocked() {
+	labels := make([]string, 0, len(r.groups))
+	for member := range r.groups {
+		labels = append(labels, member)
+	}
+	sort.Strings(labels)
+	memberOf := map[string]string{}
+	titled := map[string]bool{}
+	for _, member := range labels {
+		owned := []string{}
+		for _, id := range r.groups[member] {
+			if _, taken := memberOf[id]; !taken {
+				memberOf[id] = member
+				owned = append(owned, id)
+			}
+		}
+		if len(owned) == 0 {
+			continue
+		}
+		pick := owned[0]
+		if chosen, ok := r.chosen[member]; ok && memberOf[chosen] == member {
+			pick = chosen
+		}
+		titled[pick] = true
+	}
+	r.memberOf, r.titled = memberOf, titled
 }
 
 /*
@@ -272,17 +382,19 @@ Whether the account's characters carry the title now.
 func (r *Registry) Shown(accountID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.members[accountID] && !r.hidden[accountID]
+	return r.titled[accountID] && !r.hidden[accountID]
 }
 
 /*
 ================
 Command
 
-The chat intake: "/contributor", "/contributor on" or "/contributor off"
-from the speaker's account. handled is false for any other line, which
-stays ordinary chat. The choice is saved before it is reported, and a
-failed save leaves the old choice in force.
+The chat intake: "/contributor", "/contributor on", "/contributor off"
+or "/contributor here" from the speaker's account. handled is false for
+any other line, which stays ordinary chat. "here" moves the member's
+title to the speaker's account; on and off act only on the account that
+carries it. A choice is saved before it is reported, and a failed save
+leaves the old choice in force.
 ================
 */
 func (r *Registry) Command(accountID, message string) (answer string, handled bool) {
@@ -292,17 +404,24 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if accountID == "" || !r.members[accountID] {
+	member, linked := r.memberOf[accountID]
+	if accountID == "" || !linked {
 		return answerNotMember, true
+	}
+	if len(fields) == 2 && fields[1] == "here" {
+		return r.moveLocked(member, accountID), true
+	}
+	if len(fields) > 2 || (len(fields) == 2 && fields[1] != "on" && fields[1] != "off") {
+		return answerUsage, true
+	}
+	if !r.titled[accountID] {
+		return answerElsewhere, true
 	}
 	if len(fields) == 1 {
 		if r.hidden[accountID] {
 			return answerHidden, true
 		}
 		return answerShown, true
-	}
-	if len(fields) != 2 || (fields[1] != "on" && fields[1] != "off") {
-		return answerUsage, true
 	}
 	hide := fields[1] == "off"
 	if r.hidden[accountID] == hide {
@@ -335,18 +454,59 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 
 /*
 ================
+moveLocked
+
+"/contributor here": the member's title moves to accountID, which is
+one of its own. The account's own shown or hidden state comes with it.
+================
+*/
+func (r *Registry) moveLocked(member, accountID string) string {
+	state := answerShown
+	if r.hidden[accountID] {
+		state = answerHidden
+	}
+	if r.titled[accountID] {
+		return state
+	}
+	next := make(map[string]string, len(r.chosen)+1)
+	for label, id := range r.chosen {
+		next[label] = id
+	}
+	next[member] = accountID
+	if err := r.saveChoicesLocked(r.hidden, next); err != nil {
+		log.WithError(err).Warn("contributor titles: choice save failed")
+		return answerBusy
+	}
+	r.chosen = next
+	r.resolveLocked()
+	// The next roster pass sends the changed roster to everyone.
+	r.pushDueMs = 0
+	return answerMoved + " " + state
+}
+
+/*
+================
 saveLocked
 ================
 */
 func (r *Registry) saveLocked(hidden map[string]bool) error {
+	return r.saveChoicesLocked(hidden, r.chosen)
+}
+
+/*
+================
+saveChoicesLocked
+
+Writes both choices: the opt-outs sorted, the moves keyed by member.
+================
+*/
+func (r *Registry) saveChoicesLocked(hidden map[string]bool, chosen map[string]string) error {
 	ids := make([]string, 0, len(hidden))
 	for id := range hidden {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	body, err := json.MarshalIndent(struct {
-		Hidden []string `json:"hidden"`
-	}{ids}, "", "\t")
+	body, err := json.MarshalIndent(choicesFile{Hidden: ids, Chosen: chosen}, "", "\t")
 	if err != nil {
 		return err
 	}
@@ -394,7 +554,7 @@ func (r *Registry) Push(online []Online, nowMs int64) (payload []byte, targets [
 	present := make(map[string]bool, len(online))
 	for _, o := range online {
 		present[o.SessionID] = true
-		if r.members[o.AccountID] && !r.hidden[o.AccountID] {
+		if r.titled[o.AccountID] && !r.hidden[o.AccountID] {
 			names = append(names, o.Name)
 		}
 	}
