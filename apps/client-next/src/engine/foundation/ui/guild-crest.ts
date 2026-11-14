@@ -5,7 +5,7 @@ guild-crest.ts - native guild and union crests: names, URLs and pixels
 
 A crest is the native 256-byte .crb payload: 16x16 palette indices,
 bottom-up. The client names a guild's crest G{prefix}_{guild}_{revision}
-and a union's A{prefix}_{union}_{revision} (client 0x833E42 / 0x833E75)
+and a union's A{prefix}_{union}_{revision}
 and fetches it from the Agent's /marks/ route, under the Agent API base.
 
 ===========================================================================
@@ -26,7 +26,7 @@ const CREST_BYTES = 256; // CREST_SIZE * CREST_SIZE
 // The client's "no crest" revision mark beside zero.
 const CREST_NONE = 0xffffffff;
 
-// Overhead offsets from the guild label's left edge (client 86B350).
+// Overhead offsets from the guild label's left edge.
 const GUILD_CREST_LEFT = -20;
 const UNION_CREST_LEFT = -36;
 
