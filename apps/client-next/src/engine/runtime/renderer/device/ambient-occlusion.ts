@@ -76,11 +76,11 @@ export function createAmbientOcclusion( device: GPUDevice, retire: Retire = dest
 			label: "ambient-occlusion",
 			code: `
  @group(0) @binding(0) var sceneDepth:texture_depth_2d;
- @group(0) @binding(1) var<uniform> aoParams:vec4f;
- @group(0) @binding(2) var<uniform> aoSpiral:vec4f;
+ struct AoUniforms {params:vec4f,spiral:vec4f};
+ @group(0) @binding(1) var<uniform> ao:AoUniforms;
 ${vertex}
  fn viewZ(depth:f32)->f32{
-  return aoParams.z*aoParams.w/(aoParams.w-depth*(aoParams.w-aoParams.z));
+  return ao.params.z*ao.params.w/(ao.params.w-depth*(ao.params.w-ao.params.z));
  }
  @fragment fn fs(v:V)->@location(0) vec4f{
   let size=textureDimensions(sceneDepth);
@@ -90,7 +90,7 @@ ${vertex}
   if(depth>=0.99999){return vec4f(1);}
   let z=viewZ(depth);
   let ndc=vec2f(v.uv.x*2.0-1.0,1.0-v.uv.y*2.0);
-  let point=vec3f(ndc.x*aoParams.x*z,ndc.y*aoParams.y*z,z);
+  let point=vec3f(ndc.x*ao.params.x*z,ndc.y*ao.params.y*z,z);
   // Each pixel turns the spiral by its own gradient noise, so the
   // twelve taps never draw the same spokes on flat ground.
   let turn=fract(52.9829189*fract(0.06711056*f32(px.x)+0.00583715*f32(px.y)));
@@ -98,19 +98,19 @@ ${vertex}
   for(var i=0;i<${AO_TAPS};i++){
    let t=(f32(i)+0.5)/${AO_TAPS}.0;
    let angle=(f32(i)+turn)*${AO_GOLDEN_ANGLE};
-   let tap=point+vec3f(vec2f(cos(angle),sin(angle))*aoSpiral.x*t,0.0);
-   let projected=vec2f(tap.x/(tap.z*aoParams.x),tap.y/(tap.z*aoParams.y));
+   let tap=point+vec3f(vec2f(cos(angle),sin(angle))*ao.spiral.x*t,0.0);
+   let projected=vec2f(tap.x/(tap.z*ao.params.x),tap.y/(tap.z*ao.params.y));
    let uv=vec2f(projected.x*0.5+0.5,0.5-projected.y*0.5);
    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){continue;}
    let samplePx=clamp(vec2i(uv*vec2f(size)),vec2i(0),vec2i(size)-vec2i(1));
    let gap=z-viewZ(textureLoad(sceneDepth,samplePx,0));
-   if(gap>aoSpiral.z){
-    let inside=clamp(gap/aoSpiral.x,0.0,1.0);
-    let local=clamp(1.0-abs(gap)/(aoSpiral.x*${AO_LOCAL_RANGE}),0.0,1.0);
+   if(gap>ao.spiral.z){
+    let inside=clamp(gap/ao.spiral.x,0.0,1.0);
+    let local=clamp(1.0-abs(gap)/(ao.spiral.x*${AO_LOCAL_RANGE}),0.0,1.0);
     occlusion+=inside*local;
    }
   }
-  let factor=clamp(1.0-aoSpiral.y*occlusion/${AO_TAPS}.0,0.0,1.0);
+  let factor=clamp(1.0-ao.spiral.y*occlusion/${AO_TAPS}.0,0.0,1.0);
   return vec4f(vec3f(factor),1);
  }`
 		} );
@@ -268,8 +268,10 @@ ${vertex}
 							layout: pipeline.getBindGroupLayout( 0 ),
 							entries: [
 								{ binding: 0, resource: depth },
-								{ binding: 1, resource: { buffer: uniforms! } },
-								{ binding: 2, resource: { buffer: uniforms!, offset: 16, size: 16 } }
+								// One binding over both vec4s: a second binding at offset 16
+								// broke minUniformBufferOffsetAlignment (256 by default), and
+								// the failed bind group stopped the renderer.
+								{ binding: 1, resource: { buffer: uniforms! } }
 							]
 						} );
 					}
