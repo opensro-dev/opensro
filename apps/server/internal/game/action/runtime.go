@@ -583,6 +583,10 @@ type Runtime struct {
 	// spawn instead of in place (jobdresstown.go; port-only, not native).
 	// False is native.
 	JobDressTownSpawn bool
+	// FreePvpDressBar gives the free-PvP cape the job suit's ten-second
+	// dress bar (freepvpdress.go; port-only until traced). False is the
+	// cape going on at once.
+	FreePvpDressBar bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field

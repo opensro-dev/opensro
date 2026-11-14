@@ -99,6 +99,10 @@ func (rt *Runtime) HandleItemMove(
 		if jobSuitMove(character, request) {
 			return rt.beginJobDress(divisionID, character, request)
 		}
+		// Port-only, not native until traced (freepvpdress.go).
+		if rt.FreePvpDressBar && freePvpCapeMove(character, request) {
+			return rt.beginFreePvpDress(divisionID, character, request)
+		}
 		return rt.applyInventoryMove(divisionID, character, request)
 
 	case wire.MoveTypeGroundDrop:

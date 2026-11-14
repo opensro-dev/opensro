@@ -43,6 +43,11 @@ func (game *gameplayPlane) wireJobRules() error {
 	if game.items.JobDressTownSpawn {
 		log.Infof("job: a finished dress reloads at the nearest town spawn ON (%s)", action.EnvJobDressTownSpawn)
 	}
+	// Port-only until traced: the free-PvP cape's dress bar.
+	game.items.FreePvpDressBar = action.FreePvpDressBarFromEnv()
+	if game.items.FreePvpDressBar {
+		log.Infof("job: the free-PvP cape's ten-second dress bar ON (%s)", action.EnvFreePvpDressBar)
+	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
 	step, err := action.MostWantedTestStreakStepFromEnv()

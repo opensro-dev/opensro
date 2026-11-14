@@ -99,6 +99,9 @@ type jobDress struct {
 	character *enterworld.Character
 	request   wire.ItemMoveRequest
 	due       int64
+	// cape marks the free-PvP cape's dress (freepvpdress.go): the timing
+	// only, none of the suit's admission.
+	cape bool
 }
 
 // errCodeCantActivateCart is UIIT_MSG_STRGERR_YOU_CANT_ACTIVATE_CART.
@@ -541,6 +544,9 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 	code := jobWearErrPending
 	switch {
 	case !enterworld.CharacterAlive(c):
+	case dress.cape:
+		// The ordinary equip step below validates the cape's move.
+		code = 0
 	case dress.request.DestSlot == jobSuitSlot:
 		code = rt.jobWearRefusal(dress.division, c, dress.request.SourceSlot)
 	default:
