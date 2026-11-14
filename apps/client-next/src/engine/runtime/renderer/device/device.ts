@@ -659,15 +659,17 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		HDR intermediate's float format when that stage is on, the canvas
 		format otherwise (the bloom capture and the render-scale frame keep
 		the canvas format; the float chain lives past the scene view).
+		kept: the water refraction pass loads the 4x colour this frame.
 		================
 		*/
-		msaa( width, height, enabled ) {
+		msaa( width, height, enabled, kept ) {
 			if ( phase !== "running" || !msaaStage ) throw Error( "MSAA device is not ready" );
 			return msaaStage.prepare(
 				width,
 				height,
 				sceneFormat(),
-				enabled && msaaOn
+				enabled && msaaOn,
+				kept
 			);
 		},
 		/*

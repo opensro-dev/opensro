@@ -1029,7 +1029,7 @@ export function createRenderer(
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
 						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
-						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa, !!refraction ),
 						sceneScale: separate ?
 							{
 								view: color,
