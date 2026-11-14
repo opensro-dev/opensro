@@ -353,8 +353,10 @@ func TestGuildCrestRegisterRateLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// #3525: the refusal names the cooldown, so the client never prints
+	// the native "no file in the install path" line for it.
 	result := uploadCrest(t, d, c, crest.KindGuild, image)
-	assertCrestUploadRefused(t, result, c, crestRefusedGeneric, 0)
+	assertCrestUploadRefused(t, result, c, crestRefusedCooldown, 0)
 
 	d.clock.Advance(crest.ChangeCooldown + time.Minute)
 	result = uploadCrest(t, d, c, crest.KindGuild, image)

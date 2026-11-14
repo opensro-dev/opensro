@@ -14,6 +14,7 @@ import { fortressAppearance } from "@/engine/foundation/animation/fortress-appea
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
 import { assembleEquipmentAppearance } from "@/engine/foundation/animation/equipment-appearance";
+import { readyThenWarm, suitBagKey, suitSocketParts } from "@/engine/foundation/animation/suit-socket";
 import { stallAttachments } from "@/engine/foundation/animation/emote";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
@@ -29,6 +30,9 @@ createActorAppearance
 ================
 */
 export function createActorAppearance( owner: ActorOwner ) {
+	// The local wearer's suit-socket candidates' parts (suitSocketParts),
+	// rebuilt with its appearance and warmed every frame.
+	let socketWarm: readonly string[] = [];
 	/*
 	================
 	wornSignature
@@ -297,7 +301,8 @@ export function createActorAppearance( owner: ActorOwner ) {
 						Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 						Number( weaponHidden ) + ":" +
 						Number( attachmentsHidden ) + ":" +
-						wornSignature( equipment ) + "|" + avatarSignature( avatars );
+						wornSignature( equipment ) + "|" + avatarSignature( avatars ) +
+						(entity.gid === gameplay?.localGid ? "|" + suitBagKey( equipment ) : "");
 					let appearance = appearances.get( entity.gid );
 					if (
 						!appearance || appearance.resource !== resource ||
@@ -323,6 +328,30 @@ export function createActorAppearance( owner: ActorOwner ) {
 							jobSuitHidesArmor,
 							moonlitThiefSuit
 						} );
+						// The wearer's suit and cape candidates: the parts each would
+						// wear in the suit socket are warmed now, so a dress swaps the
+						// outfit the moment it lands instead of a load later.
+						if ( entity.gid === gameplay?.localGid ) {
+							socketWarm = suitSocketParts( equipment, candidate =>
+								assembleEquipmentAppearance( {
+									resource,
+									dress: published.dress,
+									equipment: candidate,
+									avatars,
+									hwanHair,
+									mounted: entity.mountedOn !== undefined,
+									weaponHidden,
+									attachmentsHidden,
+									fortressIndex,
+									player,
+									ownerless: false,
+									committedWear: [],
+									freezeWear,
+									enchantSparks,
+									jobSuitHidesArmor,
+									moonlitThiefSuit
+								} ).parts.map( part => part.model ) );
+						}
 						const { parts, auxiliary, defaultWear } = assembly;
 						const particles: ModelParticle[] = [
 							...(resource.ambientParticles ?? []),
@@ -348,12 +377,13 @@ export function createActorAppearance( owner: ActorOwner ) {
 						if ( entity.gid === gameplay?.localGid ) resources.prioritize( appearance.dependencies );
 					}
 					const parts = appearance.parts;
-					let ready = true;
-					for ( const part of parts ) {
-						if ( !resources.ready( part.model ) ) {
-							ready = false;
-						}
-					}
+					// The worn parts first: the wearer's suit-socket candidates are
+					// warmed only once its own outfit is ready (suit-socket.ts).
+					const ready = readyThenWarm(
+						resources,
+						parts.map( part => part.model ),
+						entity.gid === gameplay?.localGid ? socketWarm : []
+					);
 					if ( !ready ) {
 						model = fallback();
 					} else {

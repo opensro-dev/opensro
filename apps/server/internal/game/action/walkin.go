@@ -298,7 +298,7 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 		if !inWorld {
 			return
 		}
-		world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(c) })
+		world := rt.Worlds.SnapshotAt(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, nowMs)
 		pose, moving = world.LiveSpawnAt(nowMs), world.MovingAt(nowMs)
 	})
 	if !inWorld {

@@ -106,6 +106,34 @@ func (st *WorldStore) Snapshot(key string, seed func() WorldState) WorldState {
 }
 
 /*
+================
+SnapshotAt
+
+Snapshot for a tick hook that reads the pose at the tick's own time
+(LiveSpawnAt(atMs)): the ground walk advances at most to atMs. The
+tick's prepare phase already stepped every session's walk to the wall
+clock as the tick began, so a hook later in the same tick no longer
+re-runs the clip and guard for the few milliseconds since; its pose at
+atMs is the one prepare's step answers. Request handlers keep Snapshot
+(they run beside the tick and read the wall clock).
+================
+*/
+func (st *WorldStore) SnapshotAt(key string, seed func() WorldState, atMs int64) WorldState {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state := st.state(key, seed)
+	now := atMs
+	if st.groundConfig.Now != nil {
+		if wall := st.groundConfig.Now(); wall < now {
+			now = wall
+		}
+	}
+	st.advanceGroundWalkTo(key, state, now)
+	return CloneWorldState(*state)
+}
+
+/*
 ==================
 WorldStore.SnapshotInto
 
