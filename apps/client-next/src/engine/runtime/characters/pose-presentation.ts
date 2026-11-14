@@ -338,7 +338,7 @@ function recoverTurn( before: Pose, model: Pose, candidate: Pose, path: NonNulla
 		const length = hypot3( pointVector[0], pointVector[1], pointVector[2] );
 		return length ? interpolateMovement( before, model, Math.min( 1, distance / length ) ) : model;
 	}
-	if ( !onCorridor( before, path.incoming.from, path.incoming.to ) ) return null;
+	if ( !onCorridor( before, path.incoming.from, path.incoming.to, true ) ) return null;
 	const corner = path.outgoing.from;
 	if ( !writeWorldVector( corner, before, spanVector ) || !writeWorldVector( model, corner, pointVector ) ) {
 		return null;
