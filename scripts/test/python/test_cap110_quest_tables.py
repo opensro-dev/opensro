@@ -8,10 +8,11 @@ They are the quests themselves, so they follow the quest switch.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import unittest
 
-import cap110_quest_tables as quest_tables
-import import_vsro_alexandria as tables
+import cap110_quest_tables as quest_tables  # noqa: E402
+import import_vsro_alexandria as tables  # noqa: E402
 
 
 # ================

@@ -8,10 +8,11 @@ They follow the quest switch and the level cap.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import unittest
 
-import cap110_quest_monsters as quest_monsters
-import cap110_skill_effects as effects
+import cap110_quest_monsters as quest_monsters  # noqa: E402
+import cap110_skill_effects as effects  # noqa: E402
 
 
 # ================

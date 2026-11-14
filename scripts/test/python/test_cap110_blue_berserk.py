@@ -8,11 +8,12 @@ They follow the item switch and the level cap, not the quest switch.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import unittest
 
-import cap110_blue_berserk as blue
-import cap110_items as items
-import import_vsro_alexandria as tables
+import cap110_blue_berserk as blue  # noqa: E402
+import cap110_items as items  # noqa: E402
+import import_vsro_alexandria as tables  # noqa: E402
 
 
 # ================

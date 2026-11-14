@@ -8,11 +8,12 @@ They follow the item switch and the level cap, not the quest switch.
 
 ===========================================================================
 """
+import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import unittest
 
-import cap110_items as items
-import cap110_quest_items as quest_items
-import cap110_rewards as rewards
+import cap110_items as items  # noqa: E402
+import cap110_quest_items as quest_items  # noqa: E402
+import cap110_rewards as rewards  # noqa: E402
 
 
 # ================
