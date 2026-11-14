@@ -26,6 +26,7 @@ import { CROW_EGG_REF } from "../../../../scripts/build/char/crowEgg.mjs";
 import { PORT_PET_DROP_MODEL } from "../../../../scripts/build/shared/portItemRows.mjs";
 import { equipmentModelFiles, hwanModelFiles } from "../../../../scripts/build/assetPackOwnership.mjs";
 import { joinedNpcManifest } from "../../../../scripts/build/shared/npcManifest.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 
 const entry = "src/engine/runtime/assets/worker/model/model.ts";
 const publicRoot = CLIENT_PUBLIC_ROOT;
@@ -136,12 +137,17 @@ test("special COS references share authored state-50 models and matching VAT cli
 	// transports and quest companions author no state-50 emote; 582110's
 	// action-1 route plays one for the growth pets, which all author it.
 	// 1218 rows and 44 models since the tomb's MOB_QT_TQ_THIEF_01_COS ships
-	// with its own model (#2024).
-	assert.equal( cos.length, 1218 );
-	assert.equal( new Set( cos.map( row => row.glb ) ).size, 44 );
+	// with its own model (#2024). Those counts are the native census: an
+	// expanded build adds the later client's companions (1360 rows on
+	// 2026-11-14), and every growth pet there must still author the emote.
 	const rows = cos.filter( row => row.codename.startsWith( "COS_P_" ) );
-	assert.equal( rows.length, 1130 );
-	assert.equal( new Set( rows.map( row => row.glb ) ).size, 22 );
+	if ( !EXPANDED_BUILD ) {
+		assert.equal( cos.length, 1218 );
+		assert.equal( new Set( cos.map( row => row.glb ) ).size, 44 );
+		assert.equal( rows.length, 1130 );
+		assert.equal( new Set( rows.map( row => row.glb ) ).size, 22 );
+	}
+	assert.ok( rows.length > 0, "the build publishes growth pets" );
 	for ( const row of rows ) {
 		assert.equal( row.animationStates.emote0.stateId, 50 );
 		assert.ok( row.clips.includes( "emote0" ) );
