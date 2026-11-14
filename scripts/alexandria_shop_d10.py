@@ -124,8 +124,13 @@ def next_stock(packages, items):
 #
 # tables maps the NAMES to raw bytes; items maps an item code to its
 # itemdata row. Returns the changed tables, and a summary.
+#
+# clones and own_stores default to the city's gear stores; another pass
+# that needs a store of its own (the honor store, alexandria_shop_honor)
+# passes its own and gets the same copy and group move, its goods
+# unchanged when port_stock is off.
 # ================
-def merge_d10_stock(raw, items, port_stock=False):
+def merge_d10_stock(raw, items, port_stock=False, clones=CLONED_STORES, own_stores=OWN_STORES):
 	rows = {name: tables.table_rows(raw[name]) for name in NAMES}
 	next_id = {name: max((int(r[col]) for r in rows[name] if len(r) > col and r[col].isdigit()), default=0) + 1 for name, col in IDENTITY.items()}
 
@@ -213,7 +218,7 @@ def merge_d10_stock(raw, items, port_stock=False):
 	replaced_tabs = {}
 	moved_groups = {}
 
-	for store, (source, groups) in CLONED_STORES.items():
+	for store, (source, groups) in clones.items():
 		stores = {r[3] for r in rows["refshop.txt"] if len(r) > 3}
 		# The NPC merge rebuilds mappings before this pass. Reconnect an owned
 		# store even when its goods were already staged by a previous build.
@@ -242,7 +247,7 @@ def merge_d10_stock(raw, items, port_stock=False):
 		moved_groups.update({group: store for group in groups})
 		summary["stores"].append(store)
 
-	for store in OWN_STORES:
+	for store in own_stores:
 		for group in groups_of_store[store]:
 			for tab_row in tabs_of_group[group]:
 				stocked, count = restock(tab_row[3])

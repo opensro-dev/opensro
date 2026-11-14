@@ -112,8 +112,11 @@ LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
-PORT_STOCK_OFF_VALUES = ("", "0", "off", "false")
-PORT_STOCK_ON_VALUES = ("1", "on", "true")
+# Alexandria's own degree 9 honor store (#3548, port-only): unset, both
+# SD honor groups keep the native mapping onto Hotan's honor store.
+HONOR_STORE_FLAG = "SRO_ALEXANDRIA_HONOR_STORE"
+SWITCH_OFF_VALUES = ("", "0", "off", "false")
+SWITCH_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
 LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
@@ -548,7 +551,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	from variant_later_layers import add_later_layers
 	later_layers = add_later_layers(native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out, port_stock_enabled())
+	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_store_enabled())
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
@@ -622,22 +625,41 @@ def gate_level_cap(environ=None):
 
 
 # ================
+# build_switch
+#
+# An on/off build flag: unset or an off value is False (native), an on
+# value True. Anything else is refused, as the server refuses a value it
+# does not know.
+# ================
+def build_switch(flag, environ=None):
+	value = (os.environ if environ is None else environ).get(flag, "").strip().lower()
+	if value in SWITCH_OFF_VALUES:
+		return False
+	if value in SWITCH_ON_VALUES:
+		return True
+	raise ValueError(f"{flag} must be off, on or unset, not {value!r}")
+
+
+# ================
 # port_stock_enabled
+#
+# The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK: off -
+# the default, and the value every official build has - asks the shop
+# passes for each store's official stock; on asks for the port's own
+# degree goods.
 # ================
 def port_stock_enabled(environ=None):
-	"""
-	The shops' stock choice (#2846), from SRO_ALEXANDRIA_PORT_STOCK:
-	False - the default, and the value every official build has - asks
-	the shop passes for each store's official stock; on asks for the
-	port's own degree goods. Anything else is refused, as the server
-	refuses a value it does not know.
-	"""
-	value = (os.environ if environ is None else environ).get(PORT_STOCK_FLAG, "").strip().lower()
-	if value in PORT_STOCK_OFF_VALUES:
-		return False
-	if value in PORT_STOCK_ON_VALUES:
-		return True
-	raise ValueError(f"{PORT_STOCK_FLAG} must be off, on or unset, not {value!r}")
+	return build_switch(PORT_STOCK_FLAG, environ)
+
+
+# ================
+# honor_store_enabled
+#
+# Alexandria's own degree 9 honor store (#3548), from
+# SRO_ALEXANDRIA_HONOR_STORE. Off is native.
+# ================
+def honor_store_enabled(environ=None):
+	return build_switch(HONOR_STORE_FLAG, environ)
 
 
 # ================
