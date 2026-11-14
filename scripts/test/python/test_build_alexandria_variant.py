@@ -23,6 +23,7 @@ from pathlib import Path
 import build_alexandria_variant as variant  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 from test_import_vsro_alexandria import terrain  # noqa: E402
+from alexandria_map_tables import overview_tiles  # noqa: E402
 
 NATIVE_TILES = (
 	b'JMXV2DTI1001\r\n4\r\n'
@@ -481,16 +482,21 @@ class MapTests(unittest.TestCase):
 		self.assertEqual(row[8:10], ["4224", "1408"])
 		self.assertEqual(row[14:], ["0", "192", "192", "0", "xxx"])
 
-	def test_the_overview_tiles_are_the_ones_the_wider_box_adds(self):
-		wide = variant.overview_tiles((46, 113, 177, 70))
-		native = variant.overview_tiles((66, 113, 177, 82))
+	# ================
+	# test_a_widened_page_takes_every_tile_from_the_later_art
+	#
+	# The v1.150 frame is painted into row 85 and column 66; inside the
+	# widened box those tiles must take the later art like every other.
+	# ================
+	def test_a_widened_page_takes_every_tile_from_the_later_art(self):
+		wide = overview_tiles((46, 113, 177, 70))
+		native = overview_tiles((66, 113, 177, 82))
 		self.assertEqual((len(native), len(wide)), (28 * 8, 33 * 11))
-		added = variant.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
-		new_tiles = [path for path in added if "map_world_" in path]
-		self.assertEqual(len(new_tiles), 33 * 11 - 28 * 8)
-		self.assertIn("interface/worldmap/map/map_world_46x113.ddj", new_tiles)
-		self.assertIn("interface/worldmap/map/map_world_174x73.ddj", new_tiles)
-		self.assertNotIn("interface/worldmap/map/map_world_66x113.ddj", new_tiles)
+		paths = variant.map_media_paths([], (46, 113, 177, 70), (66, 113, 177, 82))
+		self.assertEqual([path for path in paths if "map_world_" in path], wide)
+		self.assertIn("interface/worldmap/map/map_world_118x85.ddj", paths)
+		self.assertIn("interface/worldmap/map/map_world_66x101.ddj", paths)
+		self.assertIn("interface/worldmap/map/map_world_46x113.ddj", paths)
 
 	def test_media_paths_name_the_map_art_and_one_minimap_tile_per_region(self):
 		paths = variant.map_media_paths(self.REGIONS)
@@ -499,62 +505,14 @@ class MapTests(unittest.TestCase):
 		self.assertIn("minimap/49x90.ddj", paths)
 
 	# ================
-	# test_overlapping_overview_tiles_are_replaced_only_for_imported_land
+	# test_an_unwidened_page_keeps_its_art_beside_the_import
 	# ================
-	def test_overlapping_overview_tiles_are_replaced_only_for_imported_land(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		paths = variant.map_media_paths([(67, 84)], box, native_box)
+	def test_an_unwidened_page_keeps_its_art_beside_the_import(self):
+		box = (66, 113, 177, 82)
+		self.assertEqual(variant.page_tiles(box, box, [(67, 84)]), ["interface/worldmap/map/map_world_66x85.ddj"])
+		paths = variant.map_media_paths([(67, 84)], box, box)
 		self.assertIn("interface/worldmap/map/map_world_66x85.ddj", paths)
-		self.assertNotIn("interface/worldmap/map/map_world_66x113.ddj", paths)
-		self.assertEqual(variant.overview_tiles(box, [(67, 84)]),
-			["interface/worldmap/map/map_world_66x85.ddj"])
-
-	# ================
-	# test_seam_tiles_join_the_import_through_empty_v150_tiles_only
-	#
-	# Import at (67, 88): tile 66x89 takes later art. 70x89 and 74x89 show no
-	# v1.150 region, so they join it; 78x89 holds v1.150 land and stops the
-	# walk, so 82x89 behind it stays even though it is empty too.
-	# ================
-	def test_seam_tiles_join_the_import_through_empty_v150_tiles_only(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		empty = {(x, y) for x in (70, 74, 82) for y in (89,)}
-		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
-		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: True)
-		self.assertEqual(seams, [
-			"interface/worldmap/map/map_world_70x89.ddj", "interface/worldmap/map/map_world_74x89.ddj"
-		])
-
-	# ================
-	# test_seam_tiles_keep_identical_art_and_the_walk_stops_there
-	# ================
-	def test_seam_tiles_keep_identical_art_and_the_walk_stops_there(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		same = "interface/worldmap/map/map_world_70x89.ddj"
-		empty = {(70, 89), (74, 89)}
-		land = lambda x, y: (x - (x - 66) % 4, y + (89 - y) % 4) not in empty
-		seams = variant.seam_tiles(box, native_box, [(67, 88)], land, lambda path: path != same)
-		# 74x89 is reachable only through 70x89, whose art is the same.
-		self.assertEqual(seams, [])
-
-	# ================
-	# test_seam_tiles_join_the_later_art_south_of_the_v150_box
-	# ================
-	def test_seam_tiles_join_the_later_art_south_of_the_v150_box(self):
-		box, native_box = (46, 113, 177, 70), (66, 113, 177, 82)
-		land = lambda x, y: (x - (x - 66) % 4, y + (85 - y) % 4) != (150, 85)
-		seams = variant.seam_tiles(box, native_box, [], land, lambda path: True)
-		self.assertEqual(seams, ["interface/worldmap/map/map_world_150x85.ddj"])
-
-	# ================
-	# test_region_available_reads_what_enable_regions_writes
-	# ================
-	def test_region_available_reads_what_enable_regions_writes(self):
-		blank = variant.MFO_SIGNATURE + bytes(variant.MFO_HEADER_BYTES - len(variant.MFO_SIGNATURE) + 8192)
-		marked = variant.enable_regions(blank, [(67, 84)])
-		self.assertTrue(variant.region_available(marked, 67, 84))
-		self.assertFalse(variant.region_available(marked, 68, 84))
-		self.assertFalse(variant.region_available(blank, 67, 84))
+		self.assertNotIn("interface/worldmap/map/map_world_70x85.ddj", paths)
 
 
 def cp949(rows):
