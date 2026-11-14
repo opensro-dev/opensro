@@ -10,7 +10,7 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_SOX_DROP  a seal drop notice, worded by its tier (#1640;
 	                       sealDropText: the Sun's line is the loudest)
 	SRO_ANNOUNCE_PLUS      "[<player>] has succeded in augmenting <<item>> to [+N]"
-	                       (N >= 7; the later client's wording, #3260)
+	                       (N >= 8; the later client's wording, #3260)
 	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
 	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
@@ -116,8 +116,9 @@ const (
 	// jobKillPairPrune is the pair count past which stale pairs are dropped.
 	jobKillPairPrune = 1024
 	// announcePlusMin is the lowest plus a reinforcement notice announces
-	// (owner decision 2026-10-18: +7 and above, with no upper ceiling).
-	announcePlusMin = 7
+	// (owner decision 2026-11-14: +8 and above, with no upper ceiling;
+	// it replaced 2026-10-18's +7).
+	announcePlusMin = 8
 	// breakNoticePerCharacterMs is #1738's per-character window on top of
 	// the break kind's per-minute shard cap: one character's repeated
 	// breaks show at most one notice per ten minutes.
@@ -470,7 +471,7 @@ func plusNoticeLead(plus uint8, tiers bool) string {
 ================
 Runtime.announcePlus
 
-Item 2: a reinforcement that succeeded into +7 or above, after its commit,
+Item 2: a reinforcement that succeeded into +8 or above, after its commit,
 naming a sealed item's seal as the drop notice does. The line takes the
 later client's announcement wording (#3260, owner ask 2026-11-12, on the
 UIIT_MSG_REINFORCERR_SUCCESS_CENTER pattern): "[<player>] has succeded

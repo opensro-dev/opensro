@@ -391,7 +391,7 @@ func TestPlusNoticeNamesTheSeal(t *testing.T) {
 ================
 TestPlusNoticeFollowsTheFlag
 
-Only a success into +7 or above is announced, and only with the flag.
+Only a success into +8 or above is announced, and only with the flag.
 ================
 */
 func TestPlusNoticeFollowsTheFlag(t *testing.T) {
@@ -409,7 +409,7 @@ func TestPlusNoticeFollowsTheFlag(t *testing.T) {
 		{false, item(9), ""},
 		{true, item(6), ""},
 		{true, failed, ""},
-		{true, item(7), "+7"},
+		{true, item(7), ""},
 		{true, item(8), "+8"},
 		{true, item(11), "+11"},
 		{true, item(12), "+12"},
