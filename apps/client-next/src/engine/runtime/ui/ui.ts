@@ -767,6 +767,7 @@ import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import * as frameDraw from "./frame/frame";
+import { ITEM_SLOT_PREFIXES, type ItemSlotContext } from "./frame/frame";
 import type { CloseControlId, UiAuthoredFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
@@ -1090,7 +1091,6 @@ const SKIN_SLIDER_TRAVEL = 85;
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
 const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
-const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:", "gacha-bag:", "gacha-card" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
 	BUTTON_DISABLE = BUTTON.replace( ".png", "_disable.png" );
@@ -10444,6 +10444,20 @@ export function createUi( ports: UiPorts ) {
 				fitWindowLabels: () => experimental.state().saved.fitWindowLabels,
 				greyDisabledTabs: () => experimental.state().saved.greyDisabledTabs
 			};
+			const itemSlots: ItemSlotContext = {
+				gameplay: next.gameplay,
+				world: game,
+				gender: next.session?.characters?.find( row => row.name === next.session?.character )?.gender,
+				simulationTimeMs: next.simulationTimeMs ?? 0,
+				warningPhase: equipmentWarningPhase,
+				iconPath,
+				carryFree: () => !repairHud.armed() && cosHud.itemTargetCursor() === null,
+				touchInspect: () => experimental.state().saved.touchInspect,
+				markEffect: () => slotEffects.mark(),
+				warningShown: () => {
+					equipmentWarningVisible = true;
+				}
+			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			// The chat strip the party board must stay clear of, counting only
 			// a chat that is actually drawn: the native bottom zone (underbar
@@ -11287,51 +11301,15 @@ export function createUi( ports: UiPorts ) {
 				item: import("@/engine/contracts/gameplay").InventoryItem | undefined,
 				r: UiRect
 			) {
-				if ( !item || !next.gameplay ) return;
-				const gender = next.session?.characters?.find( row => row.name === next.session?.character )?.gender;
-				const overlay = itemEquipmentOverlay( item, next.gameplay.progression ?? { masteries: [] }, {
-					country: next.gameplay.guide?.country,
-					sex: gender === 0 ? 1 : gender === 1 ? 0 : undefined
-				}, next.gameplay.inventory );
-				if ( overlay ) {
-					const warning = overlay === "icon_item_warning";
-					if ( warning ) equipmentWarningVisible = true;
-					image(
-						r,
-						ROOT + "icon/" + overlay + ".png",
-						white,
-						warning ? equipmentWarningUv( equipmentWarningPhase ) : [ 0, 0, 1, 1 ]
-					);
-				}
+				frameDraw.equipmentOverlay( drawFrame, itemSlots, { item, r } );
 			}
 			/*
 			================
 			itemEffects
-
-			Item-slot painters share the same overlays and animation clock.
 			================
 			*/
 			function itemEffects( id: string, owned: import("@/engine/contracts/gameplay").InventoryItem, r: UiRect ) {
-				// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
-				// companion wash, then the animated sheets. 0x3645 flashes target
-				// the inventory and equipment slots.
-				const wash = itemSlotWash( owned );
-				if ( wash ) rect( r, wash );
-				const flashes = id.startsWith( "slot:" ) ?
-					(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
-					[];
-				const overlays = itemSlotOverlays(
-					owned,
-					r,
-					slotSeed( id + ":" + owned.refObjId ),
-					next.simulationTimeMs ?? 0,
-					flashes,
-					game?.levelCap === EXPANSION_LEVEL_CAP
-				);
-				for ( const overlay of overlays ) {
-					image( overlay.rect, overlay.path, white, overlay.uv );
-					slotEffects.mark();
-				}
+				frameDraw.itemEffects( drawFrame, itemSlots, { id, owned, r } );
 			}
 			/*
 			================
@@ -11345,30 +11323,7 @@ export function createUi( ports: UiPorts ) {
 				disabled = false,
 				selected = false
 			) {
-				const path = iconPath( item?.icon ), drawn = paths.length;
-				if ( path ) {
-					image( r, path );
-					if ( item && "typeFlags" in item ) {
-						const owned = item as import("@/engine/contracts/gameplay").InventoryItem;
-						equipmentOverlay( owned, r );
-						itemEffects( id, owned, r );
-					}
-				}
-				for ( const content of paths.slice( drawn ) ) contentImages.add( content );
-				controls.push( {
-					id,
-					label: item?.name ?? "",
-					rect: r,
-					kind: "button",
-					disabled,
-					selected,
-					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
-					carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item &&
-						ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) ),
-					inspect: !!item && experimental.state().saved.touchInspect
-				} );
-				itemCount( item, r );
+				frameDraw.nativeItem( drawFrame, itemSlots, { id, item, r, disabled, selected } );
 			}
 			/*
 			================
@@ -11381,16 +11336,7 @@ export function createUi( ports: UiPorts ) {
 					| undefined,
 				r: UiRect
 			) {
-				const unlimited = item?.refObjId !== undefined && !!game?.unlimitedItems?.includes( item.refObjId );
-				for ( const q of itemCountQuads( item, r, full, unlimited ) ) {
-					// The infinity sign is solid quads; digit sprites are resources.
-					if ( !q.texture ) {
-						quads.push( q );
-						continue;
-					}
-					paths.push( q.texture );
-					if ( resources.has( q.texture ) ) quads.push( q );
-				}
+				frameDraw.itemCount( drawFrame, itemSlots, { item, r } );
 			}
 			/*
 			================

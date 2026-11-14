@@ -533,11 +533,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20111": {
+				"anonymous@20057": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20116": {
+				"anonymous@20062": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -641,7 +641,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20313": {
+				"anonymous@20259": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -691,7 +691,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20279": {
+				"anonymous@20225": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -841,15 +841,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12561": {
+				"anonymous@12507": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21928": {
+				"anonymous@21874": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1024,7 +1024,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1039,7 +1039,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1076,18 +1076,14 @@
 		},
 		{
 			"buckets": {
-				"equipmentOverlay": {
-					"reads": 1,
-					"writes": 0
-				},
 				"step": {
-					"reads": 1,
+					"reads": 2,
 					"writes": 1
 				}
 			},
 			"line": 1351,
 			"name": "equipmentWarningPhase",
-			"shared": true
+			"shared": false
 		},
 		{
 			"buckets": {
@@ -1102,12 +1098,12 @@
 		},
 		{
 			"buckets": {
-				"equipmentOverlay": {
-					"reads": 0,
-					"writes": 1
-				},
 				"step": {
 					"reads": 1,
+					"writes": 1
+				},
+				"warningShown": {
+					"reads": 0,
 					"writes": 1
 				}
 			},
@@ -1128,7 +1124,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12016": {
+				"anonymous@11962": {
 					"reads": 3,
 					"writes": 0
 				}
@@ -1165,7 +1161,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12016": {
+				"anonymous@11962": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1981,7 +1977,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2019,7 +2015,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12561": {
+				"anonymous@12507": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2038,7 +2034,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2057,7 +2053,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2076,7 +2072,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12561": {
+				"anonymous@12507": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2147,7 +2143,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2242,15 +2238,15 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12561": {
+				"anonymous@12507": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27748": {
+				"anonymous@27694": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2337,11 +2333,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12561": {
+				"anonymous@12507": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -3823,7 +3819,7 @@
 					"reads": 0,
 					"writes": 2
 				},
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -3970,7 +3966,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4081,7 +4077,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -4509,11 +4505,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20507": {
+				"anonymous@20453": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20593": {
+				"anonymous@20539": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5672,7 +5668,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@23333": {
+				"anonymous@23279": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5931,7 +5927,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12774": {
+				"anonymous@12720": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6256,7 +6252,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@16137": {
+				"anonymous@16083": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6367,7 +6363,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6478,7 +6474,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@12466": {
+				"anonymous@12412": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7254,71 +7250,71 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10634": {
+				"anonymous@10648": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10722": {
+				"anonymous@10736": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10774": {
+				"anonymous@10788": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12945": {
+				"anonymous@12891": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12969": {
+				"anonymous@12915": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13152": {
+				"anonymous@13098": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@20061": {
+				"anonymous@20007": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20593": {
+				"anonymous@20539": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@23333": {
+				"anonymous@23279": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24625": {
+				"anonymous@24571": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24699": {
+				"anonymous@24645": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@25004": {
+				"anonymous@24950": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26433": {
+				"anonymous@26379": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26565": {
+				"anonymous@26511": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26587": {
+				"anonymous@26533": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@28078": {
+				"anonymous@28024": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7403,10 +7399,6 @@
 					"writes": 0
 				},
 				"mallEdit": {
-					"reads": 1,
-					"writes": 0
-				},
-				"nativeItem": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7545,35 +7537,35 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10634": {
+				"anonymous@10648": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10722": {
+				"anonymous@10736": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10774": {
+				"anonymous@10788": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@12016": {
+				"anonymous@11962": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12774": {
+				"anonymous@12720": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12849": {
+				"anonymous@12795": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13152": {
+				"anonymous@13098": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7696,35 +7688,35 @@
 		},
 		{
 			"buckets": {
-				"anonymous@10634": {
+				"anonymous@10648": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10722": {
+				"anonymous@10736": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10774": {
+				"anonymous@10788": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@11719": {
+				"anonymous@11665": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12016": {
+				"anonymous@11962": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12774": {
+				"anonymous@12720": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12849": {
+				"anonymous@12795": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12969": {
+				"anonymous@12915": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7772,19 +7764,11 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"itemCount": {
-					"reads": 1,
-					"writes": 0
-				},
 				"letterChildWindow": {
 					"reads": 1,
 					"writes": 0
 				},
 				"letterPage": {
-					"reads": 2,
-					"writes": 0
-				},
-				"nativeItem": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -7891,10 +7875,6 @@
 		},
 		{
 			"buckets": {
-				"nativeItem": {
-					"reads": 1,
-					"writes": 0
-				},
 				"step": {
 					"reads": 2,
 					"writes": 1
@@ -7902,7 +7882,7 @@
 			},
 			"line": 2029,
 			"name": "contentImages",
-			"shared": true
+			"shared": false
 		},
 		{
 			"buckets": {
@@ -12674,6 +12654,6 @@
 	"summary": {
 		"fields": 296,
 		"routes": 787,
-		"sharedFields": 245
+		"sharedFields": 243
 	}
 }
