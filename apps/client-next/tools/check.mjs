@@ -80,6 +80,30 @@ const GATES = [
 
 /*
 ================
+sourcePart
+
+The source lane's part an argument names: --source runs both, CI runs
+--source=gates and --source=runtime as two jobs on two runners, so the
+runtime files' ~600 processes never share a two-core runner with the
+typechecks (together they took the job from 87-132 s to 220-230 s and
+pushed execution.test.mjs past its cap; ops #335 row 1). Undefined for
+anything else.
+================
+*/
+const SOURCE_PARTS = {
+	all: ( gates, runtime ) => [ ...gates, ...runtime ],
+	gates: ( gates ) => gates,
+	runtime: ( _gates, runtime ) => runtime
+};
+
+function sourcePart( args ) {
+	if ( args[0] === SOURCE_FLAG ) return "all";
+	const named = args[0]?.startsWith( SOURCE_FLAG + "=" ) ? args[0].slice( SOURCE_FLAG.length + 1 ) : undefined;
+	return named !== undefined && Object.hasOwn( SOURCE_PARTS, named ) && named !== "all" ? named : undefined;
+}
+
+/*
+================
 sourceGates
 
 The audio parity audit consumes the extracted native sound and animation tables.
@@ -87,7 +111,7 @@ Keep that file in the full asset lane; do not silently skip missing files inside
 its tests. Every other architecture suite runs from a clean source checkout.
 ================
 */
-function sourceGates() {
+function sourceGates( part ) {
 	const architecture = readdirSync( path.join( clientRoot, "tests/architecture" ) )
 		.filter( ( name ) => name.endsWith( ".test.mjs" ) && !ASSET_ARCHITECTURE_TESTS.has( name ) )
 		.sort()
@@ -97,8 +121,12 @@ function sourceGates() {
 	// release build). The list is derived from what each file read
 	// (tools/list-asset-backed-tests.mjs).
 	const skip = "--skip=" + path.relative( clientRoot, ASSET_BACKED_LIST ).replaceAll( "\\", "/" );
-	const tests = [ "tools/run-tests.mjs", ...architecture, skip, "tests/runtime" ];
-	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
+	const gates = [
+		[ "source tests", [ "tools/run-tests.mjs", ...architecture ] ],
+		...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) )
+	];
+	const runtime = [ [ "source runtime tests", [ "tools/run-tests.mjs", skip, "tests/runtime" ] ] ];
+	return SOURCE_PARTS[part]( gates, runtime );
 }
 
 /*
@@ -166,15 +194,16 @@ main
 */
 async function main() {
 	const args = process.argv.slice( 2 );
-	if ( args.length > 1 || (args.length === 1 && args[0] !== SOURCE_FLAG) ) {
-		throw new Error( "Usage: node tools/check.mjs [--source]" );
+	const part = sourcePart( args );
+	if ( args.length > 1 || (args.length === 1 && part === undefined) ) {
+		throw new Error( `Usage: node tools/check.mjs [--source[=gates|runtime]]` );
 	}
-	const sourceOnly = args[0] === SOURCE_FLAG;
-	const gates = sourceOnly ? sourceGates() : GATES;
+	const sourceOnly = part !== undefined;
+	const gates = sourceOnly ? sourceGates( part ) : GATES;
 	const started = performance.now();
 	process.stdout.write(
 		`client check (${
-			sourceOnly ? "source" : "full"
+			sourceOnly ? "source " + part : "full"
 		}): ${gates.length} gates on ${os.availableParallelism()} cores\n`
 	);
 	if ( sourceOnly ) {
@@ -197,7 +226,7 @@ async function main() {
 	process.stdout.write( `client check: PASS (${gates.length} gates, ${seconds}s)\n` );
 }
 
-if ( process.argv.includes( SOURCE_FLAG ) ) {
+if ( sourcePart( process.argv.slice( 2 ) ) !== undefined ) {
 	await main();
 } else {
 	// The full check is a machine-heavy job: it takes the heavy lock itself

@@ -67,7 +67,30 @@ jobs:
         env:
           SRO_TEST_FILE_BUDGET_MS: "20000"
           SRO_TEST_SUITE_BUDGET_MS: "300000"
-        run: node apps/client-next/tools/check.mjs --source
+        run: node apps/client-next/tools/check.mjs --source=gates
+
+  # Every runtime test file that reads no built asset (ops #335 row 1: the
+  # lane ran a hand-picked 17 of 766, so the rest regressed unseen until a
+  # release build). Its own runner: beside the typechecks on one two-core
+  # runner the ~600 test processes took the job from 87-132 s to 220-230 s.
+  client-runtime:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          require-lockfile: true
+      - name: Run the asset-free runtime tests
+        env:
+          SRO_TEST_FILE_BUDGET_MS: "20000"
+          SRO_TEST_SUITE_BUDGET_MS: "300000"
+        run: node apps/client-next/tools/check.mjs --source=runtime
 
   # The repository source policies that cover server files too. source-check
   # (check.yml) skips a server-only pull request, so without this job such a
@@ -200,7 +223,7 @@ jobs:
   # failed, or was skipped although this pull request's files needed it.
   gate-summary:
     name: gate-summary (linux)
-    needs: [changes, client-source, server-policy, server-source]
+    needs: [changes, client-source, client-runtime, server-policy, server-source]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -211,6 +234,7 @@ jobs:
           CLIENT: ${{ needs.changes.outputs.client }}
           SERVER: ${{ needs.changes.outputs.server }}
           CLIENT_SOURCE: ${{ needs.client-source.result }}
+          CLIENT_RUNTIME: ${{ needs.client-runtime.result }}
           SERVER_POLICY: ${{ needs.server-policy.result }}
           SERVER_SOURCE: ${{ needs.server-source.result }}
         run: |
@@ -226,6 +250,7 @@ jobs:
             esac
           }
           need client-source "$CLIENT_SOURCE" "$CLIENT"
+          need client-runtime "$CLIENT_RUNTIME" "$CLIENT"
           need server-policy "$SERVER_POLICY" "$SERVER"
           need server-source "$SERVER_SOURCE" "$SERVER"
           exit $failed
