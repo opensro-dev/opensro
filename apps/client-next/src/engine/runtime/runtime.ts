@@ -39,6 +39,7 @@ import { createBugReport, diagnosticActors } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
+import { hiddenFrameRenders } from "@/engine/foundation/rendering/hidden-render";
 import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
@@ -1453,15 +1454,11 @@ export function startRuntime(
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
 				// Hidden maintenance still acknowledges every ordered publication, but
-				// cannot display a frame, so it skips GPU preparation. A pending world
-				// entry is the exception: scene admission happens only inside the
-				// renderer frame, and 0x3012 game-ready waits on it. The native client
-				// keeps updating while inactive and only stops drawing: Application_PumpIdleFrame
-				// (A0F430) runs OnUpdate every idle frame, CGFXMainFrame_RenderFrame (A11650)
-				// sleeps 20 ms instead of drawing while g_bIsWindowActive is 0, and the loading
-				// screen finishes in CPSMission_OnUpdate (728E10, sends 0x324C). A background
-				// tab must finish its entry too.
-				const admitting = !readySent && sessionState?.phase === "world";
+				// cannot display a frame, so it skips GPU preparation, except while a
+				// load waits on scene admission: the world entry (0x3012 game-ready
+				// waits on it) or a frontend loading phase. hidden-render.ts has the
+				// native trace (A0F430, A11650, 728E10).
+				const admitting = hiddenFrameRenders( frontendState.phase, sessionState?.phase, readySent );
 				const rendered = visible || admitting ?
 					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() ) :
 					undefined;
