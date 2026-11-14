@@ -68,6 +68,7 @@ import {
 } from "@/engine/foundation/animation/status-presentation";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { survivalEffectActors } from "./survival-effects";
+import { carriedPose, createCorrectionCarry, predictedCast } from "./correction-carry";
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
@@ -132,6 +133,9 @@ type EffectGameplay = Pick<
 	| "attachedEffects"
 	| "homingProjectiles"
 	| "petTraining"
+	| "movementRevision"
+	| "movementPath"
+	| "movementTransition"
 >;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
@@ -404,6 +408,7 @@ export function createCharacterEffects(
 	}
 	const impactIndexes = new Map<number, ReadonlyMap<string, number>>();
 	const seen = new Set<string>(), active = new Map<number, EffectVisual>(), unsupported = new Set<string>();
+	const correctionCarry = createCorrectionCarry();
 	const pendingTriggers = new Map<string, EffectTrigger>();
 	// Effects the budget turned away since the last takeBudget, and the
 	// actors the last step drew: the frame probe's evidence that a crowd
@@ -1275,6 +1280,24 @@ export function createCharacterEffects(
 				}
 				const castStates = new Map( gameplay?.casts.map( cast => [ cast.token, cast ] ) ?? [] );
 				const current = new Set( castStates.keys() );
+				// A server correction of the local mover carries the world-placed
+				// visuals of its predicted casts with it (correction-carry.ts): the
+				// press placed them where the walk had run ahead. A cast the server
+				// opened unpredicted placed them at native timing and keeps them.
+				const carry = correctionCarry.step( gameplay?.localGid !== undefined ? gameplay : null );
+				if ( carry ) {
+					for ( const [gid, visual] of active ) {
+						const cast = castStates.get( visual.token );
+						if (
+							!cast || !predictedCast( cast ) || visual.owner !== gameplay!.localGid ||
+							visual.attachment.kind !== "world" || visual.flight
+						) continue;
+						active.set( gid, {
+							...visual,
+							actor: { ...visual.actor, pose: carriedPose( visual.actor.pose, carry ) }
+						} );
+					}
+				}
 				const byGid = new Map( entities.map( entity => [ entity.gid, entity ] ) );
 				// All effect anchors sit on the body as drawn (#1442): the local
 				// player's anchor is the frame's drawn pose when the frame
@@ -4233,6 +4256,7 @@ export function createCharacterEffects(
 		================
 		*/
 		reset() {
+			correctionCarry.reset();
 			external.clear();
 			crowEffects.length = 0;
 			externalSerial = 0;
