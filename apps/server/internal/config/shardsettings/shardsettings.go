@@ -263,6 +263,10 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// The Devil's Spirit's fifth avatar socket (#3456, port-only, not
+	// native; "off" is native: avatar storage keeps four slots). The same
+	// switch imports the Spirit's item rows at build time.
+	{Env: "SRO_NASRUN", NomadVar: "nasrun", Default: "off"},
 	// Owner, 2026-11-08: the connection census - staff census reads and
 	// the public people counts (#2716/#2717, opensro-web#78; port-only,
 	// not native; "off" opens no journal and installs no census route).

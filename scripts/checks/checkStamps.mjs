@@ -18,19 +18,29 @@ A stamp is only written after a pass, and any input change - a source
 edit, a new file, a toolchain upgrade - changes the fingerprint, so nothing
 is skipped for inputs it has not checked. SRO_CHECK_FORCE=1 ignores stamps.
 
+The stamps live in the main checkout's .state, shared by every worktree
+(ops #335 row 1): a fingerprint holds checkout-relative paths, git blob
+ids and digests of the shared trees, never a checkout's own path, so a
+pass in one worktree is a pass in another with the same files. Before
+that every fresh worktree paid the full gate once (the UI action census:
+173 s on 11-14). Writers race, so a stamp is replaced atomically and a
+torn or lost one only costs a rerun.
+
 ===========================================================================
 */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serverGameDataRoot } from "../build/world/paths.mjs";
-import { generatedPath } from "../lib/generatedRoot.mjs";
+import { generatedPath, resolveMainCheckout } from "../lib/generatedRoot.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
-const stampDirectory = path.join( rebuildRoot, ".state", "check-stamps" );
-const RECENT_PASSES = 8;
+const stampDirectory = path.join( resolveMainCheckout( rebuildRoot ), ".state", "check-stamps" );
+// Every worktree records into one list, so keep enough that switching
+// between a few branches still finds each one's pass.
+const RECENT_PASSES = 32;
 // Checkout-relative names of the trees a worktree may read from elsewhere.
 const GENERATED_PREFIX = ".generated/";
 const SERVER_GAME_DATA_PREFIX = "apps/server/.generated/game-data/1.150/server/";
@@ -227,8 +237,24 @@ readPasses
 ================
 */
 function readPasses( name ) {
-	const stampPath = path.join( stampDirectory, `${name}.json` );
-	return existsSync( stampPath ) ? [ JSON.parse( readFileSync( stampPath, "utf8" ) ) ].flat() : [];
+	const file = stampPath( name );
+	if ( !existsSync( file ) ) return [];
+	try {
+		return [ JSON.parse( readFileSync( file, "utf8" ) ) ].flat();
+	} catch {
+		return []; // torn by a racing writer: no pass, so the gate runs
+	}
+}
+
+/*
+================
+stampPath
+
+Where one gate's passes are kept (the main checkout's, shared).
+================
+*/
+export function stampPath( name ) {
+	return path.join( stampDirectory, `${name}.json` );
 }
 
 /*
@@ -258,5 +284,18 @@ export function recordPass( name, key ) {
 		{ fingerprint: key, passedAt: new Date().toISOString() },
 		...readPasses( name ).filter( ( pass ) => pass.fingerprint !== key )
 	].slice( 0, RECENT_PASSES );
-	writeFileSync( path.join( stampDirectory, `${name}.json` ), `${JSON.stringify( recent )}\n` );
+	const file = stampPath( name ), temporary = `${file}.${process.pid}`;
+	writeFileSync( temporary, `${JSON.stringify( recent )}\n` );
+	try {
+		renameSync( temporary, file );
+	} catch ( error ) {
+		// Windows refuses a rename over a file another worktree is replacing
+		// (EPERM/EBUSY); that writer's list stands and this pass reruns once.
+		try {
+			rmSync( temporary, { force: true } );
+		} catch {
+			// a temporary that cannot be removed is litter, never a failed gate
+		}
+		console.log( `check stamp ${name}: not saved (${error.code ?? error.message})` );
+	}
 }

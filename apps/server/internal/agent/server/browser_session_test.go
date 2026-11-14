@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/releaseprotocol"
 )
 
 func TestBrowserCharacterRequiresMatchingCookieAndSuccessfulAdmission(t *testing.T) {
@@ -176,5 +179,54 @@ func TestBrowserSessionCredentialsRequireExactAllowedOrigin(t *testing.T) {
 		} else if w.Code != 403 || w.Header().Get("Access-Control-Allow-Credentials") != "" {
 			t.Fatal("foreign credentialed CORS accepted")
 		}
+	}
+}
+
+/*
+================
+TestOutdatedTabLeavingStillForgetsTheBrowser
+
+ops #329: a tab from an older release presses Restart (or Logout); the
+Agent refuses it with 426 and the tab reloads. The remembered character
+must already be gone, or that reload re-enters the world instead of
+showing the roster. A text/plain post is still refused without touching
+any cookie.
+================
+*/
+func TestOutdatedTabLeavingStillForgetsTheBrowser(t *testing.T) {
+	f := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
+	publishFixtureLease(t, f, "alpha", "worker-alpha", 1, 0)
+	login := performJSON(t, f.handler, http.MethodPost, "/title/login", `{"id":"tester","password":"123123","serverId":"alpha"}`, "")
+	cookie := login.Result().Cookies()[0]
+	outdated := func(path, contentType string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current-1))
+		r.Header.Set("Content-Type", contentType)
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		f.handler.ServeHTTP(w, r)
+		return w
+	}
+	if forged := outdated("/title/character-select", "text/plain"); forged.Code != http.StatusUpgradeRequired || len(forged.Result().Cookies()) != 0 {
+		t.Fatalf("simple post: status %d, %d cookies; want 426 and none", forged.Code, len(forged.Result().Cookies()))
+	}
+	dock := outdated("/title/character-select", "application/json")
+	dockCookies := dock.Result().Cookies()
+	if dock.Code != http.StatusUpgradeRequired || len(dockCookies) != 1 || dockCookies[0].Name != cookie.Name+"Character" || dockCookies[0].MaxAge != -1 {
+		t.Fatalf("restart: status %d, cookies %v; want 426 clearing only the character", dock.Code, dockCookies)
+	}
+	logout := outdated("/title/logout", "application/json")
+	cleared := logout.Result().Cookies()
+	if logout.Code != http.StatusUpgradeRequired || len(cleared) != 2 || cleared[0].Value != "" || cleared[0].MaxAge != -1 || cleared[1].MaxAge != -1 {
+		t.Fatalf("logout: status %d, cookies %v; want 426 clearing both", logout.Code, cleared)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/title/session", strings.NewReader(`{}`))
+	declareBrowser(r)
+	r.Header.Set("Content-Type", "application/json")
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	f.handler.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("session after a refused logout answered %d; want 401 (revoked)", w.Code)
 	}
 }
