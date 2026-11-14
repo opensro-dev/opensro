@@ -33,6 +33,9 @@ const REGION = 26988;
 // where the server's walk stop put the body.
 const AHEAD = { regionId: REGION, x: 387, y: 234.4, z: 774, angle: 0 };
 const SERVER = { regionId: REGION, x: 406.3, y: 232.5, z: 783.3, angle: 0 };
+// The server placing the body back (movement.ts beginTransition( "correction" )).
+const CORRECTION = { reason: "correction", relocation: 0, eligible: true };
+const INPUT = { reason: "input", relocation: 0, eligible: true };
 const PREDICTED_TOKEN = -0x10001;
 const encode = value => new TextEncoder().encode( JSON.stringify( value ) );
 const CATALOG = {
@@ -137,6 +140,7 @@ function castThenCorrect( { token, predictedToken, movementPath } ) {
 		...before,
 		pose: { ...SERVER },
 		movementRevision: 19,
+		movementTransition: CORRECTION,
 		...(movementPath ? { movementPath } : {})
 	};
 	actors = step( .4, after, [ { cast, phase: "SHOT", event: 1, at: .4 } ] );
@@ -182,11 +186,24 @@ test("the carry answers a correction's delta once, and nothing for a walk or a t
 		null,
 		"a walk keeps its revision"
 	);
-	const delta = carry.step( { pose: SERVER, movementRevision: 19 } );
+	assert.equal(
+		carry.step( { pose: { ...AHEAD, x: 391 }, movementRevision: 19, movementTransition: INPUT } ),
+		null,
+		"a new click bumps the revision but is no correction"
+	);
+	const delta = carry.step( { pose: SERVER, movementRevision: 20, movementTransition: CORRECTION } );
 	assert.ok( delta );
-	assert.ok( Math.abs( delta[0] - (SERVER.x - 390) ) < 1e-9 );
-	assert.equal( carry.step( { pose: SERVER, movementRevision: 19 } ), null, "the same correction carries once" );
-	assert.equal( carry.step( { pose: { ...SERVER, x: SERVER.x + 500 }, movementRevision: 20 } ), null, "a teleport" );
+	assert.ok( Math.abs( delta[0] - (SERVER.x - 391) ) < 1e-9 );
+	assert.equal(
+		carry.step( { pose: SERVER, movementRevision: 20, movementTransition: CORRECTION } ),
+		null,
+		"the same correction carries once"
+	);
+	assert.equal(
+		carry.step( { pose: { ...SERVER, x: SERVER.x + 500 }, movementRevision: 21, movementTransition: CORRECTION } ),
+		null,
+		"a teleport"
+	);
 });
 
 test("a carried pose crosses a region boundary", () => {

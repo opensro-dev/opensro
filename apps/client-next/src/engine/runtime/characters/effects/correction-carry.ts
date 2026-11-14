@@ -62,8 +62,13 @@ export function createCorrectionCarry() {
 			revision = local?.movementRevision;
 			last = pose ? { ...pose } : undefined;
 			if ( !pose || !previous || previousRevision === undefined || revision === previousRevision ) return null;
+			// Only the server placing the body back carries (movement.ts
+			// beginTransition( "correction" )). A new click ("input"), a
+			// receipt, the press's own cast stop ("cast") or a knockback also
+			// bump the revision, and each would nudge a live static by one
+			// frame of walking.
 			if (
-				local!.movementPath?.displacement === true || local!.movementTransition?.reason === "displacement"
+				local!.movementTransition?.reason !== "correction" || local!.movementPath?.displacement === true
 			) return null;
 			if ( !sameCoordinateSpace( previous.regionId, pose.regionId ) ) return null;
 			const [dx, dz] = worldDelta( previous, pose ), dy = pose.y - previous.y;
