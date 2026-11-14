@@ -85,6 +85,24 @@ func (rt *Runtime) stallBusy(division, name string) bool {
 
 /*
 ================
+PlayerInteractionLocked
+
+The movement lane's interaction gate (#3433): a player keeping a stall,
+visiting one or trading does not walk until the stall or exchange closes.
+
+INFERENCE: the v1.150 client refuses the world click while the stall
+control is up (CGInterface_IsInteractionBlocked 67D090), and the original
+pins a trader the same way. The GameServer's move handler is taken to read
+the interaction state the stall and the exchange write, so the server
+refuses what a client that skips the window gate sends.
+================
+*/
+func (rt *Runtime) PlayerInteractionLocked(division, name string) bool {
+	return rt.stallBusy(division, name)
+}
+
+/*
+================
 HandleStallCreate
 
 0x7049 [wstr title].

@@ -49,6 +49,10 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if rt.sookDecisionHolds(division, snapshot) {
 		return offensiveRefusal(0x3005)
 	}
+	// And its stall and exchange gate (#3433).
+	if rt.stallBusy(division, snapshot.Name) {
+		return offensiveRefusal(0x3009)
+	}
 	now := rt.Now().UnixMilli()
 	// Natively activity != 2 executes through events 0 and 2 immediately,
 	// before inspecting the ordinary command queue. An open attack is allowed.

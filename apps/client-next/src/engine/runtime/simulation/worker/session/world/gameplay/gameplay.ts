@@ -1054,7 +1054,7 @@ scroll's kind-0 row does not.
 		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
 		if ( teleportMode === 1 ) return "teleport";
-		if ( interactionBlocked() ) return "blocked";
+		if ( interactionBlocked() || inventory.tradePinned() ) return "blocked";
 		if ( frozen() ) return "frozen";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
@@ -2712,6 +2712,14 @@ state here before a command can claim a native wire conversation.
 			if (
 				interactionBlocked() &&
 				[ "move", "ground-move", "attack", "pickup", "cos-attack" ].includes( command.kind )
+			) return null;
+			// INFERENCE (#3433): a stall or an open exchange pins the player as
+			// the server does (action PlayerInteractionLocked): no walk, attack
+			// or skill, so a teleport cannot carry it out. Nothing is sent, so
+			// nothing is predicted and snapped back.
+			if (
+				inventory.tradePinned() &&
+				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
 			// logout countdown before the seated and navigation checks.
