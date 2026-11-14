@@ -886,7 +886,9 @@ bootstrap
 			const nextAvatars = new Map<number, InventoryItem>();
 			for ( const row of b.avatarItems ?? [] ) {
 				const n = slot( row.slot );
-				if ( n >= AVATAR_STORAGE_CAPACITY || nextAvatars.has( n ) ) throw Error( "Invalid avatar storage slot" );
+				if ( n >= AVATAR_STORAGE_CAPACITY || nextAvatars.has( n ) ) {
+					throw Error( "Invalid avatar storage slot" );
+				}
 				const item = body( Uint8Array.from( row.body ), 0 );
 				if (
 					!item || item.refObjId !== row.refObjId || !isAvatarItem( item.typeFlags ) ||
