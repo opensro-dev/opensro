@@ -288,13 +288,17 @@ async function sweepIssue( sweep, issue ) {
 	}
 	const { action } = decideGate( { gate, asked, world } );
 	if ( action === "lift" ) {
-		await github.rest.issues.removeLabel( { owner, repo, issue_number: issue.number, name: GATED_LABEL } );
+		// The notice goes first: if it fails, the issue stays gated and the
+		// next sweep lifts it again with its notice. Removing the label first
+		// would leave a failed notice ungated in silence, and a sweep only
+		// reads gated issues, so it would never post one.
 		await github.rest.issues.createComment( {
 			owner,
 			repo,
 			issue_number: issue.number,
 			body: "Ungated by the gates sweep: " + gate.conditions.map( describe ).join( " and " ) + ". Ready to pull."
 		} );
+		await github.rest.issues.removeLabel( { owner, repo, issue_number: issue.number, name: GATED_LABEL } );
 	} else if ( action === "ask" ) {
 		await github.rest.issues.createComment( { owner, repo, issue_number: issue.number, body: askText( gate ) } );
 	}
