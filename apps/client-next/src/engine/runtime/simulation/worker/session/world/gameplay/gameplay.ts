@@ -107,6 +107,7 @@ import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/c
 import {
 	crestRegisterKeys,
 	crestRegisterKind,
+	crestRegisterRefusalLine,
 	crestRegisterResult,
 	crestRegisterUploadPayload
 } from "@/engine/foundation/gameplay/crest-register";
@@ -5253,14 +5254,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !result.ok ) {
 						const notice = result.code !== undefined ?
 							constantNativeNotice( 1, result.code ) :
-							{
-								key: result.reason === "overlap" ?
-									crestRegisterKeys( "guild" ).refused :
-									result.reason === "invalid" ?
-									crestRegisterKeys( "guild" ).error :
-									crestRegisterKeys( "guild" ).fail,
-								value: 0
-							};
+							crestRegisterRefusalLine( "guild", result.reason );
 						if ( notice ) {
 							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 						}
