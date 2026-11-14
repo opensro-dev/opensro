@@ -1572,7 +1572,7 @@ export function startRuntime(
 					runtimeErrors.update( "Characters", characters.error() );
 					// A presentation data gap skips one cosmetic step and is
 					// reported, not fatal (presentation-contract.ts).
-					for ( const degradation of characters.takeDegradations() ) {
+					for ( const degradation of characters.takePresentationDegradations() ) {
 						sessionCommand( {
 							kind: "client-report",
 							incidentKind: "degraded",

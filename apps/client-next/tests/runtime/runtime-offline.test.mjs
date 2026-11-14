@@ -80,6 +80,7 @@ test("a fetch burst arms asset_offline, a sustained streak files it, silence bur
 	owners.characters.damageText = () => [];
 	owners.characters.takeCameraScripts = () => [];
 	owners.characters.error = () => characterError;
+	owners.characters.takePresentationDegradations = () => [];
 	owners.characters.failure = () => null;
 	owners.ui.event = () => {};
 	owners.ui.cursor = () => null;

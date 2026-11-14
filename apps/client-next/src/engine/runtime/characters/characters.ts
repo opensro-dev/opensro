@@ -1171,13 +1171,13 @@ export function createCharacterPresentation(
 		error: () => output.failure ?? resources.error() ?? effects.error(),
 		/*
 		================
-		takeDegradations
+		takePresentationDegradations
 
 		The skipped presentation steps since the last call (runtime.ts files
 		them as degraded client reports); each is recorded once per lifetime.
 		================
 		*/
-		takeDegradations() {
+		takePresentationDegradations() {
 			const taken = output.degradations;
 			output.degradations = [];
 			return taken;

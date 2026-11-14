@@ -67,7 +67,7 @@ export interface PresentationOutput {
 	commonReady: boolean;
 	// Skipped cosmetic steps the session survives (a model without a
 	// timeline for this action): reported once each as degraded, never a
-	// failure. degradePresentation is the one writer; takeDegradations
+	// failure. degradePresentation is the one writer; takePresentationDegradations
 	// (characters.ts) drains them.
 	degradations: Degradation[];
 	degradedKeys: Set<string>;
