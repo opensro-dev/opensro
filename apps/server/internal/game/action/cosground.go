@@ -267,9 +267,11 @@ type petPickupAt struct {
 sharePetPickup
 
 A pet's pickup runs the party's item share as the owner's own pickup does:
-The reference server's ground pickup serves move type 0x11 as it serves 6,
-and its party loot selection picks the recipient by the
-party's rotation. Non-alchemy quest items (the reference server's pet pickup
+The reference server's ground pickup serves move type 0x11 as it serves 6
+(its item-move handler table holds the same player ground pickup for
+both), and its party loot selection picks the recipient by the party's
+rotation. It rotates while it selects, before the grant, so a refused
+grant still spends the turn (#3423). Non-alchemy quest items (the reference server's pet pickup
 recipient selection) also route to
 the owner's player bag (0x1C -> the player's ground-pickup grant) and update
 quest inventory rather than entering the pet container. When the rotation
@@ -347,6 +349,11 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 				// The reference server's ground pickup on 0x706D routes
 				// 0xB06D [2, 0x07] to the full recipient and 0xB06D [2, 0xDA] to
 				// the picker (without player OpActionState on move type 0x11).
+				// No fallback to the picker's pet or the next member: when
+				// the grant for another member fails bag-full, the reference
+				// server's ground pickup tells that member 0x1807 and answers
+				// the picker 0x18DA (#3423). Only the pet-command path
+				// spills, below.
 				return OpResult{
 					Frames:     []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: []byte{2, wire.ErrCodePartyInventoryFull}}},
 					Recipients: []RecipientFrames{{CharacterID: recipient.ID, Frames: result.Frames}},
