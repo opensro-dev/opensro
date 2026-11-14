@@ -93,7 +93,9 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
 		vHidesCompanions: false,
-		dungeonCharacterPvs: true
+		dungeonCharacterPvs: true,
+		// Silent wing flight is on by default (owner 2026-11-15, #3547).
+		silentWingFlight: true
 	} );
 	for (
 		const key of [

@@ -127,6 +127,9 @@ export const OFF = Object.freeze( {
 	// Off by default: port-only portal-out cue on arrival; the native
 	// gate has no traced caller, so silence is the native default.
 	warpArrivalSound: false,
+	// On by default (owner 2026-11-15, #3547): a wing dress flies without
+	// the Default run's fallback footsteps.
+	silentWingFlight: true,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
 	sealUnderHeading: false,

@@ -59,7 +59,8 @@ export async function captureSunShadowPlacement() {
 		enchantSparks: false,
 		sharedActorRoom: false,
 		vHidesCompanions: false,
-		dungeonCharacterPvs: false
+		dungeonCharacterPvs: false,
+		silentWingFlight: false
 	};
 	const lit = shade => ({
 		color: shade,
