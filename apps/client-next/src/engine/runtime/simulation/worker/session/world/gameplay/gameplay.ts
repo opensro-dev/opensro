@@ -1586,10 +1586,12 @@ bag keeps one marker row, not the whole bag.
 clearState
 
 Retire session facts together so a later character cannot inherit bindings,
-selected entities, cooldowns or world-entry state.
+selected entities, cooldowns or world-entry state. keepChat keeps the
+conversation for a re-entry (#3435); the chat owner's bootstrap still
+clears it when another character enters.
 ================
 	*/
-	function clearState() {
+	function clearState( keepChat = false ) {
 		actionSession.clear();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
@@ -1647,7 +1649,8 @@ selected entities, cooldowns or world-entry state.
 		progression = { masteries: [] };
 		skillGroups.clear();
 		movement.clear();
-		chat.clear();
+		if ( keepChat ) chat.suspend();
+		else chat.clear();
 		pickup.clear();
 		cosPickup.clear();
 		quests.clear();
@@ -6288,10 +6291,10 @@ World transfer retires spatial work while retaining character/session data.
 reset
 ================
 		*/
-		reset() {
+		reset( keepChat = false ) {
 			live = false;
 			deferredSends = [];
-			clearState();
+			clearState( keepChat );
 			dirty = true;
 		},
 		/*
