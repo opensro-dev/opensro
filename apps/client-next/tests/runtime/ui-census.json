@@ -533,11 +533,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20123": {
+				"anonymous@20140": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20128": {
+				"anonymous@20145": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -641,7 +641,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20325": {
+				"anonymous@20342": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -691,7 +691,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20291": {
+				"anonymous@20308": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -849,7 +849,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@21940": {
+				"anonymous@21957": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2246,7 +2246,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27772": {
+				"anonymous@27789": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4505,11 +4505,11 @@
 		},
 		{
 			"buckets": {
-				"anonymous@20519": {
+				"anonymous@20536": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20605": {
+				"anonymous@20622": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5668,7 +5668,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@23343": {
+				"anonymous@23360": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6023,6 +6023,10 @@
 					"reads": 1,
 					"writes": 0
 				},
+				"panel:Skills": {
+					"reads": 1,
+					"writes": 0
+				},
 				"quickSlotCell": {
 					"reads": 5,
 					"writes": 0
@@ -6252,7 +6256,7 @@
 		},
 		{
 			"buckets": {
-				"anonymous@16146": {
+				"anonymous@16163": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7278,43 +7282,43 @@
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@20073": {
+				"anonymous@20090": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20605": {
+				"anonymous@20622": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@23343": {
+				"anonymous@23360": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24635": {
+				"anonymous@24652": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24709": {
+				"anonymous@24726": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@25014": {
+				"anonymous@25031": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26457": {
+				"anonymous@26474": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26589": {
+				"anonymous@26606": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26611": {
+				"anonymous@26628": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@28102": {
+				"anonymous@28119": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7837,7 +7841,7 @@
 					"writes": 0
 				},
 				"panel:Skills": {
-					"reads": 9,
+					"reads": 10,
 					"writes": 0
 				},
 				"panel:System": {

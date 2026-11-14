@@ -15,13 +15,8 @@ import type { AnimationMetadata } from "@/engine/foundation/animation/animation-
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
-import {
-	degradePresentation,
-	type DeathModel,
-	type Resource,
-	type PresentationIdleState,
-	type PresentationOutput
-} from "./internal/presentation-contract";
+import type { DeathModel, Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
+import { recordDegradation } from "@/engine/foundation/session/degradation-record";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 /*
@@ -190,8 +185,8 @@ export function createPresentationState() {
 						const recoveryMs = recoveryByCodename.get( resource.codename );
 						if ( recoveryMs === undefined ) {
 							// The knockdown keeps standing: no recovery length to
-							// time the get-up by (degradePresentation).
-							degradePresentation(
+							// time the get-up by (recordDegradation).
+							recordDegradation(
 								output,
 								"presentation-recovery-duration",
 								`Missing native recovery duration ${resource.codename}`

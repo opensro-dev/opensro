@@ -24,7 +24,7 @@ and minimap tiles, every Data file the native tree lacks, and the monster import
 | Part | Result (real inputs) |
 | --- | --- |
 | Regions | 2 (27091, 27092), the halls every arena binds |
-| Monsters | 36 `MOB_MUHAN_*` kinds in `characterdata_200000.txt` / `skilldata_200000.txt`: one combat kind per level a wave can name (72-80, 82-90, 92-100, 102-110) |
+| Monsters | 36 `MOB_MUHAN_*` kinds in `characterdata_220000.txt` / `skilldata_220000.txt`: one combat kind per level a wave can name (72-80, 82-90, 92-100, 102-110) |
 | Waves | 160 rows (8 arenas × 20) in `muhan-waves.txt`, Version 2: point, delay, count, level offset, radius, monster type |
 | Worlds | `GROUP_MUHAN_SOLO_75/85/95/105` and `GROUP_MUHAN_PARTY_75/85/95/105`, registered as permanent worlds (type 0, one layer) while the switch is on |
 

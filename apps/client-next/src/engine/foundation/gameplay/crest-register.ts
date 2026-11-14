@@ -128,6 +128,35 @@ export function crestRegisterUploadPayload(
 	);
 }
 
+// Port-only, not native: the server's one-change-per-10-minutes crest
+// rule (server crest.ChangeCooldown, owner 2026-11-07) has no native line.
+export const CREST_CHANGE_COOLDOWN_MINUTES = 10;
+// The line names CREST_CHANGE_COOLDOWN_MINUTES (ownership: a module constant is a
+// plain literal, so the number is written out; crest-register.test pins both).
+export const CREST_COOLDOWN_TEXT = "The emblem was changed less than 10 minutes ago. Please try again later.";
+
+/*
+================
+crestRegisterRefusalLine
+
+The line a refused upload prints, by its reason: overlap and invalid
+take their native lines; cooldown takes the port-only text (#3525: it
+used to fall through to UIIT_MSG_CREST_REGISTER_FAIL, "There is no file.
+Please check the install path", after a delete and a quick re-register);
+anything else keeps the native register-fail line.
+================
+*/
+export function crestRegisterRefusalLine(
+	kind: CrestRegisterKind,
+	reason: string
+): { readonly key: string; readonly value: 0; readonly text?: string; readonly nativeType?: 5; } {
+	const keys = crestRegisterKeys( kind );
+	if ( reason === "overlap" ) return { key: keys.refused, value: 0 };
+	if ( reason === "invalid" ) return { key: keys.error, value: 0 };
+	if ( reason === "cooldown" ) return { key: "", value: 0, text: CREST_COOLDOWN_TEXT, nativeType: 5 };
+	return { key: keys.fail, value: 0 };
+}
+
 export type CrestRegisterResult =
 	| { readonly ok: true; readonly crest: number; }
 	| { readonly ok: false; readonly reason: string; readonly code?: number; };

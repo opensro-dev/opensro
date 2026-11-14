@@ -295,10 +295,25 @@ advanceGroundWalk
 ================
 */
 func (st *WorldStore) advanceGroundWalk(key string, w *WorldState) {
+	if st.groundConfig.Now == nil {
+		return
+	}
+	st.advanceGroundWalkTo(key, w, st.groundConfig.Now())
+}
+
+/*
+================
+advanceGroundWalkTo
+
+advanceGroundWalk up to a given millisecond. A walk already stepped to
+or past it is left as it stands (each step runs the full clip and
+guard, so a step of a few milliseconds costs as much as a long one).
+================
+*/
+func (st *WorldStore) advanceGroundWalkTo(key string, w *WorldState, now int64) {
 	if st.groundConfig.Now == nil || st.groundConfig.Step == nil || !w.groundActive() {
 		return
 	}
-	now := st.groundConfig.Now()
 	g := *w.Ground
 	if now <= g.At {
 		return

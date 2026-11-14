@@ -58,14 +58,20 @@ import (
 const opCrestRegister = 19
 
 // The closed refusal reasons a crest upload answer names. The client
-// maps each to its native line (crest-register.ts): a crest already
-// standing, an image that is not a usable crest, and everything else
-// - which a gate's native notice code, when one rides along, names
-// more precisely instead.
+// maps each to its line (crest-register.ts): a crest already standing,
+// an image that is not a usable crest, a change inside the owner's
+// cooldown, and everything else - which a gate's native notice code,
+// when one rides along, names more precisely instead.
+//
+// Port-only, not native: the cooldown (crest.ChangeCooldown) has no
+// native line. It is named so the client does not print the install-path
+// line for it (#3525: a register right after a delete read "There is no
+// file").
 const (
-	crestRefusedOverlap = "overlap"
-	crestRefusedInvalid = "invalid"
-	crestRefusedGeneric = "refused"
+	crestRefusedOverlap  = "overlap"
+	crestRefusedInvalid  = "invalid"
+	crestRefusedCooldown = "cooldown"
+	crestRefusedGeneric  = "refused"
 )
 
 // maxCrestEncodedBytes bounds the base64 body before it is decoded:
@@ -263,7 +269,7 @@ func (rt *Runtime) HandleCrestRegister(division string, character *enterworld.Ch
 	// one change per guild (per union) per cooldown.
 	now := rt.Now()
 	if !rt.Crests.AllowChange(kind, crestID, now) {
-		return crestRegisterRefusal("crest register: changed too recently", crestRefusedGeneric, 0)
+		return crestRegisterRefusal("crest register: changed too recently", crestRefusedCooldown, 0)
 	}
 
 	// The image: the size cap rides before the decode, and the
