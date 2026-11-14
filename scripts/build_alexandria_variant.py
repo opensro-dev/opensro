@@ -112,9 +112,6 @@ LEVEL_CAP_FLAG = "SRO_LEVEL_CAP"
 # each store with the goods one official source had active; on, the
 # shop passes stock the port's own degree goods instead.
 PORT_STOCK_FLAG = "SRO_ALEXANDRIA_PORT_STOCK"
-# Alexandria's own degree 9 honor store (#3548, port-only): unset, both
-# SD honor groups keep the native mapping onto Hotan's honor store.
-HONOR_STORE_FLAG = "SRO_ALEXANDRIA_HONOR_STORE"
 SWITCH_OFF_VALUES = ("", "0", "off", "false")
 SWITCH_ON_VALUES = ("1", "on", "true")
 EXPANSION_LEVEL_CAP = 110
@@ -550,8 +547,13 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# (variant_later_layers.py owns the order and the manifest keys).
 	from variant_later_layers import add_later_layers
 	later_layers = add_later_layers(native, out)
+	# The honor line the client authored and never shipped (SRO_HONOR_GOODS,
+	# #3548): after every other item import, whose identities it keeps
+	# clear of, and before the shops that sell it.
+	import honor_items
+	honor_goods = honor_items.add_honor_items(native, out)
 	from alexandria_npc_services import add_services
-	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_store_enabled())
+	city_services = add_services(vsro_root, native, out, port_stock_enabled(), honor_goods["enabled"])
 	# The later client's seasonal town decoration (Halloween and the other
 	# event layers), into the object catalog and region files written above.
 	# Without the v1.696 archives a previous import is removed.
@@ -587,6 +589,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"music": music,
 		"npcs": city_npcs,
 		"npcServices": city_services,
+		"honorGoods": honor_goods,
 		"weapons": weapons,
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
@@ -650,16 +653,6 @@ def build_switch(flag, environ=None):
 # ================
 def port_stock_enabled(environ=None):
 	return build_switch(PORT_STOCK_FLAG, environ)
-
-
-# ================
-# honor_store_enabled
-#
-# Alexandria's own degree 9 honor store (#3548), from
-# SRO_ALEXANDRIA_HONOR_STORE. Off is native.
-# ================
-def honor_store_enabled(environ=None):
-	return build_switch(HONOR_STORE_FLAG, environ)
 
 
 # ================

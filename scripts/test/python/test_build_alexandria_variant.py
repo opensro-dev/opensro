@@ -557,16 +557,6 @@ class GateLevelCapTests(unittest.TestCase):
 			with self.assertRaises(ValueError, msg=value):
 				variant.port_stock_enabled({variant.PORT_STOCK_FLAG: value})
 
-	def test_the_honor_store_is_off_unless_asked_for(self):
-		"""#3548: unset or off keeps the native honor mapping; a typo is refused."""
-		for value in ("", "0", "off", "OFF", "false"):
-			self.assertFalse(variant.honor_store_enabled({variant.HONOR_STORE_FLAG: value}), value)
-		self.assertFalse(variant.honor_store_enabled({}))
-		for value in ("1", "on", "true"):
-			self.assertTrue(variant.honor_store_enabled({variant.HONOR_STORE_FLAG: value}), value)
-		with self.assertRaises(ValueError):
-			variant.honor_store_enabled({variant.HONOR_STORE_FLAG: "yes"})
-
 	def test_a_value_the_server_refuses_is_refused(self):
 		for value in ("on", "true", "1", "100", "yes"):
 			with self.assertRaises(ValueError, msg=value):
