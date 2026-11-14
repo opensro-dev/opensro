@@ -26,10 +26,11 @@ import (
 )
 
 const (
-	avatarTypeID1    = 3
-	avatarTypeID2    = 1
-	avatarTypeID3    = 13
-	avatarFlagTypeID = 4 // TID4 4, the avatar flag: refused by both sides (client ItemTID_IsAvatarFlag)
+	avatarTypeID1     = 3
+	avatarTypeID2     = 1
+	avatarTypeID3     = 13
+	avatarDressTypeID = 2 // TID4 2, avatar dress
+	avatarFlagTypeID  = 4 // TID4 4, the avatar flag: refused by both sides (client ItemTID_IsAvatarFlag)
 
 	// The server's grant handler accepts inventory slots 0x0D..0x6F.
 	avatarSlotFirst = 0x0d
@@ -83,6 +84,12 @@ func (c *Catalog) loadAvatarOptions(dir string) error {
 				break
 			}
 			names = append(names, name)
+		}
+		if uint8(part) == avatarDressTypeID {
+			// Native v1.188 magicoptionassign.txt dress row (TID3 13, TID4 2;
+			// avatar-luck-and-4x-stacking.md) appends the Lucky and 4x stacking
+			// options on top of the v1.150 dress entries.
+			names = append(names, enterworld.AvatarV188DressOptions()...)
 		}
 		c.AvatarOptions[uint8(part)] = names
 	}
@@ -184,13 +191,11 @@ func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename strin
 	if !ok {
 		return zero, AvatarNoDegree
 	}
-	index, old := c.findMagic(*item, option.Tag)
+	// The reference server's avatar bless matches an existing option by tag
+	// AND param id (research/findings/avatar-luck-and-4x-stacking.md), so stacking variants
+	// like MDIA vs MDIA_2 occupy distinct slots instead of overwriting by tag.
+	index, old := c.findMagicByTagAndID(*item, option.Tag, option.ID)
 	id := option.ID
-	if index >= 0 {
-		// The bless routine keeps the carried param id (the server's
-		// magic-param lookup on the equipped item).
-		id = uint16(item.MagicOptions[index])
-	}
 	var value uint32
 	switch option.Tag {
 	case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472:
@@ -221,6 +226,25 @@ func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename strin
 		return zero, AvatarFull
 	}
 	return Outcome{Items: out, Target: slot, Success: true}, nil
+}
+
+/*
+================
+findMagicByTagAndID
+
+Matches an existing item option by both magic tag and param id, as the
+reference server's avatar bless does
+(research/findings/avatar-luck-and-4x-stacking.md).
+================
+*/
+func (c *Catalog) findMagicByTagAndID(item inventory.Item, tag uint32, id uint16) (int, uint32) {
+	for i, v := range item.MagicOptions {
+		existingID := uint16(v)
+		if c.Magic[existingID].Tag == tag && existingID == id {
+			return i, uint32(v >> 32)
+		}
+	}
+	return -1, 0
 }
 
 /*

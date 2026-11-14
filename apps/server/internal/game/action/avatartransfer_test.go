@@ -114,3 +114,86 @@ func TestStackSplitAndMergeRoundtripThroughNativeMoveFrames(t *testing.T) {
 		t.Fatalf("merge: %+v / %+v", merge, c.MissionInventory)
 	}
 }
+
+/*
+================
+spiritCharacter
+
+A character with a Devil's Spirit in bag slot 20 and the item rows the
+runtime checks requirements against.
+================
+*/
+func spiritCharacter(t *testing.T, socket bool) (*enterworld.Character, *Runtime) {
+	t.Helper()
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 20, RefObjID: 90010, Codename: "AVATAR_DEVIL", TypeFlags: wire.PackTypeFlags(3, 1, 14, 1), VarianceBits: "0", StackCount: 1}}
+	rt, _ := newTestRuntime(c, staticItemSource{"AVATAR_DEVIL": {RefObjID: 90010, Codename: "AVATAR_DEVIL", TypeIDs: [4]int64{3, 1, 14, 1}, Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}}})
+	rt.NasrunSocket = socket
+	return c, rt
+}
+
+/*
+================
+TestSpiritWearsOnlyInTheFifthSocketWithTheSwitchOn
+
+Port-only, not native (SRO_NASRUN, #3456). Off is v1.150: the Spirit
+cannot be worn anywhere.
+================
+*/
+func TestSpiritWearsOnlyInTheFifthSocketWithTheSwitchOn(t *testing.T) {
+	c, rt := spiritCharacter(t, false)
+	if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 4}); result.Frames[0].Payload[0] != 2 {
+		t.Fatalf("switch off: worn: %+v", result)
+	}
+	c, rt = spiritCharacter(t, true)
+	// The hat's socket (its TID4) and every v1.150 slot refuse it.
+	for _, slot := range []byte{0, 1, 2, 3, 5} {
+		if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, slot}); result.Frames[0].Payload[0] != 2 {
+			t.Fatalf("slot %d accepted the Spirit", slot)
+		}
+	}
+	if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 4}); result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("slot 4 refused the Spirit: %+v", result)
+	}
+	if c.AvatarInventory == nil || c.AvatarInventory.Capacity != 5 || len(c.AvatarInventory.Rows) != 1 || c.AvatarInventory.Rows[0].Slot != 4 {
+		t.Fatalf("storage: %+v", c.AvatarInventory)
+	}
+}
+
+/*
+================
+TestNoV150AvatarTakesTheSpiritSlot
+================
+*/
+func TestNoV150AvatarTakesTheSpiritSlot(t *testing.T) {
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 20, RefObjID: 90001, Codename: "AVATAR_HAT", TypeFlags: wire.PackTypeFlags(3, 1, 13, 1), VarianceBits: "0", StackCount: 1}}
+	rt, _ := newTestRuntime(c, staticItemSource{"AVATAR_HAT": {RefObjID: 90001, TypeIDs: [4]int64{3, 1, 13, 1}, Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}}})
+	rt.NasrunSocket = true
+	if result := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 4}); result.Frames[0].Payload[0] != 2 {
+		t.Fatalf("a hat took slot 4: %+v", result)
+	}
+}
+
+/*
+================
+TestAStoredSpiritComesOffWithTheSwitchOff
+
+A Spirit worn while the switch was on stays readable with it off: it can
+be taken off (to the first free bag slot, as every avatar), and the
+storage keeps five slots while it is there.
+================
+*/
+func TestAStoredSpiritComesOffWithTheSwitchOff(t *testing.T) {
+	c, rt := spiritCharacter(t, false)
+	spirit := c.MissionInventory[0]
+	spirit.Slot = 4
+	c.MissionInventory = nil
+	c.AvatarInventory = &domain.AvatarInventory{Capacity: 5, Rows: []enterworld.InventoryRow{spirit}}
+	if result := rt.HandleItemMove(testDivision, c, []byte{0x23, 4, 20}); result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("switch off: the Spirit could not come off: %+v", result)
+	}
+	if len(c.AvatarInventory.Rows) != 0 || c.AvatarInventory.Capacity != 4 || len(c.MissionInventory) != 1 || c.MissionInventory[0].Slot != 13 {
+		t.Fatalf("after: %+v / %+v", c.AvatarInventory, c.MissionInventory)
+	}
+}

@@ -276,7 +276,9 @@ The agent bus refuses them for Cursor agents.
 Speed: the gates run concurrently, and the two heavy ones (the Go server
 gate and the client check) are skipped when nothing they read changed since
 one of their recent passes (`scripts/checks/run_if_changed.mjs`; stamps live
-in the ignored `.state/check-stamps/`). A skipped gate prints "up to date".
+in the main checkout's ignored `.state/check-stamps/`, and the client test
+cache in its `.state/client-test-cache/`, both shared by every worktree, so a
+fresh worktree starts warm). A skipped gate prints "up to date".
 Set `SRO_CHECK_FORCE=1` to run everything regardless; CI and fresh clones
 have no stamps and always run everything.
 

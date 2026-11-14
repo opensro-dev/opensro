@@ -112,6 +112,69 @@ test("a pass is reused until an input it read changes; a failure is never reused
 	}
 });
 
+test("the shared records name checkout files relatively and keep another worktree's records", () => {
+	// ops #335: records live in the main checkout, shared by every worktree,
+	// so their ids must not hold this checkout's path, and one run's write
+	// must not drop what another worktree recorded meanwhile.
+	const suite = path.join( root, "temp", `test-cache-shared-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync( path.join( suite, "value.mjs" ), "export const value = 1;\n" );
+		fs.writeFileSync(
+			path.join( suite, "reads.test.mjs" ),
+			'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+				'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
+		);
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		const indexPath = path.join( suite, ".cache", "index.json" );
+		const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+		const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+		const checkout = path.resolve( root, "../.." ).toLowerCase();
+		assert.ok( ids.some( id => id.includes( "\t~/" ) ), "checkout inputs are relative" );
+		assert.ok( !ids.some( id => id.toLowerCase().includes( checkout ) ), "no id holds this checkout's path" );
+		assert.ok( !("stats" in index), "the stat memo is not shared" );
+		assert.ok( fs.existsSync( path.join( suite, ".cache", "stats.json" ) ) );
+
+		index.records["another/worktree.test.mjs"] = { inputs: {} };
+		fs.writeFileSync( indexPath, JSON.stringify( index ) );
+		fs.appendFileSync( path.join( suite, "value.mjs" ), "// edited\n" );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		const after = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+		assert.ok( "another/worktree.test.mjs" in after.records, "another worktree's record survives" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a worktree's .git link is recorded as the main checkout it names, not its worktree name", () => {
+	// ops #335: the hub resolver reads each worktree's .git link, whose
+	// bytes name the worktree; hashed as bytes, 190 of 766 runtime files
+	// reran in every other worktree. Only the hub it names may count.
+	const suite = path.join( root, "temp", `test-cache-link-${process.pid}` );
+	const link = path.join( suite, "tree", ".git" );
+	const hub = path.join( suite, "hub" );
+	fs.mkdirSync( path.dirname( link ), { recursive: true } );
+	try {
+		fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-a\n` );
+		fs.writeFileSync(
+			path.join( suite, "link.test.mjs" ),
+			'import { test } from "node:test";\nimport fs from "node:fs";\n' +
+				'test( "reads the link", () => fs.readFileSync( new URL( "./tree/.git", import.meta.url ) ) );\n'
+		);
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-b\n` );
+		assert.deepEqual(
+			runSuite( suite ),
+			{ status: 0, reused: 1, ran: 0, failed: 0 },
+			"another worktree reuses it"
+		);
+		fs.writeFileSync( link, `gitdir: ${path.join( suite, "other" )}/.git/worktrees/fix-b\n` );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 }, "another hub reruns it" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
 test("a file over its per-file budget fails the run although its tests pass", () => {
 	const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
 	fs.mkdirSync( suite, { recursive: true } );
@@ -253,4 +316,26 @@ test("only the test's own temporary files are excluded from its inputs", async (
 	// The checkout's files are inputs wherever the checkout lives.
 	assert.equal( scratchPath( path.join( root, "src", "bootstrap.ts" ) ), false );
 	assert.equal( scratchPath( path.join( root, "temp", "fixture.mjs" ) ), false );
+});
+
+test("a cache that cannot be saved costs a rerun, never a passing run's verdict", () => {
+	// Every worktree renames onto the one shared records file, and on
+	// Windows a rename racing another fails with EPERM. A cache folder that
+	// is a file fails the save the same way on every platform.
+	const suite = path.join( root, "temp", `test-cache-unsaved-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync( path.join( suite, ".cache" ), "not a folder\n" );
+		fs.writeFileSync(
+			path.join( suite, "alone.test.mjs" ),
+			'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+		);
+		const result = runRunner( suite );
+		assert.equal( result.status, 0, result.stdout + result.stderr );
+		assert.match( result.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+		assert.match( result.stdout, /test cache: not saved/ );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 }, "nothing was kept" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
 });

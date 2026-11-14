@@ -14,6 +14,7 @@ removed it drops its link here.
 
 ===========================================================================
 */
+import { avatarSocket } from "@/engine/foundation/gameplay/avatar-socket";
 import {
 	CHAT_LINK_MARKER,
 	CHAT_LINK_SOURCE,
@@ -27,9 +28,6 @@ import {
 // The chat compose cap (CIFChatViewer_HandleChatInputKey 0x64 units); the
 // marker is one unit of it.
 const CHAT_LINE_LIMIT = 100;
-// An avatar slot id names the costume's type (typeFlags >>> 11).
-const AVATAR_TYPE_SHIFT = 11;
-
 /*
 ================
 ChatLink
@@ -98,7 +96,7 @@ export function chatLinkFromActivate( id: string, sources: ChatLinkSources ): Ch
 		item = sources.pet?.find( row => row.slot === value );
 	} else if ( prefix === "avatar:" ) {
 		source = CHAT_LINK_SOURCE.avatar;
-		item = sources.avatarInventory?.find( row => (row.typeFlags ?? 0) >>> AVATAR_TYPE_SHIFT === value );
+		item = sources.avatarInventory?.find( row => avatarSocket( row.typeFlags ?? 0 ) === value );
 	} else return null;
 	if ( !item ) return null;
 	// A pet link names the pet whose bag is open (sources.petGid); a pet

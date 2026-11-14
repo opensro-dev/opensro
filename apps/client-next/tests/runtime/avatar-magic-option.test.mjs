@@ -84,6 +84,18 @@ test("553980 formats stat options plain and rate options with a percent", () => 
 		avatarMagicOptionText( "MATTR_AVATAR_MDIA", 1, text ),
 		"PARAM_AVATAR_MDIA 1% UIIT_STT_PROBABILITY"
 	);
+	for ( const suffix of [ "_2", "_3", "_4" ] ) {
+		assert.equal(
+			avatarMagicOptionText( `MATTR_AVATAR_MDIA${suffix}`, 1, text ),
+			"PARAM_AVATAR_MDIA 1% UIIT_STT_PROBABILITY"
+		);
+	}
+	for ( const suffix of [ "", "_2", "_3", "_4" ] ) {
+		assert.equal(
+			avatarMagicOptionText( `MATTR_AVATAR_LUCK${suffix}`, 1, text ),
+			"PARAM_LUCK 1% PARAM_INCREASE"
+		);
+	}
 	assert.deepEqual( itemTooltipMagic( hat( 14, [ String( 1n << 32n | 246n ) ] ), text ), [
 		// 55C4D4: the avatar formatter's result also uses style 3 (bold).
 		{ value: "PARAM_STR 1 PARAM_INCREASE", color: 0xff00eaff, strong: true }

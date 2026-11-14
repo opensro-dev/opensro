@@ -649,6 +649,9 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
+	// NasrunSocket opens the Devil's Spirit's fifth avatar socket
+	// (SRO_NASRUN; game/nasrun; port-only, not native). False is native.
+	NasrunSocket bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.

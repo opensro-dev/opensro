@@ -23,6 +23,7 @@ import {
 	STARTING_CODE,
 	serverStarting
 } from "@/engine/foundation/session/server-starting";
+import { dockRetryDelayMs } from "@/engine/foundation/session/dock-retry";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
@@ -54,6 +55,9 @@ export function createSession(): SessionOwner {
 	let lastTitleCommand: Parameters<SessionOwner["command"]>[0] | undefined;
 	let startingRetry: { dueMs: number; command: Parameters<SessionOwner["command"]>[0]; } | null = null;
 	let startingSince: number | undefined, repeatingStart = false;
+	// A failed leave-for-character-select is repeated (dock-retry.ts): when,
+	// against which Agent, and how many repeats have run (ops #329).
+	let dockRetry: { dueMs: number; base: string; } | null = null, dockAttempt = 0;
 	let generation = 0, disposed = false, controller: AbortController | null = null;
 	let state: SessionState = Object.freeze( { phase: "signed-out", revision: 0 } ), dirty = false;
 	let identity: {
@@ -245,6 +249,7 @@ cancelTitleRequest
 		controller = null;
 		completion = null;
 		logoutPending = false;
+		dockRetry = null;
 		forgetStartingRetry();
 	}
 	/*
@@ -260,6 +265,36 @@ The wait's start survives the repeat itself, so the cap still applies.
 		lastTitleCommand = undefined;
 		startingRetry = null;
 		if ( !repeatingStart ) startingSince = undefined;
+	}
+	/*
+================
+settleNavigation
+
+A departure's request (logout, or leaving for character select) lands
+as the next tick's completion, unless a newer title request superseded it.
+================
+	*/
+	function settleNavigation(
+		request: Promise<{ httpOk: boolean; status: number; body: unknown; }>,
+		kind: "logout" | "return-to-dock",
+		base: string,
+		current: number
+	) {
+		request.then( value => {
+			if ( !disposed && generation === current ) {
+				completion = { generation: current, value, kind, expectedShard: "", apiBase: base };
+			}
+		}, () => {
+			if ( !disposed && generation === current ) {
+				completion = {
+					generation: current,
+					error: "Session navigation failed",
+					kind,
+					expectedShard: "",
+					apiBase: base
+				};
+			}
+		} );
 	}
 	/*
 ================
@@ -695,24 +730,18 @@ baseUrl
 						entityCount: 0,
 						error: undefined
 					} );}
-				const kind = departure === 1 ? "logout" : "return-to-dock";
-				(departure === 1 ?
-					http.logout( base, controller.signal ) :
-					http.returnToDock( base, controller.signal )).then( value => {
-						if ( !disposed && generation === current ) {
-							completion = { generation: current, value, kind, expectedShard: "", apiBase: base };
-						}
-					}, () => {
-						if ( !disposed && generation === current ) {
-							completion = {
-								generation: current,
-								error: "Session navigation failed",
-								kind,
-								expectedShard: "",
-								apiBase: base
-							};
-						}
-					} );
+				if ( departure === 1 ) {
+					settleNavigation( http.logout( base, controller.signal ), "logout", base, current );
+				} else {
+					dockAttempt = 0;
+					settleNavigation( http.returnToDock( base, controller.signal ), "return-to-dock", base, current );
+				}
+			}
+			if ( dockRetry && now >= dockRetry.dueMs && scope === "title" && identity ) {
+				const base = dockRetry.base, current = generation;
+				dockRetry = null;
+				controller = new AbortController();
+				settleNavigation( http.returnToDock( base, controller.signal ), "return-to-dock", base, current );
 			}
 			const worldState = world.status();
 			if ( scope === "world" && worldState.revision !== worldRevision ) publishWorld();
@@ -746,7 +775,13 @@ baseUrl
 						}
 						forgetStartingRetry();
 						if ( result.kind === "return-to-dock" ) {
-							if (
+							const delay = result.error || !result.value?.httpOk ?
+								dockRetryDelayMs( result.value ? { status: result.value.status } : {}, dockAttempt ) :
+								null;
+							if ( delay !== null ) {
+								dockAttempt++;
+								dockRetry = { dueMs: now + delay, base: result.apiBase };
+							} else if (
 								result.error || !result.value?.httpOk ||
 								(result.value.body as { ok?: boolean; })?.ok !== true
 							) publish( { ...state, error: "Could not save character-select navigation" } );

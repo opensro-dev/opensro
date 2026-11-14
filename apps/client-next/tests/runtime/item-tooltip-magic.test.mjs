@@ -190,3 +190,18 @@ test("missing degree definitions suppress positive rows while class zero resolve
 	assert.equal( itemTooltipMagic( presented, s => s )[0].value, EXPECTED.MATTR_STR );
 	inventory.clear();
 });
+
+test("v1.188 avatar Lucky and 4x stacking dress options format via avatarMagicOptionText", () => {
+	for ( const suffix of [ "", "_2", "_3", "_4" ] ) {
+		const lucky = optionItem( `MATTR_AVATAR_LUCK${suffix}`, 1 );
+		assert.deepEqual( itemTooltipMagic( lucky, s => s ), [
+			{ value: "PARAM_LUCK 1% PARAM_INCREASE", color: 0xff00eaff, strong: true }
+		] );
+	}
+	for ( const suffix of [ "_2", "_3", "_4" ] ) {
+		const mdia = optionItem( `MATTR_AVATAR_MDIA${suffix}`, 1 );
+		assert.deepEqual( itemTooltipMagic( mdia, s => s ), [
+			{ value: "PARAM_AVATAR_MDIA 1% UIIT_STT_PROBABILITY", color: 0xff00eaff, strong: true }
+		] );
+	}
+});
