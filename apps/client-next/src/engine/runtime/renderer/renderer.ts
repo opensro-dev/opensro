@@ -182,6 +182,23 @@ export function createRenderer(
 				teleport: e.teleport ? { ...e.teleport } : undefined
 			}) );
 		},
+		/*
+		================
+		maintenance
+
+		The release half of a frame for a tab that cannot display one: a
+		hidden page still adopts scenes and retires actors, and without this
+		drain their scenes, draws and texture sources wait for the next
+		visible frame (BUG-070). Outside a frame the device destroys at once.
+		================
+		*/
+		maintenance() {
+			if ( disposed || failure || device.phase() !== "running" ) return;
+			const geometry = device.geometry(), images = device.images();
+			if ( !geometry || !images ) return;
+			world.releaseRetired( geometry, images );
+			characters.releaseRetired( geometry );
+		},
 		scenery: world.scenery,
 		/*
 		================

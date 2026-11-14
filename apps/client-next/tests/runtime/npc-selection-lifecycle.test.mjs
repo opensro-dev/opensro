@@ -396,6 +396,49 @@ test("an open alchemy window blocks world-click movement until it closes", () =>
 	}
 });
 
+test("a stall or an open exchange pins the player: no walk and no skill until it closes", () => {
+	// #3433: the server refuses both (action PlayerInteractionLocked), so the
+	// client sends neither and predicts no walk or teleport.
+	const STALL_CREATE_RESULT = 0xb049, STALL_CLOSE_RESULT = 0xb42c;
+	const EXCHANGE_OPENED = 0x3219, EXCHANGE_CANCEL_RESULT = 0xb2db;
+	const cases = [
+		{
+			name: "stall",
+			open: { opcode: STALL_CREATE_RESULT, payload: Uint8Array.of( 1 ) },
+			close: { opcode: STALL_CLOSE_RESULT, payload: Uint8Array.of( 1 ) }
+		},
+		{
+			name: "exchange",
+			open: { opcode: EXCHANGE_OPENED, payload: Uint8Array.of( 9, 0, 0, 0 ) },
+			close: { opcode: EXCHANGE_CANCEL_RESULT, payload: Uint8Array.of( 1 ) }
+		}
+	];
+	for ( const { name, open, close } of cases ) {
+		const f = fixture();
+		const move = now =>
+			f.game.command(
+				{ kind: "move", destination: { regionId: 1, x: 600, y: 0, z: 0, angle: 0 } },
+				now,
+				undefined
+			);
+		const press = now => f.game.command( { kind: "skill", skillId: 1 }, now, undefined );
+		try {
+			f.game.command( { kind: "navigation", regionId: 1, bundle: navigation() }, 0, undefined );
+			f.game.receive( open, 1 );
+			const before = f.sent.length;
+			assert.equal( move( 2 ), null, `${name}: a click is ignored` );
+			assert.equal( press( 3 ), null, `${name}: a skill press is ignored` );
+			assert.equal( f.sent.length, before, `${name}: nothing is sent` );
+			f.game.receive( close, 4 );
+			assert.equal( move( 5 )?.opcode, MOVEMENT_REQUEST, `${name}: the closed window lets the player walk` );
+			// The press now reaches the skill path, which refuses the unlearned row.
+			assert.throws( () => press( 6 ), /not learned/, `${name}: the closed window lets the press through` );
+		} finally {
+			f.game.dispose();
+		}
+	}
+});
+
 test("close and release barrier retire a conversation before the same NPC opens again", () => {
 	// The NPC window's close sends the release (693790). The target window's
 	// X sends nothing (582020): it retires the conversation and no barrier.

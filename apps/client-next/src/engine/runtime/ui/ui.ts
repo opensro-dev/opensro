@@ -375,6 +375,7 @@ import {
 } from "@/engine/foundation/gameplay/fortress-production";
 import {
 	ALCHEMY_DESTROYED,
+	alchemyEffectAdditive,
 	alchemyEffectCell,
 	alchemyEffectTexture,
 	alchemyResultLines
@@ -584,7 +585,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
-import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
+import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
@@ -10535,8 +10536,9 @@ export function createUi( ports: UiPorts ) {
 			additiveImage
 
 			An effect sheet without alpha, drawn additively: black adds nothing. INFERENCE: the
-			native effect statics (ga_effect_*, alcm_effect_prepare) are opaque DXT1 art, so the
-			original can only show them by adding them to what is behind.
+			native effect statics (ga_effect_*, alcm_effect_prepare, alcm_effect_success) are opaque
+			art, alpha 255 in every texel, so the original can only show them by adding them to what
+			is behind.
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
@@ -17647,9 +17649,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
 						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
 					if ( !processing && deco && alchemyEffect && cell ) {
-						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png";
-						paths.push( effect );
-						if ( resources.has( effect ) ) image( authoredRect( deco, px, py + 150 ), effect, white, cell );
+						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png",
+							r = authoredRect( deco, px, py + 150 );
+						if ( alchemyEffectAdditive( alchemyEffect.flags ) ) additiveImage( r, effect, cell );
+						else {
+							paths.push( effect );
+							if ( resources.has( effect ) ) image( r, effect, white, cell );
+						}
 					}
 					const slots = Object.values( page ).filter( n => n.type === "CIFSlotWithHelp" ).sort( ( a, b ) =>
 						a.id - b.id
@@ -22344,7 +22350,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 							if ( next.session?.crestPrefix !== undefined && next.session.marksBase ) {
 								for ( const crest of entityCrestFiles( entity, game, next.session.crestPrefix ) ) {
-									const path = new URL( "/marks/" + crest.file, next.session.marksBase ).href;
+									const path = guildCrestUrl( next.session.marksBase, crest.file );
 									paths.push( path );
 									if ( resources.has( path ) ) {
 										quads.push( {

@@ -110,7 +110,6 @@ apps/client-next/src/engine/foundation/ui/combo-box.ts
 apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
-apps/client-next/src/engine/foundation/ui/guild-crest.ts
 apps/client-next/src/engine/foundation/ui/hit-test.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
@@ -155,7 +154,6 @@ apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
 apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
-apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs
 apps/client-next/tests/architecture/panel-navigation.test.mjs

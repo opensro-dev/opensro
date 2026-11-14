@@ -169,6 +169,24 @@ export function samePlaneAdjacent( a: number, b: number ): boolean {
 
 /*
 ================
+writeRegionOffsetXZ
+
+The allocation-free form of regionOffsetXZ for the per-frame geometry passes:
+writes the sector displacement into out instead of returning a fresh tuple.
+================
+*/
+export function writeRegionOffsetXZ( fromRegion: number, toRegion: number, out: [number, number] ) {
+	if ( isDungeonRegion( fromRegion ) || isDungeonRegion( toRegion ) ) {
+		out[0] = 0;
+		out[1] = 0;
+		return;
+	}
+	out[0] = (sectorX( toRegion ) - sectorX( fromRegion )) * REGION_SIZE;
+	out[1] = (sectorY( toRegion ) - sectorY( fromRegion )) * REGION_SIZE;
+}
+
+/*
+================
 regionOffsetXZ
 
 Returns the sector displacement [ox, oz] from fromRegion's origin to toRegion's
@@ -177,13 +195,9 @@ when either region is a dungeon region, or 1920-unit sector steps outdoors.
 ================
 */
 export function regionOffsetXZ( fromRegion: number, toRegion: number ): [number, number] {
-	if ( isDungeonRegion( fromRegion ) || isDungeonRegion( toRegion ) ) {
-		return [ 0, 0 ];
-	}
-	return [
-		(sectorX( toRegion ) - sectorX( fromRegion )) * REGION_SIZE,
-		(sectorY( toRegion ) - sectorY( fromRegion )) * REGION_SIZE
-	];
+	const out: [number, number] = [ 0, 0 ];
+	writeRegionOffsetXZ( fromRegion, toRegion, out );
+	return out;
 }
 
 /*
@@ -243,8 +257,22 @@ samePlaneAdjacent is false).
 ================
 */
 export function worldDelta( from: RegionXZ, to: RegionXZ ): [number, number] {
-	const [ox, oz] = regionOffsetXZ( from.regionId, to.regionId );
-	return [ to.x - from.x + ox, to.z - from.z + oz ];
+	const out: [number, number] = [ 0, 0 ];
+	writeWorldDelta( from, to, out );
+	return out;
+}
+
+/*
+================
+writeWorldDelta
+
+The allocation-free form of worldDelta for the per-frame geometry passes.
+================
+*/
+export function writeWorldDelta( from: RegionXZ, to: RegionXZ, out: [number, number] ) {
+	writeRegionOffsetXZ( from.regionId, to.regionId, out );
+	out[0] += to.x - from.x;
+	out[1] += to.z - from.z;
 }
 
 /*

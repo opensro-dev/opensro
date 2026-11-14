@@ -12,6 +12,7 @@ import type { CharacterActor } from "@/engine/contracts/character";
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer, FrameWork } from "@/engine/contracts/runtime";
+import { actorQueryRows } from "@/engine/foundation/animation/actor-query-rows";
 import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equipment-appearance";
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
@@ -327,7 +328,11 @@ export function presentEmission( frame: EmissionFrame, bindings: EmissionBinding
 			renderer.presentationNight?.() ?? true,
 			( gid, actor ) => {
 				if ( !actor ) return renderer.characterParticleSnapshot( gid );
-				const matrix = renderer.characterMatrix( [ ...next.values(), actor ], gid );
+				// The matrix resolves this holder through its own attachment
+				// chain; spreading the whole actor table into the query (plus
+				// the holder, per emission, per frame) rebuilt the resolver's
+				// gid index over every actor for one row it reads.
+				const matrix = renderer.characterMatrix( actorQueryRows( next, [ actor ] ), gid );
 				return matrix ? { matrix, regionId: actor.pose.regionId } : null;
 			},
 			gid => renderer.characterParticleTime?.( gid ),

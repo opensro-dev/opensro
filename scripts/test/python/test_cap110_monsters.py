@@ -771,10 +771,13 @@ class Cap110MonstersTest(unittest.TestCase):
 			"textdata_object.txt": utf16([
 				["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
 				["2", "UIO_OBJ_MOB_SD_LOW", "x", "x", "Low monster", "l", "x", "a", "b", "c"]]),
+			# The v1.188 characterinfo rows are 16 wide, as the shipped
+			# MOB_SD_MONT row (sound, height 3.5, ..., three trailing columns).
 			"skilleffect.txt": utf16([
 				["#section", "characterinfo"],
-				["MOB_SD_FIELD"] + ["0"] * 12,
-				["MOB_SD_LOW"] + ["0"] * 12,
+				["MOB_SD_FIELD", "MOB_TK_BONEGENERAL", "3.5"] + ["none"] * 5 +
+					["0,14,-3.6", "hit_2_metal", "none", "0", "0", "note", "", ""],
+				["MOB_SD_LOW"] + ["0"] * 15,
 				["#section", "skillaniset"]]),
 		}
 		(vsro / "Media.pk2").write_bytes(archive_bytes(media))
@@ -810,6 +813,14 @@ class Cap110MonstersTest(unittest.TestCase):
 			self.assertNotIn("MOB_SD_LOW", shard)
 			marker = json.loads((output / monsters.MARKER).read_text(encoding="utf-8"))
 			self.assertEqual(marker["source"], "client")
+			# The admitted species carries its own characterinfo height
+			# (the name board's anchor), cut to the native width.
+			effect = (text_root / "skilleffect.txt").read_bytes().decode("utf-16").splitlines()
+			field = [line.split("	") for line in effect if line.startswith("MOB_SD_FIELD	")]
+			self.assertEqual(len(field), 1)
+			self.assertEqual(field[0][:3], ["MOB_SD_FIELD", "MOB_TK_BONEGENERAL", "3.5"])
+			self.assertEqual(len(field[0]), monsters.characters.SKILL_EFFECT_COLUMNS)
+			self.assertIn("MOB_SD_FIELD", marker["characterInfo"])
 
 	# ================
 	# test_export_still_wins_when_it_is_named

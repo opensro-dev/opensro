@@ -3,9 +3,12 @@
 
 chat.ts - character-session chat, receipts and received public history
 
-World travel replaces scene data, not the conversation. Character changes and
-session disposal clear it. A server-authored public echo determines the beta
-channel; its later native receipt only releases the outstanding request.
+World travel replaces scene data, not the conversation, and so does a
+re-entry of the same character after its session was lost (#3435): the
+lines a player was away for stay to be read. Character changes, a departure
+to character select and session disposal clear it. A server-authored public
+echo determines the beta channel; its later native receipt only releases the
+outstanding request.
 
 ===========================================================================
 */
@@ -42,6 +45,11 @@ const CHAT_GLOBAL_CHANNEL = 6;
 // (history.go OpChatHistory). Version 2 carries each line's send time.
 const CHAT_HISTORY_VERSION = 2;
 const CHAT_HISTORY_LIMIT = 10;
+// A replayed line repeats a retained one (#3435) when its channel, sender and
+// text match and its server send time lies this close to the retained line's
+// time. A live line carries no send time and is stamped with this client's
+// clock on arrival, so the window absorbs the two clocks' skew.
+const CHAT_REPLAY_MATCH_MS = 5 * 60 * 1000;
 // The player channels whose lines may carry item links (port-only,
 // SRO_CHAT_ITEM_LINKS): All, whisper, GM, party, guild, global and union.
 // Stall lines never do in v1.
@@ -294,6 +302,34 @@ Live lines are stamped on arrival; replayed history keeps the server's time.
 			sentAt: line.sentAt ?? Date.now()
 		} ];
 	}
+	/*
+================
+retained
+
+Whether the log as it stood before the replay already holds a replayed line
+(CHAT_REPLAY_MATCH_MS). A replay that repeats its own text keeps both.
+================
+	*/
+	function retained( log: readonly ChatLine[], channel: number, sender: string, text: string, sentAt: number ) {
+		return log.some( line =>
+			line.channel === channel && line.name === sender && line.text === text &&
+			Math.abs( (line.sentAt ?? 0) - sentAt ) <= CHAT_REPLAY_MATCH_MS
+		);
+	}
+	/*
+================
+suspend
+
+The transport the character spoke on is gone: a send waiting for its
+receipt and a block waiting for its answer will hear nothing.
+================
+	*/
+	function suspend() {
+		blockPending = false;
+		blockError = null;
+		pending = null;
+		error = null;
+	}
 	return {
 		/*
 ================
@@ -478,7 +514,11 @@ receive
 			if ( frame.opcode === CHAT_HISTORY_CONTROL ) {
 				// The beta public transcript the server replays at admission: lines
 				// already said, filed as history so nothing presents them as speech.
+				// After a re-entry the retained log already holds the lines it
+				// repeats (#3435).
+				const before = lines;
 				for ( const line of decodeChatHistory( p ) ) {
+					if ( retained( before, line.channel, line.sender, line.text, line.sentAt ) ) continue;
 					if ( !chatIsBlocked( localBlocks, line.channel, line.sender ) ) {
 						append( {
 							channel: line.channel,
@@ -575,17 +615,20 @@ state
 		},
 		/*
 ================
+suspend
+================
+		*/
+		suspend,
+		/*
+================
 clear
 ================
 		*/
 		clear() {
+			suspend();
 			blocked = [];
-			blockPending = false;
-			blockError = null;
 			lines = [];
 			feedback = [];
-			pending = null;
-			error = null;
 			name = "";
 			alias = "";
 			displayName = "";
