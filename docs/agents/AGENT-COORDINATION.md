@@ -43,6 +43,24 @@ pull request. An issue with `status: claimed` held by someone else is
 skipped, as is one with an open linked pull request. A maintainer lease
 lasts 24 hours; pushing to the linked pull request keeps it alive.
 
+`status: gated` keeps an issue out of the pull until something it needs
+exists. Whoever gates an issue writes one line in its body saying what
+lifts the gate:
+
+```
+Ungate when: #2519 closed
+Ungate when: live carries #3199 and after 2026-11-16T06:00Z
+Ungate when: owner decides
+```
+
+The forms are `#N closed` (one or more numbers), `live carries #N` (a merged
+pull request the live release includes), `after YYYY-MM-DDTHH:MMZ`,
+`owner decides` and `container` (a backlog that holds items), joined with
+`and`. The gates sweep (`.github/workflows/gates.yml`) lifts the label within
+the hour once every condition holds, and asks once on a gated issue with no
+line. An `owner decides` gate waits for the owner's batched questions; it
+never lifts by itself.
+
 ## The shared log
 
 One append-only text file is the team's channel. Never rewrite or delete
