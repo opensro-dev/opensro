@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/moderation"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
@@ -127,6 +128,7 @@ func newGameplayPlane(
 	}
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
+	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {

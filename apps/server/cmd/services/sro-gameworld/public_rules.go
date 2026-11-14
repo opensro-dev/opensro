@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/contributor"
@@ -309,6 +310,7 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: nasrun.Env, On: nasrun.Enabled(os.Getenv(nasrun.Env)), Native: "Avatar storage holds four avatars: hat, dress, attachment and flag.", Now: "A fifth avatar socket holds a Devil's Spirit.", Why: "Optional port-only step toward the later Devil's Spirit (#3456)."},
 			{Flag: sookarena.Env, On: sookarena.Enabled(os.Getenv(sookarena.Env)), Native: "Event So-ok offers no solo survival arena.", Now: "Three private survival entries per account per UTC day, shared by its characters, five stages, fivefold EXP/SP and checkpoint reward chests.", Why: "Optional port-only survival event."},
 			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
