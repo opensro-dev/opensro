@@ -105,6 +105,7 @@ class AvailabilityTests(unittest.TestCase):
 			variant.enable_regions(b"nope" * 10, [(1, 1)])
 
 
+
 def table(rows):
 	return b"\xff\xfe" + variant.table_text(rows).encode("utf-16-le")
 

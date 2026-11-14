@@ -83,10 +83,10 @@ TEXTDATA = stage1.TEXTDATA
 # Port-only, not native: the city's gates and ferry, plus the two authored
 # outdoor crossings: Delta East is Abundance Ground; Delta West is Forbidden Plain.
 # Ferry teleportdata names an NPC, not a teleportbuilding.
+# The crossings' far ends come from stage 1, which imports their terrain.
 GATE_CODES = (
-	"GATE_SD1", "GATE_SD2", "GATE_NPC_SD_M_AREA_FERRY",
-	"GATE_DELTA_GATE_E", "GATE_DELTA_GATE_W", "GATE_STORMDESERT_GATE", "GATE_KINGSVALLEY_GATE"
-)
+	"GATE_SD1", "GATE_SD2", "GATE_NPC_SD_M_AREA_FERRY", "GATE_DELTA_GATE_E", "GATE_DELTA_GATE_W"
+) + stage1.CROSSING_GATE_CODES
 # Port-only, not native: the Pharaoh Tomb's gates, added with SRO_PHARAOH_TOMB.
 # The one entrance in Kings Valley links to the three tomb exits. The source's
 # GATE_TOMBOSIRIS_* rows have no position and are not carried.
@@ -621,6 +621,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	replace_file(mapinfo, enable_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes(), regions))
 
 	gates, gate_tables = add_gates(vsro_root, native, out)
+	stranded = stage1.gates_without_terrain(gate_tables["teleportdata.txt"], GATE_CODES,
+		set(regions) | stage1.mfo_regions((native / "Data_extracted" / "navmesh" / "mapinfo.mfo").read_bytes()))
+	if stranded:
+		raise SystemExit(f"gates {', '.join(stranded)} stand on regions stage 1 did not import; rerun stage 1")
 	pharaoh_temple = temple.add_temple(vsro_root, native, out)
 	# The map step adds to textdataname.txt on top of the gates' texts.
 	city_map = add_map(vsro_root, native, out, regions, gate_tables["text"])

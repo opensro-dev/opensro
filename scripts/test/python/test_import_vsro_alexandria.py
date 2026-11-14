@@ -116,6 +116,55 @@ class AvailabilityTests(unittest.TestCase):
 	def test_the_seeds_stay_even_with_no_candidates(self):
 		self.assertEqual(alex.connected_regions([(5, 6), (4, 6)], set()), [(4, 6), (5, 6)])
 
+	# ================
+	# test_crossing_gates_seed_the_terrain_at_their_far_end
+	#
+	# Delta West's link lands in Kings Valley: that region and the terrain
+	# touching it are imported, so the teleport has somewhere to land.
+	# ================
+	def test_crossing_gates_seed_the_terrain_at_their_far_end(self):
+		def gate(code, region):
+			return ["1", "181", code, "27758", "SN_ZONE", str(region), "910", "221", "1793", "50", "0", "0", "1"]
+		raw = utf16_table([
+			gate("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			gate("GATE_STORMDESERT_GATE", (84 << 8) | 65),
+			gate("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			gate("GATE_SD1", (90 << 8) | 48)
+		])
+		crossings = alex.gate_seed_regions(raw)
+		self.assertEqual(crossings, {(57, 74), (65, 84)})
+		self.assertEqual(alex.gate_seed_regions(raw, ("GATE_TOMB_GATE_OUT_1",)), set())
+		candidates = {(57, 74), (58, 74), (65, 84), (90, 90)}
+		self.assertEqual(alex.connected_regions([(48, 90)], candidates, crossings),
+			[(57, 74), (58, 74), (65, 84), (48, 90)])
+
+	def test_a_missing_crossing_gate_stops_the_import(self):
+		raw = utf16_table([["1", "180", "GATE_STORMDESERT_GATE", "0", "SN", str((84 << 8) | 65)]])
+		with self.assertRaises(SystemExit):
+			alex.gate_seed_regions(raw)
+
+	# ================
+	# test_a_gate_on_a_region_without_terrain_is_reported
+	#
+	# A gate whose outdoor region is outside the terrain (the variant's plus
+	# the native, read from the native mapinfo.mfo) would end the session on
+	# arrival; dungeon gates and gates outside codes are not this check's.
+	# ================
+	def test_a_gate_on_a_region_without_terrain_is_reported(self):
+		def at(code, region):
+			return ["1", "1", code, "0", "SN", str(region), "0", "0", "0", "50", "0", "0", "1"]
+		raw = utf16_table([
+			at("GATE_SD1", (90 << 8) | 48),
+			at("GATE_NATIVE", (100 << 8) | 100),
+			at("GATE_KINGSVALLEY_GATE", (74 << 8) | 57),
+			at("GATE_TOMB_GATE_OUT_1", 0x8000 | 12),
+			at("GATE_ELSEWHERE", (10 << 8) | 10)
+		])
+		codes = ("GATE_SD1", "GATE_NATIVE", "GATE_KINGSVALLEY_GATE", "GATE_TOMB_GATE_OUT_1")
+		terrain = {(48, 90)} | alex.mfo_regions(availability({(100, 100)}))
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain), ["GATE_KINGSVALLEY_GATE"])
+		self.assertEqual(alex.gates_without_terrain(raw, codes, terrain | {(57, 74)}), [])
+
 
 class TerrainTests(unittest.TestCase):
 	def test_tile_ids_drop_the_scale_bits(self):
