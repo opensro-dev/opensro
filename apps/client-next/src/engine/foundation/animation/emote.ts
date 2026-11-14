@@ -68,13 +68,11 @@ export function emoteAttachments(
 ================
 stallAttachments
 
-A living player keeping a stall plays the stall motion (80, installed by
-8E6B50): a greeting whose hands wave and offer, so its hand attachments are
-hidden while the stall stands and return when it closes (#3443).
-
-INFERENCE: 8E6B50 is taken to empty the hands the way the emote entry
-8E6310 does (85EA20 -> A94CF0), since motion 80 is drawn for empty hands;
-the owner reports the original shows no weapon at a stall.
+A living player keeping a stall plays the stall motion (80): 8E6B50
+(CICharactor_Action_OpenVendor) installs it and, for a CICUser, calls
+85EA20 with 0 (8E6B88), the same hand hide the emote entry 8E6310 issues
+(8E6386), so the hand attachments are hidden while the stall stands and
+return when it closes (#3443).
 ================
 */
 export function stallAttachments( player: boolean, keepingStall: boolean, dead: boolean ): boolean {
