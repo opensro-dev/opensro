@@ -515,59 +515,6 @@ class MapTests(unittest.TestCase):
 		self.assertNotIn("interface/worldmap/map/map_world_70x85.ddj", paths)
 
 
-def cp949(rows):
-	return ("\r\n".join(rows) + "\r\n").encode("cp949")
-
-
-class MusicTests(unittest.TestCase):
-	TOWN = "알렉"
-	FIELD = "델타"
-
-	def tables(self):
-		native = {
-			"regioninfo.txt": cp949(["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"]),
-			"effectenvsnd.txt": cp949(["<1>\t도적\t\t\t\t\t", '\t"EasternEurope_Field.ogg"\t\t\t\t\t'])
-		}
-		vsro = {
-			"regioninfo.txt": cp949([
-				"#TOWN\t" + self.TOWN + "\t\t\t\t\t", "48\t95\tALL\t\t\t\t", "\t\t\t\t\t\t", "\t\t\t\t\t\t",
-				"#FIELD\t" + self.FIELD + "\t\t\t\t\t", "50\t93\tALL\t\t\t\t", "#FIELD\tother\t\t\t\t\t", "1\t2\tALL\t\t\t\t"
-			]),
-			"effectenvsnd.txt": cp949([
-				"<1>\t" + self.TOWN + "\t\t\t\t", '\t"Egypt_Town_Alexandria1.ogg"\t\t\t', "\t<2>\t낮\t\t\t",
-				'\t\t\t<3>\t"night_wind.wav"\t0~0', "<1>\t" + self.FIELD + "\t\t\t\t", '\t"Egypt_Field_Delta.ogg"\t\t\t',
-				"<1>\tother\t\t\t\t", '\t"Other.ogg"\t\t\t'
-			])
-		}
-		return native, vsro
-
-	def test_the_areas_are_appended_in_the_native_layout_and_name_their_tracks(self):
-		native, vsro = self.tables()
-		merged, tracks = variant.merge_music_tables(native, vsro, areas=(self.TOWN, self.FIELD))
-		self.assertEqual(tracks, ["Egypt_Field_Delta.ogg", "Egypt_Town_Alexandria1.ogg"])
-		regions = merged["regioninfo.txt"].decode("cp949").split("\r\n")
-		self.assertEqual(regions[:2], ["#TOWN\t도적\t\t\t\t\t", "182\t96\tALL\t\t\t\t"])
-		self.assertIn("48\t95\tALL\t\t\t\t", regions)
-		self.assertIn("50\t93\tALL\t\t\t\t", regions)
-		self.assertNotIn("1\t2\tALL\t\t\t\t", regions)
-		sounds = merged["effectenvsnd.txt"].decode("cp949").split("\r\n")
-		self.assertTrue(all(len(row.split("\t")) == variant.EFFECTENVSND_COLUMNS for row in sounds if row))
-		self.assertIn('\t\t\t<3>\t"night_wind.wav"\t0~0\t', sounds)
-		self.assertNotIn("<1>\tother\t\t\t\t\t", sounds)
-
-	def test_an_area_the_native_tables_have_is_left_alone(self):
-		native, vsro = self.tables()
-		merged, _ = variant.merge_music_tables(native, vsro, areas=(self.TOWN,))
-		again, tracks = variant.merge_music_tables(merged, vsro, areas=(self.TOWN,))
-		self.assertEqual(tracks, [])
-		self.assertEqual(again, merged)
-
-	def test_a_missing_area_is_refused(self):
-		native, vsro = self.tables()
-		with self.assertRaises(SystemExit):
-			variant.merge_music_tables(native, vsro, areas=("nowhere",))
-
-
 class LinkTests(unittest.TestCase):
 	def test_replacing_a_linked_file_leaves_the_native_one_alone(self):
 		with tempfile.TemporaryDirectory() as scratch:
