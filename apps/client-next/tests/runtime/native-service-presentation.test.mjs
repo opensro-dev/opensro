@@ -83,6 +83,12 @@ test("a new main item replaces the slotted one instead of being refused", () => 
 		mode: "compound",
 		slots: [ 15 ]
 	} );
+	// 6248F1: advanced never takes the rondo as a filler, so a rondo on a
+	// holding advanced window resets it even with a slot free.
+	assert.deepEqual( alchemySelection( "advanced", [ 13, 14 ], item( 15, 0x35ec ) ), {
+		mode: "compound",
+		slots: [ 15 ]
+	} );
 	// A compound pill still fills an open compound slot; equipment stays
 	// refused outside dissolve and a full compound refuses its filler.
 	assert.deepEqual( alchemySelection( "compound", [ 13 ], item( 15, 0x35ec ) ), {
