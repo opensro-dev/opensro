@@ -1656,6 +1656,21 @@ export function createWorldRenderer(
 			}
 			textureWaiters.delete( path );
 		},
+		/*
+		================
+		releaseRetired
+
+		The release half of prepare, safe to run while no frame can: retired
+		scenes hold up to WORLD_SCENE_BYTES of CPU geometry and their GPU
+		draws until the next visible frame, so a hidden tab that keeps
+		crossing regions grew without bound (BUG-070's world half). Outside a
+		frame the device destroys at once (retirement.ts).
+		================
+		*/
+		releaseRetired( geometry: GeometryCommands, textures: ImageCommands ) {
+			while ( retired.length ) release( retired.pop()!, geometry );
+			if ( prune ) collectUnused( textures );
+		},
 		prepare(
 			geometry: GeometryCommands,
 			textures: ImageCommands,

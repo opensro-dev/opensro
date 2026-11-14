@@ -3295,6 +3295,22 @@ the next full prepare pass, so this may run between frames.
 		},
 		/*
 		================
+		releaseRetired
+
+		Drain retired draws without a frame: the GPU half of retirement
+		waited for the next visible prepare (BUG-070), so a hidden tab with
+		actors coming and going kept their buffers alive without bound. A
+		failed release leaves the draw queued, exactly as in retireResidency.
+		================
+		*/
+		releaseRetired( geometry: GeometryCommands ) {
+			while ( retiredDraws.length ) {
+				geometry.release( retiredDraws[retiredDraws.length - 1]! );
+				retiredDraws.pop();
+			}
+		},
+		/*
+		================
 		prepare
 
 		Retire unwanted resources, evaluate visible actors and reuse bounded GPU batches.
