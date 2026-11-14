@@ -113,3 +113,12 @@ test("a build without later tiles stays native and reports no error", () => {
 	assert.deepEqual( minimap.dungeons()?.get( TOMB ), [] );
 	assert.equal( minimap.error(), null );
 });
+
+test("the merged floors and art are built once, not on every frame's ask", () => {
+	const { minimap } = resources();
+	// The HUD asks every frame; the variant build rebuilt every tile map
+	// each time (209 KB a frame in the allocation gauge, 2026-11-14).
+	assert.equal( minimap.art(), minimap.art() );
+	assert.equal( minimap.dungeons(), minimap.dungeons() );
+	assert.ok( minimap.art()?.size, "the merged art holds the tiles" );
+});

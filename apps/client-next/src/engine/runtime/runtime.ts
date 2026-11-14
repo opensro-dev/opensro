@@ -1467,6 +1467,11 @@ export function startRuntime(
 					undefined;
 				if ( rendered ) {
 					await rendered;
+				} else if ( !visible ) {
+					// BUG-070: without a frame the release half of retirement never
+					// ran, so a hidden tab kept retired scenes, draws and texture
+					// sources alive without bound until it was shown again.
+					renderer.maintenance?.();
 				}
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );

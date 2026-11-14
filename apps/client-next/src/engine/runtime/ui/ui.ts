@@ -375,6 +375,7 @@ import {
 } from "@/engine/foundation/gameplay/fortress-production";
 import {
 	ALCHEMY_DESTROYED,
+	alchemyEffectAdditive,
 	alchemyEffectCell,
 	alchemyEffectTexture,
 	alchemyResultLines
@@ -584,7 +585,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
-import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
+import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
@@ -6226,7 +6227,7 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
-			if ( itemMall.read().visible ) {
+			if ( itemMall.isOpen() ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
 					if ( event.id === "item-mall-search" ) {
@@ -9186,6 +9187,19 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
+					// The stall window (CIFStall) is game state too: Escape
+					// did nothing but open the System menu, so a player could
+					// not leave a stall from the keyboard. A panel drawn beside
+					// it (Inventory, or a separate window the stall leaves open) is
+					// the window Escape closes first, as the topmost one; then
+					// the stall's shared close sends what its close control
+					// sends: leave for a visitor, close for the owner.
+					const stallPhase = view?.gameplay?.stall?.phase;
+					if ( !panel && (stallPhase === "owner" || stallPhase === "visitor") ) {
+						activate( stallPhase === "owner" ? "stall-close" : "stall-leave" );
+						dirty = true;
+						return;
+					}
 					confirmDrop = "";
 					closeServer();
 					confirmAbandon = false;
@@ -9430,7 +9444,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
-			if ( next.travel && !view?.travel && itemMall.read().visible ) {
+			if ( next.travel && !view?.travel && itemMall.isOpen() ) {
 				itemMall.close();
 				dirty = true;
 			}
@@ -9579,7 +9593,7 @@ export function createUi( ports: UiPorts ) {
 			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
 				const potionState = companionPotions.state(), potionSettings = potionState.saved;
-				const potionBlocked = transportPotionBlocked( game ) || itemMall.read().visible ||
+				const potionBlocked = transportPotionBlocked( game ) || itemMall.isOpen() ||
 					!!(carriedItem || carriedShortcut);
 				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
 					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
@@ -10195,7 +10209,7 @@ export function createUi( ports: UiPorts ) {
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
 				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
-				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.read().visible;
+				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.isOpen();
 				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
 					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
 				}
@@ -10522,8 +10536,9 @@ export function createUi( ports: UiPorts ) {
 			additiveImage
 
 			An effect sheet without alpha, drawn additively: black adds nothing. INFERENCE: the
-			native effect statics (ga_effect_*, alcm_effect_prepare) are opaque DXT1 art, so the
-			original can only show them by adding them to what is behind.
+			native effect statics (ga_effect_*, alcm_effect_prepare, alcm_effect_success) are opaque
+			art, alpha 255 in every texel, so the original can only show them by adding them to what
+			is behind.
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
@@ -17634,9 +17649,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
 						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
 					if ( !processing && deco && alchemyEffect && cell ) {
-						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png";
-						paths.push( effect );
-						if ( resources.has( effect ) ) image( authoredRect( deco, px, py + 150 ), effect, white, cell );
+						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png",
+							r = authoredRect( deco, px, py + 150 );
+						if ( alchemyEffectAdditive( alchemyEffect.flags ) ) additiveImage( r, effect, cell );
+						else {
+							paths.push( effect );
+							if ( resources.has( effect ) ) image( r, effect, white, cell );
+						}
 					}
 					const slots = Object.values( page ).filter( n => n.type === "CIFSlotWithHelp" ).sort( ( a, b ) =>
 						a.id - b.id
@@ -22331,7 +22350,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 							if ( next.session?.crestPrefix !== undefined && next.session.marksBase ) {
 								for ( const crest of entityCrestFiles( entity, game, next.session.crestPrefix ) ) {
-									const path = new URL( "/marks/" + crest.file, next.session.marksBase ).href;
+									const path = guildCrestUrl( next.session.marksBase, crest.file );
 									paths.push( path );
 									if ( resources.has( path ) ) {
 										quads.push( {
@@ -26484,7 +26503,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					6
 				);
 			}
-			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
+			if ( worldVisible && game && itemMall.isOpen() && hud.data() ) {
 				const data = hud.data()!;
 				// Port-only (#3257): the Experimental mall categories row
 				// puts the later rail in force; the row off is the native
@@ -28449,7 +28468,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				titleCredit: next.frontend?.phase === "login" && !loading,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
-					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
+					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
 				// The DOM tools stay at the top right beside the minimap on desktop;
 				// companion status icons hang below them (cosStatusDesktopTop, BUG-087).

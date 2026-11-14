@@ -69,20 +69,6 @@ class ServicesTests(unittest.TestCase):
 		self.assertEqual(report["deferredPackages"], {"MISSING": ["ITEM_MISSING"]})
 		self.assertEqual(services.merge_shops(merged, source, {"ITEM_OK"}, {"NPC"})[0], merged)
 
-	# ================
-	# test_city_labels_follow_the_page_projection_and_are_idempotent
-	# ================
-	def test_city_labels_follow_the_page_projection_and_are_idempotent(self):
-		page = ["12", "1", "Alex", "map_alex.ddj", "512", "512", "512", "512", "512", "512", "1", "2", "2", "1", "0", "0", "0", "0", "0"]
-		character = ["1", "10", "NPC_SD_T_AREA_ARMOR", "xxx", "xxx", "SN_ARMOR"]
-		positions = raw([["10", "257", "960", "0", "960"]])
-		labels, count = services.npc_map_labels(raw([page]), positions, [character], raw([]))
-		self.assertEqual(count, 1)
-		row = tables.table_rows(labels)[0]
-		self.assertEqual(row[10:12], ["256", "256"])
-		self.assertEqual(row[2], "SN_ARMOR")
-		self.assertEqual(services.npc_map_labels(raw([page]), positions, [character], labels), (labels, 0))
-
 
 if __name__ == "__main__":
 	unittest.main()

@@ -1054,7 +1054,7 @@ scroll's kind-0 row does not.
 		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
 		if ( teleportMode === 1 ) return "teleport";
-		if ( interactionBlocked() ) return "blocked";
+		if ( interactionBlocked() || inventory.tradePinned() ) return "blocked";
 		if ( frozen() ) return "frozen";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
@@ -1586,10 +1586,12 @@ bag keeps one marker row, not the whole bag.
 clearState
 
 Retire session facts together so a later character cannot inherit bindings,
-selected entities, cooldowns or world-entry state.
+selected entities, cooldowns or world-entry state. keepChat keeps the
+conversation for a re-entry (#3435); the chat owner's bootstrap still
+clears it when another character enters.
 ================
 	*/
-	function clearState() {
+	function clearState( keepChat = false ) {
 		actionSession.clear();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
@@ -1647,7 +1649,8 @@ selected entities, cooldowns or world-entry state.
 		progression = { masteries: [] };
 		skillGroups.clear();
 		movement.clear();
-		chat.clear();
+		if ( keepChat ) chat.suspend();
+		else chat.clear();
 		pickup.clear();
 		cosPickup.clear();
 		quests.clear();
@@ -2712,6 +2715,14 @@ state here before a command can claim a native wire conversation.
 			if (
 				interactionBlocked() &&
 				[ "move", "ground-move", "attack", "pickup", "cos-attack" ].includes( command.kind )
+			) return null;
+			// INFERENCE (#3433): a stall or an open exchange pins the player as
+			// the server does (action PlayerInteractionLocked): no walk, attack
+			// or skill, so a teleport cannot carry it out. Nothing is sent, so
+			// nothing is predicted and snapped back.
+			if (
+				inventory.tradePinned() &&
+				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
 			// logout countdown before the seated and navigation checks.
@@ -6280,10 +6291,10 @@ World transfer retires spatial work while retaining character/session data.
 reset
 ================
 		*/
-		reset() {
+		reset( keepChat = false ) {
 			live = false;
 			deferredSends = [];
-			clearState();
+			clearState( keepChat );
 			dirty = true;
 		},
 		/*

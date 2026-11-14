@@ -6945,6 +6945,68 @@ test("Escape closes the stall network window instead of opening the System menu"
 	}
 });
 
+test("Escape leaves or closes the stall window instead of opening the System menu", () => {
+	for ( const [phase, owner, kind] of [ [ "visitor", 2, "stall-leave" ], [ "owner", 1, "stall-close" ] ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase, owner, open: true }
+			};
+			let now = 1000;
+			const draw = () => {
+				for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, now += 100 );
+			};
+			const stallCommands = () => commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" );
+			draw();
+			// 5A0DC0 -> 69C7C0 shows the main popup on its Inventory tab beside
+			// the stall: that window is topmost and takes the first Escape.
+			assert.equal( f.ui.stats().panel, "Inventory", "the stall shows Inventory beside it" );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			draw();
+			assert.deepEqual( stallCommands(), [], `a ${phase}'s first Escape closes Inventory` );
+			assert.equal( f.ui.stats().panel, "", "Inventory closed" );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			assert.deepEqual(
+				stallCommands(),
+				[ { kind } ],
+				`a ${phase}'s Escape does what the stall's close control does`
+			);
+			assert.notEqual( f.ui.stats().panel, "System", "and does not open the System menu over it" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
+test("Escape closes a window beside the stall before it closes the stall", () => {
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			return scene;
+		};
+		const stallCommands = () => commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" );
+		// The HUD takes a window press only once it has drawn.
+		draw();
+		f.ui.event( { kind: "activate", id: "open-window:Guild" } );
+		draw();
+		assert.ok( scene.controls.find( row => row.id === "close-window:Guild" ), "Guild opened" );
+		f.state.gameplay = { ...f.state.gameplay, stall: { ...emptyStall(), phase: "owner", owner: 1, open: true } };
+		draw();
+		assert.ok( scene.controls.find( row => row.id === "close-window:Guild" ), "Guild stays open beside the stall" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		draw();
+		assert.deepEqual( stallCommands(), [], "the first Escape closes Guild, not the owner's stall" );
+		assert.equal( !!scene.controls.find( row => row.id === "close-window:Guild" ), false, "Guild closed" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual( stallCommands(), [ { kind: "stall-close" } ], "the next Escape closes the stall" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a stall beside a separate window keeps that window open", () => {
 	const f = uiFixture();
 	try {

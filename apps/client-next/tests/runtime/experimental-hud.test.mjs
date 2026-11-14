@@ -197,9 +197,10 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	// 64: the Entire-map level checkbox (#3258) left when the v1.188
-	// window's own foot checkbox became the map's native switch.
-	assert.equal( keys.length, 64 );
+	// 65: the Entire-map level checkbox (#3258) left when the v1.188
+	// window's own foot checkbox became the map's native switch, and the
+	// unique spawn points row (#3417) joined World map (M).
+	assert.equal( keys.length, 65 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(
@@ -245,17 +246,19 @@ test("a gesture under the click slop is a click and moves nothing", () => {
 	assert.equal( hud.endDrag(), false, "past the slop it is a drag, even without a row step" );
 });
 
-test("gating drops the row, then an emptied section", () => {
-	// No world session: no hunting guide, so its row goes and World map
-	// (M), its only row gone, goes with it; no HD set.
-	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
-	assert.ok( !map?.sections.some( section => section.title === "World map (M)" ) );
-	const world = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1 } });
-	assert.ok(
-		experimentalTabs( world, false ).find( tab => tab.title === "Map" )?.sections.some(
+test("gating drops the guide row without a world session, and no HD set drops HD", () => {
+	// No world session: no hunting guide, so its row goes. World map (M)
+	// stays: the unique spawn points row (#3417) needs no session.
+	const worldMap = ( session ) =>
+		experimentalTabs( session, false ).find( tab => tab.title === "Map" )?.sections.find(
 			section => section.title === "World map (M)"
-		),
-		"with a session the guide's row keeps the section"
+		);
+	assert.deepEqual( worldMap( null )?.rows.map( row => row.key ), [ "uniqueSpawnPoints" ] );
+	const world = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1 } });
+	assert.deepEqual(
+		worldMap( world )?.rows.map( row => row.key ),
+		[ "monsterGuide", "uniqueSpawnPoints" ],
+		"with a session the guide's row is listed"
 	);
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });

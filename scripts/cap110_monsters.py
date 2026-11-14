@@ -582,6 +582,29 @@ def characterinfo_codenames(effect_text):
 
 
 # ================
+# later_characterinfo_rows
+#
+# The later client's characterinfo rows, cut to the native record. Its rows
+# are 16 wide (MOB_SD_MONT: sound, height 3.5, ..., then a 0, a note and two
+# empty columns) where the native ones are 13; the first SKILL_EFFECT_KEPT
+# columns are the same record, so a width test of exactly 13 admitted no row
+# and every species fell back to the default height, its name board at the
+# waist.
+# ================
+def later_characterinfo_rows(effect_text):
+	section, rows = None, []
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+			continue
+		columns = line.split("	")
+		if section == "characterinfo" and len(columns) >= characters.SKILL_EFFECT_COLUMNS:
+			rows.append(columns[:characters.SKILL_EFFECT_KEPT])
+	return rows
+
+
+# ================
 # add_monsters
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
@@ -736,8 +759,7 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
 		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
 		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
-		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(effect_prefixes) and r[0] not in known_info]
+		info = [r for r in later_characterinfo_rows(later_effects) if r[0].startswith(effect_prefixes) and r[0] not in known_info]
 		# Same rule for the characterinfo rows: a species no longer
 		# referenced loses its row, one still referenced keeps it.
 		owned_info = characterinfo_codenames(effect_text) & set(refs)

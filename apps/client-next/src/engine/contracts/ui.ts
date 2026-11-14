@@ -95,7 +95,8 @@ export interface UiQuad {
 	readonly tiled?: boolean;
 	readonly alphaCutoff?: number;
 	// Drawn with additive blending (source added to what is behind it). Effect sheets such as
-	// ga_effect_* and alcm_effect_prepare carry no alpha: black is "nothing", so the quad adds light.
+	// ga_effect_*, alcm_effect_prepare and alcm_effect_success carry no alpha: black is "nothing",
+	// so the quad adds light.
 	readonly additive?: boolean;
 	readonly characterAnchor?: number;
 	readonly mask?: { readonly texture: string; readonly rect: UiRect; };

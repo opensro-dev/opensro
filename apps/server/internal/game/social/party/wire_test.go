@@ -255,6 +255,12 @@ func TestEncodePartyLeave3E58(t *testing.T) {
 	}
 }
 
+func TestEncodePartyDelegate3E58(t *testing.T) {
+	if got := EncodePartyDelegate3E58(0x01020304); !bytes.Equal(got, []byte{0x09, 0x04, 0x03, 0x02, 0x01}) {
+		t.Fatalf("EncodePartyDelegate3E58 = % X", got)
+	}
+}
+
 func TestEncodePartyBroken3E58(t *testing.T) {
 	if got := EncodePartyBroken3E58(); !bytes.Equal(got, []byte{0x01, 0x00}) {
 		t.Fatalf("payload = % X, want 01 00", got)

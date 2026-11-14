@@ -934,6 +934,25 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	}
 	/*
 	================
+	actorIndex
+
+	One gid index per frame, not one per query: a frame's socket, matrix and
+	localMatrix queries pass the same rows array (the orbs lane reuses one,
+	footsteps share the frame's actors), so the index is rebuilt only when
+	the array identity changes.
+	================
+	*/
+	let indexedRows: readonly CharacterActor[] | null = null;
+	let indexedByGid: Map<number, CharacterActor> | null = null;
+	function actorIndex( rows: readonly CharacterActor[] ) {
+		if ( rows !== indexedRows ) {
+			indexedRows = rows;
+			indexedByGid = new Map( rows.map( actor => [ actor.gid, actor ] ) );
+		}
+		return indexedByGid!;
+	}
+	/*
+	================
 	transformFor
 
 	Compose mount and attachment transforms before applying the actor placement.
@@ -2574,7 +2593,7 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		localMatrix( rows: readonly CharacterActor[], gid: number, bone: string ) {
-			const actor = rows.find( a => a.gid === gid );
+			const actor = actorIndex( rows ).get( gid );
 			return actor ? poseFor( actor )?.socket( bone ) ?? null : null;
 		},
 		/*
@@ -2585,7 +2604,7 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		matrix( rows: readonly CharacterActor[], gid: number ) {
-			const index = new Map( rows.map( a => [ a.gid, a ] ) ), actor = index.get( gid );
+			const index = actorIndex( rows ), actor = index.get( gid );
 			return actor ? transformFor( actor, index, actor.pose.regionId, new Map() ) : null;
 		},
 		/*
@@ -2606,7 +2625,7 @@ the next full prepare pass, so this may run between frames.
 			bone: string | { name: string | null; fallback: "mount-root"; },
 			offset: readonly [number, number, number]
 		) {
-			const byGid = new Map( rows.map( actor => [ actor.gid, actor ] ) ), actor = byGid.get( gid );
+			const byGid = actorIndex( rows ), actor = byGid.get( gid );
 			if ( !actor ) return null;
 			const fallback = typeof bone !== "string", name = fallback ? bone.name : bone;
 			let holder = actor, pose = poseFor( holder );
@@ -3292,6 +3311,22 @@ the next full prepare pass, so this may run between frames.
 		*/
 		setRenderMode( mode: number, enabled: boolean ) {
 			if ( mode === GRAPHIC_OPTION_CHARACTERS ) charactersShown = enabled;
+		},
+		/*
+		================
+		releaseRetired
+
+		Drain retired draws without a frame: the GPU half of retirement
+		waited for the next visible prepare (BUG-070), so a hidden tab with
+		actors coming and going kept their buffers alive without bound. A
+		failed release leaves the draw queued, exactly as in retireResidency.
+		================
+		*/
+		releaseRetired( geometry: GeometryCommands ) {
+			while ( retiredDraws.length ) {
+				geometry.release( retiredDraws[retiredDraws.length - 1]! );
+				retiredDraws.pop();
+			}
 		},
 		/*
 		================

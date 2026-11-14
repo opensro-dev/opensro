@@ -84,14 +84,7 @@ func ResolveCalculationAgainstWall(attacker, defender Stats, input WallCalculati
 	}
 	if lanes&^walled == 0 {
 		// Every lane zeroed: the record keeps its roll flags with no damage.
-		flags := normalResultFlag
-		if critical && attack.Flags&physicalAttackFlag != 0 {
-			flags = 2
-		}
-		if attacker.Berserk {
-			flags |= 4
-		}
-		out.Defender = Result{ResultFlags: flags}
+		out.Defender = Result{ResultFlags: resultFlags(attacker, calculation)}
 		return out, nil
 	}
 	own := calculation

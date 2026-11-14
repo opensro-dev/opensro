@@ -159,9 +159,10 @@ const (
 // PartyUpdate type bytes
 // (CPSMission_OnPartyJobMemberJoinLogout0x3E58's jump table).
 const (
-	PartyUpdateBroken uint8 = 1
-	PartyUpdateJoin   uint8 = 2
-	PartyUpdateLeave  uint8 = 3
+	PartyUpdateBroken   uint8 = 1
+	PartyUpdateJoin     uint8 = 2
+	PartyUpdateLeave    uint8 = 3
+	PartyUpdateDelegate uint8 = 9
 )
 
 // PartyUpdate type-3 leave reasons
@@ -390,6 +391,14 @@ func EncodePartyJoin3E58(row MemberRow) []byte {
 // single-removes on everyone else's.
 func EncodePartyLeave3E58(memberID uint32, reason uint8) []byte {
 	return wire.NewWriter(6).U8(PartyUpdateLeave).U32(memberID).U8(reason).Payload()
+}
+
+// EncodePartyDelegate3E58 renders the 0x3E58 type-9 LEADER DELEGATE
+// body: u8 9, u32 the new leader's member id. Effect: the client's
+// leader moves to that member and UIIT_MSG_PARTY_HOST_ROLE_DELEGATED
+// names them (#3438).
+func EncodePartyDelegate3E58(memberID uint32) []byte {
+	return wire.NewWriter(5).U8(PartyUpdateDelegate).U32(memberID).Payload()
 }
 
 // EncodePartyBroken3E58 renders the 0x3E58 type-1 BROKEN body: u8 1

@@ -838,10 +838,11 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 dropMember
 
 dropMember applies one departure and fans the pinned frames out:
-leader gone -> 0x3E58 type-1 BROKEN to everyone (the native
-leader-leave dissolve); member gone -> type-3 {id, reason} to
-everyone (is-me clears the leaver), plus type-1 to the remainder
-when the roster fell below two. leaverSession carries the initiator's
+type-3 {id, reason} to everyone (is-me clears the leaver), then
+type-1 BROKEN to the remainder when the roster fell below two, or
+type-9 LEADER DELEGATE when the leader left and the lead passed on
+(#3438). A leader leaving a two-member party sends only BROKEN, as
+before. leaverSession carries the initiator's
 own session for the 0x704F path (nil on the disconnect hooks - the
 leaver is gone and receives nothing). Reports whether a departure
 applied.
@@ -852,7 +853,7 @@ func (r *Runtime) dropMember(divisionID, name string, reason uint8, leaverSessio
 	if refusal != "" {
 		return false
 	}
-	if outcome.WasLeader {
+	if outcome.WasLeader && outcome.Dissolved {
 		broken := EncodePartyBroken3E58()
 		if leaverSession != nil {
 			_ = leaverSession.Send(OpPartyUpdate, broken)
@@ -900,11 +901,13 @@ notifyDeparture
 notifyDeparture pushes one member's removal to every remaining
 pre-departure member: the type-3 frame first (the row removal +
 reason toast), then the type-1 BROKEN when the departure dissolved
-the remainder.
+the remainder, or the type-9 LEADER DELEGATE naming the successor
+when the leader left.
 ==================
 */
 func (r *Runtime) notifyDeparture(divisionID string, outcome LeaveOutcome, leaveFrame []byte) {
 	broken := EncodePartyBroken3E58()
+	delegate := EncodePartyDelegate3E58(outcome.Successor.MemberID)
 	for _, member := range outcome.Others {
 		peer, online := r.sessionByName(divisionID, member.Name)
 		if !online {
@@ -913,6 +916,8 @@ func (r *Runtime) notifyDeparture(divisionID string, outcome LeaveOutcome, leave
 		_ = peer.Send(OpPartyUpdate, leaveFrame)
 		if outcome.Dissolved {
 			_ = peer.Send(OpPartyUpdate, broken)
+		} else if outcome.WasLeader {
+			_ = peer.Send(OpPartyUpdate, delegate)
 		}
 	}
 }
