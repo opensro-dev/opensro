@@ -6945,6 +6945,28 @@ test("Escape closes the stall network window instead of opening the System menu"
 	}
 });
 
+test("Escape leaves or closes the stall window instead of opening the System menu", () => {
+	for ( const [phase, owner, kind] of [ [ "visitor", 2, "stall-leave" ], [ "owner", 1, "stall-close" ] ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase, owner, open: true }
+			};
+			for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, 1000 + i );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			assert.deepEqual(
+				commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" ),
+				[ { kind } ],
+				`a ${phase}'s Escape does what the stall's close control does`
+			);
+			assert.notEqual( f.ui.stats().panel, "System", "and does not open the System menu over it" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
 test("a stall beside a separate window keeps that window open", () => {
 	const f = uiFixture();
 	try {
