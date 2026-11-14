@@ -15981,6 +15981,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								inspect: experimental.state().saved.touchInspect
 							} );
 							if ( owned ) {
+								// The cooldown sweep the quickslot draws, on the skill window's
+								// own icon: a cast shares its cooldown group with every rank of
+								// the chain, so the used skill's lower ranks sweep with it.
+								const defined = training.skill( owned.id );
+								if ( defined ) {
+									paths.push( ...quickslotTimerPaths() );
+									quads.push(
+										...quickslotCooldownQuads(
+											game?.skillCooldowns ?? [],
+											defined.id,
+											defined.cooldownGroup ?? 0,
+											quickslotTime,
+											r,
+											full
+										).filter( q => resources.has( q.texture ) )
+									);
+								}
 								const tab = ROOT + "interface/skill/skl_level_tab.png";
 								paths.push( tab );
 								if ( resources.has( tab ) ) rect( [ r[0] + 19, r[1] + 17, 16, 16 ], white, tab );
