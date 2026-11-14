@@ -9,8 +9,11 @@ is clear. Flipping it is therefore a change of pose owner, and every
 flip that did not carry the pose across left the vehicle at a stale
 spot (PR #3464: a ridden transport's cargo dropped at the specialty
 shop). action/cosmount.go is the one place that flips it, handing the
-pose over; this gate refuses an assignment to a Mounted field anywhere
-else in the module's production code. Tests may set it to build state.
+pose over; this gate refuses, anywhere else in the module's production
+code (internal and cmd), an assignment to a Mounted field and a
+CharacterCOS literal that names Mounted (a record built ridden goes
+through rideNewVehicle). Tests may set it to build state. Loading a saved
+record decodes the persisted fact by reflection and is no flip.
 
 ===========================================================================
 */
@@ -40,11 +43,18 @@ func TestRideStateHasOneWriter(t *testing.T) {
 		t.Fatalf("ride owner: locate module root: %v", err)
 	}
 	fset := token.NewFileSet()
-	walkErr := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, entry fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if entry.IsDir() {
+			// testdata and dot folders hold no build's code.
+			if name := entry.Name(); path != root && (name == "testdata" || strings.HasPrefix(name, ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		relative, _ := filepath.Rel(root, path)
@@ -58,6 +68,13 @@ func TestRideStateHasOneWriter(t *testing.T) {
 			return nil
 		}
 		ast.Inspect(file, func(node ast.Node) bool {
+			if literal, ok := node.(*ast.CompositeLit); ok {
+				for _, key := range mountedKeys(literal) {
+					t.Errorf("%s: builds a CharacterCOS with Mounted; set the ride through rideNewVehicle (%s)",
+						fset.Position(key.Pos()), rideStateOwner)
+				}
+				return true
+			}
 			assign, ok := node.(*ast.AssignStmt)
 			if !ok {
 				return true
@@ -75,4 +92,78 @@ func TestRideStateHasOneWriter(t *testing.T) {
 	if walkErr != nil {
 		t.Fatalf("ride owner: walk: %v", walkErr)
 	}
+}
+
+/*
+================
+namesCharacterCOS
+
+Whether a composite literal's type is the companion record,
+CharacterCOS by itself or qualified by its package (domain,
+enterworld's alias).
+================
+*/
+func namesCharacterCOS(expr ast.Expr) bool {
+	switch t := expr.(type) {
+	case *ast.StarExpr:
+		return namesCharacterCOS(t.X)
+	case *ast.Ident:
+		return t.Name == "CharacterCOS"
+	case *ast.SelectorExpr:
+		return t.Sel.Name == "CharacterCOS"
+	}
+	return false
+}
+
+/*
+================
+mountedKeys
+
+The Mounted keys a composite literal sets on a CharacterCOS: its own
+when it is one, and its elements' when it is a slice, array or map of
+them whose element literals leave the type out.
+================
+*/
+func mountedKeys(literal *ast.CompositeLit) []*ast.Ident {
+	var element ast.Expr
+	switch t := literal.Type.(type) {
+	case *ast.ArrayType:
+		element = t.Elt
+	case *ast.MapType:
+		element = t.Value
+	}
+	var keys []*ast.Ident
+	if namesCharacterCOS(literal.Type) {
+		keys = append(keys, mountedKey(literal)...)
+	}
+	if element != nil && namesCharacterCOS(element) {
+		for _, e := range literal.Elts {
+			if pair, ok := e.(*ast.KeyValueExpr); ok {
+				e = pair.Value
+			}
+			if unary, ok := e.(*ast.UnaryExpr); ok {
+				e = unary.X
+			}
+			if inner, ok := e.(*ast.CompositeLit); ok && inner.Type == nil {
+				keys = append(keys, mountedKey(inner)...)
+			}
+		}
+	}
+	return keys
+}
+
+/*
+================
+mountedKey
+================
+*/
+func mountedKey(literal *ast.CompositeLit) []*ast.Ident {
+	for _, e := range literal.Elts {
+		if pair, ok := e.(*ast.KeyValueExpr); ok {
+			if key, ok := pair.Key.(*ast.Ident); ok && key.Name == "Mounted" {
+				return []*ast.Ident{key}
+			}
+		}
+	}
+	return nil
 }

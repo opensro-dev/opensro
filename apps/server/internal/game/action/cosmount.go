@@ -9,8 +9,11 @@ pet.Mounted says which, and it is persisted on the record, so it stays
 the one fact - but flipping it changes the pose owner, and a flip that
 forgot to carry the pose across left the vehicle at its stale parked
 spot (the ridden transport whose cargo dropped at the specialty shop,
-PR #3464). Every flip goes through mountCompanion or unmountCompanion;
-internal/gates refuses an assignment to Mounted anywhere else.
+PR #3464). Every flip goes through mountCompanion or unmountCompanion,
+and a vehicle record built ridden through rideNewVehicle; internal/gates
+refuses an assignment to Mounted, or a CharacterCOS literal naming it,
+anywhere else. Loading a saved record restores the persisted fact and
+is no flip.
 
 ===========================================================================
 */
@@ -60,4 +63,18 @@ func (rt *Runtime) unmountCompanion(division string, c *enterworld.Character, pe
 		state.mover.Park(pet.GID, pose)
 	}
 	pet.Mounted = false
+}
+
+/*
+================
+rideNewVehicle
+
+A vehicle record being built by its summon starts ridden: natively the
+summoned vehicle binds with its owner aboard. The record is not bound to
+a session yet, so there is no mover pose to carry across; the rider's
+world poses it from the first frame.
+================
+*/
+func rideNewVehicle(pet *enterworld.CharacterCOS) {
+	pet.Mounted = true
 }
