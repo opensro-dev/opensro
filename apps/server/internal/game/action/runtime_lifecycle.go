@@ -240,6 +240,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// After every step that can change a monster's HP or status, so
 		// the vitals a holder receives carry this tick's changes
 		// (monstervitals.go).
+		// A holder that a moving monster left beyond its range holds it no
+		// more, before this tick's vitals pick their holders.
+		step("retireDistantHolders", func() { rt.retireDistantHolders(nowMs) })
 		frames("publishMonsterVitals", rt.publishMonsterVitals)
 		// Last, so a notice any step above queued leaves this same tick.
 		frames("drainAnnouncements", rt.drainAnnouncements)

@@ -199,6 +199,9 @@ func TestLightningChainShippedRanksAndSixStageExecution(t *testing.T) {
 	c.Intellect = testInt64(2000)
 	c.CurrentMP = testInt64(10000)
 	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	// The client selects what it strikes; the combined mask reaches the
+	// caster through that hold.
+	rt.Selected.Set(testDivision, c.Name, target.Gid)
 	started := clock.NowMs()
 	start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: root.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
 	if len(start.Frames) == 0 || start.Frames[0].Opcode != wire.OpSkillCastResult || start.Frames[0].Payload[0] != 1 {

@@ -134,6 +134,23 @@ func (s *SelectionStore) Clear(divisionID, characterName string) {
 
 /*
 ================
+release
+
+Forget a character's selection if it is still gid. A reader acting on a
+holders copy uses it, so a selection made since the copy stays.
+================
+*/
+func (s *SelectionStore) release(divisionID, characterName string, gid uint32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := selectionKey(divisionID, characterName)
+	if row, ok := s.byCharacter[key]; ok && row.gid == gid {
+		delete(s.byCharacter, key)
+	}
+}
+
+/*
+================
 OpenFunction
 
 OpenFunction marks the NPC function of the selected gid open. It does

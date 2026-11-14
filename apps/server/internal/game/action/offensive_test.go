@@ -234,8 +234,7 @@ func TestAdvancedPursuitCastsOnceAndCanBeCancelled(t *testing.T) {
 			}
 			privateVitals := 0
 			for tick := 1; tick <= 100; tick++ {
-				routed, _ := separateHolderVitals(t, rt.TickHook()(clock.At(time.Duration(tick)*100*time.Millisecond).UnixMilli()))
-				for _, burst := range routed {
+				for _, burst := range rt.TickHook()(clock.At(time.Duration(tick) * 100 * time.Millisecond).UnixMilli()) {
 					for _, frame := range burst.Frames {
 						if frame.Opcode == simulation.OpVitalsUpdate {
 							if burst.OnlyCharacterID != c.ID {

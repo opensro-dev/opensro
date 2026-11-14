@@ -55,15 +55,10 @@ func TestBasicAttackEngagePersistsAcrossTheRetailActionBracket(t *testing.T) {
 		t.Fatalf("release tick = %+v, want exactly one B505 and no same-turn B245 reacquire", routed)
 	}
 
-	// The retained engage may reacquire only after this published free
-	// boundary; the striker holds its target, so the tick also carries
-	// the striker's private vitals of it.
-	routed, held := separateHolderVitals(t, rt.TickHook()(clock.At(testBasicAttackActionDuration+time.Millisecond).UnixMilli()))
+	// The retained engage may reacquire only after this published free boundary.
+	routed = rt.TickHook()(clock.At(testBasicAttackActionDuration + time.Millisecond).UnixMilli())
 	if len(routed) != 1 || routed[0].DivisionID != testDivision || len(routed[0].Frames) != 1 {
 		t.Fatalf("next-turn repeat = %+v, want one B245 after the release boundary", routed)
-	}
-	if len(held) != 1 || held[0].OnlyCharacterID != character.ID {
-		t.Fatalf("next-turn repeat vitals = %+v, want the striker's", held)
 	}
 	_, secondDamage, secondFatal := assertSkillDamageOpen(t,
 		[]wire.Frame{{Opcode: routed[0].Frames[0].Opcode, Payload: routed[0].Frames[0].Payload}},
@@ -267,10 +262,7 @@ func TestBasicAttackEngageApproachesBeforeStriking(t *testing.T) {
 	}
 
 	clock.Advance(10 * time.Second)
-	routed, held := separateHolderVitals(t, rt.TickHook()(clock.NowMs()))
-	if len(held) != 1 || held[0].OnlyCharacterID != character.ID {
-		t.Fatalf("arrived attack vitals = %+v, want the striker's", held)
-	}
+	routed := rt.TickHook()(clock.NowMs())
 	if len(routed) != 1 || len(routed[0].Frames) != 2 ||
 		routed[0].Frames[0].Opcode != wire.OpObjectSourceCorrection ||
 		routed[0].Frames[1].Opcode != wire.OpSkillCastResult {
@@ -557,8 +549,6 @@ assertOnlySkillReleases
 */
 func assertOnlySkillReleases(t *testing.T, routed []simulation.DivisionFrames) {
 	t.Helper()
-	// The striker's private vitals of its target ride the tick after a hit.
-	routed, _ = separateHolderVitals(t, routed)
 	for _, route := range routed {
 		for _, frame := range route.Frames {
 			if frame.Opcode != wire.OpSkillEffectControl || len(frame.Payload) != 10 || frame.Payload[0] != 1 || frame.Payload[9] != 0 {
