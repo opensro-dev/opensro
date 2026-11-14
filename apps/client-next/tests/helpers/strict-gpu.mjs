@@ -32,6 +32,9 @@ export const GPU_TEXTURE_USAGE = {
 	RENDER_ATTACHMENT: 16
 };
 export const GPU_SHADER_STAGE = { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 };
+// WebGPU's default minUniformBufferOffsetAlignment and
+// minStorageBufferOffsetAlignment: the fake device grants no lower one.
+const DEFAULT_BUFFER_OFFSET_ALIGNMENT = 256;
 
 /*
 ================
@@ -145,11 +148,21 @@ export function createStrictGpu() {
 		createBindGroup
 
 		A binding names a buffer ({ buffer }), a texture (its view) or a sampler.
+		A buffer binding's offset must be a multiple of the device's
+		minimum offset alignment (256 by default for uniform and storage
+		buffers), as a real device refuses the whole bind group otherwise.
 		================
 		*/
 		createBindGroup( { entries } ) {
 			const used = [];
 			for ( const entry of entries ) {
+				const offset = entry.resource?.buffer ? entry.resource.offset ?? 0 : 0;
+				if ( offset % DEFAULT_BUFFER_OFFSET_ALIGNMENT !== 0 ) {
+					throw Error(
+						`Offset (${offset}) of a bound buffer does not satisfy the minimum offset alignment ` +
+							`(${DEFAULT_BUFFER_OFFSET_ALIGNMENT})`
+					);
+				}
 				const bound = entry.resource?.buffer ?? entry.resource?.texture;
 				if ( bound ) used.push( bound );
 			}
