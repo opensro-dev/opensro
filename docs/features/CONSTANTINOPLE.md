@@ -51,7 +51,7 @@ These are inferences and port choices, not native evidence:
   admission rules, and no part of the fortress registration waits on it. Not imported here.
 - **Identities.** The import's character shard is `characterdata_210000.txt` (one importer per shard
   name: 120000 is the cap-110 family's, 160000 the Sky Temple's, 170000 Jupiter's, 180000 the second
-  hunting grounds', 190000 the GOD temples', 200000 Arabia's and Muhan's). Identities allocate above
+  hunting grounds', 190000 the GOD temples', 200000 Arabia's, 220000 Muhan's). Identities allocate above
   every published row and are marker-persistent across rebuilds.
 - **Placements ride a side file.** The native `navmesh/objectstring.ifo` is a shipped client file and is
   never rewritten; the fortress's 49 placement lines stage beside it and the bundle merges them,

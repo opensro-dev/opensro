@@ -69,12 +69,16 @@ FLAG = "SRO_MUHAN"
 ROOT_ENV = "SRO_V1696_ROOT"
 SOURCE_ENV = "SRO_MUHAN_DATABASE"
 MARKER = ".opensro-muhan.json"
-# The 200000 identity band: 120000 is the cap-110 family's, 130000 the
+# The 220000 identity band: 120000 is the cap-110 family's, 130000 the
 # pet import's (140000/150000 held for its later sources), 160000 the
 # Sky Temple's, 170000 Jupiter's, 180000 Hunting Ground 2's, 190000
-# the GOD-era temples'. One importer owns one shard file in a build.
-CHARACTER_SHARD = "characterdata_200000.txt"
-SKILL_SHARD = "skilldata_200000.txt"
+# the GOD-era temples', 200000 Arabia's, 210000 Constantinople's. One
+# importer owns one shard file in a build: every off path unlinks its
+# shard whether or not it wrote it, so a shared name deletes the other
+# layer's rows (Muhan once shared Arabia's 200000 and, off, removed
+# Arabia's monsters; test_later_shard_bands pins the rule).
+CHARACTER_SHARD = "characterdata_220000.txt"
+SKILL_SHARD = "skilldata_220000.txt"
 WAVES_FILE = "muhan-waves.txt"
 NPCS_FILE = "muhan-npcs.txt"
 NPC_PREFIX = "NPC_MUHAN_"
