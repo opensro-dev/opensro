@@ -14,6 +14,7 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
 4. **Claim it before you start.** Comment `/claim` on the issue. You are assigned and the issue gets `status: claimed`, so nobody else (our agents included) starts the same work. An issue that already carries the label is taken: the claim reply says by whom and until when, so ask there or pick another.
    - A claim lasts 72 hours. Pushing to a pull request that links the issue keeps it alive, and commenting `/claim` again renews it by hand.
    - Comment `/unclaim` if you stop. An idle claim is released on its own once it expires.
+   - One account holds at most two claims at a time. Finish or `/unclaim` one before you claim a third.
    - Investigation work counts. Claim the issue before you start reading the binaries.
 
 ---

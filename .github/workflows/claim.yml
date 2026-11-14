@@ -57,4 +57,4 @@ jobs:
         with:
           script: |
             const { run } = await import( `${ process.env.GITHUB_WORKSPACE }/scripts/github/issueClaim.mjs` );
-            await run( { github, context } );
+            await run( { github, context, core } );

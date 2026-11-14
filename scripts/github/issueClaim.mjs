@@ -29,6 +29,13 @@ export const CLAIMED_LABEL = "status: claimed";
 // and is re-seated by the queue, so a stale seat frees the issue sooner.
 export const CONTRIBUTOR_LEASE_HOURS = 72;
 export const MAINTAINER_LEASE_HOURS = 24;
+// How many live leases one non-maintainer account may hold at once. Agents
+// skip a claimed issue, so without a cap one account could claim every
+// open issue and re-claim each the moment a maintainer released it: the
+// pull would stop for nothing (ops #311: abuse must cost nothing). Two
+// covers a contributor with one pull request in review and the next
+// started. Maintainers' seats are not capped: the queue seats them.
+export const MAX_CONTRIBUTOR_CLAIMS = 2;
 const HOUR_MS = 60 * 60 * 1000;
 const MARKER = /<!-- opensro-claim (\{[^\n]*?\}) -->/;
 const SEAT_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;
@@ -133,13 +140,18 @@ export function holderName( holder, seat ) {
 decideClaim
 
 What a /claim does. grant: no live lease (none, or an expired one).
-renew: the holder claims again. refuse: someone else holds it.
+renew: the holder claims again. refuse: someone else holds it. limit:
+a non-maintainer already holds MAX_CONTRIBUTOR_CLAIMS live leases on
+other issues (held), so a new one is refused; a renewal never is.
 ================
 */
-export function decideClaim( { lease, actor, seat, association, nowMs } ) {
+export function decideClaim( { lease, actor, seat, association, nowMs, held = 0 } ) {
 	const hours = leaseHours( association );
 	const until = new Date( nowMs + hours * HOUR_MS ).toISOString();
-	if ( !lease || Date.parse( lease.until ) <= nowMs ) return { action: "grant", until, hours };
+	if ( !lease || Date.parse( lease.until ) <= nowMs ) {
+		if ( !isMaintainer( association ) && held >= MAX_CONTRIBUTOR_CLAIMS ) return { action: "limit" };
+		return { action: "grant", until, hours };
+	}
 	if ( lease.holder === actor && lease.seat === seat ) return { action: "renew", until, hours };
 	return { action: "refuse", lease };
 }
@@ -211,6 +223,42 @@ async function listComments( github, owner, repo, number ) {
 
 /*
 ================
+claimedIssues
+================
+*/
+async function claimedIssues( github, owner, repo ) {
+	const issues = await github.paginate( github.rest.issues.listForRepo, {
+		owner,
+		repo,
+		state: "open",
+		labels: CLAIMED_LABEL,
+		per_page: 100
+	} );
+	return issues.filter( issue => !issue.pull_request );
+}
+
+/*
+================
+liveLeasesHeld
+
+How many live leases actor holds on open issues other than except,
+read from the workflow's own lease markers. Not from the assignees:
+GitHub silently ignores an assignee it will not accept, so a count of
+assignments would let such an account claim without limit.
+================
+*/
+async function liveLeasesHeld( { github, owner, repo, actor, except, botLogin, nowMs } ) {
+	let held = 0;
+	for ( const issue of await claimedIssues( github, owner, repo ) ) {
+		if ( issue.number === except ) continue;
+		const lease = readLease( await listComments( github, owner, repo, issue.number ), botLogin );
+		if ( lease && lease.holder === actor && Date.parse( lease.until ) > nowMs ) held++;
+	}
+	return held;
+}
+
+/*
+================
 linkedPullRequests
 
 Open or closed pull requests that reference the issue, from its
@@ -273,7 +321,21 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 	const lease = readLease( await listComments( github, owner, repo, number ), botLogin );
 	if ( command.verb === "claim" ) {
 		if ( issue.state !== "open" ) return;
-		const decision = decideClaim( { lease, actor, seat: command.seat, association, nowMs } );
+		const fresh = !lease || Date.parse( lease.until ) <= nowMs;
+		const held = fresh && !isMaintainer( association ) ?
+			await liveLeasesHeld( { github, owner, repo, actor, except: number, botLogin, nowMs } ) :
+			0;
+		const decision = decideClaim( { lease, actor, seat: command.seat, association, nowMs, held } );
+		if ( decision.action === "limit" ) {
+			await github.rest.issues.createComment( {
+				owner,
+				repo,
+				issue_number: number,
+				body: `@${actor} already holds ${MAX_CONTRIBUTOR_CLAIMS} claims, the most one account holds at once. ` +
+					"Finish or `/unclaim` one of them first."
+			} );
+			return;
+		}
 		if ( decision.action === "refuse" ) {
 			await github.rest.issues.createComment( {
 				owner,
@@ -332,50 +394,56 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 sweep
 
 Every open issue carrying the label: extend the active, release the
-idle, and drop the label from an issue whose lease is already gone.
+idle, and drop the label from an issue whose lease is already gone. A
+GitHub failure on one issue (rate limit, 5xx, a deleted account) leaves
+that one for the next sweep; the others are still decided.
 ================
 */
-async function sweep( { github, context, botLogin, nowMs } ) {
+async function sweep( { github, context, botLogin, nowMs, core } ) {
 	const { owner, repo } = context.repo;
-	const issues = await github.paginate( github.rest.issues.listForRepo, {
-		owner,
-		repo,
-		state: "open",
-		labels: CLAIMED_LABEL,
-		per_page: 100
+	for ( const issue of await claimedIssues( github, owner, repo ) ) {
+		try {
+			await sweepIssue( { github, owner, repo, number: issue.number, botLogin, nowMs } );
+		} catch ( error ) {
+			core?.warning( `claim sweep: #${issue.number}: ${error?.message}` );
+		}
+	}
+}
+
+/*
+================
+sweepIssue
+================
+*/
+async function sweepIssue( { github, owner, repo, number, botLogin, nowMs } ) {
+	const lease = readLease( await listComments( github, owner, repo, number ), botLogin );
+	if ( !lease ) {
+		await github.rest.issues.removeLabel( { owner, repo, issue_number: number, name: CLAIMED_LABEL } );
+		return;
+	}
+	const decision = decideSweep( {
+		lease,
+		nowMs,
+		linkedPullRequests: await linkedPullRequests( github, owner, repo, number )
 	} );
-	for ( const issue of issues ) {
-		if ( issue.pull_request ) continue;
-		const number = issue.number;
-		const lease = readLease( await listComments( github, owner, repo, number ), botLogin );
-		if ( !lease ) {
-			await github.rest.issues.removeLabel( { owner, repo, issue_number: number, name: CLAIMED_LABEL } );
-			continue;
-		}
-		const decision = decideSweep( {
-			lease,
-			nowMs,
-			linkedPullRequests: await linkedPullRequests( github, owner, repo, number )
+	if ( decision.action === "extend" ) {
+		await github.rest.issues.updateComment( {
+			owner,
+			repo,
+			comment_id: lease.commentId,
+			body: leaseReply( { ...lease, until: decision.until, renewed: true } )
 		} );
-		if ( decision.action === "extend" ) {
-			await github.rest.issues.updateComment( {
-				owner,
-				repo,
-				comment_id: lease.commentId,
-				body: leaseReply( { ...lease, until: decision.until, renewed: true } )
-			} );
-		} else if ( decision.action === "release" ) {
-			await release( {
-				github,
-				owner,
-				repo,
-				number,
-				lease,
-				text: `Claim by ${
-					holderName( lease.holder, lease.seat )
-				} expired with no activity and is released. Comment \`/claim\` to take it.`
-			} );
-		}
+	} else if ( decision.action === "release" ) {
+		await release( {
+			github,
+			owner,
+			repo,
+			number,
+			lease,
+			text: `Claim by ${
+				holderName( lease.holder, lease.seat )
+			} expired with no activity and is released. Comment \`/claim\` to take it.`
+		} );
 	}
 }
 
@@ -387,11 +455,11 @@ The workflow's entry: a comment event handles that comment; a schedule
 or a manual dispatch sweeps every claimed issue.
 ================
 */
-export async function run( { github, context, nowMs = Date.now() } ) {
+export async function run( { github, context, nowMs = Date.now(), core = null } ) {
 	const botLogin = "github-actions[bot]";
 	if ( context.eventName === "issue_comment" ) {
 		await handleComment( { github, context, botLogin, nowMs } );
 		return;
 	}
-	await sweep( { github, context, botLogin, nowMs } );
+	await sweep( { github, context, botLogin, nowMs, core } );
 }
