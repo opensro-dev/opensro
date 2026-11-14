@@ -424,7 +424,10 @@ var Settings = []Setting{
 	// potion merchant, at Hotan's native price of 900. On by default;
 	// off restores the native Jangan shop.
 	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
-	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
+	// Owner, 2026-11-14 (#1609): the stat point recall scroll's level
+	// tiers sell by default beside the avatar outfits ("statrecall",
+	// commerce/mallextra.go); "on" alone is the avatar-only mall.
+	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on,statrecall"},
 	// Owner ask, 2026-11-12 (#3257): the later mall's categories, HOT
 	// shop and goods badges. Build and server read the same switch:
 	// the gears stone import stages its shard behind it, and off is

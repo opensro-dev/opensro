@@ -25,8 +25,8 @@ the item's own), one plain scrap and a silk price are written as the
 shipped data would carry them, under a package ID past the shipped ones.
 The list may name presets: "on" (the avatar outfits) and "statrecall" (the
 stat point recall scroll's six level tiers, owner 2026-10-25, #1609), so
-"on,statrecall" adds the scrolls to today's mall and "on" alone is today's
-mall exactly.
+"on,statrecall" (the deployment default since 2026-11-14) sells the
+avatars and the scrolls, and "on" alone is the avatar-only mall.
 
 ===========================================================================
 */
