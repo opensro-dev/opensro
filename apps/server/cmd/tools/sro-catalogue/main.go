@@ -452,8 +452,12 @@ func run(out, release, textdata string) error {
 	// Every magicoption.txt definition, as the enter-world magicOptionSnapshot
 	// ships it: the website's tooltip bundle resolves a worn item's options
 	// through the same rows the game client does.
+	magicOptions := enterworld.NewTextdataMagicOptions(dir)
+	if err := magicOptions.Load(); err != nil {
+		return fmt.Errorf("magic options: %w", err)
+	}
 	if err := writeJSON(filepath.Join(out, "_build", "magic-options.json"),
-		enterworld.NewTextdataMagicOptions(dir).AllMagicOptions()); err != nil {
+		magicOptions.AllMagicOptions()); err != nil {
 		return err
 	}
 	tradeQuotes := catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })

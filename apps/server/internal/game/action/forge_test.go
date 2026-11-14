@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -619,5 +620,112 @@ func TestForgeRoundTripKeepsTheBoundMark(t *testing.T) {
 	again := invItemsFromRowsWithin([]enterworld.InventoryRow{decoded}, 200)
 	if len(again) != 1 || !again[0].ForgeBound {
 		t.Fatalf("reloaded items = %+v", again)
+	}
+}
+
+/*
+================
+TestForgeAvatarDressV188BlueKeys
+
+Checks that GM forge offers the v1.188 avatar dress blue keys, forges
+4x LUCK..LUCK_4 and 4x MDIA..MDIA_4 on a dress (each in its own option slot),
+and refuses a fifth option past MaxMagic 4.
+================
+*/
+func TestForgeAvatarDressV188BlueKeys(t *testing.T) {
+	dressCodename := "ITEM_MALL_AVATAR_DRESS_TEST"
+	dressRef := &enterworld.ItemRef{
+		RefObjID: 2004, Codename: dressCodename,
+		TypeIDs: [4]int64{3, 1, 13, 2}, Country: 3, RequiredSex: 2,
+	}
+	setupDressRuntime := func(character *enterworld.Character) (*Runtime, enterworld.ItemRefSource) {
+		items := forgeTestItems()
+		items.staticItemSource[dressCodename] = dressRef
+		rt, _ := forgeTestRuntime(character, items)
+		rt.Alchemy.Items[dressCodename] = alchemy.Reference{
+			ID: dressRef.RefObjID, Name: dressCodename, Flags: wire.PackTypeFlags(3, 1, 13, 2), Class: 1, MaxMagic: 4,
+		}
+		rt.Alchemy.Magic[250] = alchemy.Magic{
+			ID: 250, Name: "MATTR_AVATAR_HP", Degree: 1, Tag: 0x687061,
+			Params: [3]uint32{1, 150, 150}, Categories: []string{"avatar_mail"},
+		}
+		rt.Alchemy.Magic[254] = alchemy.Magic{
+			ID: 254, Name: "MATTR_AVATAR_MDIA", Degree: 1, Tag: 1835297121,
+			Params: [3]uint32{1, 1, 1}, Categories: []string{"avatar_mail"},
+		}
+		magic := rt.deps.(*enterworld.Deps).MagicOptions.(forgeMagicOptions)
+		magic[250] = 0x687061
+		magic[254] = 1835297121
+		rt.Alchemy.AvatarOptions[2] = append([]string{"MATTR_AVATAR_HP", "MATTR_AVATAR_MDIA"}, enterworld.AvatarV188DressOptions()...)
+		for _, overlay := range enterworld.AvatarV188MagicOptions() {
+			id := uint16(overlay.ParamID)
+			rt.Alchemy.Magic[id] = alchemy.Magic{
+				ID: id, Name: overlay.OptionName, Degree: int(overlay.Degree), Tag: overlay.Tag,
+				Params: *overlay.RangeWords, Categories: overlay.Descriptors,
+			}
+			magic[overlay.ParamID] = overlay.Tag
+		}
+		return rt, items
+	}
+
+	cHelp := forgeTestGM()
+	rtHelp, _ := setupDressRuntime(cHelp)
+	helpLines, ok := rtHelp.ForgeGMItem(testDivision, cHelp.Name, "help "+dressCodename)
+	if !ok {
+		t.Fatal("help refused for native dress")
+	}
+	helpText := strings.Join(helpLines, "\n")
+	for _, wantKey := range []string{
+		"blue.MATTR_AVATAR_LUCK", "blue.MATTR_AVATAR_LUCK_2", "blue.MATTR_AVATAR_LUCK_3", "blue.MATTR_AVATAR_LUCK_4",
+		"blue.MATTR_AVATAR_MDIA", "blue.MATTR_AVATAR_MDIA_2", "blue.MATTR_AVATAR_MDIA_3", "blue.MATTR_AVATAR_MDIA_4",
+	} {
+		if !strings.Contains(helpText, wantKey) {
+			t.Fatalf("forge help missing %s:\n%s", wantKey, helpText)
+		}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		cmd     string
+		wantIDs []uint64
+		fifth   string
+	}{
+		{
+			name:    "4x luck",
+			cmd:     dressCodename + " blue.MATTR_AVATAR_LUCK=1 blue.MATTR_AVATAR_LUCK_2=1 blue.MATTR_AVATAR_LUCK_3=1 blue.MATTR_AVATAR_LUCK_4=1",
+			wantIDs: []uint64{373, 374, 375, 376},
+			fifth:   " blue.MATTR_AVATAR_MDIA=1",
+		},
+		{
+			name:    "4x mdia",
+			cmd:     dressCodename + " blue.MATTR_AVATAR_MDIA=1 blue.MATTR_AVATAR_MDIA_2=1 blue.MATTR_AVATAR_MDIA_3=1 blue.MATTR_AVATAR_MDIA_4=1",
+			wantIDs: []uint64{254, 370, 371, 372},
+			fifth:   " blue.MATTR_AVATAR_LUCK=1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := forgeTestGM()
+			rt, _ := setupDressRuntime(c)
+			if _, ok := rt.ForgeGMItem(testDivision, c.Name, tc.cmd+tc.fifth); ok {
+				t.Fatal("expected 5th blue option past dress MaxMagic 4 to be refused")
+			}
+			if n := rt.Ground.Count(testDivision); n != 0 {
+				t.Fatalf("refused forge left %d ground item(s)", n)
+			}
+			c = forgeTestGM()
+			rt, _ = setupDressRuntime(c)
+			if _, ok := rt.ForgeGMItem(testDivision, c.Name, tc.cmd); !ok {
+				t.Fatalf("expected 4x forge to succeed: %s", tc.cmd)
+			}
+			drop := forgedDrop(t, rt)
+			if len(drop.MagicOptions) != 4 {
+				t.Fatalf("forged options = %d, want 4 (%#x)", len(drop.MagicOptions), drop.MagicOptions)
+			}
+			for i, wantID := range tc.wantIDs {
+				if drop.MagicOptions[i] != 1<<32|wantID {
+					t.Fatalf("option[%d] = %#x, want %#x", i, drop.MagicOptions[i], 1<<32|wantID)
+				}
+			}
+		})
 	}
 }
