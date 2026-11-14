@@ -55,6 +55,43 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	assert.deepEqual( defined( alchemySelection( "magic", [ 13, 14 ], item( 13, 0x32c ) ) ).slots, [] );
 	assert.equal( alchemySelection( "reinforce", [], item( 6, 0x32c ) ), null );
 });
+test("a new main item replaces the slotted one instead of being refused", () => {
+	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
+	// 62B80B..62B8E9: new equipment on the reinforce page replaces the target
+	// and clears both reagent slots.
+	assert.deepEqual( alchemySelection( "magic", [ 13, 14 ], item( 15, 0x32c ) ), { mode: "magic", slots: [ 15 ] } );
+	assert.deepEqual( alchemySelection( "reinforce", [ 13, 14, 16 ], item( 15, 0x32c ) ), {
+		mode: "reinforce",
+		slots: [ 15 ]
+	} );
+	assert.deepEqual( alchemySelection( "reinforce", [ 13 ], item( 15, 0x32c ) ), {
+		mode: "reinforce",
+		slots: [ 15 ]
+	} );
+	// 624CFD..624D5A: dissolve overwrites its equipment slot and keeps the pill.
+	assert.deepEqual( alchemySelection( "dissolve", [ 13, 14 ], item( 15, 0x32c ) ), {
+		mode: "dissolve",
+		slots: [ 15, 14 ]
+	} );
+	// 6248F1 / 624A6B: a main pill on a holding window starts a fresh selection.
+	assert.deepEqual( alchemySelection( "advanced", [ 13, 14 ], item( 15, 0x1dec ) ), {
+		mode: "advanced",
+		slots: [ 15 ]
+	} );
+	assert.deepEqual( alchemySelection( "compound", [ 13 ], item( 15, 0x1dec ) ), { mode: "advanced", slots: [ 15 ] } );
+	assert.deepEqual( alchemySelection( "dissolve", [ 13, 14 ], item( 15, 0x35ec ) ), {
+		mode: "compound",
+		slots: [ 15 ]
+	} );
+	// A compound pill still fills an open compound slot; equipment stays
+	// refused outside dissolve and a full compound refuses its filler.
+	assert.deepEqual( alchemySelection( "compound", [ 13 ], item( 15, 0x35ec ) ), {
+		mode: "compound",
+		slots: [ 13, 15 ]
+	} );
+	assert.equal( alchemySelection( "compound", [ 13 ], item( 15, 0x32c ) ), null );
+	assert.equal( alchemySelection( "compound", [ 13, 14, 15, 16, 17, 18, 19, 20, 21 ], item( 22, 0x25ec ) ), null );
+});
 test("stone placement refuses degree first, then family, and binds without published data", () => {
 	const B = STONE_FAMILY_BITS;
 	// (tid3, tid4) packed the native way: tid3 at bits 7..10, tid4 at 11..15.

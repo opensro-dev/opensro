@@ -144,6 +144,21 @@ export function alchemySelection(
 			else if ( flags === 0x25ec || flags === 0x35ec ) mode = "compound";
 			else return null;
 		} else if ( !equipment ) return null;
+	} else if ( !process && equipment ) {
+		// 62B80B..62B8E9: equipment bound while a target is slotted clears
+		// reagent slots 1 and 2 and rebinds slot 0, replacing the target.
+		return { mode, slots: [ item.slot ] };
+	} else if ( mode === "dissolve" && equipment ) {
+		// 624CFD..624D5A: the dissolve page binds equipment straight into its
+		// single equipment slot, overwriting whatever it held.
+		return { mode, slots: [ item.slot, ...slots.slice( 1 ) ] };
+	} else if ( process && (flags === 0x1dec || flags === 0x35ec && slots.length >= alchemySlotCapacity( mode )) ) {
+		// 6248F1 (621AE0, 0x35ec) and 624A6B (550770, 0x1dec): a main pill
+		// bound while the window holds one resets every slot and rebinds slot
+		// 0, so it starts a fresh selection rather than being refused. The
+		// port also takes 0x35ec as a compound filler and as the dissolve
+		// pill, so that pill resets only once no slot is left for it.
+		return alchemySelection( mode, [], item );
 	} else if ( !process ) {
 		// 62B6D0: magic stones (3/3/11/1 0x0dec, 3/3/11/7 0x3dec) take the magic-option
 		// branch, attribute stones (3/3/11/2 0x15ec) the attribute one. A stone
