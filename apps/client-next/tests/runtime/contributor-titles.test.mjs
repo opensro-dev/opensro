@@ -218,7 +218,7 @@ test("the login prompt raises one dialog per frame, answering with the contribut
 	const titles = createContributorTitles();
 	assert.equal( titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload: Uint8Array.of( 1 ) } ), true );
 	const elsewhere = titles.takePrompt();
-	assert.deepEqual( elsewhere.dialog.answers, {
+	assert.deepEqual( elsewhere?.dialog?.answers, {
 		confirmLabel: "UIIT_PORT_CONTRIBUTOR_MOVE",
 		confirmChat: "/contributor here",
 		cancelLabel: "UIIT_PORT_CONTRIBUTOR_KEEP",
@@ -228,7 +228,7 @@ test("the login prompt raises one dialog per frame, answering with the contribut
 	assert.equal( titles.takePrompt(), undefined );
 	titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload: Uint8Array.of( 2 ) } );
 	const holder = titles.takePrompt();
-	assert.deepEqual( holder.dialog.answers, { confirmLabel: "UIIT_CTL_CONFIRM", confirmChat: "/contributor keep" } );
+	assert.deepEqual( holder?.dialog?.answers, { confirmLabel: "UIIT_CTL_CONFIRM", confirmChat: "/contributor keep" } );
 	for ( const payload of [ Uint8Array.of(), Uint8Array.of( 3 ), Uint8Array.of( 1, 1 ) ] ) {
 		assert.throws( () => titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload } ) );
 	}
