@@ -66,6 +66,16 @@ func (rt *Runtime) tickDoors() characterDoors {
 //     instance-close returns - events, never per-player-per-tick
 //     work - and splitting its commit timing by lane is a change of
 //     its own when someone profiles it hot.
+//   - A held skill press the tick replays (advanceBasicAttackIntent's
+//     Deferred branch) takes its lane's doors through
+//     handleTargetInteractLocked: the basic attack, the offensive skill
+//     and the mirage, taunt, timed-self, status-cast and trap routes
+//     join the tick's batch (#2150; the offensive path was about 3.7 ms
+//     of a tick live at 104 sessions). The remaining
+//     dispatchSkillCommand owners (support, timed-target, party buff,
+//     wall, area burst, position, discord wave, capture, duplicate and
+//     the instant self-effect) still commit immediately: they take no
+//     doors yet, and the profile does not show them hot.
 
 // Dependencies is the character and itemdata surface consumed by action.
 /*
