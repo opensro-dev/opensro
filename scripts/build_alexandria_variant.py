@@ -641,6 +641,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# #3254): without it the build is byte-identical and a previous
 	# import is removed.
 	archive_avatars = add_source(avatars_zip(), native, out, AVATARS_SOURCE)
+	# The Devil's Spirit (Nasrun) rows, inert (SRO_NASRUN, #3348): after the
+	# avatars, whose shards and identities they keep clear of.
+	from nasrun_import import add_nasrun
+	nasrun = add_nasrun(vsro_root, native, out)
 	# The later clients' pets follow the avatars: their COS rows and
 	# summon scrolls append their own shards to the same manifests. The
 	# v1.696 pass and the pinned-archive pass read their sources from the
@@ -698,6 +702,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"mallAvatars": mall_avatars,
 		"mallAvatarsV1696": later_avatars,
 		"mallAvatarsArchive": archive_avatars,
+		"nasrun": nasrun,
 		"pets": pets["pets"],
 		"petsV1696": pets["petsV1696"],
 		"petsArchive": pets["petsArchive"],

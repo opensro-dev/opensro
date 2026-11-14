@@ -40,8 +40,8 @@ These are inferences and port choices, not native evidence:
   shard backup's item census. What neither v1.150 nor this port holds is anything for them to act on:
   both serve only the Devil's Spirit (the later client's Nasrun). The extension gear lengthens a worn
   Nasrun's awakening by four weeks; the jewel upgrades one. The Nasrun wearable is item type 3/1/14 —
-  v1.150's avatars are 3/1/13, the later-avatar import selects 3/1/13 only and skips the Nasrun rows
-  for absent resources — and no awakening clock, Nasrun alchemy (the jewel's recipe and stones) or
+  v1.150's avatars are 3/1/13, the later-avatar import selects 3/1/13 only; the Nasrun rows themselves
+  land inert behind `SRO_NASRUN` ([NASRUN.md](NASRUN.md)) — and no awakening clock, Nasrun alchemy (the jewel's recipe and stones) or
   upgrade path exists here yet. Listing either now would sell an item that cannot be used, and a substitute
   effect would be invented behaviour. The owner's call (2026-11-12): port every prerequisite first. #3348
   ports the Devil's Spirit system (the wearable, its awakening clock, Nasrun alchemy) and then lists both.
