@@ -23,6 +23,9 @@ const (
 	physicalAttackFlag uint32 = 0x04
 	magicalAttackFlag  uint32 = 0x08
 	normalResultFlag   uint8  = 0x01
+	// IgnoreDefenseResultFlag is the hit-record flag byte bit (0x20) set when
+	// MATTR_AVATAR_MDIA procs, skipping parry and defense in every lane.
+	IgnoreDefenseResultFlag uint8 = 0x20
 )
 
 // Roll32767 returns one value in the same inclusive 0..32767 domain as the
@@ -139,6 +142,9 @@ type AttackCalculation struct {
 	Lanes         uint32
 	Player        bool
 	Critical      bool
+	// IgnoreDefense is the 0x20 MATTR_AVATAR_MDIA proc from the reference
+	// server's hit-outcome routine.
+	IgnoreDefense bool
 	wall          bool
 }
 
@@ -193,14 +199,31 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	if total > uint64(wire.MaxSkillActionDamage) {
 		total = uint64(wire.MaxSkillActionDamage)
 	}
+	return Result{
+		Damage:         uint32(total),
+		MagicalDamage:  magicalDamage,
+		PhysicalDamage: physicalDamage,
+		ResultFlags:    resultFlags(attacker, calculation),
+	}, nil
+}
+
+/*
+================
+resultFlags
+================
+*/
+func resultFlags(attacker Stats, calculation AttackCalculation) uint8 {
 	flags := normalResultFlag
-	if critical && attack.Flags&physicalAttackFlag != 0 {
+	if calculation.Critical && calculation.Attack.Flags&physicalAttackFlag != 0 {
 		flags = 2
 	}
 	if attacker.Berserk {
 		flags |= 4
 	}
-	return Result{Damage: uint32(total), MagicalDamage: magicalDamage, PhysicalDamage: physicalDamage, ResultFlags: flags}, nil
+	if calculation.IgnoreDefense {
+		flags |= IgnoreDefenseResultFlag
+	}
+	return flags
 }
 
 /*
@@ -301,7 +324,12 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	attackPoint = parameterAttackPoint(attackPoint, attacker.SkillParameters, attack.Parameters, magical)
 	attackPoint = stealthStrikePoint(attackPoint, attacker, attack.Parameters, magical)
 
-	damage := attackPoint/(parry/100+1) - defense
+	// In both damage lanes the 0x20 proc skips the parry division and the
+	// defense subtraction; both paths then share the same clamp at zero.
+	damage := attackPoint
+	if !calculation.IgnoreDefense {
+		damage = attackPoint/(parry/100+1) - defense
+	}
 	if damage < 0 {
 		damage = 0
 	}

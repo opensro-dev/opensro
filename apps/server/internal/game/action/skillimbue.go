@@ -242,8 +242,10 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 	}
 	var extra combat.Result
 	if imbueLanes != 0 {
+		// The weapon-imbue lanes get the same 0x20 ignore-defense flag byte.
 		extra, err = combat.ResolveCalculation(attacker, defender, combat.AttackCalculation{
 			Attack: imbue.Attack, OriginalFlags: skill.Attack.Flags, Lanes: imbueLanes, Player: true,
+			IgnoreDefense: result.ResultFlags&combat.IgnoreDefenseResultFlag != 0,
 		}, rt.CombatRoll)
 	}
 	if err != nil {
