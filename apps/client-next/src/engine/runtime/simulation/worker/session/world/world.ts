@@ -281,10 +281,16 @@ onNetworkFailure
 		// The typed refusal the mint answered with ("MAINTENANCE"),
 		// when the failure was an answered refusal at all (#2557).
 		refusal?: string;
+		// The native error code a refused EnterWorld result carried
+		// (0x11, already connected: the account's world seat is held).
+		nativeErrorCode?: number;
 	} | undefined;
 	// The refusal code of the mint failure being consumed, carried from
 	// the completion into the failure branch that files the evidence.
 	let failureRefusal: string | undefined;
+	// The native error code of a refused EnterWorld result, carried the
+	// same way into the evidence the character screen shows.
+	let failureNativeError: number | undefined;
 	let attemptBytesBase = 0, attemptFramesBase = 0;
 	// The stall watch: the oldest outstanding request's send time (step
 	// clock), the event-clock moment that request was first seen
@@ -479,6 +485,7 @@ connect
 		lastError = undefined;
 		lastFailureEvidence = undefined;
 		failureRefusal = undefined;
+		failureNativeError = undefined;
 		// Every attempt - fresh entry, resume, retry - passes through
 		// here, so this baseline is the attempt's alone (#2311 item 4).
 		attemptBytesBase = network.receivedBytes();
@@ -529,8 +536,22 @@ receive
 				throw new Error( "Truncated EnterWorld result" );
 			}
 			const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), length = view.getUint32( 5, true );
-			if ( p.length !== 9 + length || p[0] !== 1 ) {
-				throw new Error( `EnterWorld rejected: ${view.getUint32( 1, true )}` );
+			if ( p[0] !== 1 ) {
+				// A refused entry is the server's designed answer, not a
+				// packet the client failed to apply: its native error code
+				// (bytes 1..4) rides to the character screen, which shows
+				// that code's message (0x11: the account already has a
+				// character in the world) instead of the generic (S2).
+				failureNativeError = view.getUint32( 1, true );
+				onNetworkFailure( `EnterWorld rejected: ${failureNativeError}`, undefined, {
+					category: "expected",
+					code: "enter_world_refused",
+					message: "The server refused the world entry."
+				} );
+				return false;
+			}
+			if ( p.length !== 9 + length ) {
+				throw new Error( "Truncated EnterWorld result" );
 			}
 			const wrapper = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 9 ) ) ) as {
 				v?: number;
@@ -955,9 +976,11 @@ step
 					// Why the transport ended (server_bye_N when the
 					// server's BYE named it), when the failure named one.
 					...(failureCode ? { closeReason: failureCode } : {}),
-					...(failureRefusal ? { refusal: failureRefusal } : {})
+					...(failureRefusal ? { refusal: failureRefusal } : {}),
+					...(failureNativeError !== undefined ? { nativeErrorCode: failureNativeError } : {})
 				};
 				failureRefusal = undefined;
+				failureNativeError = undefined;
 				cancel();
 				deadline = 0;
 				// A bound session retries as a resume; an entry that never
