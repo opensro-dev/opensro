@@ -1029,7 +1029,11 @@ export function createRenderer(
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
 						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
-						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa, !!refraction ),
+						// Kept follows the water setting, not this frame's arming: a
+						// preview frame or one without scene depth disarms the
+						// water, and keying on it would recreate the 4x colour
+						// every time the two kinds of frame alternate.
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa, experimental.waterRefraction ),
 						sceneScale: separate ?
 							{
 								view: color,

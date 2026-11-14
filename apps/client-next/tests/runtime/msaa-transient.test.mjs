@@ -56,9 +56,9 @@ function fakeDevice() {
 
 test("arming the water recreates the colour without the transient bit, and back", () => {
 	const previous = globalThis.GPUTextureUsage;
-	globalThis.GPUTextureUsage = USAGE;
+	globalThis.GPUTextureUsage = /** @type {any} */ (USAGE);
 	try {
-		const device = fakeDevice(), stage = createMsaa( device );
+		const device = fakeDevice(), stage = createMsaa( /** @type {any} */ (device) );
 		const colours = () => device.textures.filter( texture => texture.label === "msaa-scene-colour" );
 		stage.prepare( 64, 64, "rgba8unorm", true, false );
 		stage.prepare( 64, 64, "rgba8unorm", true, false );

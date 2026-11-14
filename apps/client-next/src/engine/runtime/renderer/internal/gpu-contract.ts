@@ -233,7 +233,7 @@ export interface DeviceOwner extends Disposable {
 		enabled: boolean,
 		camera: import("@/engine/contracts/scene").WorldCamera
 	): WaterRefractionDraw | undefined;
-	// kept: a later pass this frame (the water refraction) loads the 4x colour.
+	// kept: water refraction is on, so a later pass may load the 4x colour.
 	msaa( width: number, height: number, enabled: boolean, kept: boolean ): MsaaDraw | undefined;
 	sunShadow(): SunShadowOwner;
 	ambientOcclusion(
