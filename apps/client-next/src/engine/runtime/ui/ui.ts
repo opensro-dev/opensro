@@ -985,6 +985,8 @@ const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // msgbox2_window_ has no centre tile: the letter popups' own tiles and black
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
+// ifapprenticeshiphonorranking's RankingListBtn column heads (ids 20-24).
+const ACADEMY_HONOR_HEADER_IDS = [ 20, 21, 22, 23, 24 ] as const;
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const PARTY_MATCH_VISIBLE_ROWS = 12;
 // The properties dialog (ifsetpartymode) lists Auto Share above Distribution
@@ -18227,6 +18229,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] );
 					nativeFrame( root, px, py, hudCopy( root.text ), "academy-honor-close" );
 					nativePage( layout, px, py, [ 3, 4, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 ] );
+					// 6E8C10 creates RankingListBtn and leaves it shown: the five column
+					// heads (Rank, Class, Guardian, Level, Graduation; CIFButton ids
+					// 20-24 on the gil_subj_button plates) beside the Guild bar (25).
+					// No handler of the window reads them, so they draw as plates
+					// with their captions and take no input.
+					for ( const id of ACADEMY_HONOR_HEADER_IDS ) {
+						const head = byId( id );
+						if ( !head ) continue;
+						authoredImage( head, px, py );
+						authoredText( head, px, py, hudCopy( head.text ) );
+					}
 					const confirm = byId( 3 );
 					if ( confirm ) {
 						authoredLabeledButton( confirm, px, py, "academy-honor-confirm", hudCopy( confirm.text ) );
@@ -18235,6 +18248,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const holder = byId( 30 + index );
 						if ( !holder ) continue;
 						const [sx, sy] = authoredRect( holder, px, py );
+						// CIFApprenticeShipHonorSlot (6E91D0) derives from CIFBarWnd (its
+						// base 6F5990 sets the CIFBarWnd vtable), so every one of the ten
+						// slots 6E8C10 creates draws its com_bar01_ bar, filled or not.
+						const bar = barChrome( authoredRect( holder, px, py ), holder.texture, resources.size, full );
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
 						nativePage( slotLayout, sx, sy, [ 1, 2, 3, 4, 5, 6 ] );
 						if ( !slot ) continue;
 						for ( const node of slotNodes ) {
