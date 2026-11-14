@@ -231,16 +231,12 @@ TestGrabPetItemMoveIntoFullBagsAdvancesTheRotation
 
 #3423: every member's player bag is full and the picker's pet has room;
 the pet's item-move pickup (move type 0x11) proposes one drop again and
-again. The native item-move handler serves 0x11 as 6
-(CGObjPC_RegisterItemMoveHandlers 0x50ce80: both table rows hold
-CPlayer_ExecuteGroundPickup 0x526090), and that handler rotates the loot
-member while it selects the recipient (CPlayer_SelectPartyLootRecipient
-0x525dc0 -> CParty_RotateLootMember at 0x525f82), before the grant
-(CPlayer_GrantGroundPickup at 0x526335). So a refused attempt still
-spends the turn. On the peer's turn the grant fails 0x1807 with no
-fallback (0x52634f-0x5263a8): the peer gets [2, 0x07], the picker
-[2, 0xDA], the drop stays. The next attempt is the picker's own turn and
-lands in the pet's bag.
+again. The reference server's item-move handler serves 0x11 as 6, and
+its ground pickup rotates the loot member while it selects the
+recipient, before the grant, so a refused attempt still spends the turn.
+On the peer's turn the grant fails bag-full with no fallback: the peer
+gets [2, 0x07], the picker [2, 0xDA], the drop stays. The next attempt is
+the picker's own turn and lands in the pet's bag.
 ================
 */
 func TestGrabPetItemMoveIntoFullBagsAdvancesTheRotation(t *testing.T) {
