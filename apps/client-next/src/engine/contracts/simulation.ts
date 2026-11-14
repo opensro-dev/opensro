@@ -18,7 +18,14 @@ export type HostMessage = { kind: "world-ack"; sequence: number; } | {
 } | {
 	kind: "stop";
 };
-export type WorkerMessage = { kind: "world"; batch: import("./world").WorldBatch; } | {
+export type WorkerMessage = {
+	kind: "world";
+	batch: import("./world").WorldBatch;
+	// Walking paths the port sent as their change from the one it last sent
+	// (foundation/gameplay/walking-path-wire.ts); the host restores them
+	// before anyone reads the batch.
+	walkingPaths?: readonly import("@/engine/foundation/gameplay/walking-path-wire").WalkingPathChange[];
+} | {
 	kind: "session";
 	state: SessionState;
 } | {
