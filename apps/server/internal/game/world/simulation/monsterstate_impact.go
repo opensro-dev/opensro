@@ -157,6 +157,12 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	// commit; neither can be recovered from the final HP debit.
 	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, ground: s.ground, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, plan.StatusHit, plan.Abnormal)
 	state.instances.set(gid, instance)
+	if instance.CurrentHP != before {
+		s.noteVitalsLocked(division, gid, VitalsSourceCombatDamage)
+	}
+	if effects.MaskChanged {
+		s.noteVitalsLocked(division, gid, VitalsSourceStatus)
+	}
 	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Damage: damage, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
 	if knockback != nil {
 		result.Knockback = committed

@@ -89,27 +89,34 @@ func TestPetGearElementsSeparateAndDoNotProc(t *testing.T) {
 ================
 TestPetBonusHitFramesLeaveInTheTickThatStruck
 
-A pet's bonus hit queues its frames on the monster leg, and its HP frame
-carries the HP that hit left. The frames must leave in the tick that
-committed the hit: held for the next tick's drain they arrive behind the
-hits that tick commits first (a prepared cast's release), with an HP those
-hits have already lowered, and the client's bar jumps back up.
+A pet's bonus hit queues its damage label on the monster leg, and the HP
+it took reaches the monster's holder with the tick's other changes. Both
+leave in the tick that committed the hit: held for the next tick they
+arrive behind the hits that tick commits first.
 ================
 */
 func TestPetBonusHitFramesLeaveInTheTickThatStruck(t *testing.T) {
 	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	rt.Selected.Set(testDivision, c.Name, mob.Gid)
 	step, ok := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
 	if !ok {
 		t.Fatal("no companion")
 	}
 	step.trained = &petTrainedStrike{mods: companion.Modifiers{PoisonAdd: 12}}
 	rt.petGearElements(step, mob.Gid)
+	rt.Monsters.DrainChangedVitals(nil)
 	clock.now = clock.now.Add(time.Second)
-	published := false
+	label, held := false, uint32(0)
 	for _, batch := range rt.TickHook()(clock.NowMs()) {
 		for _, frame := range batch.Frames {
-			if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
-				published = true
+			if frame.Opcode == abnormalDamageCreditOpcode && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+				label = true
+			}
+			if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid && frame.Payload[6]&1 != 0 {
+				if batch.OnlyCharacterID != c.ID {
+					t.Fatal("the bonus hit's HP reached a non-holder")
+				}
+				held = binary.LittleEndian.Uint32(frame.Payload[7:])
 			}
 		}
 	}
@@ -117,7 +124,10 @@ func TestPetBonusHitFramesLeaveInTheTickThatStruck(t *testing.T) {
 	if after.CurrentHP >= mob.CurrentHP {
 		t.Fatal("the poison tick did not land in this tick")
 	}
-	if !published {
-		t.Fatal("the tick that dealt the bonus damage did not publish the monster's HP")
+	if !label {
+		t.Fatal("the tick that dealt the bonus damage did not publish its label")
+	}
+	if held != after.CurrentHP {
+		t.Fatal("the holder did not receive the HP the bonus hit left", held, after.CurrentHP)
 	}
 }

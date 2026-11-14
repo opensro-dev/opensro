@@ -82,14 +82,16 @@ func TestFlyingStoneShippedChainAndBleedingLifecycle(t *testing.T) {
 	if enterworld.CurrentMP(c) != 450 {
 		t.Fatal("root MP", enterworld.CurrentMP(c))
 	}
+	// The bleeding reaches every observer as the status alone (flags 4);
+	// the HP reaches only the monster's holders.
 	maskFound := false
 	for _, f := range released.Frames {
-		if f.Opcode == simulation.OpVitalsUpdate && len(f.Payload) == 16 && f.Payload[6] == 5 && binary.LittleEndian.Uint32(f.Payload[11:])&0x800 != 0 && f.Payload[15] == 8 {
+		if f.Opcode == simulation.OpVitalsUpdate && len(f.Payload) == 12 && f.Payload[6] == 4 && binary.LittleEndian.Uint32(f.Payload[7:])&0x800 != 0 && f.Payload[11] == 8 {
 			maskFound = true
 		}
 	}
 	if !maskFound {
-		t.Fatal("missing bleeding grade on HP/status snapshot")
+		t.Fatal("missing bleeding grade on the status frame")
 	}
 	tailSeen := false
 	for n := 1; n <= 15; n++ {

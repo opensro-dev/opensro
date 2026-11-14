@@ -237,6 +237,10 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		frames("advanceFlagWar", rt.advanceFlagWar)
 		frames("advanceFlagWarMatches", rt.advanceFlagWarMatches)
+		// After every step that can change a monster's HP or status, so
+		// the vitals a holder receives carry this tick's changes
+		// (monstervitals.go).
+		frames("publishMonsterVitals", rt.publishMonsterVitals)
 		// Last, so a notice any step above queued leaves this same tick.
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out

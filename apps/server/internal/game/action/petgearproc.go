@@ -135,8 +135,7 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 		rt.wolfBonusHit(step, *target.monster, damage, "pet-gear-proc")
 		if kind == companion.ProcFire || kind == companion.ProcBlizzard {
 			if after, ok := rt.Monsters.Get(step.key.division, target.gid); ok && after.CurrentHP > 0 && after.CurrentHP < target.monster.CurrentHP {
-				frames := rt.applyPetStatus(step, status, target.gid)
-				if len(frames) > 0 {
+				if frames, _ := rt.applyPetStatus(step, status, target.gid); len(frames) > 0 {
 					rt.queueMonsterLegFrames(rt.sealTickPrivate([]simulation.DivisionFrames{{DivisionID: step.key.division, SourceGID: target.gid, Frames: simFrames(frames)}}))
 				}
 			}

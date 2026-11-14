@@ -322,6 +322,13 @@ func hasLifeDead(frames []simulation.Frame, gid uint32) bool {
 	return false
 }
 
+// The monster burn walk's step and the slack past its duration in which
+// the expiry lands on an update.
+const (
+	monsterBurnStepMs   = 250
+	monsterBurnSettleMs = 1000
+)
+
 /*
 ================
 TestTickPublicBatchesScopeSourceGID
@@ -344,7 +351,12 @@ func TestTickPublicBatchesScopeSourceGID(t *testing.T) {
 			Abnormal:        []abnormal.Record{mobBurn},
 			AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, []abnormal.Record{mobBurn}),
 		}})
-		mobBatches := rt.advanceMonsterAbnormals(now)
+		// A monster's status tick publishes no HP; the burn's expiry
+		// changes the status, which every observer of the monster receives.
+		var mobBatches []simulation.DivisionFrames
+		for at := now; at <= now+int64(mobBurn.DurationMs)+monsterBurnSettleMs; at += monsterBurnStepMs {
+			mobBatches = append(mobBatches, rt.advanceMonsterAbnormals(at)...)
+		}
 		assertPublicBatchesSourceGID(t, "monster abnormal", mobBatches, instance.Gid, 0)
 
 		pcBurn := abnormal.Record{Status: abnormal.Burn, Level: 4, DurationMs: 30000, Rate24: 10, Scale20: 1, SourceGID: instance.Gid}

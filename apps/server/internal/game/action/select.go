@@ -70,9 +70,13 @@ selection is one character's selected gid and its open NPC function.
 Natively the player's +0xC+6 is set to 5 when an in-range request opens a shop;
 trades check that state, not distance. A new selection or a release ends
 it, so every path that clears the selection also closes the function.
+The division and name are the key's parts, kept for the readers that walk
+every selection (holders).
 ================
 */
 type selection struct {
+	division     string
+	name         string
 	gid          uint32
 	functionOpen bool
 }
@@ -98,7 +102,7 @@ Set records a character's selected object gid. Any open NPC function ends.
 func (s *SelectionStore) Set(divisionID, characterName string, gid uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.byCharacter[selectionKey(divisionID, characterName)] = selection{gid: gid}
+	s.byCharacter[selectionKey(divisionID, characterName)] = selection{division: divisionID, name: characterName, gid: gid}
 }
 
 /*
@@ -141,7 +145,8 @@ func (s *SelectionStore) OpenFunction(divisionID, characterName string, gid uint
 	defer s.mu.Unlock()
 	key := selectionKey(divisionID, characterName)
 	if row, ok := s.byCharacter[key]; ok && row.gid == gid {
-		s.byCharacter[key] = selection{gid: gid, functionOpen: true}
+		row.functionOpen = true
+		s.byCharacter[key] = row
 	}
 }
 
@@ -157,6 +162,38 @@ func (s *SelectionStore) FunctionOpen(divisionID, characterName string, gid uint
 	defer s.mu.Unlock()
 	row, ok := s.byCharacter[selectionKey(divisionID, characterName)]
 	return ok && row.gid == gid && row.functionOpen
+}
+
+/*
+================
+selectionHolder
+
+One character holding a selection: its division, name and selected gid.
+================
+*/
+type selectionHolder struct {
+	division string
+	name     string
+	gid      uint32
+}
+
+/*
+================
+holders
+
+Append every character's selection to dst, in no particular order. The
+copy is taken under the lock, so a reader acts on it without holding it.
+================
+*/
+func (s *SelectionStore) holders(dst []selectionHolder) []selectionHolder {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, row := range s.byCharacter {
+		if row.gid != 0 {
+			dst = append(dst, selectionHolder{division: row.division, name: row.name, gid: row.gid})
+		}
+	}
+	return dst
 }
 
 /*

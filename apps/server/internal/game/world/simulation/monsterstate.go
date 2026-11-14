@@ -175,6 +175,10 @@ type MonsterState struct {
 	// must never answer through a dead state pointer.
 	scopePhase  scopePopulations
 	scopeFolded map[scopeStampKey]interestMemoStamp
+	// vitals holds the cause word of every monster whose HP or status
+	// changed since the last DrainChangedVitals (monster_vitals.go).
+	// Guarded by mu.
+	vitals map[monsterVitalsKey]VitalsSourceFlags
 }
 
 /*

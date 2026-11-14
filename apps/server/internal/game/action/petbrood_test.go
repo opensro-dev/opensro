@@ -14,7 +14,6 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"testing"
 	"time"
@@ -294,7 +293,7 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 		child.broodAt = target.at
 		child.mover.FollowFrom(egg.GID, child.broodAt)
 		if test.slowed {
-			// A slowed target already gets its HP in the strike's abnormal vitals frame.
+			// A slowed target's strike carries its status, never its HP.
 			seedBroodTargetSlow(t, rt, c, mob.Gid)
 		}
 		cloneStep := petCombatStep{key: petOwnerKey{division: key.division, name: key.name, gid: egg.GID}, state: child, snapshot: rt.characterSnapshot(key.division, c), pet: egg, ref: ref, nowMs: clock.NowMs(), percent: fullAreaPercent}
@@ -309,10 +308,14 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 		}
 		before, _ := rt.Monsters.Get(testDivision, mob.Gid)
 		rt.drainMonsterLegRecipients()
+		rt.Monsters.DrainChangedVitals(nil)
+		// The owner holds the monster, so its HP reaches the owner with
+		// the tick's changes (monstervitals.go).
+		rt.Selected.Set(testDivision, c.Name, mob.Gid)
 		egg.CurrentHP = 0
 		rt.advanceCrowBrood(key, clock.NowMs())
 		visuals := 0
-		var shown, hpRefresh, refreshes uint32
+		var shown, hpFrames uint32
 		for _, batch := range rt.drainMonsterLegRecipients() {
 			for _, frame := range batch.Frames {
 				if frame.Opcode == 0x3128 && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
@@ -321,9 +324,8 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 					}
 					shown += binary.LittleEndian.Uint32(frame.Payload[4:])
 				}
-				if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
-					hpRefresh = binary.LittleEndian.Uint32(frame.Payload[7:])
-					refreshes++
+				if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid && frame.Payload[6]&1 != 0 {
+					hpFrames++
 				}
 				if frame.Opcode == broodWindOpcode {
 					visuals++
@@ -347,13 +349,17 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 			if uint64(damage) < normal.hpDamage*5 || uint64(damage) > normal.hpDamage*5+rounding {
 				t.Fatal("wind must deal 500% of the same normal roll", test.collar, normal.hpDamage, damage)
 			}
-			if shown != damage || hpRefresh != after.CurrentHP {
-				t.Fatal("wind damage/HP feedback missing", damage, shown, after.CurrentHP, hpRefresh)
+			if shown != damage {
+				t.Fatal("wind damage feedback missing", damage, shown)
 			}
-			// One HP refresh per target: the strike's own abnormal vitals frame
-			// and the burst's refresh must never both reach the client.
-			if refreshes != 1 {
-				t.Fatal("wind HP refresh count", test.collar, refreshes)
+			// The burst's HP rides no public frame; the holder receives it.
+			if hpFrames != 0 {
+				t.Fatal("wind published the monster's HP", test.collar, hpFrames)
+			}
+			held := rt.publishMonsterVitals(clock.NowMs())
+			if len(held) != 1 || held[0].OnlyCharacterID != c.ID || len(held[0].Frames) != 1 ||
+				binary.LittleEndian.Uint32(held[0].Frames[0].Payload[7:]) != after.CurrentHP {
+				t.Fatal("holder vitals after the wind", test.collar, held, after.CurrentHP)
 			}
 		}
 		if len(c.Brood) != 0 {
@@ -466,8 +472,8 @@ func TestCrowBroodSlotReuseChangesSummonGeneration(t *testing.T) {
 ================
 seedBroodTargetSlow
 
-Puts a long Slow on the burst's target, so every strike on it publishes the
-abnormal vitals frame that already carries its HP.
+Puts a long Slow on the burst's target, so every strike on it meets a
+monster that carries a status.
 ================
 */
 func seedBroodTargetSlow(t *testing.T, rt *Runtime, c *enterworld.Character, gid uint32) {
@@ -477,29 +483,5 @@ func seedBroodTargetSlow(t *testing.T, rt *Runtime, c *enterworld.Character, gid
 	plan := simulation.MonsterDamagePlan{GID: gid, CreditGID: record.SourceGID, Abnormal: []abnormal.Record{record}, AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, []abnormal.Record{record})}
 	if r := rt.Monsters.ApplyDamageSequence(testDivision, gid, current.CurrentHP, []simulation.MonsterDamagePlan{plan}); len(r) != 1 || r[0].Instance.Abnormal == nil {
 		t.Fatal("slow admission")
-	}
-}
-
-/*
-================
-TestBroodVitalsFrameNeedsHPBit
-
-Only a vitals update that carries the target's HP stands in for the death
-burst's own refresh; an update for another object or without the HP bit
-leaves the refresh to the burst.
-================
-*/
-func TestBroodVitalsFrameNeedsHPBit(t *testing.T) {
-	const gid uint32 = 0x1234
-	withHP := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, 99)}
-	noHP := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: wire.NewWriter(7).U32(gid).U16(0x100).U8(0x04).Payload()}
-	other := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid+1, 0, 99)}
-	for _, test := range []struct {
-		frames []wire.Frame
-		want   bool
-	}{{[]wire.Frame{withHP}, true}, {[]wire.Frame{noHP}, false}, {[]wire.Frame{other}, false}, {[]wire.Frame{noHP, withHP}, true}, {nil, false}} {
-		if got := hasVitalsFrameFor(test.frames, gid); got != test.want {
-			t.Fatal("vitals frame match", len(test.frames), got, test.want)
-		}
 	}
 }

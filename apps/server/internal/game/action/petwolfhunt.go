@@ -112,7 +112,9 @@ func (rt *Runtime) wolfHuntRend(step petCombatStep, primary petCombatTarget, str
 wolfBonusHit
 
 Use the normal expected-HP, rewards and audience doors. No raw HP mutation,
-recursive cast, attack charge or duplicate reward settlement.
+recursive cast, attack charge or duplicate reward settlement. The HP the
+hit took reaches the monster's holders with the tick's other changes
+(monstervitals.go); only the damage label and the kill ride this hit.
 ================
 */
 func (rt *Runtime) wolfBonusHit(step petCombatStep, mob monster.Instance, damage uint32, reason string) {
@@ -131,12 +133,14 @@ func (rt *Runtime) wolfBonusHit(step petCombatStep, mob monster.Instance, damage
 	if action := wolfBonusEmote(reason); action != 0 {
 		rt.wolfEmote(step.key.division, mob.Gid, action)
 	}
-	public := []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(mob.Gid, 0, hit.impacts[0].CurrentHP)}}
-	result := rt.creditedHitResult(step.key.division, mob, hit, public, step.nowMs)
+	result := rt.creditedHitResult(step.key.division, mob, hit, nil, step.nowMs)
 	if reason == "pet-gear-element" || reason == "pet-gear-proc" {
 		result.ActorPrivate = append(result.ActorPrivate, abnormalDamageFrame(mob.Gid, hit.impacts[0].Damage))
 	}
-	batches := []simulation.DivisionFrames{{DivisionID: step.key.division, SourceGID: mob.Gid, Frames: simFrames(result.Broadcast)}}
+	var batches []simulation.DivisionFrames
+	if len(result.Broadcast) > 0 {
+		batches = append(batches, simulation.DivisionFrames{DivisionID: step.key.division, SourceGID: mob.Gid, Frames: simFrames(result.Broadcast)})
+	}
 	if len(result.ActorPrivate) > 0 {
 		batches = append(batches, simulation.DivisionFrames{DivisionID: step.key.division, OnlyCharacterID: step.state.character.ID, Frames: simFrames(result.ActorPrivate)})
 	}
