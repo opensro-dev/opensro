@@ -36,7 +36,8 @@ poll that stalls after every asset has arrived reports no error
 (BR-261108-1908-A644: the bar full, the asset queue idle for minutes,
 the session still at character-select, clicks dead), so without a
 bound the loading screen is permanent. The bound runs on the step
-clock (flow.elapsed), so a hidden tab does not spend it, and it only
+clock (flow.elapsed), which hidden maintenance frames still advance,
+so those frames render during these phases (hidden-render.ts); it only
 runs while nothing changes at all: a slow load that keeps moving is
 never cut. The worker's admission deadline (session/world.ts) is the
 model; this is its frontend counterpart.
