@@ -6,11 +6,15 @@ host.ts - the main thread's side of the simulation worker
 Owns the worker, the one retained world batch awaiting acknowledgement, the
 newest snapshot buffer and the input sequence checks. The runtime polls it
 once per frame; delivery() lets a hidden tab frame from worker messages.
+It also holds each character's last walking path: the worker's port sends a
+path that continues it as a change (walking-path-wire.ts), and the batch is
+whole again before it is retained.
 
 ===========================================================================
 */
 import type { SessionState } from "@/engine/contracts/session";
 import { PROTOCOL_VERSION, readSnapshot } from "@/engine/contracts/simulation";
+import { createWalkingPathMemory, restoreWalkingPaths } from "@/engine/foundation/gameplay/walking-path-wire";
 import type { WorkerMessage, HostMessage } from "@/engine/contracts/simulation";
 import type { SimulationHost, SimulationObservation } from "@/engine/contracts/runtime";
 import { NET_JOURNAL_FIELDS } from "@/engine/contracts/network";
@@ -30,6 +34,8 @@ export function createSimulationHost(): SimulationHost {
 	} );
 	let disposed = false, failure: string | null = null, pending: ArrayBuffer | null = null, sequence = 0;
 	let worldBatch: import("@/engine/contracts/world").WorldBatch | null = null, worldSequence = 0;
+	// The walking paths as the worker's port last sent them, one per character.
+	const receivedWalkingPaths = createWalkingPathMemory();
 	let sessionState: SessionState | null = null;
 	let lastInputSent = 0, lastInputAccepted = 0;
 	// Gameplay inputs to the worker carry a sequence number (#1441a).
@@ -60,6 +66,14 @@ tab; worker messages do not.
 		if ( event.data.kind === "world" ) {
 			if ( worldBatch || event.data.batch.sequence !== worldSequence + 1 ) {
 				failure = "World journal delivery sequence violation";
+				return;
+			}
+			// The port sent the walking paths that continue their last ones
+			// as changes; every reader of the batch gets them whole.
+			try {
+				restoreWalkingPaths( event.data.batch, event.data.walkingPaths, receivedWalkingPaths );
+			} catch ( error ) {
+				failure = String( error );
 				return;
 			}
 			worldBatch = event.data.batch;
