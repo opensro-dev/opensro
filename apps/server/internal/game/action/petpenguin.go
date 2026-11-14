@@ -412,10 +412,9 @@ func (rt *Runtime) advancePenguinSession(key petOwnerKey, state *petSession, now
 				pulse.trained.shatter = s.ValueAt(level)
 			}
 			if hit, ok := rt.strikePetTarget(pulse, target, skill); ok {
+				// The pulse's HP reaches the monster's holders with the
+				// tick's other changes (monstervitals.go).
 				public := hit.strike.public
-				if current, found := rt.Monsters.Get(key.division, target.gid); found {
-					public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
-				}
 				// The public audience excludes the owner, who needs the same pulse updates.
 				state.public = append(state.public, public...)
 				output = append(output, simFrames(public)...)

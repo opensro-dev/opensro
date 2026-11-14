@@ -98,6 +98,9 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 			learnPetBook(t, c, 33+book)
 			learnPetBook(t, c, 42+book)
 			castPenguinFixture(t, rt, clock, c, mob, 33+book)
+			// The owner holds the monster its pet fights, so the storm's HP
+			// reaches the owner with each tick's changes.
+			rt.Selected.Set(testDivision, c.Name, mob.Gid)
 			step, _ := rt.penguinCompanion(testDivision, c, clock.NowMs())
 			first, _ := rt.Monsters.Get(testDivision, mob.Gid)
 			if len(step.state.penguin.storms) != 1 {

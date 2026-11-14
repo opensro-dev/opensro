@@ -738,6 +738,12 @@ func (s *MonsterState) CommitAbnormalUpdate(plan MonsterAbnormalPlan, now int64)
 		state.settleCorpseLocked(&next, now, s.ground)
 	}
 	state.instances.set(plan.GID, next)
+	if next.CurrentHP != before {
+		s.noteVitalsLocked(plan.Division, plan.GID, VitalsSourceStatusDamage)
+	}
+	if plan.Effects.MaskChanged {
+		s.noteVitalsLocked(plan.Division, plan.GID, VitalsSourceStatus)
+	}
 	state.trackAbnormal(plan.GID, next.Abnormal)
 	state.queueAIEvents(plan.GID, plan.ai)
 	result := MonsterDamageResult{Population: state.lease, Instance: next, BeforeHP: before, CurrentHP: next.CurrentHP, Applied: applied, Fatal: before > 0 && next.CurrentHP == 0}
@@ -757,15 +763,8 @@ order over 017FCFC0}.
 ==================
 */
 func MonsterAbnormalPayload(instance monster.Instance) []byte {
-	var mask uint32
-	var grades []uint8
-	if instance.CurrentHP > 0 && instance.Abnormal != nil {
-		mask, grades = instance.Abnormal.Mask, instance.Abnormal.Grades()
-	}
-	w := wire.NewWriter(12).U32(instance.Gid).U16(0x100).U8(4).U32(mask)
-	for _, g := range grades {
-		w.U8(g)
-	}
+	w := wire.NewWriter(12).U32(instance.Gid).U16(uint16(VitalsSourceStatus)).U8(4)
+	writeMonsterStatus(w, instance)
 	return w.Payload()
 }
 

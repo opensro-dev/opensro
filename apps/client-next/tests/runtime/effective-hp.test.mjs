@@ -87,25 +87,35 @@ test("source gate adjusts by wire delta, then checkpoints reconcile in receipt o
 	}
 });
 
-test("a status-free monster's baseline binds its cast result, so a bonus frame lowers the bar by its own damage", () => {
+test("a holder's per-tick vitals bind its pending results, so a status tick lowers the bar by its own damage", () => {
 	const h = createEffectiveHp(), c = createCombat( () => undefined, e => h.receive( e ) );
 	const bytes = hex => Uint8Array.from( hex.match( /../g ), byte => parseInt( byte, 16 ) );
 	const target = 0x61a81;
+	// The private vitals a monster's holder receives once per tick
+	// (server monstervitals.go): gid, the tick's cause word, flags 5, the
+	// HP and the status block (left empty here).
+	const held = ( cause, hp ) => {
+		const p = new Uint8Array( 15 ), v = new DataView( p.buffer );
+		v.setUint32( 0, target, true );
+		v.setUint16( 4, cause, true );
+		p[6] = 5;
+		v.setUint32( 7, hp, true );
+		return p;
+	};
 	c.seed( target, { hp: 100 } );
-	// The server's own burst for a sword base attack with the attack-pet
-	// expansion on, byte for byte: the cast result with two impacts of 6
-	// (apps/server skill_cast_accept_fixture.json), then the survivor's HP
-	// baseline with an empty status word (monsterImpactAbnormalFrames).
+	// A sword base attack, byte for byte (apps/server
+	// skill_cast_accept_fixture.json): two impacts of 6 on the way.
 	c.receive(
 		0xb245,
 		bytes( "010002000000a386010001000000811a0600010201811a0600000106000000000000000106000000000000" ),
 		100
 	);
-	c.receive( 0x33a6, bytes( "811a06000001055800000000000000" ), 100 );
+	// The tick's vitals carry the hit's cause (4): no difference is applied.
+	c.receive( 0x33a6, held( 4, 88 ), 100 );
 	assert.equal( h.hp( target ), 100, "neither impact has landed" );
-	// A pet's bonus hit for 5 while both impacts are pending: HP only, source zero.
-	c.receive( 0x33a6, bytes( "811a060000000153000000" ), 150 );
-	assert.equal( h.hp( target ), 95, "the delta is measured from the baseline's 88, not from the spawn's 100" );
+	// The next tick's only change is a status's 5 damage (cause 2, a delta).
+	c.receive( 0x33a6, held( 2, 83 ), 150 );
+	assert.equal( h.hp( target ), 95, "the delta is measured from the tick's 88, not from the spawn's 100" );
 	h.impact( target, `1:${target}:0`, hit( 6 ), 300 );
 	assert.equal( h.hp( target ), 89 );
 	h.impact( target, `1:${target}:1`, hit( 6 ), 600 );

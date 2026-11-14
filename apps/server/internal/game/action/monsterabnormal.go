@@ -449,9 +449,8 @@ func (rt *Runtime) advanceMonsterAbnormalInPass(division string, gid uint32, now
 	for _, slot := range plan.Effects.Detonations {
 		public = append(public, timeBombFrame(gid, slot.Damage1C, impact.Fatal))
 	}
-	if len(plan.Effects.Hits) > 0 {
-		public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, simulation.VitalsSourceFlags(2), impact.CurrentHP)})
-	}
+	// The HP these ticks took reaches the monster's holders with the
+	// tick's other changes (monstervitals.go), never a public frame.
 	var recipients []RecipientFrames
 	if impact.Fatal {
 		public = append(public, monsterLifeDeadFrame(gid))
@@ -520,42 +519,23 @@ func timeBombFrame(gid, damage uint32, fatal bool) wire.Frame {
 ==================
 monsterImpactAbnormalFrames
 
-monsterImpactAbnormalFrames follows committed direct impacts: withdrawn
-casts, the stop, the speed pair, and the HP+mask baseline (flags 5) while
-the survivor carries or has just changed a mask.
-
-Port-only, not native: with the attack-pet expansion on, every impact that
-took HP publishes the baseline, status or not. A pet's bonus hit has no
-cast result. It sends the monster's HP with a delta source, and a client
-applies such a frame as its difference from the HP the server last sent
-(client 77A1E9: a source inside 0x32 adds the new HP minus +0x440). A cast
-result lowers the shown HP as each impact lands, but never that last sent
-HP. With no baseline behind the results, a bonus hit on a status-free
-monster took every landed impact off the bar a second time, and the bar
-jumped back up once the pending impacts landed. Off, the baseline keeps
-its native gate.
+monsterImpactAbnormalFrames follows committed direct impacts on a survivor:
+withdrawn casts, the stop, the speed pair and, when its status changed,
+the status frame (flags 4). Its HP rides no public frame: the original
+broadcasts a monster's status alone (4A85F6-4A85FB) and sends its HP only
+to the players that hold it, once per tick (monstervitals.go).
 ==================
 */
 func (rt *Runtime) monsterImpactAbnormalFrames(division string, gid uint32, impacts []simulation.MonsterDamageResult) []wire.Frame {
 	var effects simulation.MonsterAbnormalEffects
-	damaged := false
 	for _, impact := range impacts {
 		effects.Merge(impact.Abnormal)
-		damaged = damaged || impact.Applied != 0
 	}
 	instance, ok := rt.Monsters.Get(division, gid)
 	if !ok || instance.CurrentHP == 0 {
 		return nil
 	}
-	mask := effects.MaskChanged
-	effects.MaskChanged = false
-	frames := rt.monsterAbnormalFrames(division, instance, effects)
-	if mask || instance.AbnormalMask() != 0 || damaged && rt.AttackPetExpansion {
-		abnormalPayload := simulation.MonsterAbnormalPayload(instance)
-		payload := wire.NewWriter(16).U32(gid).U16(0x100).U8(5).U32(instance.CurrentHP).Payload()
-		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: append(payload, abnormalPayload[7:]...)})
-	}
-	return frames
+	return rt.monsterAbnormalFrames(division, instance, effects)
 }
 
 /*

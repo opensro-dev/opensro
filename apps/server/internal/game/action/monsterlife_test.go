@@ -12,10 +12,20 @@ import (
 	"bytes"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/item/wire"
+	"slices"
 	"testing"
 )
 
-func assertMonsterLifeDeath(t *testing.T, frames []wire.Frame, gid uint32, want int) {
+/*
+================
+assertMonsterLifeDeath
+
+frames carry want LIFE-dead frames for gid. A death behind a hit result
+follows it: after names the result's opcode, or is 0 for a death with no
+result (a status tick's), whose HP reaches only the monster's holders.
+================
+*/
+func assertMonsterLifeDeath(t *testing.T, frames []wire.Frame, gid uint32, want int, after uint16) {
 	t.Helper()
 	found := 0
 	for index, f := range frames {
@@ -33,8 +43,8 @@ func assertMonsterLifeDeath(t *testing.T, frames []wire.Frame, gid uint32, want 
 		if value.Value != wire.LifeStateDead || !bytes.Equal(f.Payload, wire.NewWriter(6).U32(gid).U8(0).U8(2).Payload()) {
 			t.Fatal("wrong LIFE death bytes", f)
 		}
-		if index == 0 {
-			t.Fatal("LIFE must follow the existing fatal result/HP publication")
+		if after != 0 && !slices.ContainsFunc(frames[:index], func(f wire.Frame) bool { return f.Opcode == after }) {
+			t.Fatal("LIFE must follow the fatal result")
 		}
 	}
 	if found != want {
@@ -49,8 +59,8 @@ func TestMonsterLifeDirectDamagePublishesToActorAndPeersOnce(t *testing.T) {
 		if hp == 1 {
 			want = 1
 		}
-		assertMonsterLifeDeath(t, result.Frames, target.Gid, want)
-		assertMonsterLifeDeath(t, result.Broadcast, target.Gid, want)
+		assertMonsterLifeDeath(t, result.Frames, target.Gid, want, wire.OpSkillCastResult)
+		assertMonsterLifeDeath(t, result.Broadcast, target.Gid, want, wire.OpSkillCastResult)
 		for _, batch := range rt.TickHook()(clock.NowMs()) {
 			for _, f := range batch.Frames {
 				if f.Opcode == wire.OpObjectStateRefresh && bytes.Equal(f.Payload, wire.NewWriter(6).U32(target.Gid).U8(0).U8(2).Payload()) {
@@ -85,7 +95,7 @@ func TestMonsterLifePeriodicDamageIncludesUncreditedDeaths(t *testing.T) {
 				if hp == 1 {
 					want = 1
 				}
-				assertMonsterLifeDeath(t, public, target.Gid, want)
+				assertMonsterLifeDeath(t, public, target.Gid, want, 0)
 				if hp == 1 && len(advance(now+1)) != 0 {
 					t.Fatal("periodic death repeated")
 				}

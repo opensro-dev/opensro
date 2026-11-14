@@ -971,6 +971,13 @@ type Runtime struct {
 	// openSkillCastOwnerSnapshot step and read by the same tick's
 	// basic-attack pass. Nothing retains it past the tick (#2033).
 	openActionScratch map[string]bool
+	// monsterVitals, vitalsHolders and vitalsTargets are the monster
+	// vitals step's scratch (monstervitals.go): refilled and consumed by
+	// that one step, and nothing retains them past it. The payloads are
+	// fresh per tick; the frames own them. Tick goroutine only.
+	monsterVitals []simulation.MonsterVitals
+	vitalsHolders []selectionHolder
+	vitalsTargets map[vitalsTarget]int
 	// tickGateCuts counts the TickHooks cut running by a held publication
 	// gate (acquireTickGate). Tick goroutine only.
 	tickGateCuts int

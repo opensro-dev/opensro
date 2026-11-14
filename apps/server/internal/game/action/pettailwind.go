@@ -277,12 +277,13 @@ func (rt *Runtime) tailwindIntercept(division string, c *enterworld.Character, t
 		}
 		row := enterworld.SkillRow{}
 		setPetStatus(&row, tagStun, [6]uint32{tailwindStunDurationMs, tailwindStunChance, 0})
-		frames := rt.applyPetStatus(step, row, target)
-		if len(frames) > 0 {
+		if frames, landed := rt.applyPetStatus(step, row, target); landed {
 			if victim, ok := rt.resolvePetCombatTarget(step, target); ok {
 				rt.queueCrowVisual(division, crowVisual{gid: target, kind: crowStunVisual, book: uint8(skill.Option), at: victim.at})
 			}
-			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target, Frames: simFrames(frames)}})
+			if len(frames) > 0 {
+				rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target, Frames: simFrames(frames)}})
+			}
 			// The blocked hit emits no damage frame; clients see the attacker stun and crow cue instead.
 			return true
 		}
