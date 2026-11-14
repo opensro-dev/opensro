@@ -584,7 +584,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
-import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
+import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
@@ -22331,7 +22331,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 							if ( next.session?.crestPrefix !== undefined && next.session.marksBase ) {
 								for ( const crest of entityCrestFiles( entity, game, next.session.crestPrefix ) ) {
-									const path = new URL( "/marks/" + crest.file, next.session.marksBase ).href;
+									const path = guildCrestUrl( next.session.marksBase, crest.file );
 									paths.push( path );
 									if ( resources.has( path ) ) {
 										quads.push( {
