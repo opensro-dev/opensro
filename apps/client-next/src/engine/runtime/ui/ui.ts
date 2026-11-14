@@ -656,7 +656,13 @@ import {
 	audioLevelText
 } from "@/engine/foundation/audio/volume-control";
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
-import { companionOwnerNameplate, overheadLayout, withoutBoardPass } from "@/engine/foundation/ui/overhead-layout";
+import {
+	companionOwnerNameplate,
+	CONTRIBUTOR_TITLE_COLOR,
+	overheadLayout,
+	titledNameRow,
+	withoutBoardPass
+} from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -22080,28 +22086,6 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								}
 							}
 						}
-						if ( overlay.contributorText ) {
-							// Port-only, not native (#3358): the Contributor
-							// title row above the guild row, in its yellow.
-							const value = overlay.contributorText,
-								width = text.run( value ).width,
-								height = text.boardHeight(),
-								left = -(width >> 1),
-								top = overlay.contributorY - (height >> 1);
-							quads.push( {
-								characterAnchor: entity.gid,
-								rect: [ left - 1, top - 1, width + 2, height + 2 ],
-								clip: full,
-								uv: [ 0, 0, 1, 1 ],
-								texture: "",
-								color: [ 0, 0, 0, 64 / 255 ]
-							} );
-							quads.push(
-								...text.quads( value, [ left, top, width, height ], full, overlay.contributorColor, {
-									vAlign: 0
-								} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
-							);
-						}
 						const status = overlay.status;
 						if ( !status ) continue;
 						const half = status.mp === undefined,
@@ -22225,6 +22209,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							} );
 						}
 					}
+					// Port-only (#3358): a Contributor's title rides the name
+					// board, left of the name (overhead-layout.ts titledNameRow).
+					const title = overheads.get( entity.gid )?.contributorText ?? "",
+						titleWidth = title ? text.run( title, selected ? 2 : 0 ).width : 0;
 					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = boardText(
 								entity,
@@ -22238,7 +22226,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							quads.push( {
 								characterAnchor: entity.gid,
 								alphaCutoff: 128 / 255,
-								rect: [ -(width >> 1) - 21.5, -(height >> 1) - 1.5, 16, 16 ],
+								rect: [ titledNameRow( titleWidth, width ).left - 21.5, -(height >> 1) - 1.5, 16, 16 ],
 								clip: full,
 								uv: [ 0, 0, 1, 1 ],
 								texture: path,
@@ -22254,11 +22242,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						),
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
-					const left = -(width >> 1), top = -(height >> 1);
+					const row = titledNameRow( name ? titleWidth : 0, width ),
+						left = row.nameLeft,
+						top = -(height >> 1);
 					if ( name && height ) {
 						quads.push( {
 							characterAnchor: entity.gid,
-							rect: [ left - 1, top - 1, width + 2, height + 2 ],
+							rect: [ row.left - 1, top - 1, row.total + 2, height + 2 ],
 							clip: full,
 							uv: [ 0, 0, 1, 1 ],
 							texture: "",
@@ -22286,6 +22276,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.
 					const nameColor: UiQuad["color"] = nameColorRgba( entity.nameColor ?? 0xffffffff );
+					if ( name && title ) {
+						quads.push(
+							...text.quads(
+								title,
+								[ row.left, top, titleWidth, height ],
+								full,
+								CONTRIBUTOR_TITLE_COLOR,
+								{
+									vAlign: 0,
+									fontStyle: selected ? 2 : 0
+								}
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
 					quads.push(
 						...text.quads( name, [ left, top, width, height ], full, nameColor, {
 							vAlign: 0,

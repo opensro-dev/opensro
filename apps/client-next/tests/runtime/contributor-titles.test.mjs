@@ -19,7 +19,7 @@ import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 const { createContributorTitles, OP_CONTRIBUTOR_TITLES, OP_CONTRIBUTOR_PROMPT } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/contributor-titles/contributor-titles.ts"
 );
-const { overheadLayout, withoutBoardPass } = await import(
+const { overheadLayout, titledNameRow, TITLE_NAME_GAP, withoutBoardPass } = await import(
 	"../../src/engine/foundation/ui/overhead-layout.ts"
 );
 const { chatLayout } = await import( "../../src/engine/foundation/ui/chat-layout.ts" );
@@ -110,18 +110,32 @@ function layoutFor( entity, game ) {
 	return overheadLayout( entity, local, /** @type {any} */ (game), options );
 }
 
-test("a rostered player carries the yellow title above the guild row", () => {
+test("a rostered player carries the yellow title on the name board, adding no row", () => {
 	const game = { localGid: 1, social: emptySocial( "Me" ), vitals: [], contributorTitles: [ "Hero" ] };
 	const layout = layoutFor( hero, game );
 	assert.equal( layout.contributorText, "Contributor" );
 	assert.deepEqual( layout.contributorColor, [ 1, 1, 0, 1 ] );
-	// The guild row rides at -20; the title sits one row above it.
-	assert.equal( layout.guildY, -20 );
-	assert.equal( layout.contributorY, -40 );
+	// The title rides the name's own line (titledNameRow), so the rows
+	// above the name stand exactly where an untitled player's do.
+	const plain = layoutFor( hero, { ...game, contributorTitles: [] } );
+	assert.equal( layout.guildY, plain.guildY );
+	assert.equal( layout.statusY, plain.statusY );
+	assert.equal( layout.speechY, plain.speechY );
 	// The local player's own title shows too.
 	const own = layoutFor( local, { ...game, contributorTitles: [ "Me" ] } );
 	assert.equal( own.contributorText, "Contributor" );
-	assert.equal( own.contributorY, -20 );
+});
+
+test("the title sits left of the name, the pair centred as one board", () => {
+	const row = titledNameRow( 60, 40 );
+	// The title starts the board, the name follows after the gap, and
+	// the whole board is centred on the character.
+	assert.equal( row.total, 60 + TITLE_NAME_GAP + 40 );
+	assert.equal( row.left, -(row.total >> 1) );
+	assert.equal( row.nameLeft, row.left + 60 + TITLE_NAME_GAP );
+	assert.ok( row.nameLeft > row.left );
+	// No title: the name alone, centred exactly as before.
+	assert.deepEqual( titledNameRow( 0, 40 ), { left: -20, nameLeft: -20, total: 40 } );
 });
 
 test("no roster, no title: the native stack is untouched", () => {
@@ -129,7 +143,6 @@ test("no roster, no title: the native stack is untouched", () => {
 	for ( const game of [ bare, { ...bare, contributorTitles: [] }, { ...bare, contributorTitles: [ "Sage" ] } ] ) {
 		const layout = layoutFor( hero, game );
 		assert.equal( layout.contributorText, "" );
-		assert.equal( layout.contributorY, 0 );
 		assert.equal( layout.guildY, -20 );
 	}
 	// Only a player carries the title, whatever the roster names.
@@ -142,7 +155,6 @@ test("no roster, no title: the native stack is untouched", () => {
 	const layout = layoutFor( hero, { ...bare, contributorTitles: [ "Hero" ] } );
 	const stripped = withoutBoardPass( layout );
 	assert.equal( stripped.contributorText, "" );
-	assert.equal( stripped.contributorY, 0 );
 });
 
 const chatFixtureLayout = decodeAuthoredLayout(
