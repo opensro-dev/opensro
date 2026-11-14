@@ -23,11 +23,14 @@ Machine-specific notes belong in an untracked `CLAUDE.local.md`, not here.
 - `apps/client-next/` - browser client (TypeScript, WebGPU, Vite).
 - `scripts/` - asset pipeline, product checks, `pnpm task` runner.
 - `../research/` - reverse-engineering evidence and native reconstruction.
-  Read it for evidence; never import from it.
+  Read it for evidence; never import from it. It is the maintainers' tree
+  and a public clone does not have it: read the binaries with revtool
+  (see "Reading the original binaries" below).
 
 Scope rule: the v1.150 client defines what exists (data, wire, UI). For
 server-only mechanics take the v1.188 `SR_GameServer` rule, trimmed to the
-v1.150 feature set. When neither binary shows a rule, infer how the original
+v1.150 feature set. Check both binaries with revtool before you decide
+either way. When neither binary shows a rule, infer how the original
 would have implemented it, record the inference in a code comment, and ship
 it. Do not leave "no evidence" open questions.
 
@@ -39,9 +42,11 @@ rules behind an `SRO_<FEATURE>` environment flag whose off value is native
 (as `SRO_BETA_GROWTH`), with the code marked "port-only, not native". Test
 both settings. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the contributor version.
 
-## Reverse engineering without Binary Ninja
+## Reading the original binaries (revtool, no Binary Ninja needed)
 
-For native investigations, start with revtool
+Whenever a change, review or bug verdict depends on what the original client
+or server does (a packet, a refusal, a formula, a UI rule), read the binary
+before you write code or a verdict. Start with revtool
 ([tools/re/revtool/README.md](tools/re/revtool/README.md), its quick start):
 rizin plus the published seed give every function's address and the
 maintainers' names (about 14,000 client and 12,000 server labels), with

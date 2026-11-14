@@ -1,6 +1,13 @@
 # revtool
 
-revtool is the overlay/evidence CLI for native work: it keeps a SQLite
+Use revtool whenever a change, review or bug verdict depends on what the
+original `SRO_Client.exe` or `SR_GameServer.exe` does. It needs no Binary
+Ninja and no `../research` tree: free rizin plus the maintainers'
+published function names (the seed) let you `find` a function by name,
+search `strings`, and follow `xref`s to the code that uses them. The quick
+start below takes about five minutes.
+
+In more detail, revtool is the overlay/evidence CLI for native work: it keeps a SQLite
 overlay of names, types, fields, bindings and notes beside the
 immutable Binary Ninja HLIL dump (or, on a machine without the dump,
 beside rizin's reading of the retail binary), and it gates claims with
@@ -9,44 +16,86 @@ from the research tree; the research copy stays for its own tests.
 
 ## Quick start: a contributor with no Binary Ninja
 
-Everything below was run end to end on Windows 11 with Python 3.13 on
-2026-11-13 (seed apply about 70 s, index about 2 min 20 s). You need
-your own retail `SRO_Client.exe` (v1.150, SHA-256
+Everything below was run end to end on Windows 11 with Python 3.13
+(2026-11-13, and again from a fresh agent on 2026-11-15). Seed apply takes
+about a minute; index takes 2 to 5 minutes and prints little while it
+works. You need your own retail `SRO_Client.exe` (v1.150, SHA-256
 `375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a`)
 or the v1.188 `SR_GameServer.exe`; the seed is useless without it.
+
+The venv, the seed, the `.rzdb` project and revtool's own data
+(`REVTOOL_DATA_DIR`, default `<repo>/.state/revtool`) can all live outside
+the checkout; the paths below are only the defaults.
 
 1. Rizin 0.8.2 on PATH: [docs/native/RIZIN.md](../../../docs/native/RIZIN.md)
    section 1. On Windows the zip unpacks into
    `rizin-win-installer-clang_cl-64\`; its `bin` is the folder to add.
-2. The venv, from the repository root:
+2. The venv, from the repository root (on Linux and macOS the
+   interpreter is `.state/re-venv/bin/python` instead):
 
    ```
    py -3 -m venv .state/re-venv
    .state/re-venv/Scripts/python.exe -m pip install --only-binary=:all: pefile==2024.8.26 capstone==5.0.9 rzpipe==0.6.2
    ```
 
-3. The seed: the latest `revtool-seed-*` release on
-   [the releases page](https://github.com/opensro-dev/opensro/releases)
-   (`gh release download <tag> -R opensro-dev/opensro -p revtool-seed-client.xz`).
-   `seed-manifest.json` pins its hash; a different download is refused.
-4. Verify, apply, index (global options always go before the command):
+3. The seed: release `revtool-seed-2026-11-13`, the one whose hashes
+   `seed-manifest.json` pins. Name the tag: `gh release download` without
+   one takes the release GitHub marks Latest, which can be an older seed,
+   and verify refuses it ("seed bytes do not match the released pin").
 
    ```
-   set RT=.state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py
-   %RT% seed verify revtool-seed-client.xz --binary SRO_Client.exe
-   %RT% --binary SRO_Client.exe seed apply revtool-seed-client.xz --rzdb SRO_Client.rzdb
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb index
+   gh release download revtool-seed-2026-11-13 -R opensro-dev/opensro -p revtool-seed-client.xz
    ```
 
-5. Work: every command takes the same three global options.
+4. Verify, apply, index. The lines are for Git Bash or another POSIX
+   shell, which is what a coding agent's shell tool usually runs. Retail
+   install folders often contain spaces, so the two helpers quote every
+   path. `seed verify` is the exception to "global options go before the
+   command": it takes `--binary` as its own option.
 
    ```
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb doctor
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb find CIFMainFrame
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb strings GUILD_RECALL
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb view <name or sub_xxxxxx>
-   %RT% --backend rizin --binary SRO_Client.exe --rzdb SRO_Client.rzdb xref <name or sub_xxxxxx>
+   BIN="C:/path with spaces/SRO_Client.exe"   # your retail binary
+   RZDB="SRO_Client.rzdb"                     # the rizin project to create
+   rt() { .state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py "$@"; }
+   rz() { rt --backend rizin --binary "$BIN" --rzdb "$RZDB" "$@"; }
+
+   rt seed verify revtool-seed-client.xz --binary "$BIN"
+   rt --binary "$BIN" seed apply revtool-seed-client.xz --rzdb "$RZDB"
+   rz index
    ```
+
+   In PowerShell: `$BIN = "C:/path with spaces/SRO_Client.exe"`, then
+   `& .state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py --backend rizin --binary $BIN --rzdb SRO_Client.rzdb index`.
+
+   rizin prints noise that is harmless: `seed apply` may print
+   `ERROR: core: Cannot add basic block at 0x... to fcn at 0x...`, and
+   `index` prints `WARNING: rz_type_as_string` / `pj_ks: assertion` lines.
+   Judge by revtool's own lines: `95342 of 95342 defined` with
+   `20/20 sampled` from apply, and `indexed 95342 functions (14353 named)`
+   from index. Append `2> >(grep -v WARNING >&2)` to a command to hide the
+   warnings.
+
+5. Work:
+
+   ```
+   rz doctor
+   rz find CIFMainFrame                 # functions by maintainer name
+   rz strings GUILD_RECALL              # text in the binary (UTF-16 too) and the function using it
+   rz view <name or sub_xxxxxx>         # read one function
+   rz xref <name or sub_xxxxxx>         # who calls or reads it
+   ```
+
+When you get stuck:
+
+- **From a `UIIT_*` symbol to the words a player sees:** the symbol is a
+  key into the client's `textuisystem.txt` (the `textdata` folder in
+  `Media.pk2`). After the asset build (`pnpm check`) the same table is
+  `assets/text/textuisystem.en.json` under the generated tree.
+- **From a string to the switch case and code value that reach it:**
+  revtool has no jump-table decoder yet. `strings` names the containing
+  function. Read the `cmp` / `ja` and the table address in front of the
+  indirect `jmp` with `view`, then read the table bytes from the PE file.
+  Say in your write-up which case values you decoded and which you did not.
 
 Save what you learn the way [RESEARCH_PROGRESS.md](../../../docs/native/RESEARCH_PROGRESS.md)
 says, and cite the binary hash and the address in your pull request's
@@ -116,20 +165,21 @@ path or hash actually seen), never by answering as if it were there:
 that has rizin and the retail binary but not Binary Ninja or its
 110 MB HLIL dump export. revtool.py's `--backend rizin` switch hands
 those commands to it with the same argument shapes; it can also be run
-directly:
+directly. With the `rz` helper from the quick start (`--db` picks a
+different overlay database; leave out `--rzdb` to read the bare binary
+without the seed's names):
 
 ```
-py .state/re-venv/Scripts/python.exe tools/re/revtool/revtool.py \
-    --backend rizin --db revtool.db --binary SRO_Client.exe index
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db view sub_402a70
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db xref data_f0c90c
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db xref CIFGuildSummonReq_OnCreate
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db strings GUILD_RECALL
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db coverage sub_402a70
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db find CIFMain
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db audit some_writeup.md
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db rename global sub_402a70 WidgetDraw
-py tools/re/revtool/revtool.py --backend rizin --db revtool.db doctor
+rz --db revtool.db index
+rz --db revtool.db view sub_402a70
+rz --db revtool.db xref data_f0c90c
+rz --db revtool.db xref CIFGuildSummonReq_OnCreate
+rz --db revtool.db strings GUILD_RECALL
+rz --db revtool.db coverage sub_402a70
+rz --db revtool.db find CIFMain
+rz --db revtool.db audit some_writeup.md
+rz --db revtool.db rename global sub_402a70 WidgetDraw
+rz --db revtool.db doctor
 ```
 
 The first `index` runs rizin's call analysis (`aac`, ~1 minute on
