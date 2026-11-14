@@ -314,8 +314,12 @@ func (server *Server) Handler() http.Handler {
 	)
 	mux.HandleFunc("/marks/", server.handleMark)
 	mux.Handle("/title/session", browser(server.requireRunning(http.HandlerFunc(server.handleBrowserSession))))
-	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
-	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
+	// Leaving for character select and logging out forget the browser's
+	// cookies even for an outdated tab (ops #329).
+	mux.Handle("/title/logout", releaseprotocol.RequireRetiring(server.retireBrowserSession,
+		http.HandlerFunc(server.handleBrowserLogout)))
+	mux.Handle("/title/character-select", releaseprotocol.RequireRetiring(server.retireBrowserCharacter,
+		http.HandlerFunc(server.handleBrowserCharacterSelect)))
 	mux.Handle(bugReportPath, browser(server.requireRunning(http.HandlerFunc(server.handleBugReport))))
 	mux.Handle(buildPath, browser(http.HandlerFunc(server.handleBuild)))
 	mux.Handle(clientIncidentPath, browser(http.HandlerFunc(server.handleClientIncident)))
