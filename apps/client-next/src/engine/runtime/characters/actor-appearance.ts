@@ -14,6 +14,7 @@ import { fortressAppearance } from "@/engine/foundation/animation/fortress-appea
 import { isGoldHeapType, isSurvivalPowerEgg } from "@/engine/foundation/gameplay/ground-item";
 import { defaultWearFrozen } from "@/engine/foundation/animation/default-wear-policy";
 import { assembleEquipmentAppearance } from "@/engine/foundation/animation/equipment-appearance";
+import { readyThenWarm, suitBagKey, suitSocketParts } from "@/engine/foundation/animation/suit-socket";
 import { stallAttachments } from "@/engine/foundation/animation/emote";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
@@ -375,16 +376,14 @@ export function createActorAppearance( owner: ActorOwner ) {
 						// unrelated character assets.
 						if ( entity.gid === gameplay?.localGid ) resources.prioritize( appearance.dependencies );
 					}
-					if ( entity.gid === gameplay?.localGid ) {
-						for ( const model of socketWarm ) resources.ready( model );
-					}
 					const parts = appearance.parts;
-					let ready = true;
-					for ( const part of parts ) {
-						if ( !resources.ready( part.model ) ) {
-							ready = false;
-						}
-					}
+					// The worn parts first: the wearer's suit-socket candidates are
+					// warmed only once its own outfit is ready (suit-socket.ts).
+					const ready = readyThenWarm(
+						resources,
+						parts.map( part => part.model ),
+						entity.gid === gameplay?.localGid ? socketWarm : []
+					);
 					if ( !ready ) {
 						model = fallback();
 					} else {
@@ -415,63 +414,4 @@ export function createActorAppearance( owner: ActorOwner ) {
 			};
 		}
 	};
-}
-
-// Job suits and the free-PvP cape share TID 3.1.7.* and the suit socket.
-const SUIT_SOCKET = 8;
-
-/*
-================
-isSuitSocketItem
-================
-*/
-function isSuitSocketItem( row: { readonly typeFlags: number; } ) {
-	return (row.typeFlags >> 2 & 7) === 3 && (row.typeFlags >> 5 & 3) === 1 && (row.typeFlags >> 7 & 15) === 7;
-}
-
-/*
-================
-suitBagKey
-
-The bag's suit-socket candidates, so the local appearance (and its warm
-parts) rebuild when one is bought, dropped or moved.
-================
-*/
-function suitBagKey(
-	equipment: readonly { readonly slot: number; readonly refObjId: number; readonly typeFlags: number; }[]
-) {
-	let key = "";
-	for ( const row of equipment ) {
-		if ( row.slot > 12 && isSuitSocketItem( row ) ) key += row.refObjId + ",";
-	}
-	return key;
-}
-
-/*
-================
-suitSocketParts
-
-The model paths the wearer's appearance would need if each bag item that
-fits the suit socket (a job suit or the free-PvP cape, TID 3.1.7.*) were
-worn there, and those of the bare socket when one is worn. A dress or an
-undress then swaps on a resident model; the old outfit stood until the new
-parts loaded, a second or two after the item landed.
-================
-*/
-function suitSocketParts<Row extends { readonly slot: number; readonly typeFlags: number; }>(
-	equipment: readonly Row[],
-	partsFor: ( equipment: readonly Row[] ) => readonly string[]
-): readonly string[] {
-	const suit = isSuitSocketItem;
-	const others = equipment.filter( row => row.slot !== SUIT_SOCKET );
-	const models = new Set<string>();
-	for ( const row of equipment ) {
-		if ( row.slot > 12 && suit( row ) ) {
-			for ( const model of partsFor( [ ...others, { ...row, slot: SUIT_SOCKET } ] ) ) models.add( model );
-		}
-	}
-	if ( equipment.some( row => row.slot === SUIT_SOCKET && suit( row ) ) ) {
-		for ( const model of partsFor( others ) ) models.add( model );
-	}
-	return [ ...models ];
 }
