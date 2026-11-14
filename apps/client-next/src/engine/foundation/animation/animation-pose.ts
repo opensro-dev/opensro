@@ -21,6 +21,9 @@ import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
 
 const DEFAULT_BODY_VOLUME = 2;
+// Distinct missing clip names one evaluator records: a model is one
+// catalogue row, so a handful of names says everything about it.
+export const MAX_MISSING_CLIPS = 8;
 /*
 ================
 createCharacterPose
@@ -79,6 +82,7 @@ visit
 	const animatedLocal = new Uint8Array( model.nodes.length ), changedGlobal = new Uint8Array( model.nodes.length );
 	let matricesInitialized = false, directMatrices = false;
 	const clips = new Map<string, CharacterClip>();
+	const missingClips = new Set<string>(), unreportedClips: string[] = [];
 	const timelines = new Map<CharacterClip, ReturnType<typeof createAnimationTimelines>>();
 	// One reusable clip's quaternion brackets, not a cache for every admitted
 	// animation. Switching layer clips invalidates this bounded scratch.
@@ -344,6 +348,17 @@ materialize
 	return {
 		/*
 ================
+takeMissingClips
+
+The clip names evaluate found missing since the last take, each once per
+evaluator lifetime (MAX_MISSING_CLIPS at most).
+================
+		*/
+		takeMissingClips(): string[] {
+			return unreportedClips.splice( 0 );
+		},
+		/*
+================
 admitClip
 
 Append a validated bound clip without retiring active playback or palettes.
@@ -425,7 +440,15 @@ quaternion scratch is charged and allocated only when playback needs it.
 					weight < 0 || weight > 1 || (lane !== "event" && lane !== "timed")
 				) throw new Error( "Invalid animation layer" );
 				const clip = clips.get( clipName );
-				if ( !clip && clipName ) throw new Error( `Missing animation ${clipName}` );
+				// A clip the model lacks plays the rest pose, as an unnamed
+				// layer does, and is recorded for the owner to report
+				// (takeMissingClips): one model's catalogue gap costs that
+				// motion, never the renderer. Inference: the original plays
+				// no motion for an animation it cannot find and keeps drawing.
+				if ( !clip && clipName && !missingClips.has( clipName ) && missingClips.size < MAX_MISSING_CLIPS ) {
+					missingClips.add( clipName );
+					unreportedClips.push( clipName );
+				}
 				const time = clip?.duration ?
 					(repeat ? rawTime % clip.duration : Math.min( rawTime, clip.duration )) :
 					0;
