@@ -921,8 +921,6 @@ const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // unselected one (SetStateTextures 5376A0 falls back to the off texture at
 // 53784F). The dim borrows the original's own disabled-face alpha 0x80
 // (CIFButton_SetEnabledWithFaceAlpha 541640) and grey label 0xFF999999.
-const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
-const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // Port-only, not native: the Experimental window keeps the native option
 // window's width and one height on every tab; its list frame starts under
 // the tabs.
@@ -10456,7 +10454,8 @@ export function createUi( ports: UiPorts ) {
 				focus,
 				copy: hudCopy,
 				buttonFamily: hud.buttonFamily,
-				fitWindowLabels: () => experimental.state().saved.fitWindowLabels
+				fitWindowLabels: () => experimental.state().saved.fitWindowLabels,
+				greyDisabledTabs: () => experimental.state().saved.greyDisabledTabs
 			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			// The chat strip the party board must stay clear of, counting only
@@ -11273,28 +11272,11 @@ export function createUi( ports: UiPorts ) {
 				caption: string,
 				closeId: CloseControlId
 			) {
-				const r: UiRect = [ px, py, node.rect[2], node.rect[3] ];
-				blocks.push( r );
-				paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
-				quads.push(
-					...frameRing( r, node.texture, PARTS.map( p => resources.size( node.texture + p + ".png" ) ), full )
-				);
-				// CIFMainFrame::OnCreate 6F8230: shared title/drag width is frame minus 21.
-				closeButton( px + r[2] - 26, py + 10, closeId );
-				quads.push(
-					...text.quads( caption, [ px + 10, py + 12, r[2] - 21, 12 ], full, white, { hAlign: 1, vAlign: 0 } )
-				);
+				frameDraw.nativeFrame( drawFrame, { node, px, py, caption, closeId } );
 			}
 			/*
 			================
 			nativeTab
-
-			A disabled tab is unavailable: it refuses input and, as the original,
-			looks like an unselected one; with the Experimental row Grey disabled
-			tabs on (the default) its plate is dimmed and its label grey. A busy
-			tab is only waiting for the server (its owner's request is pending):
-			it refuses input and always keeps the original look, so a pending
-			trade never flashes grey.
 			================
 			*/
 			function nativeTab(
@@ -11304,24 +11286,7 @@ export function createUi( ports: UiPorts ) {
 				selected: boolean,
 				style: { family: string; disabled?: boolean; busy?: boolean; client?: UiRect; }
 			) {
-				const { family, disabled = false, busy = false, client = [ 0, 0, 0, 0 ] } = style;
-				const content: UiRect = [
-					r[0] + client[0],
-					r[1] + client[1],
-					r[2] - client[0] - client[2],
-					r[3] - client[1] - client[3]
-				];
-				const path = ROOT + "interface/ifcommon/" + family + (selected ? "_on" : "_off") + ".png";
-				const grey = disabled && experimental.state().saved.greyDisabledTabs;
-				image( r, path, grey ? GREY_TAB_PLATE : white );
-				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
-				quads.push(
-					...text.quads( caption, content, full, grey ? GREY_TAB_LABEL : white, {
-						hAlign: 1,
-						vAlign: 1,
-						fontStyle: selected ? 2 : 0
-					} )
-				);
+				frameDraw.nativeTab( drawFrame, { id, caption, r, selected, style } );
 			}
 			equipmentWarningVisible = false;
 			cautionVisible = false;
@@ -11454,29 +11419,7 @@ export function createUi( ports: UiPorts ) {
 				page: number,
 				pages: number
 			) {
-				const r = authoredRect( node, px, py ), base = ROOT + "interface/ifcommon/";
-				for (
-					const [id, side, xx, disabled] of [ [ previous, "left", r[0], page <= 0 ], [
-						next,
-						"right",
-						r[0] + r[2] - 16,
-						page + 1 >= pages
-					] ] as const
-				) {
-					const n: AuthoredControl = {
-						...node,
-						type: "CIFButton",
-						rect: [ xx, r[1], 16, 16 ],
-						texture: base + "com_" + side + "_arrow.png"
-					};
-					authoredButton( n, 0, 0, id, id, disabled );
-				}
-				quads.push(
-					...text.quads( String( page + 1 ), [ r[0] + 16, r[1], r[2] - 32, r[3] ], full, white, {
-						hAlign: 1,
-						vAlign: 1
-					} )
-				);
+				frameDraw.nativeSpin( drawFrame, { node, px, py, previous, next, page, pages } );
 			}
 			/*
 			================

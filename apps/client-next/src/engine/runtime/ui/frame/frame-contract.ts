@@ -199,7 +199,7 @@ UiAuthoredFrame
 The frame the authored widgets (authored.ts) draw into: the whole text
 owner (widths, line height and SML2 layout besides quads), the system-text
 catalogue, the button art family of a texture and the Experimental "Fit
-window labels" preference. The coordinator's drawFrame is one.
+window labels" and "Grey disabled tabs" preferences. The coordinator's drawFrame is one.
 ================
 */
 export interface UiAuthoredFrame extends UiFrame {
@@ -218,4 +218,5 @@ export interface UiAuthoredFrame extends UiFrame {
 	copy( key: string ): string;
 	buttonFamily( texture: string ): readonly string[];
 	fitWindowLabels(): boolean;
+	greyDisabledTabs(): boolean;
 }

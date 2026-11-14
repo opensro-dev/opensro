@@ -2,6 +2,26 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/frame/admission.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": ["has", "absent"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/admission.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": ["compactWindowDrag", "compactCloseControl"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/frame/admission.ts",
+			"functions": ["beginWindow", "endWindow", "unloadedImages"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["greyDisabledTabs"]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
 			"provider": "src/engine/runtime/ui/frame/frame.ts",
 			"functions": ["measure", "callback:messageBoxLines:1", "callback:captionWords:2"]
@@ -38,8 +58,7 @@
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": [
 				"has",
-				"size",
-				"absent"
+				"size"
 			]
 		},
 		{
@@ -47,14 +66,6 @@
 			"provider": "src/engine/runtime/ui/text/text.ts",
 			"functions": [
 				"quads"
-			]
-		},
-		{
-			"consumer": "src/engine/runtime/ui/frame/frame.ts",
-			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
-			"functions": [
-				"compactWindowDrag",
-				"compactCloseControl"
 			]
 		},
 		{
