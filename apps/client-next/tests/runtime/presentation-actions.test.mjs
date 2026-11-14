@@ -44,6 +44,7 @@ function fixture() {
 		movementMode: 2,
 		appearanceState: [ 1, 0, 0 ]
 	};
+	/** @type {{ failure: string | null, degradations: import("../../src/engine/contracts/network").Degradation[], degradedKeys: Set<string> }} */
 	const output = { failure: null, degradations: [], degradedKeys: new Set() };
 	const published = {
 		catalog: new Map(),

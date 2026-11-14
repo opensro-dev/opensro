@@ -99,7 +99,7 @@ function harness() {
 					pendingDeaths: new Set(),
 					uncensored: false
 				},
-				{ failure: null },
+				{ degradations: [], degradedKeys: new Set() },
 				published
 			);
 			return defined( state.idleStates.get( LOCAL_GID ) );

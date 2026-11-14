@@ -93,7 +93,7 @@ test("admitted death resources replace body appearance and revival restores its 
 	function step( dead, pending = false ) {
 		seconds += .1;
 		const current = { ...entity, appearanceState: [ dead ? 2 : 1, 0, 0 ] };
-		const output = { failure: null };
+		const output = { failure: null, degradations: [], degradedKeys: new Set() };
 		state.step(
 			{
 				entities: [ current ],
@@ -181,6 +181,8 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		output: {
 			displayed,
 			failure: null,
+			degradations: [],
+			degradedKeys: new Set(),
 			failureCause: null,
 			cameraTarget: null,
 			cameraFade: null,
