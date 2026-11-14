@@ -278,7 +278,8 @@ export function parseSkillAniSet( skillEffectPath ) {
 			// Service == 0. Only a Blue Berserk owner (level frame 0x3FC0, cap-110 server)
 			// selects it, so shipping the record changes nothing for a native shard.
 			if (
-				baseName !== HWAN2_MODE_EFFECT && (!qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ))
+				baseName !== HWAN2_MODE_EFFECT &&
+				(!qinshiTombCombatEnabled() || !isQinShiTombSkillEffectName( baseName ))
 			) {
 				continue;
 			}
