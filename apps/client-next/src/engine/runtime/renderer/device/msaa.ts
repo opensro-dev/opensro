@@ -39,12 +39,26 @@ transientUsage
 Port-only, not native: Chrome 146's TRANSIENT_ATTACHMENT usage, or 0 where
 the browser lacks it. A transient attachment lives for one render pass, so
 a tile-based GPU keeps its samples in tile memory and never writes them to
-VRAM. The 4x colour qualifies: it is cleared, resolved inside the pass and
-discarded. The 4x depth does not: the depth resolve samples it.
+VRAM. The 4x depth never qualifies: the depth resolve samples it.
 ================
 */
 export function transientUsage( usage: object = GPUTextureUsage ) {
 	return (usage as { readonly TRANSIENT_ATTACHMENT?: number; }).TRANSIENT_ATTACHMENT ?? 0;
+}
+
+/*
+================
+colourUsage
+
+The 4x colour's usage. It is transient only while one pass both clears and
+discards it. With water refraction armed the main pass stores it and the
+water pass loads it to draw on, and WebGPU refuses a transient attachment
+whose store op is "store" (Chrome 146+: "Renderer failed: ... has the
+transient attachment usage"), so a kept colour is a plain attachment.
+================
+*/
+export function colourUsage( kept: boolean, usage: object = GPUTextureUsage ) {
+	return (usage as { readonly RENDER_ATTACHMENT: number; }).RENDER_ATTACHMENT | (kept ? 0 : transientUsage( usage ));
 }
 
 /*
@@ -65,6 +79,7 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		width = 0,
 		height = 0,
 		format: GPUTextureFormat | null = null,
+		colourKept = false,
 		disposed = false;
 	/*
 	================
@@ -123,11 +138,13 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		prepare
 
 		The 4x buffers for a w x h frame in the scene target's format,
-		(re)created when the size or format changed; undefined (and no
-		target) while the stage is off.
+		(re)created when the size, the format or kept changed; undefined
+		(and no target) while the stage is off. kept: a later pass this
+		frame loads the 4x colour (the water refraction), so it cannot be
+		transient (colourUsage).
 		================
 		*/
-		prepare( w: number, h: number, sceneFormat: GPUTextureFormat, enabled: boolean ) {
+		prepare( w: number, h: number, sceneFormat: GPUTextureFormat, enabled: boolean, kept = false ) {
 			if ( disposed ) throw Error( "MSAA owner disposed" );
 			if ( !enabled ) {
 				clear();
@@ -137,17 +154,18 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 			// terminal error path; a device that never enables this stage
 			// never compiles the depth resolve.
 			ensurePipeline();
-			if ( width !== w || height !== h || format !== sceneFormat ) {
+			if ( width !== w || height !== h || format !== sceneFormat || colourKept !== kept ) {
 				clear();
 				width = w;
 				height = h;
 				format = sceneFormat;
+				colourKept = kept;
 				colour = device.createTexture( {
 					label: "msaa-scene-colour",
 					size: [ w, h ],
 					sampleCount: MSAA_SAMPLE_COUNT,
 					format,
-					usage: GPUTextureUsage.RENDER_ATTACHMENT | transientUsage()
+					usage: colourUsage( kept )
 				} );
 				depth = device.createTexture( {
 					label: "msaa-scene-depth",
