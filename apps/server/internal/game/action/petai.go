@@ -73,7 +73,10 @@ type petSession struct {
 	ready               bool
 	character           *enterworld.Character
 	refObjID            uint32
-	follower            *simulation.PetFollower
+	// mover is the companion's own pose - its follower, or where it
+	// stands parked (simulation/companionmover.go); while ridden the
+	// rider's world moves it instead (cosmount.go).
+	mover simulation.CompanionMover
 	// judgedPet is the judged tick's scratch pet view (petjudged.go).
 	judgedPet enterworld.CharacterCOS
 	// tickFacts is the judged tick's scratch fact read
@@ -107,9 +110,9 @@ type petSession struct {
 	// was derived from, so an idle crow tick answers without
 	// re-walking the skill table and the modifiers graph (#2033).
 	broodRecharge petBroodRechargeMemo
-	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
-	transportCOS   *enterworld.CharacterCOS
-	transportWorld simulation.WorldState
+	// boundCOS is the companion record this session was bound for
+	// (bindCompanionSession); a replaced record is re-admitted.
+	boundCOS *enterworld.CharacterCOS
 	// tether is the parked trade transport's hold on its owner this tick
 	// (simulation/tether.go); nil for every other companion state.
 	tether     *simulation.Tether
@@ -137,14 +140,16 @@ type petSession struct {
 	public         []wire.Frame
 	// trained is the attack-pet expansion's unsaved combat memory
 	// (pettrained.go): attack counter and running self buffs.
-	counterView [22]byte
-	counterSent bool
-	wolf        wolfKitState
-	penguin     penguinRuntime
-	crow        crowKit
-	wolfBook    uint8
-	wolfHits    [2]uint8
-	trained     petTrainedRuntime
+	counterView         [22]byte
+	counterSent         bool
+	wolf                wolfKitState
+	penguin             penguinRuntime
+	crow                crowKit
+	crowManaRestored    uint64
+	tailwindStunReadyAt int64
+	wolfBook            uint8
+	wolfHits            [2]uint8
+	trained             petTrainedRuntime
 	// bond's spent budget is read by planPetBond and written by
 	// commitPetBond under rt.petMu: concurrent victim hits in one
 	// division share the bear's budget (checklist item 5).
@@ -549,7 +554,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	}()
 	generation := state.generation
 	defer func() {
-		if state.pickup != nil && (state.follower == nil || generation != state.generation || nowMs >= state.pickupDeadline) {
+		if state.pickup != nil && (state.mover.AnyFollower() == nil || generation != state.generation || nowMs >= state.pickupDeadline) {
 			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			for _, f := range result.Frames {
 				output = append(output, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
@@ -580,7 +585,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if !facts.companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		state.follower = nil
+		state.mover.StopInPlace(nowMs)
 		return nil
 	}
 	if facts.admitted {
@@ -602,7 +607,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if snapshot == nil && !companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		state.follower = nil
+		state.mover.StopInPlace(nowMs)
 		return nil
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
@@ -611,14 +616,14 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		// An unsummoned, dead or mounted pet leaves BATTLE; a later summon
 		// must not resume an old fight.
 		rt.cancelPetCombat(key, state, nowMs)
-		if state.follower == nil {
+		if state.mover.AnyFollower() == nil {
 			return nil
 		}
-		frames := state.follower.Stop(nowMs)
+		frames := state.mover.AnyFollower().Stop(nowMs)
 		// Port-only: a living guardian must keep its real anchor while awaiting its owner's revival timer.
 		_, _, _, _, guardian := rt.bondSource(key, state)
 		if !guardian || !ownerDead {
-			state.follower = nil
+			state.mover.StopInPlace(nowMs)
 		}
 		return frames
 	}
@@ -626,7 +631,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
 	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
 		state.roar = nil
-		state.follower = nil
+		state.mover.StopInPlace(nowMs)
 		if found && ref != nil && ref.RefObjID == cos.RefObjID && isVehicleCOS(ref.TidWord) {
 			// Natively the first primary actor is a vehicle (the
 			// band-2 trade transport), so it holds its owner.
@@ -636,28 +641,28 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		return nil
 	}
 	owner := rt.liveSpawn(simulation.WorldKey(key.division, snapshot.Name), snapshot, nowMs)
-	if state.follower == nil || state.follower.GID() != cos.GID || state.refObjID != cos.RefObjID {
+	if state.mover.AnyFollower() == nil || state.mover.AnyFollower().GID() != cos.GID || state.refObjID != cos.RefObjID {
 		start := owner
 		if isVehicleCOS(ref.TidWord) {
 			// Port-only (transportfollow.go): a transport just stepped off
 			// sets out from where its trader left it, not from the trader.
 			start = rt.companionLiveSpawn(key.division, snapshot, cos, nowMs)
 		}
-		state.follower = simulation.NewPetFollower(cos.GID, start)
+		state.mover.FollowFrom(cos.GID, start)
 		state.generation++
 		state.refObjID = cos.RefObjID
 	}
 	// Relocation and summons build new followers; every tick installs the one
 	// planner they all route with.
-	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
+	state.mover.AnyFollower().SetRoutePlanner(rt.PlanCompanionRoute)
 	if cos.BroodStage == 1 {
 		rt.cancelPetCombat(key, state, nowMs)
-		return state.follower.Stop(nowMs)
+		return state.mover.AnyFollower().Stop(nowMs)
 	}
 	if rt.TransportFollowTether && isVehicleCOS(ref.TidWord) {
 		// Port-only (transportfollow.go): the following transport holds
 		// its trader as a parked one does, from where it walks now.
-		state.tether = &simulation.Tether{Anchor: state.follower.Position(nowMs),
+		state.tether = &simulation.Tether{Anchor: state.mover.AnyFollower().Position(nowMs),
 			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
 	}
 	answerStuck = func() []simulation.Frame {
@@ -666,20 +671,20 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if state.displacement != nil {
 		state.roar = nil
 		if nowMs < state.displacement.untilMs {
-			return state.follower.Stop(nowMs)
+			return state.mover.AnyFollower().Stop(nowMs)
 		}
 		state.displacement = nil
 	}
 	if rt.companionMovementBlocked(key.division, snapshot, cos) {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		return state.follower.Stop(nowMs)
+		return state.mover.AnyFollower().Stop(nowMs)
 	}
 	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
 	// The step keeps the native run: natively it is compared with the authored
 	// speed. Only the follower moves at the paced one.
 	walk, run := cosParameter(ref, cos, block, movementWalkParameter), cosParameter(ref, cos, block, movementRunParameter)
-	state.follower.SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
+	state.mover.AnyFollower().SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
 	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	if rt.ConstrainMovement != nil {
 		constraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
@@ -688,7 +693,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	}
 	if rt.advancePetRoar(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, nowMs: nowMs}) ||
 		nowMs < state.wolf.howlHoldUntil {
-		return state.follower.Stop(nowMs)
+		return state.mover.AnyFollower().Stop(nowMs)
 	}
 	if frames, handled := rt.advancePetCombat(petCombatStep{key: key, state: state, snapshot: snapshot,
 		pet: cos, ref: ref, run: run, constraint: constraint, nowMs: nowMs}); handled {
@@ -697,13 +702,13 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if state.pickup != nil {
 		q := *state.pickup
 		item, found := rt.characterGround(key.division, snapshot, q.GroundGID)
-		pose := state.follower.Position(nowMs)
+		pose := state.mover.AnyFollower().Position(nowMs)
 		// A target that vanished, timed out, or can never be granted
 		// at arrival (cosPickupTargetRetired) retires the same way:
 		// the refusal answer, no walk, no warning.
 		if !found || nowMs >= state.pickupDeadline || rt.cosPickupTargetRetired(key.division, snapshot, pose, item) {
 			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
-			frames := state.follower.Stop(nowMs)
+			frames := state.mover.AnyFollower().Stop(nowMs)
 			for _, f := range result.Frames {
 				frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 			}
@@ -713,9 +718,9 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
 		if !grounditem.SameWorld(from, item.Position) || math.IsNaN(distance) || distance > grounditem.ExecuteRange {
-			return state.follower.Approach(target, float64(rt.cosPacedRun(ref, run)), nowMs, grounditem.ExecuteRange, constraint)
+			return state.mover.AnyFollower().Approach(target, float64(rt.cosPacedRun(ref, run)), nowMs, grounditem.ExecuteRange, constraint)
 		}
-		frames := state.follower.Stop(nowMs)
+		frames := state.mover.AnyFollower().Stop(nowMs)
 		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs), command: state.pickupCommand, doors: rt.tickDoors()})
 		result = finishPendingCosPickup(state, result)
 		state.public = append(state.public, result.Broadcast...)
@@ -732,7 +737,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		following = true
 		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, run: run, constraint: constraint, nowMs: nowMs})
 	}
-	return state.follower.Advance(owner, float64(rt.cosPacedRun(ref, run)), nowMs, constraint)
+	return state.mover.AnyFollower().Advance(owner, float64(rt.cosPacedRun(ref, run)), nowMs, constraint)
 }
 
 // PetPresentation is the sole read boundary for peer pet motion. It holds the
@@ -864,22 +869,24 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 	var revision uint64
 	// Port-only (transportfollow.go): a following transport presents its
 	// follower like a pet; a parked one, natively, its admission anchor.
-	following := rt.companionFollows(ref.TidWord) && state.follower != nil && state.follower.GID() == cos.GID
+	following := rt.companionFollows(ref.TidWord) && state.mover.AnyFollower() != nil && state.mover.AnyFollower().GID() == cos.GID
 	if ref.TidWord>>11 <= 2 && !following || cos.Mounted {
-		if state.transportCOS != cos {
-			state.transportCOS = cos
-			state.transportWorld = simulation.WorldState{Spawn: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)}
+		if state.boundCOS != cos {
+			// A record the session was not bound for stands at its
+			// owner, its admission pose, until something moves it.
+			state.boundCOS = cos
+			state.mover.Park(cos.GID, rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now))
 			state.generation++
 		}
-		world = state.transportWorld
+		world, _ = state.mover.World(cos.GID)
 		if cos.Mounted {
 			world = rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 		}
 	} else {
-		if state.follower == nil || cos.GID != state.follower.GID() || cos.RefObjID != state.refObjID {
+		if state.mover.AnyFollower() == nil || cos.GID != state.mover.AnyFollower().GID() || cos.RefObjID != state.refObjID {
 			return nil
 		}
-		world, revision = state.follower.Presentation()
+		world, revision = state.mover.AnyFollower().Presentation()
 	}
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
 	// The row is a pure function of these inputs: the cos record and
@@ -994,12 +1001,11 @@ func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character
 		return
 	}
 	state := rt.bindCompanionSession(division, owner, c.ActiveCOS)
-	state.transportCOS = c.ActiveCOS
-	state.transportWorld = simulation.WorldState{Spawn: pose}
+	state.boundCOS = c.ActiveCOS
 	// The anchor is the transport's one pose: a follower bound earlier (at
 	// the owner) must not outrank it; a following transport (port-only,
 	// transportfollow.go) sets out from here on the next pet tick.
-	state.follower = nil
+	state.mover.Park(c.ActiveCOS.GID, pose)
 	state.generation++
 	// Natively a transport summoned with goods aboard is a caravan.
 	rt.registerCaravan(division, c)
@@ -1021,14 +1027,14 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 	rt.cosOwners.note(division, pet.GID, owner.character)
 	rt.petMu.Lock()
 	old := rt.petSessions[key]
-	if old != nil && old.character == owner.character && old.transportCOS == pet {
+	if old != nil && old.character == owner.character && old.boundCOS == pet {
 		old.session = owner.session
 		old.ready = owner.ready
 		rt.petMu.Unlock()
 		return old
 	}
 	owner.formationSlots.Release(pet.GID)
-	state := &petSession{formationSlot: -1, session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID,
+	state := &petSession{formationSlot: -1, session: owner.session, ready: owner.ready, character: owner.character, boundCOS: pet, refObjID: pet.RefObjID,
 		naturalRecoveryAtMs: rt.Now().UnixMilli() + petNaturalRecoveryPeriodMs}
 	if old != nil {
 		state.generation = old.generation + 1
@@ -1038,8 +1044,7 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 	rt.petMu.Unlock()
 	pose := rt.liveSpawn(simulation.WorldKey(division, owner.character.Name), owner.character, rt.Now().UnixMilli())
 	pose = rt.companionAdmissionSpawn(pet, pose)
-	state.transportWorld = simulation.WorldState{Spawn: pose}
-	state.follower = simulation.NewPetFollower(pet.GID, pose)
+	state.mover.Place(pet.GID, pose)
 	return state
 }
 
@@ -1114,12 +1119,12 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		state.crow = crowKit{views: state.crow.views}
 		state.generation++
 		state.arrivedAtMs = rt.Now().UnixMilli()
-		state.follower = nil
+		// The companion appears at the destination; one that left its
+		// record keeps no pose from the old place.
+		state.mover.Release()
 		if cos := c.CompanionByGID(key.gid); cos != nil {
-			pose := rt.companionAdmissionSpawn(cos, destination)
-			state.follower = simulation.NewPetFollower(cos.GID, pose)
+			state.mover.Place(cos.GID, rt.companionAdmissionSpawn(cos, destination))
 			state.refObjID = cos.RefObjID
-			state.transportWorld = simulation.WorldState{Spawn: pose}
 		}
 	}
 	return previous

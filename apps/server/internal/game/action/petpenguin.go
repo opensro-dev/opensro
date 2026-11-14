@@ -229,7 +229,7 @@ func (rt *Runtime) penguinShards(step petCombatStep, mob monster.Instance, damag
 		if !valid || target.monster == nil || target.gid == mob.Gid || !samePlaneAdjacent(center, target.at) || areaDistance(center, target.at) > 50 {
 			continue
 		}
-		world, _ := step.state.follower.Presentation()
+		world, _ := step.state.mover.AnyFollower().Presentation()
 		if rt.LineOfSight != nil && !rt.LineOfSight(center, world.LiveOwnerAt(step.nowMs), target.at) {
 			continue
 		}
@@ -396,7 +396,7 @@ func (rt *Runtime) advancePenguinSession(key petOwnerKey, state *petSession, now
 			if !valid || target.monster == nil || !samePlaneAdjacent(storm.center, target.at) || areaDistance(storm.center, target.at) > radius {
 				continue
 			}
-			world, _ := state.follower.Presentation()
+			world, _ := state.mover.AnyFollower().Presentation()
 			if rt.LineOfSight != nil && !rt.LineOfSight(storm.center, world.LiveOwnerAt(now), target.at) {
 				continue
 			}

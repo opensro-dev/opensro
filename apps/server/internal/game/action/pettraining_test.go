@@ -474,9 +474,11 @@ func TestManualRoarAddsPetThreatWithoutDamageOrTarget(t *testing.T) {
 		for companion.Learn(c.ActiveCOS, id) == "" {
 		}
 	}
+	// The level-cap change permits all ten final-book ranks; this case tests rank one.
+	c.ActiveCOS.Training.Levels[2] = 1
 	c.ActiveCOS.Training.Rows[0] = domain.PetRowCooldown{}
 	lease, ok := rt.casterPopulation(testDivision, c)
-	position := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).follower.Position(clock.NowMs())
+	position := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.AnyFollower().Position(clock.NowMs())
 	position.X += 290
 	if !ok || rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{
 		Division: testDivision, Population: lease, RefObjID: mob.Ref.RefObjID,
@@ -626,7 +628,7 @@ func roarField(t *testing.T, rt *Runtime, c *enterworld.Character, clock *fakeCl
 	c.World.Spawn.RegionID = testInt64(0x62a6)
 	rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
 	at := rt.LiveSpawnFor(testDivision, c)
-	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).follower = simulation.NewPetFollower(c.ActiveCOS.GID, at)
+	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.FollowFrom(c.ActiveCOS.GID, at)
 	lease, ok := rt.casterPopulation(testDivision, c)
 	at.X += 30
 	if !ok || rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{Division: testDivision, Population: lease, RefObjID: 1933, Count: 1, Position: at, NowMs: clock.NowMs()}) != 1 {

@@ -65,13 +65,7 @@ func (rt *Runtime) companionOwnPose(division string, character *enterworld.Chara
 	if state == nil || pet.Mounted {
 		return simulation.Spawn{}, false
 	}
-	if state.follower != nil && state.follower.GID() == pet.GID {
-		return state.follower.Position(now), true
-	}
-	if state.transportCOS != nil && state.transportCOS.GID == pet.GID {
-		return state.transportWorld.LiveSpawnAt(now), true
-	}
-	return simulation.Spawn{}, false
+	return state.mover.Pose(pet.GID, now)
 }
 
 /*
@@ -167,11 +161,11 @@ func (rt *Runtime) stopCompanionMovement(division string, character *enterworld.
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
-	if state == nil || state.follower == nil || state.follower.GID() != pet.GID {
+	if state == nil || state.mover.AnyFollower() == nil || state.mover.AnyFollower().GID() != pet.GID {
 		return nil
 	}
 	var frames []wire.Frame
-	for _, frame := range state.follower.Stop(now) {
+	for _, frame := range state.mover.AnyFollower().Stop(now) {
 		frames = append(frames, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 	return frames
@@ -210,7 +204,7 @@ func (rt *Runtime) setPetFollowerMovementSpeeds(division, ownerName string, petG
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(ownerName), gid: petGID}]
-	if state != nil && state.follower != nil && state.follower.GID() == petGID {
-		state.follower.SetMovementSpeeds(walk, run, now)
+	if state != nil && state.mover.AnyFollower() != nil && state.mover.AnyFollower().GID() == petGID {
+		state.mover.AnyFollower().SetMovementSpeeds(walk, run, now)
 	}
 }

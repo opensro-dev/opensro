@@ -51,22 +51,27 @@ func petNaturalRecoveryAmount(maximum int64) int64 {
 ================
 petNaturalRecoveryMotion
 
-The companion's native motion byte from the plane that moves it: the
-follower's world, or the transport world when it has no follower. Pets
+The companion's native motion byte from the plane that moves it, in
+companionOwnPose's order: the rider's world while ridden (rider is
+non-nil only then; the parked anchor stands still under a galloping
+vehicle), else the follower's world, else the transport world. Pets
 never sit in this port, so the sitting byte (4) simply joins standing
 (0); walk and run refuse the pulse, as the native tick refuses every
 motion other than 0 and 4.
 ================
 */
-func petNaturalRecoveryMotion(petState *petSession, nowMs int64) uint8 {
+func petNaturalRecoveryMotion(petState *petSession, gid uint32, rider *simulation.WorldState, nowMs int64) uint8 {
+	if rider != nil {
+		return rider.MotionStateAt(nowMs)
+	}
 	if petState == nil {
 		return simulation.MotionNone
 	}
-	if petState.follower != nil {
-		world, _ := petState.follower.Presentation()
-		return world.MotionStateAt(nowMs)
+	world, ok := petState.mover.World(gid)
+	if !ok {
+		return simulation.MotionNone
 	}
-	return petState.transportWorld.MotionStateAt(nowMs)
+	return world.MotionStateAt(nowMs)
 }
 
 /*
@@ -108,7 +113,14 @@ func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *p
 		if pet == nil || !pet.Summoned || pet.BroodStage != 0 || pet.CurrentHP == 0 {
 			return false
 		}
-		if motion := petNaturalRecoveryMotion(petState, nowMs); motion != simulation.MotionNone &&
+		var rider *simulation.WorldState
+		if pet.Mounted && rt.Worlds != nil {
+			world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, c.Name), func() simulation.WorldState {
+				return simulation.SeedWorldState(c)
+			})
+			rider = &world
+		}
+		if motion := petNaturalRecoveryMotion(petState, key.gid, rider, nowMs); motion != simulation.MotionNone &&
 			motion != simulation.MotionSitting {
 			return false
 		}

@@ -84,7 +84,7 @@ import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/
 import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
 import { SPINE_AIM_BONE } from "@/engine/foundation/animation/spine-aim";
 import { createSpineAims } from "./spine-aims";
-import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import type { GameplayState, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
@@ -1373,12 +1373,19 @@ export function createCharacterEffects(
 					Object.assign( row, sample, { previous: clock } );
 				}
 				// 85C590 owns named PARAM_ decorations and one material register.
-				// Dead appearance and zero hp do not gate it.
+				// Dead appearance and zero hp do not gate it. The vitals index
+				// keeps find()'s first row per gid; the revisions map mutates in
+				// place - its only reader iterates the stored row inside this
+				// same step, so the per-entity copy bought nothing.
+				const vitalsByGid = new Map<number, VitalState>();
+				for ( const row of gameplay?.vitals ?? [] ) {
+					if ( !vitalsByGid.has( row.gid ) ) vitalsByGid.set( row.gid, row );
+				}
 				for ( const entity of entities ) {
-					const mask = (gameplay?.vitals ?? []).find( v => v.gid === entity.gid )?.abnormal ?? 0;
+					const mask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 					const prior = statuses.get( entity.gid );
 					const view = status.view( entity.gid, mask, entity.appearanceState?.[2] ?? 0 ); // +0x2B6 (85EC00): 1 = berserk skips the material calls
-					const revisions = new Map( prior?.revisions );
+					const revisions = prior?.revisions ?? new Map<string, number>();
 					for ( const name of view.names ) if ( !revisions.has( name ) ) revisions.set( name, clock );
 					for ( const name of revisions.keys() ) if ( !view.names.includes( name ) ) revisions.delete( name );
 					statuses.set( entity.gid, { view, revisions } );
@@ -2213,13 +2220,20 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
-					// Port-only arena one-shots wait for their own models; other crow cues retain existing timing.
-					if ( burst.started === undefined && burst.cue === 9 ) {
+					// Pet cues and the arena roar keep their full visible lifetime after admission.
+					if ( burst.started === undefined && burst.cue !== 10 ) {
 						burst.queuedAt ??= now;
-						const paths = [
-							"/assets/effects/challenging-roar-aura",
-							"/assets/effects/challenging-roar-shockwave"
-						];
+						const paths = burst.cue === 9 ?
+							[ "/assets/effects/challenging-roar-aura", "/assets/effects/challenging-roar-shockwave" ] :
+							[
+								burst.cue === 0 ?
+									"/assets/effects/crow-wind-burst" :
+									burst.cue === 1 ?
+									"/assets/effects/crow-heal-wisp" :
+									burst.cue === 4 ?
+									"/assets/effects/crow-mana-wisp" :
+									"/assets/effects/crow-feather"
+							];
 						let admitted = true;
 						for ( const path of paths ) if ( !ready( path ) ) admitted = false;
 						if ( !admitted ) {
@@ -2251,12 +2265,6 @@ export function createCharacterEffects(
 					}
 					if ( burst.cue > 0 ) {
 						// Native unlit materials bypass instance tint; recovery colors live in the textures.
-						const model = burst.cue === 1 ?
-							"/assets/effects/crow-heal-wisp" :
-							burst.cue === 4 ?
-							"/assets/effects/crow-mana-wisp" :
-							"/assets/effects/crow-feather";
-						if ( !ready( model ) ) continue;
 						const tint: readonly [number, number, number] = burst.cue === 2 ?
 							[ .8, .65, .4 ] :
 							burst.cue >= 6 && burst.cue <= 7 ?
@@ -2266,6 +2274,12 @@ export function createCharacterEffects(
 						const u = age / 1.2, count = (3 + burst.book) * (recovery ? 2 : 1);
 						for ( let feather = 0; feather < count; feather++ ) {
 							const mote = recovery && feather % 2 === 1;
+							const model = burst.cue === 1 ?
+								"/assets/effects/crow-heal-wisp" :
+								burst.cue === 4 ?
+								"/assets/effects/crow-mana-wisp" :
+								"/assets/effects/crow-feather";
+							if ( !ready( model ) ) continue;
 							if ( recovery ) {
 								const phase = (u + feather * .61803398875) % 1;
 								const mana = burst.cue === 4, angle = feather * 2.39996323 + phase * (mana ? 2.4 : .8);
@@ -2333,7 +2347,6 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
-					if ( !ready( "/assets/effects/crow-wind-burst" ) ) continue;
 					for ( let band = 0; band < 3; band++ ) {
 						const u = (age - band * .1) / .9;
 						if ( u < 0 || u >= 1 ) continue;

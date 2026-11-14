@@ -100,8 +100,8 @@ func (rt *Runtime) castCrowBrood(division string, owner *enterworld.Character, g
 		return petTrainingReceipt("No stored cast or the live egg/clone limit is reached.")
 	}
 	state := rt.bindCompanionSession(division, step.state, egg)
-	at := step.state.follower.Position(now)
-	state.follower = simulation.NewPetFollower(egg.GID, at)
+	at := step.state.mover.AnyFollower().Position(now)
+	state.mover.FollowFrom(egg.GID, at)
 	state.broodAt = at
 	state.summonedAtMs = now
 	spawn := rt.broodSpawnFrame(division, state, egg)
@@ -181,14 +181,16 @@ only a moving row opens the update door (#2139).
 */
 func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
 	row := companion.AdvanceCharges(live.Training.Rows[1], now)
+	var learned companion.SkillDef
 	for _, def := range companion.SkillsForPet(live) {
-		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-			// One modifiers read answers both the level and the row:
-			// ModifiersFor is pure on the live record, so the second
-			// walk the two call sites used to pay bought nothing.
-			mods := companion.ModifiersFor(live)
-			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, mods), now, mods)
+		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 && def.Option > learned.Option {
+			learned = def
 		}
+	}
+	if learned.ID != 0 {
+		// Initialize once from the highest book; earlier books must not start a slower recharge.
+		mods := companion.ModifiersFor(live)
+		row = companion.BroodRow(row, learned, companion.EffectiveLevel(live, learned, mods), now, mods)
 	}
 	return row, row != live.Training.Rows[1]
 }
@@ -400,8 +402,8 @@ func (rt *Runtime) crowBroodJudge(key petOwnerKey, state *petSession, now int64)
 	}
 	for _, pet := range pets[:petCount] {
 		child := rt.petSessionFor(key.division, key.name, pet.gid)
-		if child != nil && child.follower != nil {
-			child.broodAt = child.follower.Position(now)
+		if child != nil && child.mover.AnyFollower() != nil {
+			child.broodAt = child.mover.AnyFollower().Position(now)
 		}
 		remove := !valid || child == nil || pet.hp == 0 || pet.stage == 2 && now >= pet.until
 		hatch := !remove && pet.stage == 1 && now >= pet.until
@@ -536,8 +538,8 @@ func (rt *Runtime) advanceCrowBroodSession(key petOwnerKey, state *petSession, n
 			continue
 		}
 		child := rt.petSessionFor(key.division, key.name, pet.GID)
-		if child != nil && child.follower != nil {
-			child.broodAt = child.follower.Position(now)
+		if child != nil && child.mover.AnyFollower() != nil {
+			child.broodAt = child.mover.AnyFollower().Position(now)
 		}
 		remove := !valid || child == nil || pet.CurrentHP == 0 || pet.BroodStage == 2 && now >= pet.BroodUntil
 		hatch := !remove && pet.BroodStage == 1 && now >= pet.BroodUntil
@@ -618,8 +620,8 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 		return
 	}
 	step := petCombatStep{key: key, state: state, snapshot: snapshot, pet: pet, ref: ref, nowMs: now, percent: fullAreaPercent}
-	if state.follower == nil {
-		state.follower = simulation.NewPetFollower(pet.GID, state.broodAt)
+	if state.mover.AnyFollower() == nil {
+		state.mover.FollowFrom(pet.GID, state.broodAt)
 	}
 	count := 0
 	for _, mob := range rt.Monsters.CombatCandidatesInPopulation(key.division, lease, state.broodAt, 80, now, false) {

@@ -292,7 +292,7 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 			t.Fatal("missing monster")
 		}
 		child.broodAt = target.at
-		child.follower = simulation.NewPetFollower(egg.GID, child.broodAt)
+		child.mover.FollowFrom(egg.GID, child.broodAt)
 		if test.slowed {
 			// A slowed target already gets its HP in the strike's abnormal vitals frame.
 			seedBroodTargetSlow(t, rt, c, mob.Gid)

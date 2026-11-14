@@ -354,7 +354,7 @@ func TestGuardianWaitsThroughDeadOwnerTicks(t *testing.T) {
 		t.Fatal("revived before cooldown")
 	}
 	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
-	if state.follower == nil {
+	if state.mover.AnyFollower() == nil {
 		t.Fatal("living guardian lost its stationary anchor while owner awaited revival")
 	}
 	clock.now = clock.now.Add(2 * time.Second)

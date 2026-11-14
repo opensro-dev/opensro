@@ -32,7 +32,7 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 	rt.petMu.Lock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}]
 	rt.petMu.Unlock()
-	if state == nil || state.character != c || state.follower == nil || state.follower.GID() != gid {
+	if state == nil || state.character != c || state.mover.AnyFollower() == nil || state.mover.AnyFollower().GID() != gid {
 		return OpResult{}
 	}
 	// AI event 0x1A (the reference server's owner-follow order): leave BATTLE.
@@ -41,7 +41,7 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 	if state.pickup != nil {
 		result = finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 	}
-	for _, frame := range state.follower.Stop(rt.Now().UnixMilli()) {
+	for _, frame := range state.mover.AnyFollower().Stop(rt.Now().UnixMilli()) {
 		result.Frames = append(result.Frames, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 	return result

@@ -133,7 +133,7 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 			}
 		}
 		changed = changed || !pet.Mounted
-		pet.Mounted = true
+		rt.mountCompanion(division, c, pet, rt.Now().UnixMilli())
 		rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(division, c, rt.Now().UnixMilli()))
 		return changed
 	})

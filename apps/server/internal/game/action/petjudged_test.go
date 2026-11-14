@@ -65,7 +65,7 @@ func TestAdvancePetFollowTickDoesNotCopyTheOwner(t *testing.T) {
 	}
 
 	state := rt.petSessionFor(key.division, "benchowner", key.gid)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		t.Fatal("pet lost its follower over the measured ticks")
 	}
 }
@@ -105,7 +105,7 @@ func TestAdvancePetJudgedAbstainsWithoutAnOwnerWorld(t *testing.T) {
 		t.Fatal("judged tick seeded the owner world from the live record")
 	}
 	rt.advancePet(key, now+100)
-	if state.follower == nil {
+	if state.mover.AnyFollower() == nil {
 		t.Fatal("copy path lost the follower after the judged abstention")
 	}
 }
@@ -187,7 +187,7 @@ func petWolfFixture(t *testing.T, displace func(w *simulation.WorldState)) (*Run
 		now += 100
 	}
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
-	if state == nil || state.follower == nil {
+	if state == nil || state.mover.AnyFollower() == nil {
 		t.Fatal("wolf never took up its follow")
 	}
 	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name),
@@ -244,12 +244,12 @@ func TestAdvancePetJudgedFollowMatchesTheCopyForAChasingWolf(t *testing.T) {
 			}
 		}
 		state := rt.petSessionFor(key.division, "benchowner", key.gid)
-		start := state.follower.Position(now)
+		start := state.mover.AnyFollower().Position(now)
 		for i := 0; i < 10; i++ {
 			now += 100
 			rt.advancePet(key, now)
 		}
-		end := state.follower.Position(now)
+		end := state.mover.AnyFollower().Position(now)
 		if end == start {
 			t.Fatal("wolf never ran after its owner; the differential is vacuous")
 		}
@@ -298,7 +298,7 @@ func TestAdvancePetJudgedAbstainsWhenTheOwnerWarps(t *testing.T) {
 		}
 		frames := rt.advancePet(key, now+100)
 		state := rt.petSessionFor(key.division, "benchowner", key.gid)
-		if region := state.follower.Position(now + 100).RegionID; region != 23714 {
+		if region := state.mover.AnyFollower().Position(now + 100).RegionID; region != 23714 {
 			t.Fatalf("follower ended in region %d, want the owner's 23714; the warp never relocated it", region)
 		}
 		return frames

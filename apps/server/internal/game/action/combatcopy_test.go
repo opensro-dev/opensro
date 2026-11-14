@@ -235,14 +235,8 @@ const (
 ================
 preparedCrowTrace
 
-A crow owner's prepared release, on a bag whose raven record
-rides only in its bag row: the owner charges Guiding Feathers to the
-cap, then the pet's record moves out of ActiveCOS into the bag, so a
-copy that drops bag rows resolves no crow at all. The cast is accepted
-prepared (the monster must be unhurt until the release), the release
-re-copies the caster and strikes, and the trace is the accept and
-release frames and the end state. Armed with the crow, the release's
-impacts carry its empowerment; without it they land plain.
+A prepared offensive release with a bag-row crow must no longer acquire
+Precision damage or accuracy; Raven's Refuge is defensive only.
 ================
 */
 func preparedCrowTrace(t *testing.T, copyKind int) string {
@@ -254,7 +248,7 @@ func preparedCrowTrace(t *testing.T, copyKind int) string {
 	// at sword reach instead of thirty metres).
 	c.World.Spawn.RegionID = testInt64(0x62a6)
 	rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
-	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).follower = simulation.NewPetFollower(c.ActiveCOS.GID, rt.LiveSpawnFor(testDivision, c))
+	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.FollowFrom(c.ActiveCOS.GID, rt.LiveSpawnFor(testDivision, c))
 	lease, ok := rt.casterPopulation(testDivision, c)
 	if !ok {
 		t.Fatal("no caster population")
@@ -271,16 +265,6 @@ func preparedCrowTrace(t *testing.T, copyKind int) string {
 	target := rows[0]
 	learnPetBook(t, c, 50)
 	learnPetBook(t, c, 59)
-	step, ok := rt.elementalCompanion(testDivision, c, c.ActiveCOS.GID, "Crow", clock.NowMs())
-	if !ok {
-		t.Fatal("crow fixture not eligible")
-	}
-	for range 8 {
-		rt.crowAfterAttack(step, []uint32{target.Gid})
-	}
-	if got := step.state.crow.precision[enterworld.ObjectIDForCharacter(c)].stacks; got != crowChargeCap {
-		t.Fatalf("precision stacks = %d, want the cap %d", got, crowChargeCap)
-	}
 	crow := c.ActiveCOS
 	if crow == nil || !crow.Summoned {
 		t.Fatal("crow fixture pet is not a summoned active pet")
@@ -301,8 +285,6 @@ func preparedCrowTrace(t *testing.T, copyKind int) string {
 			CriticalRate:   enterworld.ItemStatRange{Min: 3, Max: 15},
 		},
 	}
-	// A damaging non-base skill: Guiding Feathers empowers only those
-	// (crowSkillEmpowers), so the fixture's base attack cannot witness it.
 	// The shipped bow row is the prepared direct skill the projectile
 	// lane already pins (arrowFixture's shape, on this runtime's items).
 	weapon := items.staticItemSource[c.MissionInventory[0].Codename]
@@ -345,17 +327,10 @@ func preparedCrowTrace(t *testing.T, copyKind int) string {
 
 /*
 ================
-TestPreparedReleaseResolvesTheBagRowCrow
-
-The prepared-cast release takes the cast copy: its strike resolves
-the caster's crow through the bag-row Summon record (the crow lane
-at the strike), so the release lands exactly as on the full copy.
-On the combat copy the row is dropped, no crow answers, and the
-empowerment is silently lost - the failure #1997 left at this root
-when it converted the release and the press lane diverged.
+TestPreparedReleaseDoesNotRetainRemovedPrecision
 ================
 */
-func TestPreparedReleaseResolvesTheBagRowCrow(t *testing.T) {
+func TestPreparedReleaseDoesNotRetainRemovedPrecision(t *testing.T) {
 	cast := preparedCrowTrace(t, crowReleaseCast)
 	full := preparedCrowTrace(t, crowReleaseFull)
 	if cast != full {
@@ -367,8 +342,8 @@ func TestPreparedReleaseResolvesTheBagRowCrow(t *testing.T) {
 		}
 		t.Fatal("prepared release: cast and full traces differ in length")
 	}
-	if combat := preparedCrowTrace(t, crowReleaseCombat); combat == cast {
-		t.Fatal("prepared release on the combat copy matched: the crow never empowered the release strike")
+	if combat := preparedCrowTrace(t, crowReleaseCombat); combat != cast {
+		t.Fatal("removed Precision still changed the prepared offensive release")
 	}
 }
 

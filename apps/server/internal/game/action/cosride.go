@@ -195,7 +195,11 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 					Z: float32(vehicle.Z), Heading: vehicle.Angle,
 				}}.Encode()})
 		}
-		c.ActiveCOS.Mounted = mounted
+		if mounted {
+			rt.mountCompanion(division, c, c.ActiveCOS, now)
+		} else {
+			rt.unmountCompanion(division, c, c.ActiveCOS, now)
+		}
 		// The reference server retires band-1 horses on dismount. Trade transports keep
 		// their detached pose and can be mounted again through this door.
 		if !mounted && ref.TidWord>>11 == 1 {

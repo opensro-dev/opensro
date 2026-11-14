@@ -58,22 +58,36 @@ const MENU_WIDTH = 116;
 const MENU_HEIGHT = 28;
 const ART = "/assets/images/Media_extracted/interface/mall/";
 
+// The two rails are fixed readonly tables, one copy each, so the frame
+// that reads a rail allocates nothing for it.
+const MALL_CATEGORIES = [
+	{ key: "hot", text: "HOT_STORE", icon: "hot" },
+	{ key: "MALL_CONSUME", text: "CONSUMPTION", icon: "consum" },
+	{ key: "MALL_AVATAR", text: "AVATA", icon: "avatar" },
+	{ key: "MALL_PET", text: "PET", icon: "pet" },
+	{ key: "package", text: "PACKAGE", icon: "bundle" },
+	{ key: "MALL_PREMIUM", text: "PREMIUM", icon: "premium" },
+	{ key: "MALL_ARCHEMY", text: "ARCHEMY", icon: "alchemy" },
+	{ key: "basket", text: "SHOPPING_BASKET_LIST", icon: "choicelist" }
+] as const;
+
+const MALL_CATEGORIES_LATER = [
+	{ key: "MALL_CONSUME", text: "CONSUMPTION", icon: "consum" },
+	{ key: "MALL_AVATAR", text: "AVATA", icon: "avatar" },
+	{ key: "MALL_PET", text: "PET", icon: "pet" },
+	{ key: "MALL_PREMIUM", text: "PREMIUM", icon: "premium" },
+	{ key: "MALL_ARCHEMY", text: "ARCHEMY", icon: "alchemy" },
+	{ key: "MALL_HOT", text: "HOT_STORE", icon: "hot" },
+	{ key: "basket", text: "SHOPPING_BASKET_LIST", icon: "choicelist" }
+] as const;
+
 /*
 ================
 mallCategories
 ================
 */
 export function mallCategories() {
-	return [
-		{ key: "hot", text: "HOT_STORE", icon: "hot" },
-		{ key: "MALL_CONSUME", text: "CONSUMPTION", icon: "consum" },
-		{ key: "MALL_AVATAR", text: "AVATA", icon: "avatar" },
-		{ key: "MALL_PET", text: "PET", icon: "pet" },
-		{ key: "package", text: "PACKAGE", icon: "bundle" },
-		{ key: "MALL_PREMIUM", text: "PREMIUM", icon: "premium" },
-		{ key: "MALL_ARCHEMY", text: "ARCHEMY", icon: "alchemy" },
-		{ key: "basket", text: "SHOPPING_BASKET_LIST", icon: "choicelist" }
-	] as const;
+	return MALL_CATEGORIES;
 }
 
 /*
@@ -88,15 +102,7 @@ untouched.
 ================
 */
 export function mallCategoriesLater() {
-	return [
-		{ key: "MALL_CONSUME", text: "CONSUMPTION", icon: "consum" },
-		{ key: "MALL_AVATAR", text: "AVATA", icon: "avatar" },
-		{ key: "MALL_PET", text: "PET", icon: "pet" },
-		{ key: "MALL_PREMIUM", text: "PREMIUM", icon: "premium" },
-		{ key: "MALL_ARCHEMY", text: "ARCHEMY", icon: "alchemy" },
-		{ key: "MALL_HOT", text: "HOT_STORE", icon: "hot" },
-		{ key: "basket", text: "SHOPPING_BASKET_LIST", icon: "choicelist" }
-	] as const;
+	return MALL_CATEGORIES_LATER;
 }
 
 /*

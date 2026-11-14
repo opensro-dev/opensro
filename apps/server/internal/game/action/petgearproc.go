@@ -40,7 +40,7 @@ func (rt *Runtime) petGearProcs(division string, owner *enterworld.Character, gi
 	if pet == nil {
 		return
 	}
-	step, ok := rt.elementalCompanion(division, owner, gid, companion.PetKind(pet.Codename), now)
+	step, ok := rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: companion.PetKind(pet.Codename), gear: true}, now)
 	if !ok || now < step.state.trained.procReadyAt {
 		return
 	}
@@ -128,7 +128,7 @@ func (rt *Runtime) petGearArea(step petCombatStep, at simulation.Spawn, damage u
 		if !valid || target.monster == nil || !samePlaneAdjacent(at, target.at) || areaDistance(at, target.at) > radius {
 			continue
 		}
-		world, _ := step.state.follower.Presentation()
+		world, _ := step.state.mover.AnyFollower().Presentation()
 		if rt.LineOfSight != nil && !rt.LineOfSight(at, world.LiveOwnerAt(step.nowMs), target.at) {
 			continue
 		}
@@ -175,7 +175,7 @@ func (rt *Runtime) petGearChain(step petCombatStep, first uint32, at simulation.
 			if !valid || victim.monster == nil || seen[gid] || !samePlaneAdjacent(at, victim.at) || areaDistance(at, victim.at) > 80 {
 				continue
 			}
-			world, _ := step.state.follower.Presentation()
+			world, _ := step.state.mover.AnyFollower().Presentation()
 			if rt.LineOfSight != nil && !rt.LineOfSight(at, world.LiveOwnerAt(step.nowMs), victim.at) {
 				continue
 			}
@@ -219,7 +219,7 @@ func (rt *Runtime) advancePetGearFieldsSession(key petOwnerKey, state *petSessio
 		state.trained.gearFields = nil
 		return
 	}
-	step, ok := rt.elementalCompanion(key.division, state.character, key.gid, companion.PetKind(pet.Codename), now)
+	step, ok := rt.elementalCompanionMatching(key.division, state.character, elementalQuery{gid: key.gid, kind: companion.PetKind(pet.Codename), gear: true}, now)
 	if !ok {
 		state.trained.gearFields = nil
 		return

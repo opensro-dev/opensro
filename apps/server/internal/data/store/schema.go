@@ -153,7 +153,9 @@ func isVersionMismatch(err error) bool {
 // sookArenaDay/sookArenaEntries fields stay as the seed the account
 // record is derived from at first load; the offline upgrade rewrites no
 // record.
-const CurrentVersion = 43
+// Version 44 adds the optional per-recipient Raven's Refuge recovery deadline.
+// The offline upgrade preserves all records; absent deadlines remain zero.
+const CurrentVersion = 44
 
 /*
 ================
@@ -223,7 +225,8 @@ var storeSteps = map[int]storeStep{
 	40: {true, "optional mostWanted.nextDecayAtMs and item forgeBound; expiresAtMs stays as an unread seed", 12, 12},
 	41: {true, "optional account gourdCount", 12, 12},
 	42: {true, "optional arena entry markers and reward chest", 12, 12},
-	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 5, 12},
+	43: {false, "the survival arena count moves to the account plane: the character count becomes a seed, so an older binary would count against it", 12, 12},
+	44: {true, "optional top-level ravenRefugeReadyAtMs recovery deadline", 5, 12},
 }
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving

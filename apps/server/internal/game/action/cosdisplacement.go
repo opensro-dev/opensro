@@ -36,11 +36,7 @@ func (rt *Runtime) commitCOSDisplacement(owner *cosAbnormalOwner, d *playerDispl
 	if state == nil {
 		return point, false
 	}
-	if state.follower != nil {
-		state.follower.Displace(d.pose, owner.now)
-	} else if state.transportCOS != nil {
-		state.transportWorld.Spawn, state.transportWorld.MoveSegment = d.pose, nil
-	} else {
+	if !state.mover.Displace(d.pose, owner.now) {
 		return point, false
 	}
 	state.displacement = d

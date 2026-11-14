@@ -596,9 +596,11 @@ func (rt *Runtime) HandleItemUse(
 				CurrentHP:        cosRef.MaxHP,
 				CurrentMP:        cosRef.MaxMP,
 				Summoned:         true,
-				Mounted:          true,
 				StateFlags:       3,
 			}
+			// Natively the summoned vehicle is bound ridden; the ride owner
+			// sets it (cosmount.go).
+			rideNewVehicle(pet)
 			// The creation arm keeps the reference capacity
 			// (+0x224) for everything but pets, so a transport carries a
 			// cargo bag of its authored size; a riding horse authors none.
