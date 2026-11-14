@@ -23,6 +23,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -141,6 +142,53 @@ func sameMarkerRows(a, b map[uint32][18]byte) bool {
 
 /*
 ================
+questMarkerSession
+
+One session's marker publication and the row generation it last
+diffed, owned together so they are created, reset and dropped
+together: a fresh session and a reset one hold generation 0, which
+always diffs.
+================
+*/
+type questMarkerSession struct {
+	publication quest.MarkerPublication
+	gen         uint64
+}
+
+/*
+================
+questMarkerSession.reset
+
+World re-entry: the publication forgets its rows (the next update
+re-emits the full set) and the generation with them, so an unchanged
+generation cannot skip the refill.
+================
+*/
+func (s *questMarkerSession) reset() {
+	s.publication.Reset()
+	s.gen = 0
+}
+
+/*
+================
+questMarkerSession.update
+
+The frames that bring the client to rows of generation gen. A
+generation already diffed has an empty diff by construction
+(Update only diffs rows against the last rows it was given), so
+Update's slices, map and sort are skipped.
+================
+*/
+func (s *questMarkerSession) update(rows map[uint32][18]byte, gen uint64) []wire.Frame {
+	if gen != 0 && gen == s.gen {
+		return nil
+	}
+	s.gen = gen
+	return s.publication.Update(rows)
+}
+
+/*
+================
 forget
 
 Drops every derivation whose session is no longer live.
@@ -186,11 +234,7 @@ array.
 ================
 */
 func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
-	publications := make(map[uint64]*quest.MarkerPublication)
-	// published is the row generation each publication last diffed:
-	// an unchanged generation since then has an empty diff by
-	// construction, so Update (its slices, map and sort) is skipped.
-	published := make(map[uint64]uint64)
+	publications := make(map[uint64]*questMarkerSession)
 	// entered is each session's last seen scene revision.
 	entered := make(map[uint64]uint64)
 	derived := &questMarkerDerivations{}
@@ -236,23 +280,16 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 			})
 			publication := publications[session.ID]
 			if publication == nil {
-				publication = &quest.MarkerPublication{}
+				publication = &questMarkerSession{}
 				publications[session.ID] = publication
 			}
 			if revision, active := session.SceneRevision(); active && entered[session.ID] != revision {
 				entered[session.ID] = revision
-				publication.Reset()
-				delete(published, session.ID)
+				publication.reset()
 			}
-			gen := derived.gen(session.ID)
-			if last, ok := published[session.ID]; ok && last == gen {
-				continue
-			}
-			published[session.ID] = gen
-			for _, frame := range publication.Update(rows) {
+			for _, frame := range publication.update(rows, derived.gen(session.ID)) {
 				if err := session.Send(frame.Opcode, frame.Payload); err != nil {
 					delete(publications, session.ID)
-					delete(published, session.ID)
 					log.Debugf("quest marker publication failed for session %d: %v", session.ID, err)
 					break
 				}
@@ -261,7 +298,6 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 		for id := range publications {
 			if !live[id] {
 				delete(publications, id)
-				delete(published, id)
 				delete(entered, id)
 			}
 		}
