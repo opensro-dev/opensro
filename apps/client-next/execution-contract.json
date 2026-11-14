@@ -2870,6 +2870,24 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-cave-page.ts",
+			"functions": [
+				"mapSignName",
+				"cavePageImages",
+				"cavePageHits"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/map-cave-page.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"run",
+				"extentHeight",
+				"quads"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/hud/map-guide-tree.ts",
 			"provider": "src/engine/runtime/ui/hud/world-map.ts",
 			"functions": [

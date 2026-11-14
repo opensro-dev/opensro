@@ -877,3 +877,32 @@ test("the globe stands off the world page beside the pin, at their layout places
 	assert.ok( view.paths.some( path => path.endsWith( "wmap_big_button_world.png" ) ) );
 	hud.dispose();
 });
+
+test("the globe inside a dungeon shows the world until the pin brings the floor back", () => {
+	const f = fixture();
+	try {
+		f.activate( "open-window:Map" );
+		// Standing on the cave's second floor, the M window opens on it.
+		let view = f.moveTo( { regionId: 32769, x: 100, y: 0, z: 100, angle: 0 }, { navigationFloor: 1 } );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), true, "the player's floor is shown" );
+		defined( control( view, "map-globe" ) );
+		// The globe leaves the cave page for the world, and it holds
+		// frame after frame while the player stays inside.
+		view = f.activate( "map-globe" );
+		view = f.step();
+		assert.equal( pageShown( f, "map_world_donf02.png" ), false, "the floor page is gone" );
+		assert.equal( control( view, "map-globe" ), undefined, "the world page has no globe" );
+		assert.equal( control( view, "map-floor-up" ), undefined, "nor the floor selector" );
+		defined( control( view, "map-dungeon-icon:1" ), "the world page offers the cave entrance" );
+		// The pin follows the player again: back to their floor.
+		view = f.activate( "map-pin" );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), true, "the pin restores the floor page" );
+		// The entrance's icon opens the cave from the world page too.
+		f.activate( "map-globe" );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), false );
+		f.activate( "map-dungeon-icon:1" );
+		assert.equal( pageShown( f, "map_world_donf02.png" ), true, "the entrance restores the floor page" );
+	} finally {
+		f.dispose();
+	}
+});
