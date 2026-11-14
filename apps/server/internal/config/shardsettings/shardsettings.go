@@ -562,6 +562,10 @@ var NotSettings = map[string]string{
 	// The store's write path (#2802, port-only): it moves the SQLite
 	// commit off the store lock; what a player plays is unchanged.
 	"SRO_STORE_ASYNC_COMMIT": "store write path: the asynchronous commit writer",
+	// The monster leg's worker pool (#2137, port-only): it plans the leg
+	// on more cores and commits in the serial order; what a player plays
+	// is unchanged (#2150, the tick target).
+	"SRO_MONSTER_LEG_WORKERS": "tick concurrency: the monster leg's planning workers",
 	// The bug-report set (opensro-ops #213): the GameWorld hosts /report
 	// beside the Agent and reads the same operator values; they shape report
 	// delivery, not the game a player plays.
