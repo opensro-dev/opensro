@@ -18,7 +18,9 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readZipEntries } from "../helpers/zip-reader.mjs";
-const { createJournal, JOURNAL_WINDOW_MS } = await import( "../../src/engine/runtime/bug-report/journal.ts" );
+const { createJournal, JOURNAL_WINDOW_MS, timelineEvents } = await import(
+	"../../src/engine/runtime/bug-report/journal.ts"
+);
 const { createDiagnosticUpload } = await import( "../../src/engine/runtime/bug-report/archive.ts" );
 
 const ORIGIN = "http://127.0.0.1:5174";
@@ -165,6 +167,35 @@ test("a 1 Hz storm whose first throw is older than the window still reports its 
 	assert.equal( errors[0].lastAtMs, 209000 );
 });
 
+test("the timeline places a kept failure's last throw on the clock of its first", t => {
+	// #3462: lastAtMs went out in raw performance.now() milliseconds beside
+	// t in replay seconds, so the storm's end could not be placed on t's axis.
+	const page = installPage( t );
+	const failure = failWith( "Maximum call stack size exceeded" );
+	throwNow( page, failure );
+	page.advance( 180000 );
+	for ( let i = 0; i < 30; i++ ) {
+		throwNow( page, failure );
+		page.advance( 1000 );
+	}
+	const zeroMs = 200000;
+	const events = timelineEvents( page.journal.since( performance.now() - JOURNAL_WINDOW_MS ), zeroMs );
+	const [error] = events.filter( e => e.kind === "error" );
+	assert.equal( error.t, -200, "the first throw, in seconds before the replay's first frame" );
+	assert.equal( error.lastT, 9, "the last throw, on the same zero and units" );
+	assert.equal( error.lastT - error.t, 209 );
+	assert.equal( "atMs" in error || "lastAtMs" in error, false, "no raw clock leaves the page" );
+});
+
+test("an ungrouped event carries no lastT", t => {
+	const page = installPage( t );
+	page.advance( 1500 );
+	page.journal.record( "ui", { control: "slot", index: 3 } );
+	const [event] = timelineEvents( page.journal.since( 0 ), 1000 );
+	assert.equal( event.t, 0.5 );
+	assert.equal( "lastT" in event, false );
+});
+
 test("the shared report keeps a kept failure's count and last time", async () => {
 	const input = {
 		"timeline.json": JSON.stringify( {
@@ -173,7 +204,7 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 				t: -180,
 				stack: "RangeError: Maximum call stack size exceeded\n    at loop (/src/loop.ts:1:1)",
 				count: 31,
-				lastAtMs: 209000
+				lastT: 9
 			} ]
 		} )
 	};
@@ -181,7 +212,7 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 	const entries = readZipEntries( await blob.arrayBuffer() );
 	const [event] = JSON.parse( entries.get( "timeline.json" ).data.toString() ).events;
 	assert.equal( event.count, 31 );
-	assert.equal( event.lastAtMs, 209000 );
+	assert.equal( event.lastT, 9 );
 	assert.match( event.stack, /at loop/ );
 });
 

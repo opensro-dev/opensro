@@ -146,7 +146,7 @@ const TECHNICAL_FIELDS = new Set( [
 	"caster",
 	"skill",
 	"count",
-	"lastAtMs",
+	"lastT",
 	"elapsedMs",
 	"cpuMs",
 	"durationMs",
