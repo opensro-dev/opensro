@@ -8,8 +8,10 @@ package action
 import (
 	"encoding/binary"
 	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/game/world/simulation"
 	"strings"
 	"testing"
+	"time"
 )
 
 /*
@@ -80,5 +82,42 @@ func TestPetGearElementsSeparateAndDoNotProc(t *testing.T) {
 	}
 	if step.state.trained.attacks != 0 || step.state.trained.procReadyAt != 0 {
 		t.Fatal("recursive counters/procs")
+	}
+}
+
+/*
+================
+TestPetBonusHitFramesLeaveInTheTickThatStruck
+
+A pet's bonus hit queues its frames on the monster leg, and its HP frame
+carries the HP that hit left. The frames must leave in the tick that
+committed the hit: held for the next tick's drain they arrive behind the
+hits that tick commits first (a prepared cast's release), with an HP those
+hits have already lowered, and the client's bar jumps back up.
+================
+*/
+func TestPetBonusHitFramesLeaveInTheTickThatStruck(t *testing.T) {
+	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	step, ok := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
+	if !ok {
+		t.Fatal("no companion")
+	}
+	step.trained = &petTrainedStrike{mods: companion.Modifiers{PoisonAdd: 12}}
+	rt.petGearElements(step, mob.Gid)
+	clock.now = clock.now.Add(time.Second)
+	published := false
+	for _, batch := range rt.TickHook()(clock.NowMs()) {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+				published = true
+			}
+		}
+	}
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if after.CurrentHP >= mob.CurrentHP {
+		t.Fatal("the poison tick did not land in this tick")
+	}
+	if !published {
+		t.Fatal("the tick that dealt the bonus damage did not publish the monster's HP")
 	}
 }
