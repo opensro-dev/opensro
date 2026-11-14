@@ -15254,15 +15254,15 @@
 						"experimental-homing-projectiles",
 						"experimental-main-thread-own-walk",
 						"experimental-predicted-run-up",
+						"experimental-silent-wing-flight",
 						"experimental-smooth-camera",
 						"experimental-unique-damage-rank",
 						"experimental-v-hides-companions",
-						"experimental-warp-arrival-sound",
-						"experimental-web-transport"
+						"experimental-warp-arrival-sound"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "3491cf79471a83ac",
+					"hash": "4a81cf8115f63298",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15276,9 +15276,6 @@
 						"experimental-render-scale:50",
 						"experimental-render-scale:75",
 						"experimental-scene-fxaa",
-						"experimental-scroll-down",
-						"experimental-scroll-thumb",
-						"experimental-scroll-up",
 						"experimental-sun-shadow",
 						"experimental-ui-scale"
 					]

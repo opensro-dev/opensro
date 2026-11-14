@@ -420,6 +420,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						description: "Play the portal-out cue when you arrive."
 					},
 					{
+						key: "silentWingFlight",
+						id: "experimental-silent-wing-flight",
+						label: "Silent wing flight",
+						description: "Wing dresses fly without footstep sounds."
+					},
+					{
 						key: "webTransport",
 						id: "experimental-web-transport",
 						label: "WebTransport connection",

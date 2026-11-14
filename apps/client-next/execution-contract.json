@@ -3558,6 +3558,13 @@
 			"reason": "The current entity LOD owner supplies the existing concealment distance."
 		},
 		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "renderer.silentWingFlight",
+			"function": "present",
+			"kind": "callback",
+			"reason": "The parent renderer reports whether the Experimental silent wing flight row is on; it changes nothing."
+		},
+		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "renderer.vHidesCompanions",
 			"function": "publishCharacters",

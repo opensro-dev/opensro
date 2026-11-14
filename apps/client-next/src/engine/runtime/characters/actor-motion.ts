@@ -30,6 +30,7 @@ import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
+import { flightSoundDefinition } from "@/engine/foundation/animation/wing-flight";
 
 const PROTECTED_ANIMATION_DISTANCE = 300;
 const STALL_ACTION_MASK = 0x8000;
@@ -88,6 +89,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				posePresentation,
 				published,
 				referenceAppearances,
+				renderer,
 				resources,
 				soundSurface,
 				sounds,
@@ -797,6 +799,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			// ADD670 retains both outgoing and incoming installations. Clip
 			// names and weights cannot identify cursors across a reinstallation.
 			const retainedActivations = new Set<AnimationActivation>();
+			const silentWingFlight = renderer.silentWingFlight?.() === true;
 			const dispatch = (state.dispatch ??= createAnimationDispatch()).step(
 				layers,
 				animationDeltaMs,
@@ -828,7 +831,7 @@ export function createActorMotion( owner: ActorOwner ) {
 					layer.activation.started,
 					(row?.elapsedMs ?? 0) / 1000,
 					layer.loop,
-					motionMetadata( layer.clip ),
+					flightSoundDefinition( layer.clip, motionMetadata( layer.clip ), silentWingFlight ),
 					seconds,
 					soundSource,
 					layer.activation

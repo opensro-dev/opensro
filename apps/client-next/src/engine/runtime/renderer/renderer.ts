@@ -245,6 +245,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		silentWingFlight
+
+		Read by the character presenter as it advances an actor's sounds.
+		================
+		*/
+		silentWingFlight() {
+			return experimental.silentWingFlight;
+		},
+		/*
+		================
 		dungeonCharacterPvs
 		================
 		*/
