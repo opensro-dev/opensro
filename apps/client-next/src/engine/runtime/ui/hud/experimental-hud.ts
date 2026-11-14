@@ -621,7 +621,7 @@ export function experimentalTabs(
 	session: SessionState | null | undefined,
 	hdAvailable: boolean
 ): readonly ExperimentalTab[] {
-	const guide = session?.phase === "world" && !!session.huntingGuide;
+	const guide = session?.phase === "world" && !!session.huntingGuide?.overlay;
 	const listed = ( row: ExperimentalRow ) =>
 		(guide || row.key !== "monsterGuide") && (hdAvailable || row.key !== "hdTextures");
 	return EXPERIMENTAL_TABS
