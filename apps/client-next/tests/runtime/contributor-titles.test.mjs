@@ -16,7 +16,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 
-const { createContributorTitles, OP_CONTRIBUTOR_TITLES } = await import(
+const { createContributorTitles, OP_CONTRIBUTOR_TITLES, OP_CONTRIBUTOR_PROMPT } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/contributor-titles/contributor-titles.ts"
 );
 const { overheadLayout, withoutBoardPass } = await import(
@@ -212,4 +212,27 @@ test("a rostered sender is tagged in gold-orange on global and normal chat alike
 	const bare = chatDraws( lines, undefined );
 	assert.equal( bare.filter( d => d.value === CONTRIBUTOR_TAG ).length, 0 );
 	assert.equal( bare.filter( d => d.value.startsWith( "Hero:" ) ).length, 2 );
+});
+
+test("the login prompt raises one dialog per frame, answering with the contributor commands", () => {
+	const titles = createContributorTitles();
+	assert.equal( titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload: Uint8Array.of( 1 ) } ), true );
+	const elsewhere = titles.takePrompt();
+	assert.deepEqual( elsewhere.dialog.answers, {
+		confirmLabel: "UIIT_PORT_CONTRIBUTOR_MOVE",
+		confirmChat: "/contributor here",
+		cancelLabel: "UIIT_PORT_CONTRIBUTOR_KEEP",
+		cancelChat: "/contributor keep"
+	} );
+	// Taken once: the next look finds nothing until the server asks again.
+	assert.equal( titles.takePrompt(), undefined );
+	titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload: Uint8Array.of( 2 ) } );
+	const holder = titles.takePrompt();
+	assert.deepEqual( holder.dialog.answers, { confirmLabel: "UIIT_CTL_CONFIRM", confirmChat: "/contributor keep" } );
+	for ( const payload of [ Uint8Array.of(), Uint8Array.of( 3 ), Uint8Array.of( 1, 1 ) ] ) {
+		assert.throws( () => titles.receive( { opcode: OP_CONTRIBUTOR_PROMPT, payload } ) );
+	}
+	// A roster frame never raises the prompt.
+	titles.receive( { opcode: OP_CONTRIBUTOR_TITLES, payload: Uint8Array.of( 0, 0 ) } );
+	assert.equal( titles.takePrompt(), undefined );
 });

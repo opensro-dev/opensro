@@ -4147,6 +4147,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( contributorTitles.receive( frame ) ) {
+					// The login prompt raises its notice dialog (port-only 0x3FC2).
+					const prompt = contributorTitles.takePrompt();
+					if ( prompt ) notices = [ ...notices.slice( -99 ), { ...prompt, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
