@@ -116,8 +116,6 @@ import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
-import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
-import { itemCountQuads } from "@/engine/foundation/ui/item-count";
 import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
@@ -493,10 +491,7 @@ import {
 	equipmentSlotMirror,
 	itemIsMallItem,
 	itemIsRare,
-	itemSlotBlockedOverlay,
-	itemSlotOverlays,
-	itemSlotWash,
-	slotSeed
+	itemSlotBlockedOverlay
 } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
@@ -10459,7 +10454,6 @@ export function createUi( ports: UiPorts ) {
 			};
 			const itemSlots: ItemSlotContext = {
 				gameplay: next.gameplay,
-				world: game,
 				gender: next.session?.characters?.find( row => row.name === next.session?.character )?.gender,
 				simulationTimeMs: next.simulationTimeMs ?? 0,
 				warningPhase: equipmentWarningPhase,

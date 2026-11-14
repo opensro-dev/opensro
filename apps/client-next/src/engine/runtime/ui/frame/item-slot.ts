@@ -41,14 +41,13 @@ export const ITEM_SLOT_PREFIXES = [
 ItemSlotContext
 
 What the item painters read beyond the frame. gameplay is the latest
-view in any phase; world is the same view only while in the world (the
-flashes, the level cap and the unlimited items come from it, as before
-the move).
+view in any phase, the same view the painters read before the move (no
+phase gate): the requirement overlay, the flashes, the level cap and the
+unlimited items all come from it.
 ================
 */
 export interface ItemSlotContext {
 	readonly gameplay: GameplayState | null | undefined;
-	readonly world: GameplayState | null | undefined;
 	// The character's gender as the session lists it.
 	readonly gender: number | undefined;
 	readonly simulationTimeMs: number;
@@ -106,7 +105,7 @@ export function itemEffects(
 	// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
 	// companion wash, then the animated sheets. 0x3645 flashes target
 	// the inventory and equipment slots.
-	const game = slots.world;
+	const game = slots.gameplay;
 	const wash = itemSlotWash( owned );
 	if ( wash ) rect( frame, { r, color: wash } );
 	const flashes = id.startsWith( "slot:" ) ?
@@ -181,7 +180,7 @@ export function itemCount(
 		r: UiRect;
 	}
 ) {
-	const unlimited = item?.refObjId !== undefined && !!slots.world?.unlimitedItems?.includes( item.refObjId );
+	const unlimited = item?.refObjId !== undefined && !!slots.gameplay?.unlimitedItems?.includes( item.refObjId );
 	for ( const q of itemCountQuads( item, r, frame.full, unlimited ) ) {
 		// The infinity sign is solid quads; digit sprites are resources.
 		if ( !q.texture ) {
