@@ -60,11 +60,11 @@ const (
 	// serves .crb blobs from (the native MarkFTP host role: the client
 	// composes "http://" + MarkFTPAddr + MarkFTPPath + filename from its
 	// client option parser @0x725669 / data_cec1d4 and downloads crests at
-	// runtime - NO crest art ships in the Media PK2). Unset (the default)
-	// means the endpoint answers 404 for everything: the mechanism is
-	// operable the moment an operator supplies art, and honestly empty
-	// until then - a missing crest draws nothing on the client, which is
-	// native-correct.
+	// runtime - NO crest art ships in the Media PK2). Unset, the GameWorld
+	// keeps its crests in "marks" inside the shard's authority directory
+	// (sro-gameworld crestMarksDir, #3454); an api Config with an empty
+	// MarksDir answers 404 for everything - a missing crest draws nothing
+	// on the client, which is native-correct.
 	EnvMarksDir = "SRO_AGENT_MARKS_DIR"
 
 	// EnvBenchmarkFixtureControl enables the authenticated deterministic
