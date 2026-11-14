@@ -88,14 +88,17 @@ chatTabShows
 
 Whether a line of the given chat channel shows on the given tab. Stall
 lines belong to the stall window's own chat box. With the port-only
-Event tab offered (tab 4), channel-7 event notices live only there:
-All skips them and the native tabs never carried them.
+Event tab offered (tab 4), it lists every channel-7 notice, and the
+port-only event notices (event: job kills, drops, plus results, breaks)
+live only there: All skips them and the native tabs never carried them.
+A native type-7 server notice, such as the operator's restart warning,
+is meant for every player, so All keeps it too (owner 2026-11-14).
 ================
 */
-export function chatTabShows( channel: number, tab: number, eventTab: boolean ): boolean {
+export function chatTabShows( channel: number, tab: number, eventTab: boolean, event = false ): boolean {
 	if ( channel === STALL_CHAT_CHANNEL ) return false;
 	if ( eventTab && tab === 4 ) return channel === 7;
-	if ( tab === 0 ) return !eventTab || channel !== 7;
+	if ( tab === 0 ) return !eventTab || !event;
 	return channel === CHAT_TAB_CHANNELS[tab] || EVERY_TAB_CHAT_CHANNELS.includes( channel );
 }
 
@@ -424,7 +427,7 @@ button
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
-			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab ) ).flatMap(
+			...lines.filter( l => chatTabShows( l.channel, activeTab, !!state.eventTab, !!l.event ) ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
