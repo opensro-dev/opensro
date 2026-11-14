@@ -921,6 +921,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		game.items.ChatItemLinks = links
 		log.Infof("chat: item links ON, %d per line (%s)", links.Limit, chat.EnvChatItemLinks)
 	}
+	// /FINDUSER reads the live region through the same owner (an
+	// optional port: a missing method would silently fall back to the
+	// saved row, so the build pins it).
+	var _ gmcommand.LivePositions = game.items
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

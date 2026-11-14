@@ -8,6 +8,7 @@ petnaturalrecovery_test.go - the companion natural-recovery pulses
 package action
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/abnormal"
@@ -185,5 +186,44 @@ func TestPetNaturalRecoveryFullVitals(t *testing.T) {
 	}
 	if pet.CurrentHP != 1000 || pet.CurrentMP != 100 {
 		t.Fatalf("full pet changed: %d/%d", pet.CurrentHP, pet.CurrentMP)
+	}
+}
+
+/*
+================
+TestRiddenTransportRecoveryReadsTheRidersMotion
+
+A ridden transport moves in its rider's world; its parked anchor stands
+still. The pulse must weigh the motion of the world that moves it: a
+transport galloping under its trader is refused, the same transport
+halted recovers.
+================
+*/
+func TestRiddenTransportRecoveryReadsTheRidersMotion(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, nil)
+	ref := equipCombatTestPet(t, rt, c, cosBandTransport)
+	ref.MaxHP, ref.MaxMP = 1000, 100
+	pet := c.ActiveCOS
+	pet.CurrentHP, pet.CurrentMP = 100, 10
+	rt.BindPetSession(testDivision, c, 1)
+	worldKey := simulation.WorldKey(testDivision, c.Name)
+	rt.rememberTransportCOS(testDivision, c, rt.liveSpawn(worldKey, c, rt.Now().UnixMilli()))
+	pet.Mounted = true
+	rt.Worlds.Update(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
+		from := w.Spawn
+		w.Spawn.X += 500
+		w.MoveSegment = &simulation.MoveSegment{From: from, StartedAtMs: 1_003_000, ArrivesAtMs: 1_010_000}
+	})
+	key := petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: pet.GID}
+	if rt.petSessions[key] == nil {
+		t.Fatal("transport session was not bound")
+	}
+	if frames := rt.advancePetNaturalRecovery(key, 1_004_000); len(frames) != 0 || pet.CurrentHP != 100 {
+		t.Fatalf("a galloping transport recovered: %d, %v", pet.CurrentHP, frames)
+	}
+	rt.advancePetNaturalRecovery(key, 1_012_000)
+	if pet.CurrentHP == 100 {
+		t.Fatal("a halted ridden transport must recover")
 	}
 }

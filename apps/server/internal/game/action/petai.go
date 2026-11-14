@@ -580,7 +580,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if !facts.companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		state.follower = nil
+		dropFollowerInPlace(state, nowMs)
 		return nil
 	}
 	if facts.admitted {
@@ -602,7 +602,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	if snapshot == nil && !companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		state.follower = nil
+		dropFollowerInPlace(state, nowMs)
 		return nil
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
@@ -618,7 +618,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 		// Port-only: a living guardian must keep its real anchor while awaiting its owner's revival timer.
 		_, _, _, _, guardian := rt.bondSource(key, state)
 		if !guardian || !ownerDead {
-			state.follower = nil
+			dropFollowerInPlace(state, nowMs)
 		}
 		return frames
 	}
@@ -626,7 +626,7 @@ func (rt *Runtime) advancePetSession(key petOwnerKey, state *petSession, nowMs i
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
 	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
 		state.roar = nil
-		state.follower = nil
+		dropFollowerInPlace(state, nowMs)
 		if found && ref != nil && ref.RefObjID == cos.RefObjID && isVehicleCOS(ref.TidWord) {
 			// Natively the first primary actor is a vehicle (the
 			// band-2 trade transport), so it holds its owner.

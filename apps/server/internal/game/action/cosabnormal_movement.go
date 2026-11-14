@@ -79,6 +79,29 @@ func (rt *Runtime) handRiddenPoseToVehicle(division string, character *enterworl
 
 /*
 ================
+dropFollowerInPlace
+
+The follower-side twin of handRiddenPoseToVehicle. A following transport
+(port-only, transportfollow.go) is posed by its follower while the
+parked anchor keeps the dismount spot; when the tick drops the follower
+(the trader died, the follow rule no longer applies, the companion left
+the record) the transport stands where the follower stood. Every
+follower drop that is not a re-anchor goes through here; the caller
+owns state (the pet tick, or the division lock).
+================
+*/
+func dropFollowerInPlace(state *petSession, nowMs int64) {
+	if state.follower == nil {
+		return
+	}
+	if state.transportCOS != nil && state.transportCOS.GID == state.follower.GID() {
+		state.transportWorld = simulation.WorldState{Spawn: state.follower.Position(nowMs)}
+	}
+	state.follower = nil
+}
+
+/*
+================
 companionOwnPose
 
 The companion's own movement owner, read under petMu. The unlock is
