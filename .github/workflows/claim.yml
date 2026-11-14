@@ -1,0 +1,60 @@
+# claim.yml - /claim and /unclaim on an issue, and the sweep of stale claims
+#
+# A claim is a lease kept on the issue (scripts/github/issueClaim.mjs), so
+# contributors and the maintainers' agents see the same record before they
+# start (two pull requests for one topic came from claims only one side
+# could see).
+#
+# Trust: issue_comment runs from the default branch, so the script checked
+# out here is the reviewed copy on main, never code from a pull request or
+# a fork. The comment text is read from the event payload inside the script
+# as data; it is never interpolated into this file or a shell. The token
+# may only write issues (assignees, labels, comments). The workflow's own
+# replies are made with GITHUB_TOKEN, which starts no new workflow run, so
+# a reply cannot trigger itself.
+name: claim
+
+on:
+  issue_comment:
+    types: [ created ]
+  schedule:
+    # The sweep: every three hours, so an idle lease frees within hours
+    # of its expiry.
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  # One run per issue at a time, so two /claim comments a second apart
+  # are decided in order; the sweep has its own lane.
+  group: claim-${{ github.event.issue.number || 'sweep' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  claim:
+    # Pull request comments and comments that are no claim command skip
+    # the job before any step runs.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (!github.event.issue.pull_request &&
+       (startsWith(github.event.comment.body, '/claim') || startsWith(github.event.comment.body, '/unclaim')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Both events check out the default branch's tip (an issue comment
+      # and a schedule carry no other ref), the reviewed script.
+      - name: Check out the default branch's claim script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/github
+          persist-credentials: false
+
+      - name: Decide the claim
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { run } = await import( `${ process.env.GITHUB_WORKSPACE }/scripts/github/issueClaim.mjs` );
+            await run( { github, context } );
