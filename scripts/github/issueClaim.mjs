@@ -223,6 +223,16 @@ async function listComments( github, owner, repo, number ) {
 
 /*
 ================
+limitText
+================
+*/
+function limitText( actor ) {
+	return `@${actor} already holds ${MAX_CONTRIBUTOR_CLAIMS} claims, the most one account holds at once. ` +
+		"Finish or `/unclaim` one of them first.";
+}
+
+/*
+================
 claimedIssues
 ================
 */
@@ -244,15 +254,16 @@ liveLeasesHeld
 How many live leases actor holds on open issues other than except,
 read from the workflow's own lease markers. Not from the assignees:
 GitHub silently ignores an assignee it will not accept, so a count of
-assignments would let such an account claim without limit.
+assignments would let such an account claim without limit. With before,
+only the leases whose marker comment is older than that comment count.
 ================
 */
-async function liveLeasesHeld( { github, owner, repo, actor, except, botLogin, nowMs } ) {
+async function liveLeasesHeld( { github, owner, repo, actor, except, botLogin, nowMs, before = Infinity } ) {
 	let held = 0;
 	for ( const issue of await claimedIssues( github, owner, repo ) ) {
 		if ( issue.number === except ) continue;
 		const lease = readLease( await listComments( github, owner, repo, issue.number ), botLogin );
-		if ( lease && lease.holder === actor && Date.parse( lease.until ) > nowMs ) held++;
+		if ( lease && lease.holder === actor && Date.parse( lease.until ) > nowMs && lease.commentId < before ) held++;
 	}
 	return held;
 }
@@ -331,8 +342,7 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 				owner,
 				repo,
 				issue_number: number,
-				body: `@${actor} already holds ${MAX_CONTRIBUTOR_CLAIMS} claims, the most one account holds at once. ` +
-					"Finish or `/unclaim` one of them first."
+				body: limitText( actor )
 			} );
 			return;
 		}
@@ -358,7 +368,7 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 		}
 		await github.rest.issues.addAssignees( { owner, repo, issue_number: number, assignees: [ actor ] } );
 		await github.rest.issues.addLabels( { owner, repo, issue_number: number, labels: [ CLAIMED_LABEL ] } );
-		await github.rest.issues.createComment( {
+		const { data: posted } = await github.rest.issues.createComment( {
 			owner,
 			repo,
 			issue_number: number,
@@ -370,6 +380,27 @@ async function handleComment( { github, context, botLogin, nowMs } ) {
 				renewed: decision.action === "renew"
 			} )
 		} );
+		// Runs on different issues are concurrent (the group is per issue),
+		// so /claim posted on many issues at once all pass the count above.
+		// Comment ids are ordered across the repository: recount only the
+		// leases posted before this one, and give this one back when they
+		// already fill the cap. The earliest MAX_CONTRIBUTOR_CLAIMS survive
+		// however the runs interleave.
+		if ( decision.action === "grant" && !isMaintainer( association ) ) {
+			const earlier = await liveLeasesHeld( {
+				github,
+				owner,
+				repo,
+				actor,
+				except: number,
+				botLogin,
+				nowMs,
+				before: posted.id
+			} );
+			if ( earlier >= MAX_CONTRIBUTOR_CLAIMS ) {
+				await release( { github, owner, repo, number, lease: { holder: actor }, text: limitText( actor ) } );
+			}
+		}
 		return;
 	}
 	const decision = decideUnclaim( { lease, actor, association } );

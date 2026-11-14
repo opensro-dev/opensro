@@ -56,7 +56,9 @@ function fakeRepo( { numbers = [ 7 ], failing = [] } = {} ) {
 			listEventsForTimeline: "listEventsForTimeline",
 			listForRepo: "listForRepo",
 			async createComment( { issue_number, body } ) {
-				at( issue_number ).comments.push( { id: nextId++, user: { login: BOT, type: "Bot" }, body } );
+				const posted = { id: nextId++, user: { login: BOT, type: "Bot" }, body };
+				at( issue_number ).comments.push( posted );
+				return { data: posted };
 			},
 			async updateComment( { comment_id, body } ) {
 				for ( const { comments } of issues.values() ) {
@@ -303,6 +305,19 @@ test("run: one account holds at most the cap of live claims; a maintainer seat i
 	for ( const number of [ 1, 2, 3 ] ) {
 		await repo.comment( "maintainer", "/claim T" + number, "OWNER", later, number );
 		assert.ok( repo.lastReply( number ).startsWith( `Claimed by @maintainer (T${number})` ), String( number ) );
+	}
+});
+
+test("run: /claim on many issues at once still leaves one account the cap", async () => {
+	// The workflow's concurrency group is per issue, so these runs overlap:
+	// each passes the first count before any lease exists.
+	const repo = fakeRepo( { numbers: [ 1, 2, 3, 4 ] } );
+	await Promise.all( [ 1, 2, 3, 4 ].map( number => repo.comment( "contributor", "/claim", "NONE", T0, number ) ) );
+	const held = [ 1, 2, 3, 4 ].filter( number => repo.at( number ).labels.has( CLAIMED_LABEL ) );
+	assert.equal( held.length, MAX_CONTRIBUTOR_CLAIMS, `claimed: ${held}` );
+	for ( const number of [ 1, 2, 3, 4 ].filter( n => !held.includes( n ) ) ) {
+		assert.match( repo.lastReply( number ), /already holds 2 claims/ );
+		assert.equal( repo.at( number ).assignees.size, 0 );
 	}
 });
 
