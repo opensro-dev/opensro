@@ -1570,6 +1570,16 @@ export function startRuntime(
 				if ( now - lastReport >= 250 ) {
 					lastReport = now;
 					runtimeErrors.update( "Characters", characters.error() );
+					// A presentation data gap skips one cosmetic step and is
+					// reported, not fatal (presentation-contract.ts).
+					for ( const degradation of characters.takeDegradations() ) {
+						sessionCommand( {
+							kind: "client-report",
+							incidentKind: "degraded",
+							code: degradation.code,
+							message: degradation.message
+						} );
+					}
 					runtimeErrors.update( "Navigation", navigation.reconnecting() ? null : navigation.error() );
 					runtimeErrors.update( "World", world.reconnecting() ? null : world.error() );
 					runtimeErrors.update( "Audio", audio.error() );

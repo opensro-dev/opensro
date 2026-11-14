@@ -183,7 +183,9 @@ export function createCharacterPresentation(
 		cameraFade: null,
 		previewReady: false,
 		dockReady: false,
-		commonReady: false
+		commonReady: false,
+		degradations: [],
+		degradedKeys: new Set()
 	};
 	const weather = createPresentationWeather();
 	const states = new Map<number, CharacterPresentationState>();
@@ -1167,6 +1169,19 @@ export function createCharacterPresentation(
 		damageText: () =>
 			presentationEvents.state.damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => output.failure ?? resources.error() ?? effects.error(),
+		/*
+		================
+		takeDegradations
+
+		The skipped presentation steps since the last call (runtime.ts files
+		them as degraded client reports); each is recorded once per lifetime.
+		================
+		*/
+		takeDegradations() {
+			const taken = output.degradations;
+			output.degradations = [];
+			return taken;
+		},
 		failure: () =>
 			resources.failure() ??
 				(effects.error() ?

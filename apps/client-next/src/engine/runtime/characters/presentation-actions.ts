@@ -27,7 +27,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose, CastState } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
-import type { Resource, PresentationOutput } from "./internal/presentation-contract";
+import { degradePresentation, type Resource, type PresentationOutput } from "./internal/presentation-contract";
 
 /*
 ================
@@ -145,7 +145,7 @@ export function createPresentationActions() {
 		*/
 		step(
 			frame: PresentationActionFrame,
-			output: Pick<PresentationOutput, "failure">,
+			output: Pick<PresentationOutput, "degradations" | "degradedKeys">,
 			published: PresentationActionCatalog
 		) {
 			const {
@@ -380,7 +380,11 @@ export function createPresentationActions() {
 						} )
 					);
 					if ( alternatives.some( table => table.some( phase => phase === undefined ) ) ) {
-						output.failure = `Missing action phase timeline ${resource.codename}`;
+						degradePresentation(
+							output,
+							"presentation-action-timeline",
+							`Missing action phase timeline ${resource.codename} (skill ${cast.skill})`
+						);
 						continue;
 					}
 					if ( loading ) continue;
