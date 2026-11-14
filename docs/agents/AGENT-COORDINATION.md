@@ -36,6 +36,13 @@ priorities and handles exceptions. An agent with no open task marks itself
 idle (`wf.py agent idle`) so the board, not a stale claim, says who is
 free.
 
+A claim on a GitHub issue is also made on the issue, where outside
+contributors can see it (`.github/workflows/claim.yml`). A seat comments
+`/claim <seat>` before it starts, and `/unclaim` when it ends without a
+pull request. An issue with `status: claimed` held by someone else is
+skipped, as is one with an open linked pull request. A maintainer lease
+lasts 24 hours; pushing to the linked pull request keeps it alive.
+
 `status: gated` keeps an issue out of the pull until something it needs
 exists. Whoever gates an issue writes one line in its body saying what
 lifts the gate:
