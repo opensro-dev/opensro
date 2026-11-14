@@ -7087,3 +7087,75 @@ test("survival arena death suppresses town rebirth while ordinary deaths keep it
 		}
 	}
 });
+
+/*
+================
+stall offer click-carry
+
+CIFInventory_OnSlotTransfer (59B1D0): a stall slot (window 0x21) released
+on the bag sends 0x71A8 kind 3 for its owner. Item slots move by click-carry
+(a click lifts the icon onto the cursor, the next click drops it), so the
+owner's offer must lift as the bag's items do, or a priced item can only
+leave by closing the whole stall.
+================
+*/
+test("an owner's stall offer lifts by click and leaves the stall on the bag in modify mode", async () => {
+	const item = {
+		slot: 13,
+		quantity: 20,
+		refObjId: 7,
+		typeFlags: 0x8ec,
+		icon: "item/etc/hp_potion_01.ddj",
+		name: "Potion"
+	};
+	const offer = { slot: 0, bagSlot: 13, quantity: 5, price: 300, item: { ...item, quantity: 5 } };
+	for ( const history of [ "never opened", "opened, then modified" ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			const stall = { ...emptyStall(), phase: "owner", owner: 1, offers: [ offer ] };
+			f.state.gameplay = {
+				...f.state.gameplay,
+				inventorySlotCount: 45,
+				equipmentSlotCount: 13,
+				inventory: [ item ],
+				stall: { ...stall, open: history !== "never opened" }
+			};
+			let now = 1000, scene;
+			const draw = async () => {
+				for ( let i = 0; i < 10; i++ ) {
+					scene = f.ui.step( f.state, now += 100 ) ?? scene;
+					// The icon resources load asynchronously.
+					await new Promise( resolve => setTimeout( resolve, 5 ) );
+				}
+			};
+			const control = id => scene.controls.find( row => row.id === id );
+			const removes = () => commands.filter( c => c.kind === "stall-remove" );
+			await draw();
+			if ( history !== "never opened" ) {
+				assert.ok( !control( "stall-slot:0" ).carry, "an open stall's offer does not lift" );
+				f.state.gameplay = { ...f.state.gameplay, stall: { ...stall, open: false } };
+				await draw();
+			}
+			const source = control( "stall-slot:0" ), bag = control( "slot:20" ).rect;
+			assert.equal( source.carry, true, `${history}: the offer lifts by click` );
+			// The lift: the platform reports a carry as drag events from the slot.
+			f.ui.event( { kind: "drag", id: "stall-slot:0", dx: 5, dy: 5 } );
+			await draw();
+			const cursor = [ source.rect[0] + 16 + 5 - 16, source.rect[1] + 16 + 5 - 16, 32, 32 ];
+			assert.ok(
+				f.scenes.at( -1 ).quads.some( q =>
+					q.texture?.includes( "hp_potion_01" ) && q.rect.every( ( v, i ) => v === cursor[i] )
+				),
+				`${history}: the carried icon is the offered bag item`
+			);
+			// A drop off the bag leaves the offer where it is.
+			f.ui.event( { kind: "drag-end", id: "stall-slot:0", x: 2, y: 2 } );
+			assert.deepEqual( removes(), [], `${history}: a drop outside the bag removes nothing` );
+			f.ui.event( { kind: "drag", id: "stall-slot:0", dx: 5, dy: 5 } );
+			f.ui.event( { kind: "drag-end", id: "stall-slot:0", x: bag[0] + 4, y: bag[1] + 4 } );
+			assert.deepEqual( removes(), [ { kind: "stall-remove", slot: 0 } ], `${history}: the bag takes it back` );
+		} finally {
+			f.dispose();
+		}
+	}
+});

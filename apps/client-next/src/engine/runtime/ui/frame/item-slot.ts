@@ -26,14 +26,17 @@ import { image, rect } from "./draw";
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
 const EQUIPMENT_WARNING = "icon_item_warning";
 
-// The control ids an item can be carried from.
+// The control ids an item can be carried from. A stall offer lifts for its
+// owner while the stall is closed for modification: CIFInventory_OnSlotTransfer
+// (59B1D0) takes a stall slot (window 0x21) released on the bag back out.
 export const ITEM_SLOT_PREFIXES = [
 	"slot:",
 	"avatar:",
 	"storage-slot:",
 	"cos-slot:",
 	"gacha-bag:",
-	"gacha-card"
+	"gacha-card",
+	"stall-slot:"
 ] as const;
 
 /*

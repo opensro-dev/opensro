@@ -8415,6 +8415,10 @@ export function createUi( ports: UiPorts ) {
 				const avatar = event.id.startsWith( "avatar:" ),
 					slot = event.id === "gacha-card" ?
 						gachaHud.frame( gachaInput() ).cardSlot :
+						event.id.startsWith( "stall-slot:" ) ?
+						// The offer's icon is its bag item's: carriedRow reads the bag slot.
+						view?.gameplay?.stall?.offers.find( row => row.slot === Number( event.id.slice( 11 ) ) )
+							?.bagSlot :
 						avatar ?
 						view?.gameplay?.avatarInventory?.find( i =>
 							avatarSocket( i.typeFlags ) === Number( event.id.slice( 7 ) )
@@ -19792,7 +19796,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							rect: cellRect,
 							kind: "button",
 							disabled: !offer && !(owner && !state.open),
-							draggable: owner && !state.open && !!offer
+							draggable: owner && !state.open && !!offer,
+							// Item slots move by click-carry: the offer lifts the way a
+							// bag item does, and the bag's release removes it.
+							carry: owner && !state.open && !!offer
 						} );
 						// GDR_STALLSLOT_MODIFY is added after the slot, so it stays
 						// topmost over the cell's top-right corner.
