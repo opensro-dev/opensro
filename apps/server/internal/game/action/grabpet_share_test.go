@@ -17,6 +17,7 @@ share the reservation holds.
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -221,5 +222,58 @@ func TestGrabPetLeavesTheTopDamagersDropsWithoutItemShare(t *testing.T) {
 	}
 	if left := len(rt.Ground.All(testDivision)); left != 2 || len(peer.MissionInventory) != peerBag || len(picker.ActiveCOS.Container.Rows) != 0 {
 		t.Fatalf("without item share the pet took a reserved drop: %d left on the ground", left)
+	}
+}
+
+/*
+================
+TestGrabPetItemMoveIntoFullBagsAdvancesTheRotation
+
+#3423: every member's player bag is full and the picker's pet has room;
+the pet's item-move pickup (move type 0x11) proposes one drop again and
+again. The native item-move handler serves 0x11 as 6
+(CGObjPC_RegisterItemMoveHandlers 0x50ce80: both table rows hold
+CPlayer_ExecuteGroundPickup 0x526090), and that handler rotates the loot
+member while it selects the recipient (CPlayer_SelectPartyLootRecipient
+0x525dc0 -> CParty_RotateLootMember at 0x525f82), before the grant
+(CPlayer_GrantGroundPickup at 0x526335). So a refused attempt still
+spends the turn. On the peer's turn the grant fails 0x1807 with no
+fallback (0x52634f-0x5263a8): the peer gets [2, 0x07], the picker
+[2, 0xDA], the drop stays. The next attempt is the picker's own turn and
+lands in the pet's bag.
+================
+*/
+func TestGrabPetItemMoveIntoFullBagsAdvancesTheRotation(t *testing.T) {
+	rt, picker, peer, gid, heap := sharedPetFixture(t)
+	fillPlayerBag(t, picker)
+	fillPlayerBag(t, peer)
+	peerRows := len(peer.MissionInventory)
+	drop := heap(grounditem.Item{RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1})
+	payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.NextPartyLootMember(testDivision, picker.Name) // the peer is next
+
+	refused := rt.HandleItemMove(testDivision, picker, payload)
+	if len(refused.Frames) != 1 || refused.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		!bytes.Equal(refused.Frames[0].Payload, []byte{2, wire.ErrCodePartyInventoryFull}) {
+		t.Fatalf("picker frames on the peer's turn = %+v, want one 0xB06D [02 DA]", refused.Frames)
+	}
+	if len(refused.Recipients) != 1 || refused.Recipients[0].CharacterID != peer.ID || len(refused.Recipients[0].Frames) != 1 ||
+		!bytes.Equal(refused.Recipients[0].Frames[0].Payload, []byte{2, wire.ErrCodeStorageFull}) {
+		t.Fatalf("peer frames = %+v, want one 0xB06D [02 07]", refused.Recipients)
+	}
+	if len(rt.Ground.All(testDivision)) != 1 || len(picker.ActiveCOS.Container.Rows) != 0 {
+		t.Fatal("the refused attempt consumed the drop or filled the pet")
+	}
+
+	rt.HandleItemMove(testDivision, picker, payload)
+	if len(rt.Ground.All(testDivision)) != 0 || len(picker.ActiveCOS.Container.Rows) != 1 {
+		t.Fatal("the refused attempt did not spend the peer's turn: the picker's own turn never came")
+	}
+	if len(peer.MissionInventory) != peerRows {
+		t.Fatal("the full peer's bag changed")
 	}
 }

@@ -267,9 +267,13 @@ type petPickupAt struct {
 sharePetPickup
 
 A pet's pickup runs the party's item share as the owner's own pickup does:
-The reference server's ground pickup serves move type 0x11 as it serves 6,
-and its party loot selection picks the recipient by the
-party's rotation. Non-alchemy quest items (the reference server's pet pickup
+The reference server's ground pickup serves move type 0x11 as it serves 6
+(v1.188 SR_GameServer, sha256 bec2375e...: CGObjPC_RegisterItemMoveHandlers
+0x50ce80 stores CPlayer_ExecuteGroundPickup 0x526090 in both table rows),
+and its party loot selection picks the recipient by the party's rotation
+(CPlayer_SelectPartyLootRecipient 0x525dc0, called at 0x526149, rotates at
+0x525f82 before the grant at 0x526335: a refused grant still spends the
+turn, #3423). Non-alchemy quest items (the reference server's pet pickup
 recipient selection) also route to
 the owner's player bag (0x1C -> the player's ground-pickup grant) and update
 quest inventory rather than entering the pet container. When the rotation
@@ -332,7 +336,8 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		if !hasFreeSlot {
 			// The reference server's pet pickup recipient selection probes
 			// the first empty slot (0x0D) of the rotated party recipient's bag
-			// and spills to that recipient's pickup pet
+			// (CCOS_SelectPickupRecipient 0x4d570c) and spills to that
+			// recipient's pickup pet (CCOSManager_FindPickupPetActor 0x4d571b)
 			// whenever no empty slot exists (al == 0xFF), without attempting a
 			// partial-stack merge in the recipient's player bag.
 			return rt.grantPeerCosPickup(division, c, recipient, item, actor, p), true
@@ -347,6 +352,11 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 				// The reference server's ground pickup on 0x706D routes
 				// 0xB06D [2, 0x07] to the full recipient and 0xB06D [2, 0xDA] to
 				// the picker (without player OpActionState on move type 0x11).
+				// No fallback to the picker's pet or the next member: on a
+				// 0x1807 grant for another member, CPlayer_ExecuteGroundPickup
+				// sends the recipient 0x1807 and returns 0x18DA
+				// (0x52634f-0x5263a8). Only the pet-command path spills
+				// (CCOS_SelectPickupRecipient 0x4d570c-0x4d573e).
 				return OpResult{
 					Frames:     []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: []byte{2, wire.ErrCodePartyInventoryFull}}},
 					Recipients: []RecipientFrames{{CharacterID: recipient.ID, Frames: result.Frames}},
