@@ -8,17 +8,15 @@ The authored widgets (statics, labels, buttons and chrome placed by a node
 of an if*.txt layout, and the simple message box) draw through the wider
 UiAuthoredFrame.
 The coordinator retains input and window lifetime; these functions append
-draw commands and controls, and admit complete windows as one unit.
+draw commands and controls. A complete window is admitted as one unit by
+admission.ts, re-exported here so the coordinator reaches one module.
 
 ===========================================================================
 */
 import type { UiRect, UiQuad } from "@/engine/contracts/ui";
 import type { BuffViewerIcon } from "@/engine/foundation/ui/buff-viewer";
 import type { CloseControlId, UiAuthoredFrame, UiFrame } from "./frame-contract";
-import { closedPanel } from "@/engine/foundation/ui/panels";
-import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { DESKTOP_HEIGHT, DESKTOP_WIDTH, fitUiGroup } from "@/engine/foundation/ui/layout";
-import { frameRing } from "@/engine/foundation/ui/frame-ring";
+import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import {
@@ -37,6 +35,8 @@ import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/found
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
+
+export { beginWindow, endWindow, unloadedImages } from "./admission";
 
 /*
 ================
@@ -178,136 +178,6 @@ export function label(
 			vAlign: 0
 		} )
 	);
-}
-
-/*
-================
-beginWindow
-================
-*/
-export function beginWindow( frame: UiFrame ) {
-	const quads = frame.quads,
-		controls = frame.controls,
-		blocks = frame.blocks,
-		paths = frame.paths,
-		commonWindowPaths = frame.commonWindowPaths;
-	const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-	paths.push( ...commonWindowPaths );
-	return mark;
-}
-
-/*
-================
-unloadedImages
-
-The images a window drew from `from` on that are still loading: neither
-resident nor known absent. Native never holds a window for its art:
-CTextBoard_SetTexturePath (53FF00) keeps whatever the texture load
-returned, null for a missing file, and CIFWnd_RenderTexturedFace (5405DF)
-draws on the path flag, not the texture. So an absent image never holds a
-window's admission; it held the M window shut forever on a build without
-its chrome art (#3407). Every window admission asks this one rule.
-================
-*/
-export function unloadedImages( resources: UiFrame["resources"], paths: readonly string[], from: number ): string[] {
-	return paths.slice( from ).filter( path => !resources.has( path ) && !resources.absent?.( path ) );
-}
-
-/*
-================
-endWindow
-================
-*/
-export function endWindow(
-	frame: UiFrame,
-	mark: readonly [number, number, number, number],
-	owner = "primary",
-	source?: UiRect
-) {
-	const admittedWindows = frame.admittedWindows,
-		paths = frame.paths,
-		resources = frame.resources,
-		windowMissing = frame.windowMissing,
-		contentImages = frame.contentImages,
-		phase = frame.phase,
-		w = frame.w,
-		h = frame.h,
-		fontPath = frame.fontPath,
-		quads = frame.quads,
-		controls = frame.controls,
-		blocks = frame.blocks,
-		compact = frame.compact,
-		full = frame.full;
-	const compactWindowDrag = frame.compactPolicy.windowDrag, compactCloseControl = frame.compactPolicy.closeControl;
-	const admittedWindow = admittedWindows.get( owner );
-	// Everything still loading is reported (tests wait on it before a raster);
-	// only the window's own art holds its admission.
-	const unloaded = unloadedImages( resources, paths, mark[3] );
-	windowMissing.push( ...unloaded );
-	const gaps = unloaded.filter( path => !contentImages.has( path ) );
-	const key = phase + ":" + w + ":" + h;
-	if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-		quads.length = mark[0];
-		controls.length = mark[1];
-		blocks.length = mark[2];
-		// Keep a fully admitted popup until its replacement is ready. Old image
-		// demand stays alive; stale content controls cannot dispatch new-tab actions.
-		if ( admittedWindow?.key === key ) {
-			quads.push( ...admittedWindow.quads );
-			blocks.push( ...admittedWindow.blocks );
-			paths.push( ...admittedWindow.paths );
-			controls.push(
-				...admittedWindow.controls.map( c => ({
-					...c,
-					disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-						c.disabled :
-						true
-				}) )
-			);
-		}
-	} else {
-		// Fit within this window before caching/publication; text behind a modal
-		// must not become a neighboring column of that modal.
-		if ( compact ) {
-			const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-				full :
-				compact.bounds;
-			fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-				blocks,
-				firstBlock: mark[2],
-				disableDrag: compactWindowDrag,
-				...(source ? { sourceBounds: source } : {})
-			} );
-			for ( let i = mark[1]; i < controls.length; i++ ) {
-				controls[i] = compactCloseControl( controls[i]!, windowBounds );
-			}
-		} else if ( w < DESKTOP_WIDTH || h < DESKTOP_HEIGHT ) {
-			// Port-only, not native: a fine pointer below the original's
-			// smallest screen mode keeps the desktop windows; one that
-			// cannot hold the viewport is scaled into it, and a window
-			// that already fits keeps the place the player dragged it to.
-			// A scaled window drops its window drags like the compact
-			// fit does: a drag would write fitted coordinates back as
-			// the remembered native position.
-			fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
-				blocks,
-				firstBlock: mark[2],
-				disableDrag: compactWindowDrag,
-				leaveWhenFits: true,
-				...(source ? { sourceBounds: source } : {})
-			} );
-		}
-		const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-		quads.length = mark[0];
-		quads.push( ...painted );
-		admittedWindows.set( owner, {
-			key,
-			quads: painted,
-			controls: controls.slice( mark[1] ),
-			blocks: blocks.slice( mark[2] ),
-			paths: paths.slice( mark[3] )
-		} );
-	}
 }
 
 /*
@@ -872,4 +742,140 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 		} );
 	}
 	return layout;
+}
+
+// ============================================================================
+
+const IFCOMMON = "/assets/images/Media_extracted/interface/ifcommon/";
+const FRAME_PARTS = frameParts();
+// An unavailable tab with "Grey disabled tabs" on: half-alpha plate, grey label.
+const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
+const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
+// CIFMainFrame::OnCreate 6F8230: shared title/drag width is frame minus 21.
+const NATIVE_TITLE_TRIM = 21;
+const SPIN_ARROW = 16;
+
+/*
+================
+nativeFrame
+
+A main frame at (px, py) sized by its authored node: the frame ring, the
+close button and the centred caption.
+================
+*/
+export function nativeFrame(
+	frame: UiAuthoredFrame,
+	{ node, px, py, caption, closeId }: {
+		node: AuthoredControl;
+		px: number;
+		py: number;
+		caption: string;
+		closeId: CloseControlId;
+	}
+) {
+	const r: UiRect = [ px, py, node.rect[2], node.rect[3] ];
+	frame.blocks.push( r );
+	frame.paths.push( ...FRAME_PARTS.map( p => node.texture + p + ".png" ) );
+	frame.quads.push(
+		...frameRing(
+			r,
+			node.texture,
+			FRAME_PARTS.map( p => frame.resources.size( node.texture + p + ".png" ) ),
+			frame.full
+		)
+	);
+	closeButton( frame, px + r[2] - 26, py + 10, closeId );
+	frame.quads.push(
+		...frame.text.quads( caption, [ px + 10, py + 12, r[2] - NATIVE_TITLE_TRIM, 12 ], frame.full, frame.white, {
+			hAlign: 1,
+			vAlign: 0
+		} )
+	);
+}
+
+/*
+================
+nativeTab
+
+A disabled tab is unavailable: it refuses input and, as the original,
+looks like an unselected one; with the Experimental row Grey disabled
+tabs on (the default) its plate is dimmed and its label grey. A busy
+tab is only waiting for the server (its owner's request is pending):
+it refuses input and always keeps the original look, so a pending
+trade never flashes grey.
+================
+*/
+export function nativeTab(
+	frame: UiAuthoredFrame,
+	{ id, caption, r, selected, style }: {
+		id: string;
+		caption: string;
+		r: UiRect;
+		selected: boolean;
+		style: { family: string; disabled?: boolean; busy?: boolean; client?: UiRect; };
+	}
+) {
+	const { family, disabled = false, busy = false, client = [ 0, 0, 0, 0 ] } = style;
+	const content: UiRect = [
+		r[0] + client[0],
+		r[1] + client[1],
+		r[2] - client[0] - client[2],
+		r[3] - client[1] - client[3]
+	];
+	const path = IFCOMMON + family + (selected ? "_on" : "_off") + ".png";
+	const grey = disabled && frame.greyDisabledTabs();
+	image( frame, { r, path, color: grey ? GREY_TAB_PLATE : frame.white } );
+	frame.controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
+	frame.quads.push(
+		...frame.text.quads( caption, content, frame.full, grey ? GREY_TAB_LABEL : frame.white, {
+			hAlign: 1,
+			vAlign: 1,
+			fontStyle: selected ? 2 : 0
+		} )
+	);
+}
+
+/*
+================
+nativeSpin
+
+A page spinner: previous and next arrows either side of the page number.
+================
+*/
+export function nativeSpin(
+	frame: UiAuthoredFrame,
+	{ node, px, py, previous, next, page, pages }: {
+		node: AuthoredControl;
+		px: number;
+		py: number;
+		previous: string;
+		next: string;
+		page: number;
+		pages: number;
+	}
+) {
+	const r = authoredRect( node, px, py );
+	for (
+		const [id, side, xx, disabled] of [
+			[ previous, "left", r[0], page <= 0 ],
+			[ next, "right", r[0] + r[2] - SPIN_ARROW, page + 1 >= pages ]
+		] as const
+	) {
+		const n: AuthoredControl = {
+			...node,
+			type: "CIFButton",
+			rect: [ xx, r[1], SPIN_ARROW, SPIN_ARROW ],
+			texture: IFCOMMON + "com_" + side + "_arrow.png"
+		};
+		authoredButton( frame, { node: n, ox: 0, oy: 0, id, label: id, disabled } );
+	}
+	frame.quads.push(
+		...frame.text.quads(
+			String( page + 1 ),
+			[ r[0] + SPIN_ARROW, r[1], r[2] - 2 * SPIN_ARROW, r[3] ],
+			frame.full,
+			frame.white,
+			{ hAlign: 1, vAlign: 1 }
+		)
+	);
 }
