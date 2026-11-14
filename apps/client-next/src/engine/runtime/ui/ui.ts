@@ -17,9 +17,6 @@ const ACTION_EXCHANGE = 1006;
 // CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
 // character's level (player +0x820) times this much gold.
 const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
-// A label closer than this to its window's left edge has left its window
-// (the frame's border is about this wide; the Experimental "Fit window labels").
-const WINDOW_LABEL_MARGIN = 6;
 // GDR_COS_INFO_NAME_BTN in ifcosinfo.txt: the pet's Name button.
 const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
@@ -34,8 +31,6 @@ const LETTER_BODY_EDIT = "letter-body";
 // popups framed by LETTER_CHILD_FRAME.
 const LETTER_CHILD_WIDTH = 439;
 const LETTER_CHILD_HEIGHT = 271;
-// A fitted button caption keeps this far inside each side of its plate.
-const CAPTION_MARGIN = 4;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
@@ -581,7 +576,6 @@ import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
-import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
@@ -698,7 +692,7 @@ import {
 	TRANSPORT_POTION_RETRY_MS
 } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
-import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
+import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
@@ -773,7 +767,7 @@ import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import * as frameDraw from "./frame/frame";
-import type { CloseControlId, UiFrame } from "./frame/frame-contract";
+import type { CloseControlId, UiAuthoredFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
@@ -10422,7 +10416,7 @@ export function createUi( ports: UiPorts ) {
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
-			const drawFrame: UiFrame = {
+			const drawFrame: UiAuthoredFrame = {
 				quads,
 				controls,
 				blocks,
@@ -10446,7 +10440,10 @@ export function createUi( ports: UiPorts ) {
 				fontPath,
 				pressed,
 				hover,
-				focus
+				focus,
+				copy: hudCopy,
+				buttonFamily: hud.buttonFamily,
+				fitWindowLabels: () => experimental.state().saved.fitWindowLabels
 			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			// The chat strip the party board must stay clear of, counting only
@@ -10832,14 +10829,7 @@ export function createUi( ports: UiPorts ) {
 				fraction = 1,
 				tint: UiQuad["color"] = white
 			) {
-				if ( !path ) return;
-				const r = authoredRect( node, ox, oy );
-				image( [ r[0], r[1], r[2] * fraction, r[3] ], path, tint, [
-					node.uv[0],
-					node.uv[1],
-					node.uv[2] * fraction,
-					node.uv[3]
-				] );
+				return frameDraw.authoredImage( drawFrame, { node, ox, oy, path, fraction, tint } );
 			}
 
 			if ( gmObserved < 0 ) gmObserved = Math.max( 0, ...(game?.gmReplies ?? []).map( reply => reply.sequence ) );
@@ -10868,89 +10858,7 @@ export function createUi( ports: UiPorts ) {
 				clipToControl: boolean | "clip" = false,
 				fontStyle = 0
 			) {
-				const box = authoredClientRect( node, ox, oy );
-				// SML2 markup (843100) renders through the text board's layout, never
-				// as plain characters: the Item Mall subtitles and alchemy texts.
-				if ( hasSml2Markup( value ) ) {
-					// Markup the guide layout cannot read falls back to plain text.
-					let tokens: ReturnType<typeof guideTokens> | null = null;
-					try {
-						tokens = guideTokens( value );
-					} catch {
-						tokens = null;
-					}
-					if ( tokens ) {
-						const out = text.guide( tokens, box, clipToControl ? box : full, node.color, resources.size );
-						quads.push( ...out.quads );
-						paths.push( ...out.paths );
-						return;
-					}
-				}
-				// Port-only (Experimental "Fit window labels", off is the original):
-				// an authored label (the static carries a text key; value fields
-				// with an empty authored text keep the native fitting) wider than
-				// its box (the trade window's "Purchase amount", right-aligned in
-				// 63 pixels, with a wider text face, or the consignment window's
-				// "Large category", right-aligned at x = 74 in a 43-pixel box)
-				// wraps onto two lines instead of running past its window's left
-				// edge or into the next control. A right-aligned label's lines may
-				// use the room to the window's left margin; the wrap width splits
-				// the label near its middle (never under its longest word) so a
-				// label whose room is the rest of the window still breaks in two
-				// instead of ellipsizing.
-				if (
-					!clipToControl && experimental.state().saved.fitWindowLabels && node.text !== "" &&
-					value.includes( " " )
-				) {
-					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
-					const width = measure( value );
-					if ( width > box[2] ) {
-						const room = node.hAlign === 2 ?
-								Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
-								box[2],
-							balanced = Math.max(
-								box[2],
-								Math.ceil( width / 2 ),
-								...value.split( " " ).map( measure )
-							);
-						// The balanced split first (its widest line stays farthest
-						// from the window's edge), the room-wide split after it.
-						for ( const wrapWidth of balanced < room ? [ balanced, room ] : [ room ] ) {
-							const lines = textLines( value, wrapWidth, measure );
-							if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
-							const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-								top = box[1] + (box[3] - 2 * lineHeight) / 2;
-							lines.forEach( ( line, index ) =>
-								quads.push(
-									...text.quads(
-										line,
-										[ box[0], top + index * lineHeight, box[2], lineHeight ],
-										full,
-										node.color,
-										{
-											fontIndex: node.fontIndex,
-											fontStyle,
-											hAlign: node.hAlign,
-											vAlign: 1
-										}
-									)
-								)
-							);
-							return;
-						}
-					}
-				}
-				quads.push(
-					...text.quads( value, box, clipToControl ? box : full, node.color, {
-						fontIndex: node.fontIndex,
-						fontStyle,
-						hAlign: node.hAlign,
-						vAlign: node.vAlign,
-						...(clipToControl ?
-							{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
-							{})
-					} )
-				);
+				return frameDraw.authoredText( drawFrame, { node, ox, oy, value, clipToControl, fontStyle } );
 			}
 			/*
 			================
@@ -10963,13 +10871,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function authoredSkillPoints( node: AuthoredControl, ox: number, oy: number, points: number ) {
-				const room = authoredClientRect( node, ox, oy )[2], readouts = skillPointReadouts( points );
-				authoredText(
-					node,
-					ox,
-					oy,
-					readouts.find( value => text.run( value, 0, node.fontIndex ).width <= room ) ?? readouts.at( -1 )!
-				);
+				return frameDraw.authoredSkillPoints( drawFrame, { node, ox, oy, points } );
 			}
 			/*
 			================
@@ -11077,18 +10979,7 @@ export function createUi( ports: UiPorts ) {
 				label: string,
 				disabled = false
 			) {
-				const r = authoredRect( node, ox, oy ), family = hud.buttonFamily( node.texture );
-				paths.push( ...family );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
-				blocks.push( r );
-				const state = disabled ?
-					3 :
-					pressed === id && hover === id ?
-					2 :
-					pressed === null && (hover === id || focus === id) ?
-					1 :
-					0;
-				if ( family.every( resources.has ) ) rect( r, white, family[state]! );
+				return frameDraw.authoredButton( drawFrame, { node, ox, oy, id, label, disabled } );
 			}
 			/*
 			================
@@ -11103,19 +10994,7 @@ export function createUi( ports: UiPorts ) {
 				caption: string,
 				disabled = false
 			) {
-				// Port-only, not native (Experimental "Fit window labels", off is
-				// the original): a button caption wider than its plate keeps the
-				// leading words that fit ("Delete message" -> "Delete", "Check
-				// for duplicate entries" -> "Check").
-				const shown = experimental.state().saved.fitWindowLabels ?
-					captionWords(
-						caption,
-						authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-						line => text.run( line, 0, node.fontIndex ).width
-					) :
-					caption;
-				authoredButton( node, ox, oy, id, shown, disabled );
-				authoredText( node, ox, oy, shown );
+				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
@@ -11125,71 +11004,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function authoredChrome( node: AuthoredControl, ox: number, oy: number ) {
-				// CIFScrollManager inherits CIFFrame (6F3830), but some resources omit its skin.
-				if ( node.type === "CIFScrollManager" && !node.texture ) return;
-				const r = authoredRect( node, ox, oy );
-				if (
-					node.type === "CIFFrame" || node.type === "CIFSubFrame" || node.type === "CIF_NPCTalk" ||
-					node.type === "CIFScrollManager"
-				) {
-					paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
-					quads.push(
-						...frameRing(
-							r,
-							node.texture,
-							PARTS.map( p => resources.size( node.texture + p + ".png" ) ),
-							full
-						)
-					);
-					if ( node.text ) {
-						quads.push(
-							...text.quads(
-								hudCopy( node.text ),
-								[ r[0] + 10, r[1] + 7, r[2] - 20, 12 ],
-								full,
-								node.color,
-								{ hAlign: 1, vAlign: 0 }
-							)
-						);
-					}
-				} else if ( node.type === "CIFBarWnd" ) {
-					const bar = barChrome( r, node.texture, resources.size, full );
-					paths.push( ...bar.paths );
-					quads.push( ...bar.quads );
-					if ( node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
-				} else if ( node.type === "CIFStretchWnd" ) {
-					const ring = stretchRing( r, node.texture, resources.size, full );
-					paths.push( ...ring.paths );
-					quads.push( ...ring.quads );
-				} else if ( node.type === "CIFLattice" ) {
-					for ( const cell of latticeCells( r[0], r[1], Math.floor( r[2] / 36 ), Math.floor( r[3] / 36 ) ) ) {
-						const path = node.texture + cell.part + ".png";
-						paths.push( path );
-						if ( resources.has( path ) ) {
-							rect( cell.rect, white, path );
-						}
-					}
-				} else if ( node.type === "CIFNormalTile" ) {
-					paths.push( node.texture );
-					quads.push( ...normalTile( r, node.texture, resources.size( node.texture ), full ) );
-				} else if ( node.type === "CIFStatic" || node.type === "CIFPartySlot" ) {
-					if ( node.texture ) authoredImage( node, ox, oy );
-					if ( node.type === "CIFStatic" && node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
-				} else if ( node.type === "CIFPML" ) {
-					const out = text.guide(
-						guideTokens( hudCopy( node.text ) ),
-						r,
-						r,
-						node.color,
-						resources.size,
-						{
-							align: node.hAlign === 1 ? "center" : node.hAlign === 2 ? "right" : "left",
-							vAlign: node.vAlign
-						}
-					);
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				}
+				return frameDraw.authoredChrome( drawFrame, { node, ox, oy } );
 			}
 			/*
 			================
@@ -11354,56 +11169,8 @@ export function createUi( ports: UiPorts ) {
 			blocks and controls around it.
 			================
 			*/
-			function simpleMessageBox(
-				box: {
-					title: string;
-					lines: readonly string[];
-					yes: string;
-					no: string;
-					yesDisabled?: boolean;
-					// CIFSimpleMessageBox types 0 (Confirm, yes id) and 2 (Cancel, no id).
-					single?: "confirm" | "cancel";
-				}
-			) {
-				const lines = messageBoxLines( box.lines, value => text.run( value ).width );
-				const layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
-				);
-				for ( const [i, line] of lines.entries() ) {
-					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
-				}
-				if ( box.single === "confirm" ) {
-					button(
-						box.yes,
-						hudCopy( "UIIT_CTL_CONFIRM" ),
-						layout.single[0],
-						layout.single[1],
-						76,
-						!!box.yesDisabled
-					);
-				} else if ( box.single === "cancel" ) {
-					button( box.no, hudCopy( "UIIT_CTL_CANCEL" ), layout.single[0], layout.single[1], 76 );
-				} else {
-					button(
-						box.yes,
-						hudCopy( "UIIT_CTL_YES" ),
-						layout.accept[0],
-						layout.accept[1],
-						76,
-						!!box.yesDisabled
-					);
-					button( box.no, hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
-				}
-				return layout;
+			function simpleMessageBox( box: frameDraw.MessageBox ) {
+				return frameDraw.simpleMessageBox( drawFrame, box );
 			}
 			/*
 			================
@@ -11411,9 +11178,7 @@ export function createUi( ports: UiPorts ) {
 			================
 			*/
 			function nativePage( layout: AuthoredLayout, px: number, py: number, exclude: readonly number[] = [] ) {
-				for ( const node of authoredPaintOrder( layout ) ) {
-					if ( !exclude.includes( node.id ) ) authoredChrome( node, px, py );
-				}
+				return frameDraw.nativePage( drawFrame, { layout, px, py, exclude } );
 			}
 			/*
 			================
