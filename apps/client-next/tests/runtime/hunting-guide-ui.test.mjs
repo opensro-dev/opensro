@@ -17,20 +17,27 @@ const { experimentalOptions } = await import( "../../src/engine/foundation/ui/ex
 const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 
 const GUIDE_PATH = "/transport/references/" + "a".repeat( 64 ) + ".json";
-const SOURCE = { url: "https://fixture.invalid" + GUIDE_PATH, bytes: 100 };
+// A shard with SRO_HUNTING_GUIDE on offers the overlay; every shard
+// publishes the atlas itself (#3489).
+const SOURCE = { url: "https://fixture.invalid" + GUIDE_PATH, bytes: 100, overlay: true };
+const ATLAS = { url: SOURCE.url, bytes: SOURCE.bytes };
 const SETTLE_STEPS = 12, STEP_MS = 100;
 
 /*
 ================
 fixture
+
+offered is false (no atlas), true (the overlay shard's SOURCE) or a
+source of its own.
 ================
 */
 function fixture( offered, enabled ) {
+	const source = offered === true ? SOURCE : offered || undefined;
 	const saved = [];
 	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
 		saveExperimental: value => saved.push( value )
 	} );
-	let state = { ...f.state, session: { ...f.state.session, huntingGuide: offered ? SOURCE : undefined } };
+	let state = { ...f.state, session: { ...f.state.session, huntingGuide: source } };
 	let now = 0, latest;
 	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { monsterGuide: enabled } ) } );
 	/*
@@ -104,6 +111,20 @@ test("disabled shards hide both controls even with a saved opt-in and make no gu
 	}
 });
 
+test("an atlas without the overlay offers neither control and fetches nothing for a saved opt-in", () => {
+	const f = fixture( ATLAS, true );
+	try {
+		assert.equal( control( f.activate( "open-window:Map" ), "map-hunting-toggle" ), undefined );
+		assert.equal( control( f.activate( "map-size" ), "map-hunting-toggle" ), undefined );
+		f.activate( panelCloseId( "Map" ) );
+		f.activate( "open-window:Experimental" );
+		assert.equal( control( f.activate( "experimental-tab:3" ), "experimental-monster-guide" ), undefined );
+		assert.equal( f.requested.includes( GUIDE_PATH ), false );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("enabled shards expose both map sizes and Experimental but fetch only after opt-in", () => {
 	const f = fixture( true, false );
 	try {
@@ -123,6 +144,18 @@ test("enabled shards expose both map sizes and Experimental but fetch only after
 			defined( control( f.activate( "experimental-tab:3" ), "experimental-monster-guide" ) ).selected,
 			true
 		);
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the monster drawer loads the atlas on a shard without the overlay (#3489)", () => {
+	const f = fixture( ATLAS, false );
+	try {
+		f.activate( "open-window:Map" );
+		assert.equal( f.requested.includes( GUIDE_PATH ), false, "nothing loads before the drawer opens" );
+		f.activate( "map-side-tab" );
+		assert.equal( f.requested.includes( GUIDE_PATH ), true, "the drawer asks for the atlas" );
 	} finally {
 		f.dispose();
 	}

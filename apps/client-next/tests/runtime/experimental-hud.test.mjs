@@ -48,7 +48,7 @@ test("safe loading defaults off and persists only after Confirm", () => {
 test("the HD row is listed only while the published build carries the set (#2800)", () => {
 	const world = /** @type {import("../../src/engine/contracts/session").SessionState} */ ({
 		phase: "world",
-		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1 }
+		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1, overlay: true }
 	});
 	const keys = tabs => tabs.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	assert.ok( keys( experimentalTabs( world, true ) ).includes( "hdTextures" ), "the set is published" );
@@ -254,12 +254,16 @@ test("gating drops the guide row without a world session, and no HD set drops HD
 			section => section.title === "World map (M)"
 		);
 	assert.deepEqual( worldMap( null )?.rows.map( row => row.key ), [ "uniqueSpawnPoints" ] );
-	const world = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1 } });
+	const world = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1, overlay: true } });
 	assert.deepEqual(
 		worldMap( world )?.rows.map( row => row.key ),
 		[ "monsterGuide", "uniqueSpawnPoints" ],
 		"with a session the guide's row is listed"
 	);
+	// An atlas without the overlay (SRO_HUNTING_GUIDE off, #3489) feeds
+	// the M window's lists but offers no guide row.
+	const atlasOnly = /** @type {any} */ ({ phase: "world", huntingGuide: { url: "fixture", bytes: 1 } });
+	assert.deepEqual( worldMap( atlasOnly )?.rows.map( row => row.key ), [ "uniqueSpawnPoints" ] );
 	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
 });
 

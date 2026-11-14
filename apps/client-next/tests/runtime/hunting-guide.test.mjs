@@ -266,6 +266,25 @@ test("world reference admission retains reverse destinations alongside the hunti
 	assert.deepEqual( result.reverseMapPoints, [ point ] );
 	assert.deepEqual( result.huntingGuide, {
 		url: "https://example.invalid/shards/world" + guide.path,
+		bytes: guide.bytes,
+		overlay: true
+	} );
+	// The atlas every shard publishes, without the overlay's key (#3489):
+	// the lists' source, no overlay.
+	const atlasOnly = await createSessionHttp().references(
+		{ path: "/transport/references/" + hash + ".json", sha256: hash, bytes: bytes.length, spawnAtlas: guide },
+		"https://example.invalid/shards/world",
+		new AbortController().signal
+	);
+	assert.deepEqual( atlasOnly.huntingGuide, {
+		url: "https://example.invalid/shards/world" + guide.path,
 		bytes: guide.bytes
 	} );
+	// No atlas at all: nothing.
+	const none = await createSessionHttp().references(
+		{ path: "/transport/references/" + hash + ".json", sha256: hash, bytes: bytes.length },
+		"https://example.invalid/shards/world",
+		new AbortController().signal
+	);
+	assert.equal( none.huntingGuide, undefined );
 });

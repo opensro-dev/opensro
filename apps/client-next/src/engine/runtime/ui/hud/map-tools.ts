@@ -135,8 +135,8 @@ interface MapToolsPaint {
 	clip: UiRect;
 	full: UiRect;
 	catalogue: HuntingCatalogue | undefined;
-	// Whether the shard publishes the hunting catalogue at all
-	// (SRO_HUNTING_GUIDE): without it the guide waits on nothing.
+	// Whether the shard publishes the hunting catalogue at all (every
+	// current shard does, #3489): without it the guide waits on nothing.
 	guidePublished: boolean;
 	characterLevel: number | undefined;
 	// The guide trees' order column (worldmap-guide.ts guideRace).

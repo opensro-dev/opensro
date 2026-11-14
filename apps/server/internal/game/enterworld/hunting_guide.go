@@ -1,10 +1,17 @@
 /*
 ===========================================================================
 
-hunting_guide.go - opt-in publication of the static hunting atlas
+hunting_guide.go - publication of the static hunting atlas
 
-Port-only, not native. SRO_HUNTING_GUIDE is off by default. Disabled shards
-never ask the population owner to build the guide and publish no reference.
+The atlas (each monster's spawn anchors, from the population template)
+is published on every shard as spawnAtlas: the M window's monster list,
+level filter and region pages (#3167, the later client's world map
+guide, native by the later-client rule) read it (#3489). The same file
+is also published as huntingGuide only while the port-only
+SRO_HUNTING_GUIDE is on (off by default): that key is what offers the
+portrait overlay, the Experimental "Monster hunting guide" row. A client
+older than spawnAtlas reads only huntingGuide, so it keeps seeing no
+atlas on a shard with the flag off.
 
 ===========================================================================
 */
@@ -51,13 +58,13 @@ func HuntingGuideFromEnv() bool {
 
 /*
 ================
-newHuntingGuideReference
+newSpawnAtlasReference
+
+The atlas file every shard publishes, or nil when the population has no
+rows (a test world).
 ================
 */
-func newHuntingGuideReference(source HuntingGuideSource) (*BrowserReferences, error) {
-	if !HuntingGuideFromEnv() {
-		return nil, nil
-	}
+func newSpawnAtlasReference(source HuntingGuideSource) (*BrowserReferences, error) {
 	if source == nil {
 		return nil, nil
 	}

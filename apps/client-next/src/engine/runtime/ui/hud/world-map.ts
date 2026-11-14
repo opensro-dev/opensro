@@ -252,7 +252,9 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		const view = mapCaveShown ? pose : mapViewPose( pose );
 		return view ? { ...view } : null;
 	}
-	let guideAvailable = false;
+	// guideAvailable: the shard offers the port-only portrait overlay;
+	// catalogueAvailable: it publishes the atlas the lists read (#3489).
+	let guideAvailable = false, catalogueAvailable = false;
 	// The expanded world map's layout (port-only, Experimental), as the last
 	// presented frame read it; undefined is the native layout.
 	let mapLayout: WorldMapLayout | undefined;
@@ -424,7 +426,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		*/
 		step( next: UiView, panel: string ) {
 			const source = next.session?.phase === "world" ? next.session.huntingGuide : undefined;
-			guideAvailable = source !== undefined;
+			catalogueAvailable = source !== undefined;
+			guideAvailable = !!source?.overlay;
 			const stepPose = next.gameplay?.pose;
 			const page = mapFollow && stepPose && featuresAt( stepPose.regionId ).worldMap ?
 				worldMapPageAt( stepPose, mapLayout ) :
@@ -434,8 +437,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// opening. The portrait art still waits for the opt-in.
 			const guideChanged = huntingGuide.step(
 				source,
-				panel === "Map" && (experimental.state().saved.monsterGuide || mapTools.drawerOpen()),
-				panel === "Map" && page === 0 && experimental.state().saved.monsterGuide
+				panel === "Map" && (guideAvailable && experimental.state().saved.monsterGuide || mapTools.drawerOpen()),
+				panel === "Map" && page === 0 && guideAvailable && experimental.state().saved.monsterGuide
 			);
 			// Two switches, both needed: the Experimental row offers the
 			// M window's unique spawns box, and the box (off by default)
@@ -913,7 +916,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					clip: mapClip,
 					full,
 					catalogue: huntingGuide.catalogue(),
-					guidePublished: guideAvailable,
+					guidePublished: catalogueAvailable,
 					characterLevel: game?.progression?.level,
 					race: guideRace( next.entities.find( e => e.gid === game?.localGid )?.countryByte9c ),
 					hover,

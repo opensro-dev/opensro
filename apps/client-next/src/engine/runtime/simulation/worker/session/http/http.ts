@@ -181,7 +181,13 @@ async function loadWorldReferences(
 	huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
 	reverseMapPoints?: unknown[];
 }> {
-	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; huntingGuide?: unknown; };
+	const ref = value as {
+		path?: unknown;
+		sha256?: unknown;
+		bytes?: unknown;
+		spawnAtlas?: unknown;
+		huntingGuide?: unknown;
+	};
 	if (
 		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
 		ref.path !== `/transport/references/${ref.sha256}.json` || typeof ref.bytes !== "number" ||
@@ -242,7 +248,12 @@ async function loadWorldReferences(
 		parsed.itemCommandReferences !== undefined &&
 		(!Array.isArray( parsed.itemCommandReferences ) || parsed.itemCommandReferences.length > REFERENCE_ROWS_LIMIT)
 	) throw Error( "Invalid item command references" );
-	const guide = huntingGuideSource( ref.huntingGuide, base );
+	// The atlas every shard publishes (spawnAtlas), or a server older than
+	// it that publishes the same file only as huntingGuide. huntingGuide's
+	// presence alone offers the port-only overlay.
+	const overlay = huntingGuideSource( ref.huntingGuide, base );
+	const atlas = huntingGuideSource( ref.spawnAtlas, base ) ?? overlay;
+	const guide = atlas ? { ...atlas, ...(overlay ? { overlay: true } : {}) } : undefined;
 	const reverseMapPoints = decodeReverseMapPoints( parsed.reverseMapPoints );
 	return {
 		...(guide ? { huntingGuide: guide } : {}),
