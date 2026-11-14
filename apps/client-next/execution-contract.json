@@ -2,6 +2,26 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/ui/text-lines.ts",
+			"provider": "src/engine/runtime/ui/frame/frame.ts",
+			"functions": ["measure", "callback:messageBoxLines:1", "callback:captionWords:2"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": ["guide", "run", "extentHeight"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["fitWindowLabels", "hudCopy"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/resources.ts",
+			"functions": ["buttonFamily"]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/arena-chest.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
 			"functions": ["preview"]
