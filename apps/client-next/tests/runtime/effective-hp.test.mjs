@@ -87,6 +87,31 @@ test("source gate adjusts by wire delta, then checkpoints reconcile in receipt o
 	}
 });
 
+test("a status-free monster's baseline binds its cast result, so a bonus frame lowers the bar by its own damage", () => {
+	const h = createEffectiveHp(), c = createCombat( () => undefined, e => h.receive( e ) );
+	const bytes = hex => Uint8Array.from( hex.match( /../g ), byte => parseInt( byte, 16 ) );
+	const target = 0x61a81;
+	c.seed( target, { hp: 100 } );
+	// The server's own burst for a sword base attack with the attack-pet
+	// expansion on, byte for byte: the cast result with two impacts of 6
+	// (apps/server skill_cast_accept_fixture.json), then the survivor's HP
+	// baseline with an empty status word (monsterImpactAbnormalFrames).
+	c.receive(
+		0xb245,
+		bytes( "010002000000a386010001000000811a0600010201811a0600000106000000000000000106000000000000" ),
+		100
+	);
+	c.receive( 0x33a6, bytes( "811a06000001055800000000000000" ), 100 );
+	assert.equal( h.hp( target ), 100, "neither impact has landed" );
+	// A pet's bonus hit for 5 while both impacts are pending: HP only, source zero.
+	c.receive( 0x33a6, bytes( "811a060000000153000000" ), 150 );
+	assert.equal( h.hp( target ), 95, "the delta is measured from the baseline's 88, not from the spawn's 100" );
+	h.impact( target, `1:${target}:0`, hit( 6 ), 300 );
+	assert.equal( h.hp( target ), 89 );
+	h.impact( target, `1:${target}:1`, hit( 6 ), 600 );
+	assert.equal( h.hp( target ), 83, "the bar ends on the server's HP and never rose" );
+});
+
 test("multi-hit/multi-cast checkpoints bind only previously unbound results", () => {
 	const h = createEffectiveHp();
 	h.receive( seed() );

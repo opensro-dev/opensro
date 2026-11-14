@@ -645,8 +645,8 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 		skill.ActionArea = enterworld.SkillOffensiveArea{}
 		if hit, committed := rt.strikePetTarget(step, target, skill); committed {
 			public := hit.strike.public
-			// A target with an abnormal state already got its HP in the strike's
-			// abnormal vitals frame (monsterImpactAbnormalFrames); send one refresh.
+			// A damaged or status-carrying survivor already got its HP in the
+			// strike's vitals frame (monsterImpactAbnormalFrames); send one refresh.
 			if current, found := rt.Monsters.Get(key.division, target.gid); found && !hasVitalsFrameFor(public, target.gid) {
 				public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
 			}
