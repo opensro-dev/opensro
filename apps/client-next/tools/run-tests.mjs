@@ -22,7 +22,7 @@ and is keyed by the Node version, platform and test environment; any change
 there discards it. SRO_CHECK_FORCE=1 runs everything.
 
 Every run times the files it actually executed and prints the thirty
-slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
+slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS, when set) fails the
 run, and a run over its whole-suite budget (TEST_SUITE_BUDGET_MS, when
 one is set) fails too (#2907, #2929), so suite time cannot creep back
 one file at a time or in aggregate.
@@ -69,13 +69,15 @@ const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_
 // A file that runs longer than this fails the run and names itself, so
 // suite time cannot creep back file by file (the Go server's 30 s budget
 // is the same idea). Only files that actually ran are timed; a reused
-// pass spent nothing. The default stays 60 s: the full check's runtime
-// lane is unmeasured and still slow before the shards land (#2924-#2928),
-// so the tight budget is set where the profile was measured - the CI
-// source lane sets 20 s via SRO_TEST_FILE_BUDGET_MS (the slowest ordinary
-// file took 14.6 s there; docs/agents/client-test-profile.md).
-// SRO_TEST_FILE_BUDGET_MS overrides it everywhere.
-const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// pass spent nothing. The budget is wall time, so it binds only in the
+// lane that measured it: the CI source lane sets 20 s via
+// SRO_TEST_FILE_BUDGET_MS (the slowest ordinary file took 14.6 s there;
+// docs/agents/client-test-profile.md), and the named caps below bind
+// with it. No cap by default, as the whole-suite budget: the full check
+// runs every file beside its other heavy gates, and its wall times
+// measured the contention, not the files (#3459: ui-behavior 48 s alone,
+// 83-114 s inside the check).
+const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 0;
 // The whole run's wall budget (#2929): the five-minute client budget
 // #2907 named, enforced on the run itself instead of only implied by
 // the per-file caps, so aggregate creep fails too. No cap by default,
@@ -414,7 +416,7 @@ async function main() {
 	const capOf = file =>
 		budgets.get( path.relative( clientRoot, file ).replaceAll( "\\", "/" ) ) ??
 			TEST_FILE_BUDGET_MS;
-	const overBudget = slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) );
+	const overBudget = TEST_FILE_BUDGET_MS > 0 ? slowest.filter( ( [file, s] ) => s * 1000 > capOf( file ) ) : [];
 	for ( const [file, s] of overBudget ) {
 		process.stdout.write(
 			`tests budget: ${path.relative( clientRoot, file )} ran ${s.toFixed( 1 )}s, over its ` +

@@ -95,7 +95,9 @@ source lane now runs with a 20 s per-file budget and a 300 s whole-suite
 wall budget (`SRO_TEST_FILE_BUDGET_MS`, `SRO_TEST_SUITE_BUDGET_MS`, set
 in source-linux.yml) — the slowest ordinary file above took 14.6 s in
 the worse of two profiled runs, so 20 s binds at a third of the old cap
-with headroom for runner jitter. The runner's own defaults stay 60 s
-with no suite cap: the full check's runtime lane is unmeasured and
-still slow before the shards land, and a default must not bind what
-nobody has measured. The ledger entry above is unchanged.
+with headroom for runner jitter. The runner itself sets neither budget
+(the per-file default was 60 s until #3459): the full check runs every
+file beside its other heavy gates, and inside it ui-behavior measured
+83-114 s against 48 s alone, so a default there measured contention, not
+the files. The named caps bind wherever a per-file budget is set. The
+ledger entry above is unchanged.
