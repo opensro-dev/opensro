@@ -8,6 +8,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"reflect"
@@ -167,4 +168,37 @@ func TestOperatorTownsFromPublishedCatalog(t *testing.T) {
 		return
 	}
 	t.Fatal("Donwhang is missing")
+}
+
+/*
+================
+TestOperatorCharacterShowsTheMoversSpeedAndItsEffects
+
+A speed rubber-band report needs the server's side: the speed the mover
+times paths with, and the buff that set it.
+================
+*/
+func TestOperatorCharacterShowsTheMoversSpeedAndItsEffects(t *testing.T) {
+	rt, c := newActiveEffectTestRuntime(t, staticSkillSource{100: {ID: 100, Group: 9, EffectDurationMs: 3600000, MovementModifier: enterworld.SkillMovementModifier{Present: true, Supported: true, Percent: 100, Persistent: true}}})
+	info, err := rt.OperatorCharacter(testDivision, c.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info["movementSpeeds"].(OperatorSpeeds); got.Run != 50 || len(info["effects"].([]OperatorEffect)) != 0 {
+		t.Fatalf("before the buff: %+v %+v", got, info["effects"])
+	}
+	if !rt.ApplyCharacterEffect(testDivision, c.Name, 100, 7, statuseffect.StateActive, false) {
+		t.Fatal("apply")
+	}
+	info, err = rt.OperatorCharacter(testDivision, c.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	effects := info["effects"].([]OperatorEffect)
+	if got := info["movementSpeeds"].(OperatorSpeeds); got.Run != 100 || got.Walk != 40 {
+		t.Fatalf("buffed speeds %+v", got)
+	}
+	if len(effects) != 1 || effects[0].SkillID != 100 || effects[0].Token != 7 || effects[0].MovementPercent != 100 {
+		t.Fatalf("effects %+v", effects)
+	}
 }
