@@ -3,28 +3,26 @@
 
 monstervitals.go - a monster's vitals to the players that hold it
 
-The original server never broadcasts a monster's HP. Once per tick, for a
-monster whose HP or status moved, CGObjChar_PublishChangedVitals (4A8510)
-broadcasts the status alone (flags 4, 4A85F6-4A85FB) and hands the change
-to the relations that hold the monster with the vitals bit (mask 2,
-4A85CB): each of their players receives a private 0x33A6 with the cause
-word, the HP and the status (CGObjPC_SendObjectSupplementTo 4A73F0). The
-monster's cause words and that payload are MonsterState's
-(simulation/monster_vitals.go); this lane finds the holders.
+The reference server never broadcasts a monster's HP. Once per tick, for a
+monster whose HP or status moved, its vitals publisher broadcasts the
+status alone (flags 4) and hands the change to the relations that hold the
+monster with the vitals bit: each of their players receives a private
+0x33A6 with the cause word, the HP and the status. The monster's cause
+words and that payload are MonsterState's (simulation/monster_vitals.go);
+this lane finds the holders.
 
-A player holds a monster through its relation slot 0, one of the seven a
-player owns (CGObjRelationVector_InitializeSevenSlots, 4335B0):
-  - the object select (0x7045, v1.150 0x745A) detaches the slot (52B5B4)
-    and binds the selected character to it with the vitals bit
-    (52B608-52B61A); the selection plane (select.go) is that slot;
-  - a cast that begins in hit range does the same for its target
-    (CastLifecycle_ProcessPersistent, 58395E-5839A4), so a player who
-    attacks without selecting still holds what it attacks
+A player holds a monster through the first of the seven relation slots a
+player owns, bound with the vitals bit:
+  - the object select (v1.150 0x745A) empties the slot and binds the
+    selected character to it; the selection plane (select.go) is that
+    slot;
+  - a cast that begins in hit range does the same for its target, so a
+    player who attacks without selecting still holds what it attacks
     (bindCastTarget).
 Selecting anything else or releasing the target leaves the monster. The
-slot also carries a range (0x140, 0x38E for a monster), but only a bit-1
-refresh judges it (433270 at 4332C5): the vitals bit never does, so this
-lane keeps no range.
+slot also carries a range (320, or 910 for a monster the select bound),
+but only a different refresh judges it, never the vitals publication, so
+this lane keeps no range.
 
 ===========================================================================
 */
@@ -53,9 +51,9 @@ type vitalsTarget struct {
 ================
 publishMonsterVitals
 
-The action tick's CGObjChar_OnTick (4A8A0E): every monster whose vitals
-changed since the last tick sends its private 0x33A6 to each player that
-holds it, then forgets the change. A changed monster nobody holds sends
+The action tick's share of the reference server's per-object tick: every
+monster whose vitals changed since the last tick sends its private 0x33A6
+to each player that holds it, then forgets the change. A changed monster nobody holds sends
 nothing. Runs after every step that can change a monster's HP or status,
 so a change made in this tick leaves in it.
 ================
@@ -121,10 +119,10 @@ func (rt *Runtime) vitalsHolderID(holder selectionHolder) int64 {
 bindCastTarget
 
 A player's cast at a monster began in hit range: the monster takes the
-player's relation slot 0, as CastLifecycle_ProcessPersistent binds the
-cast target (5839A4) after detaching the slot (58395E). The bind is the
-selection plane's, so the monster's vitals reach the caster from the
-next tick on, whether or not the client selected it first.
+player's first relation slot, as the reference server binds a cast's
+target there once the cast passes its hit-range check. The bind is the
+selection plane's, so the monster's vitals reach the caster from the next
+tick on, whether or not the client selected it first.
 ================
 */
 func (rt *Runtime) bindCastTarget(divisionID, characterName string, gid uint32) {

@@ -521,9 +521,9 @@ monsterImpactAbnormalFrames
 
 monsterImpactAbnormalFrames follows committed direct impacts on a survivor:
 withdrawn casts, the stop, the speed pair and, when its status changed,
-the status frame (flags 4). Its HP rides no public frame: the original
-broadcasts a monster's status alone (4A85F6-4A85FB) and sends its HP only
-to the players that hold it, once per tick (monstervitals.go).
+the status frame (flags 4). Its HP rides no public frame: the reference
+server broadcasts a monster's status alone and sends its HP only to the
+players that hold it, once per tick (monstervitals.go).
 ==================
 */
 func (rt *Runtime) monsterImpactAbnormalFrames(division string, gid uint32, impacts []simulation.MonsterDamageResult) []wire.Frame {

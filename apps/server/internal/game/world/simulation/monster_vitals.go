@@ -3,18 +3,15 @@
 
 monster_vitals.go - the cause words behind a monster's vitals publication
 
-The original server publishes a monster's vitals once per tick, and only
-when they moved. Every HP change ORs its cause into the object's cause
-word (+0xA0E: CGObjChar_ApplyHealthAndManaOffset 4A88D5 when the HP or
-MP changed; AbnormalState_SendVitalInfo30D2 ORs 0x100 at a status change,
-4A5C73). CGObjChar_OnTick (4A8A0E-4A8A24) then calls the publisher while
-the word is non-zero and clears it. The publisher,
-CGObjChar_PublishChangedVitals (4A8510), hands the change to the relations
-observing the monster with the vitals bit (mask 2, 4A85CB), and
-CGObjPC_SendObjectSupplementTo (4A73F0) writes each of their players a
-private 0x3057 (v1.150 0x33A6): the gid, the cause word, then the body
-sub_4C3E00 writes for flags 7 with MP dropped - flags 5, the current HP
-and the status block.
+The reference server publishes a monster's vitals once per tick, and only
+when they moved. Every HP or MP change ORs its cause into the monster's
+cause word, and a status change ORs 0x100. On its tick the monster runs
+its vitals publisher while the word is non-zero, then clears the word.
+The publisher broadcasts the status alone and hands HP and status to the
+relations that hold the monster with the vitals bit: each of their players
+receives a private 0x33A6 with the gid, the cause word and a flags-5 body
+(the current HP and the status block; the relation asks for flags 7 and
+the monster's body writer drops MP).
 
 MonsterState owns the cause words: the hit and abnormal commits record
 them here, and DrainChangedVitals hands the action tick one publication
@@ -35,8 +32,8 @@ import (
 
 // Vitals causes beside the ones gameready.go names.
 const (
-	// VitalsSourceStatus is the cause a status change ORs in
-	// (AbnormalState_SendVitalInfo30D2, 4A5C73).
+	// VitalsSourceStatus is the cause the reference server ORs in when a
+	// status changes.
 	VitalsSourceStatus VitalsSourceFlags = 0x0100
 	// VitalsSourceStatusDamage is an abnormal state's periodic damage,
 	// the cause the port's status ticks publish (playerabnormal.go
@@ -46,8 +43,8 @@ const (
 )
 
 // monsterVitalsFlags is the private body's flags byte: HP (1) and the
-// status block (4). CGObjPC_SendObjectSupplementTo asks for flags 7
-// (4A7494) and the monster's body writer sub_4C3E00 clears MP (4C3E00).
+// status block (4). The relation asks for flags 7, and the reference
+// server's monster body writer clears MP (2).
 const monsterVitalsFlags uint8 = 0x05
 
 // monsterVitalsPayloadBytes is the body without status levels: gid,
@@ -83,8 +80,8 @@ type MonsterVitals struct {
 noteVitalsLocked
 
 Record that gid's vitals changed for cause. The caller holds s.mu and
-calls only for a change that took place: the original ORs the cause in
-only when the HP or MP moved (4A88C6-4A88D9), so a hit that took nothing
+calls only for a change that took place: the reference server ORs the
+cause in only when the HP or MP moved, so a hit that took nothing
 publishes nothing.
 ================
 */
@@ -100,9 +97,9 @@ func (s *MonsterState) noteVitalsLocked(division string, gid uint32, cause Vital
 DrainChangedVitals
 
 Append one publication per monster whose vitals changed since the last
-drain to dst, in gid order, and forget the changes: CGObjChar_OnTick
-clears the cause word once the publisher ran (4A8A24). A monster that left
-the population meanwhile publishes nothing.
+drain to dst, in gid order, and forget the changes: the reference server's
+tick clears the cause word once the publisher ran. A monster that left the
+population meanwhile publishes nothing.
 ================
 */
 func (s *MonsterState) DrainChangedVitals(dst []MonsterVitals) []MonsterVitals {
