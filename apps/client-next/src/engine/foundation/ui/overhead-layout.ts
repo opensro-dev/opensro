@@ -3,12 +3,13 @@
 
 overhead-layout.ts - the rows stacked over a character's name
 
-The guild or companion-owner row, (port-only, #3358) a Contributor's
-title row above it, the vitals (quick status), the fortress mark and
+The guild or companion-owner row, the vitals (quick status), the fortress mark and
 crest, a stall's title, and (port-only, #2958) a 5-star caravan's star
 row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
-title and speech board remain.
+title and speech board remain. A Contributor's title (port-only, #3358)
+is no row of its own: it rides the name board, left of the name, the
+way the client's titles sit (titledNameRow).
 
 ===========================================================================
 */
@@ -35,12 +36,33 @@ const STALL_TITLE_RISE = 20;
 // cos-trade-info.ts); the row rides this far above the highest row.
 const CARAVAN_STAR_PATH = "/assets/images/Media_extracted/interface/ifcommon/com_star.png";
 const CARAVAN_STAR_RISE = 20;
-// Port-only, not native (#3358): a rostered player's Contributor title
-// row, yellow (0xffff00) as the owner asked, one row above the guild
-// row. The roster is the server's word (contributor-titles.ts); with
-// SRO_CONTRIBUTOR_TITLES off no frame arrives and no row ever shows.
+// Port-only, not native (#3358): a rostered player's Contributor title,
+// yellow (0xffff00) as the owner asked, on the name board left of the
+// name - where the client's titles sit, in the guild and fortress wars
+// too (owner, 2026-11-14) - not on a row of its own. The roster is the
+// server's word (contributor-titles.ts); with SRO_CONTRIBUTOR_TITLES off
+// no frame arrives and no title ever shows.
 export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
-const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
+export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
+// The gap between the title and the name on the board, in pixels.
+export const TITLE_NAME_GAP = 4;
+
+/*
+================
+titledNameRow
+
+The name board's one line with a title in front: the title's left edge
+and the name's, both relative to the board's centre, so the pair is
+centred together as one board. With no title the name is centred alone,
+exactly as before.
+================
+*/
+export function titledNameRow( titleWidth: number, nameWidth: number ) {
+	const lead = titleWidth > 0 ? titleWidth + TITLE_NAME_GAP : 0,
+		total = lead + nameWidth,
+		left = -(total >> 1);
+	return { left, nameLeft: left + lead, total };
+}
 
 /*
 ================
@@ -141,9 +163,9 @@ export function overheadLayout(
 		social?.wars?.some( w => w.name === name ) ?
 		[ 1, 0, 0, 1 ] :
 		[ 102 / 255, 185 / 255, 1, 1 ];
-	// Port-only, not native (#3358): the Contributor title over a
-	// rostered player's name, the local player's own included; the
-	// board pass below hides it with the guild row.
+	// Port-only, not native (#3358): the Contributor title in front of a
+	// rostered player's name, the local player's own included; the board
+	// pass below hides it with the name board's other rows.
 	const contributorText = (entity.kind === "player" || entity.kind === "local-player") && entity.name &&
 			game.contributorTitles?.includes( entity.name ) ?
 		CONTRIBUTOR_TITLE_TEXT :
@@ -151,8 +173,7 @@ export function overheadLayout(
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
 		ownerY = companionOwnerShown( entity, options ) ? COMPANION_OWNER_Y : 0,
-		contributorY = contributorText ? guildY - 20 : 0,
-		statusY = Math.min( guildY, ownerY, contributorY ) - (status ? 25 : 0);
+		statusY = Math.min( guildY, ownerY ) - (status ? 25 : 0);
 	let fortressMark: { path: string; y: number; } | null = null;
 	const war = game.fortress, team = role, targetGuild = own ? guild?.id : entity.guildId;
 	if ( options.fortressNames && war && fortressActive( war ) && targetGuild && (team === 1 || team === 2) ) {
@@ -203,7 +224,6 @@ export function overheadLayout(
 		guildY,
 		contributorText,
 		contributorColor: CONTRIBUTOR_TITLE_COLOR,
-		contributorY,
 		status,
 		statusY,
 		speechY,
@@ -237,7 +257,6 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		guildText: "",
 		guildY: 0,
 		contributorText: "",
-		contributorY: 0,
 		status: null,
 		statusY: 0,
 		fortressMark: null,
