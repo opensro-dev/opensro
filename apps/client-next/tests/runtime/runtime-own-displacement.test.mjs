@@ -77,6 +77,7 @@ test("a published own cast displacement is adopted only while the row is on and 
 	owners.renderer.characterStats = () => ({});
 	owners.characters.ready = () => false;
 	owners.characters.error = () => null;
+	owners.characters.takePresentationDegradations = () => [];
 	owners.characters.damageText = () => [];
 	owners.characters.takeCameraScripts = () => [];
 	owners.renderer.worldStats = () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0 });

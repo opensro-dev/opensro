@@ -291,6 +291,7 @@ that reached the worker.
 		owners.characters.ownMover = ( gid, frame ) => moverFrames.push( frame );
 		owners.characters.ready = () => false;
 		owners.characters.error = () => null;
+		owners.characters.takePresentationDegradations = () => [];
 		owners.characters.damageText = () => [];
 		owners.characters.takeCameraScripts = () => [];
 		owners.presentation.gameplay = () => gameState;
@@ -501,6 +502,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.renderer.characterStats = () => ({});
 	owners.characters.ready = () => false;
 	owners.characters.error = () => null;
+	owners.characters.takePresentationDegradations = () => [];
 	owners.characters.damageText = () => [];
 	owners.characters.takeCameraScripts = () => [];
 	owners.renderer.worldStats = () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0 });
@@ -740,6 +742,7 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 	owners.characters.damageText = () => [];
 	owners.characters.takeCameraScripts = () => [];
 	owners.characters.error = () => characterError;
+	owners.characters.takePresentationDegradations = () => [];
 	owners.ui.event = () => {};
 	owners.ui.cursor = () => null;
 	owners.renderer.experimentalVideo = () => {};

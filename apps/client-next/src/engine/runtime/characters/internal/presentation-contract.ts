@@ -42,6 +42,7 @@ import type { AttachedEffect } from "@/engine/foundation/gameplay/attached-effec
 import type { CharacterAttachment, CharacterLayer, CharacterPointLight } from "@/engine/contracts/character";
 import type { CastState, GameplayState, Pose, VitalState } from "@/engine/contracts/gameplay";
 import type { EntityState, TransformSkin } from "@/engine/contracts/world";
+import type { Degradation } from "@/engine/contracts/network";
 
 /*
 ================
@@ -64,6 +65,38 @@ export interface PresentationOutput {
 	previewReady: boolean;
 	dockReady: boolean;
 	commonReady: boolean;
+	// Skipped cosmetic steps the session survives (a model without a
+	// timeline for this action): reported once each as degraded, never a
+	// failure. degradePresentation is the one writer; takePresentationDegradations
+	// (characters.ts) drains them.
+	degradations: Degradation[];
+	degradedKeys: Set<string>;
+}
+
+// At most this many distinct degradations per presentation lifetime: one
+// bad catalogue row cannot flood the Agent (network.ts
+// DEGRADED_CODES_PER_SESSION bounds codes the same way).
+export const MAX_PRESENTATION_DEGRADATIONS = 16;
+
+/*
+================
+degradePresentation
+
+Records one skipped presentation step once. A presentation data gap - an
+action whose phase timeline the model lacks, a knockdown without a recovery
+duration - costs that one cosmetic step, never the session: the server owns
+the outcome and the rest of the world keeps drawing. The original client
+plays no motion for an animation it cannot find; it does not stop.
+================
+*/
+export function degradePresentation(
+	output: Pick<PresentationOutput, "degradations" | "degradedKeys">,
+	code: string,
+	message: string
+) {
+	if ( output.degradedKeys.has( message ) || output.degradedKeys.size >= MAX_PRESENTATION_DEGRADATIONS ) return;
+	output.degradedKeys.add( message );
+	output.degradations.push( { code, message } );
 }
 
 /*

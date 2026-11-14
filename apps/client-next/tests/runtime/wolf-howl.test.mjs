@@ -151,10 +151,10 @@ test("a wolf's howl emote selects pet-howl; Savage Rend and other pets do not", 
 		pendingDeaths: new Set(),
 		uncensored: false
 	};
-	state.step( frame, { failure: null }, published );
+	state.step( frame, { degradations: [], degradedKeys: new Set() }, published );
 	const posture = defined( defined( state.idleStates.get( 1 ) ).posture );
 	assert.equal( posture.kind === "emote" ? posture.clip : "", "pet-howl" );
-	state.step( { ...frame, seconds: 3 }, { failure: null }, published );
+	state.step( { ...frame, seconds: 3 }, { degradations: [], degradedKeys: new Set() }, published );
 	assert.equal( defined( state.idleStates.get( 1 ) ).posture, undefined );
 	// Rend plays through the bite's cast; 0xF0+ signals only draw effects.
 	/** @type {[number, string][]} */
@@ -166,7 +166,7 @@ test("a wolf's howl emote selects pet-howl; Savage Rend and other pets do not", 
 		entity.emote.action = action;
 		entity.emote.revision++;
 		body.codename = codename;
-		state.step( { ...frame, seconds: 4 }, { failure: null }, published );
+		state.step( { ...frame, seconds: 4 }, { degradations: [], degradedKeys: new Set() }, published );
 		assert.equal( defined( state.idleStates.get( 1 ) ).posture, undefined, `${codename} action ${action}` );
 	}
 });
