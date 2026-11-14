@@ -317,3 +317,25 @@ test("only the test's own temporary files are excluded from its inputs", async (
 	assert.equal( scratchPath( path.join( root, "src", "bootstrap.ts" ) ), false );
 	assert.equal( scratchPath( path.join( root, "temp", "fixture.mjs" ) ), false );
 });
+
+test("a cache that cannot be saved costs a rerun, never a passing run's verdict", () => {
+	// Every worktree renames onto the one shared records file, and on
+	// Windows a rename racing another fails with EPERM. A cache folder that
+	// is a file fails the save the same way on every platform.
+	const suite = path.join( root, "temp", `test-cache-unsaved-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync( path.join( suite, ".cache" ), "not a folder\n" );
+		fs.writeFileSync(
+			path.join( suite, "alone.test.mjs" ),
+			'import { test } from "node:test";\ntest( "alone", () => {} );\n'
+		);
+		const result = runRunner( suite );
+		assert.equal( result.status, 0, result.stdout + result.stderr );
+		assert.match( result.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+		assert.match( result.stdout, /test cache: not saved/ );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 }, "nothing was kept" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});

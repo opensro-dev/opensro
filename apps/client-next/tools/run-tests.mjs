@@ -211,13 +211,22 @@ function readKeyed( file, key, field ) {
 writeKeyed
 
 Replaces one cache file atomically (a temporary file renamed over it).
+The records file is shared by every worktree, and on Windows a rename onto
+a file another run is renaming or reading fails with EPERM (four writers
+racing on one file failed 90% of renames). A lost write costs a rerun,
+never a wrong reuse, so it is reported and the run's verdict stands.
 ================
 */
 function writeKeyed( file, body ) {
-	fs.mkdirSync( path.dirname( file ), { recursive: true } );
 	const temporary = file + "." + process.pid;
-	fs.writeFileSync( temporary, JSON.stringify( body ) );
-	fs.renameSync( temporary, file );
+	try {
+		fs.mkdirSync( path.dirname( file ), { recursive: true } );
+		fs.writeFileSync( temporary, JSON.stringify( body ) );
+		fs.renameSync( temporary, file );
+	} catch ( error ) {
+		fs.rmSync( temporary, { force: true } );
+		process.stdout.write( `test cache: not saved (${error.code ?? error.message}): ${file}\n` );
+	}
 }
 
 /*
