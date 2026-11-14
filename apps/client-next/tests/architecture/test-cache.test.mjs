@@ -146,6 +146,35 @@ test("the shared records name checkout files relatively and keep another worktre
 	}
 });
 
+test("a worktree's .git link is recorded as the main checkout it names, not its worktree name", () => {
+	// ops #335: the hub resolver reads each worktree's .git link, whose
+	// bytes name the worktree; hashed as bytes, 190 of 766 runtime files
+	// reran in every other worktree. Only the hub it names may count.
+	const suite = path.join( root, "temp", `test-cache-link-${process.pid}` );
+	const link = path.join( suite, "tree", ".git" );
+	const hub = path.join( suite, "hub" );
+	fs.mkdirSync( path.dirname( link ), { recursive: true } );
+	try {
+		fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-a\n` );
+		fs.writeFileSync(
+			path.join( suite, "link.test.mjs" ),
+			'import { test } from "node:test";\nimport fs from "node:fs";\n' +
+				'test( "reads the link", () => fs.readFileSync( new URL( "./tree/.git", import.meta.url ) ) );\n'
+		);
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		fs.writeFileSync( link, `gitdir: ${hub}/.git/worktrees/fix-b\n` );
+		assert.deepEqual(
+			runSuite( suite ),
+			{ status: 0, reused: 1, ran: 0, failed: 0 },
+			"another worktree reuses it"
+		);
+		fs.writeFileSync( link, `gitdir: ${path.join( suite, "other" )}/.git/worktrees/fix-b\n` );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 }, "another hub reruns it" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
 test("a file over its per-file budget fails the run although its tests pass", () => {
 	const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
 	fs.mkdirSync( suite, { recursive: true } );

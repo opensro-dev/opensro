@@ -222,6 +222,28 @@ function writeKeyed( file, body ) {
 
 /*
 ================
+worktreeLink
+
+The identity of a linked worktree's .git file: the main checkout it
+names, not its bytes. Its one line is "gitdir: <hub>/.git/worktrees/<name>",
+and the only thing read from it in a test process is the hub
+(resolveMainCheckout); git itself runs as a child, which no record covers.
+Hashing the bytes made every worktree's records stale in every other
+worktree: 190 of 766 runtime files reran on 11-14 for this alone (ops #335).
+Undefined for any other file.
+================
+*/
+function worktreeLink( file, stat ) {
+	if ( path.basename( file ) !== ".git" || !stat.isFile() ) return undefined;
+	try {
+		return "worktree of " + resolveMainCheckout( path.dirname( file ) );
+	} catch {
+		return undefined; // an unreadable link is hashed like any file
+	}
+}
+
+/*
+================
 createFingerprints
 
 Content identity of one input, by kind. A file is its sha256, memoised
@@ -259,7 +281,8 @@ function createFingerprints( index ) {
 			} else {
 				value = stat.isDirectory() ?
 					"dir" :
-					known( file, stat ) ?? remember( file, stat, fs.readFileSync( file ) );
+					worktreeLink( file, stat ) ?? known( file, stat ) ??
+						remember( file, stat, fs.readFileSync( file ) );
 			}
 		} catch {
 			value = "missing";
@@ -285,7 +308,8 @@ function createFingerprints( index ) {
 					} else {
 						value = stat.isDirectory() ?
 							"dir" :
-							known( file, stat ) ?? remember( file, stat, await fs.promises.readFile( file ) );
+							worktreeLink( file, stat ) ?? known( file, stat ) ??
+								remember( file, stat, await fs.promises.readFile( file ) );
 					}
 				} catch {
 					value = "missing";
