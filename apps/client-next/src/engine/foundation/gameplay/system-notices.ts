@@ -17,11 +17,33 @@ import { decodeNoticeLinks } from "./notice-links";
 SystemNotice
 ================
 */
+/*
+================
+NoticeDialogAnswers
+
+Port-only, not native: a notice dialog that answers the server. Each
+button sends its chat line (a server command such as "/contributor
+here"), so the answer needs no frame of its own. Without answers the
+dialog is the native one-button confirm.
+================
+*/
+export interface NoticeDialogAnswers {
+	readonly confirmLabel: string;
+	readonly confirmChat: string;
+	// A second button only when given; the confirm alone still answers.
+	readonly cancelLabel?: string;
+	readonly cancelChat?: string;
+}
+
 export interface SystemNotice {
 	readonly localizedArguments?: readonly (string | null)[];
 	readonly formatKinds?: readonly ("d" | "s")[];
 	readonly formatCapacity?: number;
-	readonly dialog?: { readonly title: string; readonly lines: readonly string[]; };
+	readonly dialog?: {
+		readonly title: string;
+		readonly lines: readonly string[];
+		readonly answers?: NoticeDialogAnswers;
+	};
 	readonly nativeType?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 	readonly colorArgb?: number;
 	readonly sequence?: number;

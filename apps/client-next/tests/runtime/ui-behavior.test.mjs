@@ -2004,6 +2004,54 @@ test("guild-war notice modal owns input, dismisses locally and reopens only for 
 	}
 });
 
+test("an answered notice dialog sends its button's chat command and closes", () => {
+	for (
+		const [id, text] of [ [ "notice-dialog-confirm", "/contributor here" ], [
+			"notice-dialog-cancel",
+			"/contributor keep"
+		] ]
+	) {
+		const sent = [], f = uiFixture( c => sent.push( c ) );
+		try {
+			for ( let now = 0; now < 1000; now += 100 ) f.rawStep( { ...f.state }, now );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				notices: [ {
+					sequence: 1,
+					key: "",
+					value: 0,
+					bannerOnly: true,
+					dialog: {
+						title: "UIIT_PORT_CONTRIBUTOR_TITLE",
+						lines: [ "UIIT_PORT_CONTRIBUTOR_ELSEWHERE" ],
+						answers: {
+							confirmLabel: "UIIT_PORT_CONTRIBUTOR_MOVE",
+							confirmChat: "/contributor here",
+							cancelLabel: "UIIT_PORT_CONTRIBUTOR_KEEP",
+							cancelChat: "/contributor keep"
+						}
+					}
+				} ]
+			};
+			let scene = f.rawStep( { ...f.state }, 1100 );
+			const control = name => scene.controls.find( c => c.id === name );
+			assert.ok( control( "notice-dialog-confirm" ) && control( "notice-dialog-cancel" ) );
+			// Side by side under the body, neither overlapping the other.
+			assert.ok(
+				control( "notice-dialog-confirm" ).rect[0] + control( "notice-dialog-confirm" ).rect[2] <=
+					control( "notice-dialog-cancel" ).rect[0]
+			);
+			assert.deepEqual( sent, [] );
+			f.ui.event( { kind: "activate", id } );
+			scene = f.rawStep( { ...f.state }, 1110 ) ?? scene;
+			assert.deepEqual( sent.filter( c => c.command?.kind === "chat" ).map( c => c.command.text ), [ text ] );
+			assert.equal( control( "notice-dialog-confirm" ), undefined );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
 test("the friend-conclusion box formats the two-name line and leaves the acceptance plain", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {

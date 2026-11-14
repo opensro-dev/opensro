@@ -71,6 +71,13 @@ func TestContributorHookInstallsOnlyWhenEnabled(t *testing.T) {
 	if out := hook.Hook(1); out != nil {
 		t.Fatal("contributor hook leaked generic routing")
 	}
+	// The login prompt reaches the contributor's own session first: its
+	// one account carries the title, so it is the holder's OK.
+	prompt := <-push.deliveries
+	if prompt.session != "1:1" || len(prompt.frames) != 1 || prompt.frames[0].Opcode != contributor.OpPrompt ||
+		string(prompt.frames[0].Payload) != string([]byte{contributor.PromptHolder}) {
+		t.Fatalf("first pass prompted %+v", prompt)
+	}
 	got := <-push.deliveries
 	want := contributor.EncodeRoster([]string{character.Name})
 	if got.session != "unexpected division:"+betaWiringDivision || len(got.frames) != 1 ||

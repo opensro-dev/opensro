@@ -73,6 +73,11 @@ func (game *gameplayPlane) contributorRosterTick(ticker *simulation.Ticker, nowM
 		}
 		online = append(online, contributor.Online{SessionID: view.SessionID, AccountID: c.AccountID, Name: c.Name})
 	}
+	// The login prompt rides the same pass: once per entry, to the
+	// contributor sessions that have not answered it (contributor.Prompts).
+	for _, prompt := range game.contributors.Prompts(online) {
+		ticker.Push.PushToSession(prompt.SessionID, []simulation.Frame{{Opcode: contributor.OpPrompt, Payload: []byte{prompt.Kind}}})
+	}
 	payload, targets, all := game.contributors.Push(online, nowMs)
 	if payload == nil {
 		return nil

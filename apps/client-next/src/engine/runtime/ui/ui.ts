@@ -963,6 +963,18 @@ const ROOT = "/assets/images/Media_extracted/",
 // 683B40 assigns the notice root this texture after creating it.
 const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 const PARTS = frameParts();
+// The Contributor login prompt's copy (port-only, not native; owner
+// 2026-11-14): the client has no text rows for it, so hudCopy serves
+// these keys. The account names stay off the wire, so the prompt names
+// no account.
+const CONTRIBUTOR_PROMPT_COPY: Readonly<Record<string, string>> = {
+	UIIT_PORT_CONTRIBUTOR_TITLE: "Contributor title",
+	UIIT_PORT_CONTRIBUTOR_ELSEWHERE: "Your Contributor title is on another of your accounts.\nMove it to this account?",
+	UIIT_PORT_CONTRIBUTOR_HOLDER:
+		"Your Contributor title is on this account.\nTo move it, log in on another account and type /contributor here.",
+	UIIT_PORT_CONTRIBUTOR_MOVE: "Move it here",
+	UIIT_PORT_CONTRIBUTOR_KEEP: "Keep it there"
+};
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // msgbox2_window_ has no centre tile: the letter popups' own tiles and black
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
@@ -1709,6 +1721,7 @@ export function createUi( ports: UiPorts ) {
 		activeNoticeDialog: {
 			readonly title: string;
 			readonly lines: readonly string[];
+			readonly answers?: import("@/engine/foundation/gameplay/system-notices").NoticeDialogAnswers;
 			readonly arguments?: readonly string[];
 			readonly localizedArguments?: readonly (string | null)[];
 		} | undefined,
@@ -2111,6 +2124,9 @@ export function createUi( ports: UiPorts ) {
 	*/
 	function hudCopy( key: string ) {
 		if ( key === "UIIT_PORT_SOOK_ARENA" ) return "Survival Arena (5 stages, EXP/SP x5)";
+		// The Contributor login prompt (port-only, contributor-titles.ts).
+		const contributorCopy = CONTRIBUTOR_PROMPT_COPY[key];
+		if ( contributorCopy ) return contributorCopy;
 		return hud.data()?.strings[key] ?? "";
 	}
 	/*
@@ -6284,7 +6300,17 @@ export function createUi( ports: UiPorts ) {
 			// Both physical Enter keys are native VK_RETURN, including modal handlers.
 			if ( event.kind === "key" && event.code === "NumpadEnter" ) event = { ...event, code: "Enter" };
 			if ( activeNoticeDialog && view?.session?.phase === "world" ) {
-				if ( event.kind === "activate" && event.id === "notice-dialog-confirm" ) {
+				// An answered dialog (port-only) sends its button's chat command.
+				const answers = activeNoticeDialog.answers;
+				const answer = event.kind !== "activate" ?
+					undefined :
+					event.id === "notice-dialog-confirm" ?
+					answers?.confirmChat ?? "" :
+					event.id === "notice-dialog-cancel" && answers?.cancelChat ?
+					answers.cancelChat :
+					undefined;
+				if ( answer !== undefined ) {
+					if ( answer ) sendGameplay( { kind: "chat", channel: 1, text: answer } );
 					activeNoticeDialog = undefined;
 					noticeDialogPosition = null;
 					dirty = true;
@@ -26082,7 +26108,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					h,
 					noticeDialogLines( hudCopy, activeNoticeDialog ),
 					value => text.run( value ).width,
-					noticeDialogPosition
+					noticeDialogPosition,
+					!!activeNoticeDialog.answers?.cancelLabel
 				);
 				noticeDialogFrame = layout.frame;
 				controls = drawFrame.controls = [];
@@ -26123,14 +26150,27 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				}
 				button(
 					"notice-dialog-confirm",
-					hudCopy( "UIIT_CTL_CONFIRM" ),
+					hudCopy( activeNoticeDialog.answers?.confirmLabel ?? "UIIT_CTL_CONFIRM" ),
 					layout.confirm[0],
 					layout.confirm[1],
-					76,
+					layout.confirm[2],
 					false,
 					false,
 					6
 				);
+				const cancelLabel = activeNoticeDialog.answers?.cancelLabel;
+				if ( cancelLabel ) {
+					button(
+						"notice-dialog-cancel",
+						hudCopy( cancelLabel ),
+						layout.cancel[0],
+						layout.cancel[1],
+						layout.cancel[2],
+						false,
+						false,
+						6
+					);
+				}
 			}
 			if ( phase === "disconnected" ) {
 				/*

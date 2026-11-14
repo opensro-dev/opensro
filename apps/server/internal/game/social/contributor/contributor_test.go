@@ -298,3 +298,100 @@ func TestPushRereadsTheMembersFileOnItsPace(t *testing.T) {
 		t.Fatalf("reload push: all=%v roster=%x", all, payload)
 	}
 }
+
+// grouped is a sync roster: member m1 links a1 (oldest), a2 and a3;
+// member m2 links b1. The flat list is each member's oldest account.
+const grouped = `{"members":[{"member":"m1","accounts":["a1","a2","a3"]},` +
+	`{"member":"m2","accounts":["b1"]}],"accounts":["a1","b1"]}`
+
+func TestOneMemberTitlesOnlyItsFirstAccount(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Shown("a1") || r.Shown("a2") || r.Shown("a3") || !r.Shown("b1") {
+		t.Fatalf("shown a1 %v a2 %v a3 %v b1 %v", r.Shown("a1"), r.Shown("a2"), r.Shown("a3"), r.Shown("b1"))
+	}
+	if answer, _ := r.Command("a2", "/contributor"); answer != answerElsewhere {
+		t.Fatalf("status on a linked untitled account = %q", answer)
+	}
+	if answer, _ := r.Command("a2", "/contributor off"); answer != answerElsewhere || !r.Shown("a1") {
+		t.Fatalf("off on an untitled account = %q, a1 shown %v", answer, r.Shown("a1"))
+	}
+	if answer, _ := r.Command("c1", "/contributor here"); answer != answerNotMember {
+		t.Fatalf("here from an unlinked account = %q", answer)
+	}
+}
+
+func TestHereMovesTheTitleAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Push([]Online{{SessionID: "s1", AccountID: "a1", Name: "First"}}, 0)
+	if answer, _ := r.Command("a3", "/contributor here"); answer != answerMoved+" "+answerShown {
+		t.Fatalf("here = %q", answer)
+	}
+	if r.Shown("a1") || !r.Shown("a3") || !r.Shown("b1") {
+		t.Fatalf("after here: a1 %v a3 %v b1 %v", r.Shown("a1"), r.Shown("a3"), r.Shown("b1"))
+	}
+	// Every viewer is sent the moved roster on the next pass.
+	payload, _, all := r.Push([]Online{
+		{SessionID: "s1", AccountID: "a1", Name: "First"},
+		{SessionID: "s3", AccountID: "a3", Name: "Third"},
+	}, 1)
+	if !all || !reflect.DeepEqual(decodeRoster(t, payload), []string{"Third"}) {
+		t.Fatalf("moved roster = %v (all %v)", decodeRoster(t, payload), all)
+	}
+	if answer, _ := r.Command("a3", "/contributor here"); answer != answerShown {
+		t.Fatalf("here on the titled account = %q", answer)
+	}
+	// The move survives a restart.
+	again, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Shown("a1") || !again.Shown("a3") {
+		t.Fatal("move lost across a reopen")
+	}
+	// The member unlinks a3: the title falls back to its first account.
+	writeMembers(t, dir, `{"members":[{"member":"m1","accounts":["a1","a2"]}],"accounts":["a1"]}`,
+		time.Unix(1_700_000_100, 0))
+	again.reloadLocked()
+	if !again.Shown("a1") || again.Shown("a3") {
+		t.Fatal("an unlinked choice kept the title")
+	}
+}
+
+func TestHereCarriesTheAccountsOwnOptOut(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), writeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Command("a1", "/contributor off")
+	r.Command("a2", "/contributor here")
+	if !r.Shown("a2") {
+		t.Fatal("a2 does not show the moved title")
+	}
+	if answer, _ := r.Command("a1", "/contributor here"); answer != answerMoved+" "+answerHidden || r.Shown("a1") {
+		t.Fatalf("back to the hidden account = %q, shown %v", answer, r.Shown("a1"))
+	}
+}
+
+func TestHereSaveFailureKeepsTheTitleWhereItWas(t *testing.T) {
+	dir := t.TempDir()
+	writeMembers(t, dir, grouped, time.Unix(1_700_000_000, 0))
+	r, err := Open(dir, filepath.Join(dir, MembersFileName), func(string, []byte) error { return errors.New("disk full") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer, _ := r.Command("a2", "/contributor here"); answer != answerBusy || !r.Shown("a1") || r.Shown("a2") {
+		t.Fatalf("failed move = %q, a1 %v a2 %v", answer, r.Shown("a1"), r.Shown("a2"))
+	}
+}

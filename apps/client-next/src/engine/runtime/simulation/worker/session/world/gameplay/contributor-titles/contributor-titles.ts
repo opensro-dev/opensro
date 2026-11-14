@@ -16,8 +16,15 @@ Body, little-endian: u16 count, then count x { u16 len, ascii name }.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
 
 export const OP_CONTRIBUTOR_TITLES = 0x3fc1;
+// The login prompt (port-only 0x3FC2, owner 2026-11-14): one byte, its
+// kind. Elsewhere asks an account without the title whether to move it
+// here; holder tells the account that carries it.
+export const OP_CONTRIBUTOR_PROMPT = 0x3fc2;
+export const CONTRIBUTOR_PROMPT_ELSEWHERE = 1;
+export const CONTRIBUTOR_PROMPT_HOLDER = 2;
 const MAX_CONTRIBUTORS = 1024;
 
 /*
@@ -44,6 +51,7 @@ createContributorTitles
 */
 export function createContributorTitles() {
 	let names: readonly string[] = [];
+	let prompt: number | undefined;
 	return {
 		/*
 ================
@@ -55,6 +63,14 @@ error, never a partial list.
 ================
 		*/
 		receive( frame: WireFrame ): boolean {
+			if ( frame.opcode === OP_CONTRIBUTOR_PROMPT ) {
+				const kind = frame.payload.length === 1 ? frame.payload[0] : undefined;
+				if ( kind !== CONTRIBUTOR_PROMPT_ELSEWHERE && kind !== CONTRIBUTOR_PROMPT_HOLDER ) {
+					throw new Error( "Invalid contributor prompt" );
+				}
+				prompt = kind;
+				return true;
+			}
 			if ( frame.opcode !== OP_CONTRIBUTOR_TITLES ) return false;
 			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 			if ( p.length < 2 ) throw new Error( "Invalid contributor titles" );
@@ -77,11 +93,44 @@ error, never a partial list.
 		names: () => names,
 		/*
 ================
+takePrompt
+
+The login prompt's notice, once: the dialog the HUD raises. Elsewhere
+answers "/contributor here" or "/contributor keep"; the holder's OK
+answers "keep", so the server stops asking.
+================
+		*/
+		takePrompt(): Omit<SystemNotice, "sequence"> | undefined {
+			const kind = prompt;
+			prompt = undefined;
+			if ( kind === undefined ) return undefined;
+			const elsewhere = kind === CONTRIBUTOR_PROMPT_ELSEWHERE;
+			return {
+				key: "",
+				value: 0,
+				bannerOnly: true,
+				dialog: {
+					title: "UIIT_PORT_CONTRIBUTOR_TITLE",
+					lines: [ elsewhere ? "UIIT_PORT_CONTRIBUTOR_ELSEWHERE" : "UIIT_PORT_CONTRIBUTOR_HOLDER" ],
+					answers: elsewhere ?
+						{
+							confirmLabel: "UIIT_PORT_CONTRIBUTOR_MOVE",
+							confirmChat: "/contributor here",
+							cancelLabel: "UIIT_PORT_CONTRIBUTOR_KEEP",
+							cancelChat: "/contributor keep"
+						} :
+						{ confirmLabel: "UIIT_CTL_CONFIRM", confirmChat: "/contributor keep" }
+				}
+			};
+		},
+		/*
+================
 clear
 ================
 		*/
 		clear() {
 			names = [];
+			prompt = undefined;
 		}
 	};
 }
