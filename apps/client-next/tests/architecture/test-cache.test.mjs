@@ -112,6 +112,40 @@ test("a pass is reused until an input it read changes; a failure is never reused
 	}
 });
 
+test("the shared records name checkout files relatively and keep another worktree's records", () => {
+	// ops #335: records live in the main checkout, shared by every worktree,
+	// so their ids must not hold this checkout's path, and one run's write
+	// must not drop what another worktree recorded meanwhile.
+	const suite = path.join( root, "temp", `test-cache-shared-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync( path.join( suite, "value.mjs" ), "export const value = 1;\n" );
+		fs.writeFileSync(
+			path.join( suite, "reads.test.mjs" ),
+			'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+				'import { value } from "./value.mjs";\ntest( "reads", () => assert.equal( value, 1 ) );\n'
+		);
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		const indexPath = path.join( suite, ".cache", "index.json" );
+		const index = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+		const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+		const checkout = path.resolve( root, "../.." ).toLowerCase();
+		assert.ok( ids.some( id => id.includes( "\t~/" ) ), "checkout inputs are relative" );
+		assert.ok( !ids.some( id => id.toLowerCase().includes( checkout ) ), "no id holds this checkout's path" );
+		assert.ok( !("stats" in index), "the stat memo is not shared" );
+		assert.ok( fs.existsSync( path.join( suite, ".cache", "stats.json" ) ) );
+
+		index.records["another/worktree.test.mjs"] = { inputs: {} };
+		fs.writeFileSync( indexPath, JSON.stringify( index ) );
+		fs.appendFileSync( path.join( suite, "value.mjs" ), "// edited\n" );
+		assert.deepEqual( runSuite( suite ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+		const after = JSON.parse( fs.readFileSync( indexPath, "utf8" ) );
+		assert.ok( "another/worktree.test.mjs" in after.records, "another worktree's record survives" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
 test("a file over its per-file budget fails the run although its tests pass", () => {
 	const suite = path.join( root, "temp", `test-budget-fixture-${process.pid}` );
 	fs.mkdirSync( suite, { recursive: true } );
