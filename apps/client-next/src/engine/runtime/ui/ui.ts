@@ -28260,9 +28260,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					)
 				);
 			}
-			for ( const item of game?.inventory ?? [] ) {
-				const path = iconPath( item.icon );
-				if ( path ) paths.push( path );
+			// Every item list the player already holds is warm, not only the bag:
+			// a pet's bag, the avatar slots and an opened storage drew their icons
+			// a few frames after their window (the icons were first demanded by the
+			// window itself).
+			for (
+				const items of [
+					game?.inventory,
+					game?.avatarInventory,
+					game?.storage?.items,
+					...(game?.cosRecords ?? []).map( record => record.inventory )
+				]
+			) {
+				for ( const item of items ?? [] ) {
+					const path = iconPath( item.icon );
+					if ( path ) paths.push( path );
+				}
 			}
 			// Publication: the demand is final for this layout. Frozen, it lets
 			// resources.step skip re-reading it on the frames until the next layout.
