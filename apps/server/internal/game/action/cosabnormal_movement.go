@@ -51,6 +51,34 @@ func (rt *Runtime) companionLiveSpawn(division string, character *enterworld.Cha
 
 /*
 ================
+handRiddenPoseToVehicle
+
+A rider leaving its vehicle hands the vehicle the pose they shared.
+While mounted the vehicle moves in the rider's world and its own parked
+pose (transportWorld) keeps the summon spot or the last dismount; the
+voluntary dismount re-anchors it (changeCosRide), and so must every
+other unmount, before Mounted clears, or the next reader - the death's
+cargo scatter first of all - finds the vehicle back where it was
+parked. Call it with pet still Mounted; a pet not mounted, or with no
+transport session, keeps its own pose.
+================
+*/
+func (rt *Runtime) handRiddenPoseToVehicle(division string, character *enterworld.Character, pet *enterworld.CharacterCOS, now int64) {
+	if pet == nil || !pet.Mounted {
+		return
+	}
+	pose := rt.liveSpawn(simulation.WorldKey(division, character.Name), character, now)
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
+	if state == nil || state.transportCOS == nil || state.transportCOS.GID != pet.GID {
+		return
+	}
+	state.transportWorld = simulation.WorldState{Spawn: pose}
+}
+
+/*
+================
 companionOwnPose
 
 The companion's own movement owner, read under petMu. The unlock is

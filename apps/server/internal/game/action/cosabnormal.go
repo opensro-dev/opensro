@@ -255,6 +255,9 @@ func (o *cosAbnormalOwner) commit() {
 			pet.StateFlags &^= cosStateSummoned
 			o.private = append(o.private, companionItemStateFrames(o.c, pet)...)
 			if pet.Mounted {
+				// The corpse and its cargo stay where the rider was, not
+				// at the vehicle's stale parked pose ("Trader goods").
+				o.rt.handRiddenPoseToVehicle(o.division, o.c, pet, o.now)
 				pet.Mounted = false
 				o.public = append(o.public, wire.Frame{Opcode: wire.OpCosRideState,
 					Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(o.c), false, pet.GID)})
