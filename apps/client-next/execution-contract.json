@@ -2,16 +2,6 @@
 	"version": 1,
 	"capabilities": [
 		{
-			"consumer": "src/engine/runtime/characters/presentation-actions.ts",
-			"provider": "src/engine/runtime/characters/internal/presentation-contract.ts",
-			"functions": ["degradePresentation"]
-		},
-		{
-			"consumer": "src/engine/runtime/characters/presentation-state.ts",
-			"provider": "src/engine/runtime/characters/internal/presentation-contract.ts",
-			"functions": ["degradePresentation"]
-		},
-		{
 			"consumer": "src/engine/runtime/ui/frame/draw.ts",
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": ["has"]
