@@ -24,11 +24,17 @@ fakeGitHub
 
 issues: { number: { body, labels, state, comments } }; pulls: { number:
 { merged, merge_commit_sha } }; carriedBy: the merge commits the live
-commit contains.
+commit contains; failing: numbers whose reads fail with a 500. A number
+the fake does not hold answers 404, as GitHub does.
 ================
 */
-function fakeGitHub( { issues, pulls = {}, carriedBy = [] } ) {
+function fakeGitHub( { issues, pulls = {}, carriedBy = [], failing = [] } ) {
 	const calls = [];
+	const answer = ( table, number, data ) => {
+		if ( failing.includes( number ) ) throw Object.assign( new Error( "Server Error" ), { status: 500 } );
+		if ( !(number in table) ) throw Object.assign( new Error( "Not Found" ), { status: 404 } );
+		return { data };
+	};
 	const github = {
 		paginate: async ( method, params ) => method( params ),
 		rest: {
@@ -39,7 +45,8 @@ function fakeGitHub( { issues, pulls = {}, carriedBy = [] } ) {
 					)
 						.map( ( [number, issue] ) => ({ number: Number( number ), body: issue.body }) ),
 				listComments: async ( { issue_number } ) => issues[issue_number].comments.map( body => ({ body }) ),
-				get: async ( { issue_number } ) => ({ data: { state: issues[issue_number]?.state ?? "open" } }),
+				get: async ( { issue_number } ) =>
+					answer( { ...issues, ...pulls }, issue_number, { state: issues[issue_number]?.state ?? "open" } ),
 				removeLabel: async ( { issue_number, name } ) => {
 					calls.push( [ "removeLabel", issue_number ] );
 					issues[issue_number].labels = issues[issue_number].labels.filter( label => label !== name );
@@ -49,7 +56,7 @@ function fakeGitHub( { issues, pulls = {}, carriedBy = [] } ) {
 					issues[issue_number].comments.push( body );
 				}
 			},
-			pulls: { get: async ( { pull_number } ) => ({ data: pulls[pull_number] ?? { merged: false } }) },
+			pulls: { get: async ( { pull_number } ) => answer( pulls, pull_number, pulls[pull_number] ) },
 			repos: {
 				compareCommits: async ( { base, head } ) => ({
 					data: { status: head === LIVE && carriedBy.includes( base ) ? "ahead" : "behind" }
@@ -74,7 +81,17 @@ test("the grammar reads each form and refuses anything else", () => {
 	} );
 	assert.deepEqual( parseCondition( "Owner decides" ), { kind: "owner" } );
 	assert.deepEqual( parseCondition( "container" ), { kind: "container" } );
-	for ( const text of [ "soon", "#x closed", "after tomorrow", "live carries 3199", "closed" ] ) {
+	for (
+		const text of [
+			"soon",
+			"#x closed",
+			"after tomorrow",
+			"live carries 3199",
+			"closed",
+			"after 2026-02-30T00:00Z",
+			"after 2026-11-15T25:00Z"
+		]
+	) {
 		assert.equal( parseCondition( text ), null, text );
 	}
 });
@@ -156,4 +173,38 @@ test("an unmerged pull request is never carried", async () => {
 	const issues = { 23: gated( "Ungate when: live carries #30" ) };
 	const { github } = fakeGitHub( { issues, pulls: { 30: { merged: false } }, carriedBy: [ "m30" ] } );
 	assert.deepEqual( await run( { github, context, nowMs: NOW, fetchJson: liveRecord } ), [ "#23 wait (live)" ] );
+});
+
+test("a number that names nothing is that issue's question, and the sweep goes on", async () => {
+	const issues = {
+		10: { body: "", labels: [], state: "closed", comments: [] },
+		20: gated( "Ungate when: #99999 closed" ),
+		21: gated( "Ungate when: live carries #10" ),
+		22: gated( "Ungate when: #10 closed" )
+	};
+	const { github } = fakeGitHub( { issues } );
+	assert.deepEqual( await run( { github, context, nowMs: NOW, fetchJson: liveRecord } ), [
+		"#20 ask (unreadable)",
+		"#21 ask (unreadable)",
+		"#22 lift (closed)"
+	] );
+	assert.ok( issues[20].comments[0].includes( "#99999 is not an issue or pull request" ) );
+	assert.ok( issues[21].comments[0].includes( "#10 is not a pull request" ) );
+	assert.deepEqual( issues[22].labels, [] );
+});
+
+test("a GitHub failure on one issue leaves it gated and the others decided", async () => {
+	const issues = {
+		10: { body: "", labels: [], state: "closed", comments: [] },
+		20: gated( "Ungate when: #11 closed" ),
+		21: gated( "Ungate when: #10 closed" ),
+		11: { body: "", labels: [], state: "closed", comments: [] }
+	};
+	const { github } = fakeGitHub( { issues, failing: [ 11 ] } );
+	assert.deepEqual( await run( { github, context, nowMs: NOW, fetchJson: liveRecord } ), [
+		"#20 wait (error: 500)",
+		"#21 lift (closed)"
+	] );
+	assert.deepEqual( issues[20].labels, [ GATED_LABEL ] );
+	assert.deepEqual( issues[20].comments, [] );
 });
