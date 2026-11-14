@@ -48,15 +48,10 @@ toggle is required. Legacy saved client opt-outs are ignored. With the server
 flag off, state probes are silent and the pet window stays native.
 Open pet information with **Insert**.
 
-### Level-90 balance correction (12 November 2026)
+### Native health and level-90 progression
 
-With the server expansion enabled, the authored ungeared HP curve targets
-three ordinary same-level party-giant hits for a bear, two for a wolf and
-one for a penguin or crow (normal midpoint rolls, no criticals, gear or
-passive protection). Gear and defensive skills increase actual survival.
-With the flag off, pets retain native characterdata HP and native care.
-Changing the flag requires a server restart; never rewrite stored gear or
-training ranks to switch it.
+Pet base maximum HP remains the native per-level character row. Equipment
+and defensive skills modify survival without replacing that base HP.
 
 Books unlock at pet levels **10 / 40 / 90**. The first two books reach rank
 10 at levels 40 and 90. All ten ranks of the third book are available at
@@ -65,7 +60,7 @@ rank 10. This changes requirements, not the point budget: one starter point
 plus one point per two pet levels. Players must choose where to spend them.
 
 
-### Cumulative books and crow revision (13 November 2026)
+### Cumulative books and crow support
 
 For every pet, a higher book upgrades the same skill family: it retains the
 earlier books' behavior and adds its own effect. Only the highest learned
@@ -104,6 +99,10 @@ through relogging, changing crows and server restarts. Several crows do not stac
 the 15% reduction or bypass that recovery cooldown. Direct monster attacks and
 monster damage-over-time both use the protection; native flag-off care/combat
 is unchanged. The buff icon appears only while below the threshold.
+
+Raven's persisted recipient cooldown requires the schema 43 to 44 offline
+authority upgrade, even when pets are disabled. Back up the database and stop
+authority writers before upgrading; do not lower schema metadata.
 
 ### Bear: Iron Hide shields
 

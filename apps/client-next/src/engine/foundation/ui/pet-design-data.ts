@@ -39,38 +39,7 @@ export const PET_DESIGN = {
 			"magicalPercent": 20,
 			"defensePercent": 100,
 			"magicDefensePercent": 100,
-			"magicPrimary": false,
-			"hpPercent": 220,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 20
-				},
-				{
-					"level": 10,
-					"hp": 185
-				},
-				{
-					"level": 20,
-					"hp": 245
-				},
-				{
-					"level": 40,
-					"hp": 390
-				},
-				{
-					"level": 60,
-					"hp": 1025
-				},
-				{
-					"level": 80,
-					"hp": 5000
-				},
-				{
-					"level": 90,
-					"hp": 11000
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Wolf",
@@ -80,38 +49,7 @@ export const PET_DESIGN = {
 			"magicalPercent": 25,
 			"defensePercent": 70,
 			"magicDefensePercent": 70,
-			"magicPrimary": false,
-			"hpPercent": 100,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 16
-				},
-				{
-					"level": 10,
-					"hp": 165
-				},
-				{
-					"level": 20,
-					"hp": 235
-				},
-				{
-					"level": 40,
-					"hp": 350
-				},
-				{
-					"level": 60,
-					"hp": 900
-				},
-				{
-					"level": 80,
-					"hp": 4500
-				},
-				{
-					"level": 90,
-					"hp": 8100
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Penguin",
@@ -121,38 +59,7 @@ export const PET_DESIGN = {
 			"magicalPercent": 160,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": true,
-			"hpPercent": 70,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": true
 		},
 		{
 			"name": "Crow",
@@ -162,38 +69,7 @@ export const PET_DESIGN = {
 			"magicalPercent": 112,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": true,
-			"hpPercent": 90,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": true
 		},
 		{
 			"name": "Fox",
@@ -203,38 +79,7 @@ export const PET_DESIGN = {
 			"magicalPercent": 30,
 			"defensePercent": 65,
 			"magicDefensePercent": 65,
-			"magicPrimary": false,
-			"hpPercent": 100,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 16
-				},
-				{
-					"level": 10,
-					"hp": 165
-				},
-				{
-					"level": 20,
-					"hp": 235
-				},
-				{
-					"level": 40,
-					"hp": 350
-				},
-				{
-					"level": 60,
-					"hp": 900
-				},
-				{
-					"level": 80,
-					"hp": 4500
-				},
-				{
-					"level": 90,
-					"hp": 8100
-				}
-			]
+			"magicPrimary": false
 		}
 	],
 	"skills": [

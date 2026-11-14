@@ -735,12 +735,12 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 	const preScaled = { ...training, stats: { ...training.stats, maxHp: 1400 } };
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 1400 );
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 1000 );
-	// Expansion state carries the authored level-90 bear maximum; native off stays untouched.
+	// The level-90 native row (39,434, the #2567 penguin) is the base at any
+	// level argument: no species percent and no level curve bend it.
 	const native90 = { ...baseRef, maxHp: 39434 };
-	const at90 = { ...training, stats: { ...training.stats, maxHp: 11000 } };
-	assert.equal( petReference( native90, undefined, undefined, 1000, 90 ), native90 );
-	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 15399 );
-	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 11000 );
+	const at90 = { ...training, stats: { ...training.stats, maxHp: 39434 } };
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 55207 );
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 39434 );
 });
 
 /*

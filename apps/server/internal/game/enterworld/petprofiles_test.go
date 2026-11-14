@@ -31,8 +31,8 @@ func TestPetProfilesOnlyChangeAttackPetsAfterExplicitApplication(t *testing.T) {
 		t.Fatal("native catalog changed before opt-in")
 	}
 	items.ApplyAttackPetProfiles()
-	if bear.MaxHP != companion.BaseHealth(bear.Codename, bear.Level, 1000) || bear.Parameters.PhysicalDefense != 100 || bear.Parameters.MagicalDefense != 100 || items.summonableCharacters[0].MaxHP != bear.MaxHP || horse.MaxHP != 1000 {
-		t.Fatal("profile missed authored health or changed transport health")
+	if bear.MaxHP != 1000 || bear.Parameters.PhysicalDefense != 100 || bear.Parameters.MagicalDefense != 100 || items.summonableCharacters[0].MaxHP != 1000 || horse.MaxHP != 1000 {
+		t.Fatal("profile touched native MaxHP or defenses outside the design's own percent")
 	}
 }
 
@@ -60,25 +60,29 @@ func TestPetExpansionGateKeepsNativeHealthOff(t *testing.T) {
 	}
 	t.Setenv(companion.EnvAttackPetExpansion, "on")
 	items, bear := catalog()
-	if !items.ApplyAttackPetExpansion() || bear.MaxHP != companion.BaseHealth(bear.Codename, bear.Level, 1000) {
-		t.Fatalf("explicit opt-in left MaxHP %d, want authored health", bear.MaxHP)
+	if !items.ApplyAttackPetExpansion() || bear.MaxHP != 1000 {
+		t.Fatalf("explicit opt-in left MaxHP %d, want the native 1000", bear.MaxHP)
 	}
 }
 
 /*
 ================
-TestShippedAttackPetHealthNativeOffAndAuthoredOn
+TestShippedAttackPetHealthStaysNativeAtBenchmarkLevels
 
-Native rows stay untouched without opt-in; enabled rows use the same curve
-for summon, level advance, healing and combat.
+Issue #2567: native attack-pet HP is the per-level characterdata row
+(the level chain's MaxHP column), 360 at level 1, 10,260 at 50 and
+39,434 at 90 for every attack-pet species. The expansion's design curve
+once replaced it (a level-90 penguin showed 4,800); with or without
+the expansion applied, the shipped rows must keep the native values.
 ================
 */
-func TestShippedAttackPetHealthNativeOffAndAuthoredOn(t *testing.T) {
+func TestShippedAttackPetHealthStaysNativeAtBenchmarkLevels(t *testing.T) {
 	clientdata.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	items.once.Do(items.load)
 	want := map[uint8]uint32{1: 360, 50: 10260, 90: 39434}
-	// One loader, two passes: native first, then the expansion projection.
+	// One loader, two passes: the shipped rows are native first, and
+	// applying the expansion's profiles must leave them that way.
 	for pass := 0; pass < 2; pass++ {
 		for _, species := range []string{"COS_P_BEAR", "COS_P_WOLF", "COS_P_PENGUIN", "COS_P_RAVEN"} {
 			for level, hp := range want {
@@ -86,9 +90,6 @@ func TestShippedAttackPetHealthNativeOffAndAuthoredOn(t *testing.T) {
 				ref := items.charactersByCodename[codename]
 				if ref == nil {
 					t.Fatalf("pass %d: %s missing from shipped characterdata", pass, codename)
-				}
-				if pass == 1 {
-					hp = companion.BaseHealth(codename, level, hp)
 				}
 				if ref.Level != level || ref.MaxHP != hp {
 					t.Fatalf("pass %d: %s is level %d with MaxHP %d, want level %d with the native %d", pass, codename, ref.Level, ref.MaxHP, level, hp)

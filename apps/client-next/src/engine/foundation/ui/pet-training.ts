@@ -25,8 +25,9 @@ import type { CosReference, cosAbilities } from "./cos-command";
 petReference
 
 Port-only stats use the server's catalog and worn/passive modifiers.
-The server-admitted expansion state uses the authored HP curve; without
-training or Resolve state the native reference is returned unchanged.
+Maximum HP is the pet's native character row (reference.maxHp): the
+server design no longer scales pet HP by species or level, so the only
+adjustments left are the worn gear percent and Resolve.
 ================
 */
 export function petReference(
@@ -48,9 +49,8 @@ export function petReference(
 			s => s.family === "Unbroken Spirit" && s.option === resolve.tier
 		);
 		const perStack = tierBook?.value ?? 0;
-		const baseMaxHp = profileHealth( "Bear", level, reference.maxHp );
 		return perStack > 0 ?
-			{ ...reference, maxHp: Math.trunc( baseMaxHp * (1 + activeResolve * perStack / 100) ) } :
+			{ ...reference, maxHp: Math.trunc( reference.maxHp * (1 + activeResolve * perStack / 100) ) } :
 			reference;
 	}
 	const spirit = training.skills.find(
@@ -60,10 +60,7 @@ export function petReference(
 		const gear = petGear( item?.refObjId );
 		return sum + (gear && (!level || gear.degree.minPetLevel <= level) ? gear.item.baseStats.maxHPPercent : 0);
 	}, 0 );
-	const species = petSkillDesign( training.skills[0]?.id ?? 0 )?.pet ?? "";
-	const unbuffedMaxHp = Math.trunc(
-		profileHealth( species, level, reference.maxHp ) * (1 + Math.min( 2250, gearHP ) / 100)
-	);
+	const unbuffedMaxHp = Math.trunc( reference.maxHp * (1 + Math.min( 2250, gearHP ) / 100) );
 	let maxHp = training.stats.maxHp;
 	if ( spirit && activeResolve > 0 && (maxHp === unbuffedMaxHp || maxHp === reference.maxHp) ) {
 		maxHp = Math.trunc( maxHp * (1 + activeResolve * spirit.value / 100) );
@@ -82,27 +79,6 @@ export function petReference(
 		hit: reference.hit + (training.stats.gearStats?.[4] ?? 0),
 		parry: reference.parry + (training.stats.gearStats?.[5] ?? 0)
 	};
-}
-
-/*
-================
-profileHealth
-
-The server's authored curve; keep native references unchanged when no level is known.
-================
-*/
-function profileHealth( species: string, level: number, fallback: number ): number {
-	const curve = PET_DESIGN.pets.find( p => p.name === species )?.healthByLevel;
-	if ( !level || !curve?.length ) return Math.trunc( fallback );
-	let previous: { readonly level: number; readonly hp: number; } = curve[0]!;
-	for ( const point of curve.slice( 1 ) ) {
-		if ( level <= point.level ) {
-			return previous.hp +
-				Math.trunc( (point.hp - previous.hp) * (level - previous.level) / (point.level - previous.level) );
-		}
-		previous = point;
-	}
-	return previous.hp;
 }
 
 /*

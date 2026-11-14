@@ -17,6 +17,12 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const tailwindInterceptBookID = 56
+const tailwindInterceptOption = 2
+const tailwindInterceptCooldownMs = 30000
+const tailwindStunDurationMs = 2000
+const tailwindStunChance = 100
+
 const tailwindPeriod int64 = 5000
 const tailwindOpcode uint16 = 0x3fb7 // Public: recipient u32, book u8, stacks u8, speed percent x10 u16.
 
@@ -106,7 +112,7 @@ func (rt *Runtime) advanceTailwindSession(key petOwnerKey, state *petSession, no
 		rt.clearTailwindSource(key, now)
 		return
 	}
-	members := rt.crowSupportRecipients(step, skill.Option >= 3, true)
+	members := rt.crowSupportRecipients(step, skill.Option >= crowPartyBookOption, true)
 	changed := make(map[uint32]bool)
 	rt.tailwinds.Lock()
 	if rt.tailwinds.sources == nil {
@@ -236,7 +242,7 @@ func (rt *Runtime) tailwindIntercept(division string, c *enterworld.Character, t
 		if key.division != division || !found {
 			continue
 		}
-		if row.until > now && row.stacks == 10 && row.book >= 56 {
+		if row.until > now && row.stacks == 10 && row.book >= tailwindInterceptBookID {
 			sources = append(sources, struct {
 				key  petOwnerKey
 				book uint8
@@ -253,7 +259,7 @@ func (rt *Runtime) tailwindIntercept(division string, c *enterworld.Character, t
 		rt.petMu.Unlock()
 		return false
 	}
-	recipient.tailwindStunReadyAt = now + 30000
+	recipient.tailwindStunReadyAt = now + tailwindInterceptCooldownMs
 	rt.petMu.Unlock()
 	for _, source := range sources {
 		key := source.key
@@ -266,17 +272,18 @@ func (rt *Runtime) tailwindIntercept(division string, c *enterworld.Character, t
 			continue
 		}
 		skill, _, ok := companion.Passive(step.pet, "Tailwind", companion.ModifiersFor(step.pet))
-		if !ok || skill.ID != source.book || skill.Option < 2 || rt.crowSupportRecipients(step, skill.Option >= 3, false)[gid] == nil {
+		if !ok || skill.ID != source.book || skill.Option < tailwindInterceptOption || rt.crowSupportRecipients(step, skill.Option >= crowPartyBookOption, false)[gid] == nil {
 			continue
 		}
 		row := enterworld.SkillRow{}
-		setPetStatus(&row, tagStun, [6]uint32{2000, 100, 0})
+		setPetStatus(&row, tagStun, [6]uint32{tailwindStunDurationMs, tailwindStunChance, 0})
 		frames := rt.applyPetStatus(step, row, target)
 		if len(frames) > 0 {
 			if victim, ok := rt.resolvePetCombatTarget(step, target); ok {
 				rt.queueCrowVisual(division, crowVisual{gid: target, kind: crowStunVisual, book: uint8(skill.Option), at: victim.at})
 			}
 			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target, Frames: simFrames(frames)}})
+			// The blocked hit emits no damage frame; clients see the attacker stun and crow cue instead.
 			return true
 		}
 	}

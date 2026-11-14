@@ -5,7 +5,8 @@ petprofiles.go - startup-only pet reference balance (port-only, not native)
 
 One catalog projection keeps summon, growth, healing and combat maxima in
 agreement. Called once before gameplay admission, only with expansion on.
-The authored HP curve is applied only after the server expansion gate.
+A pet's MaxHP is not the expansion's to set: it stays the native per-level
+character row the level advance walks (issue #2567).
 
 ===========================================================================
 */
@@ -42,8 +43,8 @@ func (t *TextdataItems) ApplyAttackPetProfiles() {
 			continue
 		}
 		p := companion.Profile(ref.Codename)
-		ref.MaxHP = companion.BaseHealth(ref.Codename, ref.Level, ref.MaxHP)
-		ref.Parameters.MaxHP = ref.MaxHP
+		// MaxHP stays the row's native value at every level; only the
+		// defense percents are the expansion's (issue #2567).
 		ref.Parameters.PhysicalDefense *= p.DefensePercent / 100
 		ref.Parameters.MagicalDefense *= p.MagicDefensePercent / 100
 	}

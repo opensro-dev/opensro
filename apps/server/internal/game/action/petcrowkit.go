@@ -15,6 +15,9 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const crowPartyBookOption = 3
+const ravenRefugeHealingBookID = 59
+
 const ravenRefugeFamily = "Raven's Refuge"
 const ravenRefugeReduction = 15
 const ravenRefugeHealPercent = 10
@@ -71,7 +74,7 @@ func (rt *Runtime) planRavenRefuge(division string, c *enterworld.Character, now
 	var best ravenRefugeGrant
 	for _, step := range rt.crowSources(division, c, now) {
 		skill, level, ok := companion.Passive(step.pet, ravenRefugeFamily, companion.ModifiersFor(step.pet))
-		if !ok || skill.Option < 3 && enterworld.ObjectIDForCharacter(c) != enterworld.ObjectIDForCharacter(step.snapshot) {
+		if !ok || skill.Option < crowPartyBookOption && enterworld.ObjectIDForCharacter(c) != enterworld.ObjectIDForCharacter(step.snapshot) {
 			continue
 		}
 		value := skill.ValueAt(level)
@@ -98,7 +101,7 @@ func ravenRefugeDamage(grant ravenRefugeGrant, hp, maximum int64, damage uint32)
 }
 func ravenRefugeRecovery(grant ravenRefugeGrant, c *enterworld.Character, before, after, maximum, now int64) int64 {
 	threshold := float64(maximum) * grant.threshold
-	if grant.book < 59 || after <= 0 || after >= before || float64(before)*100 < threshold || float64(after)*100 >= threshold || c.RavenRefugeReadyAtMs > now {
+	if grant.book < ravenRefugeHealingBookID || after <= 0 || after >= before || float64(before)*100 < threshold || float64(after)*100 >= threshold || c.RavenRefugeReadyAtMs > now {
 		return 0
 	}
 	heal := min(maximum-after, maximum*ravenRefugeHealPercent/100)
@@ -132,7 +135,7 @@ func (rt *Runtime) advanceCrowKitSession(key petOwnerKey, state *petSession, now
 	if ok {
 		skill, _, learned := companion.Passive(step.pet, ravenRefugeFamily, companion.ModifiersFor(step.pet))
 		if learned {
-			members = rt.crowSupportRecipients(step, skill.Option == 3, false)
+			members = rt.crowSupportRecipients(step, skill.Option == crowPartyBookOption, false)
 		}
 	}
 	if state.crow.views == nil && len(members) > 0 {
