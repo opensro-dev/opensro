@@ -9189,7 +9189,7 @@ export function createUi( ports: UiPorts ) {
 					// The stall window (CIFStall) is game state too: Escape
 					// did nothing but open the System menu, so a player could
 					// not leave a stall from the keyboard. A panel drawn beside
-					// it (69C7C0 keeps Inventory or a separate window open) is
+					// it (Inventory, or a separate window the stall leaves open) is
 					// the window Escape closes first, as the topmost one; then
 					// the stall's shared close sends what its close control
 					// sends: leave for a visitor, close for the owner.
