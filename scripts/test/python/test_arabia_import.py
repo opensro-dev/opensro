@@ -492,6 +492,33 @@ class ArabiaImportTest(unittest.TestCase):
 		self.assertEqual(rows["SN_NPC_FULL"][8], "Hello")
 
 	# ================
+	# test_korean_only_talk_takes_the_authored_english
+	#
+	# 2026-11-15: three Arabia talk rows had no English in any v1.696
+	# column, and the asset build refused the variant. The layer's own
+	# authored line fills them; a changed Korean refuses as stale.
+	# ================
+	def test_korean_only_talk_takes_the_authored_english(self):
+		key = "SN_LAST_FIELD_PRIEST_BS"
+		korean, english = arabia.SPEECH_ENGLISH[key]
+		files = {
+			"textquest_speech&name.txt": utf16([["TextQuest_Speech&Name_100.txt"]]),
+			"textquest_speech&name_100.txt": utf16([["1", "502", key, korean]]),
+		}
+		rows = {row[1]: row for row in arabia.later_speech_texts(lambda name: files[name])}
+		self.assertEqual(rows[key][8], english)
+		files["textquest_speech&name_100.txt"] = utf16([["1", "502", key, "changed Korean"]])
+		with self.assertRaisesRegex(ValueError, "stale Arabia talk English"):
+			arabia.later_speech_texts(lambda name: files[name])
+
+	# ================
+	# test_authored_english_never_replaces_the_sources_own
+	# ================
+	def test_authored_english_never_replaces_the_sources_own(self):
+		self.assertEqual(arabia.speech_english("SN_LAST_FIELD_PRIEST_BS", "other", "Shipped"), "Shipped")
+		self.assertEqual(arabia.speech_english("SN_NPC_UNLISTED", "Korean", ""), "")
+
+	# ================
 	# test_resource_closure_gap_posture
 	# ================
 	def test_resource_closure_gap_posture(self):
