@@ -90,6 +90,7 @@ const (
 	answerElsewhere = "Your Contributor title is on another of your accounts. Type /contributor here to move it to this one."
 	answerMoved     = "Your Contributor title is now on this account."
 	answerUsage     = "Usage: /contributor on, /contributor off, or /contributor here."
+	answerKept      = "Your Contributor title stays on your other account. Type /contributor here any time to move it to this one."
 	answerBusy      = "The title setting could not be saved; please try again in a moment."
 )
 
@@ -160,7 +161,12 @@ type Registry struct {
 	memberOf map[string]string
 	titled   map[string]bool
 	// chosen is each member's "/contributor here" account (persisted).
-	chosen       map[string]string
+	chosen map[string]string
+	// seen is, per account, the title holder its owner last answered the
+	// login prompt about (persisted); prompted is the sessions already
+	// asked this entry, so a prompt is one per login, never per tick.
+	seen         map[string]string
+	prompted     map[string]bool
 	hidden       map[string]bool
 	stamp        fileStamp
 	reloadDueMs  int64
@@ -190,12 +196,13 @@ func Open(dir, membersPath string, write func(string, []byte) error) (*Registry,
 		memberOf:    map[string]string{},
 		titled:      map[string]bool{},
 		sent:        map[string]bool{},
+		prompted:    map[string]bool{},
 	}
 	choices, err := readChoices(r.hiddenPath)
 	if err != nil {
 		return nil, err
 	}
-	r.hidden, r.chosen = choices.hidden, choices.chosen
+	r.hidden, r.chosen, r.seen = choices.hidden, choices.chosen, choices.seen
 	r.reloadLocked()
 	return r, nil
 }
@@ -204,12 +211,14 @@ func Open(dir, membersPath string, write func(string, []byte) error) (*Registry,
 type choices struct {
 	hidden map[string]bool
 	chosen map[string]string
+	seen   map[string]string
 }
 
 // choicesFile is the opt-out file's JSON shape.
 type choicesFile struct {
 	Hidden []string          `json:"hidden"`
 	Chosen map[string]string `json:"chosen,omitempty"`
+	Seen   map[string]string `json:"seen,omitempty"`
 }
 
 /*
@@ -220,7 +229,7 @@ readChoices
 func readChoices(path string) (choices, error) {
 	body, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return choices{hidden: map[string]bool{}, chosen: map[string]string{}}, nil
+		return choices{hidden: map[string]bool{}, chosen: map[string]string{}, seen: map[string]string{}}, nil
 	}
 	if err != nil {
 		return choices{}, fmt.Errorf("contributor titles: %w", err)
@@ -235,7 +244,13 @@ func readChoices(path string) (choices, error) {
 			chosen[member] = account
 		}
 	}
-	return choices{hidden: accountSet(file.Hidden), chosen: chosen}, nil
+	seen := make(map[string]string, len(file.Seen))
+	for account, holder := range file.Seen {
+		if boundedID(account) && boundedID(holder) {
+			seen[account] = holder
+		}
+	}
+	return choices{hidden: accountSet(file.Hidden), chosen: chosen, seen: seen}, nil
 }
 
 /*
@@ -411,6 +426,9 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 	if len(fields) == 2 && fields[1] == "here" {
 		return r.moveLocked(member, accountID), true
 	}
+	if len(fields) == 2 && fields[1] == "keep" {
+		return r.keepLocked(member, accountID), true
+	}
 	if len(fields) > 2 || (len(fields) == 2 && fields[1] != "on" && fields[1] != "off") {
 		return answerUsage, true
 	}
@@ -473,11 +491,13 @@ func (r *Registry) moveLocked(member, accountID string) string {
 		next[label] = id
 	}
 	next[member] = accountID
-	if err := r.saveChoicesLocked(r.hidden, next); err != nil {
+	// Moving answers this account's prompt: it now holds the title.
+	seen := r.seenWithLocked(accountID, accountID)
+	if err := r.saveAllLocked(r.hidden, next, seen); err != nil {
 		log.WithError(err).Warn("contributor titles: choice save failed")
 		return answerBusy
 	}
-	r.chosen = next
+	r.chosen, r.seen = next, seen
 	r.resolveLocked()
 	// The next roster pass sends the changed roster to everyone.
 	r.pushDueMs = 0
@@ -486,27 +506,137 @@ func (r *Registry) moveLocked(member, accountID string) string {
 
 /*
 ================
-saveLocked
+keepLocked
+
+"/contributor keep": the login prompt's "Keep it there" (or the title
+holder's OK). Records that this account answered the prompt about the
+current holder, so it does not come back until the holder changes.
 ================
 */
-func (r *Registry) saveLocked(hidden map[string]bool) error {
-	return r.saveChoicesLocked(hidden, r.chosen)
+func (r *Registry) keepLocked(member, accountID string) string {
+	holder := r.holderLocked(member)
+	answer := answerKept
+	if holder == accountID {
+		answer = answerShown
+		if r.hidden[accountID] {
+			answer = answerHidden
+		}
+	}
+	if holder == "" || r.seen[accountID] == holder {
+		return answer
+	}
+	seen := r.seenWithLocked(accountID, holder)
+	if err := r.saveAllLocked(r.hidden, r.chosen, seen); err != nil {
+		log.WithError(err).Warn("contributor titles: prompt answer save failed")
+		return answerBusy
+	}
+	r.seen = seen
+	return answer
 }
 
 /*
 ================
-saveChoicesLocked
+seenWithLocked
 
-Writes both choices: the opt-outs sorted, the moves keyed by member.
+A copy of seen with one more answer: account answered about holder.
 ================
 */
-func (r *Registry) saveChoicesLocked(hidden map[string]bool, chosen map[string]string) error {
+func (r *Registry) seenWithLocked(accountID, holder string) map[string]string {
+	next := make(map[string]string, len(r.seen)+1)
+	for account, answered := range r.seen {
+		next[account] = answered
+	}
+	next[accountID] = holder
+	return next
+}
+
+/*
+================
+holderLocked
+
+The account that carries member's title now, or "" when none does.
+================
+*/
+func (r *Registry) holderLocked(member string) string {
+	for _, id := range r.groups[member] {
+		if r.memberOf[id] == member && r.titled[id] {
+			return id
+		}
+	}
+	return ""
+}
+
+/*
+================
+Prompts
+
+The login prompt (port-only, not native; owner, 2026-11-14): each
+entered session of a contributor whose account has not answered about
+its member's current holder is asked once per entry. PromptElsewhere
+goes to an account without the title ([Move it here] [Keep it there]),
+PromptHolder to the one that carries it ([OK]). The client answers
+with "/contributor here" or "/contributor keep" on chat, so no new
+C->S frame exists. Sessions that left are forgotten, so the next login
+asks again while the answer is still missing.
+================
+*/
+func (r *Registry) Prompts(online []Online) []Prompt {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	present := make(map[string]bool, len(online))
+	var prompts []Prompt
+	for _, o := range online {
+		present[o.SessionID] = true
+		if r.prompted[o.SessionID] {
+			continue
+		}
+		member, linked := r.memberOf[o.AccountID]
+		if !linked {
+			continue
+		}
+		holder := r.holderLocked(member)
+		if holder == "" || r.seen[o.AccountID] == holder {
+			continue
+		}
+		r.prompted[o.SessionID] = true
+		kind := PromptElsewhere
+		if holder == o.AccountID {
+			kind = PromptHolder
+		}
+		prompts = append(prompts, Prompt{SessionID: o.SessionID, Kind: kind})
+	}
+	for id := range r.prompted {
+		if !present[id] {
+			delete(r.prompted, id)
+		}
+	}
+	return prompts
+}
+
+/*
+================
+saveLocked
+================
+*/
+func (r *Registry) saveLocked(hidden map[string]bool) error {
+	return r.saveAllLocked(hidden, r.chosen, r.seen)
+}
+
+/*
+================
+saveAllLocked
+
+Writes every choice: the opt-outs sorted, the moves keyed by member,
+the answered prompts keyed by account.
+================
+*/
+func (r *Registry) saveAllLocked(hidden map[string]bool, chosen, seen map[string]string) error {
 	ids := make([]string, 0, len(hidden))
 	for id := range hidden {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	body, err := json.MarshalIndent(choicesFile{Hidden: ids, Chosen: chosen}, "", "\t")
+	body, err := json.MarshalIndent(choicesFile{Hidden: ids, Chosen: chosen, Seen: seen}, "", "\t")
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,30 @@ import (
 // OpRoster is the port-only S->C Contributor roster push.
 const OpRoster uint16 = 0x3FC1
 
+// OpPrompt is the port-only S->C login prompt (owner, 2026-11-14): one
+// byte, the prompt's kind. The next free opcode after OpRoster; server
+// wire and client dispatch were searched for 0x3FC2. A client that
+// predates it drops the unknown opcode.
+const OpPrompt uint16 = 0x3FC2
+
+// The prompt kinds: the account lacks the title, or it carries it.
+const (
+	PromptElsewhere uint8 = 1
+	PromptHolder    uint8 = 2
+)
+
+/*
+================
+Prompt
+
+One session to ask, and which question.
+================
+*/
+type Prompt struct {
+	SessionID string
+	Kind      uint8
+}
+
 // RosterMax bounds one frame; names past it are left out.
 const RosterMax = 1024
 
