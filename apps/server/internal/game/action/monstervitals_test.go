@@ -244,6 +244,29 @@ func TestMovingMonsterRetiresDistantHolder(t *testing.T) {
 
 /*
 ================
+TestReleaseKeepsASelectionMadeSince
+
+A holder list is a copy: by the time a holder is let go, its player may
+have selected something else, and that selection stays.
+================
+*/
+func TestReleaseKeepsASelectionMadeSince(t *testing.T) {
+	store := NewSelectionStore()
+	store.Set(testDivision, "holder", 400001)
+	copied := store.holders(nil)
+	store.Set(testDivision, "holder", 400002)
+	store.release(copied[0].division, copied[0].name, copied[0].gid)
+	if gid, ok := store.Get(testDivision, "holder"); !ok || gid != 400002 {
+		t.Fatalf("selection = %d %v, want the one made since the copy", gid, ok)
+	}
+	store.release(testDivision, "holder", 400002)
+	if _, ok := store.Get(testDivision, "holder"); ok {
+		t.Fatal("the named selection was not released")
+	}
+}
+
+/*
+================
 TestStatusChangeJoinsTheTickCause
 
 A hit that also applies a status ORs the status cause (0x100) into the

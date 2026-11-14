@@ -168,8 +168,11 @@ func (rt *Runtime) retireDistantHolders(nowMs int64) {
 ================
 holderPose
 
-The holder's live position, or false once the character left the
-division.
+The holder's position at the tick's time, or false once the character
+left the division. The tick's prepare phase already stepped every walk,
+so this reads the pose that step answers (SnapshotAt) and steps nothing:
+the reference server's range test also reads the positions its frame
+stored.
 ================
 */
 func (rt *Runtime) holderPose(holder selectionHolder, nowMs int64) (monster.Pose, bool) {
@@ -179,6 +182,8 @@ func (rt *Runtime) holderPose(holder selectionHolder, nowMs int64) (monster.Pose
 	if c == nil {
 		return monster.Pose{}, false
 	}
-	at := rt.liveSpawn(simulation.WorldKey(holder.division, c.Name), c, nowMs)
+	at := rt.Worlds.SnapshotAt(simulation.WorldKey(holder.division, c.Name), func() simulation.WorldState {
+		return simulation.SeedWorldState(c)
+	}, nowMs).LiveSpawnAt(nowMs)
 	return monster.Pose{RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, true
 }
