@@ -23,10 +23,11 @@ after 60 s.
 */
 import type { FrontendPhase } from "@/engine/contracts/frontend";
 
-// The frontend phases whose completion gate waits on a stage or preview
-// scene being admitted by the renderer (frontend.ts stepLoadingWatch).
+// The post-login loading phases whose completion gate waits on a stage or
+// preview scene the renderer admits, and which the frontend's stall watch
+// bounds (frontend.ts stepLoadingWatch). The title load has no such bound:
+// a hidden title simply finishes once shown.
 const FRONTEND_LOADING_PHASES: readonly FrontendPhase[] = [
-	"loading-title",
 	"loading-dock",
 	"loading-create",
 	"loading-race"

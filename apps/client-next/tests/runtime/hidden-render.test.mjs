@@ -17,7 +17,7 @@ import "../helpers/native-source-loader.mjs";
 const { hiddenFrameRenders } = await import( "../../src/engine/foundation/rendering/hidden-render.ts" );
 
 test("a frontend loading phase renders while hidden", () => {
-	const loading = /** @type {const} */ ([ "loading-title", "loading-dock", "loading-create", "loading-race" ]);
+	const loading = /** @type {const} */ ([ "loading-dock", "loading-create", "loading-race" ]);
 	for ( const phase of loading ) {
 		assert.equal( hiddenFrameRenders( phase, "character-select", false ), true, phase );
 	}
@@ -29,7 +29,7 @@ test("a pending world entry renders while hidden until game-ready is sent", () =
 });
 
 test("a settled screen does not render while hidden", () => {
-	const settled = /** @type {const} */ ([ "dock", "create", "login", "customize", "world" ]);
+	const settled = /** @type {const} */ ([ "loading-title", "dock", "create", "login", "customize", "world" ]);
 	for ( const phase of settled ) {
 		assert.equal( hiddenFrameRenders( phase, "character-select", true ), false, phase );
 	}
