@@ -2220,13 +2220,20 @@ export function createCharacterEffects(
 				const result: CharacterActor[] = [];
 				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
 					const burst = crowEffects[i]!;
-					// Port-only arena one-shots wait for their own models; other crow cues retain existing timing.
-					if ( burst.started === undefined && burst.cue === 9 ) {
+					// Pet cues and the arena roar keep their full visible lifetime after admission.
+					if ( burst.started === undefined && burst.cue !== 10 ) {
 						burst.queuedAt ??= now;
-						const paths = [
-							"/assets/effects/challenging-roar-aura",
-							"/assets/effects/challenging-roar-shockwave"
-						];
+						const paths = burst.cue === 9 ?
+							[ "/assets/effects/challenging-roar-aura", "/assets/effects/challenging-roar-shockwave" ] :
+							[
+								burst.cue === 0 ?
+									"/assets/effects/crow-wind-burst" :
+									burst.cue === 1 ?
+									"/assets/effects/crow-heal-wisp" :
+									burst.cue === 4 ?
+									"/assets/effects/crow-mana-wisp" :
+									"/assets/effects/crow-feather"
+							];
 						let admitted = true;
 						for ( const path of paths ) if ( !ready( path ) ) admitted = false;
 						if ( !admitted ) {
@@ -2258,12 +2265,6 @@ export function createCharacterEffects(
 					}
 					if ( burst.cue > 0 ) {
 						// Native unlit materials bypass instance tint; recovery colors live in the textures.
-						const model = burst.cue === 1 ?
-							"/assets/effects/crow-heal-wisp" :
-							burst.cue === 4 ?
-							"/assets/effects/crow-mana-wisp" :
-							"/assets/effects/crow-feather";
-						if ( !ready( model ) ) continue;
 						const tint: readonly [number, number, number] = burst.cue === 2 ?
 							[ .8, .65, .4 ] :
 							burst.cue >= 6 && burst.cue <= 7 ?
@@ -2273,6 +2274,12 @@ export function createCharacterEffects(
 						const u = age / 1.2, count = (3 + burst.book) * (recovery ? 2 : 1);
 						for ( let feather = 0; feather < count; feather++ ) {
 							const mote = recovery && feather % 2 === 1;
+							const model = burst.cue === 1 ?
+								"/assets/effects/crow-heal-wisp" :
+								burst.cue === 4 ?
+								"/assets/effects/crow-mana-wisp" :
+								"/assets/effects/crow-feather";
+							if ( !ready( model ) ) continue;
 							if ( recovery ) {
 								const phase = (u + feather * .61803398875) % 1;
 								const mana = burst.cue === 4, angle = feather * 2.39996323 + phase * (mana ? 2.4 : .8);
@@ -2340,7 +2347,6 @@ export function createCharacterEffects(
 						}
 						continue;
 					}
-					if ( !ready( "/assets/effects/crow-wind-burst" ) ) continue;
 					for ( let band = 0; band < 3; band++ ) {
 						const u = (age - band * .1) / .9;
 						if ( u < 0 || u >= 1 ) continue;

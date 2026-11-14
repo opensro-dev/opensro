@@ -474,6 +474,8 @@ func TestManualRoarAddsPetThreatWithoutDamageOrTarget(t *testing.T) {
 		for companion.Learn(c.ActiveCOS, id) == "" {
 		}
 	}
+	// The level-cap change permits all ten final-book ranks; this case tests rank one.
+	c.ActiveCOS.Training.Levels[2] = 1
 	c.ActiveCOS.Training.Rows[0] = domain.PetRowCooldown{}
 	lease, ok := rt.casterPopulation(testDivision, c)
 	position := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.AnyFollower().Position(clock.NowMs())

@@ -49,19 +49,19 @@ func learnPetBook(tb testing.TB, c *enterworld.Character, id uint8) companion.Sk
 
 /*
 ================
-TestAdvancedPetPassivesCommitTheirStatuses
+TestRavenRefugeAdvancedPublication
 
-Real attack orders, simulation ticks and native status resolution, rather
-than merely checking that the skill builder contains an abnormal parameter.
+The low-HP passive is published through its real recipient-buff owner.
 ================
 */
-func TestAdvancedPetPassivesCommitTheirStatuses(t *testing.T) {
-	rt, clock, c, mob, key := tailwindFixture(t, 1)
+func TestRavenRefugeAdvancedPublication(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
 	learnPetBook(t, c, 60)
-	rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, mob.Gid))
-	tickPetCombat(t, rt, clock, 2000, func() bool {
-		return rt.petSessionFor(key.division, key.name, key.gid).crow.precision[enterworld.ObjectIDForCharacter(c)].stacks == 5
-	})
+	c.CurrentHP = testInt64(1)
+	rt.advanceCrowKit(key, clock.NowMs())
+	if rt.crowPrecisionView(testDivision, enterworld.ObjectIDForCharacter(c), clock.NowMs())[5] != 1 {
+		t.Fatal("Refuge protection not published")
+	}
 }
 
 /*

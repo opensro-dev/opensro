@@ -181,14 +181,16 @@ only a moving row opens the update door (#2139).
 */
 func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
 	row := companion.AdvanceCharges(live.Training.Rows[1], now)
+	var learned companion.SkillDef
 	for _, def := range companion.SkillsForPet(live) {
-		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-			// One modifiers read answers both the level and the row:
-			// ModifiersFor is pure on the live record, so the second
-			// walk the two call sites used to pay bought nothing.
-			mods := companion.ModifiersFor(live)
-			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, mods), now, mods)
+		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 && def.Option > learned.Option {
+			learned = def
 		}
+	}
+	if learned.ID != 0 {
+		// Initialize once from the highest book; earlier books must not start a slower recharge.
+		mods := companion.ModifiersFor(live)
+		row = companion.BroodRow(row, learned, companion.EffectiveLevel(live, learned, mods), now, mods)
 	}
 	return row, row != live.Training.Rows[1]
 }

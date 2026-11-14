@@ -12,12 +12,65 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+/*
+================
+TestTailwindInterceptsBeforeDamageAndRecoversAfterThirtySeconds
+================
+*/
+func TestTailwindInterceptsBeforeDamageAndRecoversAfterThirtySeconds(t *testing.T) {
+	rt, clock, c, mob, key := tailwindFixture(t, 2)
+	chargeTailwind(rt, clock, key, 10)
+	c.CurrentHP = testInt64(1000)
+	strike := playerStrike{division: testDivision, victim: c, killer: deathKiller{monster: &mob}, now: clock.NowMs(), impacts: 1}
+	resolve := func(*enterworld.SkillWall) (combat.WallOutcome, error) {
+		return combat.WallOutcome{Defender: combat.Result{Damage: 100}}, nil
+	}
+	roll := func(*enterworld.SkillWall, combat.Result) ([]abnormal.Record, error) { return nil, nil }
+	if rt.planPlayerStrike(&strike, resolve, roll) || *c.CurrentHP != 1000 {
+		t.Fatal("charged Tailwind allowed the incoming damage plan")
+	}
+	if rt.tailwindView(testDivision, enterworld.ObjectIDForCharacter(c), clock.NowMs()).stacks != 10 {
+		t.Fatal("interception spent travel stacks")
+	}
+	clock.now = clock.now.Add(29999 * time.Millisecond)
+	rt.advanceTailwind(key, clock.NowMs())
+	if rt.tailwindIntercept(testDivision, c, mob.Gid, clock.NowMs()) {
+		t.Fatal("stun recovered early")
+	}
+	clock.now = clock.now.Add(time.Millisecond)
+	rt.advanceTailwind(key, clock.NowMs())
+	if !rt.tailwindIntercept(testDivision, c, mob.Gid, clock.NowMs()) {
+		t.Fatal("stun did not recover at thirty seconds")
+	}
+}
+
+/*
+================
+TestTailwindSurvivesOwnerBlink
+================
+*/
+func TestTailwindSurvivesOwnerBlink(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	chargeTailwind(rt, clock, key, 10)
+	x := *c.World.Spawn.X + 250
+	c.World.Spawn.X = &x
+	rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
+	rt.advanceTailwind(key, clock.NowMs())
+	if rt.tailwindView(testDivision, enterworld.ObjectIDForCharacter(c), clock.NowMs()).stacks != 10 {
+		t.Fatal("non-damaging blink removed stacks")
+	}
+	if _, ok := rt.elementalCompanion(testDivision, c, key.gid, "Crow", clock.NowMs()); ok {
+		t.Fatal("travel support relaxed combat range")
+	}
+}
 
 /*
 ================
@@ -29,6 +82,7 @@ func tailwindFixture(t *testing.T, tier uint8) (*Runtime, *fakeClock, *enterworl
 	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
 	rt.AttackPetExpansion = true
+	rt.petSessions[petOwnerKey{division: testDivision, name: c.Name}] = &petSession{character: c, ready: true}
 	mob := roarField(t, rt, c, clock)
 	learnPetBook(t, c, 54+tier)
 	step, ok := rt.elementalCompanion(testDivision, c, c.ActiveCOS.GID, "Crow", clock.NowMs())
@@ -95,13 +149,22 @@ func TestTailwindTimingAndDamageConsumeAllTiers(t *testing.T) {
 			if math.Abs(float64(speed-want)) > .001 {
 				t.Fatalf("movement speed %v want %v", speed, want)
 			}
-			// The shared incoming-hit publication is used by physical and magical strikes.
-			rt.playerStruckFrames(testDivision, c, playerStruck{attacker: mob.Gid, impacts: []wire.SkillCastTargetImpact{{Damage: 1}}}, clock.NowMs())
+			if rt.tailwindIntercept(testDivision, c, mob.Gid, clock.NowMs()) != (tier >= 2) {
+				t.Fatal("pre-hit interception tier", tier)
+			}
 			live, _ := rt.Monsters.Get(testDivision, mob.Gid)
 			stunned := live.Abnormal != nil && live.Abnormal.Slots[abnormal.Stun].Active
 			if stunned != (tier >= 2) {
 				t.Fatal("tier stun", stunned)
 			}
+			if rt.tailwindView(testDivision, gid, clock.NowMs()).stacks != 10 {
+				t.Fatal("intercepted damage consumed stacks")
+			}
+			if rt.tailwindIntercept(testDivision, c, mob.Gid, clock.NowMs()) {
+				t.Fatal("stun ignored thirty-second cooldown")
+			}
+			// A hit that actually commits during the stun cooldown consumes the speed.
+			rt.playerStruckFrames(testDivision, c, playerStruck{attacker: mob.Gid, impacts: []wire.SkillCastTargetImpact{{Damage: 1}}}, clock.NowMs())
 			if rt.tailwindView(testDivision, gid, clock.NowMs()).stacks != 0 {
 				t.Fatal("damage did not consume stacks")
 			}
@@ -141,10 +204,13 @@ func TestTailwindPartyIsolationRangeAndRetirement(t *testing.T) {
 	if rt.tailwindView(testDivision, enterworld.ObjectIDForCharacter(far), clock.NowMs()).book != 0 {
 		t.Fatal("far party member received buff")
 	}
-	frames := rt.tailwindDamage(testDivision, member, mob.Gid, clock.NowMs())
-	if len(frames) == 0 {
-		t.Fatal("party outgoing hit did not stun")
+	if !rt.tailwindIntercept(testDivision, member, mob.Gid, clock.NowMs()) {
+		t.Fatal("party incoming attack did not stun")
 	}
+	if rt.tailwindView(testDivision, memberGID, clock.NowMs()).stacks != 10 {
+		t.Fatal("party interception consumed stacks")
+	}
+	rt.tailwindDamage(testDivision, member, mob.Gid, clock.NowMs())
 	if rt.tailwindView(testDivision, memberGID, clock.NowMs()).stacks != 0 || rt.tailwindView(testDivision, enterworld.ObjectIDForCharacter(c), clock.NowMs()).stacks != 10 {
 		t.Fatal("party counters were shared")
 	}
@@ -172,7 +238,7 @@ TestTailwindFlagOffBookChangeAndPartialCharges
 func TestTailwindFlagOffBookChangeAndPartialCharges(t *testing.T) {
 	rt, clock, c, mob, key := tailwindFixture(t, 2)
 	chargeTailwind(rt, clock, key, 9)
-	if frames := rt.tailwindDamage(testDivision, c, mob.Gid, clock.NowMs()); len(frames) != 0 {
+	if rt.tailwindIntercept(testDivision, c, mob.Gid, clock.NowMs()) {
 		t.Fatal("partial charges stunned")
 	}
 	chargeTailwind(rt, clock, key, 10)
@@ -217,7 +283,9 @@ func TestTailwindSafeZoneOwnerAndParty(t *testing.T) {
 			if got := rt.tailwindView(testDivision, enterworld.ObjectIDForCharacter(c), clock.NowMs()).stacks; got != 10 {
 				t.Fatal("town owner stacks", got)
 			}
-			if got := rt.tailwindSpeedFactor(testDivision, c, clock.NowMs()); got != 1.5 {
+			skill, _ := companion.PetSkill(c.ActiveCOS, 54+tier)
+			wantSpeed := float32(1 + skill.ValueAt(1)/10)
+			if got := rt.tailwindSpeedFactor(testDivision, c, clock.NowMs()); got != wantSpeed {
 				t.Fatal("town owner speed", got)
 			}
 			want := uint8(0)
@@ -227,7 +295,7 @@ func TestTailwindSafeZoneOwnerAndParty(t *testing.T) {
 			if got := rt.tailwindView(testDivision, memberGID, clock.NowMs()).stacks; got != want {
 				t.Fatal("town party stacks", got)
 			}
-			if tier == 3 && rt.tailwindSpeedFactor(testDivision, member, clock.NowMs()) != 1.5 {
+			if tier == 3 && rt.tailwindSpeedFactor(testDivision, member, clock.NowMs()) != wantSpeed {
 				t.Fatal("town party speed")
 			}
 			rt.AttackPetExpansion = false

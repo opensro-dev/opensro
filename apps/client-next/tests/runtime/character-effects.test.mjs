@@ -2187,6 +2187,26 @@ test("crow recovery uses red rising glow and blue inward wisps, with soft transp
 	assert.notDeepEqual( paths[0], paths[1], "healing rises beside the body; mana draws inward at torso height" );
 });
 
+for ( const cue of [ 0, 1, 4 ] ) {
+	test( "crow cue survives delayed model admission: " + cue, () => {
+		const effects = roarEffects();
+		effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, cue, 1 );
+		effects.step( [], null, 0, () => false, () => 1, [] );
+		const visible = effects.step( [], null, 2, () => true, () => 1, [] );
+		effects.dispose();
+		assert.ok( visible.length > 0, "A delayed model load should still get a visible effect" );
+	} );
+}
+
+test("crow cue releases a failed model instead of filling its bounded queue forever", () => {
+	const effects = roarEffects();
+	effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, 1, 1 );
+	effects.step( [], null, 0, () => false, () => 1, [] );
+	effects.step( [], null, 16, () => false, () => 1, [] );
+	assert.equal( effects.step( [], null, 17, () => true, () => 1, [] ).length, 0 );
+	effects.dispose();
+});
+
 /*
 ================
 Cold arena effects retain their visible lifetime.
@@ -2215,20 +2235,5 @@ test("cold arena models do not consume the effect before admission, and failed l
 			"failed loads cannot replay stale effects"
 		);
 		failed.dispose();
-	}
-});
-
-/*
-================
-Arena-only admission must not change ordinary crow effect timing.
-================
-*/
-test("ordinary crow cues retain their pre-arena lifetime when models are cold", () => {
-	for ( const cue of [ 0, 1, 4 ] ) {
-		const effects = roarEffects();
-		effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, cue, 1 );
-		effects.step( [], null, 0, () => false, () => 1, [] );
-		assert.equal( effects.step( [], null, 2, () => true, () => 1, [] ).length, 0 );
-		effects.dispose();
 	}
 });

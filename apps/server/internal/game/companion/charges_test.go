@@ -16,26 +16,27 @@ TestStoredCrowCharges
 ================
 */
 func TestStoredCrowCharges(t *testing.T) {
-	p := &domain.CharacterCOS{Codename: "COS_P_RAVEN_040", Level: 90}
+	p := &domain.CharacterCOS{Codename: "COS_P_RAVEN_040", Level: 90, Training: domain.PetTraining{TreeVersion: 2}}
 	s, _ := PetSkill(p, 50)
 	row := BroodRow(domain.PetRowCooldown{}, s, 1, 1000, Modifiers{})
-	if row.Charges != 1 || row.Capacity != 3 || row.RechargeMs != 600000 || row.ReadyAtMs != 601000 {
+	if row.Charges != 1 || row.Capacity != 3 || row.RechargeMs != 1096551 || row.ReadyAtMs != 1097551 {
 		t.Fatal(row)
 	}
 	p.Training.Rows[1] = row
 	StartRow(&p.Training, 1, s, 1, 1000, Modifiers{})
-	if RowReady(&p.Training, 1, 600999) {
+	if RowReady(&p.Training, 1, row.ReadyAtMs-1) {
 		t.Fatal("early recharge")
 	}
-	if !RowReady(&p.Training, 1, 601000) {
+	if !RowReady(&p.Training, 1, row.ReadyAtMs) {
 		t.Fatal("deadline not ready")
 	}
-	row = AdvanceCharges(p.Training.Rows[1], 1801000)
+	row = AdvanceCharges(p.Training.Rows[1], row.ReadyAtMs+2*row.RechargeMs)
 	if row.Charges != 3 || row.ReadyAtMs != 0 {
 		t.Fatal(row)
 	}
-	row = BroodRow(row, s, 10, 1801000, Modifiers{})
-	if row.RechargeMs != 300000 {
+	last, _ := PetSkill(p, 51)
+	row = BroodRow(row, last, 10, 4000000, Modifiers{})
+	if row.RechargeMs != 900000 {
 		t.Fatal(row)
 	}
 	basic, _ := PetSkill(p, 49)

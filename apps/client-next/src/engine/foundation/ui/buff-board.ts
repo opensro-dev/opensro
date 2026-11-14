@@ -237,17 +237,9 @@ export function buffBoard(
 				id: "pet-guidance",
 				path: petSkillIcon( design ),
 				uv: petSkillIconUV( design ),
-				label: `Precision: ${guidance.stacks}/5${
-					guidance.stacks === 5 && guidance.book >= 59 ? " - Skill ready" : ""
-				}`,
-				helpText:
-					`Guiding Feathers\nHit ratio +${guidance.hitPercent}%\n${guidance.stacks}/5 stacks\nCrow hits refresh 10 s duration.\n` +
-					(guidance.book >= 59 ?
-						"At 5 stacks, your next successful damaging skill is empowered and consumes Precision." :
-						""),
-				stack: guidance.stacks,
-				ready: guidance.stacks === 5 && guidance.book >= 59,
-				fraction: guidance.stacks / 5
+				label: "Raven's Refuge",
+				helpText: "Raven's Refuge\nDamage taken -15%\nActive while below the HP threshold.",
+				fraction: 1
 			} );
 		}
 	}

@@ -238,8 +238,7 @@ func ModifiersFor(p *domain.CharacterCOS) Modifiers {
 		m.MagicPct += p.ArcaneMagicPercent
 	}
 	if p.BroodStage != 0 {
-		return Modifiers{GearStats: m.GearStats, AttackPct: m.AttackPct, PhysicalPct: m.PhysicalPct, MagicPct: m.MagicPct,
-			DefensePct: m.DefensePct, CritPct: m.CritPct, AttackSpeedPct: m.AttackSpeedPct}
+		m.LeechPct = 0 // Clones inherit gear blues but remain unhealable.
 	}
 	m.CooldownPct = min(m.CooldownPct, 80)
 	return m
