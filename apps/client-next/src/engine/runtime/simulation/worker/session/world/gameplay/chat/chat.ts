@@ -93,6 +93,7 @@ function decodeChatBroadcast(
 	sender: string;
 	gid: number | undefined;
 	text: string;
+	event?: boolean;
 	links?: NoticeLinks;
 	bodies?: Uint8Array[];
 } | null {
@@ -110,7 +111,9 @@ function decodeChatBroadcast(
 		return at;
 	}
 	const wireChannel = v.getUint8( take( 1 ) ),
-		channel = isServerNoticeChannel( wireChannel ) ? 7 : wireChannel;
+		channel = isServerNoticeChannel( wireChannel ) ? 7 : wireChannel,
+		// A port-only notice channel shown as type 7 (system-notices.ts).
+		event = channel === 7 && wireChannel !== 7 ? { event: true } : {};
 	let sender = "", gid: number | undefined;
 	if ( channel === 1 || channel === 3 ) gid = v.getUint32( take( 4 ), true );
 	else if ( [ 2, 4, 5, 6, 11, STALL_CHAT_CHANNEL ].includes( channel ) ) {
@@ -127,16 +130,16 @@ function decodeChatBroadcast(
 		// Port-only links, decoded leniently: a malformed section is dropped.
 		// The break channel's section is a failed reinforce's item (#3260).
 		const links = decodeNoticeLinks( p, o );
-		return { channel, sender, gid, text, ...(links ? { links } : {}) };
+		return { channel, sender, gid, text, ...event, ...(links ? { links } : {}) };
 	}
 	if ( CHAT_LINK_CHANNELS.includes( wireChannel ) && o < p.length ) {
 		// Port-only item links (chat-item-links.ts), decoded leniently: a
 		// malformed tail is no links and a plain line.
 		const bodies = decodeChatLinkTail( p, o );
-		return { channel, sender, gid, text, ...(bodies?.length ? { bodies } : {}) };
+		return { channel, sender, gid, text, ...event, ...(bodies?.length ? { bodies } : {}) };
 	}
 	if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
-	return { channel, sender, gid, text };
+	return { channel, sender, gid, text, ...event };
 }
 
 /*
@@ -536,7 +539,7 @@ receive
 			if ( frame.opcode !== 0x3667 ) return false;
 			const line = decodeChatBroadcast( p );
 			if ( !line ) return false;
-			const { channel, sender, gid, text, links, bodies } = line;
+			const { channel, sender, gid, text, event, links, bodies } = line;
 			if ( channel === CHAT_GLOBAL_CHANNEL && sender === displayName ) {
 				// Native receipts retain the request's channel. The beta server
 				// sends this authoritative echo first (under the display name -
@@ -576,6 +579,7 @@ receive
 					gid,
 					text,
 					outgoing: false,
+					...(event ? { event } : {}),
 					...notice,
 					...linkedLine( bodies )
 				} );

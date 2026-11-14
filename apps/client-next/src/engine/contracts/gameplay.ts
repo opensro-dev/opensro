@@ -190,6 +190,11 @@ export interface ChatLine {
 	// Port-only: the player and item a drop/plus notice names
 	// (foundation/gameplay/notice-links.ts), linked in the chat log.
 	readonly notice?: { readonly name?: string; readonly item?: InventoryItem; };
+	// Port-only: a channel-7 line that arrived on a port-only event notice
+	// channel (system-notices.ts 0x80-0x83: job kills, drops and plus
+	// results, item breaks, renames). With the Event tab on, these leave
+	// All; a native type-7 server notice (the restart warning) stays.
+	readonly event?: boolean;
 	// Port-only (SRO_CHAT_ITEM_LINKS): the items a player line links, link i
 	// for the i-th marker (foundation/gameplay/chat-item-links.ts); undefined
 	// where a body could not be decoded.

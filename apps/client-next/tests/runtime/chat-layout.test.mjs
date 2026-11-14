@@ -164,8 +164,12 @@ const EVENT_LINES = [
 		channel: 7,
 		name: "",
 		text: "Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl",
-		outgoing: false
-	}
+		outgoing: false,
+		// The drop notice arrives on the port-only 0x81 channel.
+		event: true
+	},
+	// The operator's restart warning, a native type-7 notice.
+	{ channel: 7, name: "", text: "Server restart in two minutes.", outgoing: false }
 ];
 
 const TAB_LINES = [
@@ -229,7 +233,7 @@ test("whisper, GM and type 10 lines show on every native chat tab beside the tab
 	}
 });
 
-test("the Event tab holds channel-7 notices and All skips them", () => {
+test("the Event tab holds channel-7 notices and All skips the event notices", () => {
 	const tabs = chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true } ) );
 	assert.deepEqual(
 		tabs.controls.filter( c => c.id.startsWith( "chat-tab:" ) ).map( c => [ c.id, c.label ] ),
@@ -244,12 +248,14 @@ test("the Event tab holds channel-7 notices and All skips them", () => {
 	const all = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 0 } ) ) );
 	assert.ok( all.some( label => label.includes( "hello all" ) ) );
 	assert.ok( !all.some( label => label.includes( "Seal Of Star" ) ) );
+	assert.ok( all.some( label => label.includes( "Server restart" ) ), "All keeps the restart warning" );
 	const party = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 1 } ) ) );
 	assert.deepEqual( party.filter( label => label.includes( "hello" ) ).length, 1 );
 	assert.ok( !party.some( label => label.includes( "Seal Of Star" ) ) );
 	const event = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 4 } ) ) );
 	assert.ok( event.length >= 1 );
 	assert.ok( event.some( label => label.includes( "Seal Of Star" ) ) );
+	assert.ok( event.some( label => label.includes( "Server restart" ) ) );
 	assert.ok( !event.some( label => label.includes( "hello" ) ) );
 });
 
