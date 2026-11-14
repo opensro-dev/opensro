@@ -7,10 +7,30 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 )
 
-// 594980: avatar records occupy independent storage slots; their TID4 selects
-// the visible socket. Occupied costume sockets refuse replacement.
+// The v1.150 avatar sockets the dress rule names (TID4): an attachment is
+// worn only over a dress, and taking the dress off takes it off too.
+const (
+	avatarDressSocket      = 2
+	avatarAttachmentSocket = 3
+)
+
+/*
+================
+applyAvatarTransfer
+
+594980: avatar records occupy independent storage slots; their TID4 selects
+the visible socket. Occupied costume sockets refuse replacement.
+
+The Devil's Spirit (port-only, not native: SRO_NASRUN, #3456) is socketed
+by its TID3 into a fifth socket, storage slot 4, which no v1.150 avatar may
+take. The storage is always read at all five slots, so a Spirit stored
+while the switch was on survives a move made with it off; only wearing one
+needs the switch, and taking one off never does.
+================
+*/
 func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	rt.deps.Update(c, "avatar-transfer", func() bool {
@@ -21,7 +41,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		if c.AvatarInventory != nil {
 			rows = c.AvatarInventory.Rows
 		}
-		avatars, fault := inventory.NewContainer(invItemsFromRowsWithin(rows, 4), 4)
+		avatars, fault := inventory.NewContainer(invItemsFromRowsWithin(rows, nasrun.StorageSlots), nasrun.StorageSlots)
 		if fault != nil {
 			return false
 		}
@@ -32,10 +52,22 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			source, dest = avatars, player
 		}
 		item, ok := source.At(q.SourceSlot)
-		if !ok || item.TypeFlags&0x7fe != 0x6ac || item.TypeFlags>>11 < 1 || item.TypeFlags>>11 > 4 {
+		if !ok {
 			return false
 		}
+		socket, avatar := nasrun.Socket(item.TypeFlags)
+		if !avatar {
+			return false
+		}
+		spirit := socket == nasrun.SpiritSocket
 		if equip {
+			if spirit && (!rt.NasrunSocket || q.DestSlot != nasrun.SpiritSlot) {
+				return false
+			}
+			// Slot 4 is the Spirit's alone; v1.150's avatars keep 0..3.
+			if !spirit && q.DestSlot >= nasrun.AvatarStorageSlots {
+				return false
+			}
 			if _, occupied := dest.At(q.DestSlot); occupied {
 				return false
 			}
@@ -55,14 +87,15 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		if equip {
 			dress := false
 			for _, worn := range avatars.Items() {
-				if worn.TypeFlags>>11 == item.TypeFlags>>11 {
+				wornSocket, _ := nasrun.Socket(worn.TypeFlags)
+				if wornSocket == socket {
 					return false
 				}
-				if worn.TypeFlags>>11 == 2 {
+				if wornSocket == avatarDressSocket {
 					dress = true
 				}
 			}
-			if item.TypeFlags>>11 == 3 && !dress {
+			if socket == avatarAttachmentSocket && !dress {
 				return false
 			}
 			requirements := equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole)
@@ -79,9 +112,9 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		}
 		var attachment *inventory.Item
 		var attachmentDestination uint8
-		if !equip && item.TypeFlags>>11 == 2 {
+		if !equip && socket == avatarDressSocket {
 			for _, worn := range avatars.Items() {
-				if worn.TypeFlags>>11 != 3 {
+				if wornSocket, _ := nasrun.Socket(worn.TypeFlags); wornSocket != avatarAttachmentSocket {
 					continue
 				}
 				free, ok := player.FirstFreeBagSlot()
@@ -98,7 +131,14 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		}
 
 		nextBag := rowsFromInvItems(player.Items())
-		nextAvatars := &domain.AvatarInventory{Capacity: 4, Rows: rowsFromInvItems(avatars.Items())}
+		// Five slots while the switch is on, or while a Spirit stored with
+		// it on still sits in slot 4: a saved row never lies past its
+		// container's capacity.
+		capacity := int64(nasrun.AvatarStorageSlots)
+		if _, held := avatars.At(nasrun.SpiritSlot); rt.NasrunSocket || held {
+			capacity = nasrun.StorageSlots
+		}
+		nextAvatars := &domain.AvatarInventory{Capacity: capacity, Rows: rowsFromInvItems(avatars.Items())}
 		// The reference server installs or removes the avatar's contributions
 		// and the actor's stats refresh, as for equipment: the
 		// blessed options count only while the avatar is worn. Derived on

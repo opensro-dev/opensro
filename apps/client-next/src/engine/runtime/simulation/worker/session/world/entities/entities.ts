@@ -5,6 +5,7 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 
 ===========================================================================
 */
+import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
 import { petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import { decodePetBondPulse } from "@/engine/foundation/gameplay/damage-feedback";
 import { animationRate, decodeAnimationSpeed } from "@/engine/foundation/animation/animation-rate";
@@ -987,13 +988,14 @@ export function createEntities(
 			const avatarRows = (b.character as
 				| { avatarInventory?: { rows?: { slot: number; refObjId: number; plus: number; }[]; }; }
 				| undefined)?.avatarInventory?.rows ?? [];
-			if ( avatarRows.length > 5 ) throw new Error( "Avatar capacity exceeded" );
+			if ( avatarRows.length > AVATAR_STORAGE_CAPACITY ) throw new Error( "Avatar capacity exceeded" );
 			const seen = new Set<number>();
 			localAvatars = avatarRows.map( row => {
 				const typeFlags = itemRefs.get( row.refObjId );
 				if (
 					!Number.isInteger( row.slot ) || row.slot < 0 || row.slot > 4 || seen.has( row.slot ) ||
-					typeFlags === undefined || !equipmentBand( typeFlags ) || (typeFlags & 0x780) !== 0x680 ||
+					typeFlags === undefined || !equipmentBand( typeFlags ) || !isAvatarItem( typeFlags ) ||
+					!avatarSlotFits( typeFlags, row.slot ) ||
 					!Number.isInteger( row.plus ) || row.plus < 0 || row.plus > 255
 				) throw new Error( "Invalid local avatar" );
 				seen.add( row.slot );

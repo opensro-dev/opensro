@@ -8,6 +8,7 @@ Child owners handle process-specific state while this owner commits item rows.
 
 ===========================================================================
 */
+import { AVATAR_STORAGE_CAPACITY, avatarSlotFits, isAvatarItem } from "@/engine/foundation/gameplay/avatar-socket";
 import {
 	companionItemUseNotice,
 	cosItemUseTail,
@@ -885,9 +886,12 @@ bootstrap
 			const nextAvatars = new Map<number, InventoryItem>();
 			for ( const row of b.avatarItems ?? [] ) {
 				const n = slot( row.slot );
-				if ( n >= 4 || nextAvatars.has( n ) ) throw Error( "Invalid avatar storage slot" );
+				if ( n >= AVATAR_STORAGE_CAPACITY || nextAvatars.has( n ) ) throw Error( "Invalid avatar storage slot" );
 				const item = body( Uint8Array.from( row.body ), 0 );
-				if ( !item || item.refObjId !== row.refObjId || (item.typeFlags & 0x7fe) !== 0x6ac ) {
+				if (
+					!item || item.refObjId !== row.refObjId || !isAvatarItem( item.typeFlags ) ||
+					!avatarSlotFits( item.typeFlags, n )
+				) {
 					throw Error( "Invalid avatar item" );
 				}
 				nextAvatars.set( n, { ...item, slot: n } );
@@ -1476,9 +1480,10 @@ avatarMove
 			slot( destination );
 			const from = equip ? slots : avatars, to = equip ? avatars : slots, item = from.get( source );
 			if (
-				!item || (item.typeFlags & 0x7fe) !== 0x6ac || (equip && to.has( destination )) || (equip ?
-					(source < (equipmentSlotCount ?? 13) || source >= (inventorySlotCount ?? 0) || destination >= 4) :
-					(source >= 4 || destination < (equipmentSlotCount ?? 13) ||
+				!item || !isAvatarItem( item.typeFlags ) || (equip && to.has( destination )) || (equip ?
+					(source < (equipmentSlotCount ?? 13) || source >= (inventorySlotCount ?? 0) ||
+						!avatarSlotFits( item.typeFlags, destination )) :
+					(source >= AVATAR_STORAGE_CAPACITY || destination < (equipmentSlotCount ?? 13) ||
 						destination >= (inventorySlotCount ?? 0)))
 			) throw Error( "Invalid avatar transfer" );
 			const movementType = equip ? 0x24 : 0x23,
@@ -2159,11 +2164,11 @@ receive
 						to = equip ? nextAvatar : nextBag,
 						item = from.get( source );
 					if (
-						quantity !== 1 || !item || (item.typeFlags & 0x7fe) !== 0x6ac || to.has( destination ) ||
+						quantity !== 1 || !item || !isAvatarItem( item.typeFlags ) || to.has( destination ) ||
 						(equip ?
 							(source < (equipmentSlotCount ?? 13) || source >= (inventorySlotCount ?? 0) ||
-								destination >= 4) :
-							(source >= 4 || destination < (equipmentSlotCount ?? 13) ||
+								!avatarSlotFits( item.typeFlags, destination )) :
+							(source >= AVATAR_STORAGE_CAPACITY || destination < (equipmentSlotCount ?? 13) ||
 								destination >= (inventorySlotCount ?? 0)))
 					) throw Error( "Avatar transfer occupancy mismatch" );
 					from.delete( source );

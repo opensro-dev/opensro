@@ -69,7 +69,8 @@ test("the editor draws the label where the marker sits", () => {
 
 test("slot ids resolve to the item and the link the server reads", () => {
 	const blade = { slot: 14, name: "Blade", plus: 7, typeFlags: 0 };
-	const cape = { slot: 1, name: "Cape", plus: 0, typeFlags: 2 << 11 };
+	// An avatar dress: type 3/1/13, TID4 2 (avatar-socket.ts).
+	const cape = { slot: 1, name: "Cape", plus: 0, typeFlags: 0x6ac | 2 << 11 };
 	const sources = {
 		inventory: [ blade ],
 		avatarInventory: [ cape ],
