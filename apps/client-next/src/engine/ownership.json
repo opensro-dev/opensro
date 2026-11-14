@@ -236,6 +236,8 @@
     "src/engine/runtime/renderer/device/thunder.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/timing.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/ui/frame/admission.ts": "src/engine/runtime/ui/frame/frame.ts",
+    "src/engine/runtime/ui/frame/draw.ts": "src/engine/runtime/ui/frame/frame.ts",
+    "src/engine/runtime/ui/frame/item-slot.ts": "src/engine/runtime/ui/frame/frame.ts",
     "src/engine/runtime/ui/hud/region-banner.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/progression-bars.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/renderer/device/character-shadows.ts": "src/engine/runtime/renderer/device/device.ts",

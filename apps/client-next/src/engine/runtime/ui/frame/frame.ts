@@ -37,6 +37,17 @@ import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
+import { image, rect } from "./draw";
+
+export { image, rect } from "./draw";
+export {
+	equipmentOverlay,
+	ITEM_SLOT_PREFIXES,
+	itemCount,
+	itemEffects,
+	nativeItem,
+	type ItemSlotContext
+} from "./item-slot";
 
 /*
 ================
@@ -65,25 +76,6 @@ export function windowOrigin(
 			[ r[0] + 10, r[1], r[2] - 21, 34 ]
 	} );
 	return r;
-}
-
-/*
-================
-rect
-================
-*/
-export function rect(
-	frame: UiFrame,
-	{ r, color, textureId = "", uv = [ 0, 0, 1, 1 ], clip = frame.full }: {
-		r: UiRect;
-		color: UiQuad["color"];
-		textureId?: string;
-		uv?: UiRect;
-		clip?: UiRect;
-	}
-) {
-	const quads = frame.quads;
-	if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
 }
 
 /*
@@ -122,26 +114,6 @@ export function buffViewer(
 		} );
 		blocks.push( r );
 	}
-}
-
-/*
-================
-image
-================
-*/
-export function image(
-	frame: UiFrame,
-	{ r, path, color = frame.white, uv = [ 0, 0, 1, 1 ], clip = frame.full }: {
-		r: UiRect;
-		path: string;
-		color?: UiQuad["color"];
-		uv?: UiRect;
-		clip?: UiRect;
-	}
-) {
-	const paths = frame.paths, resources = frame.resources;
-	paths.push( path );
-	if ( resources.has( path ) ) rect( frame, { r: r, color: color, textureId: path, uv: uv, clip: clip } );
 }
 
 /*

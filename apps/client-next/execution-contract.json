@@ -2,6 +2,31 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/frame/draw.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": ["has"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/item-slot.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": ["has"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/item-slot.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["warningShown", "markEffect", "carryFree", "touchInspect"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/frame/draw.ts",
+			"functions": ["rect", "image"]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/frame/item-slot.ts",
+			"functions": ["equipmentOverlay", "itemEffects", "nativeItem", "itemCount"]
+		},
+		{
 			"consumer": "src/engine/runtime/ui/frame/admission.ts",
 			"provider": "src/engine/runtime/ui/resources/resources.ts",
 			"functions": ["has", "absent"]
