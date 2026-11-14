@@ -257,8 +257,7 @@ func (o *cosAbnormalOwner) commit() {
 			if pet.Mounted {
 				// The corpse and its cargo stay where the rider was, not
 				// at the vehicle's stale parked pose ("Trader goods").
-				o.rt.handRiddenPoseToVehicle(o.division, o.c, pet, o.now)
-				pet.Mounted = false
+				o.rt.unmountCompanion(o.division, o.c, pet, o.now)
 				o.public = append(o.public, wire.Frame{Opcode: wire.OpCosRideState,
 					Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(o.c), false, pet.GID)})
 				o.public = append(o.public, o.rt.refreshMovementEffects(o.division, o.c, o.now)...)

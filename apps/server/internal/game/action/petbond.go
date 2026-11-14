@@ -196,7 +196,7 @@ Owner death is allowed here so a living bear can revive its own owner.
 ================
 */
 func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.Character, *domain.CharacterCOS, companion.SkillDef, uint8, bool) {
-	if !rt.AttackPetExpansion || state == nil || !state.ready || state.follower == nil {
+	if !rt.AttackPetExpansion || state == nil || !state.ready || state.mover.AnyFollower() == nil {
 		return nil, nil, companion.SkillDef{}, 0, false
 	}
 	// A refusal the door-read facts already decide never reaches the

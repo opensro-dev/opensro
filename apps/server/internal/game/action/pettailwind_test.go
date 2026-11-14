@@ -199,7 +199,7 @@ func TestTailwindSafeZoneOwnerAndParty(t *testing.T) {
 			rt, clock, c, _, key := tailwindFixture(t, tier)
 			c.World.Spawn.RegionID = testInt64(23687)
 			rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
-			rt.petSessionFor(testDivision, c.Name, key.gid).follower = simulation.NewPetFollower(key.gid, rt.LiveSpawnFor(testDivision, c))
+			rt.petSessionFor(testDivision, c.Name, key.gid).mover.FollowFrom(key.gid, rt.LiveSpawnFor(testDivision, c))
 			member := nearbyCharacter(rt, c, 21, "town-party", 50)
 			memberGID := enterworld.ObjectIDForCharacter(member)
 			rt.petSessions[petOwnerKey{division: testDivision, name: member.Name}] = &petSession{character: member, ready: true}

@@ -60,18 +60,18 @@ never sit in this port, so the sitting byte (4) simply joins standing
 motion other than 0 and 4.
 ================
 */
-func petNaturalRecoveryMotion(petState *petSession, rider *simulation.WorldState, nowMs int64) uint8 {
+func petNaturalRecoveryMotion(petState *petSession, gid uint32, rider *simulation.WorldState, nowMs int64) uint8 {
 	if rider != nil {
 		return rider.MotionStateAt(nowMs)
 	}
 	if petState == nil {
 		return simulation.MotionNone
 	}
-	if petState.follower != nil {
-		world, _ := petState.follower.Presentation()
-		return world.MotionStateAt(nowMs)
+	world, ok := petState.mover.World(gid)
+	if !ok {
+		return simulation.MotionNone
 	}
-	return petState.transportWorld.MotionStateAt(nowMs)
+	return world.MotionStateAt(nowMs)
 }
 
 /*
@@ -120,7 +120,7 @@ func (rt *Runtime) advancePetNaturalRecoverySession(key petOwnerKey, petState *p
 			})
 			rider = &world
 		}
-		if motion := petNaturalRecoveryMotion(petState, rider, nowMs); motion != simulation.MotionNone &&
+		if motion := petNaturalRecoveryMotion(petState, key.gid, rider, nowMs); motion != simulation.MotionNone &&
 			motion != simulation.MotionSitting {
 			return false
 		}

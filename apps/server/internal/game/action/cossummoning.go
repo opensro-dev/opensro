@@ -192,7 +192,10 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		pet.CurrentHP = min(pet.CurrentHP, ref.MaxHP)
 	}
 	pet.GID, pet.InventorySlot = gid, use.request.Slot
-	pet.Summoned, pet.Mounted = true, false
+	// A fresh summon is never ridden: a stale persisted ride clears
+	// through the ride owner like any other.
+	rt.unmountCompanion(use.division, use.character, pet, use.nowMs)
+	pet.Summoned = true
 	pet.StateFlags |= cosStateSummoned
 	pet.NativeBodyStatus = domain.InitialCOSBodyStatus(c.NativeBodyStatus)
 	pet.RefreshRentalTimes(use.nowMs / 1000)

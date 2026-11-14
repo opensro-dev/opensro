@@ -316,7 +316,7 @@ func TestPetGearProcsUseCommittedCombatHooks(t *testing.T) {
 			wearProc(t, c, "ProcFireTaken", 9)
 			state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
 			ref, _ := rt.cosReference(c.ActiveCOS)
-			at := state.follower.Position(clock.NowMs())
+			at := state.mover.AnyFollower().Position(clock.NowMs())
 			skill := rt.deps.SkillData().(staticSkillSource)[2]
 			if kind == "magic" {
 				skill.Attack.Flags = 8

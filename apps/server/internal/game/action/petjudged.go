@@ -92,7 +92,7 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	if ref.TidWord>>11 == domain.MercenaryBand {
 		return nil, false
 	}
-	if state.follower == nil || state.follower.GID() != key.gid || state.refObjID != pet.RefObjID {
+	if state.mover.AnyFollower() == nil || state.mover.AnyFollower().GID() != key.gid || state.refObjID != pet.RefObjID {
 		return nil, false
 	}
 	ownerWorld := &state.judgedOwnerWorld
@@ -101,15 +101,15 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	}
 	// Relocation and summons build new followers; every tick installs the one
 	// planner they all route with.
-	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
+	state.mover.AnyFollower().SetRoutePlanner(rt.PlanCompanionRoute)
 	if pet.BroodStage == 1 {
 		rt.cancelPetCombat(key, state, nowMs)
-		return state.follower.Stop(nowMs), true
+		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	if rt.TransportFollowTether && isVehicleCOS(ref.TidWord) {
 		// Port-only (transportfollow.go): a following transport holds
 		// its trader as a parked one does, from where it walks now.
-		state.tether = &simulation.Tether{Anchor: state.follower.Position(nowMs),
+		state.tether = &simulation.Tether{Anchor: state.mover.AnyFollower().Position(nowMs),
 			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
 	}
 	// The stuck answer is the session's own, built once: refresh the
@@ -118,7 +118,7 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	state.judgedStuckNowMs, state.judgedStuckTidWord = nowMs, ref.TidWord
 	if state.judgedStuckAnswer == nil {
 		state.judgedStuckAnswer = func() []simulation.Frame {
-			if state.follower == nil || !state.follower.StuckPending() {
+			if state.mover.AnyFollower() == nil || !state.mover.AnyFollower().StuckPending() {
 				return nil
 			}
 			snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, nil)
@@ -136,20 +136,20 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	if state.displacement != nil {
 		state.roar = nil
 		if nowMs < state.displacement.untilMs {
-			return state.follower.Stop(nowMs), true
+			return state.mover.AnyFollower().Stop(nowMs), true
 		}
 		state.displacement = nil
 	}
 	if rt.cosMovementBlockedKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, key.gid)) {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
-		return state.follower.Stop(nowMs), true
+		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	block := rt.cosAbnormalKeyed(state.judgedCosAbnormalKey(key.division, state.character.Name, pet.GID))
 	// The step keeps the native run: natively it is compared with the authored
 	// speed. Only the follower moves at the paced one.
 	walk, run := cosParameter(ref, pet, block, movementWalkParameter), cosParameter(ref, pet, block, movementRunParameter)
-	state.follower.SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
+	state.mover.AnyFollower().SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
 	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	if rt.ConstrainMovement != nil {
 		if state.judgedConstraint == nil {
@@ -160,7 +160,7 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 		constraint = state.judgedConstraint
 	}
 	if nowMs < state.wolf.howlHoldUntil {
-		return state.follower.Stop(nowMs), true
+		return state.mover.AnyFollower().Stop(nowMs), true
 	}
 	// A follower whose region the owner's live region cannot be walked
 	// to relocates inside the formation step, and the step publishes
@@ -168,12 +168,12 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	// body status, life, level). The facts carry none of those, so the
 	// tick abstains on exactly the gate the step relocates on and the
 	// copy publishes the respawn as before.
-	if !monster.FollowLocationCompatible(state.follower.Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
+	if !monster.FollowLocationCompatible(state.mover.AnyFollower().Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
 		return nil, false
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
 		*following = true
 		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: state.character, ownerWorld: ownerWorld, pet: pet, ref: ref, run: run, constraint: constraint, nowMs: nowMs}), true
 	}
-	return state.follower.Advance(ownerWorld.LiveSpawnAt(nowMs), float64(rt.cosPacedRun(ref, run)), nowMs, constraint), true
+	return state.mover.AnyFollower().Advance(ownerWorld.LiveSpawnAt(nowMs), float64(rt.cosPacedRun(ref, run)), nowMs, constraint), true
 }

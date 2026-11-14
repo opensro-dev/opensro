@@ -474,7 +474,8 @@ func TestFlagWarCampReentryKeepsLiveCompanionsAndRetiresCorpses(t *testing.T) {
 				c.ActiveCOS.CurrentHP = 0
 			}
 			key := petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: gid}
-			session := &petSession{character: c, ready: true, follower: simulation.NewPetFollower(gid, f.world(c).Spawn)}
+			session := &petSession{character: c, ready: true}
+			session.mover.FollowFrom(gid, f.world(c).Spawn)
 			f.rig.rt.petSessions = map[petOwnerKey]*petSession{key: session}
 			previous := *session
 			deps := f.rig.rt.deps
@@ -498,7 +499,8 @@ func TestFlagWarCampReentryKeepsLiveCompanionsAndRetiresCorpses(t *testing.T) {
 			}
 			if alive {
 				want := f.rig.rt.companionAdmissionSpawn(c.ActiveCOS, flagWarTeamSpawns[0])
-				if !c.ActiveCOS.Summoned || session.transportWorld.Spawn != want || session.generation != previous.generation+1 {
+				at, placed := session.mover.Pose(gid, 0)
+				if !c.ActiveCOS.Summoned || !placed || at != want || session.generation != previous.generation+1 {
 					t.Fatalf("living companion did not follow its camp admission: %+v", session)
 				}
 			} else if c.CompanionByGID(gid) != nil || c.ActiveCOS.Summoned {

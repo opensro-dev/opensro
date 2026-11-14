@@ -43,10 +43,10 @@ func tickUntilWarp(rt *Runtime, key petOwnerKey, state *petSession, owner simula
 	for i := 0; i < ticks; i++ {
 		now := int64(2_000_000 + i*100)
 		frames = append(frames, rt.advancePet(key, now)...)
-		if state.follower == nil {
+		if state.mover.AnyFollower() == nil {
 			continue
 		}
-		if at := state.follower.Position(now); at.RegionID == owner.RegionID && at.X == owner.X && at.Z == owner.Z {
+		if at := state.mover.AnyFollower().Position(now); at.RegionID == owner.RegionID && at.X == owner.X && at.Z == owner.Z {
 			return frames, i
 		}
 	}
@@ -81,7 +81,7 @@ func TestWalledInPickupPetWarpsWhileCollecting(t *testing.T) {
 	rt, key, state := strandedPet(t, 4, stuckOwnerAt)
 	c := state.character
 	c.ActiveCOS.Container = &domain.COSContainer{Capacity: 2}
-	pose := state.follower.Position(2_000_000)
+	pose := state.mover.AnyFollower().Position(2_000_000)
 	item := rt.Ground.Add(testDivision, grounditem.Item{GoldAmount: 50, Position: grounditem.Point{
 		RegionID: pose.RegionID, X: float32(pose.X) + 100, Z: float32(pose.Z)}})
 	body := wire.NewWriter(9).U32(key.gid).U8(wire.CosCommandPickupTag).U32(item.Gid).Payload()
@@ -128,9 +128,9 @@ func TestStuckGateByCOSKind(t *testing.T) {
 	for _, band := range []uint16{3, 4, 5, 6} {
 		rt, key, state := strandedPet(t, band, stuckOwnerAt)
 		state.combat = nil
-		stallFollower(state.follower, 10, 2_000_000)
+		stallFollower(state.mover.AnyFollower(), 10, 2_000_000)
 		frames := rt.answerPetStuck(key, state, state.character.Snapshot(), state.character.ActiveCOS, band<<11|0x1c6, 2_001_000)
-		at := state.follower.Position(2_001_000)
+		at := state.mover.AnyFollower().Position(2_001_000)
 		warped := at.RegionID == stuckOwnerAt.RegionID && at.X == stuckOwnerAt.X
 		if want := band != 6; warped != want {
 			t.Fatalf("band %d: warped %v, want %v (at %+v, frames %d)", band, warped, want, at, len(frames))
@@ -152,16 +152,16 @@ Nine stalled stops raise nothing; the count survives until a state change
 func TestStuckNeedsTenStalledStopsAndClearsOnStateChange(t *testing.T) {
 	rt, key, state := strandedWolf(t, stuckOwnerAt)
 	snapshot, pet, tid := state.character.Snapshot(), state.character.ActiveCOS, uint16(3<<11|0x1c6)
-	stallFollower(state.follower, 9, 2_000_000)
+	stallFollower(state.mover.AnyFollower(), 9, 2_000_000)
 	if frames := rt.answerPetStuck(key, state, snapshot, pet, tid, 2_001_000); len(frames) != 0 || state.relocatedAtMs != 0 {
 		t.Fatal("nine stalled stops warped the pet")
 	}
 	resetPetStuck(state)
-	stallFollower(state.follower, 9, 2_002_000)
+	stallFollower(state.mover.AnyFollower(), 9, 2_002_000)
 	if rt.answerPetStuck(key, state, snapshot, pet, tid, 2_003_000); state.relocatedAtMs != 0 {
 		t.Fatal("the count survived a state change")
 	}
-	stallFollower(state.follower, 1, 2_003_000)
+	stallFollower(state.mover.AnyFollower(), 1, 2_003_000)
 	if rt.answerPetStuck(key, state, snapshot, pet, tid, 2_004_000); state.relocatedAtMs != 2_004_000 {
 		t.Fatal("the tenth stalled stop after the reset did not warp the pet")
 	}
@@ -187,8 +187,8 @@ func TestHorsesAndTransportsNeverStuckWarp(t *testing.T) {
 		for i := 0; i < 50; i++ {
 			rt.advancePet(key, int64(2_000_000+i*100))
 		}
-		if state.relocatedAtMs != 0 || state.follower != nil {
-			t.Fatalf("band %d: relocated at %d, follower %v", band, state.relocatedAtMs, state.follower != nil)
+		if state.relocatedAtMs != 0 || state.mover.AnyFollower() != nil {
+			t.Fatalf("band %d: relocated at %d, follower %v", band, state.relocatedAtMs, state.mover.AnyFollower() != nil)
 		}
 	}
 }
@@ -204,7 +204,7 @@ mode the pet stays in BATTLE where it is.
 func TestPetInBattleKeepsFighting(t *testing.T) {
 	rt, key, state := strandedWolf(t, stuckOwnerAt)
 	state.combat = &petCombatIntent{target: 0xdead, nextAttackMs: 1 << 62}
-	state.follower.ResetStuck()
+	state.mover.AnyFollower().ResetStuck()
 	for i := 0; i < 30; i++ {
 		rt.answerPetStuck(key, state, state.character.Snapshot(), state.character.ActiveCOS, 3<<11|0x1c6, int64(2_000_000+i*100))
 	}
@@ -315,11 +315,11 @@ func soakPetPair(t *testing.T, rt *Runtime, c *enterworld.Character, pets []*pet
 		rt.Worlds.Update(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(c) },
 			func(w *simulation.WorldState) { w.Spawn, w.MoveSegment = owner, nil })
 		for p, state := range pets {
-			rt.advancePet(petOwnerKey{division: testDivision, name: lowerName(c), gid: state.transportCOS.GID}, now)
+			rt.advancePet(petOwnerKey{division: testDivision, name: lowerName(c), gid: state.boundCOS.GID}, now)
 			if state.relocatedAtMs != 0 {
 				t.Fatalf("pet %d was warped on tick %d (owner %+v)", p, i, owner)
 			}
-			if state.follower != nil && simulation.WorldDistance2D(state.follower.Position(now), owner) <= 2*simulation.PetFollowDistance {
+			if state.mover.AnyFollower() != nil && simulation.WorldDistance2D(state.mover.AnyFollower().Position(now), owner) <= 2*simulation.PetFollowDistance {
 				near[p]++
 			}
 		}

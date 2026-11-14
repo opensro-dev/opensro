@@ -158,15 +158,15 @@ TestPetNaturalRecoveryMotionGate
 func TestPetNaturalRecoveryMotionGate(t *testing.T) {
 	rt, _, pet, key := petRecoveryRuntime(t)
 	state := rt.petSessions[key]
-	from := state.follower.Position(1_002_000)
+	from := state.mover.AnyFollower().Position(1_002_000)
 	goal := simulation.Spawn{RegionID: from.RegionID, X: from.X + 500, Z: from.Z}
-	state.follower.Advance(goal, 80, 1_002_000, func(_, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+	state.mover.AnyFollower().Advance(goal, 80, 1_002_000, func(_, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
 		return to, nil
 	})
 	if frames := rt.advancePetNaturalRecovery(key, 1_004_000); len(frames) != 0 || pet.CurrentHP != 100 {
 		t.Fatalf("moving pet recovered: %d, %v", pet.CurrentHP, frames)
 	}
-	state.follower.Stop(1_004_500)
+	state.mover.AnyFollower().Stop(1_004_500)
 	rt.advancePetNaturalRecovery(key, 1_008_000)
 	if pet.CurrentHP != 116 {
 		t.Fatalf("standing pet must recover, at %d", pet.CurrentHP)

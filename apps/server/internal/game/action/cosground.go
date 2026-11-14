@@ -81,7 +81,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	rt.petMu.Lock()
 	session := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: q.CosGID}]
 	rt.petMu.Unlock()
-	if session == nil || session.character != c || session.follower == nil || session.follower.GID() != q.CosGID {
+	if session == nil || session.character != c || session.mover.AnyFollower() == nil || session.mover.AnyFollower().GID() != q.CosGID {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 
@@ -92,7 +92,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, found := rt.characterGround(division, c, q.GroundGID); found && item.ArenaPowerup != 0 {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	at := session.follower.Position(now.UnixMilli())
+	at := session.mover.AnyFollower().Position(now.UnixMilli())
 	var sharedOwner uint32
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID

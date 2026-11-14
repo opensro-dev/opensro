@@ -64,7 +64,7 @@ func TestMercenarySelectionDistanceBoundaries(t *testing.T) {
 				}, func(w *simulation.WorldState) { w.Spawn, w.SpawnSet = pose, true })
 			}
 			state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
-			state.follower = simulation.NewPetFollower(owner.ActiveCOS.GID, at)
+			state.mover.FollowFrom(owner.ActiveCOS.GID, at)
 			rt.acquireMercenaryTarget(petCombatStep{
 				key:   petOwnerKey{division: testDivision, name: owner.Name, gid: owner.ActiveCOS.GID},
 				state: state, snapshot: owner, pet: owner.ActiveCOS, ref: ref, nowMs: clock.NowMs(),
@@ -94,7 +94,7 @@ func TestMercenaryAcquiresMonsterAtSightLimit(t *testing.T) {
 		state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
 		at := rt.monsterSpawn(testDivision, target.Gid, clock.NowMs())
 		at.X -= distance
-		state.follower = simulation.NewPetFollower(owner.ActiveCOS.GID, at)
+		state.mover.FollowFrom(owner.ActiveCOS.GID, at)
 		rt.acquireMercenaryTarget(petCombatStep{
 			key:   petOwnerKey{division: testDivision, name: owner.Name, gid: owner.ActiveCOS.GID},
 			state: state, snapshot: owner, pet: owner.ActiveCOS, ref: ref, nowMs: clock.NowMs(),

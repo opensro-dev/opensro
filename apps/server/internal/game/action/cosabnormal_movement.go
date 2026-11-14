@@ -51,57 +51,6 @@ func (rt *Runtime) companionLiveSpawn(division string, character *enterworld.Cha
 
 /*
 ================
-handRiddenPoseToVehicle
-
-A rider leaving its vehicle hands the vehicle the pose they shared.
-While mounted the vehicle moves in the rider's world and its own parked
-pose (transportWorld) keeps the summon spot or the last dismount; the
-voluntary dismount re-anchors it (changeCosRide), and so must every
-other unmount, before Mounted clears, or the next reader - the death's
-cargo scatter first of all - finds the vehicle back where it was
-parked. Call it with pet still Mounted; a pet not mounted, or with no
-transport session, keeps its own pose.
-================
-*/
-func (rt *Runtime) handRiddenPoseToVehicle(division string, character *enterworld.Character, pet *enterworld.CharacterCOS, now int64) {
-	if pet == nil || !pet.Mounted {
-		return
-	}
-	pose := rt.liveSpawn(simulation.WorldKey(division, character.Name), character, now)
-	rt.petMu.Lock()
-	defer rt.petMu.Unlock()
-	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
-	if state == nil || state.transportCOS == nil || state.transportCOS.GID != pet.GID {
-		return
-	}
-	state.transportWorld = simulation.WorldState{Spawn: pose}
-}
-
-/*
-================
-dropFollowerInPlace
-
-The follower-side twin of handRiddenPoseToVehicle. A following transport
-(port-only, transportfollow.go) is posed by its follower while the
-parked anchor keeps the dismount spot; when the tick drops the follower
-(the trader died, the follow rule no longer applies, the companion left
-the record) the transport stands where the follower stood. Every
-follower drop that is not a re-anchor goes through here; the caller
-owns state (the pet tick, or the division lock).
-================
-*/
-func dropFollowerInPlace(state *petSession, nowMs int64) {
-	if state.follower == nil {
-		return
-	}
-	if state.transportCOS != nil && state.transportCOS.GID == state.follower.GID() {
-		state.transportWorld = simulation.WorldState{Spawn: state.follower.Position(nowMs)}
-	}
-	state.follower = nil
-}
-
-/*
-================
 companionOwnPose
 
 The companion's own movement owner, read under petMu. The unlock is
@@ -116,13 +65,7 @@ func (rt *Runtime) companionOwnPose(division string, character *enterworld.Chara
 	if state == nil || pet.Mounted {
 		return simulation.Spawn{}, false
 	}
-	if state.follower != nil && state.follower.GID() == pet.GID {
-		return state.follower.Position(now), true
-	}
-	if state.transportCOS != nil && state.transportCOS.GID == pet.GID {
-		return state.transportWorld.LiveSpawnAt(now), true
-	}
-	return simulation.Spawn{}, false
+	return state.mover.Pose(pet.GID, now)
 }
 
 /*
@@ -218,11 +161,11 @@ func (rt *Runtime) stopCompanionMovement(division string, character *enterworld.
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
-	if state == nil || state.follower == nil || state.follower.GID() != pet.GID {
+	if state == nil || state.mover.AnyFollower() == nil || state.mover.AnyFollower().GID() != pet.GID {
 		return nil
 	}
 	var frames []wire.Frame
-	for _, frame := range state.follower.Stop(now) {
+	for _, frame := range state.mover.AnyFollower().Stop(now) {
 		frames = append(frames, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 	return frames
@@ -261,7 +204,7 @@ func (rt *Runtime) setPetFollowerMovementSpeeds(division, ownerName string, petG
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(ownerName), gid: petGID}]
-	if state != nil && state.follower != nil && state.follower.GID() == petGID {
-		state.follower.SetMovementSpeeds(walk, run, now)
+	if state != nil && state.mover.AnyFollower() != nil && state.mover.AnyFollower().GID() == petGID {
+		state.mover.AnyFollower().SetMovementSpeeds(walk, run, now)
 	}
 }

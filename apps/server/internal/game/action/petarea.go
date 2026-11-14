@@ -38,7 +38,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 	if skill.ActionArea.Shape == 0 || skill.ActionArea.MaxTargets <= 1 {
 		return nil
 	}
-	from := step.state.follower.Position(step.nowMs)
+	from := step.state.mover.AnyFollower().Position(step.nowMs)
 	center, reach := primary.at, float64(skill.ActionArea.Radius)
 	nearest := skill.ActionArea.Shape == 6
 	if skill.ActionArea.Shape == 1 {
@@ -69,7 +69,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 			return
 		}
 		if (penguin || step.trained != nil && step.trained.rend) && rt.LineOfSight != nil {
-			world, _ := step.state.follower.Presentation()
+			world, _ := step.state.mover.AnyFollower().Presentation()
 			if !rt.LineOfSight(from, world.LiveOwnerAt(step.nowMs), target.at) {
 				return
 			}
@@ -209,7 +209,7 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 	} else {
 		rt.queueSkillFinalize(step.key.division, bracket, step.pet.GID, step.nowMs, wire.SkillCastReleaseFrame(token, first.strike.gid))
 	}
-	from := step.state.follower.Position(step.nowMs)
+	from := step.state.mover.AnyFollower().Position(step.nowMs)
 	closeAt := step.nowMs + max(int64(lifecycle), projectileFlightMs(from, primary.at, skill.ProjectileSpeed)+1)
 	rt.queueSkillFinalize(step.key.division, bracket, step.pet.GID, closeAt, wire.SkillCastFinalizeFrame(token))
 	public := []wire.Frame{frame}

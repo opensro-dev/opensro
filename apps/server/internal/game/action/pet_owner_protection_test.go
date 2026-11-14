@@ -44,7 +44,7 @@ func TestCompanionOwnerProtectionRetiresPreparedPetAttack(t *testing.T) {
 			gid := owner.ActiveCOS.GID
 			state := rt.petSessionFor(testDivision, owner.Name, gid)
 			at := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
-			state.follower = simulation.NewPetFollower(gid, at)
+			state.mover.FollowFrom(gid, at)
 			// Seed an admitted AI target: this fixture owns ongoing validation,
 			// including targets supplied by acquisition rather than a command.
 			state.combat = &petCombatIntent{target: pet.GID, nextAttackMs: clock.NowMs()}

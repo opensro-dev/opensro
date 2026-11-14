@@ -254,7 +254,7 @@ func preparedCrowTrace(t *testing.T, copyKind int) string {
 	// at sword reach instead of thirty metres).
 	c.World.Spawn.RegionID = testInt64(0x62a6)
 	rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
-	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).follower = simulation.NewPetFollower(c.ActiveCOS.GID, rt.LiveSpawnFor(testDivision, c))
+	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).mover.FollowFrom(c.ActiveCOS.GID, rt.LiveSpawnFor(testDivision, c))
 	lease, ok := rt.casterPopulation(testDivision, c)
 	if !ok {
 		t.Fatal("no caster population")

@@ -150,7 +150,7 @@ func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Cha
 	// Port-only, not native: a loaded transport's goods stay in the world.
 	public = rt.dropRiddenCargoInDoor(division, c, now)
 	gid := ride.GID
-	ride.Mounted = false
+	rt.unmountCompanion(division, c, ride, now)
 	ride.Summoned = false
 	ride.StateFlags &^= cosStateSummoned
 	public = append(public, wire.Frame{Opcode: wire.OpCosRideState,
@@ -214,7 +214,7 @@ func (rt *Runtime) retireCompanionCorpsesVia(division string, c *enterworld.Char
 			}
 			pet.Summoned = false
 			pet.StateFlags &^= cosStateSummoned
-			pet.Mounted = false
+			rt.unmountCompanion(division, c, pet, rt.Now().UnixMilli())
 			corpses = append(corpses, pet)
 		}
 		return len(corpses) > 0
@@ -269,8 +269,8 @@ func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gi
 			frames = append(frames, pending.Frames...)
 		}
 		state.satiety = companion.SatietyClock{}
-		state.follower = nil
-		state.transportCOS = nil
+		state.mover.Release()
+		state.boundCOS = nil
 		state.public = nil
 		state.generation++
 	}
