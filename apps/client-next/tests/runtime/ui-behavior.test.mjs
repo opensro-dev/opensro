@@ -6945,6 +6945,53 @@ test("Escape closes the stall network window instead of opening the System menu"
 	}
 });
 
+test("Escape leaves or closes the stall window instead of opening the System menu", () => {
+	for ( const [phase, owner, kind] of [ [ "visitor", 2, "stall-leave" ], [ "owner", 1, "stall-close" ] ] ) {
+		const commands = [], f = uiFixture( c => commands.push( c.command ) );
+		try {
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase, owner, open: true }
+			};
+			for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, 1000 + i );
+			f.ui.event( { kind: "key", code: "Escape" } );
+			assert.deepEqual(
+				commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" ),
+				[ { kind } ],
+				`a ${phase}'s Escape does what the stall's close control does`
+			);
+			assert.notEqual( f.ui.stats().panel, "System", "and does not open the System menu over it" );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
+test("Escape closes a window beside the stall before it closes the stall", () => {
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			return scene;
+		};
+		const stallCommands = () => commands.filter( c => c.kind === "stall-leave" || c.kind === "stall-close" );
+		f.ui.event( { kind: "activate", id: "open-window:Guild" } );
+		draw();
+		f.state.gameplay = { ...f.state.gameplay, stall: { ...emptyStall(), phase: "owner", owner: 1, open: true } };
+		draw();
+		assert.ok( scene.controls.find( row => row.id === "close-window:Guild" ), "Guild stays open beside the stall" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		draw();
+		assert.deepEqual( stallCommands(), [], "the first Escape closes Guild, not the owner's stall" );
+		assert.equal( !!scene.controls.find( row => row.id === "close-window:Guild" ), false, "Guild closed" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		assert.deepEqual( stallCommands(), [ { kind: "stall-close" } ], "the next Escape closes the stall" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a stall beside a separate window keeps that window open", () => {
 	const f = uiFixture();
 	try {

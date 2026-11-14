@@ -9187,6 +9187,19 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
+					// The stall window (CIFStall) is game state too: Escape
+					// did nothing but open the System menu, so a player could
+					// not leave a stall from the keyboard. A panel drawn beside
+					// it (Inventory, or a separate window the stall leaves open) is
+					// the window Escape closes first, as the topmost one; then
+					// the stall's shared close sends what its close control
+					// sends: leave for a visitor, close for the owner.
+					const stallPhase = view?.gameplay?.stall?.phase;
+					if ( !panel && (stallPhase === "owner" || stallPhase === "visitor") ) {
+						activate( stallPhase === "owner" ? "stall-close" : "stall-leave" );
+						dirty = true;
+						return;
+					}
 					confirmDrop = "";
 					closeServer();
 					confirmAbandon = false;
