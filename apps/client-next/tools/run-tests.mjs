@@ -233,7 +233,12 @@ function writeKeyed( file, body ) {
 		fs.writeFileSync( temporary, JSON.stringify( body ) );
 		fs.renameSync( temporary, file );
 	} catch ( error ) {
-		fs.rmSync( temporary, { force: true } );
+		try {
+			fs.rmSync( temporary, { force: true } );
+		} catch {
+			// force covers only ENOENT: Linux answers ENOTDIR when the cache
+			// folder is a file, and then there is no temporary to remove.
+		}
 		process.stdout.write( `test cache: not saved (${error.code ?? error.message}): ${file}\n` );
 	}
 }
