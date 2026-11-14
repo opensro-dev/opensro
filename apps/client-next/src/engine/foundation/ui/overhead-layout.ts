@@ -8,8 +8,8 @@ crest, a stall's title, and (port-only, #2958) a 5-star caravan's star
 row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
 title and speech board remain. A Contributor's title (port-only, #3358)
-is no row of its own: it rides the name board, left of the name, the
-way the client's titles sit (titledNameRow).
+is no row of its own: it rides the name board, left of the name, as
+the owner asked (titledNameRow).
 
 ===========================================================================
 */
@@ -38,10 +38,12 @@ const CARAVAN_STAR_PATH = "/assets/images/Media_extracted/interface/ifcommon/com
 const CARAVAN_STAR_RISE = 20;
 // Port-only, not native (#3358): a rostered player's Contributor title,
 // yellow (0xffff00) as the owner asked, on the name board left of the
-// name - where the client's titles sit, in the guild and fortress wars
-// too (owner, 2026-11-14) - not on a row of its own. The roster is the
-// server's word (contributor-titles.ts); with SRO_CONTRIBUTOR_TITLES off
-// no frame arrives and no title ever shows.
+// name, in the guild and fortress wars too (owner, 2026-11-14), not on
+// a row of its own. v1.150 has no such placement to copy: its one
+// player title, the fortress officer title, rides the guild row as
+// "[Guild(Title)]" (client 86BA5F). The roster is the server's word
+// (contributor-titles.ts); with SRO_CONTRIBUTOR_TITLES off no frame
+// arrives and no title ever shows.
 export const CONTRIBUTOR_TITLE_TEXT = "Contributor";
 export const CONTRIBUTOR_TITLE_COLOR = [ 1, 1, 0, 1 ] as const;
 // The gap between the title and the name on the board, in pixels.
