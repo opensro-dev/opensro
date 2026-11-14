@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -208,6 +209,34 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 	return authorityTextdata{catalogs: textdata, loadQuests: loadQuests}, nil
 }
 
+// crestMarksSubdir is the marks directory's name inside a shard's
+// authority directory when no operator names one (crestMarksDir).
+const crestMarksSubdir = "marks"
+
+/*
+================
+crestMarksDir
+
+The directory the crest store and GET /marks/ share: SRO_AGENT_MARKS_DIR
+when an operator names one, otherwise crestMarksSubdir inside the shard's
+authority directory (#3454). Guild crests are native (the client uploads
+a crest and fetches it back from the MarkFTP host), so a shard without the
+operator setting must still accept them: with no directory every upload
+was refused. The authority directory is the one per-shard directory every
+deployment keeps across releases; the release proof already redirects it
+into its own state, and the store's permission walk skips subdirectories.
+================
+*/
+func crestMarksDir(configured, authorityDir string) string {
+	if dir := strings.TrimSpace(configured); dir != "" {
+		return dir
+	}
+	if authorityDir == "" {
+		return ""
+	}
+	return filepath.Join(authorityDir, crestMarksSubdir)
+}
+
 /*
 ================
 openAuthorityPlane
@@ -296,9 +325,9 @@ func openAuthorityPlane(
 	// The crest store lives in the marks directory (#2282): uploaded
 	// crests are stored there content-addressed beside any host art,
 	// and the same instance serves the register lane, so an upload
-	// resolves by name the moment it commits. No marks directory,
-	// no store - the register lane refuses honestly.
-	marksDir := os.Getenv(agentapi.EnvMarksDir)
+	// resolves by name the moment it commits. Every shard has one
+	// (crestMarksDir, #3454).
+	marksDir := crestMarksDir(os.Getenv(agentapi.EnvMarksDir), authorityStore.Dir())
 	var crests *crest.Store
 	if marksDir != "" {
 		var err error
