@@ -31,10 +31,12 @@ import {
 	type CaveMapPage
 } from "@/engine/foundation/ui/cave-map";
 import {
-	MONSTER_LEVEL_FILTER_SPAN,
 	dungeonDirectory,
+	levelBand,
 	monsterDirectory,
+	sameLevelBand,
 	type HuntingCatalogue,
+	type LevelBand,
 	type MonsterDirectoryRegion
 } from "@/engine/foundation/ui/hunting-guide";
 import {
@@ -270,39 +272,38 @@ export function createMapToolsHud( options: {
 	let lastLayout: WorldMapLayout | undefined;
 	let directoryFor: {
 		catalogue: HuntingCatalogue;
-		cap: number | undefined;
+		band: LevelBand | undefined;
 		regions: readonly MonsterDirectoryRegion[];
 	} | null = null;
 
 	/*
 	================
-	filterCap
+	filterBand
 
-	The level filter's cap for this character: their level plus the
-	span, or undefined when the filter is off or the level unknown
-	(the directory then shows every species).
+	The level filter's band for this character; undefined (every species
+	shows) when the filter is off or the level unknown.
 	================
 	*/
-	function filterCap( characterLevel: number | undefined ): number | undefined {
+	function filterBand( characterLevel: number | undefined ): LevelBand | undefined {
 		if ( !levelFilter || characterLevel === undefined ) return undefined;
-		return characterLevel + MONSTER_LEVEL_FILTER_SPAN;
+		return levelBand( characterLevel );
 	}
 
 	/*
 	================
 	directory
 
-	The drawer rows for this catalogue and filter cap, rebuilt only
+	The drawer rows for this catalogue and filter band, rebuilt only
 	when either changes.
 	================
 	*/
 	function directory(
 		catalogue: HuntingCatalogue | undefined,
-		cap: number | undefined
+		band: LevelBand | undefined
 	): readonly MonsterDirectoryRegion[] {
 		if ( !catalogue ) return [];
-		if ( directoryFor?.catalogue !== catalogue || directoryFor?.cap !== cap ) {
-			directoryFor = { catalogue, cap, regions: monsterDirectory( catalogue, cap ) };
+		if ( directoryFor?.catalogue !== catalogue || !sameLevelBand( directoryFor.band, band ) ) {
+			directoryFor = { catalogue, band, regions: monsterDirectory( catalogue, band ) };
 		}
 		return directoryFor.regions;
 	}
@@ -333,14 +334,14 @@ export function createMapToolsHud( options: {
 
 	The guide's monster list on a dungeon page (issue #3239): the
 	shown floor's species from the catalogue's dungeon anchors. The
-	level filter caps it as it caps the world list.
+	level filter bands it as it bands the world list.
 	================
 	*/
 	function caveDrawer( input: MapToolsPaint, paint: MapChromePaint ) {
 		const floor = input.floor;
 		if ( !floor ) return;
 		const region = input.catalogue ?
-			dungeonDirectory( input.catalogue, floor.regionId, filterCap( input.characterLevel ) ) :
+			dungeonDirectory( input.catalogue, floor.regionId, filterBand( input.characterLevel ) ) :
 			undefined;
 		guideTree(
 			input,
@@ -435,7 +436,7 @@ export function createMapToolsHud( options: {
 		return {
 			race: input.race,
 			playerLevel: input.characterLevel,
-			filterCap: filterCap( input.characterLevel ),
+			filterBand: filterBand( input.characterLevel ),
 			open: guideOpen
 		};
 	}
@@ -580,10 +581,10 @@ export function createMapToolsHud( options: {
 		},
 		/*
 		================
-		filterCap
+		filterBand
 		================
 		*/
-		filterCap,
+		filterBand,
 		/*
 		================
 		uniqueSpawns
@@ -796,7 +797,7 @@ export function createMapToolsHud( options: {
 					regionId === undefined || refObjId === undefined ||
 					!Number.isInteger( regionId ) || !Number.isInteger( refObjId )
 				) return null;
-				const regions = directory( catalogue, filterCap( characterLevel ) );
+				const regions = directory( catalogue, filterBand( characterLevel ) );
 				for ( const region of regions ) {
 					if ( region.region !== regionId ) continue;
 					const entry = region.monsters.find( row => row.monster.refObjId === refObjId );
@@ -825,7 +826,7 @@ export function createMapToolsHud( options: {
 					regionId === undefined || refObjId === undefined ||
 					!Number.isInteger( regionId ) || !Number.isInteger( refObjId ) || !catalogue
 				) return null;
-				const entry = dungeonDirectory( catalogue, regionId, filterCap( characterLevel ) )
+				const entry = dungeonDirectory( catalogue, regionId, filterBand( characterLevel ) )
 					?.monsters.find( row => row.monster.refObjId === refObjId );
 				if ( entry ) mark = { regionId, x: entry.x, z: entry.z, refObjId };
 				return null;
@@ -964,7 +965,7 @@ export function createMapToolsHud( options: {
 					);
 				} else {
 					const rows: GuideTreeRow[] = [];
-					for ( const region of directory( input.catalogue, filterCap( input.characterLevel ) ) ) {
+					for ( const region of directory( input.catalogue, filterBand( input.characterLevel ) ) ) {
 						const open = region.region === drawerRegion;
 						rows.push( {
 							id: "map-region:" + region.region,

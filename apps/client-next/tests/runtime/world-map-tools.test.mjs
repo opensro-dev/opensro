@@ -18,8 +18,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
-const { MONSTER_LEVEL_FILTER_SPAN, decodeHuntingGuide, dungeonDirectory, filterHuntingGuide, monsterDirectory } =
-	await import( "../../src/engine/foundation/ui/hunting-guide.ts" );
+const {
+	MONSTER_LEVEL_FILTER_SPAN,
+	decodeHuntingGuide,
+	dungeonDirectory,
+	filterHuntingGuide,
+	levelBand,
+	monsterDirectory
+} = await import( "../../src/engine/foundation/ui/hunting-guide.ts" );
 const { caveDungeonFloors, caveMapCatalog, cavePageCenter } = await import(
 	"../../src/engine/foundation/ui/cave-map.ts"
 );
@@ -35,7 +41,7 @@ function monster( refObjId, name, level ) {
 	return { refObjId, name, nameKey: "SN_FIXTURE_" + refObjId, level };
 }
 
-const TIGER = monster( 101, "Tiger", 5 ), BANDIT = monster( 102, "Bandit", 25 ), GIANT = monster( 103, "Giant", 45 );
+const TIGER = monster( 101, "Tiger", 21 ), BANDIT = monster( 102, "Bandit", 25 ), GIANT = monster( 103, "Giant", 45 );
 
 /*
 ================
@@ -82,23 +88,37 @@ test("the directory groups species by region at their first anchor, sorted by le
 	const regions = monsterDirectory( catalogue() );
 	assert.deepEqual( regions.map( row => row.region ), [ 50, 100, 200 ] );
 	assert.deepEqual( regions[0]?.monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
-	assert.equal( regions[0]?.minLevel, 5 );
+	assert.equal( regions[0]?.minLevel, 21 );
 	assert.equal( regions[0]?.maxLevel, 25 );
 	const home = defined( regions[1] );
 	assert.deepEqual( home.monsters.map( row => row.monster.refObjId ), [ 101, 102, 103 ] );
-	assert.equal( home.minLevel, 5 );
+	assert.equal( home.minLevel, 21 );
 	assert.equal( home.maxLevel, 45 );
 	// The Tiger's row in region 100 is its first anchor there, not the second.
 	assert.equal( home.monsters[0]?.x, 19250 );
 	assert.equal( home.monsters[0]?.z, 30 );
 });
 
-test("the level filter's cap hides species above it and the regions it empties", () => {
-	const capped = monsterDirectory( catalogue(), 30 );
-	assert.deepEqual( capped.map( row => row.region ), [ 50, 100 ] );
-	assert.deepEqual( defined( capped[1] ).monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
-	assert.equal( defined( capped[1] ).maxLevel, 25 );
-	assert.deepEqual( monsterDirectory( catalogue(), 4 ), [] );
+test("the level filter's band hides species outside it and the regions it empties", () => {
+	const banded = monsterDirectory( catalogue(), levelBand( 20 ) );
+	assert.deepEqual( banded.map( row => row.region ), [ 50, 100 ] );
+	assert.deepEqual( defined( banded[1] ).monsters.map( row => row.monster.refObjId ), [ 101, 102 ] );
+	assert.equal( defined( banded[1] ).maxLevel, 25 );
+	assert.deepEqual( monsterDirectory( catalogue(), levelBand( 4 ) ), [] );
+});
+
+test("the band hides species below the character too (the box once did nothing at high level)", () => {
+	// At 40 the band is 40..46: the Tiger (21) and the Bandit (25) are
+	// beneath it, so only the Giant's regions are left.
+	assert.deepEqual( levelBand( 40 ), { min: 40, max: 40 + MONSTER_LEVEL_FILTER_SPAN } );
+	const banded = monsterDirectory( catalogue(), levelBand( 40 ) );
+	assert.deepEqual( banded.map( row => row.region ), [ 100, 200 ] );
+	assert.deepEqual( defined( banded[0] ).monsters.map( row => row.monster.refObjId ), [ 103 ] );
+	assert.deepEqual( monsterDirectory( catalogue(), levelBand( 47 ) ), [] );
+	assert.deepEqual(
+		filterHuntingGuide( catalogue(), levelBand( 40 ) ).monsters.map( row => row.refObjId ),
+		[ 103 ]
+	);
 });
 
 test("every dungeon floor fills from the catalogue's dungeon anchors (issue #3239)", () => {
@@ -109,16 +129,17 @@ test("every dungeon floor fills from the catalogue's dungeon anchors (issue #323
 		const row = dungeonDirectory( cat, floor.regionId );
 		assert.ok( row && row.monsters.length > 0, "floor " + floor.floorLabel + " lists no species" );
 	}
-	// Sorted by level, at the first anchor, and capped like the world list.
+	// Sorted by level, at the first anchor, and banded like the world list.
 	assert.deepEqual(
 		dungeonDirectory( cat, 32769 )?.monsters.map( row => row.monster.refObjId ),
 		[ 101, 102 ]
 	);
 	assert.deepEqual(
-		dungeonDirectory( cat, 32769, 10 )?.monsters.map( row => row.monster.refObjId ),
+		dungeonDirectory( cat, 32769, levelBand( 15 ) )?.monsters.map( row => row.monster.refObjId ),
 		[ 101 ]
 	);
-	assert.equal( dungeonDirectory( cat, 32769, 4 ), undefined );
+	assert.equal( dungeonDirectory( cat, 32769, levelBand( 4 ) ), undefined );
+	assert.equal( dungeonDirectory( cat, 32769, levelBand( 26 ) ), undefined );
 	assert.equal( dungeonDirectory( cat, 12345 ), undefined );
 });
 
@@ -130,7 +151,7 @@ test("the decoded catalogue keeps dungeon anchors apart from the outdoor regions
 			refObjId: 101,
 			nameKey: "SN_FIXTURE_TIGER",
 			name: "Fixture Tiger",
-			level: 5,
+			level: 21,
 			points: [ { regionId: REGION_A, x: 500, z: 700 } ],
 			dungeonPoints: [ { regionId: 32769, x: 500, z: 700 } ]
 		} ]
@@ -157,7 +178,7 @@ test("the decoded catalogue keeps dungeon anchors apart from the outdoor regions
 });
 
 test("filterHuntingGuide drops the species, their anchors and their sections together", () => {
-	const filtered = filterHuntingGuide( catalogue(), 30 );
+	const filtered = filterHuntingGuide( catalogue(), levelBand( 20 ) );
 	assert.deepEqual( filtered.monsters.map( row => row.refObjId ), [ 101, 102 ] );
 	assert.deepEqual( [ ...filtered.regions.keys() ].sort( ( a, b ) => a - b ), [ 50, 100 ] );
 	assert.equal( defined( filtered.regions.get( 100 ) ).length, 3 );
@@ -284,14 +305,14 @@ function ids( view ) {
 	return view.controls.map( row => row.id );
 }
 
-test("the level filter starts on and its toggle lifts the cap", () => {
+test("the level filter starts on and its toggle lifts the band", () => {
 	const hud = tools();
-	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
-	assert.equal( hud.filterCap( undefined ), undefined );
+	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
+	assert.equal( hud.filterBand( undefined ), undefined );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), undefined );
+	assert.equal( hud.filterBand( 20 ), undefined );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), 20 + MONSTER_LEVEL_FILTER_SPAN );
+	assert.deepEqual( hud.filterBand( 20 ), { min: 20, max: 20 + MONSTER_LEVEL_FILTER_SPAN } );
 	assert.equal( hud.activate( "map-size", catalogue(), 20 ), undefined, "foreign ids are not the tools'" );
 	hud.dispose();
 });
@@ -306,7 +327,7 @@ test("the foot's checkbox is the one level filter switch, at its layout place", 
 	assert.deepEqual( switches[0].rect, [ 864, 704, 16, 16 ] );
 	assert.equal( switches[0].selected, true );
 	assert.equal( hud.activate( "map-level-filter", catalogue(), 20 ), null );
-	assert.equal( hud.filterCap( 20 ), undefined );
+	assert.equal( hud.filterBand( 20 ), undefined );
 	assert.equal( control( paint( hud ), "map-level-filter" )?.selected, false );
 	assert.ok( paint( hud ).quads.some( quad => quad.texture.endsWith( "com_checkbutton_off.png" ) ) );
 	hud.dispose();
@@ -331,7 +352,7 @@ test("the guide tree opens a group in place and a pick returns the anchor pose",
 	hud.activate( "map-side-tab", cat, 20 );
 	let view = paint( hud );
 	defined( control( view, "map-guide" ) );
-	// At level 20 the cap is 26: the Giant's region 200 is hidden whole.
+	// At level 20 the band is 20..26: the Giant's region 200 is hidden whole.
 	assert.deepEqual(
 		ids( view ).filter( id => id.startsWith( "map-region:" ) ),
 		[ "map-region:50", "map-region:100" ]
@@ -592,7 +613,7 @@ test("the floor spinner and the foot note stand at their layout places", () => {
 	const filter = control( view, "map-level-filter" );
 	assert.equal( filter?.helpText, "Fixture note" );
 	hud.activate( "map-level-filter", undefined, undefined );
-	assert.equal( hud.filterCap( 20 ), undefined, "the foot's box lifts the filter" );
+	assert.equal( hud.filterBand( 20 ), undefined, "the foot's box lifts the filter" );
 	hud.dispose();
 });
 
@@ -625,7 +646,7 @@ const GUIDE_BYTES = new TextEncoder().encode( JSON.stringify( {
 			refObjId: 101,
 			nameKey: "SN_FIXTURE_TIGER",
 			name: "Fixture Tiger",
-			level: 5,
+			level: 21,
 			points: [
 				{ regionId: REGION_A, x: 500, z: 700 },
 				{ regionId: REGION_A, x: 900, z: 300 },
@@ -663,7 +684,7 @@ const SETTLE_STEPS = 12, STEP_MS = 100;
 ================
 fixture
 
-The production UI at level 20 (filter cap 30) with the fixture guide
+The production UI at level 20 (filter band 20..26) with the fixture guide
 offered by the session; the pose can be moved between steps.
 ================
 */
@@ -738,11 +759,11 @@ test("the map opens with the filter and list on, and the drawer honours the filt
 		view = f.activate( "map-side-tab" );
 		defined( control( view, "map-region:" + REGION_A ) );
 		defined( control( view, "map-region:" + REGION_B ) );
-		assert.equal( control( view, "map-region:" + REGION_C ), undefined, "the Giant's region is over the cap" );
+		assert.equal( control( view, "map-region:" + REGION_C ), undefined, "the Giant's region is above the band" );
 		view = f.activate( "map-region:" + REGION_A );
 		defined( control( view, "map-monster:" + REGION_A + ":101" ) );
 		defined( control( view, "map-monster:" + REGION_A + ":102" ) );
-		assert.equal( control( view, "map-monster:" + REGION_A + ":103" ), undefined, "the Giant is over the cap" );
+		assert.equal( control( view, "map-monster:" + REGION_A + ":103" ), undefined, "the Giant is above the band" );
 		view = f.activate( "map-level-filter" );
 		assert.equal( defined( control( view, "map-level-filter" ) ).selected, false );
 		defined( control( view, "map-monster:" + REGION_A + ":103" ), "lifting the filter shows the Giant" );

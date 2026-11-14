@@ -119,7 +119,7 @@ function fixture() {
 	};
 }
 
-const VIEW = { race: 0, playerLevel: 10, filterCap: undefined, open: null };
+const VIEW = { race: 0, playerLevel: 10, filterBand: undefined, open: null };
 
 test("the catalogue is refused whole when its format or a row is wrong", () => {
 	assert.throws( () => worldMapGuideCatalog( { ...fixture(), format: "other" } ), /format/ );
@@ -169,7 +169,7 @@ test("every group opens whatever its content tier: no row is shut", () => {
 	assert.deepEqual( rows.map( row => row.color ), [ "group", "group", "group", "far" ] );
 });
 
-test("the open group lists its monsters as Lv<level> <name>, the filter hiding those above it", () => {
+test("the open group lists its monsters as Lv<level> <name>, the filter hiding those outside its band", () => {
 	const catalog = worldMapGuideCatalog( fixture() );
 	const rows = guideMonsterRows( catalog, { ...VIEW, open: 0 } );
 	assert.deepEqual( rows.map( row => [ row.label, row.color ] ), [
@@ -179,9 +179,17 @@ test("the open group lists its monsters as Lv<level> <name>, the filter hiding t
 		[ "Europe", "group" ],
 		[ "Egypt", "group" ]
 	] );
+	// The band 1..7 keeps Mangyang and drops the Weasel; Egypt (only
+	// the Lv100 Scarab) is emptied and goes.
 	assert.deepEqual(
-		guideMonsterRows( catalog, { ...VIEW, open: 0, filterCap: 16 } ).map( row => row.label ),
-		[ "China", "Lv1 Mangyang", "Europe", "Egypt" ]
+		guideMonsterRows( catalog, { ...VIEW, open: 0, filterBand: { min: 1, max: 7 } } ).map( row => row.label ),
+		[ "China", "Lv1 Mangyang", "Europe" ]
+	);
+	// A high-level character no longer sees the level-1 rows: the band
+	// 30..36 keeps the Weasel alone, and only China has anything left.
+	assert.deepEqual(
+		guideMonsterRows( catalog, { ...VIEW, open: 0, filterBand: { min: 30, max: 36 } } ).map( row => row.label ),
+		[ "China", "Lv30 Weasel" ]
 	);
 });
 
@@ -261,7 +269,7 @@ loadedTools
 Map tools whose asset owner answers the guide request with the fixture.
 ================
 */
-function loadedTools( body = fixture() ) {
+function loadedTools( body = fixture(), levelFilter = false ) {
 	const bytes = new TextEncoder().encode( JSON.stringify( body ) );
 	const hud = createMapToolsHud( {
 		assets: {
@@ -273,6 +281,9 @@ function loadedTools( body = fixture() ) {
 		base: "https://fixture.invalid/"
 	} );
 	hud.activate( "map-side-tab", undefined, 10 );
+	// The filter starts on; these tests read the tree whole unless they
+	// ask for it (its band is pinned in world-map-tools.test.mjs).
+	if ( !levelFilter ) hud.activate( "map-level-filter", undefined, 10 );
 	hud.step( "Map" );
 	return hud;
 }
@@ -340,6 +351,25 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 	hud.dispose();
 });
 
+test("with the filter on, the Monster tab keeps the band around the character's level", () => {
+	const hud = loadedTools( fixture(), true );
+	const mains = level =>
+		paint( hud, { characterLevel: level } ).controls.filter( row => row.id.startsWith( "map-guide-main:" ) )
+			.map( row => row.label );
+	// Level 1 (band 1..7): China has Mangyang, Europe the Wolf and the
+	// Cave Bat; Egypt's Lv100 Scarab empties it.
+	assert.deepEqual( mains( 1 ), [ "China", "Europe" ] );
+	// Level 30 (band 30..36): the low rows are gone, only the Weasel is left.
+	assert.deepEqual( mains( 30 ), [ "China" ] );
+	hud.activate( "map-guide-main:0", undefined, 30 );
+	const subs = paint( hud, { characterLevel: 30 } ).controls.filter( row =>
+		row.id.startsWith( "map-guide-monster:" )
+	)
+		.map( row => row.label );
+	assert.deepEqual( subs, [ "Lv30 Weasel" ] );
+	hud.dispose();
+});
+
 test("the Field tab fills from the guide and a dungeon row opens its floor's view", () => {
 	const hud = loadedTools();
 	hud.activate( "map-guide-tab:area", undefined, 10 );
@@ -380,7 +410,7 @@ test("a build without the guide keeps the shard's Monster tab and says so on the
 
 test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", () => {
 	const many = fixture();
-	for ( let i = 0; i < 20; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
+	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
 	const hud = loadedTools( many );
 	hud.activate( "map-guide-main:0", undefined, 10 );
 	let view = paint( hud );
@@ -392,7 +422,7 @@ test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", (
 	const top = thumb.rect[1];
 	const first = () => paint( hud ).controls.find( row => row.id.startsWith( "map-guide-main:" ) )?.id;
 	assert.equal( first(), "map-guide-main:0" );
-	// 24 rows (the Lv30 Weasel is over the filter) over 8 shown: 16 rows
+	// 24 rows (five groups and species, 19 extras) over 8 shown: 16 rows
 	// of range on a 146 px travel, 9.125 px a row. A drag past the end
 	// stops there and owes nothing back.
 	assert.equal( hud.drag( "map-guide-scroll-thumb", 400 ), true );

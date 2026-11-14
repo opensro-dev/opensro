@@ -683,7 +683,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter ?? mapViewPose( pose ),
 					hover,
 					mapLayout,
-					mapTools.filterCap( game?.progression?.level )
+					mapTools.filterBand( game?.progression?.level )
 				) :
 				null;
 			// The monster picked in the guide (sub_e75d50, issue #3390):
