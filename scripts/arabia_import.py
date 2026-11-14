@@ -341,6 +341,64 @@ def npc_placements(npc_rows, npcpos_rows, codename_by_id, regions):
 
 
 # ================
+# SPEECH_ENGLISH
+#
+# Authored English for the talk lines the v1.696 client ships in Korean
+# only (no English cell in any of its language columns). The asset
+# build refuses an active textquest row without English
+# (englishCompletions.mjs, assertEnglishCompletionCoverage), and the
+# shared catalog cannot hold these keys: it must name only rows the
+# native build has, and these exist only while SRO_ARABIA is on. So the
+# layer that adds the rows carries their English, under the catalog's
+# contract: each entry records the exact Korean it translates, applies
+# only while the source has no English, and a changed Korean refuses
+# the build as stale rather than showing an outdated line.
+# (key: (Korean source, English)). Translated from the v1.696 Korean,
+# 2026-11-15, freeze 2c9e87fdf's variant build.
+# ================
+SPEECH_ENGLISH = {
+	"SN_BOSS_DUNGEON_ALCHEMIST_BS": (
+		"저는 오랜 연구 끝에 마침내 유피테르 신전에 숨겨져 있다는 비밀의 방의 입구를 열 수 있었습니다. "
+		"하지만 전 입구만을 열 수 있을 뿐.. 비밀의 방이 어떤 곳인지 알지 못합니다.",
+		"After long research I was finally able to open the entrance to the secret chamber said to be "
+		"hidden in the Jupiter Temple. But I could only open the entrance.. I do not know what kind of "
+		"place the secret chamber is.",
+	),
+	"SN_LAST_FIELD_PRIEST_BS": (
+		"샴발라에 다녀는 와 봤나? 최근 많은 모험가들이 샴발라를 다녀온 후로  무언가에 홀리듯 사라졌다 "
+		"나타나곤 했지. 그리고 얼마 지나지 않아 대도시를 중심으로 역병이 창궐하고 있다네.",
+		"Have you ever been to Shambala? Lately many adventurers who came back from Shambala would vanish, "
+		"as if bewitched by something, and then turn up again. And not long after, a plague broke out, "
+		"spreading from the great cities.",
+	),
+	"SN_LOST_TOMB_DUNGEON_ALCHEMIST_BS": (
+		"유피테르 신전에 숨겨져 있는 또 다른 입구를 찾아냈습니다. 이곳은 상층, 하층으로 구성된 무덤으로 "
+		"파악이 됐으나  굳게 잠겨져 있어 조사가 중단됐습니다.",
+		"I have found another entrance hidden in the Jupiter Temple. It proved to be a tomb with an upper "
+		"and a lower level, but it is firmly locked, so the survey has stopped.",
+	),
+}
+
+
+# ================
+# speech_english
+#
+# A talk row's English: the source's own when it has one, else the
+# authored line (SPEECH_ENGLISH) for that key and Korean, else "".
+# ================
+def speech_english(key, korean, english):
+	if english:
+		return english
+	authored = SPEECH_ENGLISH.get(key)
+	if authored is None:
+		return ""
+	source, line = authored
+	if source.strip() != korean.strip():
+		raise ValueError(f"stale Arabia talk English for {key}: the v1.696 Korean changed")
+	return line
+
+
+# ================
 # later_speech_texts
 #
 # The later client's NPC talk strings (the SN_..._BS/_PS keys its
@@ -364,8 +422,9 @@ def later_speech_texts(read):
 				continue
 			english = next((row[at] for at in (9, 13, 14, 15, 16)
 				if len(row) > at and row[at] not in ("0", "")), "")
-			rows.append([row[0], row[2], row[3] if len(row) > 3 else "",
-				"", "", "", "", "", english, ""])
+			korean = row[3] if len(row) > 3 else ""
+			rows.append([row[0], row[2], korean,
+				"", "", "", "", "", speech_english(row[2], korean, english), ""])
 	return rows
 
 
