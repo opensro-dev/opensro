@@ -108,3 +108,45 @@ func TestStalePeerWatchersNeverInventAViewer(t *testing.T) {
 		t.Fatalf("outside the legs the full scan should see a and c, got %v", got)
 	}
 }
+
+/*
+================
+TestPeerWatchersReindexListsEachViewerOnce
+
+The legs index every tick on the same state: a second inversion must
+truncate the first's lists, or every viewer would be listed (and pushed
+to) once more per tick.
+================
+*/
+func TestPeerWatchersReindexListsEachViewerOnce(t *testing.T) {
+	state := &divisionTickState{shownPeers: map[string]map[uint32]bool{"a": {100001: true}, "b": {100001: true}}}
+	state.indexPeerWatchers()
+	state.indexPeerWatchers()
+	if got := watchersOf(state, 100001); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("second tick's inversion visited %v, want [a b] once each", got)
+	}
+}
+
+/*
+================
+TestPeerWatchersPruneGidsNobodyShows
+
+A gid that leaves every shown set keeps an empty list for one tick and is
+pruned at the next inversion; one shown again is listed afresh.
+================
+*/
+func TestPeerWatchersPruneGidsNobodyShows(t *testing.T) {
+	state := &divisionTickState{shownPeers: map[string]map[uint32]bool{"a": {100001: true}}}
+	state.indexPeerWatchers()
+	delete(state.shownPeers["a"], 100001)
+	state.indexPeerWatchers()
+	state.indexPeerWatchers()
+	if _, kept := state.peerWatchers[100001]; kept {
+		t.Fatal("a gid nobody shows stayed in the inversion")
+	}
+	state.shownPeers["a"][100001] = true
+	state.indexPeerWatchers()
+	if got := watchersOf(state, 100001); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("a gid shown again was listed as %v, want [a]", got)
+	}
+}

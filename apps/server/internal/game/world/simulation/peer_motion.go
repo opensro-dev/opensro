@@ -95,8 +95,8 @@ Inverts shownPeers for the session legs. Each moving peer used to scan
 every viewer's shown set (sessions x viewers lookups per tick, the
 quadratic that dominated the legs at a few hundred sessions); with the
 inversion it visits only the viewers that show it. The slices are
-reused across ticks: a gid's list is truncated, never freed, and the
-gids a division ever showed bound the map.
+reused across ticks: a gid's list is truncated for the next tick, and a
+gid no viewer showed last tick is pruned.
 ================
 */
 func (state *divisionTickState) indexPeerWatchers() {
@@ -104,6 +104,12 @@ func (state *divisionTickState) indexPeerWatchers() {
 		state.peerWatchers = make(map[uint32][]string)
 	}
 	for gid, viewers := range state.peerWatchers {
+		// A gid nobody showed last tick leaves, so the reset walks only
+		// the gids shown last tick, not every gid the division ever showed.
+		if len(viewers) == 0 {
+			delete(state.peerWatchers, gid)
+			continue
+		}
 		state.peerWatchers[gid] = viewers[:0]
 	}
 	for viewer, shown := range state.shownPeers {
