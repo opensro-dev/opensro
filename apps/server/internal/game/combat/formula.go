@@ -324,9 +324,8 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	attackPoint = parameterAttackPoint(attackPoint, attacker.SkillParameters, attack.Parameters, magical)
 	attackPoint = stealthStrikePoint(attackPoint, attacker, attack.Parameters, magical)
 
-	// 40EC8D (physical) and 40E899 (magical): the 0x20 proc skips the parry
-	// division and the defense subtraction; both paths then join the same
-	// clamp at zero (40ECDC, 40E8EC).
+	// In both damage lanes the 0x20 proc skips the parry division and the
+	// defense subtraction; both paths then share the same clamp at zero.
 	damage := attackPoint
 	if !calculation.IgnoreDefense {
 		damage = attackPoint/(parry/100+1) - defense
