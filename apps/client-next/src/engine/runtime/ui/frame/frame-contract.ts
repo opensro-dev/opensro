@@ -27,6 +27,7 @@ import type { AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import type { CosReference } from "@/engine/foundation/ui/cos-command";
 import type { FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
 import type { CameraDataRow } from "@/engine/foundation/ui/camera-waypoints";
+import type { GuideBlock, GuideToken } from "@/engine/foundation/ui/guide-content";
 
 /*
 ================
@@ -189,4 +190,32 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
+}
+
+/*
+================
+UiAuthoredFrame
+
+The frame the authored widgets (authored.ts) draw into: the whole text
+owner (widths, line height and SML2 layout besides quads), the system-text
+catalogue, the button art family of a texture and the Experimental "Fit
+window labels" preference. The coordinator's drawFrame is one.
+================
+*/
+export interface UiAuthoredFrame extends UiFrame {
+	readonly text: UiFrame["text"] & {
+		run( value: string, fontStyle?: number, fontIndex?: number ): { width: number; };
+		extentHeight( index?: number, style?: number ): number;
+		guide(
+			tokens: readonly GuideToken[],
+			rect: UiRect,
+			clip: UiRect,
+			color: UiQuad["color"],
+			size: ( path: string ) => readonly [number, number] | undefined,
+			block?: GuideBlock
+		): { quads: UiQuad[]; paths: string[]; height: number; };
+	};
+	copy( key: string ): string;
+	buttonFamily( texture: string ): readonly string[];
+	fitWindowLabels(): boolean;
 }
