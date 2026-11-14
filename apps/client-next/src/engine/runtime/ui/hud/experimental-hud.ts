@@ -309,8 +309,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "mallCategories",
 						id: "experimental-mall-categories",
 						label: "Item Mall categories",
-						description:
-							"The later mall's categories, HOT shop and item search (needs a shard that lists them)."
+						description: "The later mall's categories, HOT shop and item search."
 					}
 				]
 			},
@@ -448,8 +447,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "uniqueSpawnPoints",
 						id: "experimental-unique-spawn-points",
 						label: "Unique spawn points",
-						description:
-							"Adds a Unique spawns box to M; tick it to show every nest a unique may spawn from."
+						description: "Adds a Unique spawns box to M: every unique's nests."
 					}
 				]
 			},

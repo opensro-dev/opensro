@@ -44,6 +44,10 @@ export function createMinimapResources( assets: MinimapAssets, base: string ) {
 		}
 		| { kind: "failed"; error: string; }
 		| { kind: "disposed"; } = { kind: "idle" };
+	type Floors = ReturnType<typeof dungeon.data>;
+	type Art = ReturnType<typeof dungeon.art>;
+	let mergedFloors: { retail?: Floors; extra?: Floors; value?: Floors; } = {};
+	let mergedArt: { retail?: Art; extra?: Art; value?: Art; } = {};
 	return {
 		step( needed: boolean, worldVisible = false ) {
 			const retailChanged = dungeon.step( worldVisible ),
@@ -79,14 +83,25 @@ export function createMinimapResources( assets: MinimapAssets, base: string ) {
 		},
 		positions: () => state.kind === "ready" ? state.positions : undefined,
 		caveMaps: caveMaps.data,
+		// The HUD asks for both every frame: the merges are cached on their
+		// inputs, which change only when a catalogue loads, so a build with
+		// the later floors does not rebuild every tile map per frame.
 		dungeons() {
 			const retail = dungeon.data(), extra = laterDungeon.data();
-			return retail && extra ? minimapWithLaterFloors( retail, extra ) : retail;
+			if ( !retail || !extra ) return retail;
+			if ( mergedFloors.retail !== retail || mergedFloors.extra !== extra ) {
+				mergedFloors = { retail, extra, value: minimapWithLaterFloors( retail, extra ) };
+			}
+			return mergedFloors.value;
 		},
 		rooms: dungeon.rooms,
 		art() {
 			const retail = dungeon.art(), extra = laterDungeon.art();
-			return retail && extra ? new Map( [ ...retail, ...extra ] ) : retail;
+			if ( !retail || !extra ) return retail;
+			if ( mergedArt.retail !== retail || mergedArt.extra !== extra ) {
+				mergedArt = { retail, extra, value: new Map( [ ...retail, ...extra ] ) };
+			}
+			return mergedArt.value;
 		},
 		// A build without later tiles is not an error: those floors stay empty.
 		error: () => state.kind === "failed" ? state.error : dungeon.error(),

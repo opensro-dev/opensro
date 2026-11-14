@@ -198,6 +198,8 @@ presentUpdate
 	} );
 	owners.renderer.setWorldClock = () => {};
 	owners.renderer.setWeather = () => {};
+	// The frame hands the server's seasonal event groups on (#3288).
+	owners.renderer.setWorldLayers = () => {};
 	owners.frontend.step = () => ({ phase: "loading-title" });
 	Object.assign( owners.navigation, {
 		error: () => null,
