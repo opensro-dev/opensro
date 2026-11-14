@@ -242,3 +242,39 @@ func TestGroundWalkResteerWithEarlierTickTimestampDoesNotDoubleStep(t *testing.T
 		t.Fatalf("PersistedSpawn().X after 30 lagged tick resteers = %.3f, want %.3f (double-stepped intra-tick lag)", got.X, wantX)
 	}
 }
+
+/*
+================
+TestSnapshotAtNeverStepsPastItsTime
+
+A tick hook reads the walk at the tick's own time: after the tick's
+first snapshot stepped the walk to the wall clock, SnapshotAt for that
+tick time steps nothing more, and its pose is the one the first step
+answered. A later time steps as Snapshot would, never past the wall clock.
+================
+*/
+func TestSnapshotAtNeverStepsPastItsTime(t *testing.T) {
+	calls := 0
+	st, now, seed, key := groundFixture(t, func(from Spawn, owner NavOwner, to Spawn) (Spawn, NavOwner, bool) {
+		calls++
+		return to, owner, false
+	})
+	tickMs := *now + 300
+	*now = tickMs + 5 // prepare runs a few milliseconds into the tick
+	stepped := st.Snapshot(key, seed)
+	if calls != 1 {
+		t.Fatalf("prepare stepped %d time(s), want 1", calls)
+	}
+	*now += 7 // a later hook in the same tick
+	hook := st.SnapshotAt(key, seed, tickMs)
+	if calls != 1 {
+		t.Fatalf("SnapshotAt(tick time) stepped again: %d step(s)", calls)
+	}
+	if hook.LiveSpawnAt(tickMs) != stepped.LiveSpawnAt(tickMs) {
+		t.Fatalf("hook pose %+v, prepare's %+v", hook.LiveSpawnAt(tickMs), stepped.LiveSpawnAt(tickMs))
+	}
+	st.SnapshotAt(key, seed, *now+1000)
+	if calls != 2 {
+		t.Fatalf("a later time did not step: %d step(s)", calls)
+	}
+}
