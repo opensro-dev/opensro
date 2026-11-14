@@ -24,11 +24,12 @@ fakeGitHub
 
 issues: { number: { body, labels, state, comments } }; pulls: { number:
 { merged, merge_commit_sha } }; carriedBy: the merge commits the live
-commit contains; failing: numbers whose reads fail with a 500. A number
+commit contains; failing: numbers whose reads fail with a 500;
+failingComments: issues whose comment posts fail with a 500. A number
 the fake does not hold answers 404, as GitHub does.
 ================
 */
-function fakeGitHub( { issues, pulls = {}, carriedBy = [], failing = [] } ) {
+function fakeGitHub( { issues, pulls = {}, carriedBy = [], failing = [], failingComments = [] } ) {
 	const calls = [];
 	const answer = ( table, number, data ) => {
 		if ( failing.includes( number ) ) throw Object.assign( new Error( "Server Error" ), { status: 500 } );
@@ -52,6 +53,9 @@ function fakeGitHub( { issues, pulls = {}, carriedBy = [], failing = [] } ) {
 					issues[issue_number].labels = issues[issue_number].labels.filter( label => label !== name );
 				},
 				createComment: async ( { issue_number, body } ) => {
+					if ( failingComments.includes( issue_number ) ) {
+						throw Object.assign( new Error( "Server Error" ), { status: 500 } );
+					}
 					calls.push( [ "comment", issue_number ] );
 					issues[issue_number].comments.push( body );
 				}
@@ -207,4 +211,20 @@ test("a GitHub failure on one issue leaves it gated and the others decided", asy
 	] );
 	assert.deepEqual( issues[20].labels, [ GATED_LABEL ] );
 	assert.deepEqual( issues[20].comments, [] );
+});
+
+test("a lift whose notice fails stays gated, so the next sweep lifts it with its notice", async () => {
+	const issues = {
+		10: { body: "", labels: [], state: "closed", comments: [] },
+		20: gated( "Ungate when: #10 closed" )
+	};
+	const failing = fakeGitHub( { issues, failingComments: [ 20 ] } );
+	assert.deepEqual( await run( { github: failing.github, context, nowMs: NOW, fetchJson: liveRecord } ), [
+		"#20 wait (error: 500)"
+	] );
+	assert.deepEqual( issues[20].labels, [ GATED_LABEL ] );
+	const { github, calls } = fakeGitHub( { issues } );
+	assert.deepEqual( await run( { github, context, nowMs: NOW, fetchJson: liveRecord } ), [ "#20 lift (closed)" ] );
+	assert.deepEqual( calls, [ [ "comment", 20 ], [ "removeLabel", 20 ] ] );
+	assert.deepEqual( issues[20].labels, [] );
 });
