@@ -17,9 +17,9 @@ slots), and each stone tab with the degree 8 then the degree 9 repair
 stone. This pass lays the tabs so.
 
 Port-only, not native (SRO_HONOR_GOODS, with honor_items.py): the rest
-of the line the client authored. The weapon tab's second page (slot
-30 on) carries degrees 10 and 11 per kind, the first page gaining the
-Chinese shields; a third tab carries the European honor weapons, laid
+of the line the client authored. The weapon tab's first page stays
+native; its second page (slot 30 on) carries degrees 10 and 11 per
+kind, then the Chinese shields at every degree; a third tab carries the European honor weapons, laid
 the same way; the stone tab gains the degree 10 and 11 stones. A good
 without a package gets one minted from a shipped honor package: the
 item's own name, icon, durability and gold price, its degree's honor
@@ -92,15 +92,21 @@ def band(race, kinds, degrees, items):
 # ================
 # weapon_slots
 #
-# A weapon tab's (slot, package) layout: the native degrees from slot 0,
-# the expansion's degrees from the next page.
+# A weapon tab's (slot, package) layout: the kinds the tab stocks natively
+# at the native degrees from slot 0, untouched by the expansion; from the
+# next page, the expansion's degrees of those kinds, then every degree of
+# the kinds it adds (the Chinese shields). A tab with no native kind (the
+# European one) lays its kinds out natively, the later degrees a page on.
 # ================
-def weapon_slots(race, kinds, items, expansion):
-	first = band(race, kinds, NATIVE_DEGREES, items)
+def weapon_slots(race, kinds, native_kinds, items, expansion):
+	first_kinds = native_kinds or kinds
+	first = band(race, first_kinds, NATIVE_DEGREES, items)
 	layout = list(enumerate(first))
 	if expansion:
+		later = band(race, first_kinds, EXPANSION_DEGREES, items)
+		later += band(race, [kind for kind in kinds if kind not in first_kinds], honor.DEGREES, items)
 		start = -(-len(first) // PAGE_SLOTS) * PAGE_SLOTS
-		layout += [(start + at, package) for at, package in enumerate(band(race, kinds, EXPANSION_DEGREES, items))]
+		layout += [(start + at, package) for at, package in enumerate(later)]
 	return layout
 
 
@@ -163,7 +169,11 @@ def merge_honor_goods(raw, items, expansion):
 	for group, found in sorted(groups.items()):
 		weapon, stone = found[WEAPON_LABEL], found[STONE_LABEL]
 		stocked = [r[3] for r in sorted(goods_by_tab[weapon[3]], key=lambda r: int(r[SLOT]))]
-		layouts[weapon[3]] = weapon_slots("CH", tab_kinds("CH", stocked, items, expansion), items, expansion)
+		# The native kinds are the first page's: a rerun finds the
+		# expansion's own kinds stocked from the second page on.
+		first_page = [r[3] for r in goods_by_tab[weapon[3]] if int(r[SLOT]) < PAGE_SLOTS]
+		native_kinds = tab_kinds("CH", [p for p in stocked if p in first_page], items, False)
+		layouts[weapon[3]] = weapon_slots("CH", tab_kinds("CH", stocked, items, expansion), native_kinds, items, expansion)
 		layouts[stone[3]] = stone_slots(items, expansion)
 		if expansion:
 			code = TAB_SUFFIX.sub(EXPANSION_TAB, weapon[3])
@@ -171,7 +181,7 @@ def merge_honor_goods(raw, items, expansion):
 			kept_tabs.append(existing or [*weapon[:2], str(next_tab), code, *weapon[4:]])
 			next_tab += 0 if existing else 1
 			removed_tabs.discard(code)
-			layouts[code] = weapon_slots("EU", tab_kinds("EU", [], items, expansion), items, expansion)
+			layouts[code] = weapon_slots("EU", tab_kinds("EU", [], items, expansion), [], items, expansion)
 
 	# Packages: mint what a stocked good lacks.
 	packages = {r[3]: r for r in rows["refpackageitem.txt"] if len(r) > 3}

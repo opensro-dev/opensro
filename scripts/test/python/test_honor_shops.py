@@ -107,13 +107,14 @@ def native_tables():
 # expanded_items
 #
 # The item tables with honor_items' rows: a degree 10 Chinese blade, a
-# degree 8 European axe, the degree 10 stone.
+# degree 8 Chinese shield, a degree 8 European axe, the degree 10 stone.
 # ================
 def expanded_items(native_items):
 	found = dict(native_items)
 	found["ITEM_CH_BLADE_10_A_RARE_HONOR"] = item("ITEM_CH_BLADE_10_A_RARE_HONOR", 8900000, 140)
 	found["ITEM_EU_AXE_08_A_RARE_HONOR"] = item("ITEM_EU_AXE_08_A_RARE_HONOR", 2700000, 130)
 	found[honor.stone_code(10)] = item(honor.stone_code(10), degree="10")
+	found["ITEM_CH_SHIELD_08_A_RARE_HONOR"] = item("ITEM_CH_SHIELD_08_A_RARE_HONOR", 2700000, 110)
 	return found
 
 
@@ -151,12 +152,17 @@ class HonorShopTest(unittest.TestCase):
 		raw, found = native_tables()
 		merged, summary = apply(raw, expanded_items(found), True)
 		blade_10 = shops.package_of("ITEM_CH_BLADE_10_A_RARE_HONOR")
-		self.assertEqual(layout(merged, WEAPONS)[-1], (shops.PAGE_SLOTS, blade_10))
+		shield = shops.package_of("ITEM_CH_SHIELD_08_A_RARE_HONOR")
+		# The native page stays as off lays it; the expansion starts a page on,
+		# the later degrees first, then the added kinds.
+		native, _ = apply(raw, found, False)
+		self.assertEqual(layout(merged, WEAPONS)[:12], layout(native, WEAPONS))
+		self.assertEqual(layout(merged, WEAPONS)[12:], [(shops.PAGE_SLOTS, blade_10), (shops.PAGE_SLOTS + 1, shield)])
 		self.assertEqual(layout(merged, EUROPE), [(0, "PACKAGE_ITEM_EU_AXE_08_A_RARE_HONOR")])
 		self.assertEqual(layout(merged, STONES)[-1], (2, shops.package_of(honor.stone_code(10))))
 		tabs = tables.table_rows(merged["refshoptab.txt"])
 		self.assertIn([GROUP, shops.WEAPON_LABEL], [r[4:6] for r in tabs if r[3] == EUROPE])
-		self.assertEqual(summary["packages"], 3)
+		self.assertEqual(summary["packages"], 4)
 		scraps = {r[2]: r for r in tables.table_rows(merged["refscrapofpackageitem.txt"])}
 		self.assertEqual(scraps[blade_10][shops.SCRAP_DATA], "140")
 		self.assertEqual(int(scraps[blade_10][shops.SCRAP_PARAM]), (6 << 32) | 236)
@@ -179,7 +185,7 @@ class HonorShopTest(unittest.TestCase):
 		fresh, _ = apply(raw, found, False)
 		on, _ = apply(raw, expanded_items(found), True)
 		off, summary = apply(on, found, False)
-		self.assertEqual(summary["removedPackages"], 3)
+		self.assertEqual(summary["removedPackages"], 4)
 		self.assertEqual(off, fresh)
 
 	def test_goods_need_their_item(self):
