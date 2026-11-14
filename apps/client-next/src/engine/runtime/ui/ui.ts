@@ -6227,7 +6227,7 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
-			if ( itemMall.read().visible ) {
+			if ( itemMall.isOpen() ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
 					if ( event.id === "item-mall-search" ) {
@@ -9444,7 +9444,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
-			if ( next.travel && !view?.travel && itemMall.read().visible ) {
+			if ( next.travel && !view?.travel && itemMall.isOpen() ) {
 				itemMall.close();
 				dirty = true;
 			}
@@ -9593,7 +9593,7 @@ export function createUi( ports: UiPorts ) {
 			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
 				const potionState = companionPotions.state(), potionSettings = potionState.saved;
-				const potionBlocked = transportPotionBlocked( game ) || itemMall.read().visible ||
+				const potionBlocked = transportPotionBlocked( game ) || itemMall.isOpen() ||
 					!!(carriedItem || carriedShortcut);
 				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
 					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
@@ -10209,7 +10209,7 @@ export function createUi( ports: UiPorts ) {
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
 				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
-				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.read().visible;
+				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.isOpen();
 				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
 					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
 				}
@@ -26503,7 +26503,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					6
 				);
 			}
-			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
+			if ( worldVisible && game && itemMall.isOpen() && hud.data() ) {
 				const data = hud.data()!;
 				// Port-only (#3257): the Experimental mall categories row
 				// puts the later rail in force; the row off is the native
@@ -28468,7 +28468,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 				titleCredit: next.frontend?.phase === "login" && !loading,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
-					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
+					[ w, itemMall.isOpen() ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
 				// The DOM tools stay at the top right beside the minimap on desktop;
 				// companion status icons hang below them (cosStatusDesktopTop, BUG-087).
