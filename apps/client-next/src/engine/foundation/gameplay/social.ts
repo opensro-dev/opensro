@@ -370,9 +370,9 @@ export function socialPacket(
 				{ ...next, self: 0, leader: 0, options: 0, members: [] } :
 				{ ...next, members: next.members.filter( m => m.id !== id ) };
 		} else if ( type === 9 ) {
-			// This arm lands dark: the server has no party delegation
-			// feature and never emits type 9, so the print below starts
-			// surfacing unchanged the day delegation does.
+			// The server sends type 9 after the leader's type-3 leave when
+			// the lead passes to the longest-standing member (party
+			// registry Leave, #3438).
 			const id = u32();
 			const name = next.members.find( m => m.id === id )?.name;
 			next = { ...next, leader: id };

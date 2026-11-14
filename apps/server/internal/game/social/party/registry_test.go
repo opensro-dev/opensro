@@ -262,17 +262,54 @@ func TestRegistryLeaveAsMember(t *testing.T) {
 	}
 }
 
-func TestRegistryLeaveAsLeaderDissolves(t *testing.T) {
-	registry := formTestParty(t, 3)
+/*
+================
+TestRegistryLeaveAsLeaderHandsTheLeadOn
+
+A leader leaving a party that keeps two or more members hands the lead
+to the longest-standing member, the first of the others in join order
+(#3438); the party survives, and every leadership reader sees it.
+================
+*/
+func TestRegistryLeaveAsLeaderHandsTheLeadOn(t *testing.T) {
+	registry := formTestParty(t, 4)
 	outcome, refusal := registry.Leave(testDivision, "member1")
 	if refusal != "" {
 		t.Fatalf("Leave: %s", refusal)
 	}
-	if !outcome.WasLeader || !outcome.Dissolved {
-		t.Fatalf("outcome = %+v, want leader dissolve", outcome)
+	if !outcome.WasLeader || outcome.Dissolved || outcome.Successor != testMember(2) {
+		t.Fatalf("outcome = %+v, want member2 to take the lead", outcome)
 	}
-	if len(outcome.Others) != 2 {
-		t.Fatalf("Others = %+v, want the two remaining members", outcome.Others)
+	snapshot, ok := registry.PartyOf(testDivision, "member3")
+	if !ok || snapshot.LeaderID != testMember(2).MemberID || len(snapshot.Members) != 3 {
+		t.Fatalf("party after the handover = %+v (ok=%v)", snapshot, ok)
+	}
+	if snapshot.Members[0] != testMember(2) {
+		t.Fatalf("the new leader is not first in the roster: %+v", snapshot.Members)
+	}
+
+	// The successor leaving hands the lead on again, in join order.
+	outcome, _ = registry.Leave(testDivision, "member2")
+	if outcome.Successor != testMember(3) || outcome.Dissolved {
+		t.Fatalf("second handover = %+v, want member3", outcome)
+	}
+}
+
+/*
+================
+TestRegistryLeaveAsLeaderOfTwoDissolves
+
+A leader leaving a two-member party leaves one member: no party.
+================
+*/
+func TestRegistryLeaveAsLeaderOfTwoDissolves(t *testing.T) {
+	registry := formTestParty(t, 2)
+	outcome, refusal := registry.Leave(testDivision, "member1")
+	if refusal != "" {
+		t.Fatalf("Leave: %s", refusal)
+	}
+	if !outcome.WasLeader || !outcome.Dissolved || outcome.Successor != (Member{}) {
+		t.Fatalf("outcome = %+v, want a leader dissolve", outcome)
 	}
 	if registry.Count() != 0 {
 		t.Fatalf("Count = %d after dissolve, want 0", registry.Count())
