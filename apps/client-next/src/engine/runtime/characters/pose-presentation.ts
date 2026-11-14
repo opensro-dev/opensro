@@ -32,7 +32,12 @@ export type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
-import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+import {
+	displaceRegionXZ,
+	sameCoordinateSpace,
+	worldDelta,
+	writeWorldDelta
+} from "@/engine/foundation/world/world-space";
 import { createOwnWalkPresenter } from "./own-walk-interpolation";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
@@ -151,14 +156,24 @@ navigation proof is planar; corrections require the complete 3D chord.
 ================
 */
 function onCorridor( pose: Pose, from: Pose, to: Pose, walking = false ) {
-	const span = worldVector( to, from ), point = worldVector( pose, from );
-	if ( !span || !point ) return false;
-	if ( walking ) span[1] = point[1] = 0;
-	const length2 = span[0] ** 2 + span[1] ** 2 + span[2] ** 2;
+	if ( !writeWorldVector( to, from, spanVector ) || !writeWorldVector( pose, from, pointVector ) ) return false;
+	if ( walking ) spanVector[1] = pointVector[1] = 0;
+	const length2 = spanVector[0] ** 2 + spanVector[1] ** 2 + spanVector[2] ** 2;
 	const t = length2 ?
-		Math.max( 0, Math.min( 1, (point[0] * span[0] + point[1] * span[1] + point[2] * span[2]) / length2 ) ) :
+		Math.max(
+			0,
+			Math.min(
+				1,
+				(pointVector[0] * spanVector[0] + pointVector[1] * spanVector[1] + pointVector[2] * spanVector[2]) /
+					length2
+			)
+		) :
 		0;
-	return hypot3( point[0] - span[0] * t, point[1] - span[1] * t, point[2] - span[2] * t ) <= MIN_CORRECTION_DISTANCE;
+	return hypot3(
+		pointVector[0] - spanVector[0] * t,
+		pointVector[1] - spanVector[1] * t,
+		pointVector[2] - spanVector[2] * t
+	) <= MIN_CORRECTION_DISTANCE;
 }
 
 /*
@@ -170,37 +185,43 @@ Locate a pose on the navigation owner's connected sample chain.
 */
 function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
 	let distance = 0;
-	let best: { distance: number; error: number; pose: Pose; edge: number; fraction: number; } | null = null;
+	let hasBest = false, bestEdge = 0, bestFraction = 0, bestDistance = 0, bestError = 0;
 	for ( let i = 1; i < path.length; i++ ) {
 		const from = path[i - 1]!, to = path[i]!;
-		const span = worldVector( to, from ), point = worldVector( pose, from );
-		if ( !span || !point ) return null;
-		const planar2 = span[0] ** 2 + span[2] ** 2;
+		if ( !writeWorldVector( to, from, spanVector ) || !writeWorldVector( pose, from, pointVector ) ) return null;
+		const planar2 = spanVector[0] ** 2 + spanVector[2] ** 2;
 		const fraction = planar2 ?
-			Math.max( 0, Math.min( 1, (point[0] * span[0] + point[2] * span[2]) / planar2 ) ) :
-			span[1] ?
-			Math.max( 0, Math.min( 1, point[1] / span[1] ) ) :
+			Math.max( 0, Math.min( 1, (pointVector[0] * spanVector[0] + pointVector[2] * spanVector[2]) / planar2 ) ) :
+			spanVector[1] ?
+			Math.max( 0, Math.min( 1, pointVector[1] / spanVector[1] ) ) :
 			0;
-		const length = hypot3( ...span );
-		const miss = hypot2( point[0] - span[0] * fraction, point[2] - span[2] * fraction );
+		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] );
+		const miss = hypot2( pointVector[0] - spanVector[0] * fraction, pointVector[2] - spanVector[2] * fraction );
 		if ( miss <= MIN_CORRECTION_DISTANCE ) {
-			const error = miss + Math.abs( point[1] - span[1] * fraction );
+			const error = miss + Math.abs( pointVector[1] - spanVector[1] * fraction );
 			if (
-				!best || (latest && error <= MIN_CORRECTION_DISTANCE && best.error <= MIN_CORRECTION_DISTANCE) ||
-				error < best.error
+				!hasBest ||
+				(latest && error <= MIN_CORRECTION_DISTANCE && bestError <= MIN_CORRECTION_DISTANCE) ||
+				error < bestError
 			) {
-				best = {
-					edge: i,
-					fraction,
-					distance: distance + length * fraction,
-					error,
-					pose: interpolateMovement( from, to, fraction )
-				};
+				hasBest = true;
+				bestEdge = i;
+				bestFraction = fraction;
+				bestDistance = distance + length * fraction;
+				bestError = error;
 			}
 		}
 		distance += length;
 	}
-	return best;
+	return hasBest ?
+		{
+			edge: bestEdge,
+			fraction: bestFraction,
+			distance: bestDistance,
+			error: bestError,
+			pose: interpolateMovement( path[bestEdge - 1]!, path[bestEdge]!, bestFraction )
+		} :
+		null;
 }
 
 /*
@@ -211,19 +232,23 @@ The certified path's point nearest a pose in the plane.
 ================
 */
 function nearestWalkingPose( pose: Pose, path: readonly Pose[] ): Pose | null {
-	let best: { miss: number; pose: Pose; } | null = null;
+	let hasBest = false, bestMiss = 0, bestEdge = 0, bestFraction = 0;
 	for ( let i = 1; i < path.length; i++ ) {
 		const from = path[i - 1]!, to = path[i]!;
-		const span = worldVector( to, from ), point = worldVector( pose, from );
-		if ( !span || !point ) return null;
-		const planar2 = span[0] ** 2 + span[2] ** 2;
+		if ( !writeWorldVector( to, from, spanVector ) || !writeWorldVector( pose, from, pointVector ) ) return null;
+		const planar2 = spanVector[0] ** 2 + spanVector[2] ** 2;
 		const fraction = planar2 ?
-			Math.max( 0, Math.min( 1, (point[0] * span[0] + point[2] * span[2]) / planar2 ) ) :
+			Math.max( 0, Math.min( 1, (pointVector[0] * spanVector[0] + pointVector[2] * spanVector[2]) / planar2 ) ) :
 			0;
-		const miss = hypot2( point[0] - span[0] * fraction, point[2] - span[2] * fraction );
-		if ( !best || miss < best.miss ) best = { miss, pose: interpolateMovement( from, to, fraction ) };
+		const miss = hypot2( pointVector[0] - spanVector[0] * fraction, pointVector[2] - spanVector[2] * fraction );
+		if ( !hasBest || miss < bestMiss ) {
+			hasBest = true;
+			bestMiss = miss;
+			bestEdge = i;
+			bestFraction = fraction;
+		}
 	}
-	return best?.pose ?? null;
+	return hasBest ? interpolateMovement( path[bestEdge - 1]!, path[bestEdge]!, bestFraction ) : null;
 }
 
 /*
@@ -236,7 +261,10 @@ Spend distance along certified edges.
 function walkingPose( path: readonly Pose[], distance: number ): Pose {
 	for ( let i = 1; i < path.length; i++ ) {
 		const from = path[i - 1]!, to = path[i]!;
-		const length = hypot3( ...worldVector( to, from )! );
+		// A certified chain shares one coordinate space; a mismatched edge was
+		// a spread-of-null TypeError before and stays loud here.
+		if ( !writeWorldVector( to, from, spanVector ) ) throw Error( "Invalid walking path edge" );
+		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] );
 		if ( distance <= length ) return interpolateMovement( from, to, length ? distance / length : 0 );
 		distance -= length;
 	}
@@ -259,16 +287,18 @@ function recoverWalking(
 	const { path } = walk;
 	const start = walkingLocation( before, path, true ), end = walkingLocation( model, path, true );
 	if ( !start || !end || start.error > MIN_CORRECTION_DISTANCE || end.error > MIN_CORRECTION_DISTANCE ) return null;
-	const delta = worldVector( candidate, before );
-	if ( !delta ) return null;
+	if ( !writeWorldVector( candidate, before, pointVector ) ) return null;
 	const remaining = end.distance - start.distance;
 	const direction = Math.sign( remaining );
-	let travel = Math.min( Math.abs( remaining ), hypot3( ...delta ) );
+	let travel = Math.min( Math.abs( remaining ), hypot3( pointVector[0], pointVector[1], pointVector[2] ) );
 	let distance = start.distance, budget = walk.budget, fraction = start.fraction;
 	if ( travel === 0 ) return before;
 	for ( let edge = start.edge; edge > 0 && edge < path.length && travel > 0; edge += direction ) {
-		const span = worldVector( path[edge]!, path[edge - 1]! )!;
-		const length = hypot3( ...span ), planar = hypot2( span[0], span[2] );
+		// The certified chain shares one coordinate space; a mismatched edge
+		// was a spread-of-null TypeError before and stays loud here.
+		if ( !writeWorldVector( path[edge]!, path[edge - 1]!, spanVector ) ) throw Error( "Invalid walking path edge" );
+		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] ),
+			planar = hypot2( spanVector[0], spanVector[2] );
 		const available = length * (direction > 0 ? 1 - fraction : fraction);
 		const step = Math.min( available, travel, planar ? budget * length / planar : Infinity );
 		distance += direction * step;
@@ -301,20 +331,20 @@ Spend correction travel along the two admitted legs of a turn.
 */
 function recoverTurn( before: Pose, model: Pose, candidate: Pose, path: NonNullable<MovementTransition["turn"]> ) {
 	if ( !onCorridor( model, path.outgoing.from, path.outgoing.to, true ) ) return null;
-	const delta = worldVector( candidate, before );
-	if ( !delta ) return null;
-	const distance = hypot3( ...delta );
+	if ( !writeWorldVector( candidate, before, pointVector ) ) return null;
+	const distance = hypot3( pointVector[0], pointVector[1], pointVector[2] );
 	if ( onCorridor( before, path.outgoing.from, path.outgoing.to, true ) ) {
-		const remaining = worldVector( model, before );
-		if ( !remaining ) return null;
-		const length = hypot3( ...remaining );
+		if ( !writeWorldVector( model, before, pointVector ) ) return null;
+		const length = hypot3( pointVector[0], pointVector[1], pointVector[2] );
 		return length ? interpolateMovement( before, model, Math.min( 1, distance / length ) ) : model;
 	}
 	if ( !onCorridor( before, path.incoming.from, path.incoming.to, true ) ) return null;
 	const corner = path.outgoing.from;
-	const first = worldVector( corner, before ), second = worldVector( model, corner );
-	if ( !first || !second ) return null;
-	const toCorner = hypot3( ...first ), toModel = hypot3( ...second );
+	if ( !writeWorldVector( corner, before, spanVector ) || !writeWorldVector( model, corner, pointVector ) ) {
+		return null;
+	}
+	const toCorner = hypot3( spanVector[0], spanVector[1], spanVector[2] ),
+		toModel = hypot3( pointVector[0], pointVector[1], pointVector[2] );
 	if ( distance < toCorner ) return interpolateMovement( before, corner, distance / toCorner );
 	if ( !toModel ) return model;
 	return interpolateMovement( corner, model, Math.min( 1, (distance - toCorner) / toModel ) );
@@ -337,6 +367,35 @@ discontinuity
 function discontinuity( a: Pose, b: Pose ) {
 	return !sameCoordinateSpace( a.regionId, b.regionId ) ||
 		poseDistance( a, b ) > DISCONTINUITY_DISTANCE;
+}
+
+// Scratch for the per-edge recovery geometry (PROFILING.md: a steady frame
+// allocates close to nothing; fresh tuples here were the majority of the
+// combat frame's sampled allocations). Every helper below holds its pair for
+// one loop iteration or one statement group and nothing retains a slot past
+// a call, so two slots cover them; writeWorldVector keeps a private plane
+// scratch for the region delta.
+const spanVector: [number, number, number] = [ 0, 0, 0 ];
+const pointVector: [number, number, number] = [ 0, 0, 0 ];
+const planeVector: [number, number] = [ 0, 0 ];
+
+/*
+================
+writeWorldVector
+
+The allocation-free form of worldVector: writes a->b's world-space vector
+into out, false where worldVector returned null.
+================
+*/
+function writeWorldVector( a: Pose, b: Pose, out: [number, number, number] ): boolean {
+	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) {
+		return false;
+	}
+	writeWorldDelta( b, a, planeVector );
+	out[0] = planeVector[0];
+	out[1] = a.y - b.y;
+	out[2] = planeVector[1];
+	return true;
 }
 
 /*
