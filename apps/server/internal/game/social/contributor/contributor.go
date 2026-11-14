@@ -583,6 +583,11 @@ asks again while the answer is still missing.
 func (r *Registry) Prompts(online []Online) []Prompt {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The roster pass runs every tick: a shard with no contributor (or
+	// nobody left to forget) walks nobody.
+	if len(r.memberOf) == 0 && len(r.prompted) == 0 {
+		return nil
+	}
 	present := make(map[string]bool, len(online))
 	var prompts []Prompt
 	for _, o := range online {
