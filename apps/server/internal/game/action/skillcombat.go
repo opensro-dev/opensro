@@ -312,12 +312,6 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			return offensiveRefusal(code), skillCastRefused
 		}
 	}
-	// The cast begins in hit range: its target takes the caster's
-	// relation slot, so the monster's vitals reach the caster
-	// (monstervitals.go).
-	if release == nil {
-		rt.bindCastTarget(divisionID, snapshot.Name, target.Gid)
-	}
 	// Natively the attack starting here aims the caster's hawk.
 	if release == nil && rootID == 0 {
 		rt.noteHawkOwnerAttack(divisionID, snapshot, target.Gid, nowMs)

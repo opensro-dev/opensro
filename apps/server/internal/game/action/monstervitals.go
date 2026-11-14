@@ -12,17 +12,19 @@ words and that payload are MonsterState's (simulation/monster_vitals.go);
 this lane finds the holders.
 
 A player holds a monster through the first of the seven relation slots a
-player owns, bound with the vitals bit:
-  - the object select (v1.150 0x745A) empties the slot and binds the
-    selected character to it; the selection plane (select.go) is that
-    slot;
-  - a cast that begins in hit range does the same for its target, so a
-    player who attacks without selecting still holds what it attacks
-    (bindCastTarget).
-Selecting anything else or releasing the target leaves the monster. The
-slot also carries a range (320, or 910 for a monster the select bound),
-but only a different refresh judges it, never the vitals publication, so
-this lane keeps no range.
+player owns, bound with the vitals bit. Only the object select (v1.150
+0x745A) binds a monster there: it empties the slot and binds the selected
+character with range 910; the selection plane (select.go) is that slot.
+The browser client selects on every click on a monster, so a player
+attacks what it holds. A cast binds nothing of its own; the one cast-side
+bind is Scorn's forced target, which binds the victim's slot to the caster
+(skillforcedtarget.go). Selecting anything else or releasing the target
+leaves the monster.
+
+The slot's range is judged only when the held monster moves to another
+navigation cell: a holder farther than the range then loses the hold in
+silence (retireDistantHolders). The vitals publication itself never
+measures it.
 
 ===========================================================================
 */
@@ -32,8 +34,14 @@ package action
 import (
 	"sort"
 
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// monsterHoldRange is the range the object select gives the relation that
+// holds a monster (910; other objects get 320).
+const monsterHoldRange float32 = 910
 
 /*
 ================
@@ -116,18 +124,61 @@ func (rt *Runtime) vitalsHolderID(holder selectionHolder) int64 {
 
 /*
 ================
-bindCastTarget
+retireDistantHolders
 
-A player's cast at a monster began in hit range: the monster takes the
-player's first relation slot, as the reference server binds a cast's
-target there once the cast passes its hit-range check. The bind is the
-selection plane's, so the monster's vitals reach the caster from the next
-tick on, whether or not the client selected it first.
+The reference server measures a relation's range only when the object it
+holds moves to another navigation cell: every relation that holds the
+object with the vitals bit and a range is measured from its player (the
+3D actor distance), and one whose range is below the distance is detached
+in silence; the player's client keeps its target ring and stops receiving
+the HP until it selects again. A resting monster, and a player walking
+away from one, keep the hold.
+
+The port keeps no navigation cells. A monster in flight is taken to cross
+one on every tick (inference: a walking monster crosses cells
+continuously, and the measure is the same at each of them), so its
+holders are measured each tick while it moves. Only monster holds are
+judged: no other hold changes what a player receives.
 ================
 */
-func (rt *Runtime) bindCastTarget(divisionID, characterName string, gid uint32) {
-	if rt.Selected == nil {
+func (rt *Runtime) retireDistantHolders(nowMs int64) {
+	if rt.Monsters == nil || rt.Selected == nil {
 		return
 	}
-	rt.Selected.Set(divisionID, characterName, gid)
+	rt.vitalsHolders = rt.Selected.holders(rt.vitalsHolders[:0])
+	for _, holder := range rt.vitalsHolders {
+		if holder.gid < domain.MonsterGIDBase || holder.gid > domain.MonsterGIDLimit {
+			continue
+		}
+		mover, ok := rt.Monsters.Mover(holder.division, holder.gid)
+		if !ok || !mover.InFlight(nowMs) {
+			continue
+		}
+		from, ok := rt.holderPose(holder, nowMs)
+		if !ok {
+			continue
+		}
+		if monsterHoldRange < monster.NativeActorDistance(from, mover.LivePoseAt(nowMs, nil)) {
+			rt.Selected.release(holder.division, holder.name, holder.gid)
+		}
+	}
+}
+
+/*
+================
+holderPose
+
+The holder's live position, or false once the character left the
+division.
+================
+*/
+func (rt *Runtime) holderPose(holder selectionHolder, nowMs int64) (monster.Pose, bool) {
+	unlock := rt.lockDivision(holder.division)
+	defer unlock()
+	c := rt.findCharacter(holder.division, holder.name)
+	if c == nil {
+		return monster.Pose{}, false
+	}
+	at := rt.liveSpawn(simulation.WorldKey(holder.division, c.Name), c, nowMs)
+	return monster.Pose{RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}, true
 }

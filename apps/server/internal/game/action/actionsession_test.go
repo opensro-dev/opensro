@@ -350,8 +350,6 @@ separate private session release before comparing those public captures.
 */
 func assertAndSeparateActionReleases(t *testing.T, routed []simulation.DivisionFrames) []simulation.DivisionFrames {
 	t.Helper()
-	// The striker's private vitals of its target are no action bracket.
-	routed, _ = separateHolderVitals(t, routed)
 	var public []simulation.DivisionFrames
 	for _, burst := range routed {
 		if len(burst.Frames) == 1 && burst.Frames[0].Opcode == wire.OpActionState {

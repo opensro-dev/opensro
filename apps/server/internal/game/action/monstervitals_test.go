@@ -4,9 +4,9 @@
 monstervitals_test.go - a monster's vitals reach the players that hold it
 
 A monster's HP never rides a public frame: once per tick, a changed
-monster sends its holders (the players that selected it or whose cast
-began on it) a private 0x33A6 with the tick's cause word, the HP and the
-status. These tests pin who receives it, when, and what it carries.
+monster sends its holders (the players that selected it) a private 0x33A6
+with the tick's cause word, the HP and the status. These tests pin who
+receives it, when, what it carries, and when a holder lets go.
 
 ===========================================================================
 */
@@ -16,10 +16,12 @@ package action
 import (
 	"encoding/binary"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -67,32 +69,6 @@ func monsterVitalsRoutes(t *testing.T, routed []simulation.DivisionFrames, gid u
 		}
 	}
 	return out
-}
-
-/*
-================
-separateHolderVitals
-
-Split a tick's routes into the rest and the private monster vitals its
-holders received: every hit lets the striker hold its target, so the tick
-after it carries that frame beside whatever a test is about. Each split
-route must be one private flags-5 0x33A6.
-================
-*/
-func separateHolderVitals(t *testing.T, routed []simulation.DivisionFrames) (rest, held []simulation.DivisionFrames) {
-	t.Helper()
-	for _, route := range routed {
-		if len(route.Frames) == 1 && route.Frames[0].Opcode == simulation.OpVitalsUpdate &&
-			len(route.Frames[0].Payload) > 6 && route.Frames[0].Payload[6] == 5 {
-			if route.OnlyCharacterID == 0 {
-				t.Fatalf("monster vitals routed publicly: %+v", route)
-			}
-			held = append(held, route)
-			continue
-		}
-		rest = append(rest, route)
-	}
-	return rest, held
 }
 
 /*
@@ -164,18 +140,16 @@ func TestSelectedMonsterVitalsReachTheHolderOncePerTick(t *testing.T) {
 
 /*
 ================
-TestCastTargetHoldsTheMonster
+TestStrikeWithoutSelectionHoldsNothing
 
-A player that strikes a monster without selecting it holds it from the
-strike on: the strike's own frames carry no HP, and the next tick sends
-the striker the HP the strike left.
+A strike binds no relation: a player that strikes a monster it did not
+select receives none of the monster's HP, on the strike or on the tick.
+Once it selects the monster, as the client does on every click, the
+engage's next strike reaches it on that strike's tick.
 ================
 */
-func TestCastTargetHoldsTheMonster(t *testing.T) {
+func TestStrikeWithoutSelectionHoldsNothing(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
-	if _, selected := rt.Selected.Get(testDivision, c.Name); selected {
-		t.Fatal("fixture starts with a selection")
-	}
 	result := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
 	result = assertAndSeparateActionSession(t, result)
 	if _, damage, fatal := assertSkillDamageOpen(t, result.Frames, 2, enterworld.ObjectIDForCharacter(c), target.Gid); damage == 0 || fatal {
@@ -183,11 +157,88 @@ func TestCastTargetHoldsTheMonster(t *testing.T) {
 	}
 	assertNoMonsterHP(t, "striker frames", result.Frames, target.Gid)
 	assertNoMonsterHP(t, "observer frames", result.Broadcast, target.Gid)
+	if held := monsterVitalsRoutes(t, rt.TickHook()(clock.NowMs()), target.Gid); len(held) != 0 {
+		t.Fatalf("a striker that did not select received %+v", held)
+	}
+	if _, selected := rt.Selected.Get(testDivision, c.Name); selected {
+		t.Fatal("the strike bound a selection")
+	}
+
+	if selected := rt.HandleObjectSelect(testDivision, c, binary.LittleEndian.AppendUint32(nil, target.Gid)); selected.Refusal != "" {
+		t.Fatalf("select refused: %+v", selected)
+	}
+	rt.TickHook()(clock.At(testBasicAttackActionDuration).UnixMilli())
+	routed := rt.TickHook()(clock.At(testBasicAttackActionDuration + time.Millisecond).UnixMilli())
 	after, _ := rt.Monsters.Get(testDivision, target.Gid)
-	held := monsterVitalsRoutes(t, rt.TickHook()(clock.NowMs()), target.Gid)
+	held := monsterVitalsRoutes(t, routed, target.Gid)
 	if len(held) != 1 || held[0].characterID != c.ID || held[0].hp != after.CurrentHP ||
 		held[0].cause != uint16(simulation.VitalsSourceCombatDamage) {
-		t.Fatalf("striker vitals = %+v, want one frame to %d with HP %d", held, c.ID, after.CurrentHP)
+		t.Fatalf("selected striker vitals = %+v, want one frame to %d with HP %d", held, c.ID, after.CurrentHP)
+	}
+}
+
+/*
+================
+TestMovingMonsterRetiresDistantHolder
+
+A monster that walks past its holder's range (910) leaves the holder in
+silence, and its next HP reaches nobody; nearer, or resting beyond the
+range, it stays held.
+================
+*/
+func TestMovingMonsterRetiresDistantHolder(t *testing.T) {
+	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	rt.Selected.Set(testDivision, c.Name, target.Gid)
+	mover, ok := rt.Monsters.Mover(testDivision, target.Gid)
+	if !ok {
+		t.Fatal("target mover missing")
+	}
+	// 960 along both axes, inside the region: about 1358 at the end.
+	away := func(at float64) float64 {
+		if at < simulation.NativeRegionSize/2 {
+			return at + 960
+		}
+		return at - 960
+	}
+	mover.From, mover.To = mover.Pose, mover.Pose
+	mover.To.X, mover.To.Z = away(mover.Pose.X), away(mover.Pose.Z)
+	mover.DepartMs, mover.ArriveMs = clock.NowMs(), clock.At(10*time.Second).UnixMilli()
+	if !rt.Monsters.CommitMover(testDivision, target.Gid, mover) {
+		t.Fatal("commit the walk")
+	}
+	held := func() bool {
+		gid, ok := rt.Selected.Get(testDivision, c.Name)
+		return ok && gid == target.Gid
+	}
+
+	rt.retireDistantHolders(clock.At(time.Second).UnixMilli())
+	if !held() {
+		t.Fatal("a monster walking within the range was let go")
+	}
+	late := clock.At(9 * time.Second).UnixMilli()
+	rt.retireDistantHolders(late)
+	if held() {
+		t.Fatal("a monster that walked past the range is still held")
+	}
+	live, _ := rt.Monsters.Get(testDivision, target.Gid)
+	plan := simulation.MonsterDamagePlan{GID: target.Gid, ExpectedHP: live.CurrentHP, Damage: 100}
+	rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, live.CurrentHP, []simulation.MonsterDamagePlan{plan})
+	if routed := rt.publishMonsterVitals(late); len(routed) != 0 {
+		t.Fatalf("a let-go monster published %+v", routed)
+	}
+
+	// At rest beyond the range, the monster stays held.
+	mover, _ = rt.Monsters.Mover(testDivision, target.Gid)
+	mover.Pose = mover.To
+	mover.From, mover.To = monster.Pose{}, monster.Pose{}
+	mover.DepartMs, mover.ArriveMs = 0, 0
+	if !rt.Monsters.CommitMover(testDivision, target.Gid, mover) {
+		t.Fatal("commit the rest")
+	}
+	rt.Selected.Set(testDivision, c.Name, target.Gid)
+	rt.retireDistantHolders(late)
+	if !held() {
+		t.Fatal("a resting monster beyond the range was let go")
 	}
 }
 

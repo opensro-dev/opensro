@@ -332,6 +332,8 @@ func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 			row := installFireImbue(t, rt, c)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
 			rt.CombatRoll = func() (uint32, error) { return 0, nil }
+			// The client selects what it strikes.
+			rt.Selected.Set(testDivision, c.Name, target.Gid)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 			current, _ := rt.Monsters.Get(testDivision, target.Gid)
 			if !burnSlot(current).Active {
