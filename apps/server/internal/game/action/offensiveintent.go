@@ -72,7 +72,7 @@ beginOffensiveSkill
 Retain the target through approach; release revalidates authority and costs.
 ================
 */
-func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
+func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, doors characterDoors) OpResult {
 	if c == nil {
 		return OpResult{}
 	}
@@ -107,7 +107,7 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	reach := rt.playerActionReach(division, snapshot, skill, loadout)
 	intent := basicAttackIntent{DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID, ActionReach: reach, SingleCast: true}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(c, intent, now, rt.handlerDoors())
+	return rt.advanceBasicAttackIntent(c, intent, now, doors)
 }
 
 /*
