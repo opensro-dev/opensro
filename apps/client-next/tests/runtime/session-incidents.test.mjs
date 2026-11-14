@@ -370,20 +370,25 @@ test("a refused entry files its incident with the entering character", async t =
 	defined( socket ).receive( 2, welcome );
 	session.step( 3 );
 	await settle();
-	// The EnterWorld result refuses the entry (its first byte is not 1):
-	// the session bounces back to character select with the name cleared
-	// from the published state (#1855).
-	defined( socket ).receive( 7, new Uint8Array( 9 ) );
+	// The EnterWorld result refuses the entry (its first byte is not 1)
+	// with the native already-connected code, 0x11 (the account holds its
+	// world seat): the session bounces back to character select with the
+	// name cleared from the published state (#1855) and the code on the
+	// entry failure, for the character screen's message.
+	const refusal = new Uint8Array( 9 );
+	refusal[1] = 0x11;
+	defined( socket ).receive( 7, refusal );
 	const bounced = session.step( 4 );
 	await settle();
 	assert.equal( bounced?.phase, "character-select" );
 	assert.equal( bounced?.character, undefined );
 	assert.match( String( bounced?.error ), /EnterWorld rejected/ );
+	assert.equal( bounced?.entryFailure?.nativeErrorCode, 0x11 );
 	session.command( {
 		kind: "client-report",
 		incidentKind: "runtime",
 		code: "world_entry_rejected",
-		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0",
+		message: "Entry rejected (S17) at dock/entering: EnterWorld rejected: 17",
 		tabHiddenMs: 42000
 	} );
 	session.step( 5 );
@@ -395,10 +400,11 @@ test("a refused entry files its incident with the entering character", async t =
 	// The rejection joins to its transport session by id, names why the
 	// transport ended and how long the tab was hidden (#2558).
 	assert.equal( rejection?.transportSession, "123456789" );
-	assert.equal( rejection?.closeReason, "packet_application_failed" );
+	assert.equal( rejection?.closeReason, "enter_world_refused" );
 	assert.equal( rejection?.tabHiddenMs, 42000 );
-	const failure = reports.find( report => report.code === "packet_application_failed" );
-	assert.equal( failure?.transportSession, "123456789" );
+	// A refusal is the server's designed answer: the world files no
+	// packet failure of its own for it.
+	assert.equal( reports.some( report => report.code === "packet_application_failed" ), false );
 });
 
 /*
