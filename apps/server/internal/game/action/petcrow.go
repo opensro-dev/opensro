@@ -66,9 +66,11 @@ func (rt *Runtime) crowManaSpring(step petCombatStep, damage uint64) {
 		step.state.crowManaRestored += restored
 		bursts := step.state.crowManaRestored / 10000
 		step.state.crowManaRestored %= 10000
-		if bursts > 0 {
+		// The burst lands where the crow stands: its pose comes from the
+		// companion's one pose owner (simulation.CompanionMover, #3464).
+		if at, ok := step.state.mover.Pose(step.pet.GID, step.nowMs); bursts > 0 && ok {
 			// One aggregated hit bounds work when a single attack restores several thresholds.
-			rt.petGearArea(step, step.state.follower.Position(step.nowMs), uint32(min(uint64(^uint32(0)), bursts*5000)), 50, -1, false)
+			rt.petGearArea(step, at, uint32(min(uint64(^uint32(0)), bursts*5000)), 50, -1, false)
 		}
 	}
 }
