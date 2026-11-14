@@ -371,3 +371,31 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 		}
 	};
 }
+
+/*
+================
+timelineEvents
+
+The journal's events on timeline.json's clock: atMs becomes t and a grouped
+event's lastAtMs becomes lastT, both seconds from `zeroMs` (the replay's
+first frame). Raw performance.now() milliseconds left beside t cannot be
+placed on its axis without the page's clock origin, and the last throw of
+an error storm is what ties it to what the player was doing (#3425).
+================
+*/
+export function timelineEvents( events: readonly JournalEvent[], zeroMs: number ): Record<string, unknown>[] {
+	return events.map( ( { atMs, lastAtMs, ...event } ) => {
+		const out: Record<string, unknown> = { t: timelineSeconds( atMs, zeroMs ), ...event };
+		if ( typeof lastAtMs === "number" ) out.lastT = timelineSeconds( lastAtMs, zeroMs );
+		return out;
+	} );
+}
+
+/*
+================
+timelineSeconds
+================
+*/
+function timelineSeconds( atMs: number, zeroMs: number ): number {
+	return +((atMs - zeroMs) / 1000).toFixed( 3 );
+}
