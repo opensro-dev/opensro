@@ -17,6 +17,7 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const { CHAT_HISTORY_CONTROL } = await import( "../../src/engine/foundation/gameplay/commerce-controls.ts" );
+const { reentryKeepsChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/world.ts" );
 const NOON_UTC = Date.UTC( 2026, 0, 15, 12, 0, 0 );
 const WHISPER = 2, GLOBAL = 6;
 
@@ -132,4 +133,16 @@ test("the public replay after a re-entry adds only the lines the log does not ho
 		f.game.dispose();
 		mock.restoreAll();
 	}
+});
+
+test("only the same character on the same shard keeps the chat across an entry", () => {
+	const last = { character: "Local", division: "shard" };
+	assert.equal( reentryKeepsChat( last, "Local", "shard" ), true, "a re-entry keeps the log" );
+	assert.equal( reentryKeepsChat( last, "Local", "other" ), false, "another shard: someone else" );
+	assert.equal( reentryKeepsChat( last, "Other", "shard" ), false, "another character starts from nothing" );
+	assert.equal(
+		reentryKeepsChat( { character: "", division: "" }, "Local", "shard" ),
+		false,
+		"a first entry clears"
+	);
 });

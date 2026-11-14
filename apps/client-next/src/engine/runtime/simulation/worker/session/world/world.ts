@@ -97,6 +97,21 @@ function lostAnswer( cause: unknown ): boolean {
 
 /*
 ================
+reentryKeepsChat
+
+Whether an entry keeps the chat log of the entry before it (#3435): only
+the same character on the same shard. Names are unique within a shard, not
+across shards, and an entry that never reached the world leaves its log in
+place for a later forgetting disconnect that skips its clear (hasWorld is
+still false), so the name alone would hand that log to another account.
+================
+*/
+export function reentryKeepsChat( previous: { character: string; division: string; }, name: string, shard: string ) {
+	return previous.character === name && previous.division === shard;
+}
+
+/*
+================
 createWorldSession
 ================
 
@@ -637,9 +652,10 @@ enter
 			cancel();
 			departure.reset();
 			completedDeparture = 0;
-			// A departure or a forgetting disconnect already cleared the chat;
-			// what is left is the log this character was away from (#3435).
-			core.clear( true );
+			// Only the same character entering the same shard again keeps the
+			// log it was away from (#3435). character and division still name
+			// the previous entry here; they are replaced below.
+			core.clear( reentryKeepsChat( { character, division }, name, shard ) );
 			hasWorld = false;
 			resume = undefined;
 			entryAttempt = true;
