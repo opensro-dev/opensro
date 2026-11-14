@@ -34,7 +34,11 @@ export function createCharacterResources(
 	origin: string
 ) {
 	const durations = new Map<string, ReadonlyMap<string, number>>();
-	const loaded = new Set<string>(), wanted = new Set<string>(), planned = new Set<string>();
+	const loaded = new Set<string>();
+	// The frame's admission intent. begin starts each frame with new sets
+	// instead of clearing these: a long-lived set's next table is allocated
+	// in the old generation, where only a full collection frees it.
+	let wanted = new Set<string>(), planned = new Set<string>();
 	// The local player's worn sources for this frame (prioritize). The
 	// single load slot serves them before any other cold source starts:
 	// a newly equipped part must not wait behind unrelated actors.
@@ -195,8 +199,8 @@ export function createCharacterResources(
 		*/
 		begin( seconds: number ) {
 			now = seconds;
-			wanted.clear();
-			planned.clear();
+			wanted = new Set();
+			planned = new Set();
 			plannedBytes = 0;
 			reserved = null;
 		},
