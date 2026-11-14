@@ -17,13 +17,13 @@ import json
 import mmap
 import os
 from pathlib import Path
-import re
 
 import alexandria_npcs as text_tables
 import cap110_skill_effects as skill_effects
 import cap110_skills as skills
 import cap110_skill_database as database_skills
 import import_vsro_alexandria as tables
+import skilldata_enc as skill_tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
@@ -43,20 +43,6 @@ TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 # ================
 def enabled(env=os.environ):
 	return env.get(FLAG, "").strip().lower() in tables.FLAG_ON
-
-
-# ================
-# read_skill_tables
-#
-# Manifest entries are validated basenames, never arbitrary paths.
-# ================
-def read_skill_tables(read):
-	names = [row[0].strip() for row in tables.table_rows(read("skilldata.txt"))]
-	if not names or any(not re.fullmatch(r"skilldata_\d+\.txt", name, re.IGNORECASE) for name in names):
-		raise ValueError("invalid skill manifest")
-	if len(set(map(sro_pk2.fold_ascii, names))) != len(names):
-		raise ValueError("duplicate skill manifest entry")
-	return [row for name in names for row in tables.table_rows(read(sro_pk2.fold_ascii(name)))]
 
 
 # ================
@@ -114,8 +100,12 @@ def add_skills(vsro_root, native, output, database_export=None):
 		# ================
 		def read_later(name):
 			return tables.table_text(media, index, name)
-		native_rows = read_skill_tables(read_native)
-		later_rows = read_skill_tables(read_later)
+		# Both sides read the way their client does: the later client's
+		# encrypted skilldataenc set (skilldata_enc.py), whose plain twin is
+		# an older copy that lacks skills (#3374); the native extraction has
+		# only the plain manifest.
+		native_rows = skill_tables.client_skill_rows(read_native, lambda name: name in base_paths)
+		later_rows = skill_tables.client_skill_rows(read_later, lambda name: tables.TEXTDATA + name in index)
 		database_path = database_export or os.environ.get(database_skills.DATABASE_ENV)
 		database_rows, database_hash = database_skills.load_database_rows(database_path) if database_path else ([], None)
 		added, summary = database_skills.merge_database_tier(native_rows, later_rows, database_rows, prior)

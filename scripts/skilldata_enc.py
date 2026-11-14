@@ -24,11 +24,21 @@ so a plain table passes through.
 ===========================================================================
 """
 
+import re
+
 import import_vsro_alexandria as tables
 
 ENC_MANIFEST = "skilldataenc.txt"
 PLAIN_MANIFEST = "skilldata.txt"
+# A manifest names shards by basename only (SkillData_5000ENC.txt,
+# skilldata_5000.txt); anything else would be a path into the archive.
+SHARD_NAME = re.compile(r"skilldata_[0-9]+(enc)?\.txt", re.IGNORECASE)
 ENCRYPTED_MAGIC = bytes.fromhex("e2b0")
+# Each encrypted shard ends with this marker in plain UTF-16, outside the
+# cipher stream: checked on all seven shards of the pinned VSRO client.
+# Decoded with the rest it became a one-column row of noise; kept plain it
+# is a comment line the table reader drops.
+ENCRYPTED_TRAILER = "\r\n//encrypt".encode("utf-16-le")
 KEY_SEED = 0x8C1F
 # The two key tables, 167 and 495 bytes: the cipher indexes them
 # by the counter modulo their lengths.
@@ -84,18 +94,21 @@ KEY_TABLE_B = bytes.fromhex("""
 # decode
 #
 # One SkillData_<n>ENC.txt payload in plain UTF-16. A payload without the
-# encrypted magic is already plain and comes back as it is.
+# encrypted magic is already plain and comes back as it is. The plain
+# ENCRYPTED_TRAILER, when present, is passed through undecoded.
 # ================
 def decode(raw):
 	raw = bytes(raw)
 	if not raw.startswith(ENCRYPTED_MAGIC):
 		return raw
-	out = bytearray(len(raw))
+	trailer = ENCRYPTED_TRAILER if raw.endswith(ENCRYPTED_TRAILER) else b""
+	body = raw[:len(raw) - len(trailer)]
+	out = bytearray(len(body))
 	key = KEY_SEED
-	for i, value in enumerate(raw):
+	for i, value in enumerate(body):
 		out[i] = (value + KEY_TABLE_A[key % len(KEY_TABLE_A)] - KEY_TABLE_B[key % len(KEY_TABLE_B)]) & 0xFF
 		key += 1
-	return bytes(out)
+	return bytes(out) + trailer
 
 
 # ================
@@ -103,13 +116,16 @@ def decode(raw):
 #
 # Every skill row a later client carries, read the way the client reads
 # them: the encrypted manifest and its shards when the archive has one,
-# else the plain manifest. read(name) returns a textdata payload by name.
-# has(name) says whether the archive holds it.
+# else the plain manifest. read(name) returns a textdata payload by
+# lower-case name. has(name) says whether the archive holds it. Manifest
+# entries are validated basenames, never arbitrary paths.
 # ================
 def client_skill_rows(read, has):
 	manifest = ENC_MANIFEST if has(ENC_MANIFEST) else PLAIN_MANIFEST
-	rows = []
-	for shard in tables.table_rows(read(manifest)):
-		if shard and shard[0].strip():
-			rows.extend(tables.table_rows(decode(read(shard[0].strip()))))
-	return rows
+	names = [row[0].strip() for row in tables.table_rows(read(manifest)) if row and row[0].strip()]
+	if not names or any(not SHARD_NAME.fullmatch(name) for name in names):
+		raise ValueError(f"invalid skill manifest {manifest}")
+	shards = [name.lower() for name in names]
+	if len(set(shards)) != len(shards):
+		raise ValueError(f"duplicate entry in skill manifest {manifest}")
+	return [row for shard in shards for row in tables.table_rows(decode(read(shard)))]
