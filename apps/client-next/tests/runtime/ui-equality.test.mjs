@@ -45,6 +45,8 @@ test("retained UI compares pixels, anchors, masks and preview state without losi
 			{ rotation: .1 },
 			{ uvTurn: 1 },
 			{ alphaCutoff: .5 },
+			{ tiled: true },
+			{ additive: true },
 			{ characterAnchor: 5 },
 			{ portraitGid: 5 },
 			{ mask: { texture: "mask", rect: [ 0, 0, 1, 1 ] } },
