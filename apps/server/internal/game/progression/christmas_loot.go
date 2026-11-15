@@ -37,16 +37,13 @@ const (
 	ChristmasPrincessSocks  = 30
 
 	// ChristmasSocksPerGift is one present's price: one pair (owner,
-	// 2026-11-15).
+	// 2026-11-15). The socks stay their native row: no merchant buys
+	// them (canSell 0), a stack of ten (MaxStack 10), and no exchange or
+	// ground drop (canTrade 0, CanDrop clear), which the sale, trade and
+	// drop doors already enforce. So-ok's exchange is their only use, as
+	// the v1.188 server's token events trade tokens for presents and
+	// never sell them (owner 2026-11-16: unsellable, as native).
 	ChristmasSocksPerGift = 1
-
-	// ChristmasSockSellPrice is what a merchant pays for one pair (owner,
-	// 2026-11-15). The row is natively unsellable (canSell 0); with the
-	// event on it sells like any loot. It stays as native otherwise: a
-	// stack of ten (MaxStack 10), and no exchange or ground drop
-	// (canTrade 0, CanDrop clear), which the trade and drop doors already
-	// enforce.
-	ChristmasSockSellPrice = 1000
 )
 
 /*
