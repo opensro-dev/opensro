@@ -11,6 +11,7 @@ mip generation, and the samplers they bind.
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
+	WATER_BAND_FADE,
 	WATER_BEHIND_WEIGHT,
 	WATER_CLARITY,
 	WATER_REFLECTION_MIX,
@@ -745,8 +746,15 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
    let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
    let surface=select(lit,waterColor,waterPass.plane.z>0.5);
    // Through deep water the seabed fades to the native surface
-   // (WATER_CLARITY); a far depth (nothing drawn) gives no share.
-   let seen=exp(-max(depthBehind-input.viewZ,0.0)/${WATER_CLARITY});
+   // (WATER_CLARITY); a far depth (nothing drawn) gives no share. Toward
+   // the detailed band's edge it fades too (WATER_BAND_FADE), before
+   // the flat fog cells begin.
+   var seen=exp(-max(depthBehind-input.viewZ,0.0)/${WATER_CLARITY});
+   if(env.terrainBand.w>0.5){
+    let cells=length(input.worldXZ/320.0-env.terrainBand.xy-vec2f(0.5));
+    let radius=sqrt(env.terrainBand.z);
+    seen*=1.0-smoothstep(radius-${WATER_BAND_FADE},radius-0.5,cells);
+   }
    lit=mix(surface,mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX}),seen)+vec3f(shore*${WATER_SHORE_FOAM});
   }else if(waterPass.plane.z>0.5){
    // Native: the planar reflection where a mirror exists, the water's lit

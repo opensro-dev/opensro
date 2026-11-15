@@ -41,14 +41,18 @@ export const WATER_BEHIND_WEIGHT = 0.85;
 export const WATER_REFLECTION_MIX = 0.45;
 export const WATER_SHORE_BAND = 2.0;
 export const WATER_SHORE_FOAM = 0.4;
-// The water depth, in metres, over which what lies under the surface
-// fades out: the share seen through is exp(-depth / clarity). Deep water
-// shows the native surface. The owner saw square patches on the sea
-// (2026-11-15): the seabed behind open water changes per 320 m cell (a
-// textured cell near the camera, the untextured fog cell past the
-// detailed band, no cell at all), and a fixed share bent every one of
-// those edges into the water.
-export const WATER_CLARITY = 3.0;
+// What lies under the surface shows through by exp(-depth / clarity),
+// depth being the view-space metres of water the ray crosses: shallow
+// water shows the seabed, open sea (no seabed drawn: the far depth)
+// shows none. The owner saw square patches on the sea (2026-11-15): the
+// seabed changes per 320 m cell (textured inside the detailed band, the
+// untextured fog cell past it, no cell at all), and a fixed share bent
+// every one of those edges into the water.
+export const WATER_CLARITY = 10.0;
+// The refraction also fades out over the last cells of the detailed
+// band (in cells, from its radius inward): past it the seabed is the
+// flat fog cell, and its edge is a square.
+export const WATER_BAND_FADE = 1.5;
 
 // The material's skin.z for a blended water surface. Native water packs
 // 1 (geometry.ts); every native test reads skin.z>0.5, so blended water
