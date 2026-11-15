@@ -84,9 +84,10 @@ import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row, overview_box, overview_tiles  # noqa: E402
+from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
+from arabia_map_tiles import import_map_tiles, map_tile_paths, restore_map_tiles  # noqa: E402
 from arabia_gates import prepare_gates  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
 	copy_resource_closure,
 	later_object_texts,
@@ -104,12 +105,7 @@ FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
 NESTS_ENV = "SRO_ARABIA_NESTS"
 MARKER = ".opensro-arabia.json"
-# The native map art a tile import replaced, kept so the off path puts it
-# back: an overview tile is native or Alexandria art, never Arabia's own.
-ORIGINALS = Path(".opensro-arabia-originals")
 MAPINFO_TABLE = "worldmap_mapinfo.txt"
-# Regions at y >= 128 are dungeon ids, which have no overview or minimap art.
-DUNGEON_REGION_Y = 128
 # The 200000 identity band: 120000 is the cap-110 family's, 130000 the
 # pet import's (140000/150000 held for its later sources), 160000 the
 # Sky Temple's, 170000 Jupiter's, 180000 the second hunting grounds',
@@ -461,71 +457,6 @@ def format_coord(value):
 # ================
 def remove_owned(output, prior):
 	return shared_remove_owned(output, prior, CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE, MARKER, REGION_PREFIX)
-
-
-# ================
-# map_tile_paths
-#
-# The Media.pk2 map art Arabia's outdoor regions need: one minimap tile
-# per region (minimap/<x>x<y>.ddj, region id = y << 8 | x) and the
-# overview tiles of the M map's region box that cover a region.
-# worldmap_mapinfo needs no row: the overview page draws every tile
-# in the box, so without these files the M map showed the older art over
-# Arabia, and the minimap was blank there (owner report, 2026-11-15).
-# ================
-def map_tile_paths(regions, box):
-	outdoor = sorted((region & 0xff, region >> 8) for region in regions if (region >> 8) < DUNGEON_REGION_Y)
-	paths = [f"minimap/{x}x{y}.ddj" for x, y in outdoor]
-	if box is not None:
-		paths += overview_tiles(box, outdoor)
-	return paths
-
-
-# ================
-# import_map_tiles
-#
-# Copies the v1.696 tiles. A file the variant lacks is owned (in the
-# marker's files, reaped by the off path). A file it already holds with
-# other bytes is native or Alexandria art: its first bytes are kept under
-# ORIGINALS and the path is recorded as replaced, so the off path restores
-# it rather than deleting a native tile. Returns (owned, replaced).
-# ================
-def import_map_tiles(media, media_index, output, paths):
-	owned, replaced = [], []
-	for archive_path in paths:
-		entry = media_index.get(archive_path)
-		if entry is None:
-			continue
-		relative = "Media_extracted/" + archive_path
-		target = safe_target(output, relative)
-		stored = sro_pk2.payload(media, entry)
-		if not target.exists():
-			variant.replace_file(target, stored)
-			owned.append(relative)
-			continue
-		if target.read_bytes() == stored:
-			continue
-		original = safe_target(output / ORIGINALS, relative)
-		if not original.exists():
-			original.parent.mkdir(parents=True, exist_ok=True)
-			write_atomically(original, target.read_bytes())
-		variant.replace_file(target, stored)
-		replaced.append(relative)
-	return owned, replaced
-
-
-# ================
-# restore_map_tiles
-#
-# The off half of import_map_tiles: every replaced tile gets its
-# original bytes back and the kept copy leaves.
-# ================
-def restore_map_tiles(output, prior):
-	for relative in prior.get("replacedTiles", []):
-		original = safe_target(output / ORIGINALS, relative)
-		if original.exists():
-			variant.replace_file(safe_target(output, relative), original.read_bytes())
-			original.unlink()
 
 
 # ================

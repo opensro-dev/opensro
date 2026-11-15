@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import arabia_import as arabia
+import arabia_map_tiles as arabia
 
 # Region 0x5a50: x 0x50 = 80, y 0x5a = 90; 0x8001 is a dungeon id.
 OUTDOOR, DUNGEON = (90 << 8) | 80, 0x8001
