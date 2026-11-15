@@ -62,3 +62,15 @@ test("each peer's script depends on the seed, not on the order peers draw in", (
 		assert.ok( Math.hypot( step.to.x - SPOT.x, step.to.z - SPOT.z ) <= 25 && step.delayMs <= 6000 );
 	}
 });
+
+test("a walker beside its region's edge never clicks outside the region", () => {
+	const corner = { regionId: 25000, x: 3, y: 0, z: 1917 };
+	const next = peerScript( { role: "walk", index: 0, seed: 5, spot: corner } );
+	let onEdge = 0;
+	for ( let n = 0; n < 200; n++ ) {
+		const { to } = next();
+		assert.ok( to.x >= 0 && to.x < 1920 && to.z >= 0 && to.z < 1920, `${to.x}, ${to.z}` );
+		if ( to.x === 0 || to.z === 1919 ) onEdge++;
+	}
+	assert.ok( onEdge > 0, "some draws reached past the edge and were held on it" );
+});
