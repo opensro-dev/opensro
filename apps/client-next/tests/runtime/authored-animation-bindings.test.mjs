@@ -10,7 +10,7 @@ import { npcManifestModels } from "../../../../scripts/build/shared/npcManifest.
 
 test("original NPC and monster state selectors retain independent events without duplicating shared BAN clips", async () => {
 	const manifest = readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ), seen = new Set();
-	let selectors = 0, state122 = 0, aliases = 0;
+	let selectors = 0, state122 = 0, aliases = 0, particleSelectors = 0;
 	for ( const [key, row] of Object.entries( npcManifestModels( manifest ) ) ) {
 		if ( !/KISAENG|SHAMAN|MANGNYANG/.test( key ) || seen.has( row.bsr ) ) continue;
 		seen.add( row.bsr );
@@ -30,8 +30,11 @@ test("original NPC and monster state selectors retain independent events without
 				} else assert.ok( binding.reason );
 			}
 		}
-		if ( /KISAENG2|SHAMAN/.test( key ) ) {
-			assert.ok( bsr.particleModifiers.some( m => m.stateId === 6 ) );
+		// The native kisaeng2 and shaman author a state-6 particle selector and
+		// no state-6 animation. A later client's event kisaeng2 (expanded build)
+		// authors neither, so the check reads the selector, not the name.
+		if ( /KISAENG2|SHAMAN/.test( key ) && bsr.particleModifiers.some( m => m.stateId === 6 ) ) {
+			particleSelectors++;
 			assert.ok(
 				!bindings.some( b => b.stateId === 6 ),
 				"unreferenced particle selector manufactured an animation"
@@ -40,6 +43,7 @@ test("original NPC and monster state selectors retain independent events without
 		aliases += bindings.filter( b => b.clip ).length - clips.length;
 	}
 	assert.ok( selectors > 20 );
+	assert.equal( particleSelectors, 2, "native kisaeng2 and shaman each author a state-6 particle selector" );
 	assert.ok( state122 > 0 );
 	assert.ok( aliases > 0 );
 });
