@@ -10,7 +10,7 @@ materials run a clock.
 ===========================================================================
 */
 import type { CharacterModel, CharacterClip } from "@/engine/contracts/character";
-import { CHARACTER_ACTORS, characterPoseBytes, characterBatchBytes } from "./character-budget";
+import { CHARACTER_ACTORS, characterPoseBytes, characterBatchBytes, characterSharedPalette } from "./character-budget";
 /*
 ================
 isCharacterAnimationExtension
@@ -66,9 +66,7 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
-		sharedPalette: !model.primitives.some( p =>
-			p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
-		),
+		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
 			0
