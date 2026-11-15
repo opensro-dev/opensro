@@ -21,6 +21,7 @@ export default {
 		"scripts/test/assets/meshCloth.test.mjs",
 		"scripts/test/assets/unboundCharacterVertices.test.mjs",
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
+		"scripts/test/assets/sceneryBones.test.mjs",
 		"scripts/test/assets/entityCompoundParticles.test.mjs",
 		"scripts/test/assets/monsterPortraitError.test.mjs",
 		"scripts/test/assets/monsterPortraitNames.test.mjs",

@@ -294,17 +294,13 @@ def closure_completeness(rows, archives, natives):
 				owners.append(key)
 		if not requests:
 			break
-		try:
-			dependencies = shared.resource_dependencies(requests)
-		except ValueError:
-			dependencies = []
-			for request in requests:
-				try:
-					dependencies.append(shared.resource_dependencies([request])[0])
-				except ValueError as error:
-					lines = [line.strip() for line in str(error).splitlines() if "Error:" in line]
-					absent[owners[len(dependencies)]] = "resource dependency audit failed: " + (lines[0] if lines else "unparseable")
-					dependencies.append([])
+		dependencies = []
+		for key, result in zip(owners, shared.tolerant_dependencies(requests)):
+			if isinstance(result, ValueError):
+				lines = [line.strip() for line in str(result).splitlines() if "Error:" in line]
+				absent[key] = "resource dependency audit failed: " + (lines[0] if lines else "unparseable")
+				result = []
+			dependencies.append(result)
 		frontier = set()
 		for key, names in zip(owners, dependencies):
 			edges[key] = set()
