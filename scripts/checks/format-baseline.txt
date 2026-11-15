@@ -347,7 +347,6 @@ scripts/build/world/navmesh/parseNavmesh.mjs
 scripts/build/world/objects/compound.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/checks/lib/methodBlock.mjs
-scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs
 scripts/lib/missionMovementFixture.mjs
 scripts/lib/probeCharacter.mjs
@@ -368,7 +367,6 @@ scripts/test/assets/optionalDataAsset.test.mjs
 scripts/test/assets/pythonRun.test.mjs
 scripts/test/assets/rebuildLockInterop.test.mjs
 scripts/test/assets/skillPaneImageReferences.test.mjs
-scripts/test/helpers/outdoorRegionPayloadCheck.mjs
 scripts/test/lib/generatedAssetTestMode.mjs
 scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs

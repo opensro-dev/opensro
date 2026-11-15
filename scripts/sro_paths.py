@@ -118,3 +118,24 @@ def _resolve_generated_root() -> Path:
 
 GENERATED_ROOT = _resolve_generated_root()
 PUBLIC_ROOT = GENERATED_ROOT / "client-public"
+
+
+# ================
+# resolve_build_state_root
+#
+# The build state beside a generated tree (generatedRoot.mjs
+# resolveBuildStateRoot): the reuse caches, stamps and the asset lock of the
+# tree they describe, so a fresh worktree finds the last build's.
+# ================
+def resolve_build_state_root(generated_root: Path | None = None) -> Path:
+	return Path(GENERATED_ROOT if generated_root is None else generated_root).parent / ".state"
+
+
+BUILD_STATE_ROOT = resolve_build_state_root()
+
+
+# ================
+# build_state_path
+# ================
+def build_state_path(*parts) -> Path:
+	return BUILD_STATE_ROOT.joinpath(*parts)
