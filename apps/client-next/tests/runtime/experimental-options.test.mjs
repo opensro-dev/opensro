@@ -353,6 +353,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
+		christmasCarols: true,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -372,6 +373,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		smartPetPickup: true,
 		sunDropMarker: false,
 		warpArrivalSound: false,
+		christmasCarols: true,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );

@@ -160,6 +160,11 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	if rt.UniqueRules.GapExempt && RollsUniqueDrops(monster.Rarity()) {
 		return true
 	}
+	// Port-only, not native: with SRO_CHRISTMAS_EVENT a winter monster's
+	// drops skip the gap too (christmas_loot.go).
+	if rt.christmasGapExempt(monster) {
+		return true
+	}
 	threshold := int32(100)
 	gap := int32(playerLevel) - int32(monster.Ref.Level)
 	if gap > 6 {
@@ -601,6 +606,11 @@ func (rt *Runtime) planMonsterKillLoot(
 		Angle:    pose.Heading,
 	}
 	now := time.UnixMilli(nowMs)
+	// Port-only, not native: with SRO_CHRISTMAS_EVENT a Snow Slave
+	// carries its Red Santa Socks and nothing else (christmas_loot.go).
+	if socks, only := rt.christmasSocksOnly(snapshot, monster, at, now); only {
+		return socks
+	}
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
 	// Port-only, not native: the beta rate scales a kill's drops, its
 	// assigned rewards and ordinary passes and the capacity bounding them, so
@@ -755,6 +765,13 @@ func (rt *Runtime) planMonsterKillLoot(
 	if box, ok := rt.halloweenBoxDrop(snapshot, monster, at, snapshot.Name, now); ok {
 		box.OwnerJID = ownerJID
 		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
+	}
+	// Port-only, not native: with SRO_CHRISTMAS_EVENT a winter unique
+	// leaves its Red Santa Socks (christmas_loot.go), after admission and
+	// the drop cap like the box above.
+	for _, sock := range rt.christmasSockDrops(monster, at, snapshot.Name, now) {
+		sock.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(sock, at, monster.Rarity()))
 	}
 	return admitted
 }

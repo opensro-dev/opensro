@@ -200,8 +200,9 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// 65: the Entire-map level checkbox (#3258) left when the v1.188
 	// window's own foot checkbox became the map's native switch, and the
 	// unique spawn points row (#3417) joined World map (M); 66: Silent wing
-	// flight (#3547) joined Sound and connection.
-	assert.equal( keys.length, 66 );
+	// flight (#3547) joined Sound and connection; 67: the Christmas carols
+	// row joined it too.
+	assert.equal( keys.length, 67 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

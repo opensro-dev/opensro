@@ -65,3 +65,27 @@ func (t *TextdataItems) ApplyTradeGoodsPriceFactor(factor float64) (int, error) 
 	}
 	return scaled, nil
 }
+
+/*
+================
+ApplyMerchantSale
+
+Port-only, not native. Opens one row to the merchants at sellPrice per
+unit: canSell (itemdata column 17, the sale gate commerce reads) set, and
+the sell price the quotes pay. Applied at load, before any owner reads
+the row, as the trade goods' factor is. False when the row is missing.
+================
+*/
+func (t *TextdataItems) ApplyMerchantSale(codename string, sellPrice float64) (bool, error) {
+	t.once.Do(t.load)
+	if t.archive != nil {
+		return false, fmt.Errorf("merchant sale: item references are already archived")
+	}
+	t.ownRows()
+	ref := t.byCodename[codename]
+	if ref == nil {
+		return false, nil
+	}
+	ref.NativeFields = ref.NativeFields.With("canSell", 1).With("sellPrice", sellPrice)
+	return true, nil
+}

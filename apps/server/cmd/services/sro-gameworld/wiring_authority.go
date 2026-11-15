@@ -171,6 +171,17 @@ func loadAuthorityTextdata(devPaths enterworld.DevPaths) (authorityTextdata, err
 		}
 		log.Infof("trade: %s priced %d trade goods x%d (port-only, not native)", action.EnvTradeTiers, scaled, enterworld.TradeGoodsPriceFactor)
 	}
+	// Port-only, not native: with the Christmas event on, merchants buy
+	// the Red Santa Socks (progression/christmas_loot.go).
+	if progression.ChristmasEventFromEnv().Enabled() {
+		opened, err := textdata.Items.ApplyMerchantSale(progression.ChristmasSockCodename, progression.ChristmasSockSellPrice)
+		if err != nil {
+			return authorityTextdata{}, err
+		}
+		if opened {
+			log.Infof("christmas: merchants buy %s at %d gold (port-only, not native)", progression.ChristmasSockCodename, progression.ChristmasSockSellPrice)
+		}
+	}
 	// Port-only, not native: the Item Mall transports move 1.5 times as fast.
 	if enterworld.MallTransportSpeedFromEnv() {
 		scaled, err := textdata.Items.ApplyMallTransportSpeed()
