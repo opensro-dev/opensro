@@ -31,28 +31,14 @@ import { destroyNow, type Retire } from "./retirement";
 
 // The shading constants pipelines.ts interpolates into the water's
 // fragment. The refraction strength scales the water's bump offset (the
-// mirror's own dudv pair) into a screen-space shift; the behind weight
-// darkens what is seen through the water; the reflection mix is the
-// planar reflection's share over it; the shore band is the view-space
-// distance, in metres, over which the foam fades from the waterline;
-// the foam is the whitening added at the line itself.
+// mirror's own dudv pair) into a screen-space shift; how much of the
+// seabed shows is the native water's own vertex alpha, never a constant
+// here. The shore band is the view-space distance, in metres, over which
+// the foam fades from the waterline; the foam is the whitening added at
+// the line itself.
 export const WATER_REFRACTION_STRENGTH = 0.03;
-export const WATER_BEHIND_WEIGHT = 0.85;
-export const WATER_REFLECTION_MIX = 0.45;
 export const WATER_SHORE_BAND = 2.0;
 export const WATER_SHORE_FOAM = 0.4;
-// What lies under the surface shows through by exp(-depth / clarity),
-// depth being the view-space metres of water the ray crosses: shallow
-// water shows the seabed, open sea (no seabed drawn: the far depth)
-// shows none. The owner saw square patches on the sea (2026-11-15): the
-// seabed changes per 320 m cell (textured inside the detailed band, the
-// untextured fog cell past it, no cell at all), and a fixed share bent
-// every one of those edges into the water.
-export const WATER_CLARITY = 10.0;
-// The refraction also fades out over the last cells of the detailed
-// band (in cells, from its radius inward): past it the seabed is the
-// flat fog cell, and its edge is a square.
-export const WATER_BAND_FADE = 1.5;
 
 // The material's skin.z for a blended water surface. Native water packs
 // 1 (geometry.ts); every native test reads skin.z>0.5, so blended water

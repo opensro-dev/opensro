@@ -9,8 +9,9 @@ per 320 m cell (a textured cell, the untextured fog cell past the detailed
 band, no cell at all), and the refraction bent a fixed share of it into
 the surface, so every cell edge showed through. The scene here is deep
 water over two seabed cells of opposite colour. The proof is presented
-pixels: the edge across the water with the row on stays faint (a fixed
-share drew it at 98.7; the native frame, row off, draws none).
+pixels: the water carries the native vertex alpha for its depth, and the
+edge across it with the row on is no stronger than the native frame's
+(row off): a fixed share drew it at 98.7 over the native 0.
 water-refraction.test.mjs keeps the seabed visible through shallow
 water. SRO_WATER_SHOTS names a folder for the before/after captures.
 
@@ -27,9 +28,9 @@ const WIDTH = 192;
 const HEIGHT = 120;
 // The seabed lies this far under the water, in metres: open sea.
 const SEABED_DEPTH = 20;
-// The most the on frame's edge may show, in mean channel difference: a
-// fixed share drew it at 98.7, a faint trace stays under this.
-const MAX_EDGE = 10;
+// The on frame's edge may exceed the native one by this much at most, in
+// mean channel difference: the bend shifts texels, it never adds seabed.
+const EDGE_SLACK = 2;
 // The rows sampled across the edge (the cells meet at x = 0, mid-frame).
 const SAMPLE_ROWS = [ 70, 85, 100 ];
 // Pixels either side of the edge column that are averaged.
@@ -56,7 +57,7 @@ function edgeStrength( rgba ) {
 	return total / samples;
 }
 
-test( "deep refracted water keeps the seabed's cell edge faint", { timeout: 120000 }, async () => {
+test( "refracted water shows the seabed's cell edge no more than native", { timeout: 120000 }, async () => {
 	const { browser, page } = await launchProbeBrowser();
 	const errors = [];
 	page.on( "pageerror", error => errors.push( error.message ) );
@@ -107,7 +108,7 @@ test( "deep refracted water keeps the seabed's cell edge faint", { timeout: 1200
 			if ( renderer.phase() !== "running" ) throw Error( renderer.error() ?? "GPU startup deadline" );
 			// Looking along +z at the water, the two cells split left and right.
 			renderer.setWorldCamera( { eye: [ 0, 25, -60 ], target: [ 0, 0, 20 ], fov: 1.1, near: 1, far: 500 } );
-			const quad = ( id, corners, material ) => ({
+			const quad = ( id, corners, material, alpha = 1 ) => ({
 				id,
 				center: corners.reduce( ( sum, c ) => sum.map( ( v, i ) => v + c[i] / 4 ), [ 0, 0, 0 ] ),
 				radius: 200,
@@ -117,6 +118,7 @@ test( "deep refracted water keeps the seabed's cell edge faint", { timeout: 1200
 					positions: Float32Array.from( corners.flat() ),
 					normals: Float32Array.of( 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0 ),
 					uvs: Float32Array.of( 0, 0, 1, 0, 1, 1, 0, 1 ),
+					colors: Float32Array.from( { length: 16 }, ( _, i ) => i % 4 === 3 ? alpha : 1 ),
 					indices: Uint32Array.of( 0, 1, 2, 0, 2, 3 ),
 					instances: identity,
 					transform: identity
@@ -173,7 +175,7 @@ test( "deep refracted water keeps the seabed's cell edge faint", { timeout: 1200
 						blend: true,
 						water: true,
 						doubleSided: true
-					} )
+					}, 10 / 15 )
 				]
 			} );
 			const capture = async () => {
@@ -205,8 +207,8 @@ test( "deep refracted water keeps the seabed's cell edge faint", { timeout: 1200
 		const off = edgeStrength( native.rgba ), on = edgeStrength( refracted.rgba );
 		console.log( `cell edge: native ${off.toFixed( 1 )}, refracted ${on.toFixed( 1 )}` );
 		assert.ok(
-			on <= MAX_EDGE,
-			`The refracted edge (${on.toFixed( 1 )}, native ${off.toFixed( 1 )}) stays under ${MAX_EDGE}`
+			on <= off + EDGE_SLACK,
+			`The refracted edge (${on.toFixed( 1 )}) stays within native (${off.toFixed( 1 )})`
 		);
 		assert.deepEqual( errors, [] );
 	} finally {

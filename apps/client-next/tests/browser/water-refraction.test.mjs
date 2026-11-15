@@ -110,7 +110,7 @@ test( "the refracted water row bends, foams and restores native bytes", {
 			if ( renderer.phase() !== "running" ) throw Error( renderer.error() ?? "GPU startup deadline" );
 			renderer.setWorldCamera( { eye: [ 30, 16, -46 ], target: [ 0, 0, 6 ], fov: 1.1, near: 1, far: 500 } );
 			// A quad from four corners (x, y, z), two triangles.
-			const quad = ( id, corners, material ) => ({
+			const quad = ( id, corners, material, alpha = 1 ) => ({
 				id,
 				center: corners.reduce( ( sum, c ) => sum.map( ( v, i ) => v + c[i] / 4 ), [ 0, 0, 0 ] ),
 				radius: 200,
@@ -120,6 +120,7 @@ test( "the refracted water row bends, foams and restores native bytes", {
 					positions: Float32Array.from( corners.flat() ),
 					normals: Float32Array.of( 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0 ),
 					uvs: Float32Array.of( 0, 0, 1, 0, 1, 1, 0, 1 ),
+					colors: Float32Array.from( { length: 16 }, ( _, i ) => i % 4 === 3 ? alpha : 1 ),
 					indices: Uint32Array.of( 0, 1, 2, 0, 2, 3 ),
 					instances: identity,
 					transform: identity
@@ -159,7 +160,7 @@ test( "the refracted water row bends, foams and restores native bytes", {
 						blend: true,
 						water: true,
 						doubleSided: true
-					} ),
+					}, 2 / 15 ),
 					// The shore slopes from under the water up through the
 					// waterline: its depth meets the water's along that line.
 					quad(

@@ -10,16 +10,7 @@ mip generation, and the samplers they bind.
 */
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
-import {
-	WATER_BAND_FADE,
-	WATER_BEHIND_WEIGHT,
-	WATER_CLARITY,
-	WATER_REFLECTION_MIX,
-	WATER_REFRACTION_STRENGTH,
-	WATER_SHORE_BAND,
-	WATER_SHORE_FOAM,
-	WATER_SKIN_BLENDED
-} from "./water-refraction";
+import { WATER_REFRACTION_STRENGTH, WATER_SHORE_BAND, WATER_SHORE_FOAM, WATER_SKIN_BLENDED } from "./water-refraction";
 import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
@@ -730,32 +721,31 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
+ var refracted=vec3f(0);var refracting=false;var foam=0.0;
  if(animated&&waterPass.plane.w<0.5){
   if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
    // Port-only refraction (stages.z, device/water-refraction.ts): the
-   // blended water draws after a copy of the opaque frame, so it bends
-   // what lies under the surface by its own bump offset and whitens
-   // where the depth behind it comes within the shore band of its own
-   // (input.viewZ, view-space metres like the copy). The planar
-   // reflection, or the water's own lit texture without a mirror, stays
-   // the surface term it natively is.
-   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
-   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
-   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
-   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
-   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
-   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
-   // Through deep water the seabed fades to the native surface
-   // (WATER_CLARITY); a far depth (nothing drawn) gives no share. Toward
-   // the detailed band's edge it fades too (WATER_BAND_FADE), before
-   // the flat fog cells begin.
-   var seen=exp(-max(depthBehind-input.viewZ,0.0)/${WATER_CLARITY});
-   if(env.terrainBand.w>0.5){
-    let cells=length(input.worldXZ/320.0-env.terrainBand.xy-vec2f(0.5));
-    let radius=sqrt(env.terrainBand.z);
-    seen*=1.0-smoothstep(radius-${WATER_BAND_FADE},radius-0.5,cells);
-   }
-   lit=mix(surface,mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX}),seen)+vec3f(shore*${WATER_SHORE_FOAM});
+   // blended water draws after a copy of the opaque frame. Native water
+   // already lets the seabed through by its own vertex alpha (depth / 15,
+   // world.ts): see-through at the shore, opaque in open sea. Refraction
+   // keeps that share exactly and only bends what shows through by the
+   // water's bump offset, so deep water is the native frame and no seabed
+   // cell edge can show where natively none does (the owner's square
+   // patches, 2026-11-15, came from a fixed share drawn over deep sea).
+   // A bent sample that lands in front of the surface (something above
+   // the water) is not under it: the straight-through texel stands.
+   let size=vec2f(textureDimensions(sceneBehind));
+   let pixel=vec2i(input.position.xy);
+   let bentUv=clamp(input.position.xy/size+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
+   let bentPixel=vec2i(min(bentUv*size,size-1.0));
+   let depthBehind=textureLoad(sceneBehindDepth,pixel,0).r;
+   let under=textureLoad(sceneBehindDepth,bentPixel,0).r>input.viewZ;
+   refracted=select(textureLoad(sceneBehind,pixel,0).rgb,textureSampleLevel(sceneBehind,waterMirrorSampler,bentUv,0).rgb,under);
+   refracting=true;
+   foam=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0)*${WATER_SHORE_FOAM};
+   // The surface term is the native one: the planar reflection where a
+   // mirror exists, the water's lit texture where one does not.
+   lit=select(lit,waterColor,waterPass.plane.z>0.5);
   }else if(waterPass.plane.z>0.5){
    // Native: the planar reflection where a mirror exists, the water's lit
    // texture untouched where one does not.
@@ -767,7 +757,11 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  // mask's) must not reach a transparent target such as the viewer's doll,
  // where it showed the page through alpha-tested armour.
  let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
- return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
+ let shaded=mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog);
+ // Refracting water blends itself over the bent copy at its native alpha
+ // and writes alpha 1, so the pass's src-alpha blend keeps it as is.
+ if(refracting){return vec4f(clamp(mix(refracted,shaded,surfaceAlpha)+vec3f(foam),vec3f(0),vec3f(1)),1.0);}
+ return vec4f(shaded,select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
 @fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
 // Port-only, not native: an accepted unblended/cutout fragment covers the
