@@ -215,3 +215,13 @@ test("a member list that fits keeps the scroll at the top", t => {
 	assert.deepEqual( memberRows( out ), [ "Boss", "Other", "Player" ] );
 	assert.ok( out.controls.some( c => c.id === "guild-member-thumb" ), "the scroll is always drawn" );
 });
+
+test("the union list draws its scroll even though eight guilds fit its nine rows (ifallianceguild id 62)", t => {
+	const { f, step } = guildWindow( t, 1 );
+	f.ui.event( { kind: "activate", id: "guild-tab:1" } );
+	const out = step();
+	const thumb = defined( out.controls.find( c => c.id === "union-scroll-thumb" ) );
+	const up = defined( out.controls.find( c => c.id === "union-scroll-up" ) );
+	assert.equal( thumb.rect[1], up.rect[1] + 16, "the thumb rests at the top" );
+	assert.ok( out.controls.some( c => c.id === "union-scroll-down" ) );
+});

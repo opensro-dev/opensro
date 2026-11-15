@@ -20665,6 +20665,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						paths.push( ...bar.paths );
 						quads.push( ...bar.quads );
 					}
+					// The scroll manager draws its vertical scroll even when every row fits,
+					// as the sibling Hostility list (600120). A union holds at most
+					// ALLIANCE_MAX_GUILDS (8) guilds against nine rows, so it never moves.
+					const unionScroll = chatScrollbar(
+						"union-scroll",
+						[ gx + list.rect[0] + list.rect[2] - 16, gy + list.rect[1] + 16, 16, list.rect[3] - 32 ],
+						rows.length,
+						Math.floor( list.rect[3] / 23 ),
+						0,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...unionScroll.paths );
+					quads.push( ...unionScroll.quads );
+					controls.push( ...unionScroll.controls );
 					rows.slice( 0, Math.floor( list.rect[3] / 23 ) ).forEach( ( row, i ) => {
 						const ox = gx + list.rect[0], oy = gy + list.rect[1] + i * 23;
 						authoredText( slotAt( 11 ), ox, oy, row.name );
