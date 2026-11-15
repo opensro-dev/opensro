@@ -11,7 +11,7 @@ and 1.547 for Brotli on 2026-10-09) did not justify a bundled decoder. The membe
 stay the decoded identity, so every reader verifies what it decodes.
 
 Compression is the slow step of a pack build, so each verdict is cached
-under .state/pack-member-gzip by the member's SHA-256: a hit is
+under the build state's pack-member-gzip (generatedRoot.mjs buildStatePath) by the member's SHA-256: a hit is
 decoded and re-hashed before it is reused, and a "raw" verdict is cached
 too, so incompressible media is never tried twice.
 
@@ -21,13 +21,12 @@ too, so incompressible media is never tried twice.
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { promisify } from "node:util";
 import { MEMBER_ENCODING_GZIP } from "./packFormat.mjs";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
 
-const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
-const DEFAULT_CACHE_ROOT = path.join( rebuildRoot, ".state", "pack-member-gzip" );
+const DEFAULT_CACHE_ROOT = buildStatePath( "pack-member-gzip" );
 
 export const MEMBER_GZIP_LEVEL = 9;
 // Keep compression only when the stored bytes are at most 90 % of the raw.

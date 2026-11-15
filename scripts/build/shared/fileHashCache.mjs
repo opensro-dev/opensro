@@ -9,13 +9,11 @@
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { sha256Hex } from "./hash.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
+import { buildStatePath } from "../../lib/generatedRoot.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const rebuildRoot = path.resolve( scriptDir, "..", "..", ".." );
-const defaultCachePath = path.join( rebuildRoot, ".state", "file-hash-cache.json" );
+const defaultCachePath = buildStatePath( "file-hash-cache.json" );
 
 const CACHE_FORMAT = "sro-file-hash-cache";
 const CACHE_VERSION = 1;

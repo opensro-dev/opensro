@@ -33,7 +33,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
+import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { codeHash } from "./codeStamp.mjs";
 import { claimPublicPaths, recordClaims } from "./publicationLedger.mjs";
@@ -42,7 +42,7 @@ import { rebuildRoot } from "../world/paths.mjs";
 
 // v4: the knobs are buildKnobLines, the effective tomb posture included.
 const MEMO_VERSION = 4;
-const MEMO_ROOT = path.join( rebuildRoot, ".state", "lane-memo" );
+const MEMO_ROOT = buildStatePath( "lane-memo" );
 const STAT_CONCURRENCY = 64;
 const KEY_PARTS = [ "startup", "environment", "entry", "roots" ];
 

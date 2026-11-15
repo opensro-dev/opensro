@@ -118,3 +118,13 @@ def _resolve_generated_root() -> Path:
 
 GENERATED_ROOT = _resolve_generated_root()
 PUBLIC_ROOT = GENERATED_ROOT / "client-public"
+# The build's reuse caches beside the tree they describe (generatedRoot.mjs
+# BUILD_STATE_ROOT): a fresh worktree finds the last build's caches.
+BUILD_STATE_ROOT = GENERATED_ROOT.parent / ".state"
+
+
+# ================
+# build_state_path
+# ================
+def build_state_path(*parts) -> Path:
+	return BUILD_STATE_ROOT.joinpath(*parts)

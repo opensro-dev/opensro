@@ -67,7 +67,15 @@ const ROOT_VARIABLE_READS = [
 
 // The tree's own sub-roots: what a hard-coded root path always names next.
 const SUBTREE = "(?:client-public|intermediate|observatory)";
+// The build's reuse caches that buildStatePath owns.
+const BUILD_CACHE = "(?:lane-memo|file-hash-cache\\.json|json-minify-cache\\.json|pack-member-gzip|" +
+	"asset-integrity-hash-cache\\.json|catalogue-webp-cache)";
 const PATTERNS = [
+	// A build cache in a checkout's own .state: path.join( root, ".state",
+	// "lane-memo" ). The caches describe the generated tree, so they live
+	// beside it (generatedRoot.mjs buildStatePath) and a fresh worktree
+	// finds the last build's.
+	new RegExp( "[\"'`]\\.state[\"'`]\\s*,\\s*[\"'`]" + BUILD_CACHE + "[\"'`]" ),
 	// "../../.generated/client-public/...", '.generated/intermediate'
 	new RegExp( "[\"'`](?:\\.{1,2}/)*\\.generated/" + SUBTREE ),
 	// path.join( root, ".generated", "client-public" ), filepath.Join(..., ".generated", "client-public")

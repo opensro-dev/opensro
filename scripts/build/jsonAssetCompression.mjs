@@ -1,10 +1,9 @@
-import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
+import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { buildJobs } from "./shared/buildParallelism.mjs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import { withGeneratedAssetsLock } from "../rebuildLock.mjs";
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
@@ -18,11 +17,9 @@ import { fileHashCacheDisabled } from "./shared/fileHashCache.mjs";
 import { isMainScript, listFiles } from "./shared/fsUtils.mjs";
 import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const rebuildRoot = path.resolve( scriptDir, "..", ".." );
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const assetsRoot = path.join( publicRoot, "assets" );
-const minifyCachePath = path.join( rebuildRoot, ".state", "json-minify-cache.json" );
+const minifyCachePath = buildStatePath( "json-minify-cache.json" );
 
 const MINIFY_CACHE_FORMAT = "sro-json-minify-cache";
 const MINIFY_CACHE_VERSION = 1;
