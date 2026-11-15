@@ -444,6 +444,30 @@ def lower_paths(root):
 
 
 # ================
+# clear_content
+#
+# A build lays the variant's content down from nothing. The steps below
+# only add (link_tree skips a target that exists, add_missing_files fills
+# what the native tree lacks), so over last release's tree a re-extracted
+# native file would keep its old bytes and a file the sources dropped
+# would never leave (ops #368 review, 2026-11-16). Removing a hard link
+# leaves the native file it names alone. The build state beside the tree
+# (.state: the settle ledger, the asset caches) and the generated tree
+# stay: settle gives each file whose bytes come back the same its old time
+# (variant_settle.py), so the caches downstream still hit.
+# ================
+def clear_content(variant, native):
+	out = variant / "extracted"
+	if out.resolve() == Path(native).resolve() or Path(native).resolve() in out.resolve().parents:
+		raise SystemExit(f"{out} is inside the native extraction; refusing to clear it")
+	if out.exists():
+		shutil.rmtree(out)
+	for name in (VARIANT_MANIFEST,) + LINKED_FILES:
+		(variant / name).unlink(missing_ok=True)
+	return out
+
+
+# ================
 # build_variant
 # ================
 def build_variant(vsro_root, native, variant, imported_root=None):
@@ -455,8 +479,8 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	stage_manifest = json.loads((imported / stage1.MANIFEST_NAME).read_text(encoding="utf-8"))
 	regions = [(r["sectorX"], r["sectorY"]) for r in stage_manifest["regions"]]
-	out = variant / "extracted"
-	out.mkdir(parents=True, exist_ok=True)
+	out = clear_content(variant, native)
+	out.mkdir(parents=True)
 
 	linked = {}
 	for folder in LINKED_FOLDERS + ("Map_extracted", "Data_extracted"):
