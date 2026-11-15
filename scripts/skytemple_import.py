@@ -417,7 +417,7 @@ def later_object_texts(read):
 # the missing bytes is not an option.
 # ================
 def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
-	from cap110_item_import import normalized_path, resource_dependencies
+	from cap110_item_import import normalized_path, resource_dependencies, tolerant_dependencies
 	pending = {("Data", normalized_path(seed)) for seed in seeds}
 	seen, written, missing_sounds, missing_effects = set(), [], [], []
 	missing_files, unparsed_files = [], []
@@ -465,18 +465,15 @@ def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"),
 					"native": origin, "sounds": "data", "particles": "all"})
 		if requests:
-			try:
+			if not tolerate_gaps:
 				dependencies = resource_dependencies(requests)
-			except ValueError:
-				if not tolerate_gaps:
-					raise
+			else:
 				dependencies = []
-				for request in requests:
-					try:
-						dependencies.append(resource_dependencies([request])[0])
-					except ValueError:
+				for request, result in zip(requests, tolerant_dependencies(requests)):
+					if isinstance(result, ValueError):
 						unparsed_files.append(request["path"])
-						dependencies.append([])
+						result = []
+					dependencies.append(result)
 			for names in dependencies:
 				for dep in names:
 					if isinstance(dep, dict):
