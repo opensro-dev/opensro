@@ -3980,11 +3980,7 @@ test("body avatar override restores normal run and restarts same-name replacemen
 						"charselect-state15",
 						role
 					],
-					// Long enough that no window below sees the loop wrap: the
-					// wearer now first draws dressed, its wing set playing from
-					// that frame, and a clock check across a wrap would read as
-					// a restart.
-					animationStates: { [role]: { durationMs: 10000, loop: true } }
+					animationStates: { [role]: { durationMs: 1000, loop: true } }
 				} ],
 				dress: roster.dress
 			}
@@ -4036,7 +4032,10 @@ test("body avatar override restores normal run and restarts same-name replacemen
 		assert.equal( a.clip, role );
 		const age = a.time;
 		a = step( [ ids[0] ] );
-		assert.ok( a.time > age, "unchanged override keeps clock" );
+		// The wearer first draws dressed, its wing set playing from that frame,
+		// so the 1 s loop can wrap inside this step: the clock reads exactly
+		// the 0.4 s stepped past age, modulo the loop. A restart reads 0.4.
+		assert.ok( Math.abs( a.time - (age + .4) % 1 ) < 1e-6, "unchanged override keeps clock" );
 		a = step( [ ids[1] ] );
 		assert.equal( a.clip, "stand", "native re-entry rejects movement before restoring standing" );
 		movementRevision++;

@@ -23,9 +23,23 @@ import type { NativeTexture } from "@/engine/contracts/texture";
 
 /*
 ================
+CHARACTER_LOAD_SLOTS
+
+Character sources in flight at once. One slot made a crowd's wearers
+dress a part a fetch, one admission a frame: at world entry everyone was
+drawn bare for seconds. The asset owner's request slots are shared with
+the world, the interface and audio, so a second or third character load
+starts only while another slot stays free for them (openSlots).
+================
+*/
+const CHARACTER_LOAD_SLOTS = 3;
+
+/*
+================
 createCharacterResources
 
-Own one decode reservation and a bounded cache of admitted character sources.
+Own the decode reservations of the sources in flight and a bounded cache of
+admitted character sources.
 ================
 */
 export function createCharacterResources(
@@ -35,49 +49,73 @@ export function createCharacterResources(
 ) {
 	const durations = new Map<string, ReadonlyMap<string, number>>();
 	const loaded = new Set<string>(), wanted = new Set<string>(), planned = new Set<string>();
-	// The local player's worn sources for this frame (prioritize). The
-	// single load slot serves them before any other cold source starts:
-	// a newly equipped part must not wait behind unrelated actors.
+	// The local player's worn sources for this frame (prioritize). A free
+	// load slot serves them before any other cold source starts: a newly
+	// equipped part must not wait behind unrelated actors.
 	const priority = new Set<string>();
 	const costs = new Map<string, number>();
 	const proceduralCache = new Map<string, { model: CharacterModel; images: NativeTexture[]; }>();
-	let plannedBytes = 0, reserved: string | null = null;
+	let plannedBytes = 0;
 	// Ordered requests are priority admission, not a list of everything nearby.
 	// A decoded source is charged what it measured. A source that has never been
-	// decoded reserves one source class, and only the single load slot may hold
-	// that reservation: an unstarted load must never be charged for residency a
+	// decoded reserves one source class, and only a load slot may hold that
+	// reservation: an unstarted load must never be charged for residency a
 	// resident actor still needs. Reservations are headroom, never a charge, so
-	// speculation cannot displace an actor that is already decoded.
+	// speculation cannot displace an actor that is already decoded. This
+	// frame's reservations, by path; a new set each frame (begin).
+	let reservations = new Set<string>();
+
+	/*
+	================
+	openSlots
+
+	Loads that may start now besides those in flight: this owner's slots
+	less the ones in flight and the reservations still waiting to start
+	(except `own`, the caller's), and the asset owner's free slots, of
+	which any character load past the first leaves one to the world, the
+	interface and audio.
+	================
+	*/
+	function openSlots( own?: string ): number {
+		if ( disposed ) return 0;
+		let waiting = 0;
+		for ( const path of reservations ) if ( path !== own && !jobs.has( path ) ) waiting++;
+		const busy = jobs.size + waiting;
+		return Math.max(
+			0,
+			Math.min( CHARACTER_LOAD_SLOTS - busy, assets.available() - waiting - (busy > 0 ? 1 : 0) )
+		);
+	}
 
 	/*
 	================
 	reservable
 
-	A cold source can reserve room only when the single load slot can start it.
+	A cold source can reserve room only when a load slot can start it, or
+	already holds one.
 	================
 	*/
 	function reservable( path: string ): boolean {
-		if ( job ) return job.path === path;
-		if ( priority.has( path ) ) {
-			return !disposed && assets.available() > 0 &&
-				(failures.get( path )?.retryAt ?? -Infinity) <= now;
-		}
-		return reserved === null && !priorityPending() && !disposed && assets.available() > 0 &&
-			(failures.get( path )?.retryAt ?? -Infinity) <= now;
+		if ( jobs.has( path ) || reservations.has( path ) ) return true;
+		if ( (failures.get( path )?.retryAt ?? -Infinity) > now ) return false;
+		if ( !priority.has( path ) && priorityPending() ) return false;
+		return openSlots() > 0;
 	}
 
 	/*
 	================
 	priorityPending
 
-	A declared wearer source is still coming and may use the slot now:
-	not loaded, and not waiting out a failure's retry (a part in retry
-	must not hold the slot against everyone else).
+	A declared wearer source is still coming and waits for a slot now:
+	not loaded, not in flight, and not waiting out a failure's retry (a
+	part in retry must not hold the slots against everyone else).
 	================
 	*/
 	function priorityPending(): boolean {
 		for ( const path of priority ) {
-			if ( !loaded.has( path ) && (failures.get( path )?.retryAt ?? -Infinity) <= now ) return true;
+			if (
+				!loaded.has( path ) && !jobs.has( path ) && (failures.get( path )?.retryAt ?? -Infinity) <= now
+			) return true;
 		}
 		return false;
 	}
@@ -86,7 +124,10 @@ export function createCharacterResources(
 	================
 	plan
 
-	Charge shared sources once and reserve at most one undecoded source.
+	Charge shared sources once and reserve each undecoded source a slot
+	holds or can start. Planning an undecoded source needs a source class
+	of headroom for it and for every other reservation; a decoded source
+	is never held back by them.
 	================
 	*/
 	function plan( paths: readonly string[] ): boolean {
@@ -94,33 +135,42 @@ export function createCharacterResources(
 		// crowd models must not allocate a Set/filter for each additional actor.
 		if ( paths.every( path => planned.has( path ) ) ) return true;
 		const extra = [ ...new Set( paths ) ].filter( path => !planned.has( path ) );
-		// Equipped actors admit their parts one source at a time. A group that
-		// needs two undecoded sources cannot start both and reserves neither.
+		// Equipped actors admit their parts one source at a time. A group
+		// that needs two sources no slot holds yet cannot start both and
+		// reserves neither.
 		const cold = extra.filter( path => !costs.has( path ) );
-		if ( cold.length > 1 || (cold.length === 1 && !reservable( cold[0]! )) ) return false;
+		const unheld = cold.filter( path => !reservations.has( path ) );
+		if (
+			unheld.filter( path => !jobs.has( path ) ).length > 1 || cold.some( path => !reservable( path ) )
+		) return false;
 		const bytes = extra.reduce( ( sum, path ) => sum + (costs.get( path ) ?? 0), 0 );
 		if (
 			planned.size + extra.length > CHARACTER_MODELS ||
-			plannedBytes + bytes + (cold.length ? CHARACTER_SOURCE_BYTES : 0) > CHARACTER_RESIDENT_BYTES
+			plannedBytes + bytes + (cold.length ? (reservations.size + unheld.length) * CHARACTER_SOURCE_BYTES : 0) >
+				CHARACTER_RESIDENT_BYTES
 		) return false;
 		for ( const path of paths ) {
 			planned.add( path );
 			wanted.add( path );
 		}
 		plannedBytes += bytes;
-		if ( cold.length ) reserved = cold[0]!;
+		for ( const path of cold ) reservations.add( path );
 		return true;
 	}
 	const failures = new Map<string, {
 		retryAt: number;
 		message: string;
 	}>();
-	let job: {
+	// The loads in flight, by path (at most CHARACTER_LOAD_SLOTS).
+	const jobs = new Map<string, {
 		id: number;
 		path: string;
 		model: boolean;
 		animation?: { body: string; name: string; };
-	} | null = null;
+	}>();
+	// Byte sources (manifests) completed in one poll beyond the one it
+	// returns; later polls return them in completion order.
+	const deliveries: { path: string; buffer: ArrayBuffer; }[] = [];
 	let now = 0, disposed = false;
 
 	/*
@@ -129,9 +179,10 @@ export function createCharacterResources(
 
 	Declares the local player's worn sources for the frames ahead. The
 	declaration survives frame begins; a part that is still coming owns
-	the next free slot ahead of manifests, clips and other actors. The
-	load already in flight is never cancelled - the wearer's part takes
-	the slot when it lands, so the wait stays bounded by one fetch.
+	the next free slot ahead of manifests, clips and other actors. A load
+	already in flight is never cancelled - with every slot busy the
+	wearer's part takes one when it lands, so the wait stays bounded by
+	one fetch.
 	Callers redeclare on every appearance change; passing an empty list
 	releases the lane.
 	================
@@ -152,7 +203,7 @@ export function createCharacterResources(
 		if ( model && !plan( [ path ] ) ) return;
 		wanted.add( path );
 		if (
-			assets.available() === 0 || disposed || job || loaded.has( path ) ||
+			disposed || jobs.has( path ) || loaded.has( path ) ||
 			(failures.get( path )?.retryAt ?? -Infinity) > now
 		) {
 			return;
@@ -160,19 +211,83 @@ export function createCharacterResources(
 		// Manifests and clips skip plan(); the wearer's declared part
 		// still owns the free slot ahead of them.
 		if ( !priority.has( path ) && priorityPending() ) return;
+		// A model's own reservation is the slot it starts in.
+		if ( openSlots( model ? path : undefined ) === 0 ) return;
 		try {
 			if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 				throw new Error( "Unpublished character resource" );
 			}
 			const decode = model ? (path.includes( "/effects/programs.json#" ) ? "effect" : "character") : undefined;
-			job = {
+			jobs.set( path, {
 				id: assets.request( new URL( path, origin ).href, assetRequestBudget( decode ), decode ),
 				path,
 				model
-			};
+			} );
 		} catch ( error ) {
 			failures.set( path, { retryAt: now + 2, message: String( error ) } );
 		}
+	}
+
+	/*
+	================
+	complete
+
+	Transfer one completed source to the renderer, releasing rejected image
+	resources; a byte source is returned to the caller.
+	================
+	*/
+	function complete(
+		completed: { path: string; model: boolean; animation?: { body: string; name: string; }; },
+		result: NonNullable<ReturnType<AssetOwner["take"]>>
+	): { path: string; buffer: ArrayBuffer; } | null {
+		try {
+			if ( result.kind === "error" ) {
+				throw new Error( result.error );
+			}
+			if ( completed.model && result.kind === "character" ) {
+				const model = /\/npc\/cos\/p_bear0[12]\.glb$/i.test( completed.path ) ?
+					withBearRoar( result.model ) :
+					/\/npc\/cos\/p_wolf(_white)?_0[12]\.glb$/i.test( completed.path ) ?
+					withWolfRend( withWolfHowl( result.model ) ) :
+					/\/npc\/cos\/p_penguin0[12]\.glb$/i.test( completed.path ) ?
+					withPenguinBlizzard( result.model ) :
+					result.model;
+				try {
+					costs.set( completed.path, characterBytes( model, result.images ) );
+				} catch ( error ) {
+					for ( const image of result.images ) if ( !("kind" in image) ) image.close();
+					throw error;
+				}
+				renderer.setCharacterModel( completed.path, model, result.images );
+				durations.set(
+					completed.path,
+					new Map( model.clips.map( clip => [ clip.name, clip.duration ] ) )
+				);
+				loaded.add( completed.path );
+				failures.delete( completed.path );
+			} else if ( completed.animation && result.kind === "bytes" ) {
+				const { body, name } = completed.animation,
+					source = decodeNativeClip( new Uint8Array( result.buffer ) );
+				costs.set( body, renderer.setCharacterAnimation( body, name, source ) );
+				durations.set( body, new Map( [ ...(durations.get( body ) ?? []), [ name, source.duration ] ] ) );
+				failures.delete( completed.path );
+			} else if ( !completed.model && result.kind === "bytes" ) {
+				return { path: completed.path, buffer: result.buffer };
+			} else {
+				if ( result.kind === "image" ) {
+					result.image.close();
+				}
+				if ( result.kind === "character" ) {
+					for ( const image of result.images ) {
+						if ( !("kind" in image) ) image.close();
+					}
+				}
+				throw new Error( "Character resource result mismatch" );
+			}
+		} catch ( error ) {
+			failures.set( completed.path, { retryAt: now + 2, message: String( error ) } );
+		}
+		return null;
 	}
 	return {
 		/*
@@ -198,77 +313,32 @@ export function createCharacterResources(
 			wanted.clear();
 			planned.clear();
 			plannedBytes = 0;
-			reserved = null;
+			reservations = new Set();
 		},
 
 		/*
 		================
 		poll
 
-		Transfer a completed source to the renderer, releasing rejected image resources.
+		Admit every source completed since the last poll, so loads that land
+		together are admitted together; return one completed byte source.
 		================
 		*/
 		poll(): {
 			path: string;
 			buffer: ArrayBuffer;
 		} | null {
-			if ( !job || disposed ) {
+			if ( disposed ) {
 				return null;
 			}
-			const result = assets.take( job.id );
-			if ( !result ) {
-				return null;
+			for ( const [path, job] of jobs ) {
+				const result = assets.take( job.id );
+				if ( !result ) continue;
+				jobs.delete( path );
+				const delivered = complete( job, result );
+				if ( delivered ) deliveries.push( delivered );
 			}
-			const completed = job;
-			job = null;
-			try {
-				if ( result.kind === "error" ) {
-					throw new Error( result.error );
-				}
-				if ( completed.model && result.kind === "character" ) {
-					const model = /\/npc\/cos\/p_bear0[12]\.glb$/i.test( completed.path ) ?
-						withBearRoar( result.model ) :
-						/\/npc\/cos\/p_wolf(_white)?_0[12]\.glb$/i.test( completed.path ) ?
-						withWolfRend( withWolfHowl( result.model ) ) :
-						/\/npc\/cos\/p_penguin0[12]\.glb$/i.test( completed.path ) ?
-						withPenguinBlizzard( result.model ) :
-						result.model;
-					try {
-						costs.set( completed.path, characterBytes( model, result.images ) );
-					} catch ( error ) {
-						for ( const image of result.images ) if ( !("kind" in image) ) image.close();
-						throw error;
-					}
-					renderer.setCharacterModel( completed.path, model, result.images );
-					durations.set(
-						completed.path,
-						new Map( model.clips.map( clip => [ clip.name, clip.duration ] ) )
-					);
-					loaded.add( completed.path );
-					failures.delete( completed.path );
-				} else if ( completed.animation && result.kind === "bytes" ) {
-					const { body, name } = completed.animation,
-						source = decodeNativeClip( new Uint8Array( result.buffer ) );
-					costs.set( body, renderer.setCharacterAnimation( body, name, source ) );
-					durations.set( body, new Map( [ ...(durations.get( body ) ?? []), [ name, source.duration ] ] ) );
-					failures.delete( completed.path );
-				} else if ( !completed.model && result.kind === "bytes" ) {
-					return { path: completed.path, buffer: result.buffer };
-				} else {
-					if ( result.kind === "image" ) {
-						result.image.close();
-					}
-					if ( result.kind === "character" ) {
-						for ( const image of result.images ) {
-							if ( !("kind" in image) ) image.close();
-						}
-					}
-					throw new Error( "Character resource result mismatch" );
-				}
-			} catch ( error ) {
-				failures.set( completed.path, { retryAt: now + 2, message: String( error ) } );
-			}
-			return null;
+			return deliveries.shift() ?? null;
 		},
 
 		/*
@@ -295,9 +365,10 @@ export function createCharacterResources(
 			if ( !path.startsWith( "/assets/anim/" ) || !path.endsWith( ".ban" ) ) {
 				throw Error( "Unpublished native motion" );
 			}
-			const pending = job;
+			const fresh = !jobs.has( path );
 			request( path, false );
-			if ( !pending && job && job.path === path ) job.animation = { body, name };
+			const started = jobs.get( path );
+			if ( fresh && started ) started.animation = { body, name };
 			return false;
 		},
 
@@ -374,16 +445,19 @@ export function createCharacterResources(
 		================
 		*/
 		retainWanted( assemblies: readonly string[] ) {
-			if ( job && !wanted.has( job.path ) ) {
-				assets.cancel( job.id );
-				job = null;
+			for ( const [path, job] of jobs ) {
+				if ( !wanted.has( path ) ) {
+					assets.cancel( job.id );
+					jobs.delete( path );
+				}
 			}
 			// A finished attack is not a resource invalidation. Keep decoded
 			// models in the remaining bounded budget, most recently used first.
-			// The in-flight source class is held back, so inactive cache entries
+			// Each in-flight source class is held back, so inactive cache entries
 			// retire before the next poll can admit its decode.
-			let bytes = plannedBytes +
-					(reserved !== null || (job !== null && !costs.has( job.path )) ? CHARACTER_SOURCE_BYTES : 0),
+			let held = reservations.size;
+			for ( const path of jobs.keys() ) if ( !costs.has( path ) && !reservations.has( path ) ) held++;
+			let bytes = plannedBytes + held * CHARACTER_SOURCE_BYTES,
 				count = planned.size;
 			const keep = new Set( planned );
 			for ( const path of [ ...loaded ].reverse() ) {
@@ -454,10 +528,9 @@ export function createCharacterResources(
 		================
 		*/
 		reset() {
-			if ( job ) {
-				assets.cancel( job.id );
-			}
-			job = null;
+			for ( const job of jobs.values() ) assets.cancel( job.id );
+			jobs.clear();
+			deliveries.length = 0;
 			failures.clear();
 			wanted.clear();
 			loaded.clear();
@@ -465,7 +538,7 @@ export function createCharacterResources(
 			costs.clear();
 			planned.clear();
 			plannedBytes = 0;
-			reserved = null;
+			reservations = new Set();
 			priority.clear();
 			renderer.retainCharacterModels( [] );
 		},
@@ -479,10 +552,9 @@ export function createCharacterResources(
 		*/
 		dispose() {
 			disposed = true;
-			if ( job ) {
-				assets.cancel( job.id );
-			}
-			job = null;
+			for ( const job of jobs.values() ) assets.cancel( job.id );
+			jobs.clear();
+			deliveries.length = 0;
 			failures.clear();
 			wanted.clear();
 			loaded.clear();
@@ -490,7 +562,7 @@ export function createCharacterResources(
 			costs.clear();
 			planned.clear();
 			plannedBytes = 0;
-			reserved = null;
+			reservations = new Set();
 			priority.clear();
 		},
 		prioritize
