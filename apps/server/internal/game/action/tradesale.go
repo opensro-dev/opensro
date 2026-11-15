@@ -121,6 +121,26 @@ func (rt *Runtime) tradePurchaseAdmission(division string, c *enterworld.Charact
 
 /*
 ================
+buysIntoTransport
+
+Whether a trade-goods purchase loads the summoned transport: the
+specialty shop's COS buy (0x13) naming it. Goods never belong in the
+personal bag (costransfer.go, #3144). A bag buy (0x08) admitted with a
+transport out, which the port's merchant window sends when the
+transport was summoned after the shop opened, put them there; once
+the transport was dismissed, the goods rode a town teleport that a
+transport may not take and loaded into the next transport at the far
+end. INFERENCE: v1.150's specialty shop stocks only goods and buys
+them into the transport, so its purchase check refuses any other
+buy, with the purchase check's 0x1860.
+================
+*/
+func (rt *Runtime) buysIntoTransport(c *enterworld.Character, cosGID uint32, isCOS bool) bool {
+	return isCOS && rt.transportSummoned(c) && c.ActiveCOS.GID == cosGID
+}
+
+/*
+================
 transportSummoned
 
 Whether the player's live COS is a summoned transport (as natively).
