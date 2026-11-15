@@ -90,6 +90,31 @@ export function characterMaterialClockBytes( model: CharacterModel ): number {
 }
 /*
 ================
+characterSharedMesh
+
+Whether a primitive draws from a mesh the device keeps one GPU copy of,
+shared by every batch that draws it (device/geometry.ts sharedMesh): an
+immutable skinned primitive. Cloth and ribbons rewrite their vertices each
+frame, so each batch keeps its own stream.
+================
+*/
+export function characterSharedMesh( primitive: CharacterModel["primitives"][number] ): boolean {
+	return !primitive.cloth && !primitive.ribbon && !!primitive.geometry.joints && !!primitive.geometry.weights;
+}
+/*
+================
+characterMeshBytes
+
+The one GPU copy of a shared mesh: its packed vertex stream (14 floats a
+vertex), its indices and its skin table (four joints and four weights a
+vertex).
+================
+*/
+export function characterMeshBytes( geometry: CharacterModel["primitives"][number]["geometry"] ): number {
+	return geometry.positions.length / 3 * 14 * 4 + geometry.indices.byteLength + (geometry.joints?.length ?? 0) * 8;
+}
+/*
+================
 characterSharedPalette
 
 Whether a model's batches keep their palettes as shared streams
@@ -106,7 +131,10 @@ export function characterSharedPalette( model: CharacterModel ): boolean {
 ================
 characterBatchBytes
 
-Charge retained batch capacity rather than only this frame's visible population.
+Charge retained batch capacity rather than only this frame's visible
+population. A shared mesh is charged once per frame plan, not here
+(characterMeshBytes); a batch's own streams (cloth, ribbons, unskinned
+meshes) keep a GPU copy and a CPU mirror each.
 ================
 */
 export function characterBatchBytes( model: CharacterModel, count: number ): number {
@@ -148,8 +176,11 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				160 :
 				0) +
 			palettes( primitive, instances ) + slots * 112 + instances * 96 +
-			geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
-			(geometry.joints?.length ?? 0) * 8 * 2 + 64 + 96 + 20;
+			(characterSharedMesh( primitive ) ?
+				0 :
+				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
+				(geometry.joints?.length ?? 0) * 8 * 2) +
+			64 + 96 + 20;
 	}, 0 );
 }
 /*

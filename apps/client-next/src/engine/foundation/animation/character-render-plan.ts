@@ -10,7 +10,15 @@ materials run a clock.
 ===========================================================================
 */
 import type { CharacterModel, CharacterClip } from "@/engine/contracts/character";
-import { CHARACTER_ACTORS, characterPoseBytes, characterBatchBytes, characterSharedPalette } from "./character-budget";
+import {
+	CHARACTER_ACTORS,
+	characterPoseBytes,
+	characterBatchBytes,
+	characterMeshBytes,
+	characterSharedMesh,
+	characterSharedPalette
+} from "./character-budget";
+import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
 /*
 ================
 isCharacterAnimationExtension
@@ -63,6 +71,13 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 		emission,
 		exactCapacity,
 		poseBytes: characterPoseBytes( model ),
+		// The shared meshes this model draws, each with its one GPU copy's
+		// bytes; the frame plan charges each once, whatever batches draw it.
+		meshes: model.primitives.filter( characterSharedMesh ).map( p => ({
+			positions: p.geometry.positions,
+			arrays: meshArrays( p.geometry ),
+			bytes: characterMeshBytes( p.geometry )
+		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
