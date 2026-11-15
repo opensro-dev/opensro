@@ -11,7 +11,10 @@ A stream's inputs (one 16-byte row a pose) are a range of a staged slab
 set (buffer-slabs.ts), not a buffer of its own: every pending stream's
 rows reach the GPU in one write an encode, not one write a stream. The
 range binds with the size the stream's own buffer had, so the shader reads
-the same bytes it did.
+the same bytes it did. That size is the stream's capacity, never its row
+count: a recycled range still holds an earlier stream's rows past this
+frame's (a buffer of its own began zeroed), and only the dispatch, one
+workgroup a row, says how many rows are read.
 
 A model's inputs are two buffers (gpu-animation-plan.ts): its skeleton,
 owned by the model, and its clip set, shared by every admitted model with
