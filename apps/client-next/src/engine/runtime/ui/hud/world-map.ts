@@ -54,6 +54,7 @@ import { createUniqueNestsHud } from "./unique-nests";
 import { reverseMapButtons } from "./reverse-map-buttons";
 import { cavePageHits, cavePageImages, mapSignName } from "./map-cave-page";
 import {
+	GUIDE_MONSTER,
 	MAP_WINDOW_EXTENT,
 	MAP_WINDOW_HEIGHT,
 	MAP_WINDOW_WIDTH,
@@ -338,7 +339,10 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapFollow = false;
 					mapPan = [ 0, 0 ];
 					mapCenter = { ...picked };
-					mapPage = worldMapPageAt( picked, mapLayout );
+					// A guide monster stays on the world page: its hunting
+					// ground is drawn there only (sub_e75d50), and the town
+					// page its point falls in would hide the yellow tiles.
+					mapPage = id.startsWith( GUIDE_MONSTER ) ? 0 : worldMapPageAt( picked, mapLayout );
 					mapTools.clearView();
 				}
 				return true;

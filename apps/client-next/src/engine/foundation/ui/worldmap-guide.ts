@@ -26,7 +26,6 @@ should be enabled, playable"), as the native trees show them.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
-import { inLevelBand, type LevelBand } from "@/engine/foundation/ui/hunting-guide";
 import { DONWHANG_CAVE_DUNGEON, TOMB_FIRST_DUNGEON } from "@/engine/foundation/ui/world-map";
 
 export const WORLDMAP_GUIDE_CATALOG = "/assets/data/worldmap-guide.json";
@@ -121,14 +120,14 @@ export interface GuideRow {
 GuideView
 
 What the trees are built for: the player's race (picks the order
-column), the player's level and the level filter's band (undefined
-shows every row), and the open main row.
+column), the player's level (colours a monster row) and the open main
+row. The map's level filter does not reach the trees: native builds
+them from monster.txt alone (sub_e6cb90 reads no filter state).
 ================
 */
 export interface GuideView {
 	readonly race: number;
 	readonly playerLevel: number | undefined;
-	readonly filterBand: LevelBand | undefined;
 	readonly open: number | null;
 }
 
@@ -326,24 +325,19 @@ export function guideGroups(
 guideMonsterRows
 
 The Monster tab: every main row, and the open one's monsters as
-"Lv<level> <name>". The level filter hides monsters outside its band,
-and a main row it empties (inferred, as the band itself: a group with
-nothing to list under the filter is noise in a list the filter exists
-to shorten). A monster of unknown level always shows.
+"Lv<level> <name>", whatever the character's level. The map's level
+filter once banded this tree too (an inference); the v1.696 client
+lists every continent from Lv1 up for any character (owner's screenshot,
+2026-11-15), so the filter stays with the map's own species list.
 ================
 */
 export function guideMonsterRows( catalog: WorldMapGuideCatalog, view: GuideView ): GuideRow[] {
 	const out: GuideRow[] = [];
 	for ( const group of guideGroups( catalog.monsters, view.race ) ) {
 		const main = catalog.monsters[group.main]!;
-		const subs = group.subs.filter( index => {
-			const level = catalog.monsters[index]!.level;
-			return level === null || inLevelBand( level, view.filterBand );
-		} );
-		if ( view.filterBand !== undefined && subs.length === 0 ) continue;
 		out.push( { index: group.main, main: true, label: main.name, color: "group" } );
 		if ( group.main !== view.open ) continue;
-		for ( const index of subs ) {
+		for ( const index of group.subs ) {
 			const monster = catalog.monsters[index]!;
 			out.push( {
 				index,
