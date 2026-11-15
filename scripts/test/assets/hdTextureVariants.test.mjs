@@ -13,12 +13,13 @@ lives under /hd, is admitted under the /hd root, and is rejected under
 the default /assets root - the separation the zero-HD-bytes rule needs.
 
 The pinned tools are windows-x64 only (encoders.mjs), so the tool tests
-skip elsewhere; the lane itself also skips there. The two tests that run
-the real lane are opt-in like the lane itself (SRO_HD_TEXTURES=1): they
-start Real-ESRGAN on the GPU, and on 2026-11-16 two ordinary test runs
+skip elsewhere; the lane itself also skips there. The test that runs
+the real lane is opt-in like the lane itself (SRO_HD_TEXTURES=1): it
+starts Real-ESRGAN on the GPU, and on 2026-11-16 two ordinary test runs
 (a direct run and a pre-push check) faulted the GPU driver and left a
 21 GB dump. An ordinary check never starts the upscaler; when one is
-asked for it runs one process at a time.
+asked for it runs one process at a time. The pack separation test packs
+hand-written variants instead, so it runs everywhere, CI included.
 
 ===========================================================================
 */
@@ -95,7 +96,7 @@ fixture
 
 A throwaway published tree: an alpha-bearing and an opaque world object
 texture, one too narrow to upscale into whole blocks, and a terrain
-lightmap the lane must not touch.
+lightmap the lane must not touch. Only the real-lane tests use it.
 ================
 */
 function fixture() {
@@ -180,16 +181,35 @@ test("the HD lane upscales world object textures to x2 BC7 and ASTC variants", a
 	}
 });
 
-test("the HD packs sit behind their own index under /hd, never /assets", async ( t ) => {
-	const skip = realLaneSkip();
-	if ( skip ) {
-		t.skip( skip );
-		return;
+/*
+================
+publishVariants
+
+Writes the HD variants the real lane publishes for the fixture's two
+upscalable textures (BC7 and ASTC each), at the client's variant paths,
+without running the lane. The pack step only lists and packs the files,
+so the separation test needs no upscaler and runs on every platform.
+================
+*/
+function publishVariants( hdRoot ) {
+	for ( const name of [ "alpha", "opaque" ] ) {
+		for ( const format of [ "bc7", "astc" ] ) {
+			const variantPath = hdTextureVariantPath(
+				`/assets/world/testville/object-textures/${name}.texture`,
+				format
+			);
+			const target = path.join( hdRoot, ...variantPath.split( "/" ) );
+			mkdirSync( path.dirname( target ), { recursive: true } );
+			writeFileSync( target, bgraTexture( 16, 16, () => [ 30, 90, 160, 255 ] ) );
+		}
 	}
-	const { root, publicRoot, out } = fixture();
+}
+
+test("the HD packs sit behind their own index under /hd, never /assets", async () => {
+	const root = mkdtempSync( path.join( tmpdir(), "sro-hd-packs-" ) );
 	try {
-		await buildHdTextureVariants( { publicRoot, out, jobs: REAL_LANE_JOBS } );
-		const hdRoot = path.join( out, "client-public" );
+		const hdRoot = path.join( root, "client-public" );
+		publishVariants( hdRoot );
 		const summary = await buildHdTexturePacks( {
 			publicRoot: hdRoot,
 			hashCachePath: path.join( root, "hash-cache.json" ),
