@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/caravanai"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
@@ -91,6 +92,9 @@ type gameplayPlane struct {
 	// contributors is the Contributor title (nil when
 	// SRO_CONTRIBUTOR_TITLES is off; wiring_contributor.go).
 	contributors *contributor.Registry
+	// caravanAgents is the AI Caravan & Thief runtime (nil when
+	// SRO_AI_CARAVANS is off; wiring_caravanai.go).
+	caravanAgents *caravanai.Runtime
 }
 
 /*

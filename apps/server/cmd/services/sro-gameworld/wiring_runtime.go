@@ -142,6 +142,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.contributorRosterTick(ticker, nowMs)
 		}})
 	}
+	if game.caravanAgents != nil {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "caravan-ai", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			return game.caravanAgentsTick(ticker, nowMs)
+		}})
+	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	// Port-only (killstats.go): online time accrues to the entered
 	// characters only - the session views at each accrual instant,
