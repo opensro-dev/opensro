@@ -624,7 +624,17 @@ export async function buildEffectProgramsAsset() {
 			ambiguousEffectAliases[effectName] = resolved.map( ( [key] ) => key );
 		}
 		for ( const [resolvedName, source] of resolved ) {
-			const parsed = parseJmxVisualEffect( fs.readFileSync( source ), source );
+			const bytes = fs.readFileSync( source );
+			// An empty file fails B1F270's header read exactly as an absent one
+			// does, so AFF730 keeps the reset object: the effect draws nothing.
+			// v1.696 ships one (dun/petra_flame_yellow_glow.efp, 0 bytes). Only
+			// a zero-length file takes this path; a truncated one still fails
+			// the parse below.
+			if ( bytes.length === 0 ) {
+				nativeUnavailableEffects.push( resolved.length === 1 ? effectName : resolvedName );
+				continue;
+			}
+			const parsed = parseJmxVisualEffect( bytes, source );
 			// A unique basename keeps its authored lookup key. Ambiguous basenames
 			// remain explicit full-path entries and are published in the alias
 			// diagnostics table; choosing one silently would invent archive order.

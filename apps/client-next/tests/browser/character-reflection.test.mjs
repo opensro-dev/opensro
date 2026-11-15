@@ -1,10 +1,11 @@
 /*
 ===========================================================================
 
-character-reflection.test.mjs - native metal reflection on characters
+character-reflection.test.mjs - native environment reflection on characters
 
 Renders Metal Detail on and off through the production renderer in a real browser
-and checks texture alpha, environment tint and the fade retirement.
+and checks texture alpha, environment tint and the fade retirement, for both
+AEE6D0 stage setups: the metal stages and the ADD table entry (AEE430).
 
 ===========================================================================
 */
@@ -185,6 +186,19 @@ test(
 					result.hitTick = await sample( true, 1, undefined, "metal", -80, hit.get( 1 ), .1 );
 					hit.step( .31, new Set( [ 1 ] ) );
 					result.hitExpired = await sample( true, 1, undefined, "metal", -80, hit.get( 1 ), .1 );
+					// The same light1 descriptors written by hand (85A9E0's start colour,
+					// then half way: ambient c/1.67, diffuse 2c): a hit light is an
+					// ordinary per-actor light and nothing else.
+					const half = [ .3, .1, .05 ];
+					result.plainStart = await sample( true, 1, undefined, "metal", -80, {
+						...zeroLight,
+						diffuse: [ .6, .2, .1 ]
+					}, .1 );
+					result.plainTick = await sample( true, 1, undefined, "metal", -80, {
+						...zeroLight,
+						ambient: half.map( c => c / 1.67 ),
+						diffuse: half.map( c => c * 2 )
+					}, .1 );
 					const gradient = Uint8ClampedArray.from( [
 						0,
 						0,
@@ -215,6 +229,28 @@ test(
 					] );
 					result.front = await sample( true, 1, undefined, "mapped" );
 					result.back = await sample( true, 1, undefined, "mapped", 80 );
+					// AEE430 with D3DTOP_ADD (ENVIRONMENT_ADD): a cull-none material
+					// and the same material single-sided, seen from both sides.
+					for ( const [id, doubleSided] of [ [ "add", true ], [ "addSingle", false ] ] ) {
+						const add = structuredClone( model );
+						add.primitives[0].geometry.material = { ...material, environmentReflection: 2, doubleSided };
+						renderer.setCharacterModel( id, add, [
+							await bitmap( [ 20, 30, 40, 128 ] ),
+							await bitmap( [ 100, 80, 60, 255 ] )
+						] );
+					}
+					// The pipeline's front face (frontFace "cw") is this triangle's +z side.
+					const front = 80, back = -80;
+					result.addOn = await sample( true, 1, undefined, "add", front );
+					result.addOff = await sample( false, 1, undefined, "add", front );
+					result.addFadingOn = await sample( true, .5, undefined, "add", front );
+					result.addFadingOff = await sample( false, .5, undefined, "add", front );
+					result.addDimOn = await sample( true, 1, undefined, "add", front, undefined, .1 );
+					result.addBackOn = await sample( true, 1, undefined, "add", back );
+					result.addBackOff = await sample( false, 1, undefined, "add", back );
+					result.addSingleOn = await sample( true, 1, undefined, "addSingle", front );
+					result.addSingleBackOn = await sample( true, 1, undefined, "addSingle", back );
+					result.addSingleBackOff = await sample( false, 1, undefined, "addSingle", back );
 					return result;
 				} finally {
 					renderer.dispose();
@@ -244,19 +280,37 @@ test(
 				);
 			}
 			assert.notDeepEqual( result.on, result.off, "Metal Detail changes rendered pixels" );
+			// ENVIRONMENT_ADD: base + sphere with no lighting stage (stage 2
+			// DISABLE), so the global reflection factor does not reach it.
+			for ( let c = 0; c < 3; c++ ) {
+				assert.ok( Math.abs( result.addOn[c] - [ 120, 110, 100 ][c] ) <= 1, JSON.stringify( result ) );
+			}
+			assert.deepEqual( result.addDimOn, result.addOn, "the ADD stages take no TFACTOR or light" );
+			assert.deepEqual( result.addOff, result.off, "Metal Detail off draws the ordinary lit material" );
+			assert.deepEqual( result.addFadingOn, result.addFadingOff, "the opacity gate retires the ADD stages" );
+			// 0x10000000 skips the material's cull-none only while the stages draw.
+			assert.deepEqual( result.addOn, result.addSingleOn, "front face matches the single-sided draw" );
+			assert.deepEqual( result.addBackOn, result.addSingleBackOn, "active ADD culls like a single-sided draw" );
+			assert.deepEqual( result.addBackOn, result.addSingleBackOff, "the dropped back face is the culled one" );
+			assert.notDeepEqual( result.addBackOff, result.addBackOn, "inactive ADD keeps the material's cull-none" );
 			assert.deepEqual(
 				result.zeroPoint,
 				result.dimIdle,
 				"temporary hit light does not replace the dim global reflection factor"
 			);
+			// 85A9E0 binds the hit light as renderer light1 (A5A7F0): it lights
+			// the vertex diffuse that stage 2 MODULATE2X applies, and never the
+			// stage-0 TFACTOR (A89560's +1E4 override stays unset), so the pixel
+			// is exactly the ordinary light's at the dim global factor.
+			assert.notDeepEqual( result.hitStart, result.dimIdle, "a hit light lights the metal stage's diffuse" );
 			for ( let c = 0; c < 3; c++ ) {
 				assert.ok(
-					Math.abs( result.hitStart[c] - result.dimIdle[c] ) <= 1,
-					"hit-start reflection uses global factor: " + JSON.stringify( result )
+					Math.abs( result.hitStart[c] - result.plainStart[c] ) <= 1,
+					"hit-start is the ordinary light1 at the global factor: " + JSON.stringify( result )
 				);
 				assert.ok(
-					Math.abs( result.hitTick[c] - result.dimIdle[c] ) <= 1,
-					"hit-tick reflection uses global factor: " + JSON.stringify( result )
+					Math.abs( result.hitTick[c] - result.plainTick[c] ) <= 1,
+					"hit-tick is the ordinary light1 at the global factor: " + JSON.stringify( result )
 				);
 			}
 			assert.deepEqual(

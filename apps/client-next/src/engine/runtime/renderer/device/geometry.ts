@@ -1199,7 +1199,7 @@ export function createGeometryResources(
 						1,
 						0,
 						0,
-						mat?.environmentReflection ? 1 : 0,
+						mat?.environmentReflection ?? 0,
 						mat?.alphaCompare ?? 7,
 						// Port-only, not native: reflection.z admits world-space
 						// receivers; portrait/doll coordinates belong to another scene.

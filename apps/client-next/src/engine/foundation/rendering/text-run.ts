@@ -113,8 +113,23 @@ export function scaleTextRun( run: UiTextRun, scale: number ): UiTextRun {
 	} );
 }
 
-// Records the GPU UI buffer may hold: one per glyph or plain quad.
-export const UI_RECORD_LIMIT = 8192;
+/*
+================
+UI_RECORD_LIMIT
+
+Records a UI scene may need: one per glyph or plain quad. The original draws
+every name tag, so a crowd's tags must fit, not give way: the GPU buffer
+grows to the scene (device/ui.ts). 2^20 records of 112 bytes are 112 MiB,
+within the 128 MiB storage binding and 256 MiB buffer every WebGPU device
+offers, so this bound is the device's and needs no adapter query. A scene
+past it is a defect and is still refused. It used to be 8192: a fixed
+buffer that a few hundred players' name tags filled.
+================
+*/
+export const UI_RECORD_LIMIT = 1048576;
+
+// Glyphs one text run may carry; a run longer than this is malformed.
+export const TEXT_RUN_GLYPHS = 8192;
 
 /*
 ================
@@ -162,7 +177,7 @@ Callers cache the verdict per run object.
 */
 export function validTextRun( run: UiTextRun ): boolean {
 	if ( !Object.isFrozen( run ) || !Array.isArray( run.glyphs ) || !Object.isFrozen( run.glyphs ) ) return false;
-	if ( run.glyphs.length > UI_RECORD_LIMIT ) return false;
+	if ( run.glyphs.length > TEXT_RUN_GLYPHS ) return false;
 	for ( const glyph of run.glyphs ) {
 		if ( !Object.isFrozen( glyph ) || !Object.isFrozen( glyph.uv ) || glyph.uv.length !== 4 ) return false;
 		if (

@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 import {
+	defaultMotionClipPaths,
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateClip
@@ -347,6 +348,22 @@ test("shared animation and ResInfo helpers retain authored selection/order", () 
 	assert.deepEqual( pickDefaultSetSoundEvents( bsr, 7, "snd_run1" ), [
 		{ cursorMs: 125, cue: "SND_RUN1" }
 	] );
+
+	// One BAN for every state (the v1.696 devil hat, 2026-11-15): a body
+	// bakes it once as walk; an auxiliary part keeps its stand too.
+	const oneMotion = {
+		animationSets: [ {
+			name: "default",
+			states: [ 0, 1, 7, 14 ].map( ( stateId ) => ({ stateId, animationPath: "hair.ban", trackEvents: [] }) )
+		} ]
+	};
+	assert.deepEqual( defaultMotionClipPaths( oneMotion ), { walk: "hair.ban", run: null, stand: null } );
+	assert.deepEqual( defaultMotionClipPaths( oneMotion, { standSharesWalk: true } ), {
+		walk: "hair.ban",
+		run: null,
+		stand: "hair.ban"
+	} );
+	assert.deepEqual( defaultMotionClipPaths( bsr ).run, "run.ban" );
 
 	const lines = [
 		"Section = Create,0,0,",

@@ -66,6 +66,30 @@ export function pickAnimationSetStateClip( bsr, setName, stateId ) {
 
 /*
 ================
+defaultMotionClipPaths
+
+The walk, run and stand BANs of a resource's default set: state 1 walks
+(or the caller's clip), 7 runs, 0 stands. A run or stand that names the
+walk's own file is left out (a character body would bake it twice), but
+an auxiliary part keeps its stand: the runtime starts it on its stand
+clip (actor-appearance), and a one-motion part such as the v1.696 devil
+hat names one BAN for every state.
+================
+*/
+/** @param {any} bsr @param {{ clipPath?: string | null, standSharesWalk?: boolean }} [options] */
+export function defaultMotionClipPaths( bsr, options = {} ) {
+	const walk = options.clipPath ?? pickDefaultSetStateClip( bsr, 1 );
+	const run = pickDefaultSetStateClip( bsr, 7 );
+	const stand = pickDefaultSetStateClip( bsr, 0 );
+	return {
+		walk,
+		run: run && run !== walk ? run : null,
+		stand: stand && (stand !== walk || options.standSharesWalk === true) ? stand : null
+	};
+}
+
+/*
+================
 pickDefaultSetTrackEvents
 ================
 */

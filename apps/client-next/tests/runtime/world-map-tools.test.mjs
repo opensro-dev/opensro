@@ -31,6 +31,7 @@ const { caveDungeonFloors, caveMapCatalog, cavePageCenter } = await import(
 );
 const { createMapToolsHud } = await import( "../../src/engine/runtime/ui/hud/map-tools.ts" );
 const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
+const { WORLDMAP_GUIDE_CATALOG } = await import( "../../src/engine/foundation/ui/worldmap-guide.ts" );
 
 /*
 ================
@@ -685,7 +686,10 @@ const SETTLE_STEPS = 12, STEP_MS = 100;
 fixture
 
 The production UI at level 20 (filter band 20..26) with the fixture guide
-offered by the session; the pose can be moved between steps.
+offered by the session; the pose can be moved between steps. The build's
+M map guide catalogue is absent here: with one published (a v1.696 build,
+#3387) the drawer shows that tree instead of the session's hunting guide,
+which is the directory these tests drive.
 ================
 */
 function fixture() {
@@ -698,7 +702,7 @@ function fixture() {
 		undefined,
 		undefined,
 		{},
-		{ [GUIDE_PATH]: GUIDE_BYTES }
+		{ [GUIDE_PATH]: GUIDE_BYTES, [WORLDMAP_GUIDE_CATALOG]: { absent: true } }
 	);
 	let state = {
 		...f.state,
