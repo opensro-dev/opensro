@@ -383,6 +383,24 @@ func TestTradePurchaseLoadsOnlyTheSummonedTransport(t *testing.T) {
 			}
 		})
 	}
+	// A COS buy may name any summoned companion with a container the player
+	// owns (ownedCOSContainer); only the summoned transport takes goods.
+	t.Run("another owned companion", func(t *testing.T) {
+		rt, c := traderFixture(t, false)
+		ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+		rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+		other := *c.ActiveCOS
+		other.GID = c.ActiveCOS.GID + 1
+		other.Container = &domain.COSContainer{Capacity: 4}
+		c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: 20, RefObjID: other.RefObjID, Codename: "ITEM_COS_SUMMON", StackCount: 1, Summon: &other})
+		if found := c.CompanionByGID(other.GID); found != &other {
+			t.Fatalf("fixture: the second companion is not owned and summoned: %+v", found)
+		}
+		trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3, CosGID: other.GID})
+		if len(other.Container.Rows) != 0 || len(c.ActiveCOS.Container.Rows) != 0 {
+			t.Fatalf("goods loaded into a companion that is not the summoned transport: %+v", other.Container.Rows)
+		}
+	})
 	rt, c := traderFixture(t, false)
 	ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
 	rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
