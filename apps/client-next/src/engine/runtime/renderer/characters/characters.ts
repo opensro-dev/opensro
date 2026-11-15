@@ -287,6 +287,11 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let ribbonOrder = new Int32Array( 64 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
+	// The last main pass's queued light effects, and the world position and
+	// query offset of each one whose query is enabled (planDeferred), for
+	// the query points deferredPlan builds once the camera is known.
+	let deferredQueue: readonly number[] = [];
+	const deferredPoints = new Map<number, { position: readonly number[]; offset: number; }>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	// Per admitted model: the native pick box, and the bind bounds that size
 	// labels and shadows. Both are immutable for the model's lifetime.
@@ -391,11 +396,6 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
-	// The batches the frame's first pass planned. Its draws are recorded in
-	// the frame's command buffer before the deferred continuation runs, so the
-	// continuation may not release or resize them: their buffers must outlive
-	// the submit. The next full pass retires what the frame left behind.
-	const submitted = new Set<string>();
 	// Assembly requests precede actor publication. Protect every requested
 	// assembly, including cache hits, until that publication takes ownership.
 	const requestedAssemblies = new Set<string>();
@@ -426,7 +426,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let retiredCpuEvaluations = 0;
 	// The culling sphere of the actor being tested, [x, y, z, radius]; reused.
 	const sphere = new Float64Array( 4 );
-	// The last main (non-preview, non-continuation) frame's culling inputs and
+	// The last main (non-preview) frame's culling inputs and
 	// admitted actors, for the opt-in culling census only. One record, its
 	// fields overwritten each main frame; disposal clears it.
 	const cullFrame: {
@@ -1059,12 +1059,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		readonly view: Float32Array | undefined;
 		readonly preview: boolean;
 		readonly seconds: number;
-		readonly continuation: boolean;
 		readonly dynamicAnimation: boolean;
-		readonly frameActors: readonly CharacterActor[];
+		// The actors this pass draws, index for index with actors; joinDeferred
+		// completes the light effects behind a query in place.
+		readonly frameActors: CharacterActor[];
 		readonly dungeonLights: readonly (readonly DungeonBlockLight[])[] | undefined;
-		// The emission cycle of each clocked actor (sampleFrameActors).
-		readonly cycles: ReadonlyMap<number, number>;
+		// The emission cycle of each clocked actor (cycledActor).
+		readonly cycles: Map<number, number>;
 		readonly byGid: ReadonlyMap<number, CharacterActor>;
 		readonly chains: CharacterChains;
 		// Frame-local actor matrices (transformFor's cache).
@@ -1110,46 +1111,63 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	}
 	/*
 	================
-	sampleFrameActors
+	sampledActor
 
-	The actors this pass draws: deferred-particle samples applied, and clocked
-	loops reduced to their cycle-local time.
+	source with its deferred-particle sample applied. A light effect behind a
+	query stays dark until its visibility is complete (completed): the frame
+	learns it only after the holders' view test (joinDeferred).
 	================
 	*/
-	function sampleFrameActors( continuation: boolean ) {
+	function sampledActor( source: CharacterActor, completed: boolean ): CharacterActor {
+		const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
+		if ( !sample ) return source;
+		return {
+			...source,
+			deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
+			time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
+			opacity: (!sample.deferred || completed) && sample.draw ?
+				(source.opacity ?? 1) * sample.instanceAlpha / 255 :
+				0
+		};
+	}
+	/*
+	================
+	cycledActor
+
+	actor with a clocked loop reduced to its cycle-local time, its emission
+	cycle recorded in cycles.
+	================
+	*/
+	function cycledActor( actor: CharacterActor, cycles: Map<number, number> ): CharacterActor {
 		// A stopped emitter receives its final cycle-local age. Preserve that
 		// cycle's birth transforms while particles drain; changing loop=false
 		// must not reseed the trail at the projectile's arrival point.
 		// Ordinary skinned actors have no emitter/material cycle ownership.
 		// Their unmodified animation time already drives pose evaluation.
+		const plan = models.get( actor.model )?.plan;
+		if ( plan?.sharedPalette && !plan.clocked ) return actor;
+		const duration = plan?.continuousGraph ? undefined : plan?.clips.get( actor.clip )?.duration;
+		if ( duration ) {
+			cycles.set(
+				actor.gid,
+				actor.loop ? Math.floor( actor.time / duration ) : particleBirths.get( actor.gid )?.cycle ?? 0
+			);
+		}
+		return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
+	}
+	/*
+	================
+	sampleFrameActors
+
+	The actors this pass draws, index for index with actors: deferred-particle
+	samples applied, and clocked loops reduced to their cycle-local time.
+	================
+	*/
+	function sampleFrameActors() {
 		const cycles = new Map<number, number>();
-		const sampledActors = hasDeferred ?
-			actors.map( source => {
-				const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
-				return sample ?
-					{
-						...source,
-						deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
-						time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
-						opacity: (!sample.deferred || continuation) && sample.draw ?
-							(source.opacity ?? 1) * sample.instanceAlpha / 255 :
-							0
-					} :
-					source;
-			} ) :
-			actors;
-		const frameActors = sampledActors.map( actor => {
-			const plan = models.get( actor.model )?.plan;
-			if ( plan?.sharedPalette && !plan.clocked ) return actor;
-			const duration = plan?.continuousGraph ? undefined : plan?.clips.get( actor.clip )?.duration;
-			if ( duration ) {
-				cycles.set(
-					actor.gid,
-					actor.loop ? Math.floor( actor.time / duration ) : particleBirths.get( actor.gid )?.cycle ?? 0
-				);
-			}
-			return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
-		} );
+		const frameActors = actors.map( source =>
+			cycledActor( hasDeferred ? sampledActor( source, false ) : source, cycles )
+		);
 		return { frameActors, cycles };
 	}
 	/*
@@ -1462,100 +1480,175 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
-	advanceParticles
+	ParticleAdmission
 
-	Admit emitters within the render budget and advance their histories.
-	Returns the admitted emitters, the poses they need and their bytes.
+	The frame's admitted emitters, the poses they need and the bytes they
+	hold, in admission order (advanceParticles, then joinDeferred).
 	================
 	*/
-	function advanceParticles( frame: PrepareFrame ) {
-		const { byGid, chains, origin, continuation } = frame;
-		const particleNeeded = new Set<number>(), particleAccepted = new Set<number>();
+	interface ParticleAdmission {
+		readonly accepted: Set<number>;
+		readonly needed: Set<number>;
+		bytes: number;
+	}
+	/*
+	================
+	advanceParticles
+
+	Admit emitters within the render budget and advance their histories. The
+	light effects behind a query wait for their visibility (joinDeferred).
+	================
+	*/
+	function advanceParticles( frame: PrepareFrame ): ParticleAdmission {
 		for ( const [gid, history] of particleBirths ) {
-			if ( byGid.get( gid )?.model !== history.model || !models.has( history.model ) ) {
+			if ( frame.byGid.get( gid )?.model !== history.model || !models.has( history.model ) ) {
 				particleBirths.delete( gid );
 			}
 		}
-		let particleBytes = [ ...particleBirths.values() ].reduce( ( sum, h ) => sum + h.bytes, 0 );
+		const admission: ParticleAdmission = {
+			accepted: new Set<number>(),
+			needed: new Set<number>(),
+			bytes: [ ...particleBirths.values() ].reduce( ( sum, h ) => sum + h.bytes, 0 )
+		};
 		for ( const actor of frame.frameActors ) {
-			if ( actor.deferredParticle && (!continuation || !deferred.sample( actor.gid )?.draw) ) continue;
-			const resource = models.get( actor.model ), model = resource?.model, chain = chains.get( actor.gid )!;
-			if (
-				!model || !resource!.plan.emission || !chain.length || chain.some( a => !models.has( a.model ) )
-			) continue;
-			const storage = resource!.plan.particleBytes;
-			const bytes = Math.max( 0, storage - (particleBirths.get( actor.gid )?.bytes ?? 0) ) +
-				chain.reduce(
-					( sum, a ) => sum + (particleNeeded.has( a.gid ) ? 0 : models.get( a.model )!.plan.poseBytes),
-					0
-				);
-			if ( particleBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
-			particleBytes += bytes;
-			particleAccepted.add( actor.gid );
-			for ( const a of chain ) particleNeeded.add( a.gid );
-			const history = particleHistory( frame, actor, model, storage );
-			const transform = transformFor( actor, byGid, origin, frame.transforms );
-			if ( !transform ) continue;
-			const shift = regionOffsetXZ( origin, history.origin );
-			if ( history.graph && model.particleGraph ) {
-				advanceGraphEmitter( actor, model, history, transform, shift );
-			} else {
-				advanceBirthEmitter( actor, model, history, transform, shift );
-			}
-			history.origin = origin;
-			history.time = actor.time;
+			if ( !actor.deferredParticle ) advanceEmitter( frame, actor, admission );
 		}
 		// Deferred draws retain bounded simulation history; only actor retirement releases it.
-		return { accepted: particleAccepted, needed: particleNeeded, bytes: particleBytes };
+		return admission;
+	}
+	/*
+	================
+	advanceEmitter
+
+	Admit one emitter within the render budget and advance its history.
+	================
+	*/
+	function advanceEmitter( frame: PrepareFrame, actor: CharacterActor, admission: ParticleAdmission ) {
+		const { byGid, chains, origin } = frame, needed = admission.needed;
+		const resource = models.get( actor.model ), model = resource?.model, chain = chains.get( actor.gid )!;
+		if ( !model || !resource!.plan.emission || !chain.length || chain.some( a => !models.has( a.model ) ) ) {
+			return;
+		}
+		const storage = resource!.plan.particleBytes;
+		const bytes = Math.max( 0, storage - (particleBirths.get( actor.gid )?.bytes ?? 0) ) +
+			chain.reduce( ( sum, a ) => sum + (needed.has( a.gid ) ? 0 : models.get( a.model )!.plan.poseBytes), 0 );
+		if ( admission.bytes + bytes > CHARACTER_RENDER_BYTES ) return;
+		admission.bytes += bytes;
+		admission.accepted.add( actor.gid );
+		for ( const a of chain ) needed.add( a.gid );
+		const history = particleHistory( frame, actor, model, storage );
+		const transform = transformFor( actor, byGid, origin, frame.transforms );
+		if ( !transform ) return;
+		const shift = regionOffsetXZ( origin, history.origin );
+		if ( history.graph && model.particleGraph ) {
+			advanceGraphEmitter( actor, model, history, transform, shift );
+		} else {
+			advanceBirthEmitter( actor, model, history, transform, shift );
+		}
+		history.origin = origin;
+		history.time = actor.time;
+	}
+	/*
+	================
+	visibleActor
+
+	Whether actor draws this frame: it has opacity, and it is an admitted
+	emitter or its culling sphere meets a view.
+	================
+	*/
+	function visibleActor(
+		frame: PrepareFrame,
+		actor: CharacterActor,
+		accepted: ReadonlySet<number>,
+		frusta: readonly Float64Array[]
+	) {
+		if ( frame.opacity( actor ) <= 0 ) return false;
+		if ( models.get( actor.model )?.plan.emission ) return accepted.has( actor.gid );
+		if ( !cullSphere( actor, frame.chains, frame.origin, sphere ) ) return false;
+		return !frusta.length ||
+			frusta.some( frustum => visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! ) );
 	}
 	/*
 	================
 	selectVisible
 
-	The actors with any opacity whose culling sphere meets a view, plus the
-	admitted emitters. Records the census frame and the deferred set.
+	The visible actors (visibleActor). Records the census frame and the set
+	the light effects' holders are looked up in (planDeferred).
 	================
 	*/
-	function selectVisible(
-		frame: PrepareFrame,
-		accepted: ReadonlySet<number>,
-		reflectedView: Float32Array | undefined
-	) {
-		const { chains, origin, continuation } = frame, opacity = frame.opacity;
-		const frusta = [ frame.view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map(
-			prepareViewFrustum
-		);
-		const visible = frame.frameActors.filter( actor => {
-			if ( opacity( actor ) <= 0 ) return false;
-			if ( models.get( actor.model )?.plan.emission ) return accepted.has( actor.gid );
-			if ( !cullSphere( actor, chains, origin, sphere ) ) return false;
-			return !frusta.length ||
-				frusta.some( frustum =>
-					visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
-				);
-		} );
+	function selectVisible( frame: PrepareFrame, accepted: ReadonlySet<number>, frusta: Float64Array[] ) {
+		const visible = frame.frameActors.filter( actor => visibleActor( frame, actor, accepted, frusta ) );
 		// The census (stats(true)) reads the last main frame's admission.
-		if ( !continuation && !frame.preview ) {
+		if ( !frame.preview ) {
 			cullFrame.valid = true;
 			cullFrame.frusta = frusta;
 			cullFrame.visible = visible;
-			cullFrame.chains = chains;
+			cullFrame.chains = frame.chains;
 			cullFrame.byGid = frame.byGid;
-			cullFrame.origin = origin;
+			cullFrame.origin = frame.origin;
 		}
-		if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
+		if ( hasDeferred ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
 		return visible;
 	}
 	/*
 	================
-	retainedDeferred
+	planDeferred
 
-	Whether the first pass keeps this batch for the deferred continuation.
+	Queue the light effects behind an occlusion query (AAEA80) and complete
+	their fade, tick and draw (AEC0D0 / AEC180). The last answer landed
+	between frames (deliverDeferred), so this needs only the holders' view
+	test: a light effect whose holder is out of view is not queued. Records
+	the query positions deferredPlan turns into points.
 	================
 	*/
-	function retainedDeferred( frame: PrepareFrame, batch: { gids: readonly number[]; } ) {
-		return !frame.continuation && hasDeferred &&
-			batch.gids.some( gid => !!frame.byGid.get( gid )?.deferredParticle );
+	function planDeferred( origin: number, enabled: boolean, night: boolean ) {
+		const ids: number[] = [], allowed = new Set<number>(), transforms = new Map<number, Float32Array>();
+		deferredPoints.clear();
+		for ( const actor of actors ) {
+			if (
+				!actor.deferredParticle || !deferred.sample( actor.gid )?.deferred || !models.has( actor.model ) ||
+				(actor.opacity ?? 1) <= 0 || actor.attachment && !deferredVisible.has( actor.attachment.gid )
+			) continue;
+			const matrix = transformFor( actor, snapshots.index, origin, transforms );
+			if ( !matrix ) continue;
+			ids.push( actor.gid );
+			if ( enabled && (!actor.deferredParticle.nightOnly || night) ) {
+				allowed.add( actor.gid );
+				deferredPoints.set( actor.gid, {
+					position: Array.from( matrix.subarray( 12, 15 ) ),
+					offset: actor.deferredParticle.offset
+				} );
+			}
+		}
+		deferredQueue = ids;
+		deferred.plan( ids, allowed );
+		deferred.complete();
+	}
+	/*
+	================
+	joinDeferred
+
+	The light effects planDeferred left drawing join the frame: the frame's
+	actors take their completed samples, the hierarchy their values, and each
+	is admitted and advanced after every other emitter. Returns the visible
+	ones.
+	================
+	*/
+	function joinDeferred( frame: PrepareFrame, admission: ParticleAdmission, frusta: readonly Float64Array[] ) {
+		const joined: CharacterActor[] = [];
+		for ( let i = 0; i < actors.length; i++ ) {
+			const source = actors[i]!, sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
+			if ( !sample?.deferred || !sample.draw ) continue;
+			const actor = cycledActor( sampledActor( source, true ), frame.cycles );
+			frame.frameActors[i] = actor;
+			joined.push( actor );
+		}
+		if ( !joined.length ) return joined;
+		// The same actors and attachments: the hierarchy only takes the new
+		// values, into the maps the frame holds.
+		hierarchy.update( frame.frameActors );
+		for ( const actor of joined ) advanceEmitter( frame, actor, admission );
+		return joined.filter( actor => visibleActor( frame, actor, admission.accepted, frusta ) );
 	}
 	/*
 	================
@@ -1607,14 +1700,6 @@ the next full prepare pass, so this may run between frames.
 		// A rejected actor leaves capacity available for cheaper frameActors that follow it.
 		const grouped = new Map<string, CharacterActor[]>(), needed = new Set<number>( particles.needed );
 		renderBytes = particles.bytes + materialClocks.bytes();
-		if ( !frame.continuation && hasDeferred ) {
-			for ( const batch of batches.values() ) {
-				if ( retainedDeferred( frame, batch ) ) {
-					const actor = frame.byGid.get( batch.gids[0]! );
-					if ( actor ) renderBytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
-				}
-			}
-		}
 		deferredActors = 0;
 		for ( const actor of visible ) {
 			if ( actor.drawGeometry === false ) continue;
@@ -1654,7 +1739,6 @@ the next full prepare pass, so this may run between frames.
 		needed: ReadonlySet<number>
 	) {
 		for ( const [id, batch] of batches ) {
-			if ( retainedDeferred( frame, batch ) || frame.continuation && submitted.has( id ) ) continue;
 			const rows = grouped.get( id );
 			const capacity = rows ? models.get( rows[0]!.model )!.plan.capacity( rows.length ) : 0;
 			if (
@@ -1765,15 +1849,12 @@ the next full prepare pass, so this may run between frames.
 	================
 	releaseUngrouped
 
-	Release batches the plan left without rows, except the ones this frame
-	still needs (retained deferred batches, and the first pass's submits).
+	Release batches the plan left without rows.
 	================
 	*/
 	function releaseUngrouped( frame: PrepareFrame, grouped: ReadonlyMap<string, CharacterActor[]> ) {
 		for ( const [id, batch] of batches ) {
-			if (
-				!grouped.has( id ) && !retainedDeferred( frame, batch ) && !(frame.continuation && submitted.has( id ))
-			) {
+			if ( !grouped.has( id ) ) {
 				for ( const draw of batch.draws ) {
 					frame.geometry.release( draw );
 				}
@@ -3278,46 +3359,23 @@ the next full prepare pass, so this may run between frames.
 		================
 		deferredPlan
 
-		Build deferred effect queries from the current actor and particle state.
+		The occlusion query of the light effects the last main pass queued
+		(planDeferred): whether it is sent this frame, and each eligible
+		effect's query point (AAEA80), moved towards the camera.
 		================
 		*/
-		deferredPlan( origin: number, camera: readonly number[], enabled = true, night = true ) {
-			if ( !hasDeferred ) return null;
-			const ids: number[] = [],
-				allowed = new Set<number>(),
-				points = new Map<number, readonly number[]>(),
-				transforms = new Map<number, Float32Array>();
-			for ( const actor of actors ) {
-				if (
-					!actor.deferredParticle || !deferred.sample( actor.gid )?.deferred || !models.has( actor.model ) ||
-					(actor.opacity ?? 1) <= 0 || actor.attachment && !deferredVisible.has( actor.attachment.gid )
-				) continue;
-				const matrix = transformFor( actor, snapshots.index, origin, transforms );
-				if ( !matrix ) continue;
-				ids.push( actor.gid );
-				if ( enabled && (!actor.deferredParticle.nightOnly || night) ) {
-					allowed.add( actor.gid );
-					points.set(
-						actor.gid,
-						particleQueryPoint(
-							Array.from( matrix.subarray( 12, 15 ) ),
-							camera,
-							actor.deferredParticle.offset
-						)
-					);
-				}
-			}
-			if ( !ids.length ) return null;
-			const query = deferred.plan( ids, allowed ),
+		deferredPlan( camera: readonly number[] ) {
+			if ( !deferredQueue.length ) return null;
+			const query = deferred.issue(),
 				eligible = deferred.eligible(),
 				input = new Float32Array( eligible.length * 4 );
 			for ( let i = 0; i < eligible.length; i++ ) {
-				input.set( points.get( eligible[i]! )!, i * 4 );
+				const point = deferredPoints.get( eligible[i]! )!;
+				input.set( particleQueryPoint( point.position, camera, point.offset ), i * 4 );
 				input[i * 4 + 3] = 1;
 			}
 			return { query, points: input };
 		},
-		completeDeferred: deferred.complete,
 		deliverDeferred: deferred.deliver,
 		/*
 		================
@@ -3360,7 +3418,6 @@ the next full prepare pass, so this may run between frames.
 			view?: Float32Array,
 			preview = false,
 			seconds = 0,
-			continuation = false,
 			deferredEnabled = true,
 			night = true,
 			dynamicAnimation = false,
@@ -3372,11 +3429,10 @@ the next full prepare pass, so this may run between frames.
 			if ( !charactersShown ) return [];
 			poseSeconds = seconds;
 			probe?.characterBegin();
-			if ( !continuation ) {
-				poseFrame++;
-				submitted.clear();
-			}
-			if ( !continuation ) deferred.begin( seconds, hasDeferred ? actors : [], deferredEnabled, night );
+			poseFrame++;
+			deferred.begin( seconds, hasDeferred ? actors : [], deferredEnabled, night );
+			deferredQueue = [];
+			deferredPoints.clear();
 			deferPoses = !!geometry.prepareGpuBones;
 			gpuAnimation = geometry.gpuAnimationStats;
 			poseRequests =
@@ -3388,12 +3444,9 @@ the next full prepare pass, so this may run between frames.
 				frameGroups =
 					0;
 			framePoses = new Map();
-			const { frameActors, cycles } = sampleFrameActors( continuation );
-			// Residency retires draws and textures; the first pass's recorded
-			// commands still use them, so the continuation leaves it for the next
-			// full pass.
-			if ( residencyDirty && !continuation ) retireResidency( geometry, images, frameActors );
-			if ( hasMaterialClocks && !continuation ) {
+			const { frameActors, cycles } = sampleFrameActors();
+			if ( residencyDirty ) retireResidency( geometry, images, frameActors );
+			if ( hasMaterialClocks ) {
 				materialClocks.step( actors, seconds, path => models.get( path )?.model );
 			}
 			const { byGid, chains } = hierarchy.update( frameActors );
@@ -3404,7 +3457,6 @@ the next full prepare pass, so this may run between frames.
 				view,
 				preview,
 				seconds,
-				continuation,
 				dynamicAnimation,
 				frameActors,
 				dungeonLights: blockLights,
@@ -3415,8 +3467,16 @@ the next full prepare pass, so this may run between frames.
 				opacity: actorOpacity( byGid ),
 				output: []
 			};
+			const frusta = [ view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map( prepareViewFrustum );
 			const particles = advanceParticles( frame );
-			const visible = selectVisible( frame, particles.accepted, reflectedView );
+			let visible = selectVisible( frame, particles.accepted, frusta );
+			// The light effects behind a query complete once their holders'
+			// view test is in, and draw with this pass (planDeferred).
+			if ( hasDeferred && !preview ) {
+				planDeferred( origin, deferredEnabled, night );
+				const joined = joinDeferred( frame, particles, frusta );
+				if ( joined.length ) visible = visible.concat( joined );
+			}
 			const { grouped, needed } = planBatches( frame, visible, particles );
 			retireUnplanned( frame, grouped, needed );
 			countPlan( frame, visible, needed, particles.needed );
@@ -3456,11 +3516,6 @@ the next full prepare pass, so this may run between frames.
 				} );
 			}
 			for ( const [id, rows] of orderedGroups ) {
-				if ( !continuation ) submitted.add( id );
-				// The first pass already submitted ordinary geometry. Keep its
-				// admission/budget accounting, but do not rebuild or upload it
-				// again when visibility completes the deferred pass.
-				if ( continuation && !rows[0]!.deferredParticle ) continue;
 				prepareGroup( frame, id, rows );
 			}
 			probe?.characterMark( "character-upload" );
@@ -3536,6 +3591,8 @@ the next full prepare pass, so this may run between frames.
 			deferred.reset();
 			particleSnapshots.clear();
 			deferredVisible.clear();
+			deferredQueue = [];
+			deferredPoints.clear();
 			hasDeferred = false;
 			hierarchy.reset();
 			snapshots.reset();

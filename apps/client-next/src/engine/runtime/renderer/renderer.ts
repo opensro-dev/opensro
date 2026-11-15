@@ -744,19 +744,22 @@ export function createRenderer(
 					forward: basis.forward,
 					up: basis.up
 				};
-				const characterDraws = characters.prepare(
+				const characterFrame = characters.prepare(
 					device.geometry()!,
 					device.images()!,
 					preview ? 0 : scene.originRegion,
 					preview ? viewProjection( preview, viewport.width / Math.max( 1, viewport.height ) ) : scene.matrix,
 					!!preview,
 					timeSeconds,
-					false,
 					video.records[video.active][7] === 1,
 					world.night(),
 					video.records[video.active][12] === 1,
 					scene.reflectionMatrix
 				);
+				// The light effects behind a query draw after the world, in the
+				// deferred pass; the rest with the characters.
+				const characterDraws = characterFrame.filter( draw => !draw.deferredParticle ),
+					deferredCharacterDraws = characterFrame.filter( draw => draw.deferredParticle );
 				const shadowDraws = world.characterShadows(
 					preview ?
 						[] :
@@ -889,12 +892,7 @@ export function createRenderer(
 				probe?.renderMark( "labels-portraits" );
 				const deferredPlan = preview ?
 						null :
-						characters.deferredPlan(
-							scene.originRegion,
-							scene.camera.eye,
-							video.records[video.active][7] === 1,
-							world.night()
-						),
+						characters.deferredPlan( scene.camera.eye ),
 					targetSurface = surface;
 				// Port-only, not native. Experimental owns the opt-in; 100 keeps
 				// the native surface and pass order. UI keeps its full resolution.
@@ -916,20 +914,10 @@ export function createRenderer(
 					);
 				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred();
-					// The continuation's draws reach the second submit: same rule.
-					return device.geometry()!.singleSampled( staleDraws.live(
-						"deferred-particles",
-						characters.prepare(
-							device.geometry()!,
-							device.images()!,
-							scene.originRegion,
-							scene.matrix,
-							false,
-							timeSeconds,
-							true
-						).filter( draw => draw.deferredParticle )
-					) );
+					// The deferred pass's draws reach the second submit: same rule.
+					return device.geometry()!.singleSampled(
+						staleDraws.live( "deferred-particles", deferredCharacterDraws )
+					);
 				};
 				const deferredPass = deferredPlan ?
 					{

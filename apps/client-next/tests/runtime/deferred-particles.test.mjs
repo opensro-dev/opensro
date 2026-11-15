@@ -18,11 +18,22 @@ const { createDeferredParticles, particleQueryPoint } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/deferred-particles.ts" ).href
 );
 const actor = { gid: 1, model: "effect", time: 0, deferredParticle: { offset: 11 } };
+/*
+================
+ask
+
+One frame's query slot: plan the queue, then send the query when one is due.
+================
+*/
+function ask( owner, ids, enabled ) {
+	owner.plan( ids, enabled );
+	return owner.issue();
+}
 test("deferred visibility controls native 50-ms ticks and strict query cadence", () => {
 	const owner = createDeferredParticles();
 	function frame( time, result ) {
 		owner.begin( time, [ { ...actor, time } ] );
-		const query = owner.plan( [ 1 ], new Set( [ 1 ] ) );
+		const query = ask( owner, [ 1 ], new Set( [ 1 ] ) );
 		if ( query ) owner.deliver( [ result ] );
 		owner.complete();
 		return { query, ...owner.sample( 1 ) };
@@ -55,24 +66,24 @@ test("deferred visibility controls native 50-ms ticks and strict query cadence",
 test("missing visible frames reset fading, retired IDs and model replacements cannot inherit query results", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ] );
-	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	ask( owner, [ 1 ], new Set( [ 1 ] ) );
 	owner.complete();
 	owner.begin( .6, [ actor ] );
-	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	ask( owner, [ 1 ], new Set( [ 1 ] ) );
 	owner.deliver( [ true ] );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 255 );
 	owner.begin( .7, [ actor ] );
-	owner.plan( [], new Set() );
+	ask( owner, [], new Set() );
 	owner.begin( 1.2, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), true );
 	owner.deliver( [ false ] );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	owner.begin( 1.3, [ { ...actor, model: "replacement" } ] );
 	assert.equal( owner.sample( 1 ).time, 0 );
 	assert.equal( owner.sample( 1 ).visible, false );
-	assert.throws( () => owner.plan( [ 1, 1 ], new Set( [ 1 ] ) ), /queue/ );
+	assert.throws( () => ask( owner, [ 1, 1 ], new Set( [ 1 ] ) ), /queue/ );
 });
 test("query points preserve camera offsets and zero-distance normalization", () => {
 	assert.deepEqual( particleQueryPoint( [ 1, 2, 3 ], [ 1, 2, 13 ], 11 ), [ 1, 2, 13 ] );
@@ -80,7 +91,7 @@ test("query points preserve camera offsets and zero-distance normalization", () 
 	assert.deepEqual( particleQueryPoint( [ 1, 2, 3 ], [ 99, 98, 97 ], 1 ), [ 1, 2, 3 ] );
 });
 
-test("production renderer freezes the actual EFP graph while hidden and resumes without catch-up", async () => {
+test("production renderer freezes the actual EFP graph while hidden and resumes without catch-up, in one pass", async () => {
 	const { createCharacters } = await import(
 		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 	);
@@ -130,30 +141,27 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 		particleGraph: undefined,
 		primitives: model.primitives.map( p => ({ ...p, particleEmitter: undefined, emission: undefined }) )
 	}, [] );
-	let ordinaryWrites = 0;
 	const gpu = {
 		upload( g ) {
-			const deferred = !!g.material.deferredParticle;
-			if ( !deferred ) ordinaryWrites++;
-			return { deferred, instances: [ ...g.instances ] };
+			return { deferred: !!g.material.deferredParticle, instances: [ ...g.instances ] };
 		},
 		release( d ) {
 			reference.release( d );
 		},
 		updateInstances( d, v ) {
-			if ( !d.deferred ) ordinaryWrites++;
 			d.instances = [ ...v ];
 			return d;
 		},
 		presentParticles( d, particles ) {
-			if ( !d.deferred ) ordinaryWrites++;
 			d.instances = [ ...reference.present( d, particles ).matrices ];
 		},
 		updateBones( d ) {
-			if ( !d.deferred ) ordinaryWrites++;
 		}
 	};
-	function frame( time, visible ) {
+	// The answer of a query lands between frames (renderer.ts: the frame
+	// never waits for it), so it lights the frame after the one that asked.
+	let answer = null;
+	function frame( time, visible = true ) {
 		owner.actors( [ {
 			...actor,
 			pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
@@ -172,101 +180,41 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 			loop: true,
 			scale: 1
 		} ] );
-		owner.prepare( gpu, {}, 257, undefined, false, time );
-		const writes = ordinaryWrites;
-		const plan = owner.deferredPlan( 257, [ 0, 0, 30 ] );
-		if ( plan.query ) owner.deliverDeferred( [ visible ] );
-		owner.completeDeferred();
-		const draws = owner.prepare( gpu, {}, 257, undefined, false, time, true );
-		assert.equal( ordinaryWrites, writes, "deferred continuation repeated ordinary uploads" );
-		return draws.map( d => d.instances[12] );
+		if ( answer !== null ) owner.deliverDeferred( [ answer ] );
+		answer = null;
+		const draws = owner.prepare( gpu, {}, 257, undefined, false, time );
+		const plan = owner.deferredPlan( [ 0, 0, 30 ] );
+		assert.ok( plan, "the light effect is queued" );
+		if ( plan.query ) answer = visible;
+		assert.ok( draws.some( d => !d.deferred ), "the ordinary actor draws in the same pass" );
+		return { query: plan.query, drawn: draws.filter( d => d.deferred ).map( d => d.instances[12] ) };
 	}
 	// Each drawn particle sits at its tick position plus less than one tick of
 	// motion: presentation carries the pending fraction (particle-presentation.ts).
-	const atTick = ( drawn, ticks ) => {
+	const atTick = ( { drawn }, ticks ) => {
 		assert.equal( drawn.length, ticks.length );
 		drawn.forEach( ( value, i ) =>
 			assert.ok( value >= ticks[i] - 1e-4 && value < ticks[i] + 1, `${value} vs ${ticks[i]}` )
 		);
 	};
 	try {
-		assert.deepEqual( frame( 0 ), [] );
-		assert.deepEqual( frame( .5 ), [] );
-		atTick( frame( .501, true ), [ 0 ] );
+		atTick( frame( 0 ), [] );
+		atTick( frame( .5 ), [] );
+		// The 500 ms slot asks; the answer lights the next frame.
+		const asked = frame( .501 );
+		assert.equal( asked.query, true );
+		atTick( asked, [] );
 		atTick( frame( .601 ), [ 2 ] );
 		atTick( frame( .801 ), [ 6 ] );
-		assert.deepEqual( frame( 1.002, false ), [] );
-		assert.deepEqual( frame( 1.302 ), [] );
-		atTick( frame( 1.503, true ), [ 10 ] );
-	} finally {
-		owner.dispose( gpu, null );
-	}
-});
-
-test("the deferred continuation never releases a draw the frame's first pass returned", async () => {
-	const { createCharacters } = await import(
-		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
-	);
-	const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
-	const model = {
-		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
-		images: [],
-		clips: [ { name: "idle", duration: 1, channels: [] } ],
-		primitives: [ {
-			name: "body",
-			node: 0,
-			joints: [ 0 ],
-			inverseBind: identity(),
-			image: -1,
-			geometry: {
-				positions: new Float32Array( 9 ),
-				indices: Uint32Array.of( 0, 1, 2 ),
-				transform: identity(),
-				material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true }
-			}
-		} ]
-	};
-	const owner = createCharacters(), released = [];
-	owner.model( "ordinary", model, [] );
-	const gpu = {
-		upload( g ) {
-			return { id: Symbol( "draw" ), instances: [ ...g.instances ] };
-		},
-		release( d ) {
-			released.push( d );
-		},
-		updateInstances( d, v ) {
-			d.instances = [ ...v ];
-			return d;
-		},
-		updateBones() {}
-	};
-	const ordinary = {
-		gid: 2,
-		model: "ordinary",
-		pose: { regionId: 257, x: 5, y: 0, z: 0, yaw: 0 },
-		clip: "idle",
-		time: 0,
-		loop: true,
-		scale: 1
-	};
-	try {
-		owner.actors( [ ordinary ] );
-		const first = owner.prepare( gpu, {}, 257, undefined, false, 0 );
-		assert.ok( first.length > 0, "the first pass drew the ordinary actor" );
-		// The continuation plans without the batch the first pass used (in play:
-		// the deferred actors it adds take the render budget first). Its draws are
-		// already recorded in the frame's command buffer: they must survive.
-		owner.actors( [] );
-		owner.prepare( gpu, {}, 257, undefined, false, 0, true );
-		assert.deepEqual(
-			released.filter( d => first.includes( d ) ),
-			[],
-			"the continuation released a recorded draw"
-		);
-		// The next full pass retires it.
-		owner.prepare( gpu, {}, 257, undefined, false, .1 );
-		assert.ok( first.every( d => released.includes( d ) ), "the next frame kept a draw nobody uses" );
+		// Hidden from 1.002's answer on: no draw and no tick.
+		atTick( frame( 1.002, false ), [ 10 ] );
+		atTick( frame( 1.302 ), [] );
+		atTick( frame( 1.503 ), [] );
+		// Seen again: it resumes at the tick it stopped on, without catch-up.
+		atTick( frame( 1.603 ), [ 12 ] );
+		// A preview pass runs no particle query.
+		owner.prepare( gpu, {}, 257, identity(), true, 1.803 );
+		assert.equal( owner.deferredPlan( [ 0, 0, 30 ] ), null );
 	} finally {
 		owner.dispose( gpu, null );
 	}
@@ -280,16 +228,16 @@ test("ordinary fallback keeps instance alpha, bypasses query cadence and ticks e
 	owner.begin( .5, [ actor ], false );
 	assert.equal( owner.sample( 1 ).time, .5 );
 	owner.begin( .6, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), false );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	owner.begin( 1.2, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), true );
 	owner.deliver( [ true ] );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).instanceAlpha, 255 );
 	owner.begin( 1.8, [ actor ] );
-	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	ask( owner, [ 1 ], new Set( [ 1 ] ) );
 	owner.deliver( [ false ] );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).instanceAlpha, 0 );
@@ -307,23 +255,23 @@ test("ordinary fallback keeps instance alpha, bypasses query cadence and ticks e
 test("a query in flight completes on last visibility and its answer lands on a later frame", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), false );
 	owner.complete();
 	owner.begin( .6, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), true );
 	// The issuing frame completes without the answer: no throw, no fade yet.
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	// The next cadence slot does not issue a second query behind the first.
 	owner.begin( 1.2, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), false );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	// A malformed answer is refused and the query stays in flight.
 	assert.throws( () => owner.deliver( [ true, false ] ), /results/ );
 	owner.deliver( [ true ] );
 	owner.begin( 1.3, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), false );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).visible, true );
 	assert.ok( owner.sample( 1 ).alpha > 0 );
@@ -334,14 +282,14 @@ test("a query in flight completes on last visibility and its answer lands on a l
 test("an answer issued for a replaced model does not light its replacement", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ] );
-	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	ask( owner, [ 1 ], new Set( [ 1 ] ) );
 	owner.complete();
 	owner.begin( .6, [ actor ] );
-	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	assert.equal( ask( owner, [ 1 ], new Set( [ 1 ] ) ), true );
 	owner.begin( .7, [ { ...actor, model: "replacement" } ] );
 	owner.deliver( [ true ] );
 	assert.equal( owner.sample( 1 ).visible, false );
-	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	ask( owner, [ 1 ], new Set( [ 1 ] ) );
 	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 });

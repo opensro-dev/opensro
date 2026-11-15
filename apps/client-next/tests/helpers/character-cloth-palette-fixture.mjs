@@ -472,7 +472,6 @@ export function captureClothPalettes(
 				view,
 				preview,
 				input.seconds,
-				false,
 				true,
 				true,
 				input.enabled
