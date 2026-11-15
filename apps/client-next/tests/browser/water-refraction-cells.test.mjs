@@ -200,7 +200,7 @@ test( "refracted water shows the seabed's cell edge no more than native", { time
 		const folder = process.env.SRO_WATER_SHOTS;
 		if ( folder ) {
 			mkdirSync( folder, { recursive: true } );
-			for ( const [name, shot] of [ [ "native", native ], [ "refracted", refracted ] ] ) {
+			for ( const [name, shot] of Object.entries( { native, refracted } ) ) {
 				writeFileSync( path.join( folder, name + ".png" ), Buffer.from( shot.png.split( "," )[1], "base64" ) );
 			}
 		}
