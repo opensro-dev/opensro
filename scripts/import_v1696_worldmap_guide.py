@@ -36,7 +36,6 @@ codename), so this importer pairs the n-th line with the n-th row.
 ===========================================================================
 """
 import argparse
-import hashlib
 import json
 import mmap
 import os
@@ -49,6 +48,7 @@ import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import archive_index, table_rows
 from import_vsro_tomb_minimap import ddj_payload
+from prepare_client_resources import file_digest
 from sro_paths import PUBLIC_ROOT
 
 V1696_ENV = "SRO_V1696_ROOT"
@@ -59,7 +59,6 @@ CATALOG = PUBLIC_ROOT / "assets" / "data" / "worldmap-guide.json"
 IMAGES = PUBLIC_ROOT / "assets" / "images" / "Media_extracted" / "interface"
 MASK_DIR = "worldmap/guide-mask/"
 CATALOG_FORMAT = "opensro-worldmap-guide-v1"
-HASH_CHUNK = 1 << 20
 
 # The DDS header the tiles carry: 128 bytes after the magic's offset.
 DDS_HEADER_BYTES = 128
@@ -114,12 +113,9 @@ def verify_media(root):
 	path = Path(root) / "Media.pk2"
 	if not path.is_file():
 		raise SystemExit(f"{path} not found; {V1696_ENV} must be the pinned v1.696 client folder")
-	hasher = hashlib.sha256()
-	with open(path, "rb") as stream:
-		for chunk in iter(lambda: stream.read(HASH_CHUNK), b""):
-			hasher.update(chunk)
-	if hasher.hexdigest() != pin["archives"]["Media"]:
-		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {hasher.hexdigest()})")
+	actual = file_digest(path)
+	if actual != pin["archives"]["Media"]:
+		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {actual})")
 	return path
 
 

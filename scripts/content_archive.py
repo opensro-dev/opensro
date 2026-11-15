@@ -21,10 +21,11 @@ sorted entries at a fixed timestamp, a pinned sha256 - is the same.
 
 ===========================================================================
 """
-import hashlib
 import json
 from pathlib import Path
 import zipfile
+
+from prepare_client_resources import file_digest
 
 PIN_FORMAT = "opensro-content-archive-pin-v1"
 ARCHIVE_FORMAT = "opensro-content-archive-v1"
@@ -33,7 +34,6 @@ MANIFEST_ENTRY = "manifest.json"
 TABLES_PREFIX = "tables/"
 AREAS_PREFIX = "areas/"
 ZIP_TIME = (1980, 1, 1, 0, 0, 0)
-DIGEST_CHUNK = 1024 * 1024
 
 
 # ================
@@ -64,20 +64,6 @@ def read_pin(pin_file):
 	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("sha256"), str):
 		raise SystemExit(f"{pin_file} is not a {PIN_FORMAT} pin file")
 	return pin["sha256"]
-
-
-# ================
-# file_digest
-#
-# The sha256 of a file, read in chunks: the archive can hold a whole
-# continent's terrain, so it is never loaded whole to be verified.
-# ================
-def file_digest(path):
-	digest = hashlib.sha256()
-	with open(path, "rb") as stream:
-		for chunk in iter(lambda: stream.read(DIGEST_CHUNK), b""):
-			digest.update(chunk)
-	return digest.hexdigest()
 
 
 # ================

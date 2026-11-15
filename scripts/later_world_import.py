@@ -37,7 +37,6 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
-import hashlib
 import json
 import mmap
 import os
@@ -51,7 +50,7 @@ import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
-from prepare_client_resources import write_atomically
+from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
@@ -140,11 +139,7 @@ def require_pin(spec, root, names, pins_for):
 			raise SystemExit(f"{spec.pin_file.name} pins no {name}.pk2; pin the archive before reading it")
 		if not path.is_file():
 			raise SystemExit(f"{path} not found; --v1696-root must be the pinned v1.696 client folder")
-		hasher = hashlib.sha256()
-		with open(path, "rb") as stream:
-			for chunk in iter(lambda: stream.read(1 << 20), b""):
-				hasher.update(chunk)
-		actual = hasher.hexdigest()
+		actual = file_digest(path)
 		if actual != expected:
 			raise SystemExit(
 				f"{path} does not match the pinned v1.696 archive: sha256 is {actual}, pinned is {expected}. "
