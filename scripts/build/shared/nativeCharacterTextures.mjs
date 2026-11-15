@@ -18,7 +18,14 @@ import { imageSourceRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
-import { candidateGenerators, generatorHash, runMipGenerator, selectMipGenerator } from "./nativeMipGenerator.mjs";
+import {
+	candidateGenerators,
+	D3DX,
+	generatorHash,
+	PORTABLE,
+	runMipGenerator,
+	selectMipGenerator
+} from "./nativeMipGenerator.mjs";
 
 const DDJ_HEADER = 20;
 const DDS_HEADER = 128;
@@ -33,7 +40,7 @@ const cacheRoot = path.join( imageSourceRoot, "native-character" );
 // Source bytes and generator code both govern generated mip cache identity.
 // D3DX and the portable native_texture_mips.py never share entries
 // (nativeMipGenerator.mjs); a reader takes the first candidate it finds.
-const GENERATOR_HASHES = Object.fromEntries( candidateGenerators().map( kind => [ kind, generatorHash( kind ) ] ) );
+const GENERATOR_HASHES = Object.fromEntries( [ D3DX, PORTABLE ].map( kind => [ kind, generatorHash( kind ) ] ) );
 
 /*
 ================
@@ -167,13 +174,25 @@ function cachePath( bytes, kind ) {
 ================
 cachedPath
 
-The entry an earlier build published for these bytes, preferring D3DX's.
+The entry an earlier build published for these bytes, preferring D3DX's,
+among the generators this host reads (candidateGenerators).
 ================
 */
 function cachedPath( bytes ) {
+	return cachedEntry( bytes )?.target ?? null;
+}
+
+/*
+================
+cachedEntry
+
+cachedPath with the generator that wrote the entry.
+================
+*/
+function cachedEntry( bytes ) {
 	for ( const kind of candidateGenerators() ) {
 		const target = cachePath( bytes, kind );
-		if ( fs.existsSync( target ) ) return target;
+		if ( fs.existsSync( target ) ) return { target, kind };
 	}
 	return null;
 }
@@ -206,19 +225,42 @@ export function readCharacterTexture( gamePath, pngPath ) {
 
 /*
 ================
+pendingTextures
+
+Which textures this build generates, and with which generator. entries are
+{ item, cached } with cached the generator of the entry found (null when
+none). On Windows a portable entry is regenerated once select finds D3DX,
+and kept while it does not; select runs only when something may need
+generating, and its refusal (no D3DX, no opt-in) fails the build. Returns
+null when nothing is generated.
+================
+*/
+export async function pendingTextures( entries, platform, select ) {
+	const missing = entries.filter( entry => !entry.cached );
+	const portable = platform === "win32" ? entries.filter( entry => entry.cached === PORTABLE ) : [];
+	if ( !missing.length && !portable.length ) return null;
+	const kind = await select();
+	const pending = kind === D3DX ? [ ...missing, ...portable ] : missing;
+	return pending.length ? { kind, items: pending.map( entry => entry.item ) } : null;
+}
+
+/*
+================
 buildNativeCharacterTextures
 
 Generate missing content-addressed entries in one generator session (D3DX
 or the portable generator, nativeMipGenerator.mjs), probed only when an
 entry is missing. Private staging prevents a failed process from leaving an
-admissible cache.
+admissible cache. On Windows a portable entry (an opted-in build's) is kept
+only while D3DX stays unavailable: once the probe finds D3DX it is
+regenerated, and readers prefer the D3DX entry.
 ================
 */
 export async function buildNativeCharacterTextures() {
 	await fs.promises.mkdir( cacheRoot, { recursive: true } );
 	const staging = await fs.promises.mkdtemp( path.join( cacheRoot, ".build-" ) );
 	try {
-		const missing = [], seen = new Set();
+		const entries = [], seen = new Set();
 		for ( const source of await listFiles( dataRoot, { extensions: [ ".ddj" ] } ) ) {
 			if ( !source.toLowerCase().endsWith( ".ddj" ) ) continue;
 			const bytes = await fs.promises.readFile( source );
@@ -226,16 +268,18 @@ export async function buildNativeCharacterTextures() {
 			const digest = createHash( "sha256" ).update( bytes ).digest( "hex" );
 			if ( seen.has( digest ) ) continue;
 			seen.add( digest );
-			const cached = cachedPath( bytes );
+			const cached = cachedEntry( bytes );
 			if ( cached ) {
-				validateCharacterTexture( bytes, await fs.promises.readFile( cached ) );
-				continue;
+				validateCharacterTexture( bytes, await fs.promises.readFile( cached.target ) );
+				// Only an entry that may be regenerated keeps its bytes in memory.
+				if ( cached.kind === D3DX || process.platform !== "win32" ) continue;
 			}
-			missing.push( { source, bytes } );
+			entries.push( { item: { source, bytes }, cached: cached?.kind ?? null } );
 		}
-		if ( !missing.length ) return;
-		const kind = await selectMipGenerator();
-		const jobs = missing.map( ( { source, bytes } ) => {
+		const pending = await pendingTextures( entries, process.platform, selectMipGenerator );
+		if ( !pending ) return;
+		const kind = pending.kind;
+		const jobs = pending.items.map( ( { source, bytes } ) => {
 			const target = cachePath( bytes, kind );
 			return { source, target: path.join( staging, path.basename( target ) ), published: target };
 		} );

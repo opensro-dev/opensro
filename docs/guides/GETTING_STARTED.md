@@ -42,7 +42,10 @@ Retail game media is not in this repository. You need a Silkroad Online
 v1.150 (Legend III) client that you have the right to use. The tools below extract and
 convert it on your machine; nothing is uploaded. On Windows the asset build
 reproduces the original lens mips (32-bit D3DX) and font atlas (GDI) byte for
-byte; on macOS portable generators produce equivalent output.
+byte; on macOS portable generators produce equivalent output. D3DX needs a
+Direct3D 9 device, so a Windows build over Remote Desktop or on a GPU-less VM
+stops with the reason; set `SRO_PORTABLE_MIPS=1` to build that session with
+the portable mip generator (equivalent, not native bytes) instead.
 
 The **game root** is the client folder. By default it is the folder that
 contains this checkout; to keep the client elsewhere, set `SRO_GAME_ROOT` to
