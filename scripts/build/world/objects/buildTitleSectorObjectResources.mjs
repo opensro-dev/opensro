@@ -19,6 +19,7 @@ import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { CPD_SIGNATURE, parseCompound } from "./compound.mjs";
+import { bindSceneryParticleBones, hasSceneryBoneEntries, loadScenerySkeleton } from "./sceneryBones.mjs";
 import { probeBlockTextureFile, publishBlockTextureFile } from "../assets/blockTextures.mjs";
 import { exists } from "../io.mjs";
 import { imageSourceRoot, normalizeAssetPath, publicRoot, toGameRelative, toImageSourceRelative } from "../paths.mjs";
@@ -70,8 +71,18 @@ export async function buildTitleSectorObjectResources( options ) {
 		const resource = parseJmxResourceBsr( buffer, sourcePath );
 		for ( const materialPath of resource.materialPaths ) materialPathSet.add( materialPath );
 		for ( const meshPath of resource.meshPaths ) meshPathSet.add( meshPath );
+		// Only a bone-attached emitter needs the skeleton; plain scenery reads nothing more.
+		const skeleton = hasSceneryBoneEntries( resource.modifiers ) ?
+			await loadScenerySkeleton(
+				buffer,
+				sourcePath,
+				name => readFile( dataAssetPath( sourceExtractedRoot, name ) )
+			) :
+			null;
+		const modifiers = bindSceneryParticleBones( resource.modifiers, skeleton );
 		return {
 			...resource,
+			...(modifiers === undefined ? {} : { modifiers }),
 			objectId: definition.objectId,
 			objectFlags: definition.flags,
 			placementCount: placementCounts.get( definition.objectId ) ?? 0,

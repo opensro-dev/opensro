@@ -17,6 +17,10 @@ import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/imag
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
+// The node graph a decoded model may carry. An effect program compiles into
+// one, and the native EFP tree has no node count of its own: B29EF8 reads a
+// u32 child count and B29F10..B29F33 recurses with no bound.
+export const CHARACTER_NODES = 1024;
 export const CHARACTER_IMAGES = 64;
 // A structural count guard; the byte budget governs retained sources. Native
 // equipment shares refcounted resources rather than copying each actor's items.
@@ -118,7 +122,7 @@ export function characterBytes(
 	images: readonly (NativeTexture | { width: number; height: number; })[]
 ): number {
 	if (
-		model.nodes.length > 1024 || model.primitives.length > CHARACTER_PRIMITIVES ||
+		model.nodes.length > CHARACTER_NODES || model.primitives.length > CHARACTER_PRIMITIVES ||
 		model.images.length > CHARACTER_IMAGES || images.length !== model.images.length ||
 		images.some( ( image, index ) =>
 			image.width !== model.images[index]!.width || image.height !== model.images[index]!.height

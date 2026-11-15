@@ -7,6 +7,12 @@ Converts a world object's ambient ModDataParticle (CModDataParticle_Load_ACD4D0)
 world-space SceneryEmitter records using the native row-vector Euler
 orientation (AD05F0).
 
+A non-zero field00 is the object root: vector3c offsets it. A zero field00
+names a bone of the object's skeleton; the publisher writes that bone's
+bind matrix on the entry (scripts/build/world/objects/sceneryBones.mjs),
+and the bone matrix owns the translation, so vector3c does not apply
+(AEC870, as bsrParticleTransform for characters).
+
 ===========================================================================
 */
 
@@ -19,6 +25,7 @@ const MAX_SCENERY_PARTICLE_MODIFIERS = 128;
 // jinsi_floor01.bsr (Qin-Shi Tomb B1, 0x8007) carries 174 ambient particle
 // entries in a single ModDataParticle record.
 const MAX_SCENERY_PARTICLE_ENTRIES = 512;
+const BONE_MATRIX_LENGTH = 16;
 
 /*
 ================
@@ -98,6 +105,27 @@ export function sceneryParticles(
 		}
 		return values as readonly number[];
 	};
+	/*
+	================
+	boneMatrix
+
+	The published bind matrix of a bone entry, or null when the skeleton
+	lacks the bone. A missing socket keeps its parent matrix
+	(CRTSocket_UpdateOrdinaryMatrices AB68C0), so the caller falls back
+	to the object root.
+	================
+	*/
+	const boneMatrix = ( row: unknown ): Float32Array | null => {
+		if ( row === undefined ) return null;
+		if ( !Array.isArray( row ) || row.length !== BONE_MATRIX_LENGTH ) {
+			throw Error( "Invalid scenery emitter bone matrix" );
+		}
+		const values: readonly unknown[] = row;
+		if ( !values.every( ( v ) => typeof v === "number" && Number.isFinite( v ) ) ) {
+			throw Error( "Invalid scenery emitter bone matrix" );
+		}
+		return new Float32Array( values as readonly number[] );
+	};
 	for ( const [mi, raw] of modifiers.entries() ) {
 		const m = record( raw );
 		if ( m.kind !== 2 || m.stateId !== -1 || m.animationSetName !== "ambient" ) {
@@ -115,9 +143,10 @@ export function sceneryParticles(
 			if ( flags.some( ( v ) => !Number.isInteger( v ) || v < 0 || v > 255 ) ) {
 				throw Error( "Invalid scenery emitter parameters" );
 			}
+			let bone: Float32Array | null = null;
 			if ( !e.field00 ) {
-				warn( "Unsupported scenery bone emitter" );
-				continue;
+				bone = boneMatrix( e.boneMatrix );
+				if ( !bone ) warn( "Scenery emitter bone absent; kept at the object root" );
 			}
 			if ( e.field4c !== 0 ) {
 				warn( "Unsupported scenery emitter timing" );
@@ -135,19 +164,22 @@ export function sceneryParticles(
 			) {
 				throw Error( "Invalid scenery emitter resource" );
 			}
-			const [x, y, z] = position as readonly [number, number, number];
+			const [x, y, z] = bone ? [ 0, 0, 0 ] : position as readonly [number, number, number];
+			const holder = identity();
+			if ( bone ) multiply( matrix, bone, holder );
+			else holder.set( matrix );
 			const orientation = e.flag53 ? sceneryOrientation( vector( e.vector54 ) ) : identity();
 			const basis = identity();
-			multiply( matrix, orientation, basis );
+			multiply( holder, orientation, basis );
 			out.push( {
 				id: `${placement}:${branch}:${mi}:${ei}`,
 				placement,
 				model: "/assets/effects/programs.json#" + encodeURIComponent( path ),
 				pose: {
 					regionId: region,
-					x: matrix[12]! + matrix[0]! * x + matrix[4]! * y + matrix[8]! * z,
-					y: matrix[13]! + matrix[1]! * x + matrix[5]! * y + matrix[9]! * z,
-					z: matrix[14]! + matrix[2]! * x + matrix[6]! * y + matrix[10]! * z,
+					x: holder[12]! + holder[0]! * x + holder[4]! * y + holder[8]! * z,
+					y: holder[13]! + holder[1]! * x + holder[5]! * y + holder[9]! * z,
+					z: holder[14]! + holder[2]! * x + holder[6]! * y + holder[10]! * z,
 					yaw: radians( 0 )
 				},
 				basis: [

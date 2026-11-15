@@ -105,6 +105,25 @@ test("published derived rotation and cone parameters use authored inputs rather 
 		counts.AxisVector4 > 3000 && counts.RotVector > 900 && counts.AngleVector1 > 1300,
 		JSON.stringify( counts )
 	);
+	// AFAB10: a zero axis is NaN natively and draws nothing; the port collapses the basis.
+	assert.deepEqual( particleRotation( { kind: "AxisVector4", left: [ 0, 0, 0, 30 ] } ), [
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		1
+	] );
 	assert.notDeepEqual(
 		particleRotation( { kind: "AxisVector4", left: [ 1, 0, 0, 15 ] } ),
 		particleRotation( { kind: "AxisVector4", left: [ 1, 0, 0, 0 ] } )
