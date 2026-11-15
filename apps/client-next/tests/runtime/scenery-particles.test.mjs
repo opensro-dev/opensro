@@ -52,9 +52,16 @@ test("every installed outdoor particle record projects and every referenced EFP 
 		decoder = createEffectPrograms(),
 		refs = new Set( collectSceneryParticleReferences( index ).map( r => r.effectPath ) );
 	assert.ok( refs.size >= 47 );
+	// An EFP the archive proves empty or absent (v1.696 ships
+	// dun/petra_flame_yellow_glow.efp at 0 bytes) fails B1F270's header read;
+	// AFF730 keeps the reset object, so that emitter draws nothing. The
+	// catalogue names exactly those (buildEffectPrograms.mjs); every other
+	// referenced EFP must draw.
+	const unavailable = new Set( JSON.parse( new TextDecoder().decode( bytes ) ).nativeUnavailable?.effects ?? [] );
 	for ( const path of refs ) {
 		const result = decoder.decode( bytes, path );
-		assert.ok( result.model.primitives.length > 0, path );
+		if ( unavailable.has( path ) ) assert.equal( result.model.primitives.length, 0, path );
+		else assert.ok( result.model.primitives.length > 0, path );
 	}
 });
 test("emitter placement, night gating, resource admission, origin crossing and reset retain independent identity", () => {
@@ -102,6 +109,42 @@ test("emitter placement, night gating, resource admission, origin crossing and r
 	assert.equal( resumed.time, 3, "source time does not restart; renderer owns paused EFP time" );
 	owner.reset();
 	assert.deepEqual( owner.step( null, 9, () => true, 10 ), [] );
+});
+test("a bone emitter stands on its published bind matrix, an absent bone on the object root", () => {
+	const m = identity();
+	m[12] = 10;
+	m[13] = 20;
+	m[14] = 30;
+	// Bone bind: +X turned onto +Y, standing 5 above the model origin.
+	const bone = [ 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 5, 0, 1 ];
+	const authored = {
+		field00: 0,
+		boneName: "Bone02",
+		field4c: 0,
+		flags50: [ 11, 0, 0 ],
+		flag53: 0,
+		vector3c: [ 1, 2, 3 ],
+		effectPath: "map/cj_pal_potal_blue.efp"
+	};
+	const modifiers = entries => [ { kind: 2, stateId: -1, animationSetName: "ambient", entries } ];
+	const [onBone] = sceneryParticles(
+		modifiers( [ { ...authored, boneMatrix: bone } ] ),
+		"o",
+		0,
+		257,
+		m,
+		() => assert.fail()
+	);
+	// AEC870: the bone matrix owns the translation; vector3c applies only at the root.
+	assert.deepEqual( onBone.pose, { regionId: 257, x: 10, y: 25, z: 30, yaw: 0 } );
+	assert.deepEqual( onBone.basis, [ 0, 1, 0, -1, 0, 0, 0, 0, 1 ] );
+	const warnings = [];
+	const [absent] = sceneryParticles( modifiers( [ authored ] ), "o", 0, 257, m, w => warnings.push( w ) );
+	assert.deepEqual( absent.pose, { regionId: 257, x: 11, y: 22, z: 33, yaw: 0 } );
+	assert.equal( warnings.length, 1 );
+	assert.throws( () =>
+		sceneryParticles( modifiers( [ { ...authored, boneMatrix: [ 1, 2 ] } ] ), "o", 0, 257, m, () => {} )
+	);
 });
 test("night-only ordinary particles retain renderer identity and freeze native ticks through daylight", () => {
 	const source = {

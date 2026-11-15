@@ -12,6 +12,7 @@ writes a member's stream (or a patched range of it) straight to its slot.
 ===========================================================================
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
+import { CLOTH_STREAM_WORDS } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
 import { WATER_SKIN_BLENDED } from "./water-refraction";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
@@ -73,6 +74,21 @@ export function geometryPipelineState( mat: Geometry["material"] ): GeometryPipe
 createGeometryResources
 ================
 */
+/*
+================
+markCloth
+
+A cloth draw's instance records carry its stream base in opacity.w (record
+float 19), which the vertex shaders read; every other draw keeps 0 there.
+================
+*/
+function markCloth( packed: Float32Array, clothBase: number ): Float32Array {
+	if ( clothBase ) {
+		for ( let at = 19; at < packed.length; at += 40 ) packed[at] = clothBase;
+	}
+	return packed;
+}
+
 export function createGeometryResources(
 	created: GPUDevice,
 	current: () => GPUDevice,
@@ -334,6 +350,9 @@ export function createGeometryResources(
 		vertexFloats: number;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
+		// A cloth mesh's stream base: the vertex count, where its cloth stream
+		// starts in the skin table (cloth-stream.ts); 0 for any other draw.
+		clothBase: number;
 		// The bone and index buffers' sizes, read once: a GPUBuffer's size
 		// crosses into the browser on every read, and updates run every frame.
 		boneBytes: number;
@@ -758,6 +777,27 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		writeClothStream
+
+		Writes entries of a cloth draw's stream (CLOTH_STREAM_WORDS words a
+		vertex, cloth-stream.ts) from vertex first on. Only an upload marked
+		clothStream has a stream.
+		================
+		*/
+		writeClothStream( draw: GeometryDraw, first: number, entries: Uint32Array ) {
+			const meta = metadata.get( draw );
+			if ( !meta ) throw Error( "Unknown geometry draw" );
+			if ( !meta.clothBase ) throw Error( "Geometry was uploaded without a cloth stream" );
+			if (
+				!Number.isInteger( first ) || first < 0 || entries.length % CLOTH_STREAM_WORDS ||
+				first + entries.length / CLOTH_STREAM_WORDS > meta.clothBase
+			) throw Error( "Invalid cloth stream write" );
+			// The writer copies bytes, so the words travel as they are.
+			const words = new Float32Array( entries.buffer, entries.byteOffset, entries.length );
+			writeStream( meta.skin, (meta.clothBase + first) * CLOTH_STREAM_WORDS * 4, words, meta.cpuUploads );
+		},
+		/*
+		================
 		writeVertices
 		================
 		*/
@@ -828,7 +868,10 @@ export function createGeometryResources(
 			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
 			const count = instances.length / 16,
-				packed = packInstances( instances, opacity, appearance, pointLights, paletteOffsets );
+				packed = markCloth(
+					packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
+					meta.clothBase
+				);
 			if ( count <= draw.instanceCapacity ) {
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.
@@ -1020,6 +1063,7 @@ export function createGeometryResources(
 				// A skinned shader reads its per-vertex skin table by vertex_index,
 				// which a baseVertex would shift: skinned streams keep own buffers.
 				const skinned = !!(data.joints && data.weights && data.bones),
+					clothBase = data.clothStream ? data.positions.length / 3 : 0,
 					vertexStore = skinned ?
 						undefined :
 						slice( vertexSlabs.allocate( interleaved.byteLength ), interleaved ),
@@ -1036,7 +1080,10 @@ export function createGeometryResources(
 						new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
 					count = instances.length / 16,
 					capacity = instanceCapacity( count ),
-					packed = packInstances( instances, undefined, undefined, undefined, paletteOffsets ),
+					packed = markCloth(
+						packInstances( instances, undefined, undefined, undefined, paletteOffsets ),
+						clothBase
+					),
 					// Only owned (unshared) bone palettes can present particles.
 					owned = !!(data.joints && data.weights && data.bones && !paletteOffsets);
 				const storage = instanceStore( capacity * 160, owned );
@@ -1055,8 +1102,13 @@ export function createGeometryResources(
 				if ( data.joints ) {
 					for ( const joint of data.joints ) jointMaximum = Math.max( jointMaximum, joint );
 				}
+				if ( data.clothStream && (!skinned || paletteOffsets || data.dynamicVertices) ) {
+					throw Error( "A cloth stream needs an owned skinned mesh" );
+				}
 				if ( data.joints && data.weights && data.bones ) {
-					const packed = new ArrayBuffer( data.joints.length * 8 ),
+					// A cloth mesh's table holds its stream after the skin entries,
+					// all zero: until the owner writes it, the GPU skins every vertex.
+					const packed = new ArrayBuffer( data.joints.length * 8 * (clothBase ? 2 : 1) ),
 						joints = new Uint32Array( packed ),
 						weights = new Float32Array( packed );
 					for ( let v = 0; v < data.joints.length / 4; v++ ) {
@@ -1145,7 +1197,7 @@ export function createGeometryResources(
 						1,
 						0,
 						0,
-						mat?.environmentReflection ? 1 : 0,
+						mat?.environmentReflection ?? 0,
 						mat?.alphaCompare ?? 7,
 						// Port-only, not native: reflection.z admits world-space
 						// receivers; portrait/doll coordinates belong to another scene.
@@ -1233,6 +1285,7 @@ export function createGeometryResources(
 					vertexFloats: interleaved.length,
 					skin: skinBuffer,
 					bones: boneBuffer,
+					clothBase,
 					boneBytes: boneBuffer.size,
 					cpuUploads: !particles || boneBuffer === defaultBones || !!palette,
 					indexBytes: data.indices.byteLength,

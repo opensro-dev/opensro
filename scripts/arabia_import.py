@@ -84,7 +84,14 @@ import cap110_monsters as monsters  # noqa: E402
 import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import native_text_row  # noqa: E402
+from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
+from arabia_map_tiles import (  # noqa: E402
+	import_map_labels,
+	import_map_tiles,
+	map_tile_paths,
+	remove_map_labels,
+	restore_map_tiles,
+)
 from arabia_gates import prepare_gates  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
@@ -104,6 +111,7 @@ FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
 NESTS_ENV = "SRO_ARABIA_NESTS"
 MARKER = ".opensro-arabia.json"
+MAPINFO_TABLE = "worldmap_mapinfo.txt"
 # The 200000 identity band: 120000 is the cap-110 family's, 130000 the
 # pet import's (140000/150000 held for its later sources), 160000 the
 # Sky Temple's, 170000 Jupiter's, 180000 the second hunting grounds',
@@ -481,6 +489,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
 	if not enabled():
+		restore_map_tiles(output, prior)
+		remove_map_labels(output / TEXT_ROOT, prior)
 		return remove_owned(output, prior)
 	root = Path(source) if source else source_root()
 	verify_archives(root)
@@ -506,6 +516,16 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		placements = npc_placements(extraction["npcs"], tables.table_rows(read("npcpos.txt")),
 			codename_by_id, regions)
 
+		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
+			for r in tables.table_rows(p.read_bytes())]
+		# The Alexandria rule (alexandria_npcs.merge_npc_tables): an NPC
+		# kind the tables already hold keeps its row and its id, and only
+		# its Arabia standings are added. Converting it again shipped a
+		# second row under the same codename (NPC_CH_GACHA_MACHINE,
+		# NPC_CH_GACHA_OPERATOR, NPC_CH_EVENT_KISAENG1), which the NPC
+		# model build refuses (2026-11-15).
+		native_by_code = {r[2]: r for r in native_chars if len(r) > 2}
+
 		# A standing no source can name does not stand: the later
 		# client's own npcpos plants event props (a circus bear, a
 		# carnival frame) whose NameStrID no text shard of either
@@ -519,6 +539,10 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		nameless = {}
 		for place in placements:
 			row = later.get(place[0])
+			# A native kind is named by its native row, which the
+			# native client already ships.
+			if place[0] in native_by_code:
+				continue
 			if row is not None and row[5] not in later_name_keys and row[5] not in native_name_keys:
 				nameless[place[0]] = nameless.get(place[0], 0) + 1
 		if nameless:
@@ -528,11 +552,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 					f"table of either client ({nameless[code]} standings)")
 
 		refs = select_kinds(later, {row["Codename"] for row in extraction["monsters"]}, window=True)
-		npc_refs = select_kinds(later, {place[0] for place in placements}, window=False)
+		npc_refs = select_kinds(later, {place[0] for place in placements} - set(native_by_code), window=False)
 		all_refs = {**refs, **npc_refs}
 
-		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD
-			for r in tables.table_rows(p.read_bytes())]
 		occupied = {int(r[1]) for r in native_chars}
 		allocated = monsters.allocate_identities(occupied, sorted(all_refs), prior.get("characters", {}))
 		for code, row in sorted(all_refs.items()):
@@ -616,11 +638,21 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		# rules (a codename the native tables already have keeps its
 		# native row; shops ride only for native stores, and Baghdad's
 		# are not native, so none ride).
-		npcpos_rows = [[str(allocated[code]), str(region), format_coord(x), format_coord(y), format_coord(z)]
+		all_npcpos_rows = [[native_by_code[code][1] if code in native_by_code else str(allocated[code]),
+			str(region), format_coord(x), format_coord(y), format_coord(z)]
 			for code, region, x, y, z in placements]
 		existing_standings = {tuple(row[:5]) for row in tables.table_rows((text_root / "npcpos.txt").read_bytes())
 			if len(row) >= 5}
-		npcpos_rows = [row for row in npcpos_rows if tuple(row) not in existing_standings]
+		npcpos_rows = [row for row in all_npcpos_rows if tuple(row) not in existing_standings]
+		# A native kind's standings share its native id with the standings
+		# the native world already has, so the off path cannot strip them
+		# by id: the marker names these rows exactly. A rebuild finds its
+		# own earlier rows already standing and keeps owning the ones the
+		# prior marker named; a row the native world had stays native.
+		native_ids = {row[1] for row in native_by_code.values()}
+		prior_standings = {tuple(row) for row in prior.get("npcStandings", [])}
+		native_kind_standings = [row for row in all_npcpos_rows if row[0] in native_ids
+			and (tuple(row) not in existing_standings or tuple(row) in prior_standings)]
 		if npcpos_rows:
 			write_atomically(text_root / "npcpos.txt", characters.append_rows(
 				(text_root / "npcpos.txt").read_bytes(), npcpos_rows))
@@ -848,7 +880,16 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 		mapinfo = output / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 		variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
-		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied) if not entry.startswith("clash:")})
+		mapinfo_table = text_root / MAPINFO_TABLE
+		box = overview_box(mapinfo_table.read_bytes()) if mapinfo_table.exists() else None
+		pins, label_keys, label_art = import_map_labels(media, media_index, text_root, regions)
+		owned_tiles, replaced_tiles = import_map_tiles(media, media_index, output,
+			map_tile_paths(regions, box) + label_art)
+		copied += owned_tiles
+		replaced_tiles = sorted(set(prior.get("replacedTiles", [])) | set(replaced_tiles))
+
+		files = sorted({entry for entry in set(prior.get("files", [])) | set(copied)
+			if not entry.startswith("clash:") and entry not in replaced_tiles})
 		summary = {
 			"enabled": True,
 			"characters": {code: int(row[1]) for code, row in all_refs.items()},
@@ -858,6 +899,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"npcs": len(npc_refs),
 			"npcPlacements": len(placements),
 			"npcIds": sorted(int(allocated[code]) for code in npc_refs),
+			"npcStandings": native_kind_standings,
 			"npcCodes": sorted(npc_refs),
 			"chatCodes": sorted(chat_codes_owned),
 			"hiveCapped": extraction["hiveCapped"],
@@ -890,6 +932,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"speechSymbols": speech_symbols,
 			"speechUnresolved": speech_unresolved,
 			"files": files,
+			"replacedTiles": replaced_tiles,
+			"mapPins": sorted(set(prior.get("mapPins", [])) | set(pins)),
+			"mapTexts": sorted(set(prior.get("mapTexts", [])) | set(label_keys)),
 			"archives": archive_hashes,
 		}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())

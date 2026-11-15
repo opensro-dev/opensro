@@ -12,7 +12,6 @@ apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
-apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts

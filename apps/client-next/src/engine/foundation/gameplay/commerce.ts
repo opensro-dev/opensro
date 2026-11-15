@@ -140,6 +140,23 @@ export interface ShopState {
 
 /*
 ================
+liveShopTransport
+
+The specialty shop buys into the transport the player has out when the
+buy happens: the native buy handler reads the active COS record then
+(830410 at 567824, a class byte of 1 composing the COS buy, 0x13 at
+699B61), never one captured when the shop opened. So while a specialty
+page is open the shop's COS follows the summoned transport, or none;
+any other page keeps what the shop answer carried.
+================
+*/
+export function liveShopTransport<T extends ShopState>( shop: T, transportGid: number | undefined ): T {
+	if ( !shop.specialty || shop.cosGid === transportGid ) return shop;
+	return { ...shop, cosGid: transportGid };
+}
+
+/*
+================
 commerceJson
 ================
 */

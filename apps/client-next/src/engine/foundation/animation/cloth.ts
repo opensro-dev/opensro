@@ -202,6 +202,19 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 			}
 			stepped = false;
 			return false;
+		},
+
+		/*
+		================
+		pending
+
+		Whether advancing by deltaMs would initialize the solver or run a step.
+		Unlike due it ignores re-anchoring: an owner that skins the pins itself
+		needs the solver only when this is true (cloth-stream.ts).
+		================
+		*/
+		pending( deltaMs: number ): boolean {
+			return !initialized || elapsed + Math.max( 0, deltaMs ) >= STEP_MS;
 		}
 	};
 }

@@ -552,12 +552,15 @@ def remove_owned(output, prior, character_shard=CHARACTER_SHARD, skill_shard=SKI
 					[row for row in tables.table_rows(chat_path.read_bytes())
 						if len(row) <= 1 or row[1] not in chat_codes]))
 		npc_ids = {str(identity) for identity in prior.get("npcIds", [])}
-		if npc_ids:
+		# Standings of kinds the native tables own carry the native id,
+		# so they leave by their exact row, never by id (Arabia).
+		npc_standings = {tuple(row) for row in prior.get("npcStandings", [])}
+		if npc_ids or npc_standings:
 			npcpos_path = text_root / "npcpos.txt"
 			if npcpos_path.exists():
 				write_atomically(npcpos_path, monsters.encode_rows(
 					[row for row in tables.table_rows(npcpos_path.read_bytes())
-						if len(row) < 1 or row[0] not in npc_ids]))
+						if len(row) < 1 or (row[0] not in npc_ids and tuple(row[:5]) not in npc_standings)]))
 		region_ids = {str(region) for region in prior.get("regions", [])}
 		if region_ids:
 			region_path = text_root / "regioncode.txt"

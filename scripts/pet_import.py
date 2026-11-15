@@ -58,6 +58,7 @@ import avatar_archive
 import cap110_item_import as shared
 import cap110_items as items
 import import_vsro_alexandria as tables
+import later_world_import
 from prepare_client_resources import safe_target, write_atomically
 import sro_pk2
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
@@ -293,9 +294,13 @@ def later_tables_from_media(media, index, object_text_required=True):
 
 	# A client Media always carries the object text, so a pk2 read stops
 	# without it; the pinned archive may carry pet rows without it, and a
-	# kind whose name never arrived is reported, never fatal.
+	# kind whose name never arrived is reported, never fatal. v1.696's
+	# textdata_object.txt is a shard index, not the table: read through
+	# later_object_text, which follows it (and reads a flat VSRO table as
+	# itself). Read raw, every v1.696 pet's name went missing and the
+	# asset build refused the release (21 item titles, 2026-11-15).
 	if object_text_required or tables.TEXTDATA + "textdata_object.txt" in index:
-		object_text = read("textdata_object.txt")
+		object_text = b"\xff\xfe" + later_world_import.later_object_text(read).encode("utf-16-le")
 	else:
 		object_text = b""
 	return (_shard_rows(read, "characterdata.txt", "characterdata"),
@@ -394,8 +399,12 @@ def _merge_name_text(output, char_rows, item_rows, later_text, report):
 	known = {row[1] for row in characters.translation_rows(base) if len(row) > 1}
 	wanted = ({row[CHAR_NAME_KEY] for row in char_rows if len(row) > CHAR_NAME_KEY}
 		| {row[items.NAME_KEY] for row in item_rows if len(row) > items.NAME_KEY}) - known
+	# later_text_row brings a v1.696 17-column row (text id after the
+	# service cell) to the VSRO layout this merge reads, as stage_kinds
+	# does; a VSRO row passes through unchanged.
 	texts = [[row[0], row[1], row[2], "", "", row[5], row[4], row[7], row[8], row[9], ""]
-		for row in characters.translation_rows(later_text) if len(row) >= 10 and row[1] in wanted]
+		for row in (later_world_import.later_text_row(row) for row in characters.translation_rows(later_text))
+		if len(row) >= 10 and row[1] in wanted]
 	if texts:
 		write_atomically(name_path, characters.append_rows(base, texts))
 	report["missingNameText"] = sorted(wanted - {row[1] for row in texts})
