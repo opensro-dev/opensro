@@ -70,20 +70,21 @@ gate outside the group folds: the tomb's own gates keep the native flat
 menu. No retail link leads from outside the tomb to a GATE_JINSI_ row,
 so a native catalogue never folds.
 
-captions names a row by the room it lands in where the teleport rows
-share one zone name: floor 4's four corner passages all read
-SN_ZONE_26004, so each takes its native textzonename room name.
+corners tells apart the rows that share one zone name: floor 4's four
+corner passages all read SN_ZONE_26004, so each shows as
+"Ch'in Tomb 4F(Northwest)". No native table holds a bare compass word,
+so the four are port-only English text.
 ================
 */
 const PORTAL_GROUPS = [ {
 	key: "qinshi-tomb",
 	codePrefix: "GATE_JINSI_",
 	caption: "SN_ZONE_23001",
-	captions: {
-		126: "QT_A01_F04_WARP_NE",
-		127: "QT_A01_F04_WARP_SE",
-		128: "QT_A01_F04_WARP_SW",
-		129: "QT_A01_F04_WARP_NW"
+	corners: {
+		126: "Northeast",
+		127: "Southeast",
+		128: "Southwest",
+		129: "Northwest"
 	}
 } ] as const;
 
@@ -133,14 +134,15 @@ export function portalMenu(
 			}
 			continue;
 		}
-		const captions: Readonly<Record<number, string>> | undefined = group?.captions;
+		const corners: Readonly<Record<number, string>> | undefined = group?.corners;
+		const corner = corners?.[destination.id];
 		const format = copy( link.fee ? "UIIT_CTL_TELEPORT_RESULT" : "UIIT_CTL_TELEPORT_FREE_RESULT" );
 		let argument = 0;
 		const label = format.replace(
 			/%s|%I64[du]|%[ld]*[du]/g,
 			() =>
 				argument++ === 0 ?
-					copy( captions?.[destination.id] ?? destination.name ) :
+					copy( destination.name ) + (corner ? "(" + corner + ")" : "") :
 					String( link.fee + Math.trunc( taxRate / 100 * link.fee ) )
 		);
 		rows.push( { id: "npc-portal:" + link.target, label } );

@@ -474,7 +474,7 @@ test("the Jangan gate folds the Qin-Shi tomb floors under one row, floor 4 by co
 	assert.deepEqual( portalMenu( catalog, 2094, copy, { group: "qinshi-tomb", taxRate: 10 } ), [
 		{ id: "npc-portal:50", label: "SN_ZONE_26001 44000" },
 		{ id: "npc-portal:53", label: "SN_ZONE_26002 44000" },
-		{ id: "npc-portal:129", label: "QT_A01_F04_WARP_NW 44000" }
+		{ id: "npc-portal:129", label: "SN_ZONE_26004(Northwest) 44000" }
 	] );
 	// The tomb's own gates keep the native flat menu.
 	assert.deepEqual( portalMenu( catalog, 23280, copy ), [
