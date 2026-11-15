@@ -8,6 +8,13 @@ The shared presentation RNG trace makes cloth scheduling changes observable.
 The baseline runs the shipped renderer, with no source rewriting or private
 renderer implementation.
 
+A skinned cloth draw is skinned on the GPU, with a cloth stream for the
+vertices the solver owns (cloth-stream.ts). Its captured vertices are the
+ones its vertex shader draws, composed the shader's way: the stream where
+it says so, else the vertex skinned by the CPU's own arithmetic
+(cloth-skin.ts), so they compare bit for bit with the baseline, which the
+CPU drew. Its palette is consumed into those vertices, as before.
+
 ===========================================================================
 */
 import "./native-source-loader.mjs";
@@ -20,11 +27,17 @@ const { createPresentationRandom } = await import( "../../src/engine/runtime/ran
 const { identity } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 const { createGeometryResources } = await import( "../../src/engine/runtime/renderer/device/geometry.ts" );
+const { skinClothVertex } = await import( "../../src/engine/foundation/animation/cloth-skin.ts" );
+const { CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL } = await import(
+	"../../src/engine/foundation/animation/cloth-stream.ts"
+);
+const { packGeometryVertices } = await import( "../../src/engine/foundation/rendering/geometry-vertices.ts" );
 const JOINTS = 8;
 const FRAME_COUNT = 120;
 const RANDOM_SEED = 0x1188;
 const INSTANCE_FLOATS = 40;
 const INSTANCE_PALETTE_OFFSET = 17;
+const INSTANCE_CLOTH_BASE = 19;
 const PRIMITIVE_NAMES = [ "body", "cloth-a", "body-alias", "distinct", "cloth-b" ];
 
 /*
@@ -186,6 +199,10 @@ function captureGeometry( tags, gpuAvailable ) {
 				bones: source.bones?.slice(),
 				offsets: offsets?.slice(),
 				capturedVertices: undefined,
+				// A skinned cloth draw's mesh and the stream its owner wrote.
+				cloth: source.clothStream ?
+					{ geometry: source, stream: new Uint32Array( source.positions.length / 3 * CLOTH_STREAM_WORDS ) } :
+					undefined,
 				fade: undefined,
 				appearance: undefined,
 				lights: undefined,
@@ -232,6 +249,15 @@ function captureGeometry( tags, gpuAvailable ) {
 			device.resources.commands.writeVertices( draw.deviceDraw, offset, vertices );
 			assert.equal( offset, 0 );
 			draw.capturedVertices = vertices.slice();
+		},
+		/*
+		================
+		writeClothStream
+		================
+		*/
+		writeClothStream( draw, first, entries ) {
+			device.resources.commands.writeClothStream( draw.deviceDraw, first, entries );
+			draw.cloth.stream.set( entries, first * CLOTH_STREAM_WORDS );
 		},
 		/*
 		================
@@ -311,11 +337,18 @@ function captureGeometry( tags, gpuAvailable ) {
 						packed.slice( row * INSTANCE_FLOATS, row * INSTANCE_FLOATS + 16 ),
 						draw.instances.slice( row * 16, row * 16 + 16 )
 					);
+					// The shaders find a cloth draw's stream after its skin entries.
+					assert.equal(
+						packed[row * INSTANCE_FLOATS + INSTANCE_CLOTH_BASE],
+						draw.cloth ? draw.cloth.geometry.positions.length / 3 : 0
+					);
 				}
 				if ( !draw.bones ) continue;
 				const palette = entries.find( entry => entry.binding === 7 ).resource.buffer;
 				const uploaded = new Float32Array( device.bytes.get( palette ).buffer );
-				buffers.add( palette );
+				// The byte count measures body palette sharing; a cloth draw's
+				// palette upload replaced its vertex stream upload instead.
+				if ( !draw.cloth ) buffers.add( palette );
 				for ( let row = 0; row < draw.deviceDraw.instanceCount; row++ ) {
 					const offset = packed[row * INSTANCE_FLOATS + INSTANCE_PALETTE_OFFSET] * 16;
 					const expected = (draw.offsets?.[row] ?? row * JOINTS) * 16;
@@ -356,6 +389,29 @@ function captureGeometry( tags, gpuAvailable ) {
 
 /*
 ================
+clothVertices
+
+A skinned cloth draw's vertices as its vertex shader composes them: each
+vertex skinned by its palette, except where the cloth stream says the
+solver owns the position or the normal.
+================
+*/
+function clothVertices( draw ) {
+	const { geometry, stream } = draw.cloth, floats = new Float32Array( stream.buffer );
+	const vertices = packGeometryVertices( geometry ), skin = new Float64Array( 6 );
+	for ( let i = 0; i < geometry.positions.length / 3; i++ ) {
+		const entry = i * CLOTH_STREAM_WORDS, flags = stream[entry + 3];
+		skinClothVertex( geometry, draw.bones, i, skin );
+		for ( let axis = 0; axis < 3; axis++ ) {
+			vertices[i * 14 + axis] = flags & STREAM_POSITION ? floats[entry + axis] : skin[axis];
+			vertices[i * 14 + 3 + axis] = flags & STREAM_NORMAL ? floats[entry + 4 + axis] : skin[3 + axis];
+		}
+	}
+	return vertices;
+}
+
+/*
+================
 drawDigest
 
 Hash float storage bytes, preserving signed zero and exact float32 results.
@@ -366,13 +422,14 @@ function drawDigest( draws, randomTrace ) {
 	const hash = createHash( "sha256" );
 	for ( const draw of draws ) {
 		hash.update( JSON.stringify( { tag: draw.tag, material: draw.material } ) );
+		const vertices = draw.cloth ? clothVertices( draw ) : draw.capturedVertices;
 		for ( const key of [ "instances", "vertices", "fade", "appearance", "lights", "transform" ] ) {
-			const values = key === "vertices" ? draw.capturedVertices : draw[key];
+			const values = key === "vertices" ? vertices : draw[key];
 			hash.update( `${key}:${values?.byteLength ?? -1}:` );
 			if ( values ) hash.update( Buffer.from( values.buffer, values.byteOffset, values.byteLength ) );
 		}
-		hash.update( draw.bones ? "bones:" : "no-bones:" );
-		if ( draw.bones ) {
+		hash.update( draw.bones && !draw.cloth ? "bones:" : "no-bones:" );
+		if ( draw.bones && !draw.cloth ) {
 			for ( let instance = 0; instance < draw.instances.length / 16; instance++ ) {
 				const offset = (draw.offsets?.[instance] ?? instance * JOINTS) * 16;
 				const palette = draw.bones.subarray( offset, offset + JOINTS * 16 );

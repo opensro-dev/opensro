@@ -80,11 +80,34 @@ def resource_dependencies(requests):
 		input=json.dumps(requests), capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
-		raise ValueError(f"resource dependency audit failed:\n{result.stderr}")
+		# The exit status names a child killed from outside (empty stderr,
+		# as under memory pressure on 2026-11-15); stderr alone said nothing.
+		raise ValueError(f"resource dependency audit failed (exit {result.returncode}):\n{result.stderr}")
 	dependencies = json.loads(result.stdout)
 	if len(dependencies) != len(requests):
 		raise ValueError("resource parser response count mismatch")
 	return dependencies
+
+
+# ================
+# tolerant_dependencies
+#
+# resource_dependencies for a batch that may hold files the audit cannot
+# parse. One such file fails its whole batch, so a failing batch is split
+# in halves until each failure is a single request: k bad files in n cost
+# about 2k*log2(n) parser runs, where one run per request cost n (the
+# v1.696 Arabia closure spent about 170 s of its 5 minutes that way, two
+# bad files in a batch of hundreds). Returns one entry per request, in
+# request order: its dependency list, or the ValueError its own run raised.
+# ================
+def tolerant_dependencies(requests):
+	try:
+		return resource_dependencies(requests)
+	except ValueError as error:
+		if len(requests) <= 1:
+			return [error] * len(requests)
+	middle = len(requests) // 2
+	return tolerant_dependencies(requests[:middle]) + tolerant_dependencies(requests[middle:])
 
 
 # ================
