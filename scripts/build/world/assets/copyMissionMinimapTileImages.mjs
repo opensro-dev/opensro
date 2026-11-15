@@ -10,6 +10,7 @@ import { decodeJmxText } from "../../shared/jmxBinaryReader.mjs";
 import { writeJsonIfChanged } from "../../shared/jsonOut.mjs";
 import { readDungeonInfoRows } from "./dungeonInfo.mjs";
 import { authoredBlockContainer, probeBlockTextureFile, writeAuthoredBlockContainer } from "./blockTextures.mjs";
+import { compareText } from "../../shared/textOrder.mjs";
 
 const MISSION_MINIMAP_SOURCE_DIRECTORIES = [ "minimap", "minimap_d" ];
 const MISSION_DUNGEON_MINIMAP_MANIFEST_FORMAT = "sro-mission-dungeon-minimap-manifest";
@@ -24,7 +25,7 @@ export async function copyMissionMinimapTileImages( options = {} ) {
 		)
 	)
 		.flat()
-		.sort( ( left, right ) => left.publicPath.localeCompare( right.publicPath ) );
+		.sort( ( left, right ) => compareText( left.publicPath, right.publicPath ) );
 
 	// Publish only tiles whose target is missing or stale: unconditionally rewriting
 	// all ~3.3k tiles refreshed their mtimes every run, defeating downstream hash

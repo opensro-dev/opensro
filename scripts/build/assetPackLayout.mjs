@@ -20,6 +20,7 @@ so the waste of underfilled packs stays bounded.
 
 ===========================================================================
 */
+import { compareText } from "./shared/textOrder.mjs";
 
 // Underfilled packs a group may carry before it is repacked whole.
 export const MAX_PACK_SLACK = 3;
@@ -164,7 +165,5 @@ export function planPackLayout( { files, baseline, targetBytes } ) {
 		used.add( next );
 		planned.push( { slot: next, files: chunk, kept: false } );
 	}
-	return planned.sort( ( left, right ) =>
-		left.slot - right.slot || (left.dir ?? "").localeCompare( right.dir ?? "" )
-	);
+	return planned.sort( ( left, right ) => left.slot - right.slot || compareText( left.dir ?? "", right.dir ?? "" ) );
 }
