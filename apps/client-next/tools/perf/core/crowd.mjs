@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { createCodec } from "../../../src/engine/runtime/simulation/worker/network/codec/codec.ts";
+import { createCodec, MAX_RESERVED_OPCODE } from "../../../src/engine/runtime/simulation/worker/network/codec/codec.ts";
 import {
 	openProbeAgentSession,
 	fetchProbeSessionJson,
@@ -31,6 +31,45 @@ const ADMISSION_TIMEOUT_MS = 30000;
 // A full 32-peer refill is (32 - 10) x 6 s; retries beyond that are a fault.
 const MAX_LOGIN_RETRIES = 40;
 const DEFAULT_RETRY_AFTER_S = 6;
+// The client's acknowledgement cadence and its large-frame bound
+// (network.ts STREAM_ACK_INTERVAL_MS, STREAM_ACK_LARGE_FRAME_BYTES).
+const STREAM_ACK_INTERVAL_MS = 1000, STREAM_ACK_LARGE_FRAME_BYTES = 1 << 20;
+
+/*
+================
+createStreamAck
+
+A peer's stream position, kept and acknowledged as the client's network
+owner does (network.ts acknowledge): one count a frame above the
+session-internal range, told to the server at most once a second, and at
+once after a frame of a megabyte or more. The server keeps every
+unacknowledged ordered frame for a resume, in a window of 4 MiB a
+session; a peer that never acknowledges is detached once the window
+fills ("writer parked on a full resume ring"). A standing crowd takes
+hours to fill it, 200 walking and chatting peers about a minute.
+
+counted( bytes ) records one applied frame; flush() tells the server
+when the position moved and the interval allows. now() is the clock.
+================
+*/
+export function createStreamAck( send, now = () => performance.now() ) {
+	let position = 0, acked = 0, sentAt = -Infinity, large = false;
+	const flush = () => {
+		if ( position === acked || !large && now() - sentAt < STREAM_ACK_INTERVAL_MS ) return;
+		acked = position;
+		sentAt = now();
+		large = false;
+		send( position );
+	};
+	return {
+		counted( bytes ) {
+			position = (position + 1) >>> 0;
+			if ( bytes >= STREAM_ACK_LARGE_FRAME_BYTES ) large = true;
+			flush();
+		},
+		flush
+	};
+}
 
 /*
 ================
@@ -53,6 +92,9 @@ async function connectPeer( session, character ) {
 	const evidence = { character, frames: 0, ready: false, closed: false, dead: new Set(), opcodes: new Map() };
 	// listen( fn ): a scenario's own reader of every decoded frame (crowd-activity.mjs).
 	const listeners = [];
+	const stream = createStreamAck( position => {
+		if ( socket.readyState === WebSocket.OPEN ) socket.send( codec.encode( codec.streamAck( position ) ) );
+	} );
 	try {
 		await new Promise( ( resolve, reject ) => {
 			const timer = setTimeout( () => reject( Error( "Crowd peer admission timed out" ) ), ADMISSION_TIMEOUT_MS );
@@ -84,6 +126,8 @@ async function connectPeer( session, character ) {
 						socket.send( codec.encode( codec.enterWorld( session.divisionId, character, enter ) ) );
 					} else if ( frame.opcode === 3 ) {
 						socket.send( codec.encode( { opcode: 4, payload: frame.payload } ) );
+						// The server's ping is the peer's clock while no frame arrives.
+						stream.flush();
 					} else if ( frame.opcode === 7 ) {
 						assert.ok( frame.payload.length >= 9 && frame.payload[0] === 1, "Crowd EnterWorld accepted" );
 						socket.send( codec.encode( { opcode: 0x3012, payload: new Uint8Array() } ) );
@@ -95,6 +139,7 @@ async function connectPeer( session, character ) {
 						fail( "Crowd peer received server goodbye" );
 					}
 					for ( const listener of listeners ) listener( frame );
+					if ( frame.opcode > MAX_RESERVED_OPCODE ) stream.counted( frame.payload.byteLength );
 				} catch ( error ) {
 					fail( String( error ) );
 				}
