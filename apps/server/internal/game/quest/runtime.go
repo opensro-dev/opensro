@@ -163,12 +163,19 @@ func BuildActiveQuestRecord(def *Definition, progress uint32) enterworld.ActiveQ
 	}
 	switch def.Objective {
 	case ObjectiveCollect, ObjectiveKill:
-		if progress > objectiveRequired(def) {
+		// A kill counter stops at its target; a collect count is the
+		// raw balance (heldCollectCount).
+		if def.Objective == ObjectiveKill && progress > objectiveRequired(def) {
 			progress = objectiveRequired(def)
 		}
 		if progress >= objectiveRequired(def) {
-			node.Kind = 0
 			node.CompletionReached = true
+			// The heart counter stays in progress at any count: the
+			// reference server's resuscitation quest always reports its
+			// hearts as in progress, so every pickup shows its notice.
+			if def.Codename != resuscitationQuest {
+				node.Kind = 0
+			}
 		}
 		node.ObjectiveValues = []uint32{progress}
 	default:
@@ -266,7 +273,9 @@ func objectiveMet(c *enterworld.Character, def *Definition, record enterworld.Ac
 ================
 heldCollectCount
 
-Return progress saturated at the objective count, not the raw item balance.
+Return the raw item balance, as the reference server's gather mission
+reports it: it sends the held count to the journal unclamped, so 28 held
+items show "(28)". Completion compares it against the objective count.
 Callers hold the character door while reading mutable inventory rows.
 ================
 */
@@ -286,8 +295,8 @@ func heldCollectCount(character *enterworld.Character, def *Definition) uint32 {
 	if held < 0 {
 		return 0
 	}
-	if held > int64(def.CollectCount) {
-		return def.CollectCount
+	if held > math.MaxUint32 {
+		return math.MaxUint32
 	}
 	return uint32(held)
 }
