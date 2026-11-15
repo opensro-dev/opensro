@@ -33,14 +33,7 @@ have been chosen.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
-import {
-	isDungeonRegion,
-	REGION_SIZE,
-	sameCoordinateSpace,
-	sectorX,
-	sectorY,
-	writeWorldDelta
-} from "@/engine/foundation/world/world-space";
+import { sameCoordinateSpace, writeRegionOffsetXZ, writeWorldDelta } from "@/engine/foundation/world/world-space";
 import { interpolateMovement } from "./native-movement";
 
 // The farthest a pose may lie from an edge, in the plane, and still be on it.
@@ -54,6 +47,9 @@ const CHAIN_BLOCK_EDGES = 16;
 const CHAIN_BOUNDS_MARGIN = 1;
 // How far into the path before it a slid path's first pose is looked for.
 const MAX_CHAIN_SHIFT = 64;
+// The outdoor region at sector (0, 0): the origin of the world frame every
+// outdoor region shares.
+const WORLD_ORIGIN_REGION = 0;
 
 /*
 ================
@@ -64,13 +60,10 @@ in a dungeon its own x and z. Only poses of one space are compared.
 ================
 */
 function writePlanarPosition( pose: Pose, out: [number, number] ) {
-	if ( isDungeonRegion( pose.regionId ) ) {
-		out[0] = pose.x;
-		out[1] = pose.z;
-		return;
-	}
-	out[0] = sectorX( pose.regionId ) * REGION_SIZE + pose.x;
-	out[1] = sectorY( pose.regionId ) * REGION_SIZE + pose.z;
+	// The sector offset from the world frame's origin: zero in a dungeon.
+	writeRegionOffsetXZ( WORLD_ORIGIN_REGION, pose.regionId, out );
+	out[0] += pose.x;
+	out[1] += pose.z;
 }
 
 /*
