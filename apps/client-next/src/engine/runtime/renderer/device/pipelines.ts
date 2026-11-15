@@ -721,7 +721,7 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- var refracted=vec3f(0);var refracting=false;var foam=0.0;
+ var refracted=vec3f(0);var refracting=false;
  if(animated&&waterPass.plane.w<0.5){
   if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
    // Port-only refraction (stages.z, device/water-refraction.ts): the
@@ -742,10 +742,11 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
    let under=textureLoad(sceneBehindDepth,bentPixel,0).r>input.viewZ;
    refracted=select(textureLoad(sceneBehind,pixel,0).rgb,textureSampleLevel(sceneBehind,waterMirrorSampler,bentUv,0).rgb,under);
    refracting=true;
-   foam=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0)*${WATER_SHORE_FOAM};
+   let foam=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0)*${WATER_SHORE_FOAM};
    // The surface term is the native one: the planar reflection where a
    // mirror exists, the water's lit texture where one does not.
-   lit=select(lit,waterColor,waterPass.plane.z>0.5);
+   // The foam joins the surface ahead of the fog, so distant foam fogs.
+   lit=select(lit,waterColor,waterPass.plane.z>0.5)+vec3f(foam);
   }else if(waterPass.plane.z>0.5){
    // Native: the planar reflection where a mirror exists, the water's lit
    // texture untouched where one does not.
@@ -759,8 +760,9 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
  let shaded=mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog);
  // Refracting water blends itself over the bent copy at its native alpha
- // and writes alpha 1, so the pass's src-alpha blend keeps it as is.
- if(refracting){return vec4f(clamp(mix(refracted,shaded,surfaceAlpha)+vec3f(foam),vec3f(0),vec3f(1)),1.0);}
+ // and writes alpha 1, so the pass's src-alpha blend keeps it as is. No
+ // clamp: under the HDR row the scene target is float.
+ if(refracting){return vec4f(mix(refracted,shaded,surfaceAlpha),1.0);}
  return vec4f(shaded,select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
 @fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
