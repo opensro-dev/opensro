@@ -284,10 +284,6 @@ class PinTests(unittest.TestCase):
 			self.assertTrue(all(c in "0123456789abcdef" for c in digest), digest)
 
 
-if __name__ == "__main__":
-	unittest.main()
-
-
 class ArchiveIndexTests(unittest.TestCase):
 	"""#3590: a directory is walked once per process for the same archive bytes."""
 
@@ -299,7 +295,7 @@ class ArchiveIndexTests(unittest.TestCase):
 
 		def counting(data, blocks=None):
 			self.walks += 1
-			return [alex.sro_pk2.Entry("Server_Dep\A.txt", len(data), 1)]
+			return [alex.sro_pk2.Entry(r"Server_Dep\A.txt", len(data), 1)]
 
 		alex.sro_pk2.read_directory = counting
 		self.addCleanup(setattr, alex.sro_pk2, "read_directory", original)
@@ -318,3 +314,7 @@ class ArchiveIndexTests(unittest.TestCase):
 		index = alex.archive_index(b"archive two!")
 		self.assertEqual(self.walks, 2)
 		self.assertEqual(index["server_dep/a.txt"].offset, len(b"archive two!"))
+
+
+if __name__ == "__main__":
+	unittest.main()
