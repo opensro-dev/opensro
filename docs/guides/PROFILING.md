@@ -171,11 +171,13 @@ minute.
 | D2 | one pipeline, bind group and buffers; N `drawIndexed` with different arguments |
 | D3 / D4 | as D2 through `drawIndexedIndirect` from one buffer; D4's records draw 0 instances |
 | D5 | one draw of N instances, the floor |
+| D6 | as D2, but every draw rebinds one bind group with its own dynamic uniform offset (only the offset changes) |
+| D7 | as D2, but every draw binds the next vertex and index buffer (8 rotating; only the buffers change) |
 | U1 / U2 / U3 | N writes of 256 bytes into N buffers / into one buffer / one write of N x 256 bytes |
 | U4 / U5 | one write of N x 256 bytes to a staging buffer, then N `copyBufferToBuffer` of 256 bytes into N buffers / into one buffer (the client's staging path) |
 | C1 / C2 | N dispatches with a bind group each / one dispatch of N workgroups |
 
-D1 to D4 run twice: `pass` encodes the draws every frame, `bundle` records
+D1 to D4, D6 and D7 run twice: `pass` encodes the draws every frame, `bundle` records
 them once into a render bundle. Frames run back to back, not paced by the
 display: encode and submit, then wait for `onSubmittedWorkDone`.
 

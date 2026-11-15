@@ -15,7 +15,7 @@ made once for the largest N by createCaseResources.
 
 const TARGET_SIZE = 64;
 const TARGET_FORMAT = "rgba8unorm";
-// D1 rotates its vertex and index buffers among this many.
+// D1 and D7 rotate their vertex and index buffers among this many.
 const BUFFER_ROTATION = 8;
 // Distinct tiny triangles in the shared geometry; draw i picks one by
 // firstIndex and another by baseVertex.
@@ -92,20 +92,15 @@ function createFilledBuffer( device, usage, data ) {
 
 /*
 ================
-createDrawResources
+createDrawPipeline
 
-What every draw case shares, made once for the largest N: one pipeline
-over a tiny 64x64 target, BUFFER_ROTATION copies of the triangle pool's
-vertex and index buffers, and one 16-byte uniform slot with a bind group
-of its own per draw. Triangles are about one pixel, so fill costs nothing.
+The draw shader's pipeline over one bind group layout. D6's layout
+differs from the others' only in hasDynamicOffset, so every draw case runs
+the same shader with the same reads.
 ================
 */
-function createDrawResources( device, largest ) {
-	const layout = device.createBindGroupLayout( {
-		entries: [ { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } } ]
-	} );
-	const module = device.createShaderModule( { code: DRAW_SHADER } );
-	const pipeline = device.createRenderPipeline( {
+function createDrawPipeline( device, module, layout ) {
+	return device.createRenderPipeline( {
 		layout: device.createPipelineLayout( { bindGroupLayouts: [ layout ] } ),
 		vertex: {
 			module,
@@ -115,6 +110,27 @@ function createDrawResources( device, largest ) {
 		fragment: { module, entryPoint: "fs", targets: [ { format: TARGET_FORMAT } ] },
 		primitive: { topology: "triangle-list" }
 	} );
+}
+
+/*
+================
+createDrawResources
+
+What every draw case shares, made once for the largest N: one pipeline
+over a tiny 64x64 target, BUFFER_ROTATION copies of the triangle pool's
+vertex and index buffers, and one 16-byte uniform slot with a bind group
+of its own per draw. D6 gets a second pipeline whose layout has a dynamic
+offset, and one bind group over the same slots that a per-draw offset
+moves. Triangles are about one pixel, so fill costs nothing.
+================
+*/
+function createDrawResources( device, largest ) {
+	const uniformEntry = { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } };
+	const layout = device.createBindGroupLayout( { entries: [ uniformEntry ] } );
+	const dynamicLayout = device.createBindGroupLayout( {
+		entries: [ { ...uniformEntry, buffer: { type: "uniform", hasDynamicOffset: true } } ]
+	} );
+	const module = device.createShaderModule( { code: DRAW_SHADER } );
 	const vertices = new Float32Array( TRIANGLE_POOL * 3 * 2 );
 	const pixel = 2 / TARGET_SIZE;
 	for ( let t = 0; t < TRIANGLE_POOL; t++ ) {
@@ -142,16 +158,22 @@ function createDrawResources( device, largest ) {
 			entries: [ { binding: 0, resource: { buffer: uniforms, offset: i * SLOT_BYTES, size: UNIFORM_BYTES } } ]
 		} ) );
 	}
+	const dynamicGroup = device.createBindGroup( {
+		layout: dynamicLayout,
+		entries: [ { binding: 0, resource: { buffer: uniforms, offset: 0, size: UNIFORM_BYTES } } ]
+	} );
 	const target = device.createTexture( {
 		size: [ TARGET_SIZE, TARGET_SIZE ],
 		format: TARGET_FORMAT,
 		usage: GPUTextureUsage.RENDER_ATTACHMENT
 	} );
 	return {
-		pipeline,
+		pipeline: createDrawPipeline( device, module, layout ),
+		dynamicPipeline: createDrawPipeline( device, module, dynamicLayout ),
 		vertexBuffers,
 		indexBuffers,
 		bindGroups,
+		dynamicGroup,
 		passDescriptor: {
 			colorAttachments: [ {
 				view: target.createView(),
@@ -207,6 +229,48 @@ D2: one state, count draws with different arguments.
 function encodeSharedState( encoder, draw, count ) {
 	bindShared( encoder, draw );
 	for ( let i = 0; i < count; i++ ) encoder.drawIndexed( 3, 1, firstIndex( i ), baseVertex( i ), i );
+}
+
+/*
+================
+encodeDynamicOffsets
+
+D6: one bind group, one vertex and one index buffer; every draw rebinds
+the group with its own 256-byte-aligned dynamic offset into the uniform
+buffer, so the offset is the only state that changes. The shader reads
+the same slot D1's draw i reads.
+================
+*/
+function encodeDynamicOffsets( encoder, draw, count ) {
+	encoder.setPipeline( draw.dynamicPipeline );
+	encoder.setVertexBuffer( 0, draw.vertexBuffers[0] );
+	encoder.setIndexBuffer( draw.indexBuffers[0], "uint16" );
+	const offsets = [ 0 ];
+	for ( let i = 0; i < count; i++ ) {
+		offsets[0] = i * SLOT_BYTES;
+		encoder.setBindGroup( 0, draw.dynamicGroup, offsets );
+		encoder.drawIndexed( 3, 1, firstIndex( i ), baseVertex( i ), i );
+	}
+}
+
+/*
+================
+encodeBufferChanges
+
+D7: one pipeline and bind group; every draw binds the next of the
+rotating vertex and index buffers, so the buffers are the only state that
+changes.
+================
+*/
+function encodeBufferChanges( encoder, draw, count ) {
+	encoder.setPipeline( draw.pipeline );
+	encoder.setBindGroup( 0, draw.bindGroups[0] );
+	for ( let i = 0; i < count; i++ ) {
+		const slot = i % BUFFER_ROTATION;
+		encoder.setVertexBuffer( 0, draw.vertexBuffers[slot] );
+		encoder.setIndexBuffer( draw.indexBuffers[slot], "uint16" );
+		encoder.drawIndexed( 3, 1, firstIndex( i ), baseVertex( i ), i );
+	}
 }
 
 /*
@@ -438,7 +502,7 @@ function prepareCompute( gpu, spec, count ) {
 ================
 caseList
 
-Every case in run order. D1 to D4 run in two forms each.
+Every case in run order. D1 to D4, D6 and D7 run in two forms each.
 ================
 */
 export function caseList() {
@@ -464,6 +528,16 @@ export function caseList() {
 			what: "as D3 with instanceCount 0 in every record (empty slots)",
 			encode: encodeIndirect,
 			instanceCount: 0
+		},
+		{
+			id: "D6",
+			what: "as D2, rebinding one bind group with its own dynamic uniform offset per drawIndexed",
+			encode: encodeDynamicOffsets
+		},
+		{
+			id: "D7",
+			what: "as D2, binding the next vertex and index buffer (8 rotating) per drawIndexed",
+			encode: encodeBufferChanges
 		}
 	];
 	const cases = [];

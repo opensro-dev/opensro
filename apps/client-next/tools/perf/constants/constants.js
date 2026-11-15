@@ -47,7 +47,7 @@ const TIMER_SAMPLE_LIMIT = 50000000;
 const FIRST_INSTANCE_FEATURE = "indirect-first-instance";
 
 const NOTES = [
-	"Slopes are microseconds per unit of N: per call for D1 to D4, U1, U2 and C1; per copy for U4 and U5 " +
+	"Slopes are microseconds per unit of N: per call for D1 to D4, D6, D7, U1, U2 and C1; per copy for U4 and U5 " +
 	"(their one staging write of N x 256 bytes included); per instance for D5, per 256 bytes for U3 and per " +
 	"workgroup for C2.",
 	"main = the main thread's encode plus submit; loop = the whole frame, including the wait for " +
@@ -381,7 +381,7 @@ async function runAll( result, params, view ) {
 	if ( !firstInstance ) {
 		result.notes.push(
 			`${FIRST_INSTANCE_FEATURE} is ${offered ? "not requested (nofeature=1)" : "not offered by the adapter"}: ` +
-				"D3 and D4 records use firstInstance 0 (D1 and D2 still pass firstInstance i)."
+				"D3 and D4 records use firstInstance 0 (D1, D2, D6 and D7 still pass firstInstance i)."
 		);
 	}
 	const largest = params.sizes[params.sizes.length - 1];
