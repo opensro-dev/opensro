@@ -70,7 +70,7 @@ func TestPublicScheduleListsTheDailyFlagWar(t *testing.T) {
 	src := scheduleSources{flagWar: settings}
 
 	events := publicSchedule(src, start.Add(-time.Hour))
-	signups, matches := eventsOfKind(events, scheduleKindFlagWarSignup), eventsOfKind(events, scheduleKindFlagWar)
+	signups, matches := eventsOfKind(events, publicstats.ScheduleKindFlagWarSignup), eventsOfKind(events, publicstats.ScheduleKindFlagWar)
 	if len(signups) != 1 || len(matches) != 1 {
 		t.Fatalf("an hour before: %+v, want one sign-up and one match", events)
 	}
@@ -81,12 +81,12 @@ func TestPublicScheduleListsTheDailyFlagWar(t *testing.T) {
 		t.Fatalf("match row %+v, want 20:00 for one match length, not running", matches[0])
 	}
 
-	signups = eventsOfKind(publicSchedule(src, start.Add(-5*time.Minute)), scheduleKindFlagWarSignup)
+	signups = eventsOfKind(publicSchedule(src, start.Add(-5*time.Minute)), publicstats.ScheduleKindFlagWarSignup)
 	if len(signups) != 1 || !signups[0].Running {
 		t.Fatalf("five minutes before: sign-up %+v, want running", signups)
 	}
 
-	matches = eventsOfKind(publicSchedule(src, start.Add(5*time.Minute)), scheduleKindFlagWar)
+	matches = eventsOfKind(publicSchedule(src, start.Add(5*time.Minute)), publicstats.ScheduleKindFlagWar)
 	if len(matches) != 2 || !matches[0].Running || !matches[0].Start.Equal(start) || !matches[1].Start.Equal(start.AddDate(0, 0, 1)) {
 		t.Fatalf("five minutes in: matches %+v, want today's running and tomorrow's", matches)
 	}
@@ -108,11 +108,11 @@ func TestPublicScheduleListsHalloweenOnlyWhileItIsOnAndAhead(t *testing.T) {
 	start, end := scheduleTestDay, scheduleTestDay.AddDate(0, 0, 7)
 	event := halloweenOn(t, start, end)
 
-	ahead := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true, halloween: event}, start.Add(-time.Hour)), scheduleKindHalloween)
+	ahead := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true, halloween: event}, start.Add(-time.Hour)), publicstats.ScheduleKindHalloween)
 	if len(ahead) != 1 || ahead[0].Running || !ahead[0].Start.Equal(start) || !ahead[0].End.Equal(end) {
 		t.Fatalf("ahead of the window: %+v", ahead)
 	}
-	inside := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true, halloween: event}, start.Add(time.Hour)), scheduleKindHalloween)
+	inside := eventsOfKind(publicSchedule(scheduleSources{flagWarOff: true, halloween: event}, start.Add(time.Hour)), publicstats.ScheduleKindHalloween)
 	if len(inside) != 1 || !inside[0].Running {
 		t.Fatalf("inside the window: %+v", inside)
 	}
@@ -148,7 +148,7 @@ func TestPublicScheduleKindsAllPublish(t *testing.T) {
 	for _, event := range publicSchedule(src, now) {
 		seen[event.Kind] = true
 	}
-	for _, kind := range []string{scheduleKindMaintenance, scheduleKindFlagWarSignup, scheduleKindFlagWar, scheduleKindHalloween} {
+	for _, kind := range []string{publicstats.ScheduleKindMaintenance, publicstats.ScheduleKindFlagWarSignup, publicstats.ScheduleKindFlagWar, publicstats.ScheduleKindHalloween} {
 		if !seen[kind] {
 			t.Errorf("kind %q is never published", kind)
 		}

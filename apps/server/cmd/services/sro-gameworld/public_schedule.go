@@ -4,9 +4,10 @@
 public_schedule.go - the events the public schedule lists (port-only)
 
 P8's calendar: every event the shard runs on a clock. Each scheduler that
-starts something players can plan for has one row in scheduleKinds, and
-publicSchedule asks each of them; a test fails when a scheduler's kind is
-missing, so a new timed event cannot ship invisible to the site (#3520).
+starts something players can plan for has a kind (publicstats'
+ScheduleKind constants), and publicSchedule asks each of them; a test
+fails when a kind is never published, so a new timed event cannot ship
+invisible to the site (#3520).
 
 The sources:
 
@@ -34,14 +35,11 @@ import (
 	"opensro.online/server/internal/game/siege"
 )
 
-// The event kinds the site's calendar knows; opensro-web labels each one.
+// The fortress lane's kinds. They move to publicstats with #3649
+// (ScheduleKindFortress, ScheduleKindFortressRegistration).
 const (
-	scheduleKindMaintenance          = "maintenance"
 	scheduleKindFortressRegistration = "fortress-registration"
 	scheduleKindFortress             = "fortress"
-	scheduleKindFlagWarSignup        = "capture-the-flag-registration"
-	scheduleKindFlagWar              = "capture-the-flag"
-	scheduleKindHalloween            = "halloween"
 )
 
 // publicWindowEvents names the fortress lane's windows on the calendar.
@@ -90,7 +88,7 @@ func publicSchedule(src scheduleSources, now time.Time) []publicstats.ScheduledE
 	var events []publicstats.ScheduledEvent
 	if path := strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)); path != "" {
 		if info, err := os.Stat(path); err == nil {
-			events = append(events, publicstats.ScheduledEvent{Kind: scheduleKindMaintenance, Title: "Maintenance",
+			events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindMaintenance, Title: "Maintenance",
 				Start: info.ModTime(), Running: true})
 		}
 	}
@@ -106,7 +104,7 @@ func publicSchedule(src scheduleSources, now time.Time) []publicstats.ScheduledE
 		events = append(events, flagWarEvents(src.flagWar, now)...)
 	}
 	if start, end, valid := src.halloween.Window(); src.halloween.Enabled() && valid && now.Before(end) {
-		events = append(events, publicstats.ScheduledEvent{Kind: scheduleKindHalloween, Title: "Halloween Day",
+		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindHalloween, Title: "Halloween Day",
 			Start: start, End: end, Running: src.halloween.ActiveAt(now)})
 	}
 	return events
@@ -125,12 +123,12 @@ func flagWarEvents(settings action.FlagWarSettings, now time.Time) []publicstats
 	length := action.FlagWarMatchLength()
 	signupAt, startsAt := settings.NextMatch(now)
 	if previous := startsAt.AddDate(0, 0, -1); now.Before(previous.Add(length)) {
-		events = append(events, publicstats.ScheduledEvent{Kind: scheduleKindFlagWar, Title: "Capture the Flag",
+		events = append(events, publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindFlagWar, Title: "Capture the Flag",
 			Start: previous, End: previous.Add(length), Running: true})
 	}
 	return append(events,
-		publicstats.ScheduledEvent{Kind: scheduleKindFlagWarSignup, Title: "Capture the Flag sign-up",
+		publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindFlagWarSignup, Title: "Capture the Flag sign-up",
 			Start: signupAt, End: startsAt, Running: !now.Before(signupAt)},
-		publicstats.ScheduledEvent{Kind: scheduleKindFlagWar, Title: "Capture the Flag",
+		publicstats.ScheduledEvent{Kind: publicstats.ScheduleKindFlagWar, Title: "Capture the Flag",
 			Start: startsAt, End: startsAt.Add(length)})
 }

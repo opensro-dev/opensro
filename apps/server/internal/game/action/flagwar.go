@@ -26,8 +26,8 @@ SRO_FLAGWAR_MIN_PLAYERS the house minimum (default 4); a start with
 fewer registrants cancels with the native game-cancel notice, whose
 text is exactly that the required number was not met. With enough
 registrants the match owner takes the queue in sign-up order through
-FlagWarMatchStart; until that lane lands, a full house cancels like
-an empty one.
+FlagWarMatchStart (flagwar_match.go), which builds the arena and runs
+the match.
 
 ===========================================================================
 */

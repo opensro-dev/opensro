@@ -280,10 +280,19 @@ type StatusResponse struct {
 	UniquePlayers7d *int `json:"uniquePlayers7d"`
 }
 
-// ScheduleEvent is one event the server runs. Kind is "fortress" (the
-// war), "fortress-registration", "maintenance", "capture-the-flag",
-// "capture-the-flag-registration" or "halloween" (sro-gameworld's
-// public_schedule.go); EndsAt is null for an open-ended maintenance.
+// The schedule's event kinds (sro-gameworld's public_schedule.go publishes
+// them; opensro-web labels each one).
+const (
+	ScheduleKindMaintenance = "maintenance"
+	ScheduleKindFlagWar     = "capture-the-flag"
+	// ScheduleKindFlagWarSignup is the ten-minute sign-up before a match.
+	ScheduleKindFlagWarSignup = "capture-the-flag-registration"
+	ScheduleKindHalloween     = "halloween"
+)
+
+// ScheduleEvent is one event the server runs. Kind is one of the
+// ScheduleKind constants, or "fortress" (the war) or
+// "fortress-registration"; EndsAt is null for an open-ended maintenance.
 type ScheduleEvent struct {
 	Kind     string  `json:"kind"`
 	Title    string  `json:"title"`
