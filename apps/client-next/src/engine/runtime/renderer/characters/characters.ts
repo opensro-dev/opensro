@@ -214,6 +214,55 @@ export function fillRowPointLights(
 
 /*
 ================
+createPoseOrder
+
+The order in which the needed actors' poses are evaluated, in one
+renderer-owned scratch. Without a frame budget it is frame order. With one,
+protected (non-optional) actors come first, then the oldest sample (none
+counts as -1); Array.prototype.sort is stable, so ties keep frame order.
+Each key is read once, before any pose is evaluated, so the comparator does
+no lookups. Only needed actors are keyed: a stable sort of a subsequence
+keeps the relative order a sort of the whole frame gives it. The returned
+array is reused by the next call.
+================
+*/
+export function createPoseOrder() {
+	let optional = new Uint8Array( CHARACTER_ACTORS );
+	let sampled = new Float64Array( CHARACTER_ACTORS );
+	const needed: CharacterActor[] = [];
+	const indices: number[] = [];
+	const ordered: CharacterActor[] = [];
+	const compare = ( a: number, b: number ) => optional[a]! - optional[b]! || sampled[a]! - sampled[b]!;
+	return function order(
+		frameActors: readonly CharacterActor[],
+		wanted: ReadonlySet<number>,
+		sample?: ( gid: number ) => number | undefined
+	): readonly CharacterActor[] {
+		needed.length = 0;
+		for ( const actor of frameActors ) {
+			if ( wanted.has( actor.gid ) ) needed.push( actor );
+		}
+		if ( !sample ) return needed;
+		if ( optional.length < needed.length ) {
+			optional = new Uint8Array( needed.length );
+			sampled = new Float64Array( needed.length );
+		}
+		indices.length = 0;
+		for ( let i = 0; i < needed.length; i++ ) {
+			const actor = needed[i]!;
+			optional[i] = actor.animationLod?.optional ? 1 : 0;
+			sampled[i] = sample( actor.gid ) ?? -1;
+			indices.push( i );
+		}
+		indices.sort( compare );
+		ordered.length = 0;
+		for ( const index of indices ) ordered.push( needed[index]! );
+		return ordered;
+	};
+}
+
+/*
+================
 RibbonBuffers
 
 One ribbon primitive's vertex streams, sized for its batch's capacity.
@@ -359,7 +408,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// submits no character draws; the portrait instances are their own
 	// owners and never hear it.
 	let charactersShown = true;
-	const poseOrder: CharacterActor[] = [];
+	const poseOrder = createPoseOrder();
+	const sampledPose = ( gid: number ) => ownedPoses.get( gid )?.sampled;
 	// Birth transforms belong to the actor lifetime, not GPU batches. Keep them
 	// across culling, batch membership changes and device recreation.
 	const particleRandom: ParticleRandom = { table: particleRandomTable(), index: 0 };
@@ -1887,23 +1937,12 @@ the next full prepare pass, so this may run between frames.
 	evaluateNeededPoses
 
 	Evaluate every needed actor's pose. Oldest cosmetic samples get the next
-	budget slice. Admission and draw order remain unchanged; a busy crowd
-	cannot starve its tail.
+	budget slice (createPoseOrder). Admission and draw order remain unchanged;
+	a busy crowd cannot starve its tail.
 	================
 	*/
 	function evaluateNeededPoses( frameActors: readonly CharacterActor[], needed: ReadonlySet<number> ) {
-		poseOrder.length = 0;
-		poseOrder.push( ...frameActors );
-		if ( frameWork ) {
-			poseOrder.sort( ( a, b ) =>
-				Number( !!a.animationLod?.optional ) - Number( !!b.animationLod?.optional ) ||
-				(ownedPoses.get( a.gid )?.sampled ?? -1) - (ownedPoses.get( b.gid )?.sampled ?? -1)
-			);
-		}
-		for ( const actor of poseOrder ) {
-			if ( !needed.has( actor.gid ) ) {
-				continue;
-			}
+		for ( const actor of poseOrder( frameActors, needed, frameWork ? sampledPose : undefined ) ) {
 			const model = models.get( actor.model )?.model;
 			if ( !model ) {
 				continue;
