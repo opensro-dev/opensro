@@ -46,6 +46,27 @@ class MapTiles(unittest.TestCase):
 			arabia.restore_map_tiles(output, {"replacedTiles": replaced})
 			self.assertEqual(native.read_bytes(), b"native")
 
+	def test_label_rows_keep_arabia_overview_rows(self):
+		def later(key, kind, destination, page, x, y):
+			return ["1", key, kind, "SN_ZONE_" + key if kind == "1" else r"interface\worldmap\map\city_bagdad.ddj",
+				"", "", "", destination, page, str(x), str(y)] + ["0"] * 13
+		rows = [
+			later("22010", "1", "0", "0", 80, 90),  # Arabia name on the overview
+			later("100000", "2", "18", "0", 80, 90),  # badge to an unpublished page
+			later("11001", "1", "0", "1", 80, 90),  # a town page's label
+			later("23000", "1", "0", "0", 168, 97),  # not an Arabia region
+			later("26000", "1", "0", "0", 80, 90),  # the native table holds it
+		]
+		pins = arabia.map_label_rows(rows, {OUTDOOR: "a"}, {"26000"}, {"0", "1"})
+		self.assertEqual([row[0] for row in pins], ["22010", "100000"])
+		self.assertTrue(all(len(row) == 20 for row in pins))
+		self.assertEqual(pins[1][6], "0", "no page to open, no click")
+
+	def test_later_text_reads_utf16_without_bom(self):
+		line = ["1", "9669", "SN_ZONE_26000_15", "K", "0", "0", "0", "0", "0", "Expeditionary Force Outpost"]
+		raw = ("\t".join(line) + "\n").encode("utf-16-le")
+		self.assertEqual(arabia.later_rows(raw)[0][arabia.LATER_TEXT_ENGLISH], "Expeditionary Force Outpost")
+
 
 if __name__ == "__main__":
 	unittest.main()

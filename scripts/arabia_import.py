@@ -85,7 +85,13 @@ import cap110_skill_effects as effects  # noqa: E402
 import import_vsro_alexandria as tables  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import native_text_row, overview_box  # noqa: E402
-from arabia_map_tiles import import_map_tiles, map_tile_paths, restore_map_tiles  # noqa: E402
+from arabia_map_tiles import (  # noqa: E402
+	import_map_labels,
+	import_map_tiles,
+	map_tile_paths,
+	remove_map_labels,
+	restore_map_tiles,
+)
 from arabia_gates import prepare_gates  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
@@ -484,6 +490,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
 	if not enabled():
 		restore_map_tiles(output, prior)
+		remove_map_labels(output / TEXT_ROOT, prior)
 		return remove_owned(output, prior)
 	root = Path(source) if source else source_root()
 	verify_archives(root)
@@ -875,7 +882,9 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 
 		mapinfo_table = text_root / MAPINFO_TABLE
 		box = overview_box(mapinfo_table.read_bytes()) if mapinfo_table.exists() else None
-		owned_tiles, replaced_tiles = import_map_tiles(media, media_index, output, map_tile_paths(regions, box))
+		pins, label_keys, label_art = import_map_labels(media, media_index, text_root, regions)
+		owned_tiles, replaced_tiles = import_map_tiles(media, media_index, output,
+			map_tile_paths(regions, box) + label_art)
 		copied += owned_tiles
 		replaced_tiles = sorted(set(prior.get("replacedTiles", [])) | set(replaced_tiles))
 
@@ -924,6 +933,8 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"speechUnresolved": speech_unresolved,
 			"files": files,
 			"replacedTiles": replaced_tiles,
+			"mapPins": sorted(set(prior.get("mapPins", [])) | set(pins)),
+			"mapTexts": sorted(set(prior.get("mapTexts", [])) | set(label_keys)),
 			"archives": archive_hashes,
 		}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
