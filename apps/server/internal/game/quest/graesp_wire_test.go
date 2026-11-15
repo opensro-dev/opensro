@@ -98,19 +98,30 @@ func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
 	}
 }
 
+// latchQuest is an ordinary collect quest (the gather mission's states);
+// the heart counter is the exception that stays in progress.
+const latchQuest = "QNO_CH_CHEF_1"
+
 func TestCollectionCompletionLatchSurvivesReloadLossAndReacquisition(t *testing.T) {
 	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
-	if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {
+	if _, err := rt.StartQuest(c, latchQuest); err != nil {
 		t.Fatal(err)
 	}
-	def, _ := rt.Defs.ByCodename("QSP_ALL_POTION_1")
+	def, _ := rt.Defs.ByCodename(latchQuest)
+	if count := def.CollectCount; count == 0 {
+		t.Fatal("the latch quest collects nothing")
+	}
 	update := func(count int64, want byte) {
 		t.Helper()
-		c.MissionInventory = potionInventory(count)
+		// A row with no stack word is one item, so none held is no row.
+		c.MissionInventory = nil
+		if count > 0 {
+			c.MissionInventory = []enterworld.InventoryRow{{Slot: 20, RefObjID: def.CollectItemRefID, Codename: def.CollectItemCodename, StackCount: count}}
+		}
 		frames, changed := rt.InventoryUpdater()(c)
-		if !changed || len(frames) != 1 || frames[0].Payload[11] != want {
+		if !changed || len(frames) == 0 || frames[0].Opcode != OpQuestUpdate || frames[0].Payload[11] != want {
 			t.Fatalf("count %d expected kind %d: %+v", count, want, frames)
 		}
 	}
@@ -142,7 +153,7 @@ func TestCollectionCompletionLatchSurvivesReloadLossAndReacquisition(t *testing.
 	// Fresh acceptance starts a fresh objective; no latch leaks across abandon.
 	c.ActiveQuests = nil
 	c.MissionInventory = nil
-	if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {
+	if _, err := rt.StartQuest(c, latchQuest); err != nil {
 		t.Fatal(err)
 	}
 	update(int64(def.CollectCount), 2)

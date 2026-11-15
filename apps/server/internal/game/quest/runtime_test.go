@@ -317,15 +317,19 @@ func TestNotifyInventoryChangedEmitsProgress(t *testing.T) {
 		t.Fatalf("an unchanged count must emit nothing, got %+v", frames)
 	}
 
-	// Reaching the required count clamps and flips the node to END.
-	character.MissionInventory = potionInventory(25)
-	frames = rt.NotifyInventoryChanged(character)
-	if len(frames) != 1 {
-		t.Fatalf("frames = %+v, want the completion op-2", frames)
-	}
-	record = character.ActiveQuests[0]
-	if record.Contents[0].ObjectiveValues[0] != 10 || record.Contents[0].Kind != 0 {
-		t.Fatalf("record = %+v, want progress clamped at 10 and the END kind 0", record.Contents[0])
+	// Hearts past the price keep the counter in progress (kind 1) with the
+	// raw count, as the reference server reports them, so each pickup shows
+	// its notice.
+	for _, held := range []int64{10, 25, 26} {
+		character.MissionInventory = potionInventory(held)
+		frames = rt.NotifyInventoryChanged(character)
+		node := character.ActiveQuests[0].Contents[0]
+		if len(frames) != 1 || node.ObjectiveValues[0] != uint32(held) || node.Kind != 1 {
+			t.Fatalf("%d hearts: frames %d node %+v, want one update, raw count, kind 1", held, len(frames), node)
+		}
+		if want := EncodeQuestUpdateUpdate(withoutTimerFlag(character.ActiveQuests[0])); !bytes.Equal(frames[0].Payload, want) {
+			t.Fatalf("%d hearts: payload = % X, want % X", held, frames[0].Payload, want)
+		}
 	}
 
 	// Dropping items moves progress back DOWN (recompute-from-inventory).
@@ -371,4 +375,10 @@ func TestDefaultQuestSeeder(t *testing.T) {
 	if _, err := DefaultQuestSeeder(empty)(enterworld.RaceKeyChina); err == nil {
 		t.Fatal("an unresolvable seed codename must refuse, never seed short")
 	}
+}
+
+// withoutTimerFlag is the record as encodeMissionProgress publishes it.
+func withoutTimerFlag(record enterworld.ActiveQuestRecord) enterworld.ActiveQuestRecord {
+	record.Flags &^= 4
+	return record
 }
