@@ -11,14 +11,6 @@ mip generation, and the samplers they bind.
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
-	WATER_BEHIND_WEIGHT,
-	WATER_REFLECTION_MIX,
-	WATER_REFRACTION_STRENGTH,
-	WATER_SHORE_BAND,
-	WATER_SHORE_FOAM,
-	WATER_SKIN_BLENDED
-} from "./water-refraction";
-import {
 	D3DBLEND_BLENDFACTOR,
 	D3DBLEND_BOTHINVSRCALPHA,
 	D3DBLEND_BOTHSRCALPHA,
@@ -428,13 +420,6 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // ambient-occlusion.ts after the scene. While the stage is off every
 // draw binds a 1x1 white view and the gated read below never samples
 // it, so the native frame is untouched.
-// Port-only water refraction (device/water-refraction.ts): the frame's
-// colour before the blended water drew, and the view-space depth behind
-// each pixel (r32float: a depth attachment cannot be sampled while
-// attached). While the row is off every draw binds the 1x1 white view
-// and the stage-gated branch below never samples either.
-@group(0) @binding(16) var sceneBehind:texture_2d<f32>;
-@group(0) @binding(17) var sceneBehindDepth:texture_2d<f32>;
 @group(0) @binding(15) var ambientOcclusionMap:texture_2d<f32>;
 fn ambientOcclusionFactor(fragCoord:vec2f)->f32{
  let size=vec2i(textureDimensions(ambientOcclusionMap));
@@ -728,28 +713,9 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade*occlusion;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.w<0.5){
-  if(env.stages.z>0.5&&material.skin.z>${WATER_SKIN_BLENDED - 0.5}){
-   // Port-only refraction (stages.z, device/water-refraction.ts): the
-   // blended water draws after a copy of the opaque frame, so it bends
-   // what lies under the surface by its own bump offset and whitens
-   // where the depth behind it comes within the shore band of its own
-   // (input.viewZ, view-space metres like the copy). The planar
-   // reflection, or the water's own lit texture without a mirror, stays
-   // the surface term it natively is.
-   let screenUv=input.position.xy/vec2f(textureDimensions(sceneBehind));
-   let bent=clamp(screenUv+waterBumpOffset(input.uv)*${WATER_REFRACTION_STRENGTH},vec2f(0),vec2f(1));
-   let behind=textureSampleLevel(sceneBehind,waterMirrorSampler,bent,0).rgb;
-   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
-   let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
-   let surface=select(lit,waterColor,waterPass.plane.z>0.5);
-   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
-  }else if(waterPass.plane.z>0.5){
-   // Native: the planar reflection where a mirror exists, the water's lit
-   // texture untouched where one does not.
-   lit=waterColor;
-  }
- }
+ // 8AE2D0 / 8BA130: the planar reflection where a mirror exists, the
+ // water's lit texture untouched where one does not.
+ if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,
