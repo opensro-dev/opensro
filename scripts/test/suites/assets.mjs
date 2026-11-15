@@ -29,6 +29,7 @@ export default {
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",
 		"scripts/test/assets/nativeLensResources.test.mjs",
+		"scripts/test/assets/nativeMipGenerator.test.mjs",
 		"scripts/test/assets/skyImagePublication.test.mjs",
 		"scripts/test/assets/nativeCharacterTextures.test.mjs",
 		"scripts/test/assets/moonlitThiefSuit.test.mjs",

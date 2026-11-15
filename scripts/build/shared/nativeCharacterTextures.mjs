@@ -12,17 +12,14 @@ only the absent suffix may be generated. The outer build owns the asset lock.
 */
 import fs from "node:fs";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { dataAssetPath, convertedTexturePath, dataRoot } from "./jmxAssetIO.mjs";
-import { imageSourceRoot, rebuildRoot } from "../world/paths.mjs";
+import { imageSourceRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
-import { runPython } from "./pythonRun.mjs";
+import { candidateGenerators, generatorHash, runMipGenerator, selectMipGenerator } from "./nativeMipGenerator.mjs";
 
-const execute = promisify( execFile );
 const DDJ_HEADER = 20;
 const DDS_HEADER = 128;
 const NTX_HEADER = 20;
@@ -34,14 +31,9 @@ const MAX_DIMENSION = 8192;
 const NATIVE_MIME = "application/x-sro-texture";
 const cacheRoot = path.join( imageSourceRoot, "native-character" );
 // Source bytes and generator code both govern generated mip cache identity.
-// Windows (D3DX) and other hosts (native_texture_mips.py) never share entries.
-const GENERATOR_FILES = process.platform === "win32" ?
-	[ "scripts/build/NativeLensResources.cs", "scripts/build/native_lens_resources.ps1" ] :
-	[ "scripts/build/native_texture_mips.py" ];
-const GENERATOR_HASH = GENERATOR_FILES.reduce(
-	( hash, file ) => hash.update( fs.readFileSync( path.join( rebuildRoot, file ) ) ),
-	createHash( "sha256" )
-).digest( "hex" );
+// D3DX and the portable native_texture_mips.py never share entries
+// (nativeMipGenerator.mjs); a reader takes the first candidate it finds.
+const GENERATOR_HASHES = Object.fromEntries( candidateGenerators().map( kind => [ kind, generatorHash( kind ) ] ) );
 
 /*
 ================
@@ -159,15 +151,31 @@ export function preserveAuthoredMips( source, generated ) {
 ================
 cachePath
 
-Bind generated mip resources to their full source bytes. A changed DDJ cannot
-silently reuse an old texture merely because its path or timestamp is stable.
+Bind generated mip resources to their full source bytes and the generator
+that wrote them. A changed DDJ cannot silently reuse an old texture merely
+because its path or timestamp is stable.
 ================
 */
-function cachePath( bytes ) {
+function cachePath( bytes, kind ) {
 	return path.join(
 		cacheRoot,
-		createHash( "sha256" ).update( GENERATOR_HASH ).update( bytes ).digest( "hex" ) + ".texture"
+		createHash( "sha256" ).update( GENERATOR_HASHES[kind] ).update( bytes ).digest( "hex" ) + ".texture"
 	);
+}
+
+/*
+================
+cachedPath
+
+The entry an earlier build published for these bytes, preferring D3DX's.
+================
+*/
+function cachedPath( bytes ) {
+	for ( const kind of candidateGenerators() ) {
+		const target = cachePath( bytes, kind );
+		if ( fs.existsSync( target ) ) return target;
+	}
+	return null;
 }
 
 /*
@@ -182,8 +190,8 @@ export function readCharacterTexture( gamePath, pngPath ) {
 	if ( gamePath ) {
 		const source = fs.readFileSync( dataAssetPath( gamePath ) );
 		if ( compressedSource( source ) ) {
-			const target = cachePath( source );
-			if ( !fs.existsSync( target ) ) {
+			const target = cachedPath( source );
+			if ( !target ) {
 				throw Error(
 					"Missing native character texture; run the native character texture prerequisite: " + gamePath
 				);
@@ -198,68 +206,42 @@ export function readCharacterTexture( gamePath, pngPath ) {
 
 /*
 ================
-generateMips
-
-One native device session for the whole batch on Windows (32-bit D3DX through
-PowerShell); the portable generator elsewhere. Both write NTX1 resources.
-================
-*/
-async function generateMips( manifest ) {
-	if ( process.platform !== "win32" ) {
-		await runPython( [ path.join( rebuildRoot, "scripts/build/native_texture_mips.py" ), "-Manifest", manifest ], {
-			task: "native character texture mip generation"
-		} );
-		return;
-	}
-	const powershell = path.join(
-		process.env.SystemRoot ?? "C:\\Windows",
-		"SysWOW64",
-		"WindowsPowerShell",
-		"v1.0",
-		"powershell.exe"
-	);
-	await execute( powershell, [
-		"-NoProfile",
-		"-NonInteractive",
-		"-ExecutionPolicy",
-		"Bypass",
-		"-File",
-		path.join( rebuildRoot, "scripts/build/native_lens_resources.ps1" ),
-		"-Manifest",
-		manifest
-	], { windowsHide: true } );
-}
-
-/*
-================
 buildNativeCharacterTextures
 
-Generate missing content-addressed entries in one native device session.
-Private staging prevents a failed process from leaving an admissible cache.
+Generate missing content-addressed entries in one generator session (D3DX
+or the portable generator, nativeMipGenerator.mjs), probed only when an
+entry is missing. Private staging prevents a failed process from leaving an
+admissible cache.
 ================
 */
 export async function buildNativeCharacterTextures() {
 	await fs.promises.mkdir( cacheRoot, { recursive: true } );
 	const staging = await fs.promises.mkdtemp( path.join( cacheRoot, ".build-" ) );
 	try {
-		const jobs = [], seen = new Set();
+		const missing = [], seen = new Set();
 		for ( const source of await listFiles( dataRoot, { extensions: [ ".ddj" ] } ) ) {
 			if ( !source.toLowerCase().endsWith( ".ddj" ) ) continue;
 			const bytes = await fs.promises.readFile( source );
 			if ( !compressedSource( bytes ) ) continue;
-			const target = cachePath( bytes );
-			if ( seen.has( target ) ) continue;
-			seen.add( target );
-			if ( fs.existsSync( target ) ) {
-				validateCharacterTexture( bytes, await fs.promises.readFile( target ) );
+			const digest = createHash( "sha256" ).update( bytes ).digest( "hex" );
+			if ( seen.has( digest ) ) continue;
+			seen.add( digest );
+			const cached = cachedPath( bytes );
+			if ( cached ) {
+				validateCharacterTexture( bytes, await fs.promises.readFile( cached ) );
 				continue;
 			}
-			jobs.push( { source, target: path.join( staging, path.basename( target ) ), published: target } );
+			missing.push( { source, bytes } );
 		}
-		if ( !jobs.length ) return;
+		if ( !missing.length ) return;
+		const kind = await selectMipGenerator();
+		const jobs = missing.map( ( { source, bytes } ) => {
+			const target = cachePath( bytes, kind );
+			return { source, target: path.join( staging, path.basename( target ) ), published: target };
+		} );
 		const manifest = path.join( staging, "jobs.json" );
 		await fs.promises.writeFile( manifest, JSON.stringify( jobs ) );
-		await generateMips( manifest );
+		await runMipGenerator( kind, { manifest }, "native character texture mip generation" );
 		for ( const job of jobs ) {
 			const source = await fs.promises.readFile( job.source );
 			const output = preserveAuthoredMips( source, await fs.promises.readFile( job.target ) );
