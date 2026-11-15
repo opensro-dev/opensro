@@ -120,6 +120,21 @@ def archive_pins(spec):
 
 
 # ================
+# client_root
+#
+# The v1.696 client folder an import reads: the caller's, else the root
+# environment variable's. An empty or unset value refuses. Not
+# Path("") tested by str(): that is ".", the working directory, which
+# then fails the pin check with a misleading archive message.
+# ================
+def client_root(given, root_env, env=os.environ):
+	named = str(given or "").strip() or env.get(root_env, "").strip()
+	if not named:
+		raise SystemExit(f"Pass the v1.696 client folder or set {root_env}.")
+	return Path(named)
+
+
+# ================
 # require_pin
 #
 # The v1.696 archives against their pins, before any of them is read:
@@ -536,9 +551,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 		raise ValueError(f"{spec.label} import drives its own monster pass; add_world does not serve it")
 	native, out = Path(native), Path(out)
 	require_pairing(spec)
-	v1696_root = Path(v1696_root or os.environ.get(spec.root_env, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {spec.root_env}.")
+	v1696_root = client_root(v1696_root, spec.root_env)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
 		raise SystemExit(f"{spec.source_env} names no population export folder")
