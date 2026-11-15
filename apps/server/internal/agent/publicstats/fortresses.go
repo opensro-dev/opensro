@@ -27,11 +27,12 @@ import (
 	"time"
 )
 
-// The schedule kinds the war state is read from (sro-gameworld
-// publicWindowEvents).
+// The schedule kinds of the fortress windows (P8 ScheduleEvent.Kind). The
+// public contract owns the kind names: the GameWorld's schedule writes
+// them and this answer reads them back.
 const (
-	scheduleKindWar          = "fortress"
-	scheduleKindRegistration = "fortress-registration"
+	ScheduleKindFortress             = "fortress"
+	ScheduleKindFortressRegistration = "fortress-registration"
 )
 
 // The answer's war states.
@@ -90,8 +91,8 @@ func (s *Service) fortresses(*http.Request) (any, error) {
 		Fortresses: []FortressRow{}}
 	if s.src.Schedule != nil {
 		events := s.src.Schedule(now)
-		out.War = fortressWindow(events, scheduleKindWar)
-		out.Registration = fortressWindow(events, scheduleKindRegistration)
+		out.War = fortressWindow(events, ScheduleKindFortress)
+		out.Registration = fortressWindow(events, ScheduleKindFortressRegistration)
 	}
 	// The war outranks registration: the original closes registration
 	// before the war opens, but a schedule that overlaps them is at war.

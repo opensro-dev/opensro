@@ -101,8 +101,8 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 
 // publicWindowEvents names the fortress lane's windows on the calendar.
 var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {"fortress-registration", "Fortress war registration"},
-	"SiegeProgressing":  {"fortress", "Fortress war"},
+	"AllowSiegeRequest": {publicstats.ScheduleKindFortressRegistration, "Fortress war registration"},
+	"SiegeProgressing":  {publicstats.ScheduleKindFortress, "Fortress war"},
 }
 
 /*
