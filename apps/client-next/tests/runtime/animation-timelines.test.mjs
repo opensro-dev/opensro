@@ -169,29 +169,31 @@ function catalog() {
 }
 /*
 ================
-CountedTimelines
+countedTimelines
 
-A renderer's timeline cache that counts the clips whose key times it
-was asked to hash.
+A renderer's timeline cache, and how many clips it was asked to store:
+each store is one clip whose key times were hashed.
 ================
 */
-class CountedTimelines extends WeakMap {
-	walks = 0;
-	set( clip, bytes ) {
-		this.walks++;
-		return super.set( clip, bytes );
-	}
+function countedTimelines() {
+	const timelines = new WeakMap(), store = timelines.set.bind( timelines );
+	let walks = 0;
+	timelines.set = ( clip, bytes ) => {
+		walks++;
+		return store( clip, bytes );
+	};
+	return { timelines, walks: () => walks };
 }
 
 test("re-planning a body hashes only the key times of the clip it newly admitted, for the same charge", () => {
-	const model = catalog(), timelines = new CountedTimelines();
+	const model = catalog(), { timelines, walks } = countedTimelines();
 	createCharacterRenderPlan( model, timelines );
-	assert.equal( timelines.walks, 3 );
+	assert.equal( walks(), 3 );
 	// The second plan reads every clip's charge from the cache.
 	assert.equal( createCharacterRenderPlan( model, timelines ).poseBytes, characterPoseBytes( model ) );
-	assert.equal( timelines.walks, 3 );
+	assert.equal( walks(), 3 );
 	// An admitted clip appends to the catalog every assembly of the body shares.
 	const [added] = catalog().clips, extended = { ...model, clips: [ ...model.clips, { ...added, name: "walk" } ] };
 	assert.equal( createCharacterRenderPlan( extended, timelines ).poseBytes, characterPoseBytes( extended ) );
-	assert.equal( timelines.walks, 4 );
+	assert.equal( walks(), 4 );
 });
