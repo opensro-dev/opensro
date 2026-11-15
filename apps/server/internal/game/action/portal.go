@@ -14,8 +14,10 @@ import (
 	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/commerce"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -43,6 +45,37 @@ var muhanTeleportDataTSV string
 
 //go:embed data/muhan_teleportlink.tsv
 var muhanTeleportLinkTSV string
+
+// Port-only, not native: the Jangan town gate's links to the Qin-Shi
+// Emperor Tomb floors 1-4, appended only while SRO_JANGAN_TOMB_TELEPORT
+// and SRO_QINSHI_TOMB are both on.
+//
+//go:embed data/jangan_tomb_teleportlink.tsv
+var janganTombTeleportLinkTSV string
+
+// EnvJanganTombTeleport turns the Jangan gate's tomb floor rows on.
+const EnvJanganTombTeleport = "SRO_JANGAN_TOMB_TELEPORT"
+
+/*
+================
+JanganTombTeleportEnabled
+
+Port-only, not native: the Jangan town gate also offers the Qin-Shi
+Emperor Tomb floors 1-4. The rows land on the tomb, so they follow
+SRO_QINSHI_TOMB too: with the tomb closed the gate keeps its native
+menu. Mirrored by scripts/build/shared/janganTombTeleport.mjs.
+================
+*/
+func JanganTombTeleportEnabled() bool {
+	if !monster.QinShiTombFromEnv() {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvJanganTombTeleport))) {
+	case "1", "on", "true", "yes":
+		return true
+	}
+	return false
+}
 
 /*
 ================
@@ -160,6 +193,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	}
 	if pharaohtemple.Enabled() {
 		key += "+pharaoh_temple"
+	}
+	if JanganTombTeleportEnabled() {
+		key += "+jangan_tomb_teleport"
 	}
 	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
 		catalog, err := parsePortalCatalog(dir)
@@ -330,6 +366,10 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		// Port-only, not native (#3314): append the 16 Muhan links (hub to
 		// gates, gates back to the town gate), fee 0 and condition-free.
 		rows = append(rows, monster.SplitTabbedText(muhanTeleportLinkTSV)...)
+	}
+	if JanganTombTeleportEnabled() {
+		// Port-only, not native: the Jangan gate's four tomb floor links.
+		rows = append(rows, monster.SplitTabbedText(janganTombTeleportLinkTSV)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {

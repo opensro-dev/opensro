@@ -435,9 +435,44 @@ test("native I64 fee strings resolve the full integer format and shared tax calc
 	const catalog = decodePortalCatalog(
 		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/teleportData.json", "utf8" ) )
 	);
-	const rows = portalMenu( catalog, 2011, key => key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %I64d" : key, 10 );
+	const rows = portalMenu( catalog, 2011, key => key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %I64d" : key, {
+		taxRate: 10
+	} );
 	assert.ok( rows.some( row => row.label.endsWith( " 550" ) ) );
 	assert.ok( rows.every( row => !row.label.includes( "%" ) ) );
+});
+
+test("the Jangan gate folds the Qin-Shi tomb floors under one row with a Back row (port-only)", () => {
+	const row = ( id, codeName, npcRefObjId, nameSymbol ) => ({ id, codeName, npcRefObjId, nameSymbol, regionId: 0 });
+	const link = ( sourceId, destinationId, fee ) => ({ sourceId, destinationId, fee });
+	const catalog = decodePortalCatalog( {
+		format: "sro-teleportdata",
+		version: 1,
+		teleportRows: [
+			row( 1, "GATE_CH", 2094, "SN_ZONE_22001" ),
+			row( 2, "GATE_WC", 2095, "SN_ZONE_22002" ),
+			row( 50, "GATE_JINSI_IN", 0, "SN_ZONE_26001" ),
+			row( 53, "GATE_JINSI_02x01_09", 0, "SN_ZONE_26002" ),
+			row( 125, "GATE_JINSI_04x01-bldg", 23280, "SN_ZONE_26004" ),
+			row( 130, "GATE_JINSI_05x01", 0, "SN_ZONE_26005" )
+		],
+		linkRows: [ link( 1, 2, 5000 ), link( 1, 50, 40000 ), link( 1, 53, 40000 ), link( 125, 130, 0 ) ]
+	} );
+	const copy = key =>
+		key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %d" : key === "UIIT_CTL_TELEPORT_FREE_RESULT" ? "%s" : key;
+	assert.deepEqual( portalMenu( catalog, 2094, copy ), [
+		{ id: "npc-portal:2", label: "SN_ZONE_22002 5000" },
+		{ id: "npc-portal-group:qinshi-tomb", label: "SN_ZONE_23001" }
+	] );
+	assert.deepEqual( portalMenu( catalog, 2094, copy, { group: "qinshi-tomb", taxRate: 10 } ), [
+		{ id: "npc-portal:50", label: "SN_ZONE_26001 44000" },
+		{ id: "npc-portal:53", label: "SN_ZONE_26002 44000" },
+		{ id: "npc-portal-back", label: "UIIT_STT_COS_BACK" }
+	] );
+	// The tomb's own gates keep the native flat menu.
+	assert.deepEqual( portalMenu( catalog, 23280, copy ), [
+		{ id: "npc-portal:130", label: "SN_ZONE_26005" }
+	] );
 });
 
 test("an interaction approach retires on cancellation, arrival or matching despawn, never another entity", () => {

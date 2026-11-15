@@ -62,6 +62,7 @@ export default {
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/qinshiTombOverlay.test.mjs",
 		"scripts/test/assets/muhanOverlay.test.mjs",
+		"scripts/test/assets/janganTombTeleport.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
 		"scripts/test/assets/npcAnimationContactMarkers.test.mjs",

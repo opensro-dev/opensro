@@ -13,7 +13,7 @@ import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 export type PortalId = number & { readonly __portalId: unique symbol; };
 export interface PortalCatalog {
-	readonly destinations: readonly { id: PortalId; ref: number; name: string; }[];
+	readonly destinations: readonly { id: PortalId; ref: number; name: string; code: string; }[];
 	readonly links: readonly { source: PortalId; target: PortalId; fee: number; }[];
 }
 /*
@@ -41,7 +41,8 @@ export function decodePortalCatalog( value: unknown ): PortalCatalog {
 		const id = integer( r.id, 1 ) as PortalId;
 		if ( ids.has( id ) ) throw Error( "Duplicate portal identity" );
 		ids.add( id );
-		return { id, ref: integer( r.npcRefObjId ), name: r.nameSymbol };
+		const code = typeof r.codeName === "string" ? r.codeName : "";
+		return { id, ref: integer( r.npcRefObjId ), name: r.nameSymbol, code };
 	} );
 	const seen = new Set<string>();
 	const links = o.linkRows.map( r => {
@@ -60,17 +61,67 @@ export function decodePortalCatalog( value: unknown ): PortalCatalog {
 }
 /*
 ================
+PORTAL_GROUPS
+
+Port-only, not native: destinations a gate folds under one row whose
+click opens their own page with a Back row (SRO_JANGAN_TOMB_TELEPORT,
+the Jangan gate's Qin-Shi Tomb floors). Only a gate outside the group
+folds: the tomb's own gates keep the native flat menu. No retail link
+leads from outside the tomb to a GATE_JINSI_ row, so a native
+catalogue never folds.
+================
+*/
+const PORTAL_GROUPS = [ { key: "qinshi-tomb", codePrefix: "GATE_JINSI_", caption: "SN_ZONE_23001" } ] as const;
+
+// The Back row's caption: the native "Back" string.
+const PORTAL_GROUP_BACK = "UIIT_STT_COS_BACK";
+
+/*
+================
+PortalMenuView
+
+taxRate: the gate's fortress tax, added to each fee. group: the open
+PORTAL_GROUPS key, "" for the gate's top page.
+================
+*/
+export interface PortalMenuView {
+	readonly taxRate?: number;
+	readonly group?: string;
+}
+
+/*
+================
 portalMenu
 
 5D7040: the destination rows for the selected gate. It uses the NPC's
-reference identity, never its runtime GID.
+reference identity, never its runtime GID. A port-only group
+(PORTAL_GROUPS) shows as one "npc-portal-group:" row on the top page
+and as its own rows plus "npc-portal-back" once opened.
 ================
 */
-export function portalMenu( catalog: PortalCatalog, ref: number, copy: ( key: string ) => string, taxRate = 0 ) {
+export function portalMenu(
+	catalog: PortalCatalog,
+	ref: number,
+	copy: ( key: string ) => string,
+	view: PortalMenuView = {}
+) {
 	const source = catalog.destinations.find( r => r.ref === ref );
 	if ( !source ) return [];
-	return catalog.links.filter( r => r.source === source.id ).map( link => {
+	const taxRate = view.taxRate ?? 0, open = view.group ?? "";
+	const groupOf = ( code: string ) =>
+		PORTAL_GROUPS.find( g => code.startsWith( g.codePrefix ) && !source.code.startsWith( g.codePrefix ) );
+	const rows: { id: string; label: string; }[] = [], shown = new Set<string>();
+	for ( const link of catalog.links ) {
+		if ( link.source !== source.id ) continue;
 		const destination = catalog.destinations.find( r => r.id === link.target )!;
+		const group = groupOf( destination.code );
+		if ( (group?.key ?? "") !== open ) {
+			if ( group && !open && !shown.has( group.key ) ) {
+				shown.add( group.key );
+				rows.push( { id: "npc-portal-group:" + group.key, label: copy( group.caption ) } );
+			}
+			continue;
+		}
 		const format = copy( link.fee ? "UIIT_CTL_TELEPORT_RESULT" : "UIIT_CTL_TELEPORT_FREE_RESULT" );
 		let argument = 0;
 		const label = format.replace(
@@ -80,8 +131,10 @@ export function portalMenu( catalog: PortalCatalog, ref: number, copy: ( key: st
 					copy( destination.name ) :
 					String( link.fee + Math.trunc( taxRate / 100 * link.fee ) )
 		);
-		return { id: "npc-portal:" + link.target, label };
-	} );
+		rows.push( { id: "npc-portal:" + link.target, label } );
+	}
+	if ( open ) rows.push( { id: "npc-portal-back", label: copy( PORTAL_GROUP_BACK ) } );
+	return rows;
 }
 /*
 ================
