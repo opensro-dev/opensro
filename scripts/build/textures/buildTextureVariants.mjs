@@ -15,9 +15,10 @@ one whose source has any alpha below 255 carries that alpha (level 0, one
 byte a texel, decoded bit-exactly from the BC blocks) after its levels,
 so a variant picks exactly as the original; an opaque source carries none
 (native-texture.ts NTX_PICK_ALPHA). The mask has its own cache beside the
-encoder's, keyed by the source's SHA-256 and by the decoder's own source
-(native-texture.ts imports only types), so a decoder fix recomputes every
-mask while an unchanged texture is never decoded again. WebGPU requires a
+encoder's, keyed by the source's SHA-256 and by the code hash of this
+module and the decoder it imports, so a fix to either recomputes every
+mask while an unchanged texture is never decoded again. Cache records are
+written whole (a temp name, then a rename). WebGPU requires a
 block-compressed level 0 to be whole blocks, so a texture under 4x4 keeps
 its original.
 
@@ -42,7 +43,16 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync
+} from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -82,10 +92,6 @@ const GL_RG = 0x8227;
 const KTX_CHANNELS = { [GL_RED]: 1, [GL_RG]: 2, [GL_RGB]: 3, [GL_RGBA]: 4 };
 const PRESET = "-medium";
 const VARIANT = "astc";
-const DECODER_SOURCE = new URL(
-	"../../../apps/client-next/src/engine/foundation/assets/native-texture.ts",
-	import.meta.url
-);
 const DECODER_DIGEST_CHARS = 16;
 
 /*
@@ -251,8 +257,8 @@ export function pickAlphaSection( texture ) {
 ================
 maskCacheRoot
 
-The mask cache for one decoder: a folder named by its code hash
-(decoderHash), so a decoder change starts an empty one.
+The mask cache for one mask writer: a folder named by its code hash
+(maskCodeHash), so a change to the mask starts an empty one.
 ================
 */
 export function maskCacheRoot( cacheRoot, decoder ) {
@@ -261,14 +267,31 @@ export function maskCacheRoot( cacheRoot, decoder ) {
 
 /*
 ================
-decoderHash
+maskCodeHash
 
-The code hash of the client's NTX decoder, from the owner every builder
-stamp uses (codeStamp.mjs).
+The code hash of everything that shapes a mask (codeStamp.mjs, the owner
+every builder stamp uses): this module, which writes the tag, the
+opacity rule and the byte order (pickAlphaSection), and the client's NTX
+decoder it imports. A change to either serves no stale mask.
 ================
 */
-export function decoderHash() {
-	return codeHash( DECODER_SOURCE );
+export function maskCodeHash() {
+	return codeHash( import.meta.url );
+}
+
+/*
+================
+writeCacheFile
+
+A cache record written whole: to a temp name, then renamed over the
+target, so a build killed mid-write leaves no torn record. A torn empty
+mask would read as an opaque source.
+================
+*/
+function writeCacheFile( target, bytes ) {
+	const temporary = `${target}.${process.pid}.tmp`;
+	writeFileSync( temporary, bytes );
+	renameSync( temporary, target );
 }
 
 /*
@@ -289,7 +312,7 @@ export async function cachedPickAlpha( maskRoot, digest, pick ) {
 		if ( error.code !== "ENOENT" ) throw error;
 	}
 	const mask = pick();
-	writeFileSync( file, mask );
+	writeCacheFile( file, mask );
 	return mask;
 }
 
@@ -355,7 +378,7 @@ export async function buildTextureVariants( flags = {} ) {
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
 		generatedPath( "intermediate", "texture-variants", cacheName );
 	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
-	const maskRoot = maskCacheRoot( cacheRoot, await decoderHash() );
+	const maskRoot = maskCacheRoot( cacheRoot, await maskCodeHash() );
 	mkdirSync( maskRoot, { recursive: true } );
 	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
 	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
@@ -381,8 +404,8 @@ export async function buildTextureVariants( flags = {} ) {
 			return { variant, back, mask, hit: true };
 		}
 		const result = await encodeTexture( astcenc, source, scratch, !!flags.roundtrip );
-		writeFileSync( cachedVariant, result.variant );
-		if ( result.roundtrip ) writeFileSync( cachedBack, result.roundtrip );
+		writeCacheFile( cachedVariant, result.variant );
+		if ( result.roundtrip ) writeCacheFile( cachedBack, result.roundtrip );
 		return { variant: result.variant, back: result.roundtrip, mask, hit: false };
 	}
 	/*

@@ -15,7 +15,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { cachedPickAlpha, decoderHash, maskCacheRoot } from "../../build/textures/buildTextureVariants.mjs";
+import { fileURLToPath } from "node:url";
+import { codeClosure } from "../../build/shared/codeStamp.mjs";
+import { cachedPickAlpha, maskCacheRoot, maskCodeHash } from "../../build/textures/buildTextureVariants.mjs";
 
 const DIGEST = "ab".repeat( 32 );
 
@@ -59,7 +61,12 @@ test("another decoder source names another mask cache", () => {
 	assert.ok( path.basename( first ).startsWith( "pick-alpha-" ) );
 });
 
-test("the decoder hash is the client's NTX decoder's code hash", async () => {
-	const root = path.join( os.tmpdir(), "sro-pka-default" );
-	assert.match( path.basename( maskCacheRoot( root, await decoderHash() ) ), /^pick-alpha-[0-9a-f]{16}$/ );
+test("the mask key covers the mask writer and the decoder it imports", async () => {
+	const closure = (await codeClosure(
+		fileURLToPath( new URL( "../../build/textures/buildTextureVariants.mjs", import.meta.url ) )
+	))
+		.map( file => path.basename( file ) );
+	assert.ok( closure.includes( "buildTextureVariants.mjs" ) );
+	assert.ok( closure.includes( "native-texture.ts" ) );
+	assert.match( await maskCodeHash(), /^[0-9a-f]{64}$/ );
 });
