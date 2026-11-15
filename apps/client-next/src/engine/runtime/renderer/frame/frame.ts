@@ -20,6 +20,23 @@ import type {
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
 /*
 ================
+drawList
+
+Draws a prepared geometry list into a pass, in order.
+================
+*/
+function drawList( pass: GPURenderPassEncoder, draws: readonly GeometryDraw[] ) {
+	for ( const draw of draws ) {
+		if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
+		pass.setPipeline( draw.pipeline );
+		pass.setBindGroup( 0, draw.binding );
+		pass.setVertexBuffer( 0, draw.vertices );
+		pass.setIndexBuffer( draw.indices, "uint32" );
+		pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
+	}
+}
+/*
+================
 createFrame
 ================
 */
@@ -285,6 +302,20 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					flareBundle = encoder.finish();
 				}
 			}
+			// The light effects behind an occlusion query (deferred) draw after
+			// the world, before the labels and the UI. On a frame with no query
+			// due (every frame but one in 500 ms, AAEA80) they draw at the end of
+			// the main pass: a tail pass of their own reloaded and stored the
+			// whole colour and depth target again for a few sprites, about as
+			// much GPU time as the world itself at 3808x1892. Their continuation
+			// is prepared before the frame's particle prepare, so its emitters
+			// are dispatched with the main pass's. A query frame keeps the tail:
+			// the query reads the finished scene depth and the continuation
+			// draws after it (AEBD90). So do water refraction (the transparent
+			// tail draws in a pass after the main one) and MSAA (the
+			// continuation's pipelines are single-sampled).
+			const mergedTail = deferred && !deferred.asynchronous && !water && !msaa ? deferred.prepare() : null;
+			if ( mergedTail instanceof Promise ) throw Error( "Unexpected asynchronous deferred pass" );
 			const encoder = commands.createEncoder(), timing = commands.beginTiming?.( frameId );
 			commands.prepare?.( encoder, timing );
 			// The sun cascade renders before anything shades its receivers.
@@ -310,19 +341,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						}
 					} );
 					pass.setBlendConstant( blendFactor );
-					for ( const draw of portrait.draws ) {
-						if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
-						pass.setPipeline( draw.pipeline );
-						pass.setBindGroup( 0, draw.binding );
-						pass.setVertexBuffer( 0, draw.vertices );
-						pass.setIndexBuffer( draw.indices, "uint32" );
-						pass.drawIndexed(
-							draw.indexCount,
-							draw.instanceCount,
-							draw.firstIndex ?? 0,
-							draw.baseVertex ?? 0
-						);
-					}
+					drawList( pass, portrait.draws );
 					pass.end();
 				}
 			}
@@ -331,7 +350,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// from the scene. With none this frame the depth is never stored,
 			// and under MSAA its 4x samples are never resolved either. The
 			// water pass loads it as well (below).
-			const sceneDepthRead = !!flares || !!deferred || !!experimental?.ao || (separateScene && !!worldUiBundle);
+			const sceneDepthRead = !!flares || (!!deferred && !mergedTail) || !!experimental?.ao ||
+				(separateScene && !!worldUiBundle);
 			const pass = encoder.beginRenderPass( {
 				timestampWrites: timing?.pass( "main-pass" ),
 				label: "main-pass",
@@ -357,10 +377,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
+			if ( mergedTail ) drawList( pass, mergedTail );
 			// Natively everything draws here; any separate scene or the
 			// deferred tail moves the labels, background and UI later.
 			// With the water armed, its pass is the last scene pass instead.
-			const sceneDrawsUi = !separateScene && !deferred;
+			const sceneDrawsUi = !separateScene && (!deferred || !!mergedTail);
 			/*
 			================
 			sceneUi
@@ -446,20 +467,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					} ]
 				} );
 				overlay.setBlendConstant( blendFactor );
-				for ( const draw of preview ) {
-					if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
-					overlay.setPipeline( draw.pipeline );
-					overlay.setBindGroup( 0, draw.binding );
-					overlay.setVertexBuffer( 0, draw.vertices );
-					overlay.setIndexBuffer( draw.indices, "uint32" );
-					overlay.drawIndexed(
-						draw.indexCount,
-						draw.instanceCount,
-						draw.firstIndex ?? 0,
-						draw.baseVertex ?? 0,
-						0
-					);
-				}
+				drawList( overlay, preview );
 				if ( !hdrScene && uiBundle ) overlay.executeBundles( [ uiBundle ] );
 				overlay.end();
 			};
@@ -469,7 +477,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			================
 			*/
 			const finish = ( encoder: GPUCommandEncoder, extra: readonly GeometryDraw[] = [] ) => {
-				if ( deferred ) {
+				if ( deferred && !mergedTail ) {
 					commands.prepare?.( encoder, timing );
 					const tail = encoder.beginRenderPass( {
 						label: "deferred-particles",
@@ -488,19 +496,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							{})
 					} );
 					tail.setBlendConstant( blendFactor );
-					for ( const draw of extra ) {
-						if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
-						tail.setPipeline( draw.pipeline );
-						tail.setBindGroup( 0, draw.binding );
-						tail.setVertexBuffer( 0, draw.vertices );
-						tail.setIndexBuffer( draw.indices, "uint32" );
-						tail.drawIndexed(
-							draw.indexCount,
-							draw.instanceCount,
-							draw.firstIndex ?? 0,
-							draw.baseVertex ?? 0
-						);
-					}
+					drawList( tail, extra );
 					if ( !separateScene && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
 					if ( !separateScene && !flares && !thunder && backgroundBundle ) {
 						tail.executeBundles( [ backgroundBundle ] );
@@ -623,7 +619,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				commands.submit( encoder.finish() );
 				timing?.submitted();
 			};
-			if ( !deferred ) return finish( encoder );
+			if ( !deferred || mergedTail ) return finish( encoder );
 			if ( deferred.asynchronous ) {
 				commands.submit( encoder.finish() );
 				return Promise.resolve( deferred.prepare() ).then( extra => finish( commands.createEncoder(), extra ) );
