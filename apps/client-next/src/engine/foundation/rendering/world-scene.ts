@@ -98,7 +98,9 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 				e.basis.length !== 9 || !e.basis.every( Number.isFinite ) ||
 				!Object.values( e.pose ).every( Number.isFinite ) || typeof e.nightOnly !== "boolean" ||
 				!Number.isInteger( e.renderPriority ) || e.renderPriority < 0 || e.renderPriority > 255 ||
-				e.dungeonBlock !== undefined && (!Number.isInteger( e.dungeonBlock ) || e.dungeonBlock < 0)
+				e.dungeonBlock !== undefined && (!Number.isInteger( e.dungeonBlock ) || e.dungeonBlock < 0) ||
+				e.holder !== undefined &&
+					(e.holder.length !== 4 || !e.holder.every( Number.isFinite ) || e.holder[3]! < 0)
 			) throw Error( "Invalid scenery emitter" );
 			keys.add( e.id );
 		}

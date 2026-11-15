@@ -192,6 +192,10 @@ export interface CharacterActor {
 	readonly modifierId?: number;
 	readonly modelAnimation?: import("@/engine/foundation/animation/model-animation").ModelAnimationFrame;
 	readonly animationLod?: { readonly fraction: number; readonly crowded: boolean; readonly optional?: boolean; };
+	/** A scenery emitter's holder (its placement) was in the last view
+	 * (world.ts scenery). false stops the emitter's clock: an object attached
+	 * to a compound ticks only on a frame its compound is visible (A9EFB0). */
+	readonly holderVisible?: boolean;
 	readonly deferredParticle?: {
 		readonly offset: number;
 		readonly nightOnly?: boolean;

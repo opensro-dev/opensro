@@ -2089,6 +2089,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/animation/scenery-emission.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"holderVisible"
+			],
+			"reason": "A scenery emitter's clock stops while its compound is out of view (A9EFB0); the world renderer answers from its last selection walk's frustum."
+		},
+		{
 			"consumer": "src/engine/runtime/characters/skill-objects.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [
@@ -3745,6 +3753,13 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
+		},
+		{
+			"file": "src/engine/foundation/animation/scenery-emission.ts",
+			"expression": "scene!.holderVisible",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The world renderer's synchronous view test of a placement, read from its last selection walk while the finalization phase publishes scenery emitters."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-actions.ts",

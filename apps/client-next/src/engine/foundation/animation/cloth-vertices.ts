@@ -48,6 +48,20 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 
 		/*
 		================
+		pause
+
+		Out of view the frame's time passes without being owed: the original
+		adds a frame's time to the cloth accumulator (+0x194) only on its
+		compound's visible path (A9EFB0), so the next update steps only for
+		the time after this frame.
+		================
+		*/
+		pause( seconds: number ) {
+			if ( lastTime !== undefined ) lastTime = seconds;
+		},
+
+		/*
+		================
 		update
 
 		AEADE0 refreshes pinned vertices from the skeleton before simulation.
