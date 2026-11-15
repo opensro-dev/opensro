@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -35,7 +35,12 @@ import {
 	readJmxSignature,
 	readUInt32Array
 } from "../../build/shared/jmxBinaryReader.mjs";
-import { readJsonOrNullSync, readJsonOrUndefined, writeJsonIfChanged } from "../../build/shared/jsonOut.mjs";
+import {
+	readJsonOrNullSync,
+	readJsonOrUndefined,
+	writeJsonIfChanged,
+	writeStateJson
+} from "../../build/shared/jsonOut.mjs";
 import { quatMultiply, quatRotateVector } from "../../build/shared/math3d.mjs";
 import { extractResinfoSection, parseResinfoSummary } from "../../build/shared/resinfoParser.mjs";
 import {
@@ -135,6 +140,24 @@ test("shared JSON, hash, existence, and atomic publish contracts", async ( t ) =
 		} ).changed,
 		false
 	);
+});
+
+test("concurrent saves of one shared build cache leave one whole cache and no temp files", async ( t ) => {
+	const root = await mkdtemp( path.join( os.tmpdir(), "sro-state-json-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	// Two worktrees saving the cache beside the shared tree at once: each
+	// payload is large enough that an in-place write would interleave.
+	const cachePath = path.join( root, "state", "file-hash-cache.json" );
+	const payloads = Array.from( { length: 8 }, ( _, writer ) => ({
+		writer,
+		entries: Object.fromEntries(
+			Array.from( { length: 4000 }, ( _, i ) => [ "k" + i, "v".repeat( 64 ) + writer ] )
+		)
+	}) );
+	await Promise.all( payloads.map( payload => writeStateJson( cachePath, payload ) ) );
+	const saved = JSON.parse( await readFile( cachePath, "utf8" ) );
+	assert.deepEqual( saved, payloads[saved.writer] );
+	assert.deepEqual( await readdir( path.dirname( cachePath ) ), [ "file-hash-cache.json" ] );
 });
 
 test("superseded generated artifacts move to a recoverable archive with provenance", async ( t ) => {

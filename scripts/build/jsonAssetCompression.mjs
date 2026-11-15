@@ -15,7 +15,7 @@ import {
 } from "./shared/compressionUtils.mjs";
 import { fileHashCacheDisabled } from "./shared/fileHashCache.mjs";
 import { isMainScript, listFiles } from "./shared/fsUtils.mjs";
-import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
+import { readJsonOrUndefined, writeStateJson } from "./shared/jsonOut.mjs";
 
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const assetsRoot = path.join( publicRoot, "assets" );
@@ -184,12 +184,11 @@ async function writeMinifyCache( entries ) {
 	// Merge over the on-disk cache: runs against other roots (e.g. tests) must not drop
 	// entries belonging to the main public tree.
 	const merged = { ...(await readMinifyCache()), ...entries };
-	await mkdir( path.dirname( minifyCachePath ), { recursive: true } );
-	await writeFile(
-		minifyCachePath,
-		JSON.stringify( { format: MINIFY_CACHE_FORMAT, version: MINIFY_CACHE_VERSION, entries: merged } ),
-		"utf8"
-	);
+	await writeStateJson( minifyCachePath, {
+		format: MINIFY_CACHE_FORMAT,
+		version: MINIFY_CACHE_VERSION,
+		entries: merged
+	} );
 }
 
 function matchesExcludedPath( filePath, excludes ) {
