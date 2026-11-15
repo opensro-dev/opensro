@@ -153,7 +153,8 @@ export function createGeometryResources(
 
 	The GPU copy of an immutable skinned mesh, made on its first upload and
 	counted on every later one. The skin table interleaves each vertex's four
-	joints and four weights, as the skinning shaders read it.
+	joints and four weights, as the skinning shaders read it; a cloth draw
+	reads its own table instead, which holds its solver's stream as well.
 	================
 	*/
 	function sharedMesh( gpu: GPUDevice, data: Geometry ): SharedMesh {
@@ -1156,8 +1157,9 @@ export function createGeometryResources(
 				// which a baseVertex would shift: skinned streams keep buffers of
 				// their own, one copy shared by every draw of an immutable mesh.
 				const skinned = !!(data.joints && data.weights && data.bones);
-				// A cloth stream's skin table is its own: the owner writes the stream into it.
-				mesh = skinned && !data.dynamicVertices && !data.clothStream ? sharedMesh( gpu, data ) : undefined;
+				// A cloth stream shares the mesh's vertices and indices: the owner
+				// writes the stream into the draw's own skin table, never into them.
+				mesh = skinned && !data.dynamicVertices ? sharedMesh( gpu, data ) : undefined;
 				// The asset worker packs terrain (Geometry.vertices); pack anything else here.
 				const interleaved = mesh ?
 					undefined :
@@ -1207,7 +1209,7 @@ export function createGeometryResources(
 					throw Error( "A cloth stream needs an owned skinned mesh" );
 				}
 				if ( data.joints && data.weights && data.bones ) {
-					if ( mesh ) skinBuffer = mesh.skin;
+					if ( mesh && !clothBase ) skinBuffer = mesh.skin;
 					else {
 						// A cloth mesh's table holds its stream after the skin entries,
 						// all zero: until the owner writes it, the GPU skins every vertex.
