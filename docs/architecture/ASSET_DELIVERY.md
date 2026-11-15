@@ -383,7 +383,8 @@ what players have cached.
 A member is stored gzip-compressed (level 9) when that saves at least 10% of
 its bytes; already-compressed media (PNG, MP3, `.json.gz`) stays raw.
 `scripts/build/shared/memberCompression.mjs` owns the rule and caches each
-verdict under `.state/pack-member-gzip/` by the member's SHA-256 (a hit is
+verdict under `pack-member-gzip/` in the build state beside the generated
+tree (`generatedRoot.mjs` `buildStatePath`) by the member's SHA-256 (a hit is
 decoded and re-hashed before reuse; entries no full build used for 30 days
 are pruned). The gzip header's operating-system byte is normalised to 255,
 so the same input packs to the same bytes, and URLs, on Windows and Linux.
