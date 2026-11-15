@@ -23,16 +23,19 @@ rowSurvives
 
 True when the built row keeps everything the native row records: every
 field equal except the id lists, which must hold every native id, and the
-digest, which follows the lists.
+digest, which follows the lists. An id a list gains must be one the expanded
+data adds: an action that now opens or closes a native control changed
+native behaviour.
 ================
 */
-function rowSurvives( native, built ) {
+function rowSurvives( native, built, nativeControls ) {
 	if ( native === null || built === null ) return native === built;
 	for ( const [key, value] of Object.entries( native ) ) {
 		if ( key === ROW_DIGEST ) continue;
 		if ( ID_LISTS.has( key ) && Array.isArray( value ) && Array.isArray( built[key] ) ) {
-			const ids = new Set( built[key] );
+			const ids = new Set( built[key] ), kept = new Set( value );
 			if ( value.some( id => !ids.has( id ) ) ) return false;
+			if ( built[key].some( id => !kept.has( id ) && nativeControls.has( id ) ) ) return false;
 			continue;
 		}
 		if ( JSON.stringify( value ) !== JSON.stringify( built[key] ) ) return false;
@@ -51,6 +54,9 @@ controls, rows and row ids the expanded data adds are not differences.
 ================
 */
 export function lostNativeRow( before, table, canonical ) {
+	const nativeControls = new Set(
+		Object.values( before.scenes ?? {} ).flatMap( scene => scene.controls ?? [] )
+	);
 	for ( const [name, scene] of Object.entries( before.scenes ?? {} ) ) {
 		const built = table.scenes[name];
 		if ( !built ) return `scene ${name} is gone`;
@@ -60,7 +66,9 @@ export function lostNativeRow( before, table, canonical ) {
 		if ( control !== undefined ) return `scene ${name} lost control ${control}`;
 		for ( const [id, row] of Object.entries( scene.rows ?? {} ) ) {
 			if ( !(id in built.rows) ) return `scene ${name} lost row ${id}`;
-			if ( !rowSurvives( canonical( row ), built.rows[id] ) ) return `scene ${name} row ${id} changed`;
+			if ( !rowSurvives( canonical( row ), built.rows[id], nativeControls ) ) {
+				return `scene ${name} row ${id} changed`;
+			}
 		}
 	}
 	return undefined;

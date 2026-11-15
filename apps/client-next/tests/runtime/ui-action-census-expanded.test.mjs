@@ -65,5 +65,8 @@ test("a lost control, a lost row, a changed row or a moved scene fails", () => {
 	assert.match( lost( map => map.panel = "Option" ), /opens differently/ );
 	assert.match( lost( map => map.rows["map-side-tab"].added = [] ), /row map-side-tab changed/ );
 	assert.match( lost( map => map.rows["map-side-tab"].panel = null ), /row map-side-tab changed/ );
+	// A native control the action now closes, or newly opens, is a native change.
+	assert.match( lost( map => map.rows["map-side-tab"].removed.push( "map-guide" ) ), /row map-side-tab changed/ );
+	assert.match( lost( map => map.rows["map-side-tab"].added.push( "map-guide" ) ), /row map-side-tab changed/ );
 	assert.match( lostNativeRow( NATIVE, { scenes: {} }, asIs ), /scene Map is gone/ );
 });
