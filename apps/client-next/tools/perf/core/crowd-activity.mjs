@@ -26,6 +26,7 @@ import "../../../tests/helpers/native-source-loader.mjs";
 const { createChat } = await import(
 	"../../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts"
 );
+const { REGION_SIZE } = await import( "../../../src/engine/foundation/world/world-space.ts" );
 
 // The replacement client's predicted-movement envelope (movement.ts
 // OP_PREDICTED_MOVE, transport.OpPredictedMove) and its player kind byte;
@@ -182,9 +183,26 @@ export function peerScript( { role, index, seed, spot } ) {
 		return {
 			delayMs,
 			kind: "walk",
-			to: { ...spot, x: spot.x + Math.cos( angle ) * distance, z: spot.z + Math.sin( angle ) * distance }
+			to: {
+				...spot,
+				x: regionLocal( spot.x + Math.cos( angle ) * distance ),
+				z: regionLocal( spot.z + Math.sin( angle ) * distance )
+			}
 		};
 	};
+}
+
+/*
+================
+regionLocal
+
+A click keeps its spot's region: a point drawn past the region's edge
+stays on it. The server refuses a local coordinate outside
+[0, REGION_SIZE), which would count a script's own draw as a refusal.
+================
+*/
+function regionLocal( value ) {
+	return Math.min( REGION_SIZE - 1, Math.max( 0, value ) );
 }
 
 /*

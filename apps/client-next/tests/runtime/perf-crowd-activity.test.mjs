@@ -62,3 +62,37 @@ test("each peer's script depends on the seed, not on the order peers draw in", (
 		assert.ok( Math.hypot( step.to.x - SPOT.x, step.to.z - SPOT.z ) <= 25 && step.delayMs <= 6000 );
 	}
 });
+
+test("a peer acknowledges its stream position at the client's cadence", async () => {
+	const { createStreamAck } = await import( "../../tools/perf/core/crowd.mjs" );
+	let clock = 0;
+	const sent = [], stream = createStreamAck( position => sent.push( position ), () => clock );
+	// The first applied frame is told at once; the next two wait out the second.
+	stream.counted( 100 );
+	stream.counted( 100 );
+	stream.counted( 100 );
+	assert.deepEqual( sent, [ 1 ] );
+	clock = 999;
+	stream.flush();
+	assert.deepEqual( sent, [ 1 ] );
+	clock = 1000;
+	stream.flush();
+	stream.flush();
+	assert.deepEqual( sent, [ 1, 3 ], "told once the interval passed, and not again while nothing moved" );
+	// A frame of a megabyte does not wait: the server's writer is parked behind it.
+	clock = 1100;
+	stream.counted( 1 << 20 );
+	assert.deepEqual( sent, [ 1, 3, 4 ] );
+});
+
+test("a walker beside its region's edge never clicks outside the region", () => {
+	const corner = { regionId: 25000, x: 3, y: 0, z: 1917 };
+	const next = peerScript( { role: "walk", index: 0, seed: 5, spot: corner } );
+	let onEdge = 0;
+	for ( let n = 0; n < 200; n++ ) {
+		const { to } = next();
+		assert.ok( to.x >= 0 && to.x < 1920 && to.z >= 0 && to.z < 1920, `${to.x}, ${to.z}` );
+		if ( to.x === 0 || to.z === 1919 ) onEdge++;
+	}
+	assert.ok( onEdge > 0, "some draws reached past the edge and were held on it" );
+});
