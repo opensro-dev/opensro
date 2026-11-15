@@ -39,9 +39,11 @@ switch off removes exactly the rows and files the marker records.
 The entry slice (#3314) admits the manager and change NPCs (24
 export nests) into the same character shard and writes them as
 muhan-npcs.txt, so the arenas have a gatekeeper to talk to. The
-transform masks' monster forms (MOB_MUHAN_CHANGE_*) stay out of the
-shard: the wave director must never resolve one as a wave kind, and
-admitting them waits for the change interaction itself.
+transform slice (#3349) admits the monster forms the export's
+transMask rows name (MOB_MUHAN_CHANGE_*) and their BUFF01 skills, and
+writes the change NPC -> skill -> form pairing as muhan-transforms.txt.
+A form never joins the wave level map: the wave director must never
+resolve one as a wave kind (it refuses the CHANGE prefix too).
 
 The region merge and the reap are later_world_import's
 (merge_world / reap_world, #3326); this module is the Muhan spec
@@ -79,7 +81,10 @@ CHARACTER_SHARD = "characterdata_220000.txt"
 SKILL_SHARD = "skilldata_220000.txt"
 WAVES_FILE = "muhan-waves.txt"
 NPCS_FILE = "muhan-npcs.txt"
+TRANSFORMS_FILE = "muhan-transforms.txt"
 NPC_PREFIX = "NPC_MUHAN_"
+CHANGE_NPC_PREFIX = "NPC_MUHAN_CHANGE_"
+SKILL_PREFIX = "SKILL_MUHAN_"
 POPULATION_NAME = "muhan-population.json"
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
@@ -252,10 +257,39 @@ def project_npcs(export):
 
 
 # ================
+# project_transforms
+#
+# The change pairing (_RefMuhanMonsterTransMask) in the Version-2
+# schema the server reads: one row per change NPC naming the BUFF01
+# skill its Talk casts and the monster form that skill becomes. Every
+# row's NPC must be a change NPC with a nest in the projection, each
+# NPC changes into one form only, and the three codenames must carry
+# their Muhan prefixes; anything else is a data defect and refuses
+# the build.
+# ================
+def project_transforms(export, npcs):
+	nested = {row["Codename"] for row in npcs["Rows"]}
+	projected = {}
+	for row in export.get("transMask") or []:
+		npc, skill, form = row.get("NpcCodename", ""), row.get("SkillCodename", ""), row.get("MonsterCodename", "")
+		if not npc.startswith(CHANGE_NPC_PREFIX) or not skill.startswith(SKILL_PREFIX) or not form.startswith(CHANGE_PREFIX):
+			raise ValueError(f"muhan transform row {row} names a non-muhan npc, skill or form")
+		if npc not in nested:
+			raise ValueError(f"muhan transform npc {npc} has no nest")
+		if npc in projected and projected[npc] != (skill, form):
+			raise ValueError(f"muhan transform npc {npc} names two forms")
+		projected[npc] = (skill, form)
+	rows = [{"NpcCodename": npc, "SkillCodename": skill, "MonsterCodename": form}
+		for npc, (skill, form) in sorted(projected.items())]
+	return {"Version": 2, "Rows": rows}
+
+
+# ================
 # family_admits
 #
-# One later character row against the family's admission: a combat
-# MOB_MUHAN_* kind (the MOB_MUHAN_CHANGE_* transform forms stay out),
+# One later character row against the family's wave admission: a combat
+# MOB_MUHAN_* kind (the MOB_MUHAN_CHANGE_* transform forms join only
+# through the pairing, project_transforms, never as a wave kind),
 # grade 0 (row 15), at a level (row 57) some wave can name; or one of
 # the arena NPCs (NPC_MUHAN_*), which carry no wave level and are
 # admitted on codename alone (#3314).
@@ -278,7 +312,7 @@ SPEC = later_world_import.WorldImport(
 	pin_file=PIN_FILE,
 	pin_sentence="Muhan is built from one pinned v1.696 client; its archives are never committed.",
 	region_label="Muhan",
-	population_files=(("waves", WAVES_FILE), ("npcs", NPCS_FILE)),
+	population_files=(("waves", WAVES_FILE), ("npcs", NPCS_FILE), ("transforms", TRANSFORMS_FILE)),
 	source_env=SOURCE_ENV,
 	population_name=POPULATION_NAME,
 	source_sha256=POPULATION_SOURCE_SHA256,
@@ -366,10 +400,21 @@ def add_monsters(v1696_root, native, output, source_root=None):
 		for row in npcs["Rows"]:
 			if row["Codename"] not in refs:
 				raise ValueError(f"muhan npc nest {row['NestID']} names unadmitted character {row['Codename']}")
+		# The change forms the pairing names join the shard after the
+		# wave level map is built, so no wave can resolve one. Their
+		# BUFF01 skills are cast by the NPC and named by no kind, so they
+		# are staged by codename.
+		transforms = project_transforms(export, npcs)
+		for row in transforms["Rows"]:
+			form = row["MonsterCodename"]
+			if form not in later:
+				raise ValueError(f"muhan transform form {form} is absent from the later client")
+			refs[form] = characters.convert_character(later[form])
 		staged = later_world_import.stage_kinds("muhan", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
-			lambda code: code in refs)
+			lambda code: code in refs, sorted({row["SkillCodename"] for row in transforms["Rows"]}))
 		write_atomically(text_root / WAVES_FILE, (json.dumps(waves) + "\n").encode())
 		write_atomically(text_root / NPCS_FILE, (json.dumps(npcs) + "\n").encode())
+		write_atomically(text_root / TRANSFORMS_FILE, (json.dumps(transforms) + "\n").encode())
 		summary = {"enabled": True,
 			"characters": staged["characters"], "skills": staged["skills"],
 			"levels": sorted(levels),
@@ -377,6 +422,7 @@ def add_monsters(v1696_root, native, output, source_root=None):
 			"npcNests": len(npcs["Rows"]),
 			"npcRows": len(export.get("npcNests") or []),
 			"transMaskRows": len(export.get("transMask") or []),
+			"transforms": len(transforms["Rows"]),
 			"animationBases": staged["animationBases"], "characterInfo": staged["characterInfo"], "nameSymbols": staged["nameSymbols"],
 			"sourcePopulationSha256": POPULATION_SOURCE_SHA256,
 			"populationFileSha256": sro_pk2.digest((source_root / POPULATION_NAME).read_bytes())}
