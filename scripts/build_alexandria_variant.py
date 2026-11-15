@@ -36,6 +36,9 @@ into <variant root>/extracted/:
 No native file is ever overwritten or changed: a link is never written
 through, and a VSRO file is added only where no native file of that name
 exists, except source-authored overview tiles covering imported regions.
+A rerun with the same code, flags and sources over an untouched tree is
+skipped (variant_stamp.py); --force rebuilds anyway.
+
 Build the variant with its own generated tree:
 
 	SRO_GAME_ROOT=<variant root> SRO_GENERATED_ROOT=<variant root>/.generated pnpm assets build full
@@ -65,6 +68,7 @@ import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
 import variant_settle  # noqa: E402
+import variant_stamp  # noqa: E402
 from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -806,6 +810,7 @@ def main():
 	parser.add_argument("--vsro-root", default=os.environ.get(stage1.ROOT_ENV), help="VSRO client folder")
 	parser.add_argument("--variant-root", required=True, help="the new game root to create")
 	parser.add_argument("--imported-root", type=Path, help="isolated stage-1 import instead of the native extraction's import folder")
+	parser.add_argument("--force", action="store_true", help="rebuild even when the stamp says nothing changed")
 	args = parser.parse_args()
 	if not stage1.flag_enabled():
 		raise SystemExit(f"{stage1.FLAG_ENV} is not on. Alexandria is port-only, not native.")
@@ -814,12 +819,30 @@ def main():
 	variant = Path(args.variant_root).resolve()
 	if variant == EXTRACTED_ROOT.parent.resolve() or EXTRACTED_ROOT.resolve() in variant.parents:
 		raise SystemExit("The variant root must be a different folder from the native game root.")
-	manifest = build_variant(Path(args.vsro_root), EXTRACTED_ROOT, variant, args.imported_root)
+	vsro_root = Path(args.vsro_root)
+	imported = Path(args.imported_root) if args.imported_root else EXTRACTED_ROOT / stage1.OUTPUT_FOLDER
+	# Same code, flags and sources as the last successful build of this
+	# tree, and the tree untouched since: nothing to do (variant_stamp.py).
+	inputs = variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant)
+	stale = ["--force"] if args.force else variant_stamp.stale_parts(variant, inputs, (VARIANT_MANIFEST,) + LINKED_FILES)
+	if not stale:
+		log(f"unchanged since the last build of {variant}; skipped (pass --force to rebuild)")
+		return
+	log(f"rebuilding: {', '.join(stale[:8])}{' ...' if len(stale) > 8 else ''}")
+	variant_stamp.clear_stamp(variant)
+	manifest = build_variant(vsro_root, EXTRACTED_ROOT, variant, args.imported_root)
 	# Files the rebuild left byte-identical get their old mtime back, so the
 	# asset build's (size, mtime) caches still hit (variant_settle.py).
 	settled = variant_settle.settle(variant, build_jobs())
 	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
 		f"{settled['changed']} changed, {settled['unread']} matched unread")
+	# Stamped with what the build read before it started; a source that
+	# moved under it leaves no stamp, so the next run rebuilds.
+	moved = variant_stamp.differences(inputs, variant_stamp.read_inputs(EXTRACTED_ROOT, imported, vsro_root, variant))
+	if moved:
+		log(f"not stamped: {', '.join(moved)} changed during the build")
+	else:
+		variant_stamp.write_stamp(variant, inputs)
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 

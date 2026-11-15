@@ -5,7 +5,8 @@ codeStamp.test.mjs - a reuse stamp follows the code that fills the cache
 
 The stamp must change when any file the entry can run changes bytes: a
 module in its import closure, a Python file a module names however the path
-is assembled, or a repository module that Python file imports. Prose in
+is assembled, a repository module that Python file imports, or a Node
+script that Python file runs. Prose in
 comments is ignored, and a Python name the stamp cannot resolve is an error
 rather than a silent gap.
 
@@ -32,8 +33,9 @@ writeRepository
 
 A small repository: an entry module imports a helper (static and dynamic);
 the helper names one Python file beside it and one by path.join pieces in
-another root; that script imports a module from scripts/ through sys.path.
-A comment names a file that does not exist.
+another root; that script imports a module from scripts/ through sys.path,
+and the Python helper runs a Node script by name. Comments name files that
+do not exist.
 ================
 */
 async function writeRepository( root ) {
@@ -50,7 +52,13 @@ async function writeRepository( root ) {
 			'export const helper = [ "apps", "client-next", "tools", "project.py" ].join( "/" );'
 		].join( "\n" ),
 		"scripts/build/lib/late.mjs": "export const value = 2;\n",
-		"scripts/build/lib/encode.py": "import os\nprint(1)\n",
+		"scripts/build/lib/encode.py": [
+			"import os",
+			"# node gone.mjs once did this",
+			'AUDIT = ["node", os.path.join("scripts", "analysis", "audit.mjs")]'
+		].join( "\n" ),
+		"scripts/analysis/audit.mjs": 'import { rule } from "./rule.mjs";\nconsole.log( rule );\n',
+		"scripts/analysis/rule.mjs": "export const rule = 1;\n",
 		"apps/client-next/tools/project.py": "import sys\nfrom paths import ROOT\nprint(ROOT)\n",
 		"scripts/paths.py": "ROOT = 1\n"
 	};
@@ -68,6 +76,8 @@ test("the closure covers imports, named Python files and the modules they import
 		closure.map( ( file ) => path.relative( root, file ).split( path.sep ).join( "/" ) ).sort(),
 		[
 			"apps/client-next/tools/project.py",
+			"scripts/analysis/audit.mjs",
+			"scripts/analysis/rule.mjs",
 			"scripts/build/entry.mjs",
 			"scripts/build/lib/encode.py",
 			"scripts/build/lib/helper.mjs",

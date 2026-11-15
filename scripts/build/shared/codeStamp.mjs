@@ -13,9 +13,10 @@ each other (clean-room comparison, 2026-10-08).
 A stamp records the content hash of the code behind one reuse cache: the
 entry module and every module it imports, followed through relative
 imports, plus the Python helpers those modules name and the sibling
-modules those helpers import. A cache whose stamp is
-missing or different is rebuilt in full and stamped only after that run
-succeeds; the old stamp is removed before the first write under other
+modules those helpers import, and the Node scripts those helpers run
+(cap110_item_import.py runs scripts/analysis/cap110_asset_dependencies.mjs).
+A cache whose stamp is missing or different is rebuilt in full and stamped
+only after that run succeeds; the old stamp is removed before the first write under other
 code, so a partial or failed run never leaves a stamp beside outputs it
 does not describe. Stamps live in the generated tree they describe
 (generatedPath( "build-stamps" )), so every worktree sharing it agrees.
@@ -34,8 +35,13 @@ const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](\.{1,2}\
 // Any string literal naming a Python file, however the path around it is
 // assembled (new URL, path.join pieces, a repository-relative string).
 const PYTHON_LITERAL = /["'`]([\w./-]*\w\.py)["'`]/g;
-// Where the repository's Python lives; a literal resolves against these.
-const PYTHON_ROOTS = [ "scripts", path.join( "apps", "client-next", "tools" ) ];
+// A Python file's string literal naming a Node script it runs.
+const SCRIPT_LITERAL = /["'`]([\w./-]*\w\.mjs)["'`]/g;
+// A Python whole-line comment, removed before that scan.
+const PYTHON_COMMENT = /^\s*#.*$/gm;
+// Where the repository's Python and tool scripts live; a literal resolves
+// against these.
+const SOURCE_ROOTS = [ "scripts", path.join( "apps", "client-next", "tools" ) ];
 // Block comments and whole-line comments, removed before scanning so an
 // example in prose is never taken for a dependency.
 const COMMENTS = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
@@ -57,15 +63,16 @@ function stampPath( name ) {
 codeClosure
 
 Every source file the entry can run: relative JS imports followed
-transitively, every Python file a module names, and the repository modules
-a Python file imports. A Python literal that names no repository file, or
-more than one, throws: a dependency the stamp cannot see is the stale-reuse
-bug it exists to prevent. Package imports are pinned by the lockfiles and
+transitively, every Python file a module names, the repository modules a
+Python file imports and the Node scripts it names. A Python or script
+literal that names no repository file, or more than one, throws: a
+dependency the stamp cannot see is the stale-reuse bug it exists to prevent. Package imports are pinned by the lockfiles and
 are not followed.
 ================
 */
 export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
-	const python = await pythonIndex( repositoryRoot );
+	const python = await sourceIndex( repositoryRoot, ".py" );
+	const scripts = await sourceIndex( repositoryRoot, ".mjs" );
 	const seen = new Set();
 	const pending = [ path.resolve( entryFile ) ];
 	for ( let file = pending.pop(); file !== undefined; file = pending.pop() ) {
@@ -73,8 +80,12 @@ export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
 		seen.add( file );
 		const directory = path.dirname( file );
 		if ( file.endsWith( ".py" ) ) {
-			for ( const match of (await readFile( file, "utf8" )).matchAll( PYTHON_IMPORT ) ) {
+			const text = await readFile( file, "utf8" );
+			for ( const match of text.matchAll( PYTHON_IMPORT ) ) {
 				pending.push( ...(python.get( `${match[1] ?? match[2]}.py` ) ?? []) );
+			}
+			for ( const match of text.replace( PYTHON_COMMENT, "" ).matchAll( SCRIPT_LITERAL ) ) {
+				pending.push( resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ) );
 			}
 			continue;
 		}
@@ -82,7 +93,7 @@ export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
 		const source = (await readFile( file, "utf8" )).replace( COMMENTS, "" );
 		for ( const match of source.matchAll( RELATIVE_IMPORT ) ) pending.push( path.resolve( directory, match[1] ) );
 		for ( const match of source.matchAll( PYTHON_LITERAL ) ) {
-			pending.push( resolvePython( match[1], { file, directory, repositoryRoot, python } ) );
+			pending.push( resolveNamed( match[1], { file, directory, repositoryRoot, index: python } ) );
 		}
 	}
 	return [ ...seen ].sort();
@@ -90,14 +101,15 @@ export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
 
 /*
 ================
-pythonIndex
+sourceIndex
 
-Every Python file under the repository's Python roots, by file name.
+Every file with this extension under the repository's source roots, by
+file name.
 ================
 */
-async function pythonIndex( repositoryRoot ) {
+async function sourceIndex( repositoryRoot, extension ) {
 	const index = new Map();
-	for ( const root of PYTHON_ROOTS ) {
+	for ( const root of SOURCE_ROOTS ) {
 		let names = [];
 		try {
 			names = await readdir( path.join( repositoryRoot, root ), { recursive: true } );
@@ -105,7 +117,9 @@ async function pythonIndex( repositoryRoot ) {
 			if ( error.code !== "ENOENT" ) throw error;
 		}
 		for ( const name of names ) {
-			if ( !name.endsWith( ".py" ) || name.includes( "__pycache__" ) ) continue;
+			if ( !name.endsWith( extension ) || name.includes( "__pycache__" ) || name.includes( "node_modules" ) ) {
+				continue;
+			}
 			const file = path.join( repositoryRoot, root, name );
 			const list = index.get( path.basename( name ) ) ?? [];
 			list.push( file );
@@ -117,20 +131,20 @@ async function pythonIndex( repositoryRoot ) {
 
 /*
 ================
-resolvePython
+resolveNamed
 
-The one repository file a Python literal names: relative to the module,
-relative to the repository, or by file name.
+The one repository file a literal names: relative to the module, relative
+to the repository, or by file name in the index of its kind.
 ================
 */
-function resolvePython( literal, { file, directory, repositoryRoot, python } ) {
-	const byName = python.get( path.basename( literal ) ) ?? [];
+function resolveNamed( literal, { file, directory, repositoryRoot, index } ) {
+	const byName = index.get( path.basename( literal ) ) ?? [];
 	for ( const candidate of [ path.resolve( directory, literal ), path.resolve( repositoryRoot, literal ) ] ) {
 		if ( byName.includes( candidate ) ) return candidate;
 	}
 	if ( byName.length === 1 ) return byName[0];
 	throw new Error(
-		`${path.relative( repositoryRoot, file )} names Python file "${literal}", which matches ${byName.length} ` +
+		`${path.relative( repositoryRoot, file )} names "${literal}", which matches ${byName.length} ` +
 			"repository files; a code stamp must see every file a builder runs"
 	);
 }
