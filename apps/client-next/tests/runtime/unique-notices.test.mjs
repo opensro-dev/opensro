@@ -18,6 +18,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 import path from "node:path";
 import { serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 const { isSpecialtySellEnd, uniqueNotice, uniqueReferences } = await import(
 	"../../src/engine/foundation/gameplay/unique-notices.ts"
 );
@@ -26,6 +27,8 @@ const { createGameplay } = await import(
 );
 const { noticeText, createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
 const { createUniqueBanner } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
+// The rank-3 MOB_ rows of the native characterdata.
+const NATIVE_UNIQUE_ROWS = 19;
 const symbols = [ "CH_TIGERWOMAN", "KK_ISYUTARU", "OA_URUCHI", "TK_BONELORD", "RM_TAHOMET", "EU_KERBEROS" ];
 const refObjSnapshot = symbols.map( ( s, i ) => ({
 	refObjId: i + 1,
@@ -63,7 +66,11 @@ test("every shipped unique reference resolves appearance and death text without 
 			}
 		}
 	}
-	assert.equal( rows.length, 19 );
+	// The native data ships 19 uniques. An expanded build adds later ones
+	// (Arabia's Karkadann, Mad General and Mustafa); every row, added or
+	// native, must still resolve its notices below.
+	if ( !EXPANDED_BUILD ) assert.equal( rows.length, NATIVE_UNIQUE_ROWS );
+	else assert.ok( rows.length >= NATIVE_UNIQUE_ROWS );
 	const refs = uniqueReferences( { refObjSnapshot: rows } );
 	for ( const row of rows ) {
 		for ( const [kind, killer] of [ [ 5, "" ], [ 6, "asd2" ], [ 6, "???" ] ] ) {
