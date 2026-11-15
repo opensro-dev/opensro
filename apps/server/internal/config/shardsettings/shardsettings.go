@@ -594,6 +594,11 @@ var Settings = []Setting{
 	// "Ch'in Tomb" row opening the floor list. Needs SRO_QINSHI_TOMB.
 	// "off" is native.
 	{Env: "SRO_JANGAN_TOMB_TELEPORT", NomadVar: "jangan_tomb_teleport", Default: "off"},
+	// Port-only, not native: every Silk Road town gate (Jangan, Donwhang,
+	// Hotan, Samarkand, Constantinople) also leads straight to the other
+	// four, for the native chain's 5000 gold per gate skipped. "off" is
+	// native.
+	{Env: "SRO_CROSS_CITY_TELEPORT", NomadVar: "cross_city_teleport", Default: "off"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;
