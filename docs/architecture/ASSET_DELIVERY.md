@@ -327,6 +327,17 @@ cache is keyed by code, never by a file merely existing:
 | Converted PNGs (`convert_images.py`) | the `image-conversion` code stamp, then the PNG's mtime against its source |
 | Block textures (`.texture`) | the encoder's sha256 plus the source's |
 | Crowd VAT bakes | `CROWD_VAT_COMPILER_VERSION` |
+| The expanded game root (`build_alexandria_variant.py`) | the variant stamp (`variant_stamp.py`): the builder's code closure, every `SRO_*` value, the roots and the source files; `--force` rebuilds |
+
+The reuse caches (the file hash cache, the lane memo, the minify, gzip and
+WebP caches, the resource-build fingerprint) live in the build state beside
+the generated tree (`generatedRoot.mjs` `buildStatePath`, Python
+`sro_paths.build_state_path`), so a fresh worktree or release checkout finds
+the last build's caches instead of starting cold. A worktree's own `.state`
+copies of those names are leftovers from before the move: the release
+cleanup removes them. A rebuilt variant gives every file it left
+byte-identical its old mtime back (`variant_settle.py`), so the `(size,
+mtime)` keys above still hit after a variant rebuild.
 
 A code stamp (`scripts/build/shared/codeStamp.mjs`) is the sha256 of a
 builder's source closure: the entry module, every module it imports through
