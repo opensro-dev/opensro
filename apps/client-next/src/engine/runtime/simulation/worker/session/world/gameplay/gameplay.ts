@@ -276,7 +276,13 @@ import {
 } from "@/engine/foundation/gameplay/pet-assist";
 import { cosBehaviorResult, applyCosBehavior, cosBehaviorRequest } from "@/engine/foundation/gameplay/cos-behavior";
 import { createFeedback } from "./feedback/feedback";
-import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engine/foundation/gameplay/commerce";
+import {
+	saleResult,
+	soldInventory,
+	commerceJson,
+	commerceInteger,
+	liveShopTransport
+} from "@/engine/foundation/gameplay/commerce";
 import { actionEmote, quickSlotItemSlot, quickSlot, TRACE_ACTION_ID } from "@/engine/foundation/gameplay/quickslots";
 import { reconcileQuickslotInventory } from "@/engine/foundation/gameplay/quickslot-inventory";
 import { createTraining } from "./training/training";
@@ -1336,6 +1342,27 @@ fails; retry persistence without restoring stale slot occupancy.
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
+	// The last presented shop with its live transport (liveShopTransport),
+	// kept so an unchanged shop keeps its identity between frames.
+	type PresentedShop = NonNullable<ReturnType<typeof inventory.state>["shop"]>;
+	let liveShopCache: { source: PresentedShop; gid: number | undefined; shop: PresentedShop; } | undefined;
+	/*
+	================
+	liveShop
+
+	The shop as the view shows it: a specialty page follows the transport
+	that is out now (band 2, COS_CLASS_TRANSPORT), not the one the shop
+	answer named.
+	================
+	*/
+	function liveShop( source: PresentedShop ): PresentedShop {
+		const record = activeCos ? cosRecords.get( activeCos.gid ) : undefined;
+		const gid = record && record.band === 2 && !activeCos!.dead ? record.gid : undefined;
+		if ( liveShopCache?.source !== source || liveShopCache.gid !== gid ) {
+			liveShopCache = { source, gid, shop: liveShopTransport( source, gid ) };
+		}
+		return liveShopCache.shop;
+	}
 	// 6E6150 keys a kind-3 row by its item id, so distinct items stack.
 	let cosWindows: readonly CosItemWindow[] = [];
 	const cosItemRefs2 = new Map<number, CosItemWindowReference>();
@@ -3708,6 +3735,26 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "shop-buy" || command.kind === "shop-sell" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
+				}
+				// 567824/567830: a trade good bought with no transport out
+				// prints the line and sends nothing; with one out the buy is
+				// the COS buy (liveShopTransport), never one into the bag.
+				if ( command.kind === "shop-buy" ) {
+					const tab = command.tab, slot = command.slot;
+					const offer = inventory.state().shop?.offers.find(
+						row => row.tab === tab && row.slot === slot
+					);
+					const bought = offer?.items?.[0] ?? offer?.previews?.[0];
+					if ( bought && isTradeGoods( bought.typeFlags ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+							value: 0,
+							sequence: ++noticeSequence,
+							nativeType: 0
+						} ];
+						dirty = true;
+						return null;
+					}
 				}
 				return inventory.trade(
 					command.kind === "shop-buy",
@@ -6193,6 +6240,7 @@ The published plane when something changed since the last take, else null.
 				moveHeld: moveReservation.holding(),
 				pickupPredictable,
 				...i,
+				...(i.shop ? { shop: liveShop( i.shop ) } : {}),
 				inventoryJournal,
 				...c,
 				...targeting.state(),

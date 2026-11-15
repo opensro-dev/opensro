@@ -125,14 +125,14 @@ buysIntoTransport
 
 Whether a trade-goods purchase loads the summoned transport: the
 specialty shop's COS buy (0x13) naming it. Goods never belong in the
-personal bag (costransfer.go, #3144). A bag buy (0x08) admitted with a
-transport out, which the port's merchant window sends when the
-transport was summoned after the shop opened, put them there; once
-the transport was dismissed, the goods rode a town teleport that a
-transport may not take and loaded into the next transport at the far
-end. INFERENCE: v1.150's specialty shop stocks only goods and buys
-them into the transport, so its purchase check refuses any other
-buy, with the purchase check's 0x1860.
+personal bag (costransfer.go, #3144). The v1.150 client never asks
+for anything else. Its buy handler reads the transport out at buy
+time (v1.150 client 830410 at 567824) and composes the COS buy for it
+(v1.150 client 699B61). With none out it prints
+UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY and sends nothing
+(v1.150 client 567830). So any other trade-goods buy comes from a
+modified client; it is refused with the purchase check's 0x1860 and
+changes nothing.
 ================
 */
 func (rt *Runtime) buysIntoTransport(c *enterworld.Character, cosGID uint32, isCOS bool) bool {
