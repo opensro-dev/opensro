@@ -882,7 +882,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 
 		mapinfo_table = text_root / MAPINFO_TABLE
 		box = overview_box(mapinfo_table.read_bytes()) if mapinfo_table.exists() else None
-		pins, label_keys, label_art = import_map_labels(media, media_index, text_root, regions)
+		pins, label_keys, label_art, map_pages = import_map_labels(media, media_index, text_root, regions)
 		owned_tiles, replaced_tiles = import_map_tiles(media, media_index, output,
 			map_tile_paths(regions, box) + label_art)
 		copied += owned_tiles
@@ -935,6 +935,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			"replacedTiles": replaced_tiles,
 			"mapPins": sorted(set(prior.get("mapPins", [])) | set(pins)),
 			"mapTexts": sorted(set(prior.get("mapTexts", [])) | set(label_keys)),
+			"mapPages": sorted(set(prior.get("mapPages", [])) | set(map_pages)),
 			"archives": archive_hashes,
 		}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
