@@ -27,8 +27,9 @@ function fixture() {
 	const buffers = [],
 		writes = [],
 		gpu = {
-			createBuffer( { size } ) {
+			createBuffer( { size, label } ) {
 				const b = {
+					label,
 					size,
 					bytes: new Uint8Array( size ),
 					destroyed: 0,
@@ -201,4 +202,118 @@ test("shader-addressed shared palettes equal expanded poses through merge, split
 	owner.dispose( f.resources.commands, null );
 	f.resources.dispose();
 	assert.ok( [ ...retired, ...f.buffers ].every( b => b.destroyed === 1 ) );
+});
+
+test("an immutable skinned mesh has one GPU copy across draws, counted by reference", () => {
+	const f = fixture(), c = f.resources.commands, mesh = geometry();
+	const streams = draw => [ draw.vertices, draw.indices, binding( draw, 6 ) ];
+	// Two batches drawing the same body part, each with its own palette.
+	const a = c.upload( { ...mesh, bones: new Float32Array( 16 ) } ),
+		b = c.upload( { ...mesh, bones: new Float32Array( 16 ) } );
+	assert.deepEqual( streams( b ), streams( a ) );
+	assert.equal( binding( a, 6 ).label, "geometry-skin", "binding 6 is the skin table" );
+	assert.notEqual( binding( a, 7 ), binding( b, 7 ), "each draw keeps its own palette" );
+	// Another array, or a stream the draw rewrites, is not that mesh.
+	const other = c.upload( { ...mesh, uvs: new Float32Array( 6 ), bones: new Float32Array( 16 ) } ),
+		dynamic = c.upload( { ...mesh, dynamicVertices: true, bones: new Float32Array( 16 ) } );
+	assert.notEqual( other.vertices, a.vertices );
+	assert.notEqual( dynamic.vertices, a.vertices );
+	assert.throws( () => c.updateIndices( a, Uint32Array.of( 0, 1, 2 ) ), /shared mesh/ );
+	const shared = streams( a );
+	c.release( a );
+	assert.ok( shared.every( buffer => buffer.destroyed === 0 ), "the other draw still reads the mesh" );
+	c.release( b );
+	assert.ok( shared.every( buffer => buffer.destroyed === 1 ), "the last draw retires it" );
+	// A new upload after that makes a new copy.
+	const again = c.upload( { ...mesh, bones: new Float32Array( 16 ) } );
+	assert.notEqual( again.vertices, shared[0] );
+	f.resources.dispose();
+	assert.ok( f.buffers.every( buffer => buffer.destroyed === 1 ), "every buffer is destroyed exactly once" );
+});
+
+test("a failed upload gives back its use of a shared mesh", () => {
+	const f = fixture(), c = f.resources.commands, mesh = geometry();
+	const a = c.upload( { ...mesh, bones: new Float32Array( 16 ) } );
+	// Palette offsets past the palette fail the upload after the mesh is taken.
+	assert.throws( () => c.upload( { ...mesh, bones: new Float32Array( 16 ) }, undefined, Uint32Array.of( 64 ) ) );
+	const shared = a.vertices;
+	c.release( a );
+	assert.equal( shared.destroyed, 1, "no use is left behind by the failed upload" );
+	f.resources.dispose();
+});
+
+test("two assemblies over one body share its GPU copy and its budget charge", async () => {
+	const { characterMeshBytes } = await load( "src/engine/foundation/animation/character-budget.ts" );
+	const f = fixture();
+	const model = name => ({
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		images: [],
+		clips: [ { name: "idle", duration: 1, channels: [] } ],
+		primitives: [ { name, node: 0, image: -1, joints: [ 0 ], inverseBind: I(), geometry: geometry() } ]
+	});
+	const row = ( gid, name ) => ({
+		gid,
+		model: name,
+		clip: "idle",
+		time: 0,
+		loop: true,
+		scale: 1,
+		pose: { regionId: 257, x: gid, y: 0, z: 10, yaw: 0 }
+	});
+	/*
+	================
+	frame
+
+	One frame of the given assemblies of the body with a sword or a shield,
+	one actor each: the frame's render bytes and draws.
+	================
+	*/
+	const frame = names => {
+		const owner = createCharacters();
+		for ( const name of [ "body", "sword", "shield" ] ) owner.model( name, model( name ), [] );
+		for ( const item of [ "sword", "shield" ] ) {
+			owner.assembly( item + "-wearer", "body", [ { model: item, parts: [ item ], covers: [] } ] );
+		}
+		owner.actors( names.map( ( name, i ) => row( i + 1, name ) ) );
+		const draws = owner.prepare( f.resources.commands, {}, 257 );
+		const result = { bytes: owner.stats().renderBytes, draws: [ ...draws ] };
+		owner.dispose( f.resources.commands, null );
+		return result;
+	};
+	const sword = frame( [ "sword-wearer" ] ), shield = frame( [ "shield-wearer" ] );
+	const both = frame( [ "sword-wearer", "shield-wearer" ] );
+	// Two batches; the body mesh is charged once for both, each item once.
+	assert.equal( both.bytes, sword.bytes + shield.bytes - characterMeshBytes( geometry() ) );
+	// And drawn from one GPU copy: the four draws use three vertex streams.
+	assert.equal( both.draws.length, 4 );
+	assert.equal( new Set( both.draws.map( draw => draw.vertices ) ).size, 3 );
+	f.resources.dispose();
+});
+
+test("only immutable skinned primitives are charged as shared meshes", async () => {
+	const { characterSharedMesh, characterBatchBytes, characterMeshBytes } = await load(
+		"src/engine/foundation/animation/character-budget.ts"
+	);
+	const skinned = { name: "body", node: 0, image: -1, joints: [ 0 ], inverseBind: I(), geometry: geometry() };
+	assert.equal( characterSharedMesh( skinned ), true );
+	// Cloth and ribbons rewrite their streams, and an unskinned mesh lives in
+	// the slabs: each batch keeps its own copy, charged with the batch.
+	for (
+		const own of [
+			{ ...skinned, cloth: {} },
+			{ ...skinned, ribbon: {} },
+			{ ...skinned, geometry: { ...geometry(), joints: undefined, weights: undefined } }
+		]
+	) {
+		assert.equal( characterSharedMesh( own ), false );
+	}
+	const model = primitive => ({ nodes: [], images: [], clips: [], primitives: [ primitive ] });
+	const own = { ...skinned, geometry: { ...geometry(), joints: undefined, weights: undefined } };
+	// A shared mesh leaves the batch charge; one of a batch's own stays in it.
+	assert.equal(
+		characterBatchBytes( model( own ), 1 ) - characterBatchBytes( model( skinned ), 1 ),
+		// a GPU copy and a CPU mirror of the 14-float stream, and the indices
+		geometry().positions.length / 3 * 14 * 4 * 2 + geometry().indices.byteLength
+	);
+	assert.equal( characterMeshBytes( geometry() ), 3 * 56 + 3 * 4 + 3 * 32, "stream, indices and skin table once" );
 });

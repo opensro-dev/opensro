@@ -9,6 +9,7 @@ import { createClothVertices } from "@/engine/foundation/animation/cloth-vertice
 import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
+import { sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { GRAPHIC_OPTION_CHARACTERS } from "@/engine/foundation/rendering/graphic-options";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -1592,6 +1593,36 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	meshCharge
+
+	The bytes of the shared meshes in meshes that the frame plan has not
+	charged yet (charged, by positions array); with mark, they become
+	charged. The device keeps one GPU copy of each, whatever batches draw it.
+	================
+	*/
+	function meshCharge(
+		charged: Map<Float32Array, (readonly unknown[])[]>,
+		meshes: ModelResource["plan"]["meshes"],
+		mark: boolean
+	): number {
+		let bytes = 0;
+		const counted: (readonly unknown[])[] = [];
+		for ( const mesh of meshes ) {
+			const list = charged.get( mesh.positions );
+			if (
+				list?.some( arrays => sameMesh( arrays, mesh.arrays ) ) ||
+				counted.some( arrays => sameMesh( arrays, mesh.arrays ) )
+			) continue;
+			bytes += mesh.bytes;
+			counted.push( mesh.arrays );
+			if ( !mark ) continue;
+			if ( list ) list.push( mesh.arrays );
+			else charged.set( mesh.positions, [ mesh.arrays ] );
+		}
+		return bytes;
+	}
+	/*
+	================
 	planBatches
 
 	Plan the complete frame before creating poses, arrays, or GPU resources:
@@ -1606,12 +1637,15 @@ the next full prepare pass, so this may run between frames.
 		visibleActors = visible.length;
 		// A rejected actor leaves capacity available for cheaper frameActors that follow it.
 		const grouped = new Map<string, CharacterActor[]>(), needed = new Set<number>( particles.needed );
+		const charged = new Map<Float32Array, (readonly unknown[])[]>();
 		renderBytes = particles.bytes + materialClocks.bytes();
 		if ( !frame.continuation && hasDeferred ) {
 			for ( const batch of batches.values() ) {
 				if ( retainedDeferred( frame, batch ) ) {
 					const actor = frame.byGid.get( batch.gids[0]! );
-					if ( actor ) renderBytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
+					if ( !actor ) continue;
+					const plan = models.get( actor.model )!.plan;
+					renderBytes += plan.batchBytes( batch.gids.length ) + meshCharge( charged, plan.meshes, true );
 				}
 			}
 		}
@@ -1621,7 +1655,9 @@ the next full prepare pass, so this may run between frames.
 			const plan = models.get( actor.model )!.plan, dependencies = frame.chains.get( actor.gid )!;
 			const key = batchKey( frame, actor, plan );
 			const rows = grouped.get( key ) ?? [];
+			// A batch's first row brings its shared meshes, once per frame plan.
 			const extra = plan.batchBytes( rows.length + 1 ) - plan.batchBytes( rows.length ) +
+				(rows.length ? 0 : meshCharge( charged, plan.meshes, false )) +
 				dependencies.reduce(
 					( bytes, value ) =>
 						bytes + (needed.has( value.gid ) ? 0 : models.get( value.model )!.plan.poseBytes),
@@ -1632,6 +1668,7 @@ the next full prepare pass, so this may run between frames.
 				continue;
 			}
 			renderBytes += extra;
+			if ( !rows.length ) meshCharge( charged, plan.meshes, true );
 			rows.push( actor );
 			grouped.set( key, rows );
 			for ( const value of dependencies ) {
