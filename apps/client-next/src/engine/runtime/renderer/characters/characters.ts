@@ -10,6 +10,7 @@ import { createClothStream } from "@/engine/foundation/animation/cloth-stream";
 import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
+import { sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { GRAPHIC_OPTION_CHARACTERS } from "@/engine/foundation/rendering/graphic-options";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -1592,7 +1593,7 @@ the next full prepare pass, so this may run between frames.
 	chain is not resident). Prunes the histories of departed actors first.
 	================
 	*/
-	function retainedBytes( frame: PrepareFrame ) {
+	function retainedBytes( frame: PrepareFrame, charged: Map<Float32Array, (readonly unknown[])[]> ) {
 		let bytes = 0;
 		for ( const [gid, history] of particleBirths ) {
 			const actor = frame.byGid.get( gid );
@@ -1603,9 +1604,41 @@ the next full prepare pass, so this may run between frames.
 			for ( const batch of batches.values() ) {
 				if ( retainedDeferred( frame, batch ) ) {
 					const actor = frame.byGid.get( batch.gids[0]! );
-					if ( actor ) bytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
+					if ( !actor ) continue;
+					const plan = models.get( actor.model )!.plan;
+					bytes += plan.batchBytes( batch.gids.length ) + meshCharge( charged, plan.meshes, true );
 				}
 			}
+		}
+		return bytes;
+	}
+	/*
+	================
+	meshCharge
+
+	The bytes of the shared meshes in meshes that the frame plan has not
+	charged yet (charged, by positions array); with mark, they become
+	charged. The device keeps one GPU copy of each, whatever batches draw it.
+	================
+	*/
+	function meshCharge(
+		charged: Map<Float32Array, (readonly unknown[])[]>,
+		meshes: ModelResource["plan"]["meshes"],
+		mark: boolean
+	): number {
+		let bytes = 0;
+		const counted: (readonly unknown[])[] = [];
+		for ( const mesh of meshes ) {
+			const list = charged.get( mesh.positions );
+			if (
+				list?.some( arrays => sameMesh( arrays, mesh.arrays ) ) ||
+				counted.some( arrays => sameMesh( arrays, mesh.arrays ) )
+			) continue;
+			bytes += mesh.bytes;
+			counted.push( mesh.arrays );
+			if ( !mark ) continue;
+			if ( list ) list.push( mesh.arrays );
+			else charged.set( mesh.positions, [ mesh.arrays ] );
 		}
 		return bytes;
 	}
@@ -1623,11 +1656,14 @@ the next full prepare pass, so this may run between frames.
 		actor: CharacterActor,
 		rows: ReadonlyMap<string, number>,
 		needed: ReadonlySet<number>,
-		draws: boolean
+		draws: boolean,
+		charged: Map<Float32Array, (readonly unknown[])[]>
 	) {
 		const plan = models.get( actor.model )!.plan, key = draws ? batchKey( frame, actor, plan ) : undefined;
 		const count = key === undefined ? 0 : rows.get( key ) ?? 0;
 		let bytes = key === undefined ? 0 : plan.batchBytes( count + 1 ) - plan.batchBytes( count );
+		// A batch's first row brings its shared meshes, once per frame plan.
+		if ( key !== undefined && !count ) bytes += meshCharge( charged, plan.meshes, false );
 		for ( const value of frame.chains.get( actor.gid )! ) {
 			if ( !needed.has( value.gid ) ) bytes += models.get( value.model )!.plan.poseBytes;
 		}
@@ -1653,7 +1689,8 @@ the next full prepare pass, so this may run between frames.
 	function planBatches( frame: PrepareFrame, bodies: readonly CharacterActor[] ) {
 		const needed = new Set<number>(), particleNeeded = new Set<number>(), emitters = new Set<number>();
 		const refused = new Set<number>(), keys = new Map<CharacterActor, string>(), rows = new Map<string, number>();
-		renderBytes = materialClocks.bytes() + retainedBytes( frame );
+		const charged = new Map<Float32Array, (readonly unknown[])[]>();
+		renderBytes = materialClocks.bytes() + retainedBytes( frame, charged );
 		deferredActors = deferredBodies = 0;
 		// A refused actor leaves capacity for cheaper actors that follow it.
 		const admit = ( actor: CharacterActor, cost: { key: string | undefined; bytes: number; } ) => {
@@ -1661,6 +1698,7 @@ the next full prepare pass, so this may run between frames.
 			if ( renderBytes + cost.bytes > CHARACTER_RENDER_BYTES ) return false;
 			renderBytes += cost.bytes;
 			if ( cost.key !== undefined ) {
+				if ( !rows.has( cost.key ) ) meshCharge( charged, models.get( actor.model )!.plan.meshes, true );
 				keys.set( actor, cost.key );
 				rows.set( cost.key, (rows.get( cost.key ) ?? 0) + 1 );
 			}
@@ -1669,7 +1707,7 @@ the next full prepare pass, so this may run between frames.
 		};
 		for ( const actor of bodies ) {
 			if ( actor.drawGeometry === false ) continue;
-			if ( admit( actor, rowCost( frame, actor, rows, needed, true ) ) ) continue;
+			if ( admit( actor, rowCost( frame, actor, rows, needed, true, charged ) ) ) continue;
 			deferredActors++;
 			deferredBodies++;
 			refused.add( actor.gid );
@@ -1678,7 +1716,7 @@ the next full prepare pass, so this may run between frames.
 			if ( !emitterCandidate( frame, actor ) ) continue;
 			const resource = models.get( actor.model )!, chain = frame.chains.get( actor.gid )!;
 			const draws = frame.opacity( actor ) > 0 && actor.drawGeometry !== false;
-			const cost = rowCost( frame, actor, rows, needed, draws );
+			const cost = rowCost( frame, actor, rows, needed, draws, charged );
 			cost.bytes += resource.plan.particleBytes;
 			if ( chain.some( value => refused.has( value.gid ) ) || !admit( actor, cost ) ) {
 				if ( draws ) deferredActors++;
