@@ -218,6 +218,12 @@ test("an immutable skinned mesh has one GPU copy across draws, counted by refere
 		dynamic = c.upload( { ...mesh, dynamicVertices: true, bones: new Float32Array( 16 ) } );
 	assert.notEqual( other.vertices, a.vertices );
 	assert.notEqual( dynamic.vertices, a.vertices );
+	// A cloth stream's owner writes the stream into its skin table: two
+	// wearers of one dress never share it.
+	const cloth = [ 0, 1 ].map( () => c.upload( { ...mesh, clothStream: true, bones: new Float32Array( 16 ) } ) );
+	assert.notEqual( binding( cloth[0], 6 ), binding( a, 6 ) );
+	assert.notEqual( binding( cloth[0], 6 ), binding( cloth[1], 6 ) );
+	for ( const draw of cloth ) c.release( draw );
 	assert.throws( () => c.updateIndices( a, Uint32Array.of( 0, 1, 2 ) ), /shared mesh/ );
 	const shared = streams( a );
 	c.release( a );

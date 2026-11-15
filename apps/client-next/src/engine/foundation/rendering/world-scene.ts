@@ -477,6 +477,8 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			bones: g.bones ? mutable( g.bones ) : undefined,
 			// Terrain stitches its seams by rewriting positions (world.ts).
 			dynamicVertices: group.ranges !== undefined,
+			// World cloth keeps its CPU vertex stream (renderer/world/world.ts).
+			clothStream: undefined,
 			vertices: undefined as Float32Array | undefined
 		} satisfies Record<keyof Geometry, unknown>;
 		// Terrain is most of a scene's upload; packing it here keeps the

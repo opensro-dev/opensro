@@ -21,6 +21,7 @@ import { effectLinks, type EffectLinks } from "@/engine/foundation/animation/eff
 import {
 	CHARACTER_PARTICLE_BIRTHS,
 	CHARACTER_MODEL_BYTES,
+	CHARACTER_NODES,
 	CHARACTER_PRIMITIVES,
 	CHARACTER_IMAGES
 } from "@/engine/foundation/animation/character-budget";
@@ -234,7 +235,10 @@ export function createEffectPrograms() {
 				parentFrames = node.globalData.totalFrames,
 				parentEmitter = -1
 			) {
-				if ( nodes.length >= 128 ) {
+				// The compiled graph is a character model, so its node budget is the
+				// model's (CHARACTER_NODES); a rotated node adds one helper node.
+				// Arabia's dun/bagh_masin_bridge01_90.efp compiles to 347 nodes.
+				if ( nodes.length >= CHARACTER_NODES ) {
 					throw new Error( "Effect node budget exceeded" );
 				}
 				const isLeafAnchor = node.emitterProgram.length === 0 && node.lifeCommand.name === "NeverExtinct" &&
@@ -335,7 +339,7 @@ export function createEffectPrograms() {
 				);
 				let combinedMatrix: number[] | null = null;
 				if ( rotations.length ) {
-					if ( nodes.length >= 127 ) throw new Error( "Effect node budget exceeded" );
+					if ( nodes.length >= CHARACTER_NODES - 1 ) throw new Error( "Effect node budget exceeded" );
 					for ( const op of rotations ) {
 						if ( op.start === 0 && op.spacing === 0 && op.end === 0 ) {
 							// Native CEESourceListLineState_ResolveFrameWindow returns count=0 (period < 1e-6); CEESourceListLineState_ScheduleCommands skips scheduling.

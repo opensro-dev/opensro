@@ -40,7 +40,8 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 	if (
 		!Number.isSafeInteger( scene.revision ) || !Number.isFinite( scene.width ) ||
 		!Number.isFinite( scene.height ) || scene.width <= 0 || scene.height <= 0 || scene.width > 32768 ||
-		scene.height > 32768 || scene.quads.length > 8192 || uiRecordCount( scene.quads ) > UI_RECORD_LIMIT
+		scene.height > 32768 || scene.quads.length > UI_RECORD_LIMIT ||
+		uiRecordCount( scene.quads ) > UI_RECORD_LIMIT
 	) throw new Error( "Invalid UI scene" );
 	/*
 	================

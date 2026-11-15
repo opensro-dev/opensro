@@ -119,7 +119,7 @@ function fixture() {
 	};
 }
 
-const VIEW = { race: 0, playerLevel: 10, filterBand: undefined, open: null };
+const VIEW = { race: 0, playerLevel: 10, open: null };
 
 test("the catalogue is refused whole when its format or a row is wrong", () => {
 	assert.throws( () => worldMapGuideCatalog( { ...fixture(), format: "other" } ), /format/ );
@@ -179,17 +179,11 @@ test("the open group lists its monsters as Lv<level> <name>, the filter hiding t
 		[ "Europe", "group" ],
 		[ "Egypt", "group" ]
 	] );
-	// The band 1..7 keeps Mangyang and drops the Weasel; Egypt (only
-	// the Lv100 Scarab) is emptied and goes.
+	// A level-30 character sees the same tree: only the colours follow
+	// the level, the rows do not (native lists every continent).
 	assert.deepEqual(
-		guideMonsterRows( catalog, { ...VIEW, open: 0, filterBand: { min: 1, max: 7 } } ).map( row => row.label ),
-		[ "China", "Lv1 Mangyang", "Europe" ]
-	);
-	// A high-level character no longer sees the level-1 rows: the band
-	// 30..36 keeps the Weasel alone, and only China has anything left.
-	assert.deepEqual(
-		guideMonsterRows( catalog, { ...VIEW, open: 0, filterBand: { min: 30, max: 36 } } ).map( row => row.label ),
-		[ "China", "Lv30 Weasel" ]
+		guideMonsterRows( catalog, { ...VIEW, open: 0, playerLevel: 30 } ).map( row => row.label ),
+		guideMonsterRows( catalog, { ...VIEW, open: 0 } ).map( row => row.label )
 	);
 });
 
@@ -351,22 +345,20 @@ test("the tools load the guide and fill the Monster tab from it", () => {
 	hud.dispose();
 });
 
-test("with the filter on, the Monster tab keeps the band around the character's level", () => {
+test("the level filter does not reach the Monster tab", () => {
 	const hud = loadedTools( fixture(), true );
 	const mains = level =>
 		paint( hud, { characterLevel: level } ).controls.filter( row => row.id.startsWith( "map-guide-main:" ) )
 			.map( row => row.label );
-	// Level 1 (band 1..7): China has Mangyang, Europe the Wolf and the
-	// Cave Bat; Egypt's Lv100 Scarab empties it.
-	assert.deepEqual( mains( 1 ), [ "China", "Europe" ] );
-	// Level 30 (band 30..36): the low rows are gone, only the Weasel is left.
-	assert.deepEqual( mains( 30 ), [ "China" ] );
+	// Level 1 and level 30 list the same continents, Egypt's Lv100 one too.
+	assert.deepEqual( mains( 1 ), [ "China", "Europe", "Egypt" ] );
+	assert.deepEqual( mains( 30 ), mains( 1 ) );
 	hud.activate( "map-guide-main:0", undefined, 30 );
 	const subs = paint( hud, { characterLevel: 30 } ).controls.filter( row =>
 		row.id.startsWith( "map-guide-monster:" )
 	)
 		.map( row => row.label );
-	assert.deepEqual( subs, [ "Lv30 Weasel" ] );
+	assert.ok( subs.includes( "Lv1 Mangyang" ) && subs.includes( "Lv30 Weasel" ), subs.join() );
 	hud.dispose();
 });
 
@@ -377,6 +369,11 @@ test("the Field tab fills from the guide and a dungeon row opens its floor's vie
 	const view = paint( hud );
 	assert.equal( control( view, "map-guide-area:3" ).label, "Tomb B3" );
 	assert.equal( control( view, "map-guide-area:4" ).kind, "button", "the temple takes a click" );
+	// A picked place lights its lamp, as a picked monster does.
+	assert.equal( control( view, "map-guide-area:4" ).selected, false );
+	hud.activate( "map-guide-area:4", undefined, 10 );
+	assert.equal( control( paint( hud ), "map-guide-area:4" ).selected, true, "the picked place's lamp" );
+	assert.equal( control( paint( hud ), "map-guide-area:3" ).selected, false );
 	assert.equal( hud.activate( "map-guide-area:3", undefined, 10 ), null );
 	assert.equal( hud.viewingDungeon(), true );
 	hud.dispose();
@@ -408,15 +405,23 @@ test("a build without the guide keeps the shard's Monster tab and says so on the
 	hud.dispose();
 });
 
-test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", () => {
+test("the guide's stock scrollbar: chat-window art, and the thumb drags the tree", () => {
 	const many = fixture();
 	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
 	const hud = loadedTools( many );
 	hud.activate( "map-guide-main:0", undefined, 10 );
 	let view = paint( hud );
-	for ( const art of [ "gd_scroll_line.png", "gd_scroll_up.png", "gd_scroll_down.png", "gd_scroll_button.png" ] ) {
-		assert.ok( view.quads.some( quad => quad.texture.endsWith( "/guide/" + art ) ), art );
+	for (
+		const art of [
+			"ifcommon/com_scroll_bar.png",
+			"chattingwnd/chat_arrow_up.png",
+			"chattingwnd/chat_arrow_down.png",
+			"ifcommon/com_scroll_button.png"
+		]
+	) {
+		assert.ok( view.quads.some( quad => quad.texture.endsWith( "/interface/" + art ) ), art );
 	}
+	assert.equal( view.quads.some( quad => quad.texture.includes( "gd_scroll" ) ), false, "no bone-knot art" );
 	const thumb = control( view, "map-guide-scroll-thumb" );
 	assert.equal( thumb.draggable, true );
 	const top = thumb.rect[1];

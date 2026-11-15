@@ -139,7 +139,11 @@ test("special COS references share authored state-50 models and matching VAT cli
 	// 1218 rows and 44 models since the tomb's MOB_QT_TQ_THIEF_01_COS ships
 	// with its own model (#2024). Those counts are the native census: an
 	// expanded build adds the later client's companions (1360 rows on
-	// 2026-11-14), and every growth pet there must still author the emote.
+	// 2026-11-14). Four of its pick pets (TypeID4 4, admitted by 582110 like
+	// growth pets) reuse monster models that author no state 50: 8E7150 then
+	// finds the motion in neither set and returns 0, so the pet keeps its
+	// motion, as presentation-state.ts does when the clip is absent. Wherever
+	// the emote is authored, its clip and VAT clip ship with it.
 	const rows = cos.filter( row => row.codename.startsWith( "COS_P_" ) );
 	if ( !EXPANDED_BUILD ) {
 		assert.equal( cos.length, 1218 );
@@ -148,11 +152,17 @@ test("special COS references share authored state-50 models and matching VAT cli
 		assert.equal( new Set( rows.map( row => row.glb ) ).size, 22 );
 	}
 	assert.ok( rows.length > 0, "the build publishes growth pets" );
-	for ( const row of rows ) {
+	const authored = rows.filter( row => row.animationStates?.emote0 );
+	if ( !EXPANDED_BUILD ) assert.equal( authored.length, rows.length, "every native growth pet authors the emote" );
+	for ( const row of authored ) {
 		assert.equal( row.animationStates.emote0.stateId, 50 );
 		assert.ok( row.clips.includes( "emote0" ) );
 		assert.ok( row.vat.clips.includes( "emote0" ), row.codename );
 	}
+	for ( const row of rows.filter( row => !row.animationStates?.emote0 ) ) {
+		assert.ok( !row.clips.includes( "emote0" ), row.codename + " ships an emote it does not author" );
+	}
+	assert.ok( authored.length > rows.length / 2, "the emote is the growth-pet norm" );
 });
 
 test("every authored item drop passes the production model decoder", () => {
