@@ -52,9 +52,16 @@ test("every installed outdoor particle record projects and every referenced EFP 
 		decoder = createEffectPrograms(),
 		refs = new Set( collectSceneryParticleReferences( index ).map( r => r.effectPath ) );
 	assert.ok( refs.size >= 47 );
+	// An EFP the archive proves empty or absent (v1.696 ships
+	// dun/petra_flame_yellow_glow.efp at 0 bytes) fails B1F270's header read;
+	// AFF730 keeps the reset object, so that emitter draws nothing. The
+	// catalogue names exactly those (buildEffectPrograms.mjs); every other
+	// referenced EFP must draw.
+	const unavailable = new Set( JSON.parse( new TextDecoder().decode( bytes ) ).nativeUnavailable?.effects ?? [] );
 	for ( const path of refs ) {
 		const result = decoder.decode( bytes, path );
-		assert.ok( result.model.primitives.length > 0, path );
+		if ( unavailable.has( path ) ) assert.equal( result.model.primitives.length, 0, path );
+		else assert.ok( result.model.primitives.length > 0, path );
 	}
 });
 test("emitter placement, night gating, resource admission, origin crossing and reset retain independent identity", () => {
