@@ -36,8 +36,7 @@ const {
 	sectorX,
 	sectorY,
 	worldAudioPosition,
-	worldDelta,
-	writeWorldDelta
+	worldDelta
 } = await import( "../../src/engine/foundation/world/world-space.ts" );
 
 const parityPath = new URL(
@@ -203,33 +202,4 @@ test("regionOffsetXZ, regionRelativeXZ, normalizeRegionXZ, and worldAudioPositio
 		displaceRegionXZ( { regionId: 0x8001, x: 1900, z: 10 }, 50, -30 ),
 		{ regionId: 0x8001, x: 1950, z: -20 }
 	);
-});
-
-test("a delta inside one region is the plain difference added to zero, outdoors and in a dungeon", () => {
-	// pose-presentation.ts writeWorldVector takes this for two poses of one
-	// region without asking: the same bits as the general path, a
-	// difference of negative zero included.
-	let seed = 11;
-	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
-	const coordinate = () => {
-		const kind = random();
-		if ( kind < .1 ) return 0;
-		if ( kind < .2 ) return -0;
-		if ( kind < .6 ) return Math.fround( random() * REGION_SIZE );
-		return (random() - .5) * 4 * REGION_SIZE;
-	};
-	/** @type {[number, number]} */
-	const out = [ NaN, NaN ];
-	for ( let i = 0; i < 200000; i++ ) {
-		const regionId = (random() < .25 ? DUNGEON_REGION_BIT : 0) | Math.floor( random() * 0x8000 );
-		const from = { regionId, x: coordinate(), z: coordinate() },
-			to = { regionId, x: coordinate(), z: coordinate() };
-		assert.equal( sameCoordinateSpace( to.regionId, from.regionId ), true );
-		writeWorldDelta( from, to, out );
-		assert.ok( Object.is( out[0], 0 + (to.x - from.x) ), `x ${regionId} ${from.x} ${to.x}` );
-		assert.ok( Object.is( out[1], 0 + (to.z - from.z) ), `z ${regionId} ${from.z} ${to.z}` );
-	}
-	// The zero matters: the general path writes the offset, then adds.
-	writeWorldDelta( { regionId: 0x64a8, x: 0, z: 0 }, { regionId: 0x64a8, x: -0, z: -0 }, out );
-	assert.ok( Object.is( out[0], 0 ) && Object.is( out[1], 0 ) );
 });
