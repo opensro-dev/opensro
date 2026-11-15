@@ -68,5 +68,20 @@ class MapTiles(unittest.TestCase):
 		self.assertEqual(arabia.later_rows(raw)[0][arabia.LATER_TEXT_ENGLISH], "Expeditionary Force Outpost")
 
 
+	def test_labels_keep_a_line_break_inside_a_description(self):
+		# A description cell holds a bare LF; rows end in CR LF. Adding and
+		# removing the map texts must leave that row's bytes as they were.
+		native = "﻿1\tSN_ITEM\tK\t\tline one\nline two\t\t\t\tItem\t\t\r\n"
+		raw = native.encode("utf-16-le")
+		with tempfile.TemporaryDirectory() as temp:
+			path = Path(temp) / arabia.TEXT_NAMES
+			path.write_bytes(raw)
+			row = ["1", "SN_ZONE_22010"] + ["Arabia"] * 9
+			path.write_bytes(arabia.append_rows(path.read_bytes(), [row]))
+			self.assertTrue(path.read_bytes().startswith(raw))
+			arabia.remove_map_labels(Path(temp), {"mapTexts": ["SN_ZONE_22010"]})
+			self.assertEqual(path.read_bytes(), raw)
+
+
 if __name__ == "__main__":
 	unittest.main()

@@ -21,9 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_alexandria_variant as variant  # noqa: E402
 import sro_pk2  # noqa: E402
-from alexandria_map_tables import LOCALINFO_COLUMNS, overview_tiles  # noqa: E402
-from cap110_monsters import encode_rows  # noqa: E402
-from import_vsro_alexandria import TEXTDATA, table_rows  # noqa: E402
+from alexandria_map_tables import LOCALINFO_COLUMNS, append_rows, overview_tiles  # noqa: E402
+from import_vsro_alexandria import TEXTDATA, decode_table, table_rows  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 
 # The native map art a tile import replaced, kept so the off path puts it
@@ -123,6 +122,8 @@ LATER_TEXT_PREFIX = TEXTDATA + "textdata_object"
 # A v1.150 textdataname row: service, key, Korean, '', description,
 # zh-CN, zh-TW, ja, en, vi, ''.
 NATIVE_TEXT_COLUMNS, NATIVE_TEXT_ENGLISH = 11, 8
+# A table row ends in CR LF; a bare LF is a line break inside a cell.
+ROW_END = "\r\n"
 # An image row's art comes with its hover and pressed faces.
 IMAGE_FACES = ("", "_focus", "_press")
 
@@ -197,6 +198,12 @@ def label_texts(media, media_index, keys):
 # paths) for the marker and the tile copy. Rows a prior run added are
 # already there and are not added twice. An extraction without the map
 # tables (or a source without its localinfo) has no overview to label.
+#
+# The tables are appended to, never re-encoded: table_rows splits a row
+# whose text holds a line break, so writing its rows back rewrote 48
+# textdataname descriptions and the asset build refused them as stale
+# (2026-11-15). append_rows keeps the native bytes first, as the
+# Alexandria merge does.
 # ================
 def import_map_labels(media, media_index, text_root, regions):
 	local_path, names_path = text_root / LOCALINFO, text_root / TEXT_NAMES
@@ -214,9 +221,9 @@ def import_map_labels(media, media_index, text_root, regions):
 	resolved = known | {row[1] for row in texts}
 	pins = [row for row in pins if row[1] != LABEL_KIND or row[2] in resolved]
 	if pins:
-		write_atomically(local_path, encode_rows(native + pins))
+		write_atomically(local_path, append_rows(local_path.read_bytes(), pins))
 	if texts:
-		write_atomically(names_path, encode_rows(name_rows + texts))
+		write_atomically(names_path, append_rows(names_path.read_bytes(), texts))
 	images = sorted({row[2].replace("\\", "/").lower()[:-len(".ddj")] + face + ".ddj"
 		for row in pins if row[1] == IMAGE_KIND for face in IMAGE_FACES})
 	return [row[0] for row in pins], [row[1] for row in texts], images
@@ -226,7 +233,9 @@ def import_map_labels(media, media_index, text_root, regions):
 # remove_map_labels
 #
 # The off half of import_map_labels: the pins and texts the marker
-# records leave their tables.
+# records leave their tables. Only the physical lines of those rows go
+# (each is one line, as import_map_labels wrote it); every other byte,
+# a line break inside a description included, stays as it was.
 # ================
 def remove_map_labels(text_root, prior):
 	pins, texts = set(prior.get("mapPins", [])), set(prior.get("mapTexts", []))
@@ -234,5 +243,14 @@ def remove_map_labels(text_root, prior):
 		path = text_root / name
 		if not owned or not path.exists():
 			continue
-		rows = table_rows(path.read_bytes())
-		write_atomically(path, encode_rows([row for row in rows if len(row) <= column or row[column] not in owned]))
+		lines = decode_table(path.read_bytes()).lstrip("﻿").split(ROW_END)
+		kept = [line for line in lines if not owned_line(line, column, owned)]
+		write_atomically(path, b"\xff\xfe" + ROW_END.join(kept).encode("utf-16-le"))
+
+
+# ================
+# owned_line
+# ================
+def owned_line(line, column, owned):
+	cells = line.split("\t")
+	return len(cells) > column and cells[column] in owned
