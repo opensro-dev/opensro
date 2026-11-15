@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { cachedPickAlpha, maskCacheRoot } from "../../build/textures/buildTextureVariants.mjs";
+import { cachedPickAlpha, decoderHash, maskCacheRoot } from "../../build/textures/buildTextureVariants.mjs";
 
 const DIGEST = "ab".repeat( 32 );
 
@@ -27,7 +27,7 @@ scratchMaskRoot
 function scratchMaskRoot( t ) {
 	const root = mkdtempSync( path.join( os.tmpdir(), "sro-pka-" ) );
 	t.after( () => rmSync( root, { recursive: true, force: true } ) );
-	const maskRoot = maskCacheRoot( root, Buffer.from( "decoder v1" ) );
+	const maskRoot = maskCacheRoot( root, "1".repeat( 64 ) );
 	mkdirSync( maskRoot, { recursive: true } );
 	return maskRoot;
 }
@@ -53,13 +53,13 @@ test("an opaque source records an empty mask and is not decoded again", async t 
 
 test("another decoder source names another mask cache", () => {
 	const root = path.join( os.tmpdir(), "sro-pka-names" );
-	const first = maskCacheRoot( root, Buffer.from( "decoder v1" ) );
-	assert.equal( maskCacheRoot( root, Buffer.from( "decoder v1" ) ), first );
-	assert.notEqual( maskCacheRoot( root, Buffer.from( "decoder v2" ) ), first );
+	const first = maskCacheRoot( root, "1".repeat( 64 ) );
+	assert.equal( maskCacheRoot( root, "1".repeat( 64 ) ), first );
+	assert.notEqual( maskCacheRoot( root, "2".repeat( 64 ) ), first );
 	assert.ok( path.basename( first ).startsWith( "pick-alpha-" ) );
 });
 
-test("the default decoder source is the client's NTX decoder", () => {
+test("the decoder hash is the client's NTX decoder's code hash", async () => {
 	const root = path.join( os.tmpdir(), "sro-pka-default" );
-	assert.match( path.basename( maskCacheRoot( root ) ), /^pick-alpha-[0-9a-f]{16}$/ );
+	assert.match( path.basename( maskCacheRoot( root, await decoderHash() ) ), /^pick-alpha-[0-9a-f]{16}$/ );
 });

@@ -41,6 +41,7 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
+import { codeHash } from "../shared/codeStamp.mjs";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -250,13 +251,24 @@ export function pickAlphaSection( texture ) {
 ================
 maskCacheRoot
 
-The mask cache for today's decoder: a folder named by the digest of
-native-texture.ts, so a decoder change starts an empty one.
+The mask cache for one decoder: a folder named by its code hash
+(decoderHash), so a decoder change starts an empty one.
 ================
 */
-export function maskCacheRoot( cacheRoot, decoderSource = readFileSync( DECODER_SOURCE ) ) {
-	const decoder = createHash( "sha256" ).update( decoderSource ).digest( "hex" ).slice( 0, DECODER_DIGEST_CHARS );
-	return path.join( cacheRoot, `pick-alpha-${decoder}` );
+export function maskCacheRoot( cacheRoot, decoder ) {
+	return path.join( cacheRoot, `pick-alpha-${decoder.slice( 0, DECODER_DIGEST_CHARS )}` );
+}
+
+/*
+================
+decoderHash
+
+The code hash of the client's NTX decoder, from the owner every builder
+stamp uses (codeStamp.mjs).
+================
+*/
+export function decoderHash() {
+	return codeHash( DECODER_SOURCE );
 }
 
 /*
@@ -343,7 +355,7 @@ export async function buildTextureVariants( flags = {} ) {
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
 		generatedPath( "intermediate", "texture-variants", cacheName );
 	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
-	const maskRoot = maskCacheRoot( cacheRoot );
+	const maskRoot = maskCacheRoot( cacheRoot, await decoderHash() );
 	mkdirSync( maskRoot, { recursive: true } );
 	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
 	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
