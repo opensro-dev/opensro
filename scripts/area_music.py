@@ -143,18 +143,30 @@ def later_region_section(name, area, regions, claimed):
 # ================
 # later_sound_section
 # ================
-def later_sound_section(lines, name, columns):
+def later_sound_section(lines, name, columns, has_track=None):
 	"""
 	One area of the v1.696 effectenvsnd.txt (area, kind, "file", range per row)
 	in the v1.150 layout: the "<1>" header, the track, then a "<2>" period per
 	ambience kind with its "<3>" sounds. Empty when the table lacks the area.
+
+	has_track (quoted file name -> bool) drops a track this build cannot
+	ship: the v1.696 Music.pk2 is not a pinned input, so the Arabia tracks
+	exist nowhere the build reads. INFERENCE: the native client opens an
+	area's track by name and plays nothing when that fails, keeping the
+	area's ambience; an area with no track row is that same silence, stated
+	in the table instead of left to a missing file. Only these later areas
+	take this path: a native or VSRO area's track is never dropped, so a
+	file missing there still fails the build's audio audit.
 	"""
 	rows = [line.split("\t") for line in lines]
 	rows = [cells for cells in rows if len(cells) >= 4 and cells[0] == name]
 	if not rows:
 		return []
 	section = [pad(["<1>", name], columns)]
-	section += [pad(["", cells[2]], columns) for cells in rows if cells[1] == LATER_SOUND_MUSIC]
+	section += [
+		pad(["", cells[2]], columns) for cells in rows
+		if cells[1] == LATER_SOUND_MUSIC and (has_track is None or has_track(cells[2]))
+	]
 	for kind, label in LATER_SOUND_PERIODS:
 		sounds = [cells for cells in rows if cells[1] == kind]
 		if not sounds:
@@ -168,7 +180,7 @@ def later_sound_section(lines, name, columns):
 # ================
 # later_music_rows
 # ================
-def later_music_rows(region_lines, later_regions, later_sounds, regions, sound_columns):
+def later_music_rows(region_lines, later_regions, later_sounds, regions, sound_columns, has_track=None):
 	"""
 	The later areas the variant still needs once the native and VSRO areas
 	are in: (regioninfo rows, effectenvsnd rows, area names). region_lines is
@@ -181,7 +193,7 @@ def later_music_rows(region_lines, later_regions, later_sounds, regions, sound_c
 		if name in present:
 			continue
 		section = later_region_section(name, area, regions, claimed)
-		sounds = later_sound_section(later_sounds, name, sound_columns)
+		sounds = later_sound_section(later_sounds, name, sound_columns, has_track)
 		if not section or not sounds:
 			continue
 		claimed |= {(int(row.split("\t")[0]), int(row.split("\t")[1])) for row in section[1:]}
@@ -380,9 +392,12 @@ def add_music(vsro_root, native, out, later_root=None):
 		if name in sounded
 	]
 	merged, tracks = merge_music_tables(tables, vsro, areas)
-	later_areas = []
+	later_areas, unshipped = [], []
 	if later_root is not None:
-		merged, later_tracks, later_areas = add_later_music(later_root, merged, regions)
+		shipped = shippable_tracks(vsro_root, out)
+		merged, later_tracks, later_areas, unshipped = add_later_music(
+			later_root, merged, regions, lambda quoted: quoted.strip('"').lower() in shipped
+		)
 		tracks = sorted(set(tracks) | set(later_tracks))
 	for name, content in merged.items():
 		variant.replace_file(out / textdata / name, content)
@@ -390,18 +405,20 @@ def add_music(vsro_root, native, out, later_root=None):
 	converted, absent = convert_tracks(vsro_root, tracks, out)
 	return {
 		"areas": areas, "laterAreas": later_areas, "tracks": tracks, "converted": converted, "absent": absent,
-		"silentRegions": [list(region) for region in silent]
+		"laterTracksNotShipped": unshipped, "silentRegions": [list(region) for region in silent]
 	}
 
 
 # ================
 # add_later_music
 # ================
-def add_later_music(later_root, merged, regions):
+def add_later_music(later_root, merged, regions, has_track):
 	"""
 	The merged tables with the v1.696 areas appended that cover the variant's
 	regions and that no native or VSRO area already holds; returns (tables,
-	tracks, area names). The v1.696 Data and Media archives are pin-checked.
+	tracks, area names, tracks left out). A track has_track refuses is left
+	out of its area (later_sound_section). The v1.696 Data and Media archives
+	are pin-checked.
 	"""
 	import build_alexandria_variant as variant
 	from mall_avatar_import import V1696_SOURCE, source_pins
@@ -409,12 +426,39 @@ def add_later_music(later_root, merged, regions):
 	later_regions = table_lines(variant.read_vsro_file(later_root, "Data", "regioninfo.txt"))
 	later_sounds = table_lines(variant.read_vsro_file(later_root, "Media", stage1.TEXTDATA + "effectenvsnd.txt"))
 	region_rows, sound_rows, names = later_music_rows(
-		table_lines(merged["regioninfo.txt"]), later_regions, later_sounds, regions, EFFECTENVSND_COLUMNS
+		table_lines(merged["regioninfo.txt"]), later_regions, later_sounds, regions, EFFECTENVSND_COLUMNS,
+		has_track
 	)
+	named = {
+		cells[2].strip('"') for cells in (line.split("\t") for line in later_sounds)
+		if len(cells) >= 4 and cells[0] in names and cells[1] == LATER_SOUND_MUSIC
+	}
+	kept = music_tracks(sound_rows)
 	return {
 		"regioninfo.txt": append_cp949(merged["regioninfo.txt"], region_rows),
 		"effectenvsnd.txt": append_cp949(merged["effectenvsnd.txt"], sound_rows)
-	}, music_tracks(sound_rows), names
+	}, kept, names, sorted(named - set(kept))
+
+
+# ================
+# shippable_tracks
+# ================
+def shippable_tracks(vsro_root, out):
+	"""
+	The lower-case track file names this build can ship: the VSRO
+	Music.pk2's (what convert_tracks reads) and those already in
+	out/Music_mp3, each under its .ogg and .mp3 name.
+	"""
+	path, handle, data = stage1.open_archive(vsro_root, "Music")
+	try:
+		names = {name.rsplit("/", 1)[-1] for name in stage1.archive_index(data)}
+	finally:
+		data.close()
+		handle.close()
+	folder = out / "Music_mp3"
+	if folder.is_dir():
+		names |= {item.name.lower() for item in folder.iterdir()}
+	return {Path(name).stem + ext for name in names for ext in (".ogg", ".mp3")}
 
 
 # ================
