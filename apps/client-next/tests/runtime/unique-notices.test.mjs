@@ -97,7 +97,7 @@ test("every shipped unique reference resolves appearance and death text without 
 	// (Arabia's Karkadann, Mad General and Mustafa); every row, added or
 	// native, must still resolve its notices below.
 	const codes = rows.map( row => row.code );
-	if ( !EXPANDED_BUILD ) assert.deepEqual( codes.toSorted(), NATIVE_UNIQUE_CODES );
+	if ( !EXPANDED_BUILD ) assert.deepEqual( [ ...codes ].sort(), NATIVE_UNIQUE_CODES );
 	else assert.deepEqual( NATIVE_UNIQUE_CODES.filter( code => !codes.includes( code ) ), [] );
 	const refs = uniqueReferences( { refObjSnapshot: rows } );
 	for ( const row of rows ) {
