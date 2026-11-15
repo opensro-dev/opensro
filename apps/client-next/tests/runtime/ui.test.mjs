@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 const { copyUi, prepareUi, createUiPreparation } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/ui.ts" ).href
 );
+const { UI_RECORD_LIMIT } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 test("UI admission isolates retained commands and rejects malformed replacements", () => {
 	const scene = {
 		revision: 1,
@@ -34,7 +35,13 @@ test("UI admission isolates retained commands and rejects malformed replacements
 	scene.quads[0].rect[0] = 90;
 	assert.equal( owned.quads[0].rect[0], 0 );
 	assert.throws( () => copyUi( { ...scene, width: 0 } ), /Invalid/ );
-	assert.throws( () => copyUi( { ...scene, quads: Array( 8193 ).fill( scene.quads[0] ) } ), /Invalid/ );
+	// A crowd's name tags pass the old fixed 8192 (ui-crowd-records.test.mjs);
+	// the bound is the device's, UI_RECORD_LIMIT.
+	assert.equal( copyUi( { ...scene, quads: Array( 8193 ).fill( scene.quads[0] ) } ).quads.length, 8193 );
+	assert.throws(
+		() => copyUi( { ...scene, quads: Array( UI_RECORD_LIMIT + 1 ).fill( scene.quads[0] ) } ),
+		/Invalid/
+	);
 	scene.quads[0].color[0] = NaN;
 	assert.throws( () => copyUi( scene ), /Invalid/ );
 });
