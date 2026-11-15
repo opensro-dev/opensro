@@ -262,6 +262,9 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// muhanChanges is the Muhan change pairing by change NPC codename
+	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
+	muhanChanges map[string]muhanChange
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
