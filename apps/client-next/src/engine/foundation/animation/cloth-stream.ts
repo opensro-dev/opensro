@@ -159,13 +159,16 @@ export function createClothStream(
 		================
 		update
 
-		The frame's changes to the stream, for palette at seconds. enabled is
+		The frame's changes to the stream, for the pose at seconds. enabled is
 		the option and detail gate createClothVertices takes; motion feeds the
 		wind. Returns null on most frames: no step due, nothing to write.
+		paletteOf gives the pose's palette on the CPU; it is called only on a
+		frame that re-anchors vertices, so a skeleton the GPU samples is built
+		on the CPU only for the solver's steps.
 		================
 		*/
 		update(
-			palette: Float32Array,
+			paletteOf: () => Float32Array,
 			seconds: number,
 			enabled: boolean,
 			motion: { direction: readonly number[]; speed: number; }
@@ -190,6 +193,7 @@ export function createClothStream(
 						touch( i );
 					}
 				}
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) {
 					if ( data.pins[i] !== 1 ) anchor( i, palette );
 				}
@@ -199,18 +203,21 @@ export function createClothStream(
 			}
 			if ( lastTime === undefined ) {
 				// The first frame: every vertex's anchor and normal now.
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) anchor( i, palette );
 				publish( simulation.advance( input ), true );
 			} else if ( !lastEnabled ) {
 				// The simulation starts again: the solver resets to the last off
 				// frame's anchors, then the pins re-anchor to this frame's.
 				simulation.advance( { ...input, deltaMs: 0, enabled: false } );
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) {
 					if ( data.pins[i] !== 0 ) anchor( i, palette );
 				}
 				publish( simulation.advance( input ), true );
 			} else if ( simulation.pending( deltaMs ) ) {
 				// A step falls due: re-anchor the pins to this frame's skeleton.
+				const palette = paletteOf();
 				for ( let i = 0; i < count; i++ ) {
 					if ( data.pins[i] !== 0 ) anchor( i, palette );
 				}

@@ -286,6 +286,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const ribbonChains: RibbonChain[] = [], groupChains = new Map<unknown, RibbonChain>();
 	const ribbonGroups: RibbonChain[] = [], ribbonDrawn = createRibbonChain(), ribbonWork = createRibbonChain();
 	let ribbonOrder = new Int32Array( 64 );
+	// One cloth row's CPU palette for its solver (clothPalette), reused.
+	let clothScratch = new Float32Array( 0 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
@@ -1982,9 +1984,9 @@ the next full prepare pass, so this may run between frames.
 				if ( !state || state.model !== actor.model ) throw Error( "Missing prepared character pose" );
 				return state.pose;
 			} ),
-			// Cloth reads the palette on the CPU. Keep canonical bindings shared
-			// with the body, but never hand this storage to GPU-only sampling.
-			plan.cloth ? undefined : geometry.prepareGpuBones,
+			// Cloth builds its CPU palette only for the solver (drawCloth), so
+			// a cloth batch's palettes are sampled on the GPU as the body's are.
+			geometry.prepareGpuBones,
 			model
 		);
 		for ( let i = 0; i < rows.length; i++ ) {
@@ -2332,6 +2334,24 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	clothPalette
+
+	The CPU palette of a cloth batch's one row for primitive, for the solver
+	(cloth-stream.ts calls it only on a frame that re-anchors vertices). The
+	pose builds its skeleton on the CPU only now, whatever the GPU sampled.
+	================
+	*/
+	function clothPalette( group: GroupFrame, primitive: CharacterModel["primitives"][number] ): Float32Array {
+		const state = poses.get( group.rows[0]!.gid );
+		if ( !state || state.model !== group.rows[0]!.model ) throw Error( "Missing prepared character pose" );
+		const floats = primitive.joints.length * 16;
+		if ( clothScratch.length < floats ) clothScratch = new Float32Array( floats );
+		const palette = clothScratch.subarray( 0, floats );
+		state.pose.palette( primitive, palette, 0 );
+		return palette;
+	}
+	/*
+	================
 	drawCloth
 
 	A cloth primitive. A skinned cloth mesh is drawn skinned: the GPU skins
@@ -2351,9 +2371,13 @@ the next full prepare pass, so this may run between frames.
 		// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
 		const motion = { direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 };
 		const skinned = !!primitive.geometry.joints && !!primitive.geometry.weights;
+		// A skinned piece of a shared-palette batch reads the body's palette
+		// stream, which the GPU may sample (writeBatchRows).
+		const stream = skinned ? batch.streams?.streams[p] : undefined;
 		let draw = batch.draws[p];
-		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights;
-		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances );
+		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights ||
+			stream?.mappingChanged;
+		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances, stream?.offsets );
 		// Cloth draws never enter the particle compute writer.
 		if ( placementChanged ) {
 			draw = geometry.updateInstances(
@@ -2361,7 +2385,8 @@ the next full prepare pass, so this may run between frames.
 				instances,
 				group.opacities,
 				appearance?.subarray( 0, instances.length / 2 ),
-				pointLights
+				pointLights,
+				stream?.offsets.subarray( 0, rows.length )
 			);
 		}
 		batch.draws[p] = draw;
@@ -2373,10 +2398,17 @@ the next full prepare pass, so this may run between frames.
 				cloth = createClothStream( primitive, clothRandom );
 				batch.clothStreams.set( p, cloth );
 			}
-			const upload = palette.subarray( 0, rows.length * primitive.joints.length * 16 );
-			boneUploadBytes += upload.byteLength;
-			geometry.updateBones( draw, upload );
-			const write = cloth.update( palette, frame.seconds, enabled, motion );
+			let paletteOf = () => palette;
+			if ( stream ) {
+				boneUploadBytes +=
+					geometry.updateBones( draw, stream.data.subarray( 0, stream.length ), stream.revision ) ?? 0;
+				paletteOf = () => clothPalette( group, primitive );
+			} else {
+				const upload = palette.subarray( 0, rows.length * primitive.joints.length * 16 );
+				boneUploadBytes += upload.byteLength;
+				geometry.updateBones( draw, upload );
+			}
+			const write = cloth.update( paletteOf, frame.seconds, enabled, motion );
 			if ( write ) geometry.writeClothStream( draw, write.first, write.entries );
 		} else {
 			batch.cloth ??= new Map();
@@ -2990,12 +3022,13 @@ the next full prepare pass, so this may run between frames.
 					const plan = models.get( state.model )?.plan;
 					if ( plan?.sharedPalette ) sharedPaletteSamples++;
 					if ( plan?.cloth ) clothSamples++;
-					if ( plan?.sharedPalette && !plan.cloth ) gpuPaletteSamples++;
+					if ( plan?.sharedPalette ) gpuPaletteSamples++;
 				}
 				// Sampling eligibility alone does not prove an affine playback clock.
 				// Count retained evaluators without materializing CPU palettes or sockets.
-				// Model restrictions overlap: cloth can use shared palettes, but its
-				// CPU consumer excludes GPU-only storage. Device admission is separate.
+				// Model restrictions overlap: cloth uses shared palettes, and the GPU
+				// may palette it too (its solver builds a CPU palette only on its
+				// steps, clothPalette). Device admission is separate.
 				poseEligibility = {
 					actors: poses.size,
 					unique: unique.size,

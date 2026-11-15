@@ -53,9 +53,15 @@ for ( const normals of [ false, true ] ) {
 		for ( let frame = 0; frame < reference.frames; frame++ ) {
 			const a = reference.input( frame ), b = mirror.input( frame );
 			const expected = cpu.update( a.palette, a.seconds, a.enabled, a.motion );
-			const write = gpu.update( b.palette, b.seconds, b.enabled, b.motion );
+			let asked = 0;
+			const write = gpu.update( () => (asked++, b.palette), b.seconds, b.enabled, b.motion );
+			assert.ok( asked <= 1, "one palette a frame at most" );
 			if ( write ) stream.set( write.entries, write.first * CLOTH_STREAM_WORDS );
-			else if ( b.enabled ) idle++;
+			else if ( b.enabled ) {
+				idle++;
+				// The GPU samples the skeleton: between steps the CPU builds none.
+				assert.equal( asked, 0, `frame ${frame}: no step, no CPU palette` );
+			}
 			if ( b.enabled && !wasEnabled ) restarts++;
 			wasEnabled = b.enabled;
 			for ( let i = 0; i < count; i++ ) {
