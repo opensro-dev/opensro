@@ -160,11 +160,6 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	if rt.UniqueRules.GapExempt && RollsUniqueDrops(monster.Rarity()) {
 		return true
 	}
-	// Port-only, not native: with SRO_CHRISTMAS_EVENT a winter monster's
-	// drops skip the gap too (christmas_loot.go).
-	if rt.christmasGapExempt(monster) {
-		return true
-	}
 	threshold := int32(100)
 	gap := int32(playerLevel) - int32(monster.Ref.Level)
 	if gap > 6 {

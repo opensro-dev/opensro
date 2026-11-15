@@ -3,8 +3,9 @@
 
 onedamage_test.go - tests for OneDamageCap (the Christmas Snow Slave)
 
-Port-only, not native: a monster marked OneDamageHits takes exactly 1
-from any hit that deals damage, whatever the attacker's power.
+A monster marked OneDamageHits (the v1.188 server's special target)
+takes exactly 1 from any hit that deals damage, whatever the attacker's
+power, the hawk's periodic hit included.
 
 ===========================================================================
 */
@@ -65,6 +66,25 @@ func TestOneDamageHitsLandForOne(t *testing.T) {
 	}
 	if result.Damage <= 1 {
 		t.Fatalf("ordinary monster took %d", result.Damage)
+	}
+}
+
+/*
+================
+TestOneDamageHitsTakeOneFromTheHawk
+
+The hawk's periodic hit, 130 on an open target, lands for 1 on a
+OneDamageHits monster.
+================
+*/
+func TestOneDamageHitsTakeOneFromTheHawk(t *testing.T) {
+	open := Stats{PhysicalDefense: 20, ParryRate: 100}
+	if got, _ := HawkDamage(open, 300, 0, 0, fixedRoll(0)); got != 130 {
+		t.Fatalf("open target took %d, want 130", got)
+	}
+	open.OneDamageHits = true
+	if got, _ := HawkDamage(open, 300, 0, 0, fixedRoll(0)); got != 1 {
+		t.Fatalf("special target took %d from the hawk, want 1", got)
 	}
 }
 

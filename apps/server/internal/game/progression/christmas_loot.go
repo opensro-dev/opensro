@@ -12,9 +12,10 @@ QEV_CH_EVENT_KISAENG_071225 ("If it Snows on Christmas~") whose talk rows
 read "Receive present for Red Santa Socks." with a bag-full and a
 no-socks answer: the Halloween exchange's exact shape. The inference:
 the winter monsters are the thieves, so a Snow Slave carries one pair
-and nothing else, the uniques a pile beside their own loot; while the
-event is on their drops skip the level-gap admission
-(action/christmas_loot.go). So-ok's one row trades each pair for one
+and nothing else, the uniques a pile beside their own loot, dropped
+outside the level-gap admission as the v1.188 winter event drops its
+token (action/christmas_loot.go); their ordinary loot keeps the gap.
+So-ok's one row trades each pair for one
 rolled present (action/christmas.go), from the owner's list of the
 event's presents (2026-11-15): the Santa costume, Rudolph, the Santa
 Wings and the 2005 event scrolls.
@@ -28,8 +29,6 @@ import "strings"
 const (
 	// ChristmasSockCodename is the event's token, native to v1.150.
 	ChristmasSockCodename = "ITEM_ETC_E071225_SANTASOCKS"
-	// christmasWinterPrefix names every winter event monster row.
-	christmasWinterPrefix = "MOB_EV_WINTER_"
 
 	// The Red Santa Socks each winter monster leaves, one ground item
 	// each.
@@ -49,15 +48,6 @@ const (
 	// enforce.
 	ChristmasSockSellPrice = 1000
 )
-
-/*
-================
-IsChristmasWinterMonster
-================
-*/
-func IsChristmasWinterMonster(codename string) bool {
-	return strings.HasPrefix(codename, christmasWinterPrefix)
-}
 
 /*
 ================

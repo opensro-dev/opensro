@@ -221,11 +221,16 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 ================
 OneDamageCap
 
-Port-only, not native: a defender marked OneDamageHits (the Christmas
-Snow Slave, monster.oneDamageHitCodenames) takes exactly 1 from any hit
-that deals damage; a zero stays zero. Every damage formula a monster
-defender meets ends here: the att lanes (ResolveCalculation), the fixed
-pdmg hit and the life steal.
+A defender marked OneDamageHits (the winter Snow Slave,
+monster.oneDamageHitCodenames) takes exactly 1 from any hit that deals
+damage; a zero stays zero. The v1.188 server keeps a table of special
+targets, each with a fixed damage word, and its winter event registers
+MOB_EV_WINTER_SNOWMAN there with damage 1; a hit on a listed monster,
+direct or periodic, takes that word in place of the formula's. Every
+damage formula a monster defender meets ends here: the att lanes
+(ResolveCalculation), the fixed pdmg hit, the life steal and the hawk's
+periodic hit (HawkDamage). The row exists only where the winter import
+ran (SRO_CHRISTMAS_EVENT), so a native root never meets it.
 ================
 */
 func OneDamageCap(defender Stats, damage uint32) uint32 {

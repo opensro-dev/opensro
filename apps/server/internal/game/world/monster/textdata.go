@@ -34,14 +34,12 @@ import (
 )
 
 // oneDamageHitCodenames are the monsters every hit lands on for exactly 1.
-// Inferred, port-only data: the winter event's Snow Slave
+// The v1.188 server's winter event registers the Snow Slave
 // (MOB_EV_WINTER_SNOWMAN, the v1.696 row the Christmas import adds,
-// scripts/winter_event_import.py) carries MaxHP 5 at level 1, a row
-// built to fall to five hits, as the later clients' Snow Slave Hunting
-// Event played. The v1.188 server touches it only where it spawns, so
-// the rule is inferred. The row
-// exists only in a game root the winter import ran on, so a native
-// root never meets it.
+// scripts/winter_event_import.py) as a special target whose fixed damage
+// is 1 (combat.OneDamageCap); its MaxHP 5 at level 1 makes five hits.
+// The row exists only in a game root the winter import ran on, so a
+// native root never meets it.
 var oneDamageHitCodenames = map[string]bool{
 	"MOB_EV_WINTER_SNOWMAN": true,
 }

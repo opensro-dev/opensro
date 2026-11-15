@@ -134,29 +134,21 @@ func TestSnowSlaveLeavesOnlyItsSocks(t *testing.T) {
 
 /*
 ================
-TestChristmasWinterMonsterSkipsTheLevelGap
+TestChristmasWinterMonsterKeepsTheLevelGap
 
-A level-90 hunter's roll on a level-1 winter monster: the native
-threshold admits nothing; with the event on its drops pass. An ordinary
-level-1 monster keeps the native gap either way.
+A level-90 hunter's roll on a level-1 winter unique: its ordinary loot
+meets the native threshold, which admits nothing, with the event on as
+off. Its socks come from outside admission (TestSnowSlaveLeavesOnlyItsSocks).
 ================
 */
-func TestChristmasWinterMonsterSkipsTheLevelGap(t *testing.T) {
+func TestChristmasWinterMonsterKeepsTheLevelGap(t *testing.T) {
 	knight := monster.Instance{Ref: monster.MonsterRef{Codename: progression.ChristmasKnightCodename(20), Level: 1}}
-	ordinary := monster.Instance{Ref: monster.MonsterRef{Codename: "MOB_CH_MANGNYANG", Level: 1}}
-	on := christmasLootRuntime(t, testCharacter(), true)
-	on.DropRoll = dropRollSequence(0)
-	if !on.admitMonsterDrop(90, knight) {
-		t.Fatal("event on: the winter monster's drop was refused by the gap")
-	}
-	on.DropRoll = dropRollSequence(0)
-	if on.admitMonsterDrop(90, ordinary) {
-		t.Fatal("event on: an ordinary monster skipped the gap")
-	}
-	off := christmasLootRuntime(t, testCharacter(), false)
-	off.DropRoll = dropRollSequence(0)
-	if off.admitMonsterDrop(90, knight) {
-		t.Fatal("event off: the winter monster skipped the native gap")
+	for _, enabled := range []bool{true, false} {
+		rt := christmasLootRuntime(t, testCharacter(), enabled)
+		rt.DropRoll = dropRollSequence(0)
+		if rt.admitMonsterDrop(90, knight) {
+			t.Fatalf("event %v: the winter unique's loot skipped the native gap", enabled)
+		}
 	}
 }
 

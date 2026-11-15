@@ -1,13 +1,16 @@
 /*
 ===========================================================================
 
-christmas_loot.go - the winter monsters' Red Santa Socks and level-gap pass
+christmas_loot.go - the winter monsters' Red Santa Socks
 
 Port-only, not native (SRO_CHRISTMAS_EVENT, default off). While the event
 is on, a Snow Slave's kill leaves its Red Santa Socks and nothing else; a
-winter unique's leaves its socks beside its ordinary loot, whose drops
-skip the level-gap admission, so a hunter of any level loots it
-(progression/christmas_loot.go). Off, no branch runs: byte-native loot.
+winter unique's leaves its socks beside its ordinary loot
+(progression/christmas_loot.go). The socks are appended after admission,
+as the v1.188 server's winter event drops its token from its own kill
+hook outside the loot tables, so a hunter of any level loots them; the
+ordinary loot keeps the native level gap. Off, no branch runs:
+byte-native loot.
 
 ===========================================================================
 */
@@ -23,15 +26,6 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
-
-/*
-================
-Runtime.christmasGapExempt
-================
-*/
-func (rt *Runtime) christmasGapExempt(defeated monster.Instance) bool {
-	return rt.Christmas.Enabled() && progression.IsChristmasWinterMonster(defeated.Ref.Codename)
-}
 
 /*
 ================
