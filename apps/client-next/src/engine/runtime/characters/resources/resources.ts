@@ -394,23 +394,35 @@ export function createCharacterResources(
 			let bytes = plannedBytes +
 					(reserved !== null || (job !== null && !costs.has( job.path )) ? CHARACTER_SOURCE_BYTES : 0),
 				count = planned.size;
-			const keep = new Set( planned );
-			const recentFirst = [ ...loaded.keys() ].sort( ( a, b ) => loaded.get( b )! - loaded.get( a )! );
-			for ( const path of recentFirst ) {
-				if ( !keep.has( path ) ) {
-					const cost = costs.get( path )!;
-					if ( count < CHARACTER_MODELS && bytes + cost <= CHARACTER_RESIDENT_BYTES ) {
-						keep.add( path );
-						count++;
-						bytes += cost;
-					}
+			// Most frames keep everything: every inactive source fits, so every
+			// prefix of the recency order fits too and nothing is retired. Only
+			// an overflowing cache pays for the sort.
+			let inactive = 0, inactiveBytes = 0;
+			for ( const path of loaded.keys() ) {
+				if ( !planned.has( path ) ) {
+					inactive++;
+					inactiveBytes += costs.get( path )!;
 				}
 			}
-			for ( const path of loaded.keys() ) {
-				if ( !keep.has( path ) ) {
-					loaded.delete( path );
-					durations.delete( path );
-					costs.delete( path );
+			if ( count + inactive > CHARACTER_MODELS || bytes + inactiveBytes > CHARACTER_RESIDENT_BYTES ) {
+				const keep = new Set( planned );
+				const recentFirst = [ ...loaded.keys() ].sort( ( a, b ) => loaded.get( b )! - loaded.get( a )! );
+				for ( const path of recentFirst ) {
+					if ( !keep.has( path ) ) {
+						const cost = costs.get( path )!;
+						if ( count < CHARACTER_MODELS && bytes + cost <= CHARACTER_RESIDENT_BYTES ) {
+							keep.add( path );
+							count++;
+							bytes += cost;
+						}
+					}
+				}
+				for ( const path of loaded.keys() ) {
+					if ( !keep.has( path ) ) {
+						loaded.delete( path );
+						durations.delete( path );
+						costs.delete( path );
+					}
 				}
 			}
 			for ( const path of failures.keys() ) {
