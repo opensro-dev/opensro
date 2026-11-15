@@ -60,14 +60,61 @@ and runs these scenarios:
 | `combat` (only with `--at combat`) | `combat`: a repeatable fight against the native GM `/LOADMONSTER` scene |
 | `crowd` (only with `--at crowd`) | `still`, `drag` among `--crowd N` real players |
 
-`crowd` stands `--crowd N` peers (at most 32, the default; `core/crowd.mjs`) in a
-grid in front of the character: authenticated characters on real GameWorld
+`crowd` stands `--crowd N` peers (32 by default; `core/crowd.mjs`) in a grid
+in front of the character: authenticated characters on real GameWorld
 sockets, admitted through the local provisioning endpoint (`--provisioning`,
 `--token`, the defaults of `crowd-host.mjs`) and disabled again at the end, or
 attached from a running `crowd-host.mjs` that holds a matching crowd. Admission
 is bounded by the Agent's login budget (a burst of 10, then one every 6 s), so
-hold one crowd with `crowd-host.mjs` across benches. It measures what every
-drawn character costs (#3563).
+a freshly admitted crowd has at most 32 peers; hold one crowd with
+`crowd-host.mjs` across benches, and hold a larger one from saved sessions
+(below). It measures what every drawn character costs (#3563).
+
+### A large crowd held from saved sessions
+
+Every local peer logs in from 127.0.0.1, so 600 logins take about an hour.
+An Agent session lasts 12 hours, so provision the crowd once, then hold it
+from its saved sessions in about a minute as often as needed:
+
+```
+node tools/perf/bench/crowd-provision.mjs --fixture FIXTURE.json --count 600 --accounts ACCOUNTS.json
+node tools/perf/bench/crowd-host.mjs --accounts ACCOUNTS.json --count 600 --act walk=0.3,chat=0.1 --seed 1
+node tools/perf/bench/fps-bench.mjs --at crowd --crowd 600 --crowd-fixture FIXTURE.json --act walk=0.3,chat=0.1 --seed 1
+node tools/perf/bench/crowd-provision.mjs --accounts ACCOUNTS.json --retire
+```
+
+- **Provision** creates scratch accounts and characters and saves each
+  account's password and session to the accounts file (owner-only; default
+  `.state/crowd-host/crowd-accounts.json`). It waits out the login budget,
+  prints progress with an estimate, and can be stopped at any time: running
+  it again with the same file continues where it stopped and never creates an
+  account twice. A larger `--count` later adds accounts to the same file.
+- **Hold** stands the first `--count` characters of the file on the crowd
+  layout (a fixture reset each, so every hold starts the same scene), connects
+  them on their saved sessions and logs in again only where a session has
+  expired. It prints how many sessions it reused and how many logins it spent,
+  and `GET /crowd` carries the same as `source`. Shutdown (`POST /shutdown`,
+  Ctrl+C) closes the sockets and keeps the accounts for the next hold.
+- **Measure** with the hold's fixture, count, `--act` and `--seed` (they make
+  up the crowd's key); add `--crowd-host URL` when the host is not on its
+  default port. Each row's `crowd` records the size, the source and the
+  activity evidence.
+- **Retire** disables every account of the file once the crowd is no longer
+  wanted and reads each one back from the Agent.
+
+The layout keeps the whole crowd and every walker's 25-unit reach within one
+320-unit interest block of the observer on both axes, so the server sends the
+observer every peer: rows 15 units apart starting 35 units ahead, at most 18
+deep, then wider (600 peers stand 34 wide, 720 at most). A crowd that would
+leave the fixture's region is refused before any account is made. The ground
+is the fixture's to get right: in the Jangan square (region 25000 around
+x 1404, z 1374) buildings block some of a 600-peer layout. This fixture's
+every spot and walker reach, for every crowd up to 720, passes the server's
+movement clip (`ClipMovementPath`), and it stands inside Jangan town:
+
+```
+{ "id": "held-crowd-jangan-north", "movementMode": 3, "start": { "regionId": 25255, "x": 1050, "y": 0, "z": 910 }, "startYawRadians": 0 }
+```
 
 `combat` loads `--combat codename:count:type` at the character's feet with
 the native GM commands, `/INVINCIBLE` first unless `--vulnerable`. The current

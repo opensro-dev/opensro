@@ -19,11 +19,16 @@ scenarios (scenarios.mjs):
   cross   - walking across a region boundary until arrival.
 
 The crowd location (--at crowd, run only when named) stands --crowd N real
-peers (at most 32) in a grid in front of the character (core/crowd.mjs):
+peers in a grid in front of the character (core/crowd.mjs crowdLayout):
 authenticated characters on real GameWorld sockets, admitted through the
-local provisioning endpoint (--provisioning, --token), or attached from a
-crowd-host.mjs that holds a matching crowd. It measures what every drawn
-character costs (#3563); its rows record the crowd the client published.
+local provisioning endpoint (--provisioning, --token; at most 32), or
+attached from a crowd-host.mjs that holds a matching crowd (any size its
+accounts file holds; docs/guides/PROFILING.md). --crowd-fixture FILE.json
+stands the character and the crowd at that fixture instead of the Europe
+field; a held crowd matches only at its own fixture, and --crowd-host URL
+names the host to ask (default core/crowd.mjs CROWD_HOST_URL). It measures what
+every drawn character costs (#3563); its rows record the crowd's size,
+where it came from and its activity.
 --act walk=0.5,chat=0.2 [--seed N] makes the crowd live (core/crowd-activity.mjs):
 shares of it walk and chat from a seeded script; each row records the
 activity, its seed and the server's receipts. Without --act it stands.
@@ -67,14 +72,14 @@ Both boundaries are recorded; changed or unknown state invalidates the row.
 */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
-import { DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
+import { CROWD_HOST_URL, DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
 import { parseActivity } from "../core/crowd-activity.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 
@@ -152,8 +157,8 @@ const LOCATIONS = [ {
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
-	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--act walk=SHARE,chat=SHARE] [--seed N] " +
-	"[--provisioning URL] [--token FILE]";
+	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--crowd-fixture FILE.json] " +
+	"[--crowd-host URL] [--act walk=SHARE,chat=SHARE] [--seed N] [--provisioning URL] [--token FILE]";
 // How long the client may take to publish every admitted peer.
 const CROWD_PUBLISH_MS = 30000;
 
@@ -430,6 +435,7 @@ async function session( options, location, results ) {
 				fixture: location.fixture,
 				act: options.act,
 				seed: options.seed,
+				hostUrl: options.crowdHost,
 				provisioningUrl: options.provisioning,
 				tokenPath: options.token,
 				journalPath: `${options.out}/crowd-cleanup.json`
@@ -477,7 +483,12 @@ async function session( options, location, results ) {
 			// The activity's evidence as the window ended: what ran, its seed and
 			// what the server answered, so a standing row never reads as a living one.
 			if ( crowd ) {
-				result.crowd = { peers: crowd.peers.length, held: !!crowd.held, activity: { ...crowd.activity } };
+				result.crowd = {
+					peers: crowd.peers.length,
+					held: !!crowd.held,
+					source: crowd.source ?? { kind: "fresh", accounts: crowd.peers.length },
+					activity: { ...crowd.activity }
+				};
 			}
 			if ( scene ) {
 				result.serverUptimeMinutes = await serverUptimeMinutes();
@@ -574,8 +585,9 @@ async function session( options, location, results ) {
 		}
 		await closeClient( client );
 		// A crowd this session admitted is closed (its accounts disabled); a
-		// held one stays with its host.
-		if ( crowd && !crowd.held ) await crowd.close();
+		// held one is only detached (its poll stops, or the bench never exits)
+		// and stays with its host.
+		await crowd?.close();
 	}
 }
 
@@ -588,9 +600,10 @@ async function run( options ) {
 	for ( const name of options.at ) {
 		if ( !LOCATIONS.some( location => location.name === name ) ) throw Error( `unknown location ${name}` );
 	}
+	const crowdFixture = options.crowdFixture ? JSON.parse( await readFile( options.crowdFixture, "utf8" ) ) : null;
 	const selected = LOCATIONS.filter( location =>
 		options.at.includes( location.name ) && location.scenarios.some( name => options.only.includes( name ) )
-	);
+	).map( location => location.crowd && crowdFixture ? { ...location, fixture: crowdFixture } : location );
 	if ( !selected.length ) throw Error( "no scenarios match --at and --only" );
 	const results = [];
 	for ( const location of selected ) {
@@ -633,6 +646,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
+	crowdFixture: "",
+	crowdHost: CROWD_HOST_URL,
 	act: "",
 	seed: DEFAULT_ACTIVITY_SEED,
 	provisioning: "http://127.0.0.1:8789",
