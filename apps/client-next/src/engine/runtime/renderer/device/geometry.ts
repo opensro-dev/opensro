@@ -5,15 +5,18 @@ geometry.ts - GPU geometry resources
 
 Uploads meshes to GPU buffers and bind groups and owns their updates
 (instances, bones, indices, positions) and release. Only meshes uploaded
-with dynamicVertices keep a CPU mirror for position updates. A terrain
+with dynamicVertices keep a CPU mirror for position updates. An immutable
+skinned mesh uploaded by several draws (a body part or worn item in every
+character batch that holds it) has one GPU copy of its vertex stream,
+indices and skin table, shared by those draws (sharedMesh). A terrain
 layer keeps none: its members own their packed streams, and streamVertices
 writes a member's stream (or a patched range of it) straight to its slot.
 
 ===========================================================================
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
+import { CLOTH_STREAM_WORDS } from "@/engine/foundation/animation/cloth-stream";
 import { createWaterReflection } from "./water-reflection";
-import { WATER_SKIN_BLENDED } from "./water-refraction";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
@@ -29,12 +32,28 @@ import type { createGpuAnimationResources } from "./animation";
 import { DEFAULT_BLEND, type GeometryPipelineState, type SceneSurface } from "./pipelines";
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
 import type { Geometry } from "@/engine/contracts/geometry";
-import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
+import { meshArrays, packGeometryVertices, sameMesh } from "@/engine/foundation/rendering/geometry-vertices";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import type { ImageLeases } from "./images";
 
 // A bound slab range: buffer, offset and size are all set.
 type Binding = BufferSlice["binding"];
+/*
+================
+SharedMesh
+
+One GPU copy of an immutable skinned mesh. arrays are the CPU arrays the
+copy is made from (geometry-vertices.ts meshArrays); refs counts the draws
+using it.
+================
+*/
+interface SharedMesh {
+	readonly arrays: readonly unknown[];
+	readonly vertices: GPUBuffer;
+	readonly indices: GPUBuffer;
+	readonly skin: GPUBuffer;
+	refs: number;
+}
 // The packed vertex (14 floats) and a uint32 index, in bytes.
 const VERTEX_BYTES = 56;
 const INDEX_BYTES = 4;
@@ -73,6 +92,21 @@ export function geometryPipelineState( mat: Geometry["material"] ): GeometryPipe
 createGeometryResources
 ================
 */
+/*
+================
+markCloth
+
+A cloth draw's instance records carry its stream base in opacity.w (record
+float 19), which the vertex shaders read; every other draw keeps 0 there.
+================
+*/
+function markCloth( packed: Float32Array, clothBase: number ): Float32Array {
+	if ( clothBase ) {
+		for ( let at = 19; at < packed.length; at += 40 ) packed[at] = clothBase;
+	}
+	return packed;
+}
+
 export function createGeometryResources(
 	created: GPUDevice,
 	current: () => GPUDevice,
@@ -108,6 +142,81 @@ export function createGeometryResources(
 	const previewBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
 	const singleSampledBindings: typeof previewBindings = new WeakMap();
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
+	// The shared skinned meshes by their positions array, and the one each
+	// draw uses (sharedMesh, releaseMesh).
+	const sharedMeshes = new Map<Float32Array, SharedMesh[]>();
+	const drawMeshes = new Map<GeometryDraw, SharedMesh>();
+	/*
+	================
+	sharedMesh
+
+	The GPU copy of an immutable skinned mesh, made on its first upload and
+	counted on every later one. The skin table interleaves each vertex's four
+	joints and four weights, as the skinning shaders read it.
+	================
+	*/
+	function sharedMesh( gpu: GPUDevice, data: Geometry ): SharedMesh {
+		const arrays = meshArrays( data ), list = sharedMeshes.get( data.positions ) ?? [];
+		const found = list.find( mesh => sameMesh( mesh.arrays, arrays ) );
+		if ( found ) {
+			found.refs++;
+			return found;
+		}
+		const interleaved = data.vertices?.length === data.positions.length / 3 * 14 ?
+			data.vertices :
+			packGeometryVertices( data );
+		const packed = new ArrayBuffer( data.joints!.length * 8 ),
+			joints = new Uint32Array( packed ),
+			weights = new Float32Array( packed );
+		for ( let v = 0; v < data.joints!.length / 4; v++ ) {
+			for ( let c = 0; c < 4; c++ ) {
+				joints[v * 8 + c] = data.joints![v * 4 + c]!;
+				weights[v * 8 + 4 + c] = data.weights![v * 4 + c]!;
+			}
+		}
+		const made: GPUBuffer[] = [];
+		const store = ( label: string, source: Float32Array | Uint32Array, usage: number ) => {
+			const buffer = gpu.createBuffer( {
+				label,
+				size: source.byteLength,
+				usage: usage | GPUBufferUsage.COPY_DST
+			} );
+			made.push( buffer );
+			gpu.queue.writeBuffer( buffer, 0, source.buffer as ArrayBuffer, source.byteOffset, source.byteLength );
+			return buffer;
+		};
+		try {
+			const mesh: SharedMesh = {
+				arrays,
+				vertices: store( "geometry-vertices", interleaved, GPUBufferUsage.VERTEX ),
+				indices: store( "geometry-indices", data.indices, GPUBufferUsage.INDEX ),
+				skin: store( "geometry-skin", joints, GPUBufferUsage.STORAGE ),
+				refs: 1
+			};
+			list.push( mesh );
+			sharedMeshes.set( data.positions, list );
+			return mesh;
+		} catch ( error ) {
+			for ( const buffer of made ) buffer.destroy();
+			throw error;
+		}
+	}
+	/*
+	================
+	releaseMesh
+
+	Drops one draw's use of a shared mesh; the last one retires its buffers.
+	================
+	*/
+	function releaseMesh( mesh: SharedMesh | undefined ) {
+		if ( !mesh || --mesh.refs > 0 ) return;
+		const positions = mesh.arrays[0] as Float32Array, list = sharedMeshes.get( positions ) ?? [];
+		list.splice( list.indexOf( mesh ), 1 );
+		if ( !list.length ) sharedMeshes.delete( positions );
+		retire( mesh.vertices );
+		retire( mesh.indices );
+		retire( mesh.skin );
+	}
 	// Released draws and their release records (releasedDraw).
 	const releasedDraws = new WeakMap<GeometryDraw, { atMs: number; error: Error; }>();
 	// Every buffer is labelled: a validation error names the resource it rejects.
@@ -148,14 +257,6 @@ export function createGeometryResources(
 	// through refreshAmbientOcclusion when the view changes).
 	const aoDummyView = white.createView();
 	let aoBoundView = aoDummyView;
-	// Bindings 16/17, the port-only water refraction (device
-	// /water-refraction.ts): the frame's colour copy and its r32float depth
-	// copy. While the row is off both bind the 1x1 white view (a float
-	// texture, like the depth copy) and the stage-gated branch never
-	// samples them; device.ts installs the real views through
-	// refreshWaterRefraction when they change.
-	const refractionDummyView = white.createView();
-	let refractionColourView = refractionDummyView, refractionDepthView = refractionDummyView;
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
@@ -284,8 +385,6 @@ export function createGeometryResources(
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
 				{ binding: 15, resource: aoBoundView },
-				{ binding: 16, resource: refractionColourView },
-				{ binding: 17, resource: refractionDepthView },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -334,6 +433,9 @@ export function createGeometryResources(
 		vertexFloats: number;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
+		// A cloth mesh's stream base: the vertex count, where its cloth stream
+		// starts in the skin table (cloth-stream.ts); 0 for any other draw.
+		clothBase: number;
 		// The bone and index buffers' sizes, read once: a GPUBuffer's size
 		// crosses into the browser on every read, and updates run every frame.
 		boneBytes: number;
@@ -377,8 +479,7 @@ export function createGeometryResources(
 	================
 	rebindEveryDraw
 
-	A shared binding (the sun cascade, the occlusion factor, the water
-	refraction copies) now names another view. Bind groups hold their
+	A shared binding (the sun cascade, the occlusion factor) now names another view. Bind groups hold their
 	views, so every draw rebinds against its current pipeline through
 	the one geometryBinding funnel.
 	================
@@ -666,6 +767,8 @@ export function createGeometryResources(
 		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
 			const gpu = current(), buffers = geometryBuffers.get( draw ), meta = metadata.get( draw );
+			// Other draws read a shared mesh's indices.
+			if ( drawMeshes.has( draw ) ) throw new Error( "A shared mesh's indices do not change" );
 			if ( !buffers || !meta || indices.byteLength > meta.indexBytes ) {
 				throw new Error( "Invalid index selection" );
 			}
@@ -758,6 +861,27 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		writeClothStream
+
+		Writes entries of a cloth draw's stream (CLOTH_STREAM_WORDS words a
+		vertex, cloth-stream.ts) from vertex first on. Only an upload marked
+		clothStream has a stream.
+		================
+		*/
+		writeClothStream( draw: GeometryDraw, first: number, entries: Uint32Array ) {
+			const meta = metadata.get( draw );
+			if ( !meta ) throw Error( "Unknown geometry draw" );
+			if ( !meta.clothBase ) throw Error( "Geometry was uploaded without a cloth stream" );
+			if (
+				!Number.isInteger( first ) || first < 0 || entries.length % CLOTH_STREAM_WORDS ||
+				first + entries.length / CLOTH_STREAM_WORDS > meta.clothBase
+			) throw Error( "Invalid cloth stream write" );
+			// The writer copies bytes, so the words travel as they are.
+			const words = new Float32Array( entries.buffer, entries.byteOffset, entries.length );
+			writeStream( meta.skin, (meta.clothBase + first) * CLOTH_STREAM_WORDS * 4, words, meta.cpuUploads );
+		},
+		/*
+		================
 		writeVertices
 		================
 		*/
@@ -828,7 +952,10 @@ export function createGeometryResources(
 			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
 			const count = instances.length / 16,
-				packed = packInstances( instances, opacity, appearance, pointLights, paletteOffsets );
+				packed = markCloth(
+					packInstances( instances, opacity, appearance, pointLights, paletteOffsets ),
+					meta.clothBase
+				);
 			if ( count <= draw.instanceCapacity ) {
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.
@@ -977,7 +1104,7 @@ export function createGeometryResources(
 		*/
 		upload( data: Geometry, image?: ImageDraw, paletteOffsets?: Uint32Array, environmentImage?: ImageDraw ) {
 			const gpu = current(), buffers: GPUBuffer[] = [], slices: BufferSlice[] = [];
-			let palette: SharedPalette | undefined;
+			let palette: SharedPalette | undefined, mesh: SharedMesh | undefined;
 			gpu.pushErrorScope( "validation" );
 			/*
 			================
@@ -1013,22 +1140,28 @@ export function createGeometryResources(
 				return result;
 			};
 			try {
+				// A skinned shader reads its per-vertex skin table by vertex_index,
+				// which a baseVertex would shift: skinned streams keep buffers of
+				// their own, one copy shared by every draw of an immutable mesh.
+				const skinned = !!(data.joints && data.weights && data.bones);
+				// A cloth stream's skin table is its own: the owner writes the stream into it.
+				mesh = skinned && !data.dynamicVertices && !data.clothStream ? sharedMesh( gpu, data ) : undefined;
 				// The asset worker packs terrain (Geometry.vertices); pack anything else here.
-				const interleaved = data.vertices?.length === data.positions.length / 3 * 14 ?
+				const interleaved = mesh ?
+					undefined :
+					data.vertices?.length === data.positions.length / 3 * 14 ?
 					data.vertices :
 					packGeometryVertices( data );
-				// A skinned shader reads its per-vertex skin table by vertex_index,
-				// which a baseVertex would shift: skinned streams keep own buffers.
-				const skinned = !!(data.joints && data.weights && data.bones),
+				const clothBase = data.clothStream ? data.positions.length / 3 : 0,
 					vertexStore = skinned ?
 						undefined :
-						slice( vertexSlabs.allocate( interleaved.byteLength ), interleaved ),
+						slice( vertexSlabs.allocate( interleaved!.byteLength ), interleaved! ),
 					indexStore = skinned ?
 						undefined :
 						slice( indexSlabs.allocate( data.indices.byteLength ), data.indices ),
-					vertices = vertexStore?.binding.buffer ??
-						buffer( "geometry-vertices", interleaved, GPUBufferUsage.VERTEX ),
-					indices = indexStore?.binding.buffer ??
+					vertices = mesh?.vertices ?? vertexStore?.binding.buffer ??
+						buffer( "geometry-vertices", interleaved!, GPUBufferUsage.VERTEX ),
+					indices = mesh?.indices ?? indexStore?.binding.buffer ??
 						buffer( "geometry-indices", data.indices, GPUBufferUsage.INDEX ),
 					transform = data.world ? undefined : slice( transformSlabs.allocate( 64 ), data.transform ),
 					uniform = transform?.binding ?? worldBinding;
@@ -1036,7 +1169,10 @@ export function createGeometryResources(
 						new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
 					count = instances.length / 16,
 					capacity = instanceCapacity( count ),
-					packed = packInstances( instances, undefined, undefined, undefined, paletteOffsets ),
+					packed = markCloth(
+						packInstances( instances, undefined, undefined, undefined, paletteOffsets ),
+						clothBase
+					),
 					// Only owned (unshared) bone palettes can present particles.
 					owned = !!(data.joints && data.weights && data.bones && !paletteOffsets);
 				const storage = instanceStore( capacity * 160, owned );
@@ -1055,17 +1191,25 @@ export function createGeometryResources(
 				if ( data.joints ) {
 					for ( const joint of data.joints ) jointMaximum = Math.max( jointMaximum, joint );
 				}
+				if ( data.clothStream && (!skinned || paletteOffsets || data.dynamicVertices) ) {
+					throw Error( "A cloth stream needs an owned skinned mesh" );
+				}
 				if ( data.joints && data.weights && data.bones ) {
-					const packed = new ArrayBuffer( data.joints.length * 8 ),
-						joints = new Uint32Array( packed ),
-						weights = new Float32Array( packed );
-					for ( let v = 0; v < data.joints.length / 4; v++ ) {
-						for ( let c = 0; c < 4; c++ ) {
-							joints[v * 8 + c] = data.joints[v * 4 + c]!;
-							weights[v * 8 + 4 + c] = data.weights[v * 4 + c]!;
+					if ( mesh ) skinBuffer = mesh.skin;
+					else {
+						// A cloth mesh's table holds its stream after the skin entries,
+						// all zero: until the owner writes it, the GPU skins every vertex.
+						const packed = new ArrayBuffer( data.joints.length * 8 * (clothBase ? 2 : 1) ),
+							joints = new Uint32Array( packed ),
+							weights = new Float32Array( packed );
+						for ( let v = 0; v < data.joints.length / 4; v++ ) {
+							for ( let c = 0; c < 4; c++ ) {
+								joints[v * 8 + c] = data.joints[v * 4 + c]!;
+								weights[v * 8 + 4 + c] = data.weights[v * 4 + c]!;
+							}
 						}
+						skinBuffer = buffer( "geometry-skin", joints, GPUBufferUsage.STORAGE );
 					}
-					skinBuffer = buffer( "geometry-skin", joints, GPUBufferUsage.STORAGE );
 					if ( paletteOffsets ) {
 						palette = sharedPalettes.get( data.bones );
 						if ( !palette ) {
@@ -1108,9 +1252,7 @@ export function createGeometryResources(
 								data.bones.length / 16 / Math.max( 1, count )) :
 							0,
 						mat?.lightmap ? 1 : 0,
-						// skin.z: water, with blended surfaces marked apart for
-						// the port-only refraction branch (device/water-refraction.ts).
-						mat?.water ? (mat.blend ? WATER_SKIN_BLENDED : 1) : 0,
+						mat?.water ? 1 : 0,
 						mat?.sky ?? 0,
 						1,
 						1,
@@ -1188,7 +1330,6 @@ export function createGeometryResources(
 				const draw = new DeviceDraw(
 					{
 						deferredParticle: mat?.deferredParticle,
-						water: !!mat?.water,
 						blended: data.material?.sky ? false : data.material?.blend ?? false,
 						pipeline: selected,
 						vertices,
@@ -1213,6 +1354,7 @@ export function createGeometryResources(
 					}
 				}
 				geometryBuffers.set( draw, buffers );
+				if ( mesh ) drawMeshes.set( draw, mesh );
 				metadata.set( draw, {
 					water: !!mat?.water,
 					state: geometryPipelineState( mat ),
@@ -1230,9 +1372,10 @@ export function createGeometryResources(
 					image,
 					environmentImage,
 					...(data.dynamicVertices ? { vertices: interleaved } : {}),
-					vertexFloats: interleaved.length,
+					vertexFloats: data.positions.length / 3 * 14,
 					skin: skinBuffer,
 					bones: boneBuffer,
+					clothBase,
 					boneBytes: boneBuffer.size,
 					cpuUploads: !particles || boneBuffer === defaultBones || !!palette,
 					indexBytes: data.indices.byteLength,
@@ -1245,6 +1388,7 @@ export function createGeometryResources(
 				return draw;
 			} catch ( error ) {
 				releasePalette( palette );
+				releaseMesh( mesh );
 				for ( const item of buffers ) {
 					item.destroy();
 				}
@@ -1297,6 +1441,8 @@ export function createGeometryResources(
 				retire( meta.stores.instances );
 			}
 			releasePalette( meta?.palette );
+			releaseMesh( drawMeshes.get( draw ) );
+			drawMeshes.delete( draw );
 			if ( meta?.image ) images.drop( meta.image );
 			if ( meta?.environmentImage ) images.drop( meta.environmentImage );
 			particles?.release( draw );
@@ -1465,25 +1611,6 @@ export function createGeometryResources(
 		},
 		/*
 		================
-		refreshWaterRefraction
-
-		Port-only, not native: the water refraction stage's copies
-		(device/water-refraction.ts), or null while the row is off, when
-		both bindings fall back to the white view the stage gate never
-		samples. The copies' views are stable per scene size and format,
-		so, as with the occlusion factor, only an enable, disable, resize
-		or format flip rebinds.
-		================
-		*/
-		refreshWaterRefraction( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
-			const nextColour = colour ?? refractionDummyView, nextDepth = depth ?? refractionDummyView;
-			if ( nextColour === refractionColourView && nextDepth === refractionDepthView ) return;
-			refractionColourView = nextColour;
-			refractionDepthView = nextDepth;
-			rebindEveryDraw();
-		},
-		/*
-		================
 		dispose
 		================
 		*/
@@ -1501,6 +1628,15 @@ export function createGeometryResources(
 			}
 			for ( const palette of sharedPalettes.values() ) palette.buffer.destroy();
 			sharedPalettes.clear();
+			for ( const list of sharedMeshes.values() ) {
+				for ( const mesh of list ) {
+					mesh.vertices.destroy();
+					mesh.indices.destroy();
+					mesh.skin.destroy();
+				}
+			}
+			sharedMeshes.clear();
+			drawMeshes.clear();
 			transformSlabs.dispose();
 			materialSlabs.dispose();
 			instanceSlabs.dispose();

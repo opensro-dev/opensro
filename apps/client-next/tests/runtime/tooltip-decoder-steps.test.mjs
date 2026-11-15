@@ -7,7 +7,8 @@ The HUD decodes the 27,835-row skill catalogue a slice per frame. A stepped
 decode must publish nothing until every row is admitted, then exactly the
 catalogue a whole decode produces; a malformed row late in the catalogue
 still rejects it. The character owner's appearance references must equal
-the msch blocks of the full decode.
+the msch blocks of the full decode. The catalogue keeps a decoded view only
+once a caller asks for it.
 
 ===========================================================================
 */
@@ -35,6 +36,39 @@ test("a stepped decode publishes nothing early, then the whole decode's catalogu
 	assert.deepStrictEqual( [ ...catalog.groups.entries() ], [ ...whole.groups.entries() ] );
 	// A finished decoder keeps returning the same catalogue.
 	assert.equal( decoder.step( slice ), catalog );
+});
+
+test("the catalogue keeps a view only once get asks for it; iterating keeps none", () => {
+	// skill-tooltip-catalog.ts SkillPane_CreateCatalog: the decode keeps the
+	// source rows, not their views. Two passes over a fresh catalogue get
+	// different objects, so neither the decode nor the first pass kept one.
+	const catalog = decodeTooltipSkills( source );
+	const first = new Map( catalog.entries() ), second = new Map( catalog.entries() );
+	assert.equal( first.size, source.rows.length );
+	const ids = [ ...first.keys() ];
+	for ( const id of ids ) assert.notEqual( first.get( id ), second.get( id ), `row ${id} was kept` );
+	assert.deepStrictEqual( first.get( ids[0] ), second.get( ids[0] ) );
+	// get keeps the view: the same object on every later get, and from then on in
+	// every iterator and through the groups.
+	const asked = ids[Math.floor( ids.length / 2 )];
+	const view = catalog.get( asked );
+	assert.ok( view );
+	assert.equal( catalog.get( asked ), view );
+	assert.deepStrictEqual( view, first.get( asked ) );
+	assert.equal( new Map( catalog.entries() ).get( asked ), view );
+	assert.equal( [ ...catalog.values() ].includes( view ), true );
+	let seen;
+	catalog.forEach( ( row, id ) => {
+		if ( id === asked ) seen = row;
+	} );
+	assert.equal( seen, view );
+	// The rows that were not asked for are still not kept.
+	assert.notEqual( new Map( catalog.entries() ).get( ids[0] ), first.get( ids[0] ) );
+	const group = catalog.groups.entries().next().value;
+	assert.ok( group );
+	const [key, head] = group;
+	assert.equal( catalog.groups.get( key ), head );
+	assert.equal( catalog.get( head.id ), head );
 });
 
 test("a malformed row late in the catalogue rejects it on the step that reaches it", () => {

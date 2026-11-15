@@ -26,6 +26,7 @@ from test_skytemple_import import (
 	media_archive,
 	placement_o2,
 	read_rows,
+	region_navmesh,
 	skill,
 	terrain_m,
 	utf16,
@@ -33,6 +34,11 @@ from test_skytemple_import import (
 )
 
 # One region per family, at the source's own sector spacing.
+# The town sector's one placed object: an id the native object.ifo
+# holds as another model, so the import moves it past the native ids.
+TOWN_REGION = 22106
+TOWN_OBJECT = 777
+MOVED_OBJECT = 901
 REGIONS = [(22106, "TOWN"), (19792, "FIELD_01"), (20048, "FIELD_02"),
 	(20559, "FIELD_03"), (21325, "PETRA"), (23378, "DUNGEON"), (31734, "GARDEN")]
 REGION_IDS = {region for region, _family in REGIONS}
@@ -350,14 +356,17 @@ def build_trees(base):
 		map_files[f"{y}/{x}.m"] = terrain_m()
 		map_files[f"{y}/{x}.t"] = b"t"
 		map_files[f"{y}/{x}.o"] = b"o"
-		map_files[f"{y}/{x}.o2"] = placement_o2(None)
+		# The town places 777, which the native catalogue defines
+		# differently: the import moves it to 901 in both files.
+		map_files[f"{y}/{x}.o2"] = placement_o2(TOWN_OBJECT if region == TOWN_REGION else None)
 	# One sector stands unbuilt behind its region code, the boss
 	# lair's shape in miniature: no terrain files, no navmesh.
 	garden_x, garden_y = 31734 & 0xFF, (31734 >> 8) & 0xFF
 	for extension in (".m", ".t", ".o", ".o2"):
 		del map_files[f"{garden_y}/{garden_x}{extension}"]
 	(source / "Map.pk2").write_bytes(map_archive(map_files))
-	data_files = {f"navmesh/nv_{region:04x}.nvm": b"nvm" for region, _family in REGIONS}
+	data_files = {f"navmesh/nv_{region:04x}.nvm": region_navmesh(*([TOWN_OBJECT] if region == TOWN_REGION else []))
+		for region, _family in REGIONS}
 	del data_files[f"navmesh/nv_{31734:04x}.nvm"]
 	(source / "Data.pk2").write_bytes(data_archive(data_files))
 	(source / "Particles.pk2").write_bytes(data_archive({}))
@@ -432,6 +441,15 @@ class ArabiaImportTest(unittest.TestCase):
 			# The unbuilt garden sector imports no terrain; its
 			# region code row above still imports.
 			self.assertFalse((output / "Map_extracted" / "123" / "246.m").exists())
+			# The town's navmesh names the remapped id its placements
+			# do: the client resolves both through object.ifo, and an
+			# unpatched navmesh failed Baghdad ("Missing navigation BSR").
+			self.assertEqual(summary["objectRemap"], {str(TOWN_OBJECT): MOVED_OBJECT})
+			town_x, town_y = TOWN_REGION & 0xFF, (TOWN_REGION >> 8) & 0xFF
+			self.assertEqual(skytemple_import.o2_object_ids(
+				(output / "Map_extracted" / str(town_y) / f"{town_x}.o2").read_bytes()), {MOVED_OBJECT})
+			self.assertEqual(skytemple_import.nvm_object_ids(
+				(output / "Data_extracted" / "navmesh" / f"nv_{TOWN_REGION:04x}.nvm").read_bytes()), {MOVED_OBJECT})
 			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
 			self.assertIn("SN_MOB_AR_TEST", names)
 			# A kind whose name the native table already owns rides

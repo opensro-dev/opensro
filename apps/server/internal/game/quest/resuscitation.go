@@ -82,7 +82,7 @@ resuscitationExchangeCount
 
 The server exchanges every complete group of hearts, capped by the thirty
 potions already held. Count inventory under the character transaction;
-the journal's ten-heart progress bar is deliberately saturated.
+the journal shows the raw heart count, as the server's counter does.
 ================
 */
 func resuscitationExchangeCount(c *enterworld.Character, def *Definition) (uint32, error) {

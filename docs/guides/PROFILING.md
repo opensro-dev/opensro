@@ -58,6 +58,16 @@ and runs these scenarios:
 | `jangan` (water ghost field outside Jangan, busier) | `still`, `drag`, `move` |
 | `hunt` (a field with a live monster) | `skill` (skills and attacks on it) |
 | `combat` (only with `--at combat`) | `combat`: a repeatable fight against the native GM `/LOADMONSTER` scene |
+| `crowd` (only with `--at crowd`) | `still`, `drag` among `--crowd N` real players |
+
+`crowd` stands `--crowd N` peers (at most 32, the default; `core/crowd.mjs`) in a
+grid in front of the character: authenticated characters on real GameWorld
+sockets, admitted through the local provisioning endpoint (`--provisioning`,
+`--token`, the defaults of `crowd-host.mjs`) and disabled again at the end, or
+attached from a running `crowd-host.mjs` that holds a matching crowd. Admission
+is bounded by the Agent's login budget (a burst of 10, then one every 6 s), so
+hold one crowd with `crowd-host.mjs` across benches. It measures what every
+drawn character costs (#3563).
 
 `combat` loads `--combat codename:count:type` at the character's feet with
 the native GM commands, `/INVINCIBLE` first unless `--vulnerable`. The current

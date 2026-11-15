@@ -17,7 +17,7 @@ import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAs
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
 import { collectSceneryParticleReferences } from "../../../../scripts/build/effects/buildEffectPrograms.mjs";
 import { defined } from "../helpers/defined.mjs";
-const { sceneryParticles, sceneryOrientation } = await import(
+const { sceneryParticles, sceneryOrientation, holderSphere, placedSphere } = await import(
 	"../../src/engine/foundation/rendering/scenery-particles.ts"
 );
 const { createSceneryEmission } = await import( "../../src/engine/foundation/animation/scenery-emission.ts" );
@@ -52,9 +52,16 @@ test("every installed outdoor particle record projects and every referenced EFP 
 		decoder = createEffectPrograms(),
 		refs = new Set( collectSceneryParticleReferences( index ).map( r => r.effectPath ) );
 	assert.ok( refs.size >= 47 );
+	// An EFP the archive proves empty or absent (v1.696 ships
+	// dun/petra_flame_yellow_glow.efp at 0 bytes) fails B1F270's header read;
+	// AFF730 keeps the reset object, so that emitter draws nothing. The
+	// catalogue names exactly those (buildEffectPrograms.mjs); every other
+	// referenced EFP must draw.
+	const unavailable = new Set( JSON.parse( new TextDecoder().decode( bytes ) ).nativeUnavailable?.effects ?? [] );
 	for ( const path of refs ) {
 		const result = decoder.decode( bytes, path );
-		assert.ok( result.model.primitives.length > 0, path );
+		if ( unavailable.has( path ) ) assert.equal( result.model.primitives.length, 0, path );
+		else assert.ok( result.model.primitives.length > 0, path );
 	}
 });
 test("emitter placement, night gating, resource admission, origin crossing and reset retain independent identity", () => {
@@ -208,4 +215,59 @@ test("material timelines preserve native wrap, clamped bounce and terminal color
 		clock.step( 2 );
 		assert.deepEqual( [ ...clock.rgb ], mode === 0 ? [ 1, 0, 0 ] : mode === 1 ? [ .5, .5, 0 ] : [ 0, 1, 0 ] );
 	}
+});
+
+test("scenery emitters carry whether their holder is in view, in view by default", () => {
+	const m = identity();
+	const modifiers = [ {
+		kind: 2,
+		stateId: -1,
+		animationSetName: "ambient",
+		entries: [ {
+			field00: 1,
+			field4c: 0,
+			flags50: [ 0, 0, 0 ],
+			flag53: 0,
+			vector3c: [ 0, 0, 0 ],
+			effectPath: "map/fire.efp"
+		} ]
+	} ];
+	const emitters = sceneryParticles( modifiers, "object", 0, 257, m, () => assert.fail() );
+	const owner = createSceneryEmission();
+	assert.equal( owner.step( { emitters, night: true }, 0, () => true, 10 )[0].holderVisible, true );
+	const asked = [];
+	const hidden = owner.step(
+		{
+			emitters,
+			night: true,
+			holderVisible: emitter => {
+				asked.push( emitter );
+				return false;
+			}
+		},
+		1,
+		() => true,
+		10
+	)[0];
+	assert.equal( hidden.holderVisible, false );
+	assert.deepEqual( asked, [ emitters[0] ] );
+	assert.equal( hidden.time, 1, "the source clock runs on: the renderer stops the emitter's own" );
+});
+
+test("a compound's holder sphere holds every mesh box and follows its placement", () => {
+	const meshes = new Map( [
+		[ "a.bms", { bounds: { min: [ -1, 0, -1 ], max: [ 1, 4, 1 ] } } ],
+		[ "b.bms", { bounds: { min: [ 0, 0, 0 ], max: [ 3, 1, 1 ] } } ]
+	] );
+	assert.equal( holderSphere( [ { meshPaths: [ "absent.bms" ] } ], meshes ), null );
+	// Two branches; paths are matched lower-case.
+	const local = holderSphere( [ { meshPaths: [ "A.bms" ] }, {
+		meshPaths: [ "x.bms" ],
+		renderMeshSection: { paths: [ "b.BMS" ] }
+	} ], meshes );
+	// The union box [-1, 0, -1]..[3, 4, 1]: centre (1, 2, 0), half diagonal 3.
+	assert.deepEqual( local, [ 1, 2, 0, 3 ] );
+	// Placed at (10, 20, 30), turned a quarter about y, scaled by 2.
+	const matrix = Float32Array.of( 0, 0, -2, 0, 0, 2, 0, 0, 2, 0, 0, 0, 10, 20, 30, 1 );
+	assert.deepEqual( placedSphere( local, matrix ), [ 10, 24, 28, 6 ] );
 });
