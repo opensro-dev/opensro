@@ -47,7 +47,7 @@ class Settle(unittest.TestCase):
 
 	def test_untouched_file_is_trusted_unread(self):
 		counts = variant_settle.settle(self.root, 2)
-		self.assertEqual((counts["trusted"], counts["hashed"]), (1, 0))
+		self.assertEqual((counts["unread"], counts["hashed"]), (1, 0))
 
 	def test_same_bytes_get_their_old_time_back(self):
 		self.rewrite(b"native")
@@ -61,7 +61,7 @@ class Settle(unittest.TestCase):
 		self.assertEqual(counts["changed"], 1)
 		self.assertEqual(self.data.stat().st_mtime_ns, LATER_NS)
 		# The next run trusts the new state it recorded.
-		self.assertEqual(variant_settle.settle(self.root, 2)["trusted"], 1)
+		self.assertEqual(variant_settle.settle(self.root, 2)["unread"], 1)
 
 	def test_a_file_linked_from_another_tree_keeps_its_time(self):
 		# The native extraction holds the other link: re-timing the variant's

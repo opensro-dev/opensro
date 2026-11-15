@@ -819,7 +819,7 @@ def main():
 	# asset build's (size, mtime) caches still hit (variant_settle.py).
 	settled = variant_settle.settle(variant, build_jobs())
 	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
-		f"{settled['changed']} changed, {settled['trusted']} trusted unread")
+		f"{settled['changed']} changed, {settled['unread']} matched unread")
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 

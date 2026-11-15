@@ -128,7 +128,7 @@ def settle(variant_root: Path, jobs: int = 8) -> dict[str, int]:
 			entries[relative] = known
 		else:
 			pending.append((relative, absolute, stat))
-	counts = {"files": len(files), "trusted": len(files) - len(pending), "hashed": len(pending), "restored": 0, "changed": 0}
+	counts = {"files": len(files), "unread": len(files) - len(pending), "hashed": len(pending), "restored": 0, "changed": 0}
 	with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
 		digests = pool.map(lambda item: file_sha256(item[1]), pending)
 		for (relative, absolute, stat), sha in zip(pending, digests):
