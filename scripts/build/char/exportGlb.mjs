@@ -577,7 +577,7 @@ export function avatarToGlb( avatar ) {
 		// AEE6D0 applies the owning BSR's environment modifier before material setup:
 		// it replaces that baseline with reference 1 or disables alpha testing.
 		const flags = texInfo.flags ?? 0;
-		applyCharacterMaterialState( material, flags, grp.environmentModifiers );
+		applyCharacterMaterialState( material, flags, grp.environmentModifiers, texInfo.materialIndex );
 		embedCharacterEnvironment( g.json, material, bytes => g.addView( bytes ), new Map() );
 		g.json.materials.push( material );
 		meshGroups.push( {

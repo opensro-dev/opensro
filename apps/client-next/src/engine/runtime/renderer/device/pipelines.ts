@@ -555,7 +555,7 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  }
  return o;
 }
-fn shadeGeometry(input:Out)->vec4f {
+fn shadeGeometry(input:Out,frontFacing:bool)->vec4f {
  if(waterPass.plane.w>0.5&&material.skin.w==0&&(input.worldY-waterPass.plane.x)*waterPass.plane.y<0){discard;}
  var reflected=vec3f(0);var equipment=vec3f(0);
  if(material.equipmentColor.w>0.0){equipment=textureSample(sphereMap,textureSampler,input.equipmentUV,0).rgb;}
@@ -654,7 +654,12 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
   case 8u:{} default:{accepted=alphaByte>=reference;}
  }
  if(material.equipmentColor.w>0.0){accepted=material.equipmentUV.z<0.5||ceil(floor(clamp(tex.a,0.0,1.0)*4096.0)*(255.0/4096.0)-0.5)>=1.0;}
- if(!accepted){discard;}
+ // An ADD-table draw sets 0x10000000 past AEE6D0's quality and opacity
+ // gates, and A5E0E0 then skips RenderState_ApplyMaterialFlags: the
+ // material's cull-none never reaches the device. Its pipeline keeps the
+ // material's own culling for the ungated draw, so drop back faces here.
+ let environmentAdd=material.reflection.x>1.5&&env.reflection.w>0.5&&input.opacity==1.0;
+ if(!accepted||(environmentAdd&&!frontFacing)){discard;}
  // Native NOLIGHT writes oD0=1, bypassing the material diffuse tint too.
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
  // A native stage is the whole colour: its op already carries any 2X/4X.
@@ -663,9 +668,13 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  // (oD0 = 1, no material tint), stage 0 MODULATE texture by that diffuse,
  // stage 1 MODULATE2X by the lightmap (CCompoundObj +0x260 = 5).
  if(material.stagePolicy.z>0.5){lit=clamp(select(clamp(tex.rgb,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0)*objectLightmap*2.0,vec3f(0),vec3f(1));}
+ // AEE6D0 bit 0 clear, table entry AEE430 with D3DTOP_ADD: stage0 the
+ // sphere, stage1 base+current, alpha base; the restore (AEE950) leaves
+ // stage2 DISABLE, so neither vertex light nor 2X applies.
+ if(environmentAdd){lit=clamp(tex.rgb+reflected,vec3f(0),vec3f(1));}
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
- if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
+ else if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
   // 85A9E0 sets temporary renderer light1 (C39094+64 -> A5A7F0).
   // It does not set the model's +1E4 reflection override (A89560).
   // Neither ordinary hit lights nor SCT_MAT replace this factor.
@@ -742,11 +751,11 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
  let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
  return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
-@fragment fn fs(input:Out)->@location(0) vec4f {return shadeGeometry(input);}
+@fragment fn fs(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {return shadeGeometry(input,frontFacing);}
 // Port-only, not native: an accepted unblended/cutout fragment covers the
 // scratch target fully. Alpha tests still discard inside shadeGeometry.
-@fragment fn fsPreviewOpaque(input:Out)->@location(0) vec4f {
- let color=shadeGeometry(input);return vec4f(color.rgb,1.0);
+@fragment fn fsPreviewOpaque(input:Out,@builtin(front_facing) frontFacing:bool)->@location(0) vec4f {
+ let color=shadeGeometry(input,frontFacing);return vec4f(color.rgb,1.0);
 }`
 	} );
 	/*
