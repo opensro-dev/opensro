@@ -68,8 +68,6 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 	let anchors = new Set<GeometryDraw>(), nextAnchors = new Set<GeometryDraw>();
 	// The frame's drawable geometry, refilled every frame.
 	const live: GeometryDraw[] = [];
-	// The water refraction split, refilled every frame it is armed.
-	const opaqueWorld: GeometryDraw[] = [], waterTail: GeometryDraw[] = [];
 	let recordedImage: ImageDraw | undefined, imageBundle: GPURenderBundle | null = null;
 	/*
 	================
@@ -93,29 +91,6 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			) return false;
 		}
 		return true;
-	}
-	/*
-	================
-	splitWater
-
-	Partitions world for the water refraction stage: opaqueWorld takes
-	world[0..transparentStart) without its blended water; waterTail takes
-	that water, then the transparent tail world[transparentStart..), so
-	the tail keeps its native order behind the water. False when no
-	blended water is in view.
-	================
-	*/
-	function splitWater( world: readonly GeometryDraw[], transparentStart: number ): boolean {
-		opaqueWorld.length = 0;
-		waterTail.length = 0;
-		let found = false;
-		for ( let i = 0; i < world.length; i++ ) {
-			const draw = world[i]!, water = draw.water === true && draw.blended === true;
-			found ||= water;
-			if ( i >= transparentStart || water ) waterTail.push( draw );
-			else opaqueWorld.push( draw );
-		}
-		return found;
 	}
 	/*
 	================
@@ -273,18 +248,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			}
 			const bundles: GPURenderBundle[] = imageBundle ? [ imageBundle ] : [];
 			nextAnchors.clear();
-			// Port-only water refraction: with blended water in view, the main
-			// pass draws the opaque world without it; the water, then the
-			// transparent tail, draw in their own pass after the stage copies
-			// the opaque frame. With none in view the frame keeps one pass.
-			const water = experimental?.water && splitWater( world, experimental.water.transparentStart ) ?
-				experimental.water :
-				undefined;
-			const waterBundles: GPURenderBundle[] = [];
-			if ( water ) {
-				recordGeometry( bundles, opaqueWorld, geometry );
-				recordGeometry( waterBundles, waterTail );
-			} else recordGeometry( bundles, world, geometry );
+			recordGeometry( bundles, world, geometry );
 			const previousAnchors = anchors;
 			anchors = nextAnchors;
 			nextAnchors = previousAnchors;
@@ -311,10 +275,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// is prepared before the frame's particle prepare, so its emitters
 			// are dispatched with the main pass's. A query frame keeps the tail:
 			// the query reads the finished scene depth and the continuation
-			// draws after it (AEBD90). So do water refraction (the transparent
-			// tail draws in a pass after the main one) and MSAA (the
-			// continuation's pipelines are single-sampled).
-			const mergedTail = deferred && !deferred.asynchronous && !water && !msaa ? deferred.prepare() : null;
+			// draws after it (AEBD90). So does MSAA (the continuation's
+			// pipelines are single-sampled).
+			const mergedTail = deferred && !deferred.asynchronous && !msaa ? deferred.prepare() : null;
 			if ( mergedTail instanceof Promise ) throw Error( "Unexpected asynchronous deferred pass" );
 			const encoder = commands.createEncoder(), timing = commands.beginTiming?.( frameId );
 			commands.prepare?.( encoder, timing );
@@ -348,8 +311,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// The passes after this one that read the scene depth: the flare
 			// probe, the deferred tail, the occlusion and labels drawn apart
 			// from the scene. With none this frame the depth is never stored,
-			// and under MSAA its 4x samples are never resolved either. The
-			// water pass loads it as well (below).
+			// and under MSAA its 4x samples are never resolved either.
 			const sceneDepthRead = !!flares || (!!deferred && !mergedTail) || !!experimental?.ao ||
 				(separateScene && !!worldUiBundle);
 			const pass = encoder.beginRenderPass( {
@@ -361,8 +323,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: msaa ? msaa.depth : depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							// The water pass loads the depth the main pass leaves.
-							depthStoreOp: sceneDepthRead || water ? "store" as const : "discard" as const
+							depthStoreOp: sceneDepthRead ? "store" as const : "discard" as const
 						}
 					} :
 					{}),
@@ -371,8 +332,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					...(msaa ? { resolveTarget: sceneView } : {}),
 					clearValue: { r: 0.035, g: 0.07, b: 0.09, a: 1 },
 					loadOp: "clear",
-					// The water pass draws on into the 4x colour, so it keeps it.
-					storeOp: msaa && !water ? "discard" as const : "store" as const
+					storeOp: msaa ? "discard" as const : "store" as const
 				} ]
 			} );
 			pass.setBlendConstant( blendFactor );
@@ -380,61 +340,21 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			if ( mergedTail ) drawList( pass, mergedTail );
 			// Natively everything draws here; any separate scene or the
 			// deferred tail moves the labels, background and UI later.
-			// With the water armed, its pass is the last scene pass instead.
 			const sceneDrawsUi = !separateScene && (!deferred || !!mergedTail);
-			/*
-			================
-			sceneUi
-
-			The labels, background and interface draw inside the last scene
-			pass when no separate scene or deferred tail claims them later.
-			================
-			*/
-			const sceneUi = ( target: GPURenderPassEncoder ) => {
-				if ( !sceneDrawsUi ) return;
-				if ( worldUiBundle ) target.executeBundles( [ worldUiBundle ] );
-				if ( flares || thunder ) return;
-				if ( backgroundBundle ) target.executeBundles( [ backgroundBundle ] );
-				if ( !preview.length && uiBundle ) target.executeBundles( [ uiBundle ] );
-			};
-			if ( !water ) sceneUi( pass );
+			if ( sceneDrawsUi ) {
+				if ( worldUiBundle ) pass.executeBundles( [ worldUiBundle ] );
+				if ( !flares && !thunder ) {
+					if ( backgroundBundle ) pass.executeBundles( [ backgroundBundle ] );
+					if ( !preview.length && uiBundle ) pass.executeBundles( [ uiBundle ] );
+				}
+			}
 			pass.end();
 			// The multisampled depth cannot be resolved by the driver: write the
 			// samples' minimum into the scene's single-sampled depth now,
-			// before the deferred tail, the flare probe, the labels and the
-			// water stage read it, and only when one of them does. The
-			// render-scale stage upscales this depth as it always does.
-			if ( msaa && depth && (sceneDepthRead || water) ) msaa.resolveDepth( encoder, depth );
-			// Port-only water refraction: the opaque frame is complete and
-			// resolved. The stage copies its colour and depth, then the water
-			// and the transparent tail draw over it in their native order, so a
-			// blended surface in front of the water still covers it. Under MSAA
-			// they draw on into the 4x buffers (the retained bundles are 4x) and
-			// resolve again; their depth is resolved once more for later readers.
-			if ( water ) {
-				if ( !depth ) throw Error( "Water refraction needs the scene depth" );
-				water.stage.encode( encoder, sceneView, depth );
-				const overlay = encoder.beginRenderPass( {
-					timestampWrites: timing?.pass( "water-refraction" ),
-					label: "water-refraction",
-					depthStencilAttachment: {
-						view: msaa ? msaa.depth : depth,
-						depthLoadOp: "load",
-						depthStoreOp: sceneDepthRead ? "store" : "discard"
-					},
-					colorAttachments: [ {
-						view: msaa ? msaa.view : sceneView,
-						...(msaa ? { resolveTarget: sceneView } : {}),
-						loadOp: "load",
-						storeOp: msaa ? "discard" : "store"
-					} ]
-				} );
-				overlay.setBlendConstant( blendFactor );
-				if ( waterBundles.length ) overlay.executeBundles( waterBundles );
-				sceneUi( overlay );
-				overlay.end();
-				if ( msaa && sceneDepthRead ) msaa.resolveDepth( encoder, depth );
-			}
+			// before the deferred tail, the flare probe and the labels read it,
+			// and only when one of them does. The render-scale stage upscales
+			// this depth as it always does.
+			if ( msaa && depth && sceneDepthRead ) msaa.resolveDepth( encoder, depth );
 			/*
 			================
 			previewPass

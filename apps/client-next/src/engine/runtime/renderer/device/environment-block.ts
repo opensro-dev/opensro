@@ -39,7 +39,6 @@ them over. All off is the native frame: both stages vec4s zero.
 export interface StageRows {
 	readonly heightFog: boolean;
 	readonly dynamicSun: boolean;
-	readonly waterRefraction: boolean;
 	readonly skyDetail: boolean;
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
@@ -53,8 +52,8 @@ packStages
 
 The saved stage words, in the order the WGSL struct reads them (stages,
 then stages2). stages.z was terrain relief, removed at the owner's
-request (2026-10-11), and now gates the port-only water refraction;
-stages.w was the textured horizon, and now gates the port-only sky
+request (2026-10-11), then gated the water refraction row, removed at
+the owner's request (2026-11-15), and stays zero; stages.w was the textured horizon, and now gates the port-only sky
 detail (clouds, glow, rim).
 ================
 */
@@ -62,7 +61,7 @@ export function packStages( saved: Float32Array, rows: StageRows ) {
 	saved.set( [
 		rows.heightFog ? 1 : 0,
 		rows.dynamicSun ? 1 : 0,
-		rows.waterRefraction ? 1 : 0,
+		0,
 		rows.skyDetail ? 1 : 0,
 		rows.hdrToneMap ? 1 : 0,
 		rows.sunShadow ? 1 : 0,
