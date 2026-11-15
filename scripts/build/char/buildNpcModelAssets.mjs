@@ -510,6 +510,32 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 
 /*
 ================
+monsterPolicyBsrs
+
+The BSRs that bake with the monster clip policy: every one a monster, a
+COS or a ride names. The native client loads a BSR as one resource
+whichever object asks for it (CResChar), so a town NPC that shares a
+monster's or a pet's model (v1.696's lamp genie on res/cos/p_jinn.bsr)
+plays its states from that same resource. The monster bake is the NPC
+bake's superset (the same stand, idle and emote states plus the combat
+motions), so the shared BSR bakes once with the monster policy and every
+consumer reuses it, whatever the roster order.
+================
+*/
+export function monsterPolicyBsrs( roster, { resolveModel, isMonster, rideModelPath } ) {
+	const paths = new Set();
+	for ( const { codename } of roster ) {
+		const ride = rideModelPath( codename );
+		if ( ride ) paths.add( ride );
+		if ( !isMonster( codename ) ) continue;
+		const model = resolveModel( codename );
+		if ( model ) paths.add( model.bsrPath );
+	}
+	return paths;
+}
+
+/*
+================
 buildNpcModelAssets
 ================
 */
@@ -570,6 +596,12 @@ export async function buildNpcModelAssets( options = {} ) {
 	const rideResources = new Map();
 	/** characterInfo death BSR -> the codenames whose record names it. */
 	const deathResources = new Map();
+	const monsterBsrs = monsterPolicyBsrs( roster, {
+		resolveModel: codename => resolveNpcModel( codename, rows ),
+		isMonster: codename => mobRosterByCodename.has( codename ) || cosNames.has( codename ),
+		// The media ride path; the loop below refuses one that drifts from the server's.
+		rideModelPath: codename => resolveCharacterInfo( codename )?.rideModelPath ?? null
+	} );
 	for ( const rosterRef of roster ) {
 		const { codename } = rosterRef;
 		const model = resolveNpcModel( codename, rows );
@@ -664,9 +696,12 @@ export async function buildNpcModelAssets( options = {} ) {
 			entry.materialKind = model.materialKind;
 			if ( model.baseCodename ) entry.baseCodename = model.baseCodename;
 		}
+		// The bake's clip policy is the BSR's (monsterPolicyBsrs); the entry
+		// above keeps this consumer's own kind and fields.
+		const bakeAsMob = isMob || monsterBsrs.has( model.bsrPath );
 		const prior = bakedByBsr.get( model.bsrPath );
 		if ( prior ) {
-			if ( prior.isMob !== isMob ) {
+			if ( prior.isMob !== bakeAsMob ) {
 				throw new Error(
 					`[npc] ${model.bsrPath}: shared by NPC and monster consumers with incompatible clip policies`
 				);
@@ -679,10 +714,10 @@ export async function buildNpcModelAssets( options = {} ) {
 			continue;
 		}
 		try {
-			const baked = await bakeCharacterResource( model.bsrPath, output, isMob );
+			const baked = await bakeCharacterResource( model.bsrPath, output, bakeAsMob );
 			const { retailAnimationCatalog, ...missionBaked } = baked;
 			Object.assign( entry, missionBaked );
-			bakedByBsr.set( model.bsrPath, { isMob, baked: missionBaked } );
+			bakedByBsr.set( model.bsrPath, { isMob: bakeAsMob, baked: missionBaked } );
 			retailAnimationResources.set( model.bsrPath, {
 				bsr: model.bsrPath,
 				glb: missionBaked.glb,
