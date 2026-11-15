@@ -245,6 +245,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		silentWingFlight
+
+		Read by the character presenter as it advances an actor's sounds.
+		================
+		*/
+		silentWingFlight() {
+			return experimental.silentWingFlight;
+		},
+		/*
+		================
 		dungeonCharacterPvs
 		================
 		*/
@@ -897,10 +907,7 @@ export function createRenderer(
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
 						viewport,
-						// The refraction stage samples the frame: the canvas
-						// texture cannot be bound, the retained frame can.
-						experimental.postProcessing || !!deferredPlan?.query ||
-							(experimental.waterRefraction && !preview),
+						experimental.postProcessing || !!deferredPlan?.query,
 						renderScale,
 						experimental.sceneFxaa
 					);
@@ -981,15 +988,6 @@ export function createRenderer(
 						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
 						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
 					];
-				// Experimental > Effects > Water refraction (port-only, not
-				// native): armed like the occlusion stage, never for preview
-				// frames, and only with a scene depth to copy.
-				const refraction = device.waterRefraction(
-					sceneWidth,
-					sceneHeight,
-					experimental.waterRefraction && !preview && !!surface.depth(),
-					scene.camera
-				);
 				const pending = frame!.draw(
 					separate ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
@@ -1028,12 +1026,7 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
-						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
-						// Kept follows the water setting, not this frame's arming: a
-						// preview frame or one without scene depth disarms the
-						// water, and keying on it would recreate the 4x colour
-						// every time the two kinds of frame alternate.
-						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa, experimental.waterRefraction ),
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
 						sceneScale: separate ?
 							{
 								view: color,

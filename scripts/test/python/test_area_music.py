@@ -15,6 +15,7 @@ reported.
 ===========================================================================
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -189,6 +190,65 @@ class LaterAreaTests(unittest.TestCase):
 		)
 		self.assertEqual(names, ["카크"])
 		self.assertEqual(region_rows[1:], ["88\t89\tALL\t\t\t\t"])
+
+
+class LaterTrackTests(unittest.TestCase):
+	# ================
+	# pinned_root
+	#
+	# A folder with a stand-in Music.pk2 and the pins that admit it.
+	# ================
+	def pinned_root(self, folder):
+		archive = Path(folder) / "Music.pk2"
+		archive.write_bytes(b"later music archive")
+		return folder, {"Music": hashlib.sha256(archive.read_bytes()).hexdigest()}
+
+	# ================
+	# test_a_later_track_the_vsro_archive_lacks_comes_from_the_v1696_archive
+	#
+	# Only the later areas' tracks are asked of the v1.696 Music.pk2; a VSRO
+	# area's absent track stays reported as before.
+	# ================
+	def test_a_later_track_the_vsro_archive_lacks_comes_from_the_v1696_archive(self):
+		asked = []
+
+		def convert(root, tracks, out):
+			asked.append(list(tracks))
+			return [Path(track).stem + ".mp3" for track in tracks], []
+
+		with tempfile.TemporaryDirectory() as folder:
+			root, pins = self.pinned_root(folder)
+			converted, absent = music.source_later_tracks(
+				["ARABIA_TOWN.ogg", "VSRO_ONLY.ogg"], ["ARABIA_TOWN.ogg", "JUPITER.ogg"], Path(folder), root,
+				convert, pins
+			)
+		self.assertEqual(asked, [["ARABIA_TOWN.ogg"]])
+		self.assertEqual(converted, ["ARABIA_TOWN.mp3"])
+		self.assertEqual(absent, ["VSRO_ONLY.ogg"])
+
+	# ================
+	# test_a_later_track_no_archive_holds_stops_the_build
+	# ================
+	def test_a_later_track_no_archive_holds_stops_the_build(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root, pins = self.pinned_root(folder)
+			with self.assertRaisesRegex(SystemExit, "ARABIA_TOWN.ogg"):
+				music.source_later_tracks(
+					["ARABIA_TOWN.ogg"], ["ARABIA_TOWN.ogg"], Path(folder), root,
+					lambda root, tracks, out: ([], list(tracks)), pins
+				)
+
+	# ================
+	# test_an_unpinned_later_archive_is_refused_before_it_is_read
+	# ================
+	def test_an_unpinned_later_archive_is_refused_before_it_is_read(self):
+		with tempfile.TemporaryDirectory() as folder:
+			root, _ = self.pinned_root(folder)
+			with self.assertRaises(SystemExit):
+				music.source_later_tracks(
+					["ARABIA_TOWN.ogg"], ["ARABIA_TOWN.ogg"], Path(folder), root,
+					lambda *args: self.fail("read before the pin check"), {"Music": "0" * 64}
+				)
 
 
 if __name__ == "__main__":

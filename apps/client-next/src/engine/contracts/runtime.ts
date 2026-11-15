@@ -259,6 +259,9 @@ export interface Renderer extends Disposable {
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;
+	// Port-only, not native (#3547): whether a wing dress's flight drops
+	// its fallback footsteps (Experimental, on by default).
+	silentWingFlight?(): boolean;
 	// Port-only, not native (Experimental "Dungeon character PVS", on by
 	// default): whether dungeon character PVS and floor admission are on.
 	dungeonCharacterPvs?(): boolean;
