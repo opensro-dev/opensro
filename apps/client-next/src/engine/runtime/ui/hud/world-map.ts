@@ -39,6 +39,7 @@ import {
 	worldMapDungeonPose,
 	worldMapFrame,
 	worldMapPageAt,
+	worldMapPageCaption,
 	worldMapPages,
 	worldMapPresentation,
 	worldMapPointMarkers,
@@ -478,6 +479,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				authoredButton = input.authoredButton,
 				closeButton = input.closeButton,
 				image = input.image;
+			// A page's caption string: a town's UIIT_STT_ text, a fortress's
+			// SN_ object text (576949).
+			const pageName = ( page: { readonly name: string; readonly caption?: string; } ) => {
+				const key = worldMapPageCaption( page );
+				return key.startsWith( "SN_" ) ? hudData?.strings?.[key] ?? key : hudCopy( key );
+			};
 
 			let hover = input.hover;
 			lastLevel = game?.progression?.level;
@@ -769,7 +776,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				if ( page ) {
 					mapHits.push( {
 						id: "map-town:" + page.id,
-						label: hudCopy( "UIIT_STT_" + page.name ),
+						label: pageName( page ),
 						rect: r,
 						kind: "button",
 						draggable: true
@@ -854,7 +861,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// carries: "Underground Level 1 of Tomb of Qin-Shi".
 					caption = (cavePage && caveMap ? cavePage.caption : undefined) ||
 						(page ?
-							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + pageName( page ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
 						"World Map";
 				windowBox( caption, mx, my, mw, mh );
