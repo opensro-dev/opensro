@@ -39,7 +39,8 @@ func nodeValue(t *testing.T, record enterworld.ActiveQuestRecord, tag uint8) uin
 ================
 TestEntryRederivesALaggingCollectCount
 
-The saved record says 9 while 11 teeth are held: entry shows 10 of 10.
+The saved record says 9 while 11 teeth are held: entry shows the held 11,
+the unclamped count the reference server's gather mission reports.
 ================
 */
 func TestEntryRederivesALaggingCollectCount(t *testing.T) {
@@ -61,8 +62,8 @@ func TestEntryRederivesALaggingCollectCount(t *testing.T) {
 	if err := rt.NormalizeEntryRecords(c); err != nil {
 		t.Fatal(err)
 	}
-	if got := nodeValue(t, c.ActiveQuests[0], 1); got != 10 {
-		t.Fatalf("entry shows %d teeth with 11 held, want 10", got)
+	if got := nodeValue(t, c.ActiveQuests[0], 1); got != 11 {
+		t.Fatalf("entry shows %d teeth with 11 held, want 11", got)
 	}
 }
 
