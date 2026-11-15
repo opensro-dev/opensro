@@ -13,6 +13,7 @@ unchanged and lets added ones pass (tools/census-expanded.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lostNativeRow } from "../../tools/census-expanded.mjs";
+import { defined } from "../helpers/defined.mjs";
 
 // The rows below are written in canonical key order already.
 const asIs = value => value;
@@ -46,6 +47,17 @@ function lost( change ) {
 	return lostNativeRow( NATIVE, { scenes: { Map: map } }, asIs );
 }
 
+/*
+================
+failure
+
+The fact lost reports for a change that must fail: present, and a string.
+================
+*/
+function failure( change ) {
+	return defined( lost( change ), "the lost native fact" );
+}
+
 test("added controls and rows pass; every native one survives", () => {
 	assert.equal(
 		lost( map => {
@@ -59,14 +71,14 @@ test("added controls and rows pass; every native one survives", () => {
 });
 
 test("a lost control, a lost row, a changed row or a moved scene fails", () => {
-	assert.match( lost( map => map.controls.splice( 0, 1 ) ), /lost control map-close/ );
-	assert.match( lost( map => delete map.rows["map-guide"] ), /lost row map-guide/ );
-	assert.match( lost( map => map.rows["map-close"] = { panel: "Map" } ), /row map-close changed/ );
-	assert.match( lost( map => map.panel = "Option" ), /opens differently/ );
-	assert.match( lost( map => map.rows["map-side-tab"].added = [] ), /row map-side-tab changed/ );
-	assert.match( lost( map => map.rows["map-side-tab"].panel = null ), /row map-side-tab changed/ );
+	assert.match( failure( map => map.controls.splice( 0, 1 ) ), /lost control map-close/ );
+	assert.match( failure( map => delete map.rows["map-guide"] ), /lost row map-guide/ );
+	assert.match( failure( map => map.rows["map-close"] = { panel: "Map" } ), /row map-close changed/ );
+	assert.match( failure( map => map.panel = "Option" ), /opens differently/ );
+	assert.match( failure( map => map.rows["map-side-tab"].added = [] ), /row map-side-tab changed/ );
+	assert.match( failure( map => map.rows["map-side-tab"].panel = null ), /row map-side-tab changed/ );
 	// A native control the action now closes, or newly opens, is a native change.
-	assert.match( lost( map => map.rows["map-side-tab"].removed.push( "map-guide" ) ), /row map-side-tab changed/ );
-	assert.match( lost( map => map.rows["map-side-tab"].added.push( "map-guide" ) ), /row map-side-tab changed/ );
-	assert.match( lostNativeRow( NATIVE, { scenes: {} }, asIs ), /scene Map is gone/ );
+	assert.match( failure( map => map.rows["map-side-tab"].removed.push( "map-guide" ) ), /row map-side-tab changed/ );
+	assert.match( failure( map => map.rows["map-side-tab"].added.push( "map-guide" ) ), /row map-side-tab changed/ );
+	assert.match( defined( lostNativeRow( NATIVE, { scenes: {} }, asIs ), "the lost scene" ), /scene Map is gone/ );
 });
