@@ -288,6 +288,14 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const ribbonGroups: RibbonChain[] = [], ribbonDrawn = createRibbonChain(), ribbonWork = createRibbonChain();
 	let ribbonOrder = new Int32Array( 64 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
+	// The clocks of emitters held by a model (an attachment, or a scenery
+	// placement). The original ticks an object attached to a compound only on
+	// a frame the compound is in view, by that frame's time (A9EFB0 ->
+	// A956F0), so an emitter held out of view is neither advanced nor drawn
+	// and its clock stops: offset is the time spent hidden, last the source
+	// time last seen, hidden this frame's view test. The registered light
+	// effects (deferredParticle) keep their own query clock.
+	const viewClocks = new Map<number, { offset: number; last: number; hidden: boolean; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	// Per admitted model: the native pick box, and the bind bounds that size
@@ -436,7 +444,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// fields overwritten each main frame; disposal clears it.
 	const cullFrame: {
 		valid: boolean;
-		frusta: Float64Array[];
+		frusta: readonly Float64Array[];
 		visible: CharacterActor[];
 		chains: ReadonlyMap<number, readonly CharacterActor[]>;
 		byGid: ReadonlyMap<number, CharacterActor>;
@@ -1128,21 +1136,21 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		// Ordinary skinned actors have no emitter/material cycle ownership.
 		// Their unmodified animation time already drives pose evaluation.
 		const cycles = new Map<number, number>();
-		const sampledActors = hasDeferred ?
-			actors.map( source => {
-				const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
-				return sample ?
-					{
-						...source,
-						deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
-						time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
-						opacity: (!sample.deferred || continuation) && sample.draw ?
-							(source.opacity ?? 1) * sample.instanceAlpha / 255 :
-							0
-					} :
-					source;
-			} ) :
-			actors;
+		const sampledActors = actors.map( source => {
+			const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
+			if ( !sample ) {
+				const offset = heldClock( source, continuation );
+				return offset ? { ...source, time: source.time - offset } : source;
+			}
+			return {
+				...source,
+				deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
+				time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
+				opacity: (!sample.deferred || continuation) && sample.draw ?
+					(source.opacity ?? 1) * sample.instanceAlpha / 255 :
+					0
+			};
+		} );
 		const frameActors = sampledActors.map( actor => {
 			const plan = models.get( actor.model )?.plan;
 			if ( plan?.sharedPalette && !plan.clocked ) return actor;
@@ -1467,15 +1475,79 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
+	heldClock
+
+	The time a held emitter has spent out of view, to take off its source
+	time; 0 for any other actor. The first pass of a frame adds the time
+	since the last frame when the last view test hid the emitter, and starts
+	over when the source restarts. The continuation reads the same offset.
+	================
+	*/
+	function heldClock( actor: CharacterActor, continuation: boolean ): number {
+		if (
+			actor.deferredParticle || actor.attachment === undefined && actor.holderVisible === undefined ||
+			!models.get( actor.model )?.plan.emission
+		) return 0;
+		let clock = viewClocks.get( actor.gid );
+		if ( !clock ) {
+			clock = { offset: 0, last: actor.time, hidden: false };
+			viewClocks.set( actor.gid, clock );
+		} else if ( !continuation ) {
+			if ( actor.time < clock.last ) clock.offset = 0;
+			else if ( clock.hidden ) clock.offset += actor.time - clock.last;
+			clock.last = actor.time;
+		}
+		return clock.offset;
+	}
+	/*
+	================
+	heldOutOfView
+
+	Whether a held emitter's holder is out of view this frame: a scenery
+	placement by the world's own test (holderVisible), an attachment by the
+	sphere around its holder chain against the frame's frusta. A frame
+	without a view (a preview) holds nothing out of view.
+	================
+	*/
+	function heldOutOfView( frame: PrepareFrame, actor: CharacterActor, frusta: readonly Float64Array[] ): boolean {
+		if ( !viewClocks.has( actor.gid ) || !frusta.length || frame.preview ) return false;
+		if ( actor.holderVisible === false ) return true;
+		if ( actor.attachment === undefined || !cullSphere( actor, frame.chains, frame.origin, sphere ) ) return false;
+		return !frusta.some( frustum =>
+			visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
+		);
+	}
+	/*
+	================
+	testHeld
+
+	The first pass's view test of every held emitter (heldOutOfView); the
+	clocks of departed actors are dropped. The continuation keeps the first
+	pass's answers.
+	================
+	*/
+	function testHeld( frame: PrepareFrame, frusta: readonly Float64Array[] ) {
+		if ( frame.continuation ) return;
+		for ( const [gid, clock] of viewClocks ) {
+			const actor = frame.byGid.get( gid );
+			if ( !actor ) viewClocks.delete( gid );
+			else clock.hidden = heldOutOfView( frame, actor, frusta );
+		}
+	}
+	/*
+	================
 	emitterCandidate
 
 	Whether this pass may admit the actor as an emitter: its model emits, it
-	and its chain are resident, and a deferred draw has reached its
-	continuation.
+	and its chain are resident, it is not held out of view (testHeld), and a
+	deferred draw has reached its continuation. A held emitter out of view
+	keeps its history and its storage charge (retainedBytes), but is not
+	advanced or drawn.
 	================
 	*/
 	function emitterCandidate( frame: PrepareFrame, actor: CharacterActor ) {
 		if ( actor.deferredParticle && (!frame.continuation || !deferred.sample( actor.gid )?.draw) ) return false;
+		if ( viewClocks.get( actor.gid )?.hidden ) return false;
 		const resource = models.get( actor.model ), chain = frame.chains.get( actor.gid )!;
 		return !!resource?.model && !!resource.plan.emission && chain.length > 0 &&
 			chain.every( value => models.has( value.model ) );
@@ -3539,6 +3611,7 @@ the next full prepare pass, so this may run between frames.
 			const frusta = [ view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map(
 				prepareViewFrustum
 			);
+			testHeld( frame, frusta );
 			const { grouped, needed, visible, particleNeeded } = planBatches( frame, selectBodies( frame, frusta ) );
 			recordVisible( frame, frusta, visible );
 			retireUnplanned( frame, grouped, needed );
@@ -3655,6 +3728,7 @@ the next full prepare pass, so this may run between frames.
 			cullFrame.chains = new Map();
 			cullFrame.byGid = new Map();
 			particleBirths.clear();
+			viewClocks.clear();
 			materialClocks.reset();
 			deferred.reset();
 			particleSnapshots.clear();

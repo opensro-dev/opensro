@@ -200,3 +200,95 @@ export function sceneryParticles(
 	}
 	return out;
 }
+
+/*
+================
+holderSphere
+
+The bounding sphere, in its own frame, of a compound whose scenery emitters
+are attached to it: around the box of every branch's resident meshes (keyed
+by lower-case path), [x, y, z, radius]; null when none is resident.
+================
+*/
+export function holderSphere(
+	branches: readonly {
+		readonly renderMeshSection?: { readonly paths: readonly string[]; };
+		readonly meshPaths: readonly string[];
+	}[],
+	meshes: ReadonlyMap<
+		string,
+		{ readonly bounds: { readonly min: readonly number[]; readonly max: readonly number[]; }; }
+	>
+): readonly number[] | null {
+	const low = [ Infinity, Infinity, Infinity ], high = [ -Infinity, -Infinity, -Infinity ];
+	let found = false;
+	for ( const branch of branches ) {
+		for ( const path of branch.renderMeshSection?.paths ?? branch.meshPaths ) {
+			const box = meshes.get( path.toLowerCase() )?.bounds;
+			if ( !box ) continue;
+			found = true;
+			for ( let axis = 0; axis < 3; axis++ ) {
+				low[axis] = Math.min( low[axis]!, box.min[axis]! );
+				high[axis] = Math.max( high[axis]!, box.max[axis]! );
+			}
+		}
+	}
+	if ( !found ) return null;
+	return [
+		(low[0]! + high[0]!) / 2,
+		(low[1]! + high[1]!) / 2,
+		(low[2]! + high[2]!) / 2,
+		Math.hypot( high[0]! - low[0]!, high[1]! - low[1]!, high[2]! - low[2]! ) / 2
+	];
+}
+
+/*
+================
+placeSceneryEmitters
+
+Appends a placement's emitters to the scene's list, with the dungeon room
+they belong to and their compound's sphere placed by its matrix.
+================
+*/
+export function placeSceneryEmitters(
+	out: SceneryEmitter[],
+	emitters: readonly SceneryEmitter[],
+	dungeonBlock: number | undefined,
+	holder: readonly number[] | null | undefined,
+	matrix: ArrayLike<number>
+) {
+	const placed = holder && emitters.length ? placedSphere( holder, matrix ) : undefined;
+	for ( const emitter of emitters ) {
+		out.push( {
+			...emitter,
+			...(dungeonBlock === undefined ? {} : { dungeonBlock }),
+			...(placed ? { holder: placed } : {})
+		} );
+	}
+}
+
+/*
+================
+placedSphere
+
+A compound's sphere placed by its placement matrix (column-major): the
+centre transformed, the radius grown by the matrix's largest axis scale.
+================
+*/
+export function placedSphere(
+	local: readonly number[],
+	matrix: ArrayLike<number>
+): readonly [number, number, number, number] {
+	const [x, y, z, radius] = local as [number, number, number, number];
+	const scale = Math.max(
+		Math.hypot( matrix[0]!, matrix[1]!, matrix[2]! ),
+		Math.hypot( matrix[4]!, matrix[5]!, matrix[6]! ),
+		Math.hypot( matrix[8]!, matrix[9]!, matrix[10]! )
+	);
+	return [
+		matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
+		matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
+		matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
+		radius * scale
+	];
+}
