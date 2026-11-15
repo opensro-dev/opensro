@@ -217,6 +217,37 @@ test("two builds storing the same action at once both finish whole", async ( t )
 	assert.equal( await readFile( objectPath( store, record.outputs[0].sha256 ), "utf8" ), "ALPHA" );
 });
 
+// Enough identical outputs stored at once that two publishes of one digest
+// overlap (the race is a window between a stat and a rename).
+const TWINS = 300;
+const TWIN_BYTES = Buffer.alloc( 256 * 1024, 7 );
+
+test("outputs with the same bytes stored at once all replay", async ( t ) => {
+	// Two images that convert to one PNG publish one object; the second
+	// writer must not swap it under the first one's record.
+	const f = await fixture( t );
+	for ( const link of [ false, true ] ) {
+		const runs = [];
+		const twin = index => ({
+			name: `twin-${link}-${index}`,
+			outputRoot: path.join( f.root, `twins-${link}` ),
+			outputs: [ `${index}.txt` ],
+			params: { index, link },
+			link,
+			run: async ( { outputRoot } ) => {
+				runs.push( index );
+				await writeFile( path.join( outputRoot, `${index}.txt` ), TWIN_BYTES );
+			}
+		});
+		const specs = Array.from( { length: TWINS }, ( _, index ) => twin( index ) );
+		await build( f, specs, { jobs: TWINS } );
+		assert.equal( runs.length, TWINS );
+		const again = await build( f, specs, { jobs: TWINS } );
+		assert.equal( runs.length, TWINS, `every twin replays (link ${link})` );
+		assert.ok( Object.values( again ).every( result => result.hit ) );
+	}
+});
+
 test("the same key twice in one build runs once", async ( t ) => {
 	const f = await fixture( t );
 	const runs = [];
@@ -264,6 +295,32 @@ test("an in-place write through a hard link is caught, not replayed", async ( t 
 	assert.equal( result.upper.hit, false );
 	assert.equal( runs.length, 2 );
 	assert.equal( await readFile( path.join( f.out, "A.txt" ), "utf8" ), "ALPHA" );
+});
+
+test("a damaged object is never recorded again under its name", async ( t ) => {
+	// A writes "ALPHA" through a link; a tool rewrites it in place, which
+	// damages the stored object; B then produces "ALPHA" too and must not
+	// record the damaged object as its bytes (#3652 review).
+	const f = await fixture( t );
+	const writer = ( name ) => ( {
+		name,
+		outputRoot: path.join( f.root, name ),
+		outputs: [ "out.txt" ],
+		params: { name },
+		link: true,
+		run: async ( { outputRoot } ) => {
+			await writeFile( path.join( outputRoot, "out.txt" ), "ALPHA" );
+		}
+	} );
+	await build( f, [ writer( "a" ) ] );
+	const linked = await stat( path.join( f.root, "a", "out.txt" ) );
+	if ( linked.nlink < 2 ) return t.skip( "this volume does not hard link" );
+	await writeFile( path.join( f.root, "a", "out.txt" ), "XXXXX" );
+	await build( f, [ writer( "b" ) ] );
+	await rm( path.join( f.root, "b", "out.txt" ) );
+	const replay = await build( f, [ writer( "b" ) ] );
+	assert.equal( replay.b.hit, true );
+	assert.equal( await readFile( path.join( f.root, "b", "out.txt" ), "utf8" ), "ALPHA" );
 });
 
 test("a malformed graph is refused before anything runs", () => {

@@ -46,19 +46,22 @@ export const RECORD_FORMAT = "sro-action-record";
 export const RECORD_VERSION = 1;
 export const DEFAULT_STORE_ROOT = buildStatePath( "actions" );
 const FAN_OUT_CHARS = 2;
+const HASH_CACHE_NAME = "file-hash-cache.json";
 
 /*
 ================
 openStore
 
 Init for the cache. root defaults to the shared build state; hashCache
-defaults to the file hash cache beside it (tests pass their own). Call
-shutdown() once the build is done: it saves the hash cache.
+defaults to a file hash cache of the store's own (tests pass theirs). Not
+the asset build's: a cache saves whole, so two owners of one file in one
+build would each drop the other's entries. Call shutdown() once the build
+is done: it saves the hash cache.
 ================
 */
 export async function openStore( options = {} ) {
 	const root = path.resolve( options.root ?? DEFAULT_STORE_ROOT );
-	const hashCache = options.hashCache ?? (await openFileHashCache());
+	const hashCache = options.hashCache ?? (await openFileHashCache( path.join( root, HASH_CACHE_NAME ) ));
 	const codeHashOf = options.codeHashOf ?? codeHash;
 	const codeHashes = new Map();
 	const store = {
@@ -153,7 +156,7 @@ export async function storeOutputs( store, action, key, outputRoot = action.outp
 		const info = await statOrUndefined( file );
 		if ( !info?.isFile() ) throw new Error( `action ${action.name}: declared output ${name} was not written` );
 		const sha256 = await sha256File( file );
-		const object = await putObject( store, file, sha256 );
+		const object = await putObject( store, file, sha256, action.link );
 		outputs.push( { name, sha256, size: object.size, objectMtimeMs: object.mtimeMs } );
 	}
 	const record = { format: RECORD_FORMAT, version: RECORD_VERSION, name: action.name, key, outputs };
@@ -166,28 +169,58 @@ export async function storeOutputs( store, action, key, outputRoot = action.outp
 putObject
 
 One output's bytes under their digest. An object already stored is kept
-(it holds the same bytes by name); a new one is copied to a temp name
-beside it and renamed into place. Returns the object's stat.
+(it holds the same bytes by name); a new one is placed at a temp name
+beside it (a hard link for an action that asked for links, so the output
+and the store share one copy) and published exclusively (publishExclusive).
+Returns the object's stat.
 ================
 */
-async function putObject( store, file, sha256 ) {
+async function putObject( store, file, sha256, wantLink ) {
 	const target = objectPath( store, sha256 );
 	const existing = await statOrUndefined( target );
-	if ( existing ) return existing;
+	if ( existing ) {
+		// A stored object is trusted only while it still holds the bytes it
+		// is named for: an in-place write through a hard-linked output
+		// rewrites it, and recording it as it stands would carry the damage
+		// into a fresh record (#3652 review). The hash cache answers from the
+		// stat while nothing moved; a moved object is re-read.
+		if ( (await store.hashFile( target )) === sha256 ) return existing;
+		await rm( target, { force: true } );
+	}
 	await mkdir( path.dirname( target ), { recursive: true } );
 	const temporary = `${target}.${process.pid}.${Math.random().toString( 16 ).slice( 2 )}.tmp`;
 	try {
-		await copyFile( file, temporary, constants.COPYFILE_FICLONE );
-		try {
-			await rename( temporary, target );
-		} catch ( error ) {
-			// Another writer published the same digest first: its file stands.
-			if ( !(await statOrUndefined( target )) ) throw error;
-		}
+		await placeObject( file, temporary, wantLink );
+		await publishExclusive( temporary, target );
 	} finally {
 		await rm( temporary, { force: true } );
 	}
 	return stat( target );
+}
+
+/*
+================
+publishExclusive
+
+Names temporary as target unless target exists; the first writer's file
+stands. Not a rename: on Windows a rename replaces an existing file, so
+two builds storing the same bytes at once (two images that convert to one
+PNG) would swap the object under a record that just stated it, and the
+record would read as moved (the cold equivalence run lost 48 of 18,221
+that way). A hard link is exclusive (EEXIST); a volume that refuses links
+falls back to a rename only while the target is absent.
+================
+*/
+async function publishExclusive( temporary, target ) {
+	try {
+		await link( temporary, target );
+		return;
+	} catch ( error ) {
+		if ( error?.code === "EEXIST" ) return;
+		if ( ![ "EXDEV", "EPERM", "ENOTSUP", "EMLINK" ].includes( error?.code ) ) throw error;
+	}
+	if ( await statOrUndefined( target ) ) return;
+	await rename( temporary, target );
 }
 
 /*
