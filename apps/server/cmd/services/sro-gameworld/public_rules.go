@@ -319,7 +319,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(time.Now()),
 				Native: "No Christmas event runs: the towns stay undecorated, no event snow falls and no winter monsters come.",
-				Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
+				Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
 				Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",

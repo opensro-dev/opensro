@@ -199,12 +199,40 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	if total > uint64(wire.MaxSkillActionDamage) {
 		total = uint64(wire.MaxSkillActionDamage)
 	}
+	if defender.OneDamageHits && total > 0 {
+		// One lane keeps the single point, so the lane split still sums
+		// to the hit.
+		total = uint64(OneDamageCap(defender, uint32(total)))
+		if physicalDamage > 0 {
+			physicalDamage, magicalDamage = 1, 0
+		} else {
+			magicalDamage = 1
+		}
+	}
 	return Result{
 		Damage:         uint32(total),
 		MagicalDamage:  magicalDamage,
 		PhysicalDamage: physicalDamage,
 		ResultFlags:    resultFlags(attacker, calculation),
 	}, nil
+}
+
+/*
+================
+OneDamageCap
+
+Port-only, not native: a defender marked OneDamageHits (the Christmas
+Snow Slave, monster.oneDamageHitCodenames) takes exactly 1 from any hit
+that deals damage; a zero stays zero. Every damage formula a monster
+defender meets ends here: the att lanes (ResolveCalculation), the fixed
+pdmg hit and the life steal.
+================
+*/
+func OneDamageCap(defender Stats, damage uint32) uint32 {
+	if defender.OneDamageHits && damage > 0 {
+		return 1
+	}
+	return damage
 }
 
 /*
