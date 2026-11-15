@@ -467,7 +467,7 @@ test("floor picks hold per dungeon and a viewed dungeon opens on its first floor
 	// centred on that page.
 	const outside = { regionId: 250, x: 0, y: 0, z: 0, angle: 0 };
 	assert.equal( hud.cavePage( CAVE, outside ), undefined );
-	hud.activate( "map-dungeon:2", undefined, undefined );
+	hud.activate( "map-dungeon-icon:2", undefined, undefined );
 	const view = defined( hud.cavePage( CAVE, outside ) );
 	assert.equal( view.page.regionId, 32775 );
 	assert.deepEqual( view.center, cavePageCenter( view.page ) );
@@ -487,7 +487,7 @@ test("the dungeon page wears the later client's chrome and its arrows walk the f
 	const floors = caveDungeonFloors( CAVE, 32769 );
 	const outside = { regionId: 250, x: 0, y: 0, z: 0, angle: 0 };
 	const shown = () => defined( hud.cavePage( CAVE, outside ) ).page;
-	hud.activate( "map-dungeon:1", undefined, undefined );
+	hud.activate( "map-dungeon-icon:1", undefined, undefined );
 	assert.equal( shown().floorIndex, 0, "viewing opens on the first floor" );
 	// The pin stands on the world too, without the globe.
 	let view = paint( hud );
@@ -520,7 +520,7 @@ test("the dungeon page wears the later client's chrome and its arrows walk the f
 	assert.equal( shown().floorIndex, 3, "the up end holds" );
 	hud.activate( "map-floor-down", undefined, undefined, false );
 	assert.equal( shown().floorIndex, 2 );
-	// The entrance's own icon opens its dungeon, as its label does.
+	// The entrance's own icon opens its dungeon.
 	hud.clearView();
 	hud.activate( "map-dungeon-icon:2", undefined, undefined );
 	assert.equal( defined( hud.cavePage( CAVE, outside ) ).page.regionId, 32775 );
@@ -631,8 +631,21 @@ test("a door is named by the client's text and its control is the icon drawn the
 	assert.deepEqual( defined( control( view, "map-dungeon-icon:1" ) ).rect, icon );
 	// A door the text does not name stays the plain icon.
 	view = paint( hud, { center, strings: { SN_ZONE_23001: "Fixture Tomb" } } );
-	assert.equal( control( view, "map-dungeon:1" ), undefined );
 	assert.equal( control( view, "map-dungeon-icon:1" ), undefined );
+	hud.dispose();
+});
+
+test("a door adds no label: the page's own label names the place once (#3516)", () => {
+	const hud = tools();
+	const written = [];
+	const text = {
+		...TEXT,
+		quads: ( value, rect, clip, color, style ) => (written.push( { value, rect, style } ), [])
+	};
+	const center = defined( worldMapDungeonPose( 0x8001 ) );
+	const view = paint( hud, { center, text } );
+	defined( control( view, "map-dungeon-icon:1" ), "the door is still offered" );
+	assert.deepEqual( written.filter( row => row.value === "Fixture Cave" ), [], "no second label" );
 	hud.dispose();
 });
 
@@ -799,18 +812,11 @@ test("dungeon entrances open their map and a dungeon starts on the player's floo
 		// Stand at the Donwhang cave mouth the world map itself names.
 		f.moveTo( defined( worldMapDungeonPose( 0x8001 ), "the cave mouth pose" ) );
 		let view = f.step();
-		defined( control( view, "map-dungeon:1" ), "the cave entrance is offered" );
-		// The entrance's own icon takes the click too (issue #3210):
-		// the control is the client's xy_dungeon icon drawn at the
-		// door, so hovering it shows the same popup as the label
-		// (issue #3238: the popup used to answer to the name alone).
-		const icon = defined( control( view, "map-dungeon-icon:1" ) );
+		// The entrance's own icon takes the click (issue #3210): the
+		// control is the client's xy_dungeon icon drawn at the door, so
+		// hovering it shows the popup (issue #3238).
+		const icon = defined( control( view, "map-dungeon-icon:1" ), "the cave entrance is offered" );
 		assert.equal( icon.helpText, "Open the Donwhang Stone Cave map", "the marker carries the popup text" );
-		assert.equal(
-			defined( control( view, "map-dungeon:1" ) ).helpText,
-			icon.helpText,
-			"marker and label name the same popup"
-		);
 		assert.equal(
 			f.scenes.at( -1 )?.quads.some( quad =>
 				quad.texture.endsWith( "xy_dungeon.png" ) &&
