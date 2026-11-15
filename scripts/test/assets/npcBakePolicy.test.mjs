@@ -6,13 +6,15 @@ npcBakePolicy.test.mjs - which clip policy a shared NPC model bakes with
 A BSR that a town NPC shares with a monster, a COS or a ride bakes once,
 with the monster policy, whichever consumer the roster lists first
 (monsterPolicyBsrs). The v1.696 lamp genie and its jinn pet share
-res/cos/p_jinn.bsr. Fixture rosters only; no game data.
+res/cos/p_jinn.bsr. A v1.696 model cell that names several models (the
+Mad General's three forms) resolves to its first (resolveNpcModel).
+Fixture rosters only; no game data.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { monsterPolicyBsrs } from "../../build/char/buildNpcModelAssets.mjs";
+import { monsterPolicyBsrs, resolveNpcModel } from "../../build/char/buildNpcModelAssets.mjs";
 
 const MODELS = {
 	NPC_GACHA_LAMP_GENIE: "res/cos/p_jinn.bsr",
@@ -58,4 +60,44 @@ test("a ride model counts as a monster bake for an NPC that shares it", () => {
 
 test("an unresolved model adds nothing", () => {
 	assert.deepEqual( [ ...policy( [ "MOB_UNKNOWN" ] ) ], [] );
+});
+
+/*
+================
+characterRow
+
+A characterdata row with its identity, base link and model cell; every
+other column is empty.
+================
+*/
+function characterRow( refObjId, base, model ) {
+	const cols = new Array( 120 ).fill( "" );
+	cols[1] = String( refObjId );
+	cols[4] = base;
+	cols[52] = model;
+	return cols;
+}
+
+test("a model cell naming several forms resolves to its first, for the kind and its clone", () => {
+	const rows = new Map( [
+		[
+			"MOB_ARABIA_MAD_GENERAL",
+			characterRow(
+				41001,
+				"xxx",
+				String.raw`mob\arabia\mad_general_1.bsr,mob\arabia\mad_general_2.bsr,mob\arabia\mad_general_3.bsr`
+			)
+		],
+		[
+			"MOB_ARABIA_MAD_GENERAL_CLONE",
+			characterRow( 41002, "MOB_ARABIA_MAD_GENERAL", String.raw`mob\arabia\mad_general_3_clone.bsr` )
+		],
+		[ "MOB_KT_MUJIGI", characterRow( 41003, "xxx", String.raw`mob\arabia\mujigi_koold.bsr` ) ]
+	] );
+	assert.equal( resolveNpcModel( "MOB_ARABIA_MAD_GENERAL", rows ).bsrPath, "res/mob/arabia/mad_general_1.bsr" );
+	assert.equal(
+		resolveNpcModel( "MOB_ARABIA_MAD_GENERAL_CLONE", rows ).bsrPath,
+		"res/mob/arabia/mad_general_3_clone.bsr"
+	);
+	assert.equal( resolveNpcModel( "MOB_KT_MUJIGI", rows ).bsrPath, "res/mob/arabia/mujigi_koold.bsr" );
 });
