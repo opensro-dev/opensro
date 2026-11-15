@@ -205,12 +205,64 @@ export function expandedWorldMapOn( game: { readonly alexandria?: boolean; } | n
 ================
 worldMapPages
 
-The shipped worldmap_mapinfo.txt fields; 5758D0 probes towns 1..5 in order.
-Pages published beyond those five (decodeWorldMapLayout) follow them.
+Every page the window can show: the shipped worldmap_mapinfo.txt towns,
+the pages published beyond them (decodeWorldMapLayout), and the fortress
+pages a fortress icon opens (#3513).
 ================
 */
 export function worldMapPages( layout: WorldMapLayout = nativeLayout() ) {
+	return [ ...worldMapPagesAround( layout ), ...worldMapFortressPages() ];
+}
+
+/*
+================
+worldMapPagesAround
+
+The pages the window picks by the character's position: 5758D0 probes
+towns 1..5 in order, then the published extra towns. A fortress page is
+never picked so; only its icon opens it.
+================
+*/
+function worldMapPagesAround( layout: WorldMapLayout ) {
 	return [ ...worldMapTownPages(), ...layout.extra ];
+}
+
+/*
+================
+worldMapPageCaption
+
+The string key a page's caption names after UIIT_PAG_LOCALMAP (576949):
+a town's UIIT_STT_ string, page 1001's SN_FORTRESS_JANGAN object text.
+================
+*/
+export function worldMapPageCaption( page: { readonly name: string; readonly caption?: string; } ): string {
+	return page.caption ?? "UIIT_STT_" + page.name;
+}
+
+/*
+================
+worldMapFortressPages
+
+worldmap_mapinfo.txt row 1001, the Jangan fortress (world INS_FORT_JA):
+the page the three fort_worldmap icons (localinfo 91006-91008) open. Its
+regions (69..74 across, 71..67 down) lie outside the overview, so the
+town-page projection places the fortress's own positions unchanged.
+576949 captions it SN_FORTRESS_JANGAN.
+================
+*/
+function worldMapFortressPages() {
+	return [
+		{
+			id: 1001,
+			name: "FORTRESS_JANGAN",
+			caption: "SN_FORTRESS_JANGAN",
+			image: "fort_jangan",
+			size: [ 1024, 819 ],
+			texture: [ 1024, 1024 ],
+			picture: [ 1024, 819 ],
+			bounds: [ 69, 71, 74, 67, -48, 48, 48, 0 ]
+		}
+	] as const;
 }
 
 /*
@@ -325,7 +377,7 @@ export function worldMapPageAt( p: Pose, layout: WorldMapLayout = nativeLayout()
 	if ( !featuresAt( p.regionId ).worldMap ) return 0;
 	const rx = sectorX( p.regionId ),
 		rz = sectorY( p.regionId );
-	for ( const page of worldMapPages( layout ) ) {
+	for ( const page of worldMapPagesAround( layout ) ) {
 		const [l, t, r, b, lx, ly, rxoff, ry] = page.bounds;
 		if ( rx < l || rx > r || rz < b || rz > t ) continue;
 		const x = (rx - l) * REGION_SIZE + p.x,
