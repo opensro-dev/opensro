@@ -10,7 +10,8 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { sha256Hex } from "./hash.mjs";
-import { readJsonOrUndefined, writeStateJson } from "./jsonOut.mjs";
+import { readJsonOrUndefined } from "./jsonOut.mjs";
+import { writeStateJson } from "./stateFile.mjs";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 
 const defaultCachePath = buildStatePath( "file-hash-cache.json" );

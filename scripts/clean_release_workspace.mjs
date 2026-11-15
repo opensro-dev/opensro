@@ -16,15 +16,14 @@ import { fileURLToPath } from "node:url";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, ".." );
+// The build's reuse caches are not here: they live beside the shared
+// generated tree (generatedRoot.mjs buildStatePath), not in this checkout,
+// and the next build on any worktree reuses them.
 const removablePaths = [
 	".state/archive-dogfood-cache",
 	".state/probe-gm.log",
 	".state/chat-probe-085806432.err.log",
 	".state/chat-probe-085806432.out.log",
-	".state/file-hash-cache.json",
-	".state/json-minify-cache.json",
-	".state/outdoorPayloadVerdicts.json",
-	".state/asset-integrity-hash-cache.json",
 	".state/check-pipeline.log",
 	".state/check-dogfood",
 	".state/codex-validation",
@@ -51,7 +50,7 @@ for ( const relativePath of removablePaths ) {
 
 console.log(
 	`Release workspace cleanup removed ${removedTargets} target(s), ` +
-	`${( removedBytes / ( 1024 ** 2 ) ).toFixed( 1 )} MiB.`
+		`${(removedBytes / (1024 ** 2)).toFixed( 1 )} MiB.`
 );
 
 /*

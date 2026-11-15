@@ -15,7 +15,8 @@ import {
 } from "./shared/compressionUtils.mjs";
 import { fileHashCacheDisabled } from "./shared/fileHashCache.mjs";
 import { isMainScript, listFiles } from "./shared/fsUtils.mjs";
-import { readJsonOrUndefined, writeStateJson } from "./shared/jsonOut.mjs";
+import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
+import { writeStateJson } from "./shared/stateFile.mjs";
 
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const assetsRoot = path.join( publicRoot, "assets" );

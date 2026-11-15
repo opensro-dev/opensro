@@ -19,12 +19,13 @@ too, so incompressible media is never tried twice.
 */
 
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rename, stat, unlink, utimes, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, unlink, utimes } from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
 import { promisify } from "node:util";
 import { MEMBER_ENCODING_GZIP } from "./packFormat.mjs";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
+import { writeStateFile } from "./stateFile.mjs";
 
 const DEFAULT_CACHE_ROOT = buildStatePath( "pack-member-gzip" );
 
@@ -95,20 +96,6 @@ function cachePaths( root, digest ) {
 		encoded: path.join( folder, digest + ".gz" ),
 		raw: path.join( folder, digest + "." + RAW_VERDICT )
 	};
-}
-
-/*
-================
-writeOnce
-
-Write-then-rename, so a reader never sees a partial cache entry.
-================
-*/
-async function writeOnce( filename, bytes ) {
-	await mkdir( path.dirname( filename ), { recursive: true } );
-	const temporary = `${filename}.${process.pid}.${Math.random().toString( 16 ).slice( 2 )}.tmp`;
-	await writeFile( temporary, bytes );
-	await rename( temporary, filename );
 }
 
 /*
@@ -198,10 +185,10 @@ export function openMemberCompression( { cacheRoot = DEFAULT_CACHE_ROOT } = {} )
 		const encoded = portableGzip( await compress( bytes, GZIP_OPTIONS ) );
 		const paths = cachePaths( cacheRoot, digest );
 		if ( encoded.length <= bytes.length * MEMBER_MAX_RATIO ) {
-			await writeOnce( paths.encoded, encoded );
+			await writeStateFile( paths.encoded, encoded );
 			return { stored: encoded, encoding: MEMBER_ENCODING_GZIP };
 		}
-		await writeOnce( paths.raw, Buffer.from( digest, "utf8" ) );
+		await writeStateFile( paths.raw, Buffer.from( digest, "utf8" ) );
 		return { stored: bytes, encoding: null };
 	}
 

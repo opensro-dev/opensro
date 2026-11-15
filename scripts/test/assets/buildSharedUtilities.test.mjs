@@ -35,12 +35,8 @@ import {
 	readJmxSignature,
 	readUInt32Array
 } from "../../build/shared/jmxBinaryReader.mjs";
-import {
-	readJsonOrNullSync,
-	readJsonOrUndefined,
-	writeJsonIfChanged,
-	writeStateJson
-} from "../../build/shared/jsonOut.mjs";
+import { readJsonOrNullSync, readJsonOrUndefined, writeJsonIfChanged } from "../../build/shared/jsonOut.mjs";
+import { writeStateFile, writeStateJson } from "../../build/shared/stateFile.mjs";
 import { quatMultiply, quatRotateVector } from "../../build/shared/math3d.mjs";
 import { extractResinfoSection, parseResinfoSummary } from "../../build/shared/resinfoParser.mjs";
 import {
@@ -158,6 +154,17 @@ test("concurrent saves of one shared build cache leave one whole cache and no te
 	const saved = JSON.parse( await readFile( cachePath, "utf8" ) );
 	assert.deepEqual( saved, payloads[saved.writer] );
 	assert.deepEqual( await readdir( path.dirname( cachePath ) ), [ "file-hash-cache.json" ] );
+});
+
+test("a state file of raw bytes is replaced whole and leaves no temp file", async ( t ) => {
+	const root = await mkdtemp( path.join( os.tmpdir(), "sro-state-file-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	const target = path.join( root, "pack-member-gzip", "ab", "ab12.gz" );
+	const bytes = Buffer.from( [ 0x1f, 0x8b, 0, 255, 10 ] );
+	assert.equal( await writeStateFile( target, Buffer.from( "older" ) ), true );
+	assert.equal( await writeStateFile( target, bytes ), true );
+	assert.deepEqual( await readFile( target ), bytes );
+	assert.deepEqual( await readdir( path.dirname( target ) ), [ "ab12.gz" ] );
 });
 
 test("superseded generated artifacts move to a recoverable archive with provenance", async ( t ) => {

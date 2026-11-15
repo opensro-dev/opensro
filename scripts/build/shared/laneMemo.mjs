@@ -37,7 +37,7 @@ import { buildStatePath, CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs"
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { codeHash } from "./codeStamp.mjs";
 import { claimPublicPaths, recordClaims } from "./publicationLedger.mjs";
-import { writeStateJson } from "./jsonOut.mjs";
+import { writeStateJson } from "./stateFile.mjs";
 import { buildKnobLines, hashRoots } from "./resourceBuildFingerprint.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
 

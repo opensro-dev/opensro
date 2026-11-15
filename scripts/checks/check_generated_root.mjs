@@ -69,7 +69,8 @@ const ROOT_VARIABLE_READS = [
 const SUBTREE = "(?:client-public|intermediate|observatory)";
 // The build's reuse caches that buildStatePath owns.
 const BUILD_CACHE = "(?:lane-memo|file-hash-cache\\.json|json-minify-cache\\.json|pack-member-gzip|" +
-	"asset-integrity-hash-cache\\.json|catalogue-webp-cache)";
+	"asset-integrity-hash-cache\\.json|catalogue-webp-cache|resource-build-fingerprint\\.json|" +
+	"outdoorPayloadVerdicts\\.json)";
 const PATTERNS = [
 	// A build cache in a checkout's own .state: path.join( root, ".state",
 	// "lane-memo" ). The caches describe the generated tree, so they live
