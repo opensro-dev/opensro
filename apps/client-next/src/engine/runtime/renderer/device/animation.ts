@@ -7,6 +7,12 @@ Admits a model's animation inputs to the GPU once, keeps one input stream
 per palette source, and encodes the compute pass that evaluates the
 bones. Models the GPU path cannot run fall back to CPU poses.
 
+A stream's inputs (one 16-byte row a pose) are a range of a staged slab
+set (buffer-slabs.ts), not a buffer of its own: every pending stream's
+rows reach the GPU in one write an encode, not one write a stream. The
+range binds with the size the stream's own buffer had, so the shader reads
+the same bytes it did.
+
 A model's inputs are two buffers (gpu-animation-plan.ts): its skeleton,
 owned by the model, and its clip set, shared by every admitted model with
 the same clips. An assembled character therefore uploads a few kilobytes,
@@ -25,6 +31,7 @@ import {
 import type { GpuTimingFrame } from "../internal/gpu-contract";
 import { animationShader } from "./animation-shader";
 import { destroyNow, type Retire } from "./retirement";
+import { createStagedSlabs, type BufferSlice } from "./buffer-slabs";
 import { isCharacterAnimationExtension } from "@/engine/foundation/animation/character-render-plan";
 /*
 ================
@@ -70,7 +77,7 @@ type Stream = {
 	model: Model;
 	primitive: CharacterPrimitive;
 	output: GPUBuffer;
-	input: GPUBuffer;
+	input: BufferSlice;
 	configuration: GPUBuffer;
 	binding: GPUBindGroup;
 	data: Float32Array;
@@ -96,12 +103,19 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		staticBytes = 0,
 		streamBytes = 0,
 		dispatches = 0,
+		inputUploads = 0,
 		poses = 0;
 	const models = new Map<CharacterModel, Model>(),
 		clipSets = new Map<readonly CharacterClip[], ClipSet>(),
 		streams = new Map<Float32Array, Stream>(),
 		pending = new Set<Stream>(),
-		unsupported = new WeakSet<CharacterModel>();
+		unsupported = new WeakSet<CharacterModel>(),
+		inputs = createStagedSlabs(
+			device,
+			"animation-inputs",
+			GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+			retire
+		);
 	// CPU-side plans. A model whose current clip is not GPU-eligible is refused
 	// before admission; without these it rebuilt its plan every frame. A null
 	// entry records a clip set or skeleton the GPU must not run.
@@ -264,7 +278,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		if ( !row ) return;
 		pending.delete( row );
 		// A pass encoded earlier this frame may still bind the row.
-		retire( row.input );
+		inputs.free( row.input );
 		retire( row.configuration );
 		streamBytes -= row.data.byteLength + CONFIGURATION_BYTES;
 		streams.delete( source );
@@ -336,13 +350,9 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			if ( !row ) {
 				const data = new Float32Array( capacity * 4 );
 				if ( streamBytes + data.byteLength + CONFIGURATION_BYTES > STREAM_BYTES ) return false;
-				let input: GPUBuffer | undefined, configuration: GPUBuffer | undefined;
+				let input: BufferSlice | undefined, configuration: GPUBuffer | undefined;
 				try {
-					input = device.createBuffer( {
-						label: "animation-inputs",
-						size: data.byteLength,
-						usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-					} );
+					input = inputs.allocate( data.byteLength );
 					configuration = device.createBuffer( {
 						label: "animation-configuration",
 						size: CONFIGURATION_BYTES,
@@ -351,10 +361,13 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 					device.queue.writeBuffer( configuration, 0, config.buffer, config.byteOffset, config.byteLength );
 					const binding = device.createBindGroup( {
 						layout: pipeline.getBindGroupLayout( 0 ),
-						entries: [ admitted.buffer, admitted.clips.buffer, input, output, configuration ].map( (
-							buffer,
-							binding
-						) => ({ binding, resource: { buffer } }) )
+						entries: [
+							{ binding: 0, resource: { buffer: admitted.buffer } },
+							{ binding: 1, resource: { buffer: admitted.clips.buffer } },
+							{ binding: 2, resource: input.binding },
+							{ binding: 3, resource: { buffer: output } },
+							{ binding: 4, resource: { buffer: configuration } }
+						]
 					} );
 					row = {
 						model: admitted,
@@ -371,7 +384,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 					admitted.refs++;
 					streamBytes += data.byteLength + CONFIGURATION_BYTES;
 				} catch ( error ) {
-					input?.destroy();
+					if ( input ) inputs.free( input );
 					configuration?.destroy();
 					if ( !admitted.refs ) retireModel( model, admitted );
 					throw error;
@@ -391,7 +404,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 				row.data[at + 2] = i;
 			}
 			row.count = count;
-			device.queue.writeBuffer( row.input, 0, row.data.buffer, 0, count * 16 );
+			inputs.write( row.input, row.data, count * 16 );
 			pending.add( row );
 			return true;
 		},
@@ -407,11 +420,18 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 		/*
 		================
 		encode
+
+		One write carries every pending stream's rows before the pass. A
+		stream prepared again after an earlier encode this frame is pending
+		again; its rows go up in the next encode's write. Both writes precede
+		the frame's submit, so an earlier pass of the same command buffer
+		reads the new rows too, as it did from the stream's own buffer.
 		================
 		*/
 		encode( encoder: GPUCommandEncoder, timing?: GpuTimingFrame ) {
 			if ( disposed ) throw Error( "Disposed GPU animation owner" );
 			if ( !pending.size ) return;
+			inputUploads += inputs.flush();
 			const pass = encoder.beginComputePass( {
 				label: "skeletal-animation",
 				timestampWrites: timing?.pass( "skeletal-animation" )
@@ -437,6 +457,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			staticBytes,
 			streamBytes,
 			dispatches,
+			inputUploads,
 			poses
 		}),
 		/*
@@ -449,6 +470,7 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 			disposed = true;
 			for ( const source of streams.keys() ) release( source );
 			for ( const [model, row] of [ ...models ] ) retireModel( model, row );
+			inputs.dispose();
 			models.clear();
 			clipSets.clear();
 			pending.clear();
