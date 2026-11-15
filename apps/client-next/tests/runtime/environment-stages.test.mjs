@@ -18,7 +18,6 @@ const { frameStages, packStages } = await import( "../../src/engine/runtime/rend
 const OFF = {
 	heightFog: false,
 	dynamicSun: false,
-	waterRefraction: false,
 	skyDetail: false,
 	hdrToneMap: false,
 	sunShadow: false,
@@ -30,8 +29,8 @@ test("all rows off packs the native zero words; each row owns one word", () => {
 	const saved = new Float32Array( 8 );
 	packStages( saved, OFF );
 	assert.deepEqual( [ ...saved ], [ 0, 0, 0, 0, 0, 0, 0, 0 ] );
-	packStages( saved, { ...OFF, waterRefraction: true } );
-	assert.deepEqual( [ ...saved ], [ 0, 0, 1, 0, 0, 0, 0, 0 ] );
+	packStages( saved, { ...OFF, skyDetail: true } );
+	assert.deepEqual( [ ...saved ], [ 0, 0, 0, 1, 0, 0, 0, 0 ], "stages.z stays zero" );
 	packStages( saved, { ...OFF, ambientOcclusion: true, sunShadow: true } );
 	assert.deepEqual( [ ...saved ], [ 0, 0, 0, 0, 0, 1, 0, 1 ] );
 });
