@@ -74,17 +74,25 @@ func TestCargoPurchaseAssignsOwnerBeforeChoosingMergeTarget(t *testing.T) {
 	c.Job.Alias = "Buyer"
 	ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
 	rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40, Contents: []commerce.Content{{Ref: ref, Stack: 40}}}}
-	c.MissionInventory[1].TradeOwner = "Foreign"
-	c.MissionInventory[1].StackCount = 10
-	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3})
-	if len(c.MissionInventory) != 3 || c.MissionInventory[1].TradeOwner != "Foreign" || c.MissionInventory[1].StackCount != 10 || c.MissionInventory[2].TradeOwner != "Buyer" || c.MissionInventory[2].StackCount != 3 {
-		t.Fatalf("cargo origin or merge changed: %+v", c.MissionInventory)
+	// Goods load into the transport only (buysIntoTransport): a foreign
+	// stack already in its cargo must stay apart from the buyer's.
+	foreign := c.MissionInventory[1]
+	foreign.Slot, foreign.TradeOwner, foreign.StackCount = 0, "Foreign", 10
+	c.MissionInventory = c.MissionInventory[:1]
+	c.ActiveCOS.Container.Rows = []domain.InventoryRow{foreign}
+	buy := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3, CosGID: c.ActiveCOS.GID}
+	trade(t, rt, c, buy)
+	cargo := c.ActiveCOS.Container.Rows
+	if len(cargo) != 2 || cargo[0].TradeOwner != "Foreign" || cargo[0].StackCount != 10 || cargo[1].TradeOwner != "Buyer" || cargo[1].StackCount != 3 {
+		t.Fatalf("cargo origin or merge changed: %+v", cargo)
 	}
 	if rt.Commerce.Tabs[1][0].Contents[0].TradeOwner != "" {
 		t.Fatal("purchase mutated shared merchandise template")
 	}
-	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 2})
-	if len(c.MissionInventory) != 3 || c.MissionInventory[2].StackCount != 5 || goldOf(c) != 4700 {
-		t.Fatalf("same-owner purchase failed: %+v", c.MissionInventory)
+	buy.Quantity = 2
+	trade(t, rt, c, buy)
+	cargo = c.ActiveCOS.Container.Rows
+	if len(cargo) != 2 || cargo[1].StackCount != 5 || goldOf(c) != 4700 {
+		t.Fatalf("same-owner purchase failed: %+v", cargo)
 	}
 }

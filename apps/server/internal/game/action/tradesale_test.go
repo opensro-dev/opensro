@@ -344,6 +344,74 @@ func TestTradePurchaseRequiresMerchantJobQuestAndTransport(t *testing.T) {
 
 /*
 ================
+TestTradePurchaseLoadsOnlyTheSummonedTransport
+
+The goods carry exploit: with a transport out, a bag buy (0x08, which
+the merchant window sends when the transport came after the shop
+opened) put goods in the personal bag, where they rode a town teleport
+once the transport was gone. A purchase must be the COS buy naming the
+summoned transport; anything else is refused with 0x1860 and changes
+nothing. The COS buy itself still loads the transport.
+================
+*/
+func TestTradePurchaseLoadsOnlyTheSummonedTransport(t *testing.T) {
+	cases := []struct {
+		reason string
+		q      func(c *enterworld.Character) wire.ItemMoveRequest
+	}{
+		{"bag buy", func(c *enterworld.Character) wire.ItemMoveRequest {
+			return wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3}
+		}},
+		{"other gid", func(c *enterworld.Character) wire.ItemMoveRequest {
+			return wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3, CosGID: c.ActiveCOS.GID + 1}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			rt, c := traderFixture(t, false)
+			ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+			rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+			before := c.Snapshot()
+			result := trade(t, rt, c, tc.q(c))
+			if !reflect.DeepEqual(before, c.Snapshot()) || len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 {
+				t.Fatalf("%s bought goods outside the transport: %+v", tc.reason, result)
+			}
+			// The other-gid case may stop at the container lookup first;
+			// the bag buy must answer the purchase check's own code.
+			if tc.reason == "bag buy" && result.Frames[0].Payload[1] != tradeErrOnlyTrader {
+				t.Fatalf("bag buy refused with 0x%X, want 0x%X", result.Frames[0].Payload[1], tradeErrOnlyTrader)
+			}
+		})
+	}
+	// A COS buy may name any summoned companion with a container the player
+	// owns (ownedCOSContainer); only the summoned transport takes goods.
+	t.Run("another owned companion", func(t *testing.T) {
+		rt, c := traderFixture(t, false)
+		ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+		rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+		other := *c.ActiveCOS
+		other.GID = c.ActiveCOS.GID + 1
+		other.Container = &domain.COSContainer{Capacity: 4}
+		c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: 20, RefObjID: other.RefObjID, Codename: "ITEM_COS_SUMMON", StackCount: 1, Summon: &other})
+		if found := c.CompanionByGID(other.GID); found != &other {
+			t.Fatalf("fixture: the second companion is not owned and summoned: %+v", found)
+		}
+		trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3, CosGID: other.GID})
+		if len(other.Container.Rows) != 0 || len(c.ActiveCOS.Container.Rows) != 0 {
+			t.Fatalf("goods loaded into a companion that is not the summoned transport: %+v", other.Container.Rows)
+		}
+	})
+	rt, c := traderFixture(t, false)
+	ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+	rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3, CosGID: c.ActiveCOS.GID})
+	if len(c.ActiveCOS.Container.Rows) != 1 || c.ActiveCOS.Container.Rows[0].StackCount != 3 {
+		t.Fatalf("the transport buy no longer loads the transport: %+v", c.ActiveCOS.Container.Rows)
+	}
+}
+
+/*
+================
 TestTradeSaleJobAndQuantityRules
 
 Natively a sale in a hunter's suit or in no suit is refused (job states 3 and
