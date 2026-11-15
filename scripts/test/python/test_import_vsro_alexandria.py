@@ -13,6 +13,7 @@ the native-versus-VSRO catalog comparison.
 """
 import script_paths  # noqa: F401  (puts scripts/ and its build folders on sys.path, #3410)
 import hashlib
+import os
 import struct
 import sys
 import tempfile
@@ -240,6 +241,41 @@ class PinTests(unittest.TestCase):
 		with self.assertRaises(SystemExit):
 			alex.require_vsro_pin(self.vsro, ("Map", "Media"), pins)
 
+	# ================
+	# test_a_later_step_admits_an_unchanged_verified_archive
+	#
+	# #3590: the variant step trusts stage 1's hash only while the file keeps
+	# the size and mtime it was hashed at and the digest is today's pin. The
+	# swapped bytes below keep both, so admission (not a second hash) is what
+	# lets them through; a moved mtime or a stale pin hashes again and fails.
+	# ================
+	def test_a_later_step_admits_an_unchanged_verified_archive(self):
+		pins = self.pin("Media", b"the pinned client")
+		alex._verified_digests.clear()
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex.write_verified_archives(self.vsro)
+		archive = self.vsro / "Media.pk2"
+		stat = archive.stat()
+		archive.write_bytes(b"the pinned cliEnt")
+		os.utime(archive, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+		alex._verified_archives.clear()
+		self.assertEqual(alex.admit_verified_archives(self.vsro, pins), 1)
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex._verified_archives.clear()
+		os.utime(archive, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+		self.assertEqual(alex.admit_verified_archives(self.vsro, pins), 0)
+		with self.assertRaises(SystemExit):
+			alex.verify_vsro_archive(self.vsro, "Media", pins)
+
+	def test_a_record_of_another_pin_is_not_admitted(self):
+		pins = self.pin("Media", b"the pinned client")
+		alex._verified_digests.clear()
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+		alex.write_verified_archives(self.vsro)
+		alex._verified_archives.clear()
+		self.assertEqual(alex.admit_verified_archives(self.vsro, {"Media": "0" * 64}), 0)
+		self.assertEqual(alex.admit_verified_archives(self.vsro / "absent", pins), 0)
+
 	def test_the_checked_in_pin_names_every_archive_the_chain_reads(self):
 		pins = alex.archive_pins()
 		self.assertEqual(set(pins), set(alex.ARCHIVE_NAMES))
@@ -250,3 +286,35 @@ class PinTests(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class ArchiveIndexTests(unittest.TestCase):
+	"""#3590: a directory is walked once per process for the same archive bytes."""
+
+	def setUp(self):
+		alex._archive_indexes.clear()
+		self.addCleanup(alex._archive_indexes.clear)
+		self.walks = 0
+		original = alex.sro_pk2.read_directory
+
+		def counting(data, blocks=None):
+			self.walks += 1
+			return [alex.sro_pk2.Entry("Server_Dep\A.txt", len(data), 1)]
+
+		alex.sro_pk2.read_directory = counting
+		self.addCleanup(setattr, alex.sro_pk2, "read_directory", original)
+
+	def test_the_same_bytes_are_walked_once(self):
+		first = alex.archive_index(b"archive one")
+		second = alex.archive_index(bytes(b"archive one"))
+		self.assertEqual(self.walks, 1)
+		self.assertEqual(list(first), ["server_dep/a.txt"])
+		first.clear()
+		self.assertEqual(list(second), ["server_dep/a.txt"], "a caller's edit stays in its own copy")
+		self.assertEqual(list(alex.archive_index(b"archive one")), ["server_dep/a.txt"])
+
+	def test_other_bytes_are_walked_again(self):
+		alex.archive_index(b"archive one")
+		index = alex.archive_index(b"archive two!")
+		self.assertEqual(self.walks, 2)
+		self.assertEqual(index["server_dep/a.txt"].offset, len(b"archive two!"))

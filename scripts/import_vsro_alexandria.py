@@ -339,9 +339,36 @@ def object_placeholder(row):
 #============================================================================
 
 
+# An archive's directory is walked and decrypted once per process (#3590):
+# the import steps reopen the same pinned archives for every file they read,
+# and each walk of Media.pk2 cost about a second. The key is the archive's
+# length with digests of its head (the header and root directory block) and
+# its tail (where an appended patch lands). The archives are read-only
+# inputs the pin gate checked, so within one process the key names one
+# directory.
+INDEX_HEAD_BYTES = 1 << 20
+INDEX_TAIL_BYTES = 1 << 16
+_archive_indexes = {}
+
+
+def archive_key(data):
+	"""The process-local identity of one archive's bytes (archive_index)."""
+	size = len(data)
+	head = hashlib.sha256(data[:INDEX_HEAD_BYTES]).hexdigest()
+	tail = hashlib.sha256(data[max(0, size - INDEX_TAIL_BYTES):]).hexdigest()
+	return size, head, tail
+
+
 def archive_index(data):
-	"""{lower-case path with forward slashes: entry} of one PK2."""
-	return {entry.path.replace("\\", "/").lower(): entry for entry in sro_pk2.read_directory(data)}
+	"""{lower-case path with forward slashes: entry} of one PK2, walked once per process."""
+	key = archive_key(data)
+	index = _archive_indexes.get(key)
+	if index is None:
+		index = {entry.path.replace("\\", "/").lower(): entry for entry in sro_pk2.read_directory(data)}
+		_archive_indexes[key] = index
+	# Entries hold only offsets, valid for any mapping of the same bytes; the
+	# copy keeps one caller's edits out of another's index.
+	return dict(index)
 
 
 def open_archive(root, name):
@@ -371,6 +398,11 @@ def sha256_of(data):
 #============================================================================
 
 _verified_archives = set()
+# What this process verified, for the next step of the same build (#3590):
+# {resolved path: {"name", "size", "mtimeNs", "sha256"}}.
+_verified_digests = {}
+VERIFIED_ARCHIVES_NAME = "verified-archives.json"
+VERIFIED_ARCHIVES_FORMAT = "sro-verified-vsro-archives"
 
 
 def archive_pins():
@@ -410,12 +442,58 @@ def verify_vsro_archive(root, name, pins=None):
 			"Alexandria is built from one pinned VSRO client (#1745); its archives are never committed."
 		)
 	_verified_archives.add(key)
+	stat = path.stat()
+	_verified_digests[key] = {"name": name, "size": stat.st_size, "mtimeNs": stat.st_mtime_ns, "sha256": actual}
 
 
 def require_vsro_pin(root, names, pins=None):
 	"""Every archive in names against its pin, before any of them is read."""
 	for name in names:
 		verify_vsro_archive(root, name, pins)
+
+
+# ================
+# write_verified_archives
+#
+# Record the archives this process hashed to their pins, beside the
+# stage 1 output, so the variant step of the same build need not hash
+# them again (#3590).
+# ================
+def write_verified_archives(folder):
+	document = {"format": VERIFIED_ARCHIVES_FORMAT, "archives": dict(sorted(_verified_digests.items()))}
+	(folder / VERIFIED_ARCHIVES_NAME).write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+
+# ================
+# admit_verified_archives
+#
+# Trust an earlier step's verification of one archive only while the file
+# still has the size and mtime it was hashed at and its recorded digest is
+# today's pin. Anything else is hashed again by verify_vsro_archive, so the
+# pin stays exactly as strict. Returns how many archives were admitted.
+# ================
+def admit_verified_archives(folder, pins=None):
+	path = Path(folder) / VERIFIED_ARCHIVES_NAME
+	try:
+		document = json.loads(path.read_text(encoding="utf-8"))
+	except (OSError, ValueError):
+		return 0
+	if document.get("format") != VERIFIED_ARCHIVES_FORMAT or not isinstance(document.get("archives"), dict):
+		return 0
+	expected = archive_pins() if pins is None else pins
+	admitted = 0
+	for key, record in document["archives"].items():
+		try:
+			stat = Path(key).stat()
+		except OSError:
+			continue
+		if (stat.st_size, stat.st_mtime_ns) != (record.get("size"), record.get("mtimeNs")):
+			continue
+		if record.get("sha256") != expected.get(record.get("name")):
+			continue
+		_verified_archives.add(key)
+		admitted += 1
+	return admitted
 
 
 # ================
@@ -630,6 +708,7 @@ def main():
 	# parents: the variant build's isolated stage 1 game root starts empty.
 	EXTRACTED_ROOT.mkdir(parents=True, exist_ok=True)
 	manifest = import_alexandria(Path(args.vsro_root), EXTRACTED_ROOT, args.native_mapinfo)
+	write_verified_archives(EXTRACTED_ROOT / OUTPUT_FOLDER)
 	log(f"{len(manifest['files'])} files copied, {len(manifest['missing'])} absent from the archives")
 	log(f"extracted/{OUTPUT_FOLDER}/{MANIFEST_NAME} written")
 

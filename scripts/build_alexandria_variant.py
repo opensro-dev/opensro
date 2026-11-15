@@ -442,8 +442,11 @@ def lower_paths(root):
 # ================
 def build_variant(vsro_root, native, variant, imported_root=None):
 	"""Make the variant's extracted/ tree; returns its manifest."""
-	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	imported = Path(imported_root) if imported_root else native / stage1.OUTPUT_FOLDER
+	# Stage 1 of this build hashed these archives minutes ago (#3590); an
+	# unchanged file with today's pinned digest is not hashed again.
+	stage1.admit_verified_archives(imported)
+	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	stage_manifest = json.loads((imported / stage1.MANIFEST_NAME).read_text(encoding="utf-8"))
 	regions = [(r["sectorX"], r["sectorY"]) for r in stage_manifest["regions"]]
 	out = variant / "extracted"
