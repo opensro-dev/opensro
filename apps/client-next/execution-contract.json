@@ -4000,6 +4000,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.failed",
+			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only: a character seen for the first time waits unseen for its worn parts; the resource owner's failure query, read synchronously, ends the wait for a part that keeps failing."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "allocateActor",
 			"function": "resolve",
 			"kind": "callback",
