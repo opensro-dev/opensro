@@ -3606,14 +3606,16 @@ the next full prepare pass, so this may run between frames.
 		) {
 			// Option 0x16 clear: no character draws this frame. Poses and
 			// clocks read absolute seconds, so the first frame back shows
-			// the current pose, not a caught-up one.
+			// the current pose, not a caught-up one. The last pass's light
+			// effects leave the queue too, or deferredPlan would keep asking
+			// about effects no frame draws.
+			deferredQueue = [];
+			deferredPoints.clear();
 			if ( !charactersShown ) return [];
 			poseSeconds = seconds;
 			probe?.characterBegin();
 			poseFrame++;
 			deferred.begin( seconds, hasDeferred ? actors : [], deferredEnabled, night );
-			deferredQueue = [];
-			deferredPoints.clear();
 			deferPoses = !!geometry.prepareGpuBones;
 			gpuAnimation = geometry.gpuAnimationStats;
 			poseRequests =

@@ -95,6 +95,9 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 	const { createCharacters } = await import(
 		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 	);
+	const { GRAPHIC_OPTION_CHARACTERS } = await import(
+		sourceFileUrl( "src/engine/foundation/rendering/graphic-options.ts" ).href
+	);
 	const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 	const graph = [ {
 		parent: -1,
@@ -212,6 +215,12 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 		atTick( frame( 1.503 ), [] );
 		// Seen again: it resumes at the tick it stopped on, without catch-up.
 		atTick( frame( 1.603 ), [ 12 ] );
+		// /char hides every character: the last pass's light effects leave
+		// the query with them.
+		owner.setRenderMode( GRAPHIC_OPTION_CHARACTERS, false );
+		assert.deepEqual( owner.prepare( gpu, {}, 257, undefined, false, 1.703 ), [] );
+		assert.equal( owner.deferredPlan( [ 0, 0, 30 ] ), null );
+		owner.setRenderMode( GRAPHIC_OPTION_CHARACTERS, true );
 		// A preview pass runs no particle query.
 		owner.prepare( gpu, {}, 257, identity(), true, 1.803 );
 		assert.equal( owner.deferredPlan( [ 0, 0, 30 ] ), null );
