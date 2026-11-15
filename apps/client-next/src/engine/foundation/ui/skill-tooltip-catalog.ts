@@ -713,7 +713,8 @@ for and then kept, so a skill shows the same object every time. The 27,835
 decoded views were about 34 MB of small objects that stayed alive for the
 session: every full collection marked them, though a session shows a few
 hundred at most. The source rows are one string each and cost the
-collector next to nothing. Iterating decodes every row without keeping it.
+collector next to nothing. Iterating decodes every row without keeping it
+(entries). The result is map-like, not a Map: see TooltipSkillCatalog.
 ================
 */
 function SkillPane_CreateCatalog(
@@ -740,10 +741,23 @@ function SkillPane_CreateCatalog(
 	/*
 	================
 	entries
+
+	A view already asked for is the kept one; any other row is decoded for
+	the caller and not kept, so one pass over the catalogue does not bring
+	back the views this owner exists to drop. The group heads are few and
+	groups.get keeps them anyway, so groupEntries goes through view.
 	================
 	*/
 	function* entries(): MapIterator<[number, SkillTooltipRowView]> {
-		for ( const id of index.keys() ) yield [ id, view( id )! ];
+		for ( const [id, row] of index ) {
+			const kept = views.get( id );
+			if ( kept ) {
+				yield [ id, kept ];
+				continue;
+			}
+			SkillPane_ScanRow( rows[row], scanned );
+			yield [ id, SkillPane_DecodeSkillRow( scanned, specs, efrTag ) ];
+		}
 	}
 	/*
 	================
