@@ -7172,16 +7172,23 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "map-teleport-confirm"
 				) {
-					mapTeleport.clear();
-					dirty = true;
 					if ( teleportTarget.reversePoint !== undefined ) {
+						// A busy bag holds the reverse answer: the confirmation
+						// stays until the use is sent or the choice is really gone.
 						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
 						if ( command ) {
+							mapTeleport.clear();
+							dirty = true;
 							sendGameplay( command );
 							setPanel( "" );
+						} else if ( !reverseScrollHud.mapping() ) {
+							mapTeleport.clear();
+							dirty = true;
 						}
 						return;
 					}
+					mapTeleport.clear();
+					dirty = true;
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
