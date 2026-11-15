@@ -26,6 +26,7 @@ from pathlib import Path
 import zipfile
 
 from prepare_client_resources import file_digest
+from pin_file import read_pin_field
 
 PIN_FORMAT = "opensro-content-archive-pin-v1"
 ARCHIVE_FORMAT = "opensro-content-archive-v1"
@@ -57,13 +58,7 @@ def write_archive(path, entries):
 # The pinned sha256 of the content archive, from its pin file.
 # ================
 def read_pin(pin_file):
-	try:
-		pin = json.loads(Path(pin_file).read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("sha256"), str):
-		raise SystemExit(f"{pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["sha256"]
+	return read_pin_field(pin_file, PIN_FORMAT, "sha256", str)
 
 
 # ================

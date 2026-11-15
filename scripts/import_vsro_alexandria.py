@@ -50,6 +50,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
+from pin_file import read_pin_field  # noqa: E402
 import state_document  # noqa: E402
 from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -408,13 +409,7 @@ VERIFIED_ARCHIVES_FORMAT = "sro-verified-vsro-archives"
 
 def archive_pins():
 	"""The pinned VSRO archive hashes (vsro_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{PIN_FILE} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
 
 
 def verify_vsro_archive(root, name, pins=None):

@@ -50,6 +50,7 @@ import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
+from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
 from sro_paths import trees_overlap
 
@@ -110,13 +111,7 @@ class WorldImport:
 # ================
 def archive_pins(spec):
 	"""The pinned v1.696 archive hashes (v1696_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(spec.pin_file.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{spec.pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{spec.pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(spec.pin_file, PIN_FORMAT, "archives")
 
 
 # ================

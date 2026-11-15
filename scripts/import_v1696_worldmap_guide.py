@@ -48,6 +48,7 @@ import sro_pk2
 from convert_images import save_image_payload
 from import_vsro_alexandria import archive_index, table_rows
 from import_vsro_tomb_minimap import ddj_payload
+from pin_file import read_pin_field
 from prepare_client_resources import file_digest
 from sro_paths import PUBLIC_ROOT
 
@@ -104,17 +105,14 @@ ART = (
 # The v1.696 Media.pk2 against its pin, before a byte of it is read.
 # ================
 def verify_media(root):
-	try:
-		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or "Media" not in pin.get("archives", {}):
+	archives = read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
+	if "Media" not in archives:
 		raise SystemExit(f"{PIN_FILE} pins no Media.pk2")
 	path = Path(root) / "Media.pk2"
 	if not path.is_file():
 		raise SystemExit(f"{path} not found; {V1696_ENV} must be the pinned v1.696 client folder")
 	actual = file_digest(path)
-	if actual != pin["archives"]["Media"]:
+	if actual != archives["Media"]:
 		raise SystemExit(f"{path} does not match the pinned v1.696 Media.pk2 (sha256 {actual})")
 	return path
 
