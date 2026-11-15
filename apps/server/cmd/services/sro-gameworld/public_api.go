@@ -430,6 +430,15 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
 		},
+		// The Contributor title's read and pick (port-only, not native; #135)
+		// reach the registry at call time (wiring_contributor.go): with
+		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
+		ContributorTitleOf: func(account string) ([]string, string, bool, bool) {
+			return contributorTitleOf(gameplay, account)
+		},
+		MoveContributorTitle: func(signedIn, target string) error {
+			return moveContributorTitle(gameplay, signedIn, target)
+		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
 			online := 0

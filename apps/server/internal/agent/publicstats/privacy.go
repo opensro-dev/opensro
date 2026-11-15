@@ -7,6 +7,8 @@ privacy.go - the website's privacy setting (port-only)
 	PUT /v1/accounts/{id}/characters/{name}/hidden       {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/break-notice {"on": bool} -> 204
+	GET /v1/accounts/{id}/contributor-title              -> 200 the title's accounts (#135)
+	PUT /v1/accounts/{id}/contributor-title              {"account": "<id>"} -> 204
 
 The /account page lists the signed-in player's own characters with their
 current flag and sets it. Both are served on the same loopback listener as
@@ -16,6 +18,11 @@ listener keeps it off the network, the token keeps other local processes
 out (the provisioning API's two guards). The character must belong to the
 account in the path; any other name answers 404, exactly like an unknown
 one, so the write cannot be used to probe who owns what.
+
+The Contributor title's pick (port-only, not native; #135) rides the same
+guards: a contributor moves the title only between accounts of its own
+Discord member (contributor.Registry.MoveTitle). Another member's account,
+or one that is no contributor, answers the 404 an unknown one does.
 
 A successful write empties the answer cache and the shared snapshot: a
 player who hides is gone from every read at once, not after the cache
@@ -47,7 +54,8 @@ const MinWriteTokenBytes = 32
 // maxPrivacyBody bounds the request body.
 const maxPrivacyBody = 256
 
-// ErrNotOwned answers 404: no such character on that account.
+// ErrNotOwned answers 404: no such character on that account, and, for the
+// Contributor title's pick, no such account in the signed-in one's group.
 var ErrNotOwned = errors.New("character not found on this account")
 
 /*
@@ -80,6 +88,19 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 	if s.src.SetBreakNotice != nil {
 		mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/break-notice", func(w http.ResponseWriter, r *http.Request) {
 			s.putBreakNotice(w, r, digest)
+		})
+	}
+	// The Contributor title's read and pick (port-only, not native; #135)
+	// sit behind the same token. The game sets both closures together.
+	if s.src.ContributorTitleOf != nil && s.src.MoveContributorTitle != nil {
+		mux.HandleFunc("GET /v1/accounts/{id}/contributor-title", func(w http.ResponseWriter, r *http.Request) {
+			if !authorized(w, r, digest) {
+				return
+			}
+			s.contributorTitle(w, r.PathValue("id"))
+		})
+		mux.HandleFunc("PUT /v1/accounts/{id}/contributor-title", func(w http.ResponseWriter, r *http.Request) {
+			s.putContributorTitle(w, r, digest)
 		})
 	}
 }
@@ -170,6 +191,76 @@ func (s *Service) putBreakNotice(w http.ResponseWriter, r *http.Request, digest 
 	s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
 	s.snap.guilds, s.snap.guildsUntil = nil, time.Time{}
 	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+/*
+================
+contributorTitle
+
+The Contributor title the signed-in account sees (port-only, not native;
+#135): its member's accounts oldest first, which one carries the title,
+and whether this account hides it. An account that is no contributor
+answers 404, the same answer the pick gives.
+================
+*/
+func (s *Service) contributorTitle(w http.ResponseWriter, account string) {
+	accounts, holder, hidden, ok := s.src.ContributorTitleOf(account)
+	if !ok {
+		writeStatus(w, http.StatusNotFound, "not found")
+		return
+	}
+	out := ContributorTitleResponse{Accounts: make([]ContributorTitleAccount, 0, len(accounts)), Hidden: hidden}
+	for _, id := range accounts {
+		out.Accounts = append(out.Accounts, ContributorTitleAccount{Account: id, Holder: id == holder})
+	}
+	body, err := json.Marshal(out)
+	if err != nil {
+		writeStatus(w, http.StatusInternalServerError, "encode")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+/*
+================
+putContributorTitle
+
+The website's pick of the Contributor title (port-only, not native; #135),
+{"account": "<id>"}: the title moves to that account when it belongs to
+the signed-in account's own contributor group (MoveContributorTitle), 204.
+Another group, or an account that is no contributor, answers the 404 an
+unknown account gets, so the two cannot be told apart. A save the store
+does not take answers 503, and the old choice stays in force.
+================
+*/
+func (s *Service) putContributorTitle(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte) {
+	if !authorized(w, r, digest) {
+		return
+	}
+	var body struct {
+		Account *string `json:"account"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPrivacyBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || body.Account == nil {
+		writeStatus(w, http.StatusBadRequest, "body must be {\"account\": \"<account id>\"}")
+		return
+	}
+	signedIn := r.PathValue("id")
+	if signedIn == "" {
+		writeStatus(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := s.src.MoveContributorTitle(signedIn, *body.Account); err != nil {
+		if errors.Is(err, ErrNotOwned) {
+			writeStatus(w, http.StatusNotFound, "not found")
+			return
+		}
+		writeStatus(w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
