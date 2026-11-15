@@ -148,6 +148,52 @@ at it:
 SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:5199 node tools/perf/bench/effects-bench.mjs
 ```
 
+### What one WebGPU call costs
+
+```
+node tools/perf/constants/serve.mjs [--port 4230]
+```
+
+then open `http://127.0.0.1:4230/` in the browser to measure
+(`?quick=1` for a smoke run of a few seconds). It is a plain page with no
+game assets, build or server: it measures the fixed cost of the calls a
+frame is made of (#3563), so results from other machines and GPU
+backends (D3D12, Vulkan, Metal) can be compared. Any static file server
+works too (`python3 -m http.server` inside `tools/perf/constants`), but
+only `serve.mjs` sends the cross-origin-isolation headers that give
+`performance.now()` steps of about 5 microseconds instead of 0.1 ms. Keep
+the tab in front and the machine quiet; the default run takes under a
+minute.
+
+| Case | Each frame (N = 250 to 4000) |
+| --- | --- |
+| D1 | `drawIndexed` with its own bind group, vertex and index buffer (8 rotating) |
+| D2 | one pipeline, bind group and buffers; N `drawIndexed` with different arguments |
+| D3 / D4 | as D2 through `drawIndexedIndirect` from one buffer; D4's records draw 0 instances |
+| D5 | one draw of N instances, the floor |
+| U1 / U2 / U3 | N writes of 256 bytes into N buffers / into one buffer / one write of N x 256 bytes |
+| U4 / U5 | one write of N x 256 bytes to a staging buffer, then N `copyBufferToBuffer` of 256 bytes into N buffers / into one buffer (the client's staging path) |
+| C1 / C2 | N dispatches with a bind group each / one dispatch of N workgroups |
+
+D1 to D4 run twice: `pass` encodes the draws every frame, `bundle` records
+them once into a render bundle. Frames run back to back, not paced by the
+display: encode and submit, then wait for `onSubmittedWorkDone`.
+
+How to read the table: each column is the slope of a least-squares line
+through the per-size medians, in microseconds per unit of N, with its R
+squared. `main` is the main thread's encode plus submit; `loop` is the
+whole frame. `loop - main` estimates what the GPU process and the GPU add
+per call. It is only an estimate, because the GPU process works while the
+main thread is still encoding. A low R squared on a slope near zero
+(D5, U3, C2, `main` for bundles) is timer noise, not a bad fit.
+
+`Copy JSON` copies the result, with the browser, the adapter, the
+features and the parameters; paste it into the issue.
+`window.__gpuConstants` holds the same result for scripts. `?sizes=`, `?frames=`, `?repeats=`, `?warmup=` and
+`?only=D1,U3` change the run; `?nofeature=1` skips
+`indirect-first-instance` (D3 then passes `firstInstance` 0, as it must
+on an adapter without the feature).
+
 ## 2. Find the cost: the analyzers
 
 CPU profile of a scenario, by function, then inside one:
