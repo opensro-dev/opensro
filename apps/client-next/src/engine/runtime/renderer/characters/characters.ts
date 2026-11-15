@@ -6,6 +6,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 ===========================================================================
 */
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
+import { createClothStream } from "@/engine/foundation/animation/cloth-stream";
 import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
@@ -382,6 +383,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		// vertex count the last frame wrote.
 		ribbons: (RibbonBuffers | undefined)[];
 		cloth?: Map<number, ReturnType<typeof createClothVertices>>;
+		clothStreams?: Map<number, ReturnType<typeof createClothStream>>;
 		poseKey?: string;
 	}>();
 	// ownedModels counts the owned entries of models (decoded sources); the
@@ -2242,8 +2244,12 @@ the next full prepare pass, so this may run between frames.
 				},
 				instances,
 				bones: group.batch.palettes[p],
+				// A skinned cloth mesh is skinned on the GPU, with its solver
+				// stream (drawCloth); an unskinned one keeps CPU vertices.
 				...(primitive.cloth ?
-					{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
+					primitive.geometry.joints && primitive.geometry.weights ?
+						{ clothStream: true } :
+						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
 				transform: preview ? view! : identity()
 			},
@@ -2328,25 +2334,27 @@ the next full prepare pass, so this may run between frames.
 	================
 	drawCloth
 
-	A cloth primitive: its instance streams, then CPU cloth vertices from the
-	batch palette.
+	A cloth primitive. A skinned cloth mesh is drawn skinned: the GPU skins
+	its vertices from the batch palette every frame, and the CPU runs the
+	solver only when a step falls due, writing the vertices it owns into the
+	draw's cloth stream (cloth-stream.ts). Before, the CPU skinned the pins
+	and rewrote and uploaded the whole vertex stream every frame: with avatar
+	dresses in a crowd that was the largest cost of the main thread. An
+	unskinned cloth mesh keeps its CPU vertex stream (cloth-vertices.ts).
 	================
 	*/
 	function drawCloth( frame: PrepareFrame, group: GroupFrame, p: number, streams: PrimitiveRows ): GeometryDraw {
 		const geometry = frame.geometry;
 		const { preview, view } = frame, { rows, batch, fading } = group;
 		const { instances, appearance, pointLights } = streams, primitive = group.model.primitives[p]!;
-		batch.cloth ??= new Map();
-		let cloth = batch.cloth.get( p );
-		if ( !cloth ) {
-			cloth = createClothVertices( primitive, clothRandom );
-			batch.cloth.set( p, cloth );
-		}
+		const enabled = frame.dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25;
+		// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
+		const motion = { direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 };
+		const skinned = !!primitive.geometry.joints && !!primitive.geometry.weights;
 		let draw = batch.draws[p];
 		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights;
 		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances );
-		// Cloth vertices change independently of the actor placement. These
-		// unskinned draws never enter the particle compute writer.
+		// Cloth draws never enter the particle compute writer.
 		if ( placementChanged ) {
 			draw = geometry.updateInstances(
 				draw,
@@ -2357,17 +2365,28 @@ the next full prepare pass, so this may run between frames.
 			);
 		}
 		batch.draws[p] = draw;
-		geometry.writeVertices(
-			draw,
-			0,
-			cloth.update(
-				batch.palettes[p]!,
-				frame.seconds,
-				frame.dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25,
-				// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
-				{ direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 }
-			)
-		);
+		const palette = batch.palettes[p]!;
+		if ( skinned ) {
+			batch.clothStreams ??= new Map();
+			let cloth = batch.clothStreams.get( p );
+			if ( !cloth ) {
+				cloth = createClothStream( primitive, clothRandom );
+				batch.clothStreams.set( p, cloth );
+			}
+			const upload = palette.subarray( 0, rows.length * primitive.joints.length * 16 );
+			boneUploadBytes += upload.byteLength;
+			geometry.updateBones( draw, upload );
+			const write = cloth.update( palette, frame.seconds, enabled, motion );
+			if ( write ) geometry.writeClothStream( draw, write.first, write.entries );
+		} else {
+			batch.cloth ??= new Map();
+			let cloth = batch.cloth.get( p );
+			if ( !cloth ) {
+				cloth = createClothVertices( primitive, clothRandom );
+				batch.cloth.set( p, cloth );
+			}
+			geometry.writeVertices( draw, 0, cloth.update( palette, frame.seconds, enabled, motion ) );
+		}
 		if ( preview ) geometry.updateTransform( draw, view! );
 		updateModifiers( geometry, group, draw, p, true );
 		return draw;

@@ -971,7 +971,8 @@
 				"updateEquipmentGlow",
 				"presentParticles",
 				"updateTextureFactor",
-				"writeVertices"
+				"writeVertices",
+				"writeClothStream"
 			]
 		},
 		{
