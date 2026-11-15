@@ -51,7 +51,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_MALL_AVATARS"
 FLAG_OFF = ("0", "off", "false", "no")
@@ -687,7 +687,7 @@ def vsro_text_row(row):
 # ================
 def add_avatars(vsro_root, native, output, source=VSRO_SOURCE):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("avatar output must be separate from the native extraction")
 	marker = output / source["report"]
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

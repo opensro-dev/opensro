@@ -63,6 +63,7 @@ import skytemple_import as sky  # noqa: E402
 import sro_pk2  # noqa: E402
 from alexandria_map_tables import native_text_row  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from sro_paths import trees_overlap  # noqa: E402
 
 FLAG = "SRO_FORT_CONSTANTINOPLE"
 MARKER = ".opensro-constantinople.json"
@@ -218,7 +219,7 @@ def remove_owned(output, prior):
 # ================
 def add_constantinople(native, output, source=None, closure=sky.copy_resource_closure):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("constantinople output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

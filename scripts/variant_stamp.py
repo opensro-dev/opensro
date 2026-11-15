@@ -54,9 +54,10 @@ import re
 import subprocess
 from pathlib import Path
 
+import state_document
 import variant_settle
-from prepare_client_resources import write_atomically
-from sro_paths import REPO_ROOT
+from prepare_client_resources import file_digest
+from sro_paths import REPO_ROOT, tree_state_root, trees_overlap
 
 STAMP_FORMAT = "sro-variant-stamp"
 STAMP_VERSION = 1
@@ -77,13 +78,12 @@ SOURCE_VARIABLE = re.compile(r"SRO_\w+_(?:ROOT|ZIP|DATABASE|NESTS)")
 OUTPUT_ROOTS = frozenset(("SRO_GAME_ROOT", "SRO_GENERATED_ROOT", "SRO_SERVER_GAME_DATA_ROOT"))
 # A single source file up to this size is hashed by content, not stat.
 SMALL_FILE = 64 << 20
-# A module's literal naming a JSON file beside it (Path(__file__).with_name).
-JSON_LITERAL = re.compile(r"[\"']([\w.-]+\.json)[\"']")
-CLOSURE_SCRIPT = (
+# Calls one export of codeStamp.mjs on the builder and prints its result.
+CODE_STAMP_SCRIPT = (
 	"const { pathToFileURL } = await import( 'node:url' );"
-	"const [ owner, entry ] = process.argv.slice( 1 );"
-	"const { codeClosure } = await import( pathToFileURL( owner ).href );"
-	"console.log( JSON.stringify( await codeClosure( entry ) ) );"
+	"const [ owner, name, entry ] = process.argv.slice( 1 );"
+	"const stamp = await import( pathToFileURL( owner ).href );"
+	"console.log( JSON.stringify( await stamp[name]( entry ) ) );"
 )
 
 
@@ -91,53 +91,38 @@ CLOSURE_SCRIPT = (
 # stamp_path
 # ================
 def stamp_path(variant_root: Path) -> Path:
-	return Path(variant_root) / ".state" / STAMP_NAME
+	return tree_state_root(variant_root) / STAMP_NAME
+
+
+# ================
+# code_stamp
+#
+# One export of codeStamp.mjs (codeClosure or codeHash) on the builder: the
+# one owner of code closures, so the variant and the asset lanes agree on
+# what counts as code (imports, named scripts, pin files beside a module).
+# ================
+def code_stamp(export: str):
+	result = subprocess.run(
+		["node", "--input-type=module", "-e", CODE_STAMP_SCRIPT, str(CODE_STAMP), export, str(BUILDER)],
+		cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=False
+	)
+	if result.returncode != 0:
+		raise SystemExit(f"variant stamp: {export} failed (exit {result.returncode}):\n{result.stderr}")
+	return json.loads(result.stdout)
 
 
 # ================
 # code_closure
-#
-# Every file the builder can run, from the one owner of code closures.
 # ================
 def code_closure() -> list[Path]:
-	result = subprocess.run(
-		["node", "--input-type=module", "-e", CLOSURE_SCRIPT, str(CODE_STAMP), str(BUILDER)],
-		cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=False
-	)
-	if result.returncode != 0:
-		raise SystemExit(f"variant stamp: the code closure failed (exit {result.returncode}):\n{result.stderr}")
-	return [Path(file) for file in json.loads(result.stdout)]
+	return [Path(file) for file in code_stamp("codeClosure")]
 
 
 # ================
-# code_digest
-#
-# sha256 over the closure and the JSON files its modules name beside
-# themselves, keyed by repository-relative path.
+# code_hash
 # ================
-def code_digest(closure: list[Path]) -> str:
-	files = set(closure)
-	for module in closure:
-		if module.suffix != ".py":
-			continue
-		for name in JSON_LITERAL.findall(module.read_text(encoding="utf-8")):
-			data = module.with_name(name)
-			if data.is_file():
-				files.add(data)
-	digest = hashlib.sha256()
-	for file in sorted(files):
-		relative = file.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
-		digest.update(relative.encode("utf-8") + b"\0" + file.read_bytes() + b"\0")
-	return digest.hexdigest()
-
-
-# ================
-# overlaps
-#
-# Whether two roots are the same folder or one holds the other.
-# ================
-def overlaps(a: Path, b: Path) -> bool:
-	return a == b or a in b.parents or b in a.parents
+def code_hash() -> str:
+	return code_stamp("codeHash")
 
 
 # ================
@@ -161,7 +146,7 @@ def source_roots(native: Path, imported: Path, vsro_root: Path, variant: Path, e
 	roots = set()
 	for candidate in candidates:
 		resolved = Path(candidate).resolve()
-		if resolved.exists() and not overlaps(resolved, output):
+		if resolved.exists() and not trees_overlap(resolved, output):
 			roots.add(resolved)
 	return sorted(roots)
 
@@ -174,7 +159,7 @@ def source_roots(native: Path, imported: Path, vsro_root: Path, variant: Path, e
 # ================
 def file_key(path: Path, content: bool) -> str:
 	if content:
-		return variant_settle.file_sha256(path)
+		return file_digest(path)
 	stat = path.stat()
 	return f"{stat.st_size}\0{stat.st_mtime_ns}"
 
@@ -210,7 +195,7 @@ def tree_fingerprint(root: Path, content: bool = False) -> str:
 def read_inputs(native: Path, imported: Path, vsro_root: Path, variant: Path, environ=None, code=None) -> dict:
 	environ = os.environ if environ is None else environ
 	return {
-		"code": code_digest(code_closure()) if code is None else code,
+		"code": code_hash() if code is None else code,
 		"env": {
 			key: hashlib.sha256(environ[key].encode("utf-8")).hexdigest()
 			for key in sorted(environ) if key.startswith(ENV_PREFIX) and key not in IGNORED_ENV
@@ -246,15 +231,11 @@ def differences(before: dict, after: dict) -> list[str]:
 
 # ================
 # load_stamp
+#
+# The inputs the last successful build recorded, or None.
 # ================
 def load_stamp(variant_root: Path) -> dict | None:
-	try:
-		document = json.loads(stamp_path(variant_root).read_text(encoding="utf-8"))
-	except (OSError, ValueError):
-		return None
-	if document.get("format") != STAMP_FORMAT or document.get("version") != STAMP_VERSION:
-		return None
-	return document
+	return state_document.read_document(stamp_path(variant_root), STAMP_FORMAT, "inputs", STAMP_VERSION)
 
 
 # ================
@@ -267,7 +248,7 @@ def stale_parts(variant_root: Path, inputs: dict, required_files=()) -> list[str
 	stamp = load_stamp(variant_root)
 	if stamp is None:
 		return ["no stamp"]
-	changed = differences(stamp.get("inputs") or {}, inputs)
+	changed = differences(stamp, inputs)
 	if changed:
 		return changed
 	missing = [name for name in required_files if not (Path(variant_root) / name).exists()]
@@ -292,7 +273,4 @@ def clear_stamp(variant_root: Path) -> None:
 # write_stamp
 # ================
 def write_stamp(variant_root: Path, inputs: dict) -> None:
-	path = stamp_path(variant_root)
-	path.parent.mkdir(parents=True, exist_ok=True)
-	document = {"format": STAMP_FORMAT, "version": STAMP_VERSION, "inputs": inputs}
-	write_atomically(path, (json.dumps(document, indent=1, sort_keys=True) + "\n").encode("utf-8"))
+	state_document.write_document(stamp_path(variant_root), STAMP_FORMAT, "inputs", inputs, STAMP_VERSION)

@@ -34,8 +34,9 @@ writeRepository
 A small repository: an entry module imports a helper (static and dynamic);
 the helper names one Python file beside it and one by path.join pieces in
 another root; that script imports a module from scripts/ through sys.path,
-and the Python helper runs a Node script by name. Comments name files that
-do not exist.
+and the Python helper runs a Node script by name and reads a JSON file
+beside it. Comments name files that do not exist, and a JSON file named but
+not beside the module is input, not code.
 ================
 */
 async function writeRepository( root ) {
@@ -55,8 +56,12 @@ async function writeRepository( root ) {
 		"scripts/build/lib/encode.py": [
 			"import os",
 			"# node gone.mjs once did this",
-			'AUDIT = ["node", os.path.join("scripts", "analysis", "audit.mjs")]'
+			'AUDIT = ["node", os.path.join("scripts", "analysis", "audit.mjs")]',
+			'PINS = "pins.json"',
+			'OUTPUT = "report.json"'
 		].join( "\n" ),
+		"scripts/build/lib/pins.json": "{}\n",
+		"scripts/report.json": "{}\n",
 		"scripts/analysis/audit.mjs": 'import { rule } from "./rule.mjs";\nconsole.log( rule );\n',
 		"scripts/analysis/rule.mjs": "export const rule = 1;\n",
 		"apps/client-next/tools/project.py": "import sys\nfrom paths import ROOT\nprint(ROOT)\n",
@@ -82,6 +87,7 @@ test("the closure covers imports, named Python files and the modules they import
 			"scripts/build/lib/encode.py",
 			"scripts/build/lib/helper.mjs",
 			"scripts/build/lib/late.mjs",
+			"scripts/build/lib/pins.json",
 			"scripts/paths.py"
 		]
 	);

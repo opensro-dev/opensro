@@ -24,6 +24,7 @@ does not describe. Stamps live in the generated tree they describe
 ===========================================================================
 */
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +39,11 @@ const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](\.{1,2}\
 const PYTHON_LITERAL = /["'`]([\w./-]*\w\.py)["'`]/g;
 // A Python file's string literal naming a Node script it runs.
 const SCRIPT_LITERAL = /["'`]([\w./-]*\w\.mjs)["'`]/g;
-// A Python whole-line comment, removed before that scan.
+// A Python file's string literal naming a JSON file beside it
+// (Path(__file__).with_name( "vsro_archive_pins.json" )): the pins and
+// tables a module reads are part of what it does.
+const DATA_LITERAL = /["']([\w.-]+\.json)["']/g;
+// A Python whole-line comment, removed before those scans.
 const PYTHON_COMMENT = /^\s*#.*$/gm;
 // Where the repository's Python and tool scripts live; a literal resolves
 // against these.
@@ -65,7 +70,8 @@ codeClosure
 
 Every source file the entry can run: relative JS imports followed
 transitively, every Python file a module names, the repository modules a
-Python file imports and the Node scripts it names. A Python or script
+Python file imports, the Node scripts it names and the JSON files it names
+beside itself (data, not followed further). A Python or script
 literal that names no repository file, or more than one, throws: a
 dependency the stamp cannot see is the stale-reuse bug it exists to prevent. Package imports are pinned by the lockfiles and
 are not followed.
@@ -85,8 +91,15 @@ export async function codeClosure( entryFile, repositoryRoot = rebuildRoot ) {
 			for ( const match of text.matchAll( PYTHON_IMPORT ) ) {
 				pending.push( ...(python.get( `${match[1] ?? match[2]}.py` ) ?? []) );
 			}
-			for ( const match of text.replace( PYTHON_COMMENT, "" ).matchAll( SCRIPT_LITERAL ) ) {
+			const code = text.replace( PYTHON_COMMENT, "" );
+			for ( const match of code.matchAll( SCRIPT_LITERAL ) ) {
 				pending.push( resolveNamed( match[1], { file, directory, repositoryRoot, index: scripts } ) );
+			}
+			for ( const match of code.matchAll( DATA_LITERAL ) ) {
+				// Only beside the module: any other JSON a module names is
+				// build input or output, which the caller fingerprints itself.
+				const data = path.join( directory, match[1] );
+				if ( existsSync( data ) ) seen.add( data );
 			}
 			continue;
 		}

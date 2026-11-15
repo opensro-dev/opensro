@@ -34,7 +34,7 @@ class Stamp(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		# The closure runs node once; every test reuses its digest.
-		cls.code = variant_stamp.code_digest(variant_stamp.code_closure())
+		cls.code = variant_stamp.code_hash()
 
 	def setUp(self):
 		self.temp = tempfile.TemporaryDirectory()

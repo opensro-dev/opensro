@@ -52,6 +52,7 @@ import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import write_atomically
+from sro_paths import trees_overlap
 
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
@@ -312,7 +313,7 @@ def reap_monsters(spec, output, prior):
 # ================
 def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_enabled, pins_for):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = output / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
@@ -802,7 +803,7 @@ def reap_regions(spec, native, out, record):
 # ================
 def reap_world(spec, native, out):
 	native, out = Path(native).resolve(), Path(out).resolve()
-	if native == out or native in out.parents or out in native.parents:
+	if trees_overlap(native, out):
 		raise ValueError(f"{spec.label} overlay must be separate from native extraction")
 	marker = out / spec.marker
 	prior = cap110.read_json(marker) if marker.exists() else {}
