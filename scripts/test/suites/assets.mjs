@@ -34,6 +34,7 @@ export default {
 		"scripts/test/assets/equipmentGlowJoin.test.mjs",
 		"scripts/test/assets/fontAtlasPublication.test.mjs",
 		"scripts/test/assets/buildSharedUtilities.test.mjs",
+		"scripts/test/assets/npcBakePolicy.test.mjs",
 		"scripts/test/assets/animation-sound-bindings.test.mjs",
 		"scripts/test/assets/publicWrite.test.mjs",
 		"scripts/test/assets/generatedArtifactArchive.test.mjs",

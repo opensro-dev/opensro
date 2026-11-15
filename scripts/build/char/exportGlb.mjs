@@ -315,6 +315,39 @@ function readInPlaceHorizontalRootMotionRoles( avatar ) {
 
 /*
 ================
+finiteBindBones
+
+The skeleton with every non-finite bind component replaced by a finite one:
+0 for a translation component, identity for a rotation. The v1.696
+res/mob/arabia/firespirit.bsk stores a NaN in its childless [root] bone's
+bind translation (z). Exported as is, that NaN reaches the node, the inverse
+bind matrix and, through the in-place locomotion rule, every walk and run
+key, and the client rejects the whole model.
+
+INFERENCE: the native client would carry the NaN into that bone's matrix
+only. A bone with no children and no weighted vertex draws nothing either
+way, so the finite value changes no visible pose. A weighted vertex on such
+a bone now draws at bind instead of vanishing; the warning names the bone.
+================
+*/
+function finiteBindBones( name, bones ) {
+	return bones.map( ( bone ) => {
+		const { q, t } = bone.local;
+		if ( q.every( Number.isFinite ) && t.every( Number.isFinite ) ) return bone;
+		console.warn( `[glb] ${name}:${bone.name}: non-finite bind transform; using a finite bind` );
+		return {
+			...bone,
+			local: {
+				...bone.local,
+				q: q.every( Number.isFinite ) ? q : [ 0, 0, 0, 1 ],
+				t: t.map( ( value ) => Number.isFinite( value ) ? value : 0 )
+			}
+		};
+	} );
+}
+
+/*
+================
 avatarToGlb
 
 Publish native material, skin and animation contracts with shared texture admission.
@@ -330,13 +363,16 @@ export function avatarToGlb( avatar ) {
 	// for an unbound vertex. Model-space identity is the inferred reserved
 	// palette entry, represented explicitly in glTF without changing a bone.
 	const unboundJoint = avatar.skeleton.bones.length;
-	const bones = hasUnboundVertices ?
-		[ ...avatar.skeleton.bones, {
-			name: "NativeUnbound",
-			parentIndex: -1,
-			local: { q: [ 0, 0, 0, 1 ], t: [ 0, 0, 0 ] }
-		} ] :
-		avatar.skeleton.bones;
+	const bones = finiteBindBones(
+		avatar.name,
+		hasUnboundVertices ?
+			[ ...avatar.skeleton.bones, {
+				name: "NativeUnbound",
+				parentIndex: -1,
+				local: { q: [ 0, 0, 0, 1 ], t: [ 0, 0, 0 ] }
+			} ] :
+			avatar.skeleton.bones
+	);
 	const N = bones.length;
 	const inPlaceHorizontalRootMotionRoles = readInPlaceHorizontalRootMotionRoles( avatar );
 	const skeletonRootIndices = new Set(
@@ -577,7 +613,7 @@ export function avatarToGlb( avatar ) {
 		// AEE6D0 applies the owning BSR's environment modifier before material setup:
 		// it replaces that baseline with reference 1 or disables alpha testing.
 		const flags = texInfo.flags ?? 0;
-		applyCharacterMaterialState( material, flags, grp.environmentModifiers );
+		applyCharacterMaterialState( material, flags, grp.environmentModifiers, texInfo.materialIndex );
 		embedCharacterEnvironment( g.json, material, bytes => g.addView( bytes ), new Map() );
 		g.json.materials.push( material );
 		meshGroups.push( {

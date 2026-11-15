@@ -80,7 +80,9 @@ def resource_dependencies(requests):
 		input=json.dumps(requests), capture_output=True, text=True, encoding="utf-8", check=False
 	)
 	if result.returncode != 0:
-		raise ValueError(f"resource dependency audit failed:\n{result.stderr}")
+		# The exit status names a child killed from outside (empty stderr,
+		# as under memory pressure on 2026-11-15); stderr alone said nothing.
+		raise ValueError(f"resource dependency audit failed (exit {result.returncode}):\n{result.stderr}")
 	dependencies = json.loads(result.stdout)
 	if len(dependencies) != len(requests):
 		raise ValueError("resource parser response count mismatch")
