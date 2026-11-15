@@ -399,6 +399,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
 		"/public/v1/status":               "/public/v1/status",
 		"/public/v1/schedule":             "/public/v1/schedule",
+		"/public/v1/fortresses":           "/public/v1/fortresses",
 		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
 		"/public/v1/chat":                 "/public/v1/chat",
 		"/public/v1/events":               "/public/v1/events",
