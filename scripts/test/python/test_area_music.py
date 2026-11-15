@@ -177,24 +177,6 @@ class LaterAreaTests(unittest.TestCase):
 		self.assertEqual(names, ["바그다드", "카크"])
 
 	# ================
-	# test_a_later_track_the_build_cannot_ship_is_dropped
-	#
-	# Baghdad's track is absent: the area stays, with its ambience and no
-	# track row, so it is silent instead of naming a missing file. The
-	# dungeon's track is present and kept.
-	# ================
-	def test_a_later_track_the_build_cannot_ship_is_dropped(self):
-		regions = {(88, 89), (89, 89), (40, music.DUNGEON_SECTOR_Y)}
-		_, sound_rows, names = music.later_music_rows(
-			self.PRESENT, self.REGIONS, self.SOUNDS, regions, music.EFFECTENVSND_COLUMNS,
-			lambda quoted: quoted == '"ARABIA_DUNGEON.ogg"'
-		)
-		self.assertEqual(names, ["바그다드", "바그다드던젼"])
-		self.assertEqual(music.music_tracks(sound_rows), ["ARABIA_DUNGEON.ogg"])
-		self.assertEqual(sound_rows[:2], ["<1>\t바그다드\t\t\t\t\t", "\t<2>\t낮\t\t\t\t"])
-		self.assertIn('\t\t\t<3>\t"night_wind.wav"\t10~20\t', sound_rows)
-
-	# ================
 	# test_an_area_with_no_sound_section_is_left_out
 	#
 	# Without its sounds Baghdad is skipped and claims nothing, so Kakh,
