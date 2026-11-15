@@ -127,15 +127,10 @@ export function createNpcPanel() {
 				top = 0;
 				return true;
 			}
-			// Port-only, not native: a group row opens its page, Back
-			// returns to the gate's top page (portal.ts PORTAL_GROUPS).
+			// Port-only, not native: a group row opens its page (portal.ts
+			// PORTAL_GROUPS); End conversation closes it as any menu.
 			if ( event.kind === "activate" && destinations && event.id.startsWith( "npc-portal-group:" ) ) {
 				group = event.id.slice( 17 );
-				top = 0;
-				return true;
-			}
-			if ( event.kind === "activate" && destinations && event.id === "npc-portal-back" ) {
-				group = "";
 				top = 0;
 				return true;
 			}

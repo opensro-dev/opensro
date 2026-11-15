@@ -442,7 +442,7 @@ test("native I64 fee strings resolve the full integer format and shared tax calc
 	assert.ok( rows.every( row => !row.label.includes( "%" ) ) );
 });
 
-test("the Jangan gate folds the Qin-Shi tomb floors under one row with a Back row (port-only)", () => {
+test("the Jangan gate folds the Qin-Shi tomb floors under one row, floor 4 by corner (port-only)", () => {
 	const row = ( id, codeName, npcRefObjId, nameSymbol ) => ({ id, codeName, npcRefObjId, nameSymbol, regionId: 0 });
 	const link = ( sourceId, destinationId, fee ) => ({ sourceId, destinationId, fee });
 	const catalog = decodePortalCatalog( {
@@ -454,9 +454,16 @@ test("the Jangan gate folds the Qin-Shi tomb floors under one row with a Back ro
 			row( 50, "GATE_JINSI_IN", 0, "SN_ZONE_26001" ),
 			row( 53, "GATE_JINSI_02x01_09", 0, "SN_ZONE_26002" ),
 			row( 125, "GATE_JINSI_04x01-bldg", 23280, "SN_ZONE_26004" ),
+			row( 129, "GATE_JINSI_04x05", 0, "SN_ZONE_26004" ),
 			row( 130, "GATE_JINSI_05x01", 0, "SN_ZONE_26005" )
 		],
-		linkRows: [ link( 1, 2, 5000 ), link( 1, 50, 40000 ), link( 1, 53, 40000 ), link( 125, 130, 0 ) ]
+		linkRows: [
+			link( 1, 2, 5000 ),
+			link( 1, 50, 40000 ),
+			link( 1, 53, 40000 ),
+			link( 1, 129, 40000 ),
+			link( 125, 130, 0 )
+		]
 	} );
 	const copy = key =>
 		key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %d" : key === "UIIT_CTL_TELEPORT_FREE_RESULT" ? "%s" : key;
@@ -467,7 +474,7 @@ test("the Jangan gate folds the Qin-Shi tomb floors under one row with a Back ro
 	assert.deepEqual( portalMenu( catalog, 2094, copy, { group: "qinshi-tomb", taxRate: 10 } ), [
 		{ id: "npc-portal:50", label: "SN_ZONE_26001 44000" },
 		{ id: "npc-portal:53", label: "SN_ZONE_26002 44000" },
-		{ id: "npc-portal-back", label: "UIIT_STT_COS_BACK" }
+		{ id: "npc-portal:129", label: "QT_A01_F04_WARP_NW 44000" }
 	] );
 	// The tomb's own gates keep the native flat menu.
 	assert.deepEqual( portalMenu( catalog, 23280, copy ), [

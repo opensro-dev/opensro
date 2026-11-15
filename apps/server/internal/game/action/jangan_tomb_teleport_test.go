@@ -3,7 +3,7 @@
 
 jangan_tomb_teleport_test.go - the Jangan gate's Qin-Shi Tomb floor rows
 
-Port-only, not native: SRO_JANGAN_TOMB_TELEPORT adds four links from the
+Port-only, not native: SRO_JANGAN_TOMB_TELEPORT adds seven links from the
 Jangan town gate (teleport 1) to the tomb floors 1-4. Off, or with the
 tomb itself closed, the gate keeps its native menu.
 
@@ -22,8 +22,9 @@ import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
-// janganTombFloors are the tomb floor 1-4 arrival rows the gate links to.
-var janganTombFloors = []uint32{50, 53, 120, 126}
+// janganTombFloors are the tomb floor 1-4 arrival rows the gate links to:
+// floors 1-3, then the four floor 4 corners (NW, NE, SW, SE).
+var janganTombFloors = []uint32{50, 53, 120, 129, 126, 128, 127}
 
 // janganTombFee is the Alexandria rows' fee from the same gate.
 const janganTombFee = 40000
@@ -32,7 +33,7 @@ const janganTombFee = 40000
 ================
 TestJanganTombTeleportLinksFollowBothFlags
 
-The four links exist only with both SRO_JANGAN_TOMB_TELEPORT and
+The links exist only with both SRO_JANGAN_TOMB_TELEPORT and
 SRO_QINSHI_TOMB on, and carry the Alexandria terms: 40000 gold, level
 70-999, no transport.
 ================

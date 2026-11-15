@@ -521,8 +521,9 @@ var Settings = []Setting{
 	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on", Catalogue: true},
 	// Port-only, not native: the Jangan town gate also offers the Qin-Shi
 	// Emperor Tomb floors 1-4 (40000 gold, level 70+, the Alexandria
-	// rows' terms), shown by the client as one "Ch'in Tomb" row with a
-	// floor submenu. Needs SRO_QINSHI_TOMB. "off" is native.
+	// rows' terms; floor 4 by corner), shown by the client as one
+	// "Ch'in Tomb" row opening the floor list. Needs SRO_QINSHI_TOMB.
+	// "off" is native.
 	{Env: "SRO_JANGAN_TOMB_TELEPORT", NomadVar: "jangan_tomb_teleport", Default: "off"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/

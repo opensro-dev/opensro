@@ -61,13 +61,16 @@ test("flipping the switch changes the resource build fingerprint", async ( t ) =
 	assert.notEqual( on.hash, off.hash );
 });
 
-test("the overlay links the Jangan gate to the four floor arrival rows", () => {
+test("the overlay links the Jangan gate to the floor arrival rows, floor 4 by corner", () => {
 	const rows = loadJanganTombTeleportLinkRows().rows;
 	assert.deepEqual( rows.map( ( cols ) => [ cols[1], cols[2], cols[3] ].map( Number ) ), [
 		[ 1, 50, 40000 ],
 		[ 1, 53, 40000 ],
 		[ 1, 120, 40000 ],
-		[ 1, 126, 40000 ]
+		[ 1, 129, 40000 ],
+		[ 1, 126, 40000 ],
+		[ 1, 128, 40000 ],
+		[ 1, 127, 40000 ]
 	] );
 	for ( const cols of rows ) {
 		assert.equal( cols.length, 21 );

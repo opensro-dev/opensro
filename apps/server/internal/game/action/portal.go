@@ -368,7 +368,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		rows = append(rows, monster.SplitTabbedText(muhanTeleportLinkTSV)...)
 	}
 	if JanganTombTeleportEnabled() {
-		// Port-only, not native: the Jangan gate's four tomb floor links.
+		// Port-only, not native: the Jangan gate's tomb floor links.
 		rows = append(rows, monster.SplitTabbedText(janganTombTeleportLinkTSV)...)
 	}
 	for i, r := range rows {

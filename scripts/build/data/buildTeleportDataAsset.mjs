@@ -105,7 +105,7 @@ export function buildTeleportDataAsset() {
 		rawLinkRows.push( ...loadMuhanTeleportLinkRows().rows );
 	}
 	// Port-only, not native: when SRO_JANGAN_TOMB_TELEPORT (and the tomb)
-	// is on, include the Jangan gate's four tomb floor links; every row
+	// is on, include the Jangan gate's tomb floor links; every row
 	// they name already exists in v1.150 teleportdata.txt.
 	if ( janganTombTeleportEnabled() ) {
 		rawLinkRows.push( ...loadJanganTombTeleportLinkRows().rows );

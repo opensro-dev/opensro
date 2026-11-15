@@ -635,7 +635,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Opens the Jangan tomb dungeon shipped in the v1.150 client assets (GH #1013); the original returns with one setting."},
 			{Flag: action.EnvJanganTombTeleport, On: action.JanganTombTeleportEnabled(),
 				Native: "The Jangan teleporter does not lead into Qin-Shi Emperor Tomb; players walk in through its door.",
-				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 4 for 40,000 gold, from level 70.",
+				Now:    "The Jangan teleporter also offers Qin-Shi Emperor Tomb floors 1 to 3 and each corner of floor 4 for 40,000 gold, from level 70.",
 				Why:    "A quicker way to the tomb floors, on the same terms as the Alexandria rows of the same gate."},
 			{Flag: action.EnvFlagWarStartUTC, On: true,
 				Native: "Capture the Flag runs on the reference server's event schedule.",

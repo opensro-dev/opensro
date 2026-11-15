@@ -64,17 +64,28 @@ export function decodePortalCatalog( value: unknown ): PortalCatalog {
 PORTAL_GROUPS
 
 Port-only, not native: destinations a gate folds under one row whose
-click opens their own page with a Back row (SRO_JANGAN_TOMB_TELEPORT,
-the Jangan gate's Qin-Shi Tomb floors). Only a gate outside the group
-folds: the tomb's own gates keep the native flat menu. No retail link
-leads from outside the tomb to a GATE_JINSI_ row, so a native
-catalogue never folds.
+click opens their own page (SRO_JANGAN_TOMB_TELEPORT, the Jangan gate's
+Qin-Shi Tomb floors); End conversation closes it as any menu. Only a
+gate outside the group folds: the tomb's own gates keep the native flat
+menu. No retail link leads from outside the tomb to a GATE_JINSI_ row,
+so a native catalogue never folds.
+
+captions names a row by the room it lands in where the teleport rows
+share one zone name: floor 4's four corner passages all read
+SN_ZONE_26004, so each takes its native textzonename room name.
 ================
 */
-const PORTAL_GROUPS = [ { key: "qinshi-tomb", codePrefix: "GATE_JINSI_", caption: "SN_ZONE_23001" } ] as const;
-
-// The Back row's caption: the native "Back" string.
-const PORTAL_GROUP_BACK = "UIIT_STT_COS_BACK";
+const PORTAL_GROUPS = [ {
+	key: "qinshi-tomb",
+	codePrefix: "GATE_JINSI_",
+	caption: "SN_ZONE_23001",
+	captions: {
+		126: "QT_A01_F04_WARP_NE",
+		127: "QT_A01_F04_WARP_SE",
+		128: "QT_A01_F04_WARP_SW",
+		129: "QT_A01_F04_WARP_NW"
+	}
+} ] as const;
 
 /*
 ================
@@ -96,7 +107,7 @@ portalMenu
 5D7040: the destination rows for the selected gate. It uses the NPC's
 reference identity, never its runtime GID. A port-only group
 (PORTAL_GROUPS) shows as one "npc-portal-group:" row on the top page
-and as its own rows plus "npc-portal-back" once opened.
+and as its own rows once opened.
 ================
 */
 export function portalMenu(
@@ -122,18 +133,18 @@ export function portalMenu(
 			}
 			continue;
 		}
+		const captions: Readonly<Record<number, string>> | undefined = group?.captions;
 		const format = copy( link.fee ? "UIIT_CTL_TELEPORT_RESULT" : "UIIT_CTL_TELEPORT_FREE_RESULT" );
 		let argument = 0;
 		const label = format.replace(
 			/%s|%I64[du]|%[ld]*[du]/g,
 			() =>
 				argument++ === 0 ?
-					copy( destination.name ) :
+					copy( captions?.[destination.id] ?? destination.name ) :
 					String( link.fee + Math.trunc( taxRate / 100 * link.fee ) )
 		);
 		rows.push( { id: "npc-portal:" + link.target, label } );
 	}
-	if ( open ) rows.push( { id: "npc-portal-back", label: copy( PORTAL_GROUP_BACK ) } );
 	return rows;
 }
 /*
