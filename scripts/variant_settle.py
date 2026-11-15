@@ -32,25 +32,26 @@ than one link keeps whatever time it has: settle records it as it stands.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import state_document
+from prepare_client_resources import file_digest
+from sro_paths import tree_state_root
 
 LEDGER_FORMAT = "sro-variant-content"
 LEDGER_VERSION = 1
 # The trees settle walks: the game data the build reads. The build state,
 # the generated tree and loose root files are not variant content.
 CONTENT_ROOT = "extracted"
-HASH_CHUNK = 1 << 20
 
 
 # ================
 # ledger_path
 # ================
 def ledger_path(variant_root: Path) -> Path:
-	return Path(variant_root) / ".state" / "variant-content.json"
+	return tree_state_root(variant_root) / "variant-content.json"
 
 
 # ================
@@ -60,37 +61,14 @@ def ledger_path(variant_root: Path) -> Path:
 # foreign ledger is empty, so the worst case is one full hash.
 # ================
 def load_ledger(path: Path) -> dict[str, list]:
-	try:
-		document = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, ValueError):
-		return {}
-	if document.get("format") != LEDGER_FORMAT or document.get("version") != LEDGER_VERSION:
-		return {}
-	entries = document.get("entries")
-	return entries if isinstance(entries, dict) else {}
+	return state_document.read_document(path, LEDGER_FORMAT, "entries", LEDGER_VERSION) or {}
 
 
 # ================
 # write_ledger
 # ================
 def write_ledger(path: Path, entries: dict[str, list]) -> None:
-	data = json.dumps({"format": LEDGER_FORMAT, "version": LEDGER_VERSION, "entries": dict(sorted(entries.items()))},
-		separators=(",", ":")).encode("utf-8")
-	path.parent.mkdir(parents=True, exist_ok=True)
-	temporary = path.with_suffix(".json.tmp")
-	temporary.write_bytes(data)
-	os.replace(temporary, path)
-
-
-# ================
-# file_sha256
-# ================
-def file_sha256(path: Path) -> str:
-	digest = hashlib.sha256()
-	with open(path, "rb") as handle:
-		while chunk := handle.read(HASH_CHUNK):
-			digest.update(chunk)
-	return digest.hexdigest()
+	state_document.write_document(path, LEDGER_FORMAT, "entries", entries, LEDGER_VERSION)
 
 
 # ================
@@ -151,7 +129,7 @@ def settle(variant_root: Path, jobs: int = 8) -> dict[str, int]:
 			pending.append((relative, absolute, stat))
 	counts = {"files": len(files), "unread": len(files) - len(pending), "hashed": len(pending), "restored": 0, "changed": 0}
 	with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
-		digests = pool.map(lambda item: file_sha256(item[1]), pending)
+		digests = pool.map(lambda item: file_digest(item[1]), pending)
 		for (relative, absolute, stat), sha in zip(pending, digests):
 			known = ledger.get(relative)
 			if known and known[0] == stat.st_size and known[2] == sha and stat.st_nlink == 1:

@@ -24,10 +24,11 @@ does not describe. Stamps live in the generated tree they describe
 ===========================================================================
 */
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatedPath } from "../../lib/generatedRoot.mjs";
+import { writeStateFile } from "./stateFile.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
 
 // Static and dynamic imports with a relative specifier.
@@ -204,9 +205,5 @@ Records that a complete run of the named cache used code with this hash.
 ================
 */
 export async function writeStamp( name, hash ) {
-	const target = stampPath( name );
-	await mkdir( path.dirname( target ), { recursive: true } );
-	const temporary = `${target}.${process.pid}.tmp`;
-	await writeFile( temporary, `${JSON.stringify( { name, codeHash: hash } )}\n` );
-	await rename( temporary, target );
+	await writeStateFile( stampPath( name ), `${JSON.stringify( { name, codeHash: hash } )}\n` );
 }
