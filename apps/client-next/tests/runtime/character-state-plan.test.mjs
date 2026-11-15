@@ -25,7 +25,11 @@ test("admission plans preserve every capacity reservation including irregular pa
 	for ( const emission of [ undefined, { capacity: 17, births: [ 0 ], lifetime: 1 } ] ) {
 		const model = {
 			nodes: [ {} ],
-			clips: [ { name: "walk", duration: 1, channels: [ {}, {} ] } ],
+			clips: [ {
+				name: "walk",
+				duration: 1,
+				channels: [ { times: new Float32Array( 1 ) }, { times: new Float32Array( 1 ) } ]
+			} ],
 			primitives: Array.from(
 				{ length: 3 },
 				( _, i ) => ({
