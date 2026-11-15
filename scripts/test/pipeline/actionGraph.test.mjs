@@ -302,7 +302,7 @@ test("a damaged object is never recorded again under its name", async ( t ) => {
 	// damages the stored object; B then produces "ALPHA" too and must not
 	// record the damaged object as its bytes (#3652 review).
 	const f = await fixture( t );
-	const writer = ( name ) => ( {
+	const writer = ( name ) => ({
 		name,
 		outputRoot: path.join( f.root, name ),
 		outputs: [ "out.txt" ],
@@ -311,7 +311,7 @@ test("a damaged object is never recorded again under its name", async ( t ) => {
 		run: async ( { outputRoot } ) => {
 			await writeFile( path.join( outputRoot, "out.txt" ), "ALPHA" );
 		}
-	} );
+	});
 	await build( f, [ writer( "a" ) ] );
 	const linked = await stat( path.join( f.root, "a", "out.txt" ) );
 	if ( linked.nlink < 2 ) return t.skip( "this volume does not hard link" );
