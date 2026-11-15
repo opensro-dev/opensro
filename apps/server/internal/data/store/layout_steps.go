@@ -81,6 +81,7 @@ var layoutSteps = []layoutStep{
 	{10, true, "empty economy ledger", []string{"economy_ledger"}, economyLedgerSchema},
 	{11, true, "empty name-reservation table", []string{"name_reservations"}, nameReservationsSchema},
 	{12, true, "empty silk-history table", []string{"silk_history"}, silkHistorySchema},
+	{13, true, "empty trade-history table", []string{"trade_history"}, tradeHistorySchema},
 }
 
 /*
