@@ -6,6 +6,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 ===========================================================================
 */
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
+import { createClothStream } from "@/engine/foundation/animation/cloth-stream";
 import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
@@ -382,11 +383,14 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		// vertex count the last frame wrote.
 		ribbons: (RibbonBuffers | undefined)[];
 		cloth?: Map<number, ReturnType<typeof createClothVertices>>;
+		clothStreams?: Map<number, ReturnType<typeof createClothStream>>;
 		poseKey?: string;
 	}>();
 	// ownedModels counts the owned entries of models (decoded sources); the
 	// rest are borrowed or assembled views, so their count is the difference.
-	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0;
+	// deferredActors: visible actors the render budget kept from drawing;
+	// deferredBodies: those of them without emission.
+	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
 	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
@@ -1462,89 +1466,77 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
-	advanceParticles
+	emitterCandidate
 
-	Admit emitters within the render budget and advance their histories.
-	Returns the admitted emitters, the poses they need and their bytes.
+	Whether this pass may admit the actor as an emitter: its model emits, it
+	and its chain are resident, and a deferred draw has reached its
+	continuation.
 	================
 	*/
-	function advanceParticles( frame: PrepareFrame ) {
-		const { byGid, chains, origin, continuation } = frame;
-		const particleNeeded = new Set<number>(), particleAccepted = new Set<number>();
-		for ( const [gid, history] of particleBirths ) {
-			if ( byGid.get( gid )?.model !== history.model || !models.has( history.model ) ) {
-				particleBirths.delete( gid );
-			}
-		}
-		let particleBytes = [ ...particleBirths.values() ].reduce( ( sum, h ) => sum + h.bytes, 0 );
-		for ( const actor of frame.frameActors ) {
-			if ( actor.deferredParticle && (!continuation || !deferred.sample( actor.gid )?.draw) ) continue;
-			const resource = models.get( actor.model ), model = resource?.model, chain = chains.get( actor.gid )!;
-			if (
-				!model || !resource!.plan.emission || !chain.length || chain.some( a => !models.has( a.model ) )
-			) continue;
-			const storage = resource!.plan.particleBytes;
-			const bytes = Math.max( 0, storage - (particleBirths.get( actor.gid )?.bytes ?? 0) ) +
-				chain.reduce(
-					( sum, a ) => sum + (particleNeeded.has( a.gid ) ? 0 : models.get( a.model )!.plan.poseBytes),
-					0
-				);
-			if ( particleBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
-			particleBytes += bytes;
-			particleAccepted.add( actor.gid );
-			for ( const a of chain ) particleNeeded.add( a.gid );
-			const history = particleHistory( frame, actor, model, storage );
-			const transform = transformFor( actor, byGid, origin, frame.transforms );
-			if ( !transform ) continue;
-			const shift = regionOffsetXZ( origin, history.origin );
-			if ( history.graph && model.particleGraph ) {
-				advanceGraphEmitter( actor, model, history, transform, shift );
-			} else {
-				advanceBirthEmitter( actor, model, history, transform, shift );
-			}
-			history.origin = origin;
-			history.time = actor.time;
-		}
-		// Deferred draws retain bounded simulation history; only actor retirement releases it.
-		return { accepted: particleAccepted, needed: particleNeeded, bytes: particleBytes };
+	function emitterCandidate( frame: PrepareFrame, actor: CharacterActor ) {
+		if ( actor.deferredParticle && (!frame.continuation || !deferred.sample( actor.gid )?.draw) ) return false;
+		const resource = models.get( actor.model ), chain = frame.chains.get( actor.gid )!;
+		return !!resource?.model && !!resource.plan.emission && chain.length > 0 &&
+			chain.every( value => models.has( value.model ) );
 	}
 	/*
 	================
-	selectVisible
+	advanceEmitter
 
-	The actors with any opacity whose culling sphere meets a view, plus the
-	admitted emitters. Records the census frame and the deferred set.
+	Advance an admitted emitter's history to the actor's time.
 	================
 	*/
-	function selectVisible(
-		frame: PrepareFrame,
-		accepted: ReadonlySet<number>,
-		reflectedView: Float32Array | undefined
-	) {
-		const { chains, origin, continuation } = frame, opacity = frame.opacity;
-		const frusta = [ frame.view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map(
-			prepareViewFrustum
-		);
-		const visible = frame.frameActors.filter( actor => {
-			if ( opacity( actor ) <= 0 ) return false;
-			if ( models.get( actor.model )?.plan.emission ) return accepted.has( actor.gid );
+	function advanceEmitter( frame: PrepareFrame, actor: CharacterActor, resource: ModelResource ) {
+		const { byGid, origin } = frame, model = resource.model;
+		const history = particleHistory( frame, actor, model, resource.plan.particleBytes );
+		const transform = transformFor( actor, byGid, origin, frame.transforms );
+		if ( !transform ) return;
+		const shift = regionOffsetXZ( origin, history.origin );
+		if ( history.graph && model.particleGraph ) {
+			advanceGraphEmitter( actor, model, history, transform, shift );
+		} else {
+			advanceBirthEmitter( actor, model, history, transform, shift );
+		}
+		history.origin = origin;
+		history.time = actor.time;
+	}
+	/*
+	================
+	selectBodies
+
+	The actors without emission, with any opacity, whose culling sphere meets
+	a view. planBatches admits the emitters after them.
+	================
+	*/
+	function selectBodies( frame: PrepareFrame, frusta: readonly Float64Array[] ) {
+		const { chains, origin } = frame, opacity = frame.opacity;
+		return frame.frameActors.filter( actor => {
+			if ( opacity( actor ) <= 0 || models.get( actor.model )?.plan.emission ) return false;
 			if ( !cullSphere( actor, chains, origin, sphere ) ) return false;
 			return !frusta.length ||
 				frusta.some( frustum =>
 					visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
 				);
 		} );
-		// The census (stats(true)) reads the last main frame's admission.
-		if ( !continuation && !frame.preview ) {
+	}
+	/*
+	================
+	recordVisible
+
+	The census (stats(true)) reads the last main frame's admission, and a
+	deferred draw attaches only to an actor this frame shows.
+	================
+	*/
+	function recordVisible( frame: PrepareFrame, frusta: Float64Array[], visible: CharacterActor[] ) {
+		if ( !frame.continuation && !frame.preview ) {
 			cullFrame.valid = true;
 			cullFrame.frusta = frusta;
 			cullFrame.visible = visible;
-			cullFrame.chains = chains;
+			cullFrame.chains = frame.chains;
 			cullFrame.byGid = frame.byGid;
-			cullFrame.origin = origin;
+			cullFrame.origin = frame.origin;
 		}
-		if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
-		return visible;
+		if ( hasDeferred && !frame.continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
 	}
 	/*
 	================
@@ -1592,53 +1584,126 @@ the next full prepare pass, so this may run between frames.
 	}
 	/*
 	================
-	planBatches
+	retainedBytes
 
-	Plan the complete frame before creating poses, arrays, or GPU resources:
-	group the visible actors by batch until the render budget is spent.
+	What the frame holds before it plans a row: the batches a deferred draw
+	keeps for its continuation, and the histories of emitters this pass does
+	not consider (a deferred draw before its continuation, an emitter whose
+	chain is not resident). Prunes the histories of departed actors first.
 	================
 	*/
-	function planBatches(
-		frame: PrepareFrame,
-		visible: readonly CharacterActor[],
-		particles: { needed: ReadonlySet<number>; bytes: number; }
-	) {
-		visibleActors = visible.length;
-		// A rejected actor leaves capacity available for cheaper frameActors that follow it.
-		const grouped = new Map<string, CharacterActor[]>(), needed = new Set<number>( particles.needed );
-		renderBytes = particles.bytes + materialClocks.bytes();
+	function retainedBytes( frame: PrepareFrame ) {
+		let bytes = 0;
+		for ( const [gid, history] of particleBirths ) {
+			const actor = frame.byGid.get( gid );
+			if ( actor?.model !== history.model || !models.has( history.model ) ) particleBirths.delete( gid );
+			else if ( !emitterCandidate( frame, actor ) ) bytes += history.bytes;
+		}
 		if ( !frame.continuation && hasDeferred ) {
 			for ( const batch of batches.values() ) {
 				if ( retainedDeferred( frame, batch ) ) {
 					const actor = frame.byGid.get( batch.gids[0]! );
-					if ( actor ) renderBytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
+					if ( actor ) bytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
 				}
 			}
 		}
-		deferredActors = 0;
-		for ( const actor of visible ) {
+		return bytes;
+	}
+	/*
+	================
+	rowCost
+
+	What admitting the actor adds: its batch's growth by one row when it
+	draws (key names that batch), plus the poses of its chain no admitted
+	actor needs yet.
+	================
+	*/
+	function rowCost(
+		frame: PrepareFrame,
+		actor: CharacterActor,
+		rows: ReadonlyMap<string, number>,
+		needed: ReadonlySet<number>,
+		draws: boolean
+	) {
+		const plan = models.get( actor.model )!.plan, key = draws ? batchKey( frame, actor, plan ) : undefined;
+		const count = key === undefined ? 0 : rows.get( key ) ?? 0;
+		let bytes = key === undefined ? 0 : plan.batchBytes( count + 1 ) - plan.batchBytes( count );
+		for ( const value of frame.chains.get( actor.gid )! ) {
+			if ( !needed.has( value.gid ) ) bytes += models.get( value.model )!.plan.poseBytes;
+		}
+		return { key, bytes };
+	}
+	/*
+	================
+	planBatches
+
+	Plan the complete frame before creating poses, arrays, or GPU resources,
+	within the render budget: first every visible body in admission order
+	(the local player, its mount, then nearest first), then the emitters,
+	each whole (particle storage, poses and row) or not at all, and never
+	one whose holder the budget refused. The original keeps every body it
+	is sent and ticks an attached effect through its holder (A9EFB0 ->
+	A956F0), so when this port's budget runs out a glow gives way before a
+	body does. A refused emitter's history is released, so retained
+	particles cannot keep holding what a nearer body needs; the emitter
+	restarts when it is admitted again. Rows join their batches in frame
+	order, so the two passes do not change the draw order.
+	================
+	*/
+	function planBatches( frame: PrepareFrame, bodies: readonly CharacterActor[] ) {
+		const needed = new Set<number>(), particleNeeded = new Set<number>(), emitters = new Set<number>();
+		const refused = new Set<number>(), keys = new Map<CharacterActor, string>(), rows = new Map<string, number>();
+		renderBytes = materialClocks.bytes() + retainedBytes( frame );
+		deferredActors = deferredBodies = 0;
+		// A refused actor leaves capacity for cheaper actors that follow it.
+		const admit = ( actor: CharacterActor, cost: { key: string | undefined; bytes: number; } ) => {
+			if ( !Number.isSafeInteger( cost.bytes ) || cost.bytes < 0 ) return false;
+			if ( renderBytes + cost.bytes > CHARACTER_RENDER_BYTES ) return false;
+			renderBytes += cost.bytes;
+			if ( cost.key !== undefined ) {
+				keys.set( actor, cost.key );
+				rows.set( cost.key, (rows.get( cost.key ) ?? 0) + 1 );
+			}
+			for ( const value of frame.chains.get( actor.gid )! ) needed.add( value.gid );
+			return true;
+		};
+		for ( const actor of bodies ) {
 			if ( actor.drawGeometry === false ) continue;
-			const plan = models.get( actor.model )!.plan, dependencies = frame.chains.get( actor.gid )!;
-			const key = batchKey( frame, actor, plan );
-			const rows = grouped.get( key ) ?? [];
-			const extra = plan.batchBytes( rows.length + 1 ) - plan.batchBytes( rows.length ) +
-				dependencies.reduce(
-					( bytes, value ) =>
-						bytes + (needed.has( value.gid ) ? 0 : models.get( value.model )!.plan.poseBytes),
-					0
-				);
-			if ( !Number.isSafeInteger( extra ) || extra < 0 || renderBytes + extra > CHARACTER_RENDER_BYTES ) {
-				deferredActors++;
+			if ( admit( actor, rowCost( frame, actor, rows, needed, true ) ) ) continue;
+			deferredActors++;
+			deferredBodies++;
+			refused.add( actor.gid );
+		}
+		for ( const actor of frame.frameActors ) {
+			if ( !emitterCandidate( frame, actor ) ) continue;
+			const resource = models.get( actor.model )!, chain = frame.chains.get( actor.gid )!;
+			const draws = frame.opacity( actor ) > 0 && actor.drawGeometry !== false;
+			const cost = rowCost( frame, actor, rows, needed, draws );
+			cost.bytes += resource.plan.particleBytes;
+			if ( chain.some( value => refused.has( value.gid ) ) || !admit( actor, cost ) ) {
+				if ( draws ) deferredActors++;
+				refused.add( actor.gid );
+				particleBirths.delete( actor.gid );
 				continue;
 			}
-			renderBytes += extra;
-			rows.push( actor );
-			grouped.set( key, rows );
-			for ( const value of dependencies ) {
-				needed.add( value.gid );
-			}
+			emitters.add( actor.gid );
+			for ( const value of chain ) particleNeeded.add( value.gid );
+			advanceEmitter( frame, actor, resource );
 		}
-		return { grouped, needed };
+		const shown = new Set( bodies );
+		const visible = frame.frameActors.filter( actor =>
+			shown.has( actor ) || emitters.has( actor.gid ) && frame.opacity( actor ) > 0
+		);
+		visibleActors = visible.length;
+		const grouped = new Map<string, CharacterActor[]>();
+		for ( const actor of visible ) {
+			const key = keys.get( actor );
+			if ( key === undefined ) continue;
+			const group = grouped.get( key );
+			if ( group ) group.push( actor );
+			else grouped.set( key, [ actor ] );
+		}
+		return { grouped, needed, visible, particleNeeded };
 	}
 	/*
 	================
@@ -2242,8 +2307,12 @@ the next full prepare pass, so this may run between frames.
 				},
 				instances,
 				bones: group.batch.palettes[p],
+				// A skinned cloth mesh is skinned on the GPU, with its solver
+				// stream (drawCloth); an unskinned one keeps CPU vertices.
 				...(primitive.cloth ?
-					{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
+					primitive.geometry.joints && primitive.geometry.weights ?
+						{ clothStream: true } :
+						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
 				transform: preview ? view! : identity()
 			},
@@ -2328,25 +2397,27 @@ the next full prepare pass, so this may run between frames.
 	================
 	drawCloth
 
-	A cloth primitive: its instance streams, then CPU cloth vertices from the
-	batch palette.
+	A cloth primitive. A skinned cloth mesh is drawn skinned: the GPU skins
+	its vertices from the batch palette every frame, and the CPU runs the
+	solver only when a step falls due, writing the vertices it owns into the
+	draw's cloth stream (cloth-stream.ts). Before, the CPU skinned the pins
+	and rewrote and uploaded the whole vertex stream every frame: with avatar
+	dresses in a crowd that was the largest cost of the main thread. An
+	unskinned cloth mesh keeps its CPU vertex stream (cloth-vertices.ts).
 	================
 	*/
 	function drawCloth( frame: PrepareFrame, group: GroupFrame, p: number, streams: PrimitiveRows ): GeometryDraw {
 		const geometry = frame.geometry;
 		const { preview, view } = frame, { rows, batch, fading } = group;
 		const { instances, appearance, pointLights } = streams, primitive = group.model.primitives[p]!;
-		batch.cloth ??= new Map();
-		let cloth = batch.cloth.get( p );
-		if ( !cloth ) {
-			cloth = createClothVertices( primitive, clothRandom );
-			batch.cloth.set( p, cloth );
-		}
+		const enabled = frame.dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25;
+		// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
+		const motion = { direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 };
+		const skinned = !!primitive.geometry.joints && !!primitive.geometry.weights;
 		let draw = batch.draws[p];
 		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights;
 		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances );
-		// Cloth vertices change independently of the actor placement. These
-		// unskinned draws never enter the particle compute writer.
+		// Cloth draws never enter the particle compute writer.
 		if ( placementChanged ) {
 			draw = geometry.updateInstances(
 				draw,
@@ -2357,17 +2428,28 @@ the next full prepare pass, so this may run between frames.
 			);
 		}
 		batch.draws[p] = draw;
-		geometry.writeVertices(
-			draw,
-			0,
-			cloth.update(
-				batch.palettes[p]!,
-				frame.seconds,
-				frame.dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25,
-				// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
-				{ direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 }
-			)
-		);
+		const palette = batch.palettes[p]!;
+		if ( skinned ) {
+			batch.clothStreams ??= new Map();
+			let cloth = batch.clothStreams.get( p );
+			if ( !cloth ) {
+				cloth = createClothStream( primitive, clothRandom );
+				batch.clothStreams.set( p, cloth );
+			}
+			const upload = palette.subarray( 0, rows.length * primitive.joints.length * 16 );
+			boneUploadBytes += upload.byteLength;
+			geometry.updateBones( draw, upload );
+			const write = cloth.update( palette, frame.seconds, enabled, motion );
+			if ( write ) geometry.writeClothStream( draw, write.first, write.entries );
+		} else {
+			batch.cloth ??= new Map();
+			let cloth = batch.cloth.get( p );
+			if ( !cloth ) {
+				cloth = createClothVertices( primitive, clothRandom );
+				batch.cloth.set( p, cloth );
+			}
+			geometry.writeVertices( draw, 0, cloth.update( palette, frame.seconds, enabled, motion ) );
+		}
 		if ( preview ) geometry.updateTransform( draw, view! );
 		updateModifiers( geometry, group, draw, p, true );
 		return draw;
@@ -2997,6 +3079,7 @@ the next full prepare pass, so this may run between frames.
 				renderBytes,
 				rowStreamBytes: (rowStreams.rowScratch?.byteLength ?? 0) + (rowStreams.lightScratch?.byteLength ?? 0),
 				deferredActors,
+				deferredBodies,
 				poseRequests,
 				poseEvaluations,
 				poseSharingHits,
@@ -3415,11 +3498,13 @@ the next full prepare pass, so this may run between frames.
 				opacity: actorOpacity( byGid ),
 				output: []
 			};
-			const particles = advanceParticles( frame );
-			const visible = selectVisible( frame, particles.accepted, reflectedView );
-			const { grouped, needed } = planBatches( frame, visible, particles );
+			const frusta = [ view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map(
+				prepareViewFrustum
+			);
+			const { grouped, needed, visible, particleNeeded } = planBatches( frame, selectBodies( frame, frusta ) );
+			recordVisible( frame, frusta, visible );
 			retireUnplanned( frame, grouped, needed );
-			countPlan( frame, visible, needed, particles.needed );
+			countPlan( frame, visible, needed, particleNeeded );
 			evaluateNeededPoses( frameActors, needed );
 			releaseUngrouped( frame, grouped );
 			const orderedGroups = [ ...grouped.entries() ];

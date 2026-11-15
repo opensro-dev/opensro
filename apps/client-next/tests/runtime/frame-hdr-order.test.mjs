@@ -28,7 +28,7 @@ function fixture( hdr, scaled = false ) {
 	const sceneFormat = hdr ? HDR_FORMAT : CANVAS_FORMAT;
 	const view = { format: CANVAS_FORMAT }, scene = { format: sceneFormat }, depth = { value: undefined };
 	const fullDepth = { value: undefined };
-	const passes = [], visible = [], submits = [];
+	const passes = [], visible = [], submits = [], events = [];
 	let nextEncoder = 0;
 	/*
 	================
@@ -161,6 +161,10 @@ function fixture( hdr, scaled = false ) {
 		},
 		submit( id ) {
 			submits.push( id );
+		},
+		// The particle presentation of every draw presented so far.
+		prepare() {
+			events.push( "particle-prepare" );
 		}
 	};
 	const frame = createFrame( /** @type {any} */ (commands) );
@@ -192,6 +196,7 @@ function fixture( hdr, scaled = false ) {
 		passes,
 		visible,
 		submits,
+		events,
 		geometry,
 		/*
 		================
@@ -254,9 +259,54 @@ test("HDR deferred UI uses the canvas format and retains world-label occlusion w
 			assert.equal( labelPass.descriptor.depthStencilAttachment.depthLoadOp, "load" );
 			assert.equal( labelPass.descriptor.colorAttachments[0].view.format, CANVAS_FORMAT );
 			assert.deepEqual( f.submits, mode === "asynchronous" ? [ 1, 2 ] : [ 1 ] );
-			if ( deferred ) {
-				assert.deepEqual( f.passes.find( p => p.descriptor.label === "deferred-particles" ).draws, [] );
+			// Only a query frame keeps the light effects' tail pass.
+			const tail = f.passes.find( p => p.descriptor.label === "deferred-particles" );
+			if ( mode === "asynchronous" ) assert.deepEqual( tail.draws, [] );
+			else assert.equal( tail, undefined );
+		}
+	}
+});
+
+test("light effects draw after the world and before the labels, in the main pass unless a query is due", async () => {
+	for ( const hdr of [ false, true ] ) {
+		for ( const asynchronous of [ false, true ] ) {
+			const f = fixture( hdr ), light = f.geometry( "light" );
+			await f.draw( {
+				deferred: {
+					asynchronous,
+					prepare: () => {
+						f.events.push( "continuation" );
+						return asynchronous ? Promise.resolve( [ light ] ) : [ light ];
+					}
+				}
+			} );
+			const rows = f.passes.map( p => [ p.descriptor.label, p.draws ] );
+			if ( asynchronous ) {
+				// The query reads the finished scene depth: the effects keep the
+				// pass after it, in a second submit.
+				assert.deepEqual( rows[0], [ "main-pass", [ "world" ] ] );
+				assert.deepEqual( rows[1], [
+					"deferred-particles",
+					hdr ? [ "light" ] : [ "light", "label", "background", "foreground" ]
+				] );
+				assert.deepEqual( f.submits, [ 1, 2 ] );
+				assert.deepEqual( f.events, [ "particle-prepare", "continuation", "particle-prepare" ] );
+			} else {
+				assert.deepEqual( rows[0], [
+					"main-pass",
+					hdr ? [ "world", "light" ] : [ "world", "light", "label", "background", "foreground" ]
+				] );
+				assert.equal( rows.some( ( [label] ) => label === "deferred-particles" ), false );
+				assert.deepEqual( f.submits, [ 1 ] );
+				// The continuation is presented before the frame's one particle
+				// prepare dispatches it.
+				assert.deepEqual( f.events, [ "continuation", "particle-prepare" ] );
+				// Nothing after the main pass reads its depth on this frame.
+				if ( !hdr ) {
+					assert.equal( f.passes[0].descriptor.depthStencilAttachment.depthStoreOp, "discard" );
+				}
 			}
+			assert.deepEqual( f.visible, [ "world", "light", "background", "foreground" ] );
 		}
 	}
 });
@@ -322,7 +372,7 @@ test("HDR weather and flares finish before depth-tested labels and foreground UI
 		} );
 		assert.deepEqual( f.passes.map( p => p.descriptor.label ), [
 			"main-pass",
-			"deferred-particles",
+			...(asynchronous ? [ "deferred-particles" ] : []),
 			"weather-thunder",
 			"hdr-resolve",
 			"flare-chain",

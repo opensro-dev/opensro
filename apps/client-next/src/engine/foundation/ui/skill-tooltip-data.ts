@@ -62,4 +62,7 @@ export interface SkillTooltipRowView {
 
 
 
+// Map-like, not a Map: skill-tooltip-catalog.ts builds views on demand
+// (SkillPane_CreateCatalog). structuredClone, postMessage and instanceof Map
+// do not work on it; read it through get, has, keys and iteration only.
 export type TooltipSkillCatalog=ReadonlyMap<number,SkillTooltipRowView>&{readonly groups:ReadonlyMap<string,SkillTooltipRowView>};
