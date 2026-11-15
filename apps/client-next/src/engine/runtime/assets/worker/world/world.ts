@@ -62,7 +62,7 @@ import { dungeonObjectMatrix, identity, mapPlacement } from "@/engine/foundation
 import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-contract";
 import { validDungeonBlocks } from "./internal/dungeon-block-publication";
 import { sceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
-import { sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
+import { holderSphere, placeSceneryEmitters, sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
 import { worldObjectMaterial } from "@/engine/foundation/rendering/world-material";
 import { finiteNumbers } from "@/engine/foundation/rendering/geometry-validation";
 
@@ -314,6 +314,9 @@ noteMaterial
 				materialFor( ref, material, index );
 			};
 			const compoundReady = new Map<ObjectBranch, boolean>(), fadeRadii = new Map<ObjectBranch, number>();
+			// Each compound's own sphere: its scenery emitters are in view while
+			// it is (A9EFB0 ticks attached objects on the visible path).
+			const holderSpheres = new Map<ObjectBranch, readonly number[] | null>();
 			const placements = objectPart ? b.objects.placements : [];
 			for ( const p of placements ) {
 				const key = [ Number( p.regionId ), p.objectId, p.uid, p.position.x, p.position.y, p.position.z ].join(
@@ -408,11 +411,10 @@ noteMaterial
 						message => warnings.push( `${ref.sourcePath}: ${message}` )
 					);
 					reserve( emitters.length * 512 );
-					for ( const emitter of emitters ) {
-						scenery.push(
-							p.dungeonBlock === undefined ? emitter : { ...emitter, dungeonBlock: p.dungeonBlock }
-						);
+					if ( emitters.length && !holderSpheres.has( rootRef ) ) {
+						holderSpheres.set( rootRef, holderSphere( branches, meshes ) );
 					}
+					placeSceneryEmitters( scenery, emitters, p.dungeonBlock, holderSpheres.get( rootRef ), matrix );
 					if ( animation?.model ) {
 						reserve( 256 );
 						let placements = animatedPlacements.get( animation.glbPublicPath );
