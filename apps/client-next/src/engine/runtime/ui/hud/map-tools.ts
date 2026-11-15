@@ -55,7 +55,6 @@ import {
 	guideMonsterRows,
 	guideMonsterTarget,
 	worldMapGuideCatalog,
-	type GuideRow,
 	type GuideTarget,
 	type GuideView,
 	type WorldMapGuideCatalog
@@ -67,7 +66,9 @@ import {
 	GUIDE_SCROLL_THUMB,
 	GUIDE_SCROLL_TRAVEL,
 	GUIDE_TREE_ROWS,
+	GUIDE_MAIN,
 	paintGuideTree,
+	treeRow,
 	type GuideTreeRow
 } from "./map-guide-tree";
 import {
@@ -92,8 +93,7 @@ const LEVEL_FILTER_NOTE_KEY = "UIIT_STT_WORLDMAP_LEVEL_MONSTER_LIST";
 const REGIONCODE_PATH = "/assets/text/regioncode.json";
 const GUIDE_BYTE_LIMIT = 4 << 20;
 // The guide trees' row ids: a main row, a monster, a place.
-const GUIDE_MAIN = "map-guide-main:";
-const GUIDE_MONSTER = "map-guide-monster:";
+export const GUIDE_MONSTER = "map-guide-monster:";
 const GUIDE_AREA = "map-guide-area:";
 // Any pose: a page's bounds and size do not depend on the view.
 const ORIGIN_POSE: Pose = { regionId: 0, x: 0, y: 0, z: 0, angle: 0 };
@@ -192,25 +192,6 @@ type GuideLoad =
 
 /*
 ================
-treeRow
-
-A guide row as the tree paints it.
-================
-*/
-function treeRow( row: GuideRow, prefix: string, open: number | null, picked: number | null ): GuideTreeRow {
-	return {
-		id: (row.main ? GUIDE_MAIN : prefix) + row.index,
-		label: row.label,
-		group: row.main,
-		open: row.main ? row.index === open : undefined,
-		lamp: !row.main && row.index === picked,
-		color: row.color,
-		badge: row.badge
-	};
-}
-
-/*
-================
 dungeonKey
 
 The dungeon a region belongs to, as the floor selector counts them:
@@ -262,6 +243,9 @@ export function createMapToolsHud( options: {
 	// picked dungeon row asks for until the cave catalogue resolves it.
 	let guideOpen: number | null = null;
 	let guidePicked: number | null = null;
+	// The Field tab's picked place: its lamp lights as a monster's does
+	// (the tree slot's selected face, CNIFTreeViewSlot).
+	let guideAreaPicked: number | null = null;
 	let pendingFloor: number | null = null;
 	// The rows the last paint showed past one page, and the thumb's
 	// unspent drag in rows, so a slow drag still moves.
@@ -436,7 +420,6 @@ export function createMapToolsHud( options: {
 		return {
 			race: input.race,
 			playerLevel: input.characterLevel,
-			filterBand: filterBand( input.characterLevel ),
 			open: guideOpen
 		};
 	}
@@ -492,6 +475,7 @@ export function createMapToolsHud( options: {
 			mark = null;
 			return guideTarget( guideMonsterTarget( catalog, index ) );
 		}
+		guideAreaPicked = index;
 		return guideTarget( guideAreaTarget( catalog, index ) );
 	}
 
@@ -505,7 +489,7 @@ export function createMapToolsHud( options: {
 	function guideRows( catalog: WorldMapGuideCatalog, input: MapToolsPaint ): GuideTreeRow[] {
 		const view = guideView( input );
 		return guideTab === "area" ?
-			guideAreaRows( catalog, view ).map( row => treeRow( row, GUIDE_AREA, guideOpen, null ) ) :
+			guideAreaRows( catalog, view ).map( row => treeRow( row, GUIDE_AREA, guideOpen, guideAreaPicked ) ) :
 			guideMonsterRows( catalog, view ).map( row => treeRow( row, GUIDE_MONSTER, guideOpen, guidePicked ) );
 	}
 

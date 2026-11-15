@@ -32,6 +32,11 @@ export interface Geometry {
 	// (updatePositions). Only such meshes keep a CPU mirror of their packed
 	// vertices; every other mesh drops it once the GPU holds the bytes.
 	readonly dynamicVertices?: boolean;
+	// A skinned cloth mesh: its skin table carries a second block of one
+	// entry a vertex, the cloth stream (cloth-stream.ts), which the owner
+	// rewrites with writeClothStream. The GPU skins a vertex unless its
+	// stream entry says the solver owns its position or normal.
+	readonly clothStream?: boolean;
 	// The packed vertex stream (14 floats a vertex, packGeometryVertices) of a
 	// dynamicVertices mesh, already built by the asset worker. The renderer
 	// uploads it and keeps it as the mirror instead of packing on its thread.

@@ -30,6 +30,10 @@ const NEAREST_FLAG = 4;
 const TILED_FLAG = 8;
 // Resident UI texture bytes the slots may hold together.
 const UI_TEXTURE_BUDGET_BYTES = 64 << 20;
+// One instance record: 28 floats (the shader's Quad).
+const UI_RECORD_BYTES = 112;
+// The instance buffer a session starts with; a crowd grows it (prepare).
+const UI_INITIAL_RECORDS = 8192;
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
 /*
 ================
@@ -351,11 +355,21 @@ fs
 			additivePipeline = additive;
 		}
 	} );
-	const storage = device.createBuffer( {
-		label: "ui-instances",
-		size: 8192 * 112,
-		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-	} );
+	/*
+	================
+	createStorage
+	================
+	*/
+	function createStorage( records: number ) {
+		return device.createBuffer( {
+			label: "ui-instances",
+			size: records * UI_RECORD_BYTES,
+			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+		} );
+	}
+	// Records the instance buffer holds; it grows to the scene (prepare).
+	let storageRecords = UI_INITIAL_RECORDS;
+	let storage = createStorage( storageRecords );
 	const viewport = device.createBuffer( {
 		label: "ui-viewport",
 		size: 16,
@@ -574,8 +588,21 @@ fs
 			if ( last === scene && recordedResources === resourceRevision ) return draws;
 			// One GPU record per plain quad and per glyph of a text run.
 			const records = uiRecordCount( scene.quads );
-			if ( scene.quads.length > 8192 || records > UI_RECORD_LIMIT ) throw new Error( "UI quad budget exceeded" );
-			if ( recordedResources !== resourceRevision ) bindings.clear();
+			if ( scene.quads.length > UI_RECORD_LIMIT || records > UI_RECORD_LIMIT ) {
+				throw new Error( "UI quad budget exceeded" );
+			}
+			if ( records > storageRecords ) {
+				// A crowd's name tags outgrew the buffer: a larger one in powers of
+				// two, every record packed again, and bind groups that name it.
+				// The frame that may still name the old buffer destroys it.
+				while ( storageRecords < records ) storageRecords *= 2;
+				retire( storage );
+				storage = createStorage( storageRecords );
+				packed.length = 0;
+				packedGlyph.length = 0;
+				uploaded.fill( NaN );
+				bindings.clear();
+			} else if ( recordedResources !== resourceRevision ) bindings.clear();
 			const needed = records * 28;
 			if ( values.length < needed ) {
 				const capacity = 2 ** Math.ceil( Math.log2( Math.max( 1, records ) ) ) * 28,

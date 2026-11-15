@@ -159,6 +159,7 @@
 		"ui-academy-buff-dialog.test.mjs",
 		"ui-behavior.test.mjs",
 		"ui-control-identities.test.mjs",
+		"ui-crowd-records.test.mjs",
 		"ui-edit-caret.test.mjs",
 		"ui-glyphs.test.mjs",
 		"ui-native-state.test.mjs",
