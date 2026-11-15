@@ -349,8 +349,8 @@ func TestForgeStackableAvatarCapsuleAndPet(t *testing.T) {
 		if _, ok := rt.ForgeGMItem(testDivision, c.Name, forgeCapsuleCodename+" transform=mob_forge_test"); !ok {
 			t.Fatal("capsule forge refused")
 		}
-		if drop := forgedDrop(t, rt); drop.TransformRefObjID != 777 {
-			t.Fatalf("transform = %d, want the MOB_FORGE_TEST ref 777", drop.TransformRefObjID)
+		if drop := forgedDrop(t, rt); drop.Data != 777 {
+			t.Fatalf("transform = %d, want the MOB_FORGE_TEST ref 777", drop.Data)
 		}
 		if _, ok := rt.ForgeGMItem(testDivision, c.Name, forgeCapsuleCodename+" transform=MOB_NOPE"); ok {
 			t.Fatal("an unknown transform target forged")
