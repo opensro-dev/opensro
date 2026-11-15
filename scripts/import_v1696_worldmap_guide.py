@@ -72,8 +72,9 @@ LEVEL_COLUMN = 57
 CODENAME_COLUMN = 2
 
 # The art the guide draws besides the tiles, by its path under interface/:
-# the hunting ground's icon and the guide scrollbar's arrows, thumb and
-# track in their faces. The reverse return button's three faces
+# the hunting ground's icon and the guide scrollbar's arrows and thumb in
+# their faces. The bar's track is v1.150's own quest line (qst_scroll_line,
+# 0xB48A86), so no track comes from here (#3515). The reverse return button's three faces
 # (worldmap/map/xy_returnicon*) are not here: the v1.188 buttons import
 # owns them, and a test keeps the two lists disjoint.
 ART = (
@@ -87,7 +88,6 @@ ART = (
 	"guide/gd_scroll_button",
 	"guide/gd_scroll_button_focus",
 	"guide/gd_scroll_button_press",
-	"guide/gd_scroll_line",
 	"guide/gd_contents_lamp",
 	"guide/gd_index_button_open",
 	"guide/gd_index_button_close",

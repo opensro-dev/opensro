@@ -7406,6 +7406,10 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
 				dirty = true;

@@ -103,7 +103,7 @@ const EDGE_SIZE = 4;
 // 336): v1.188 builds them in code, three to the right of v1.696's place
 // (17 and 77), where map1 shows them.
 export const GUIDE_WIDTH = 298;
-const GUIDE_HEIGHT = 296;
+export const GUIDE_HEIGHT = 296;
 const GUIDE_TILE_RECT: UiRect = [ 16, 16, 270, 264 ];
 const GUIDE_INNER_RECT: UiRect = [ 11, 32, 279, 258 ];
 const GUIDE_BLACK_RECT: UiRect = [ 22, 43, 257, 235 ];

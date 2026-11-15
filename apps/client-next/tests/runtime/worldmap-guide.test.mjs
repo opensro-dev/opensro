@@ -408,15 +408,18 @@ test("a build without the guide keeps the shard's Monster tab and says so on the
 	hud.dispose();
 });
 
-test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", () => {
+test("the guide's scrollbar: gd_scroll buttons on the quest line, and the thumb drags the tree", () => {
 	const many = fixture();
 	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
 	const hud = loadedTools( many );
 	hud.activate( "map-guide-main:0", undefined, 10 );
 	let view = paint( hud );
-	for ( const art of [ "gd_scroll_line.png", "gd_scroll_up.png", "gd_scroll_down.png", "gd_scroll_button.png" ] ) {
+	for ( const art of [ "gd_scroll_up.png", "gd_scroll_down.png", "gd_scroll_button.png" ] ) {
 		assert.ok( view.quads.some( quad => quad.texture.endsWith( "/guide/" + art ) ), art );
 	}
+	// v1.696 sets the quest window's line as the bar's track (0xB48A86).
+	assert.ok( view.quads.some( quad => quad.texture.endsWith( "/quest/qst_scroll_line.png" ) ), "the track" );
+	assert.equal( view.quads.some( quad => quad.texture.endsWith( "/guide/gd_scroll_line.png" ) ), false );
 	const thumb = control( view, "map-guide-scroll-thumb" );
 	assert.equal( thumb.draggable, true );
 	const top = thumb.rect[1];
@@ -435,6 +438,29 @@ test("the guide's own scrollbar: gd_scroll art, and the thumb drags the tree", (
 	hud.drag( "map-guide-scroll-thumb", -5 );
 	assert.equal( control( paint( hud ), "map-guide-scroll-thumb" ).rect[1], top + Math.round( 15 * 146 / 16 ) );
 	assert.equal( hud.drag( "map-pan", 10 ), false, "other drags are not the guide's" );
+	hud.dispose();
+});
+
+test("the wheel over the guide steps one row a notch, and leaves the map's wheel alone (#3515)", () => {
+	const many = fixture();
+	for ( let i = 0; i < 19; i++ ) many.monsters.push( monster( "Extra" + i, [ 10110 + i, 10810 + i, 10110 + i ] ) );
+	const hud = loadedTools( many );
+	hud.activate( "map-guide-main:0", undefined, 10 );
+	const thumb = () => control( paint( hud ), "map-guide-scroll-thumb" ).rect[1];
+	const top = thumb();
+	// The panel stands left of the window: [102, 100, 298, 296] here.
+	assert.equal( hud.scroll( 200, 200, 120 ), true );
+	assert.equal( thumb(), top + Math.round( 146 / 16 ), "one row, however large the delta" );
+	assert.equal( hud.scroll( 200, 200, -3 ), true );
+	assert.equal( thumb(), top, "and back" );
+	assert.equal( hud.scroll( 200, 200, -120 ), true );
+	assert.equal( thumb(), top, "held at the first row" );
+	for ( let i = 0; i < 30; i++ ) hud.scroll( 200, 200, 1 );
+	assert.equal( thumb(), top + 146, "held at the last row" );
+	assert.equal( hud.scroll( 700, 300, 1 ), false, "the map's own area is not the guide's" );
+	hud.activate( "map-side-tab", undefined, 10 );
+	paint( hud );
+	assert.equal( hud.scroll( 200, 200, 1 ), false, "a shut guide takes no wheel" );
 	hud.dispose();
 });
 

@@ -421,6 +421,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		},
 		/*
 		================
+		scroll
+
+		The wheel over the M window's guide panel; false when the panel
+		does not take it.
+		================
+		*/
+		scroll( event: Extract<UiEvent, { kind: "scroll"; }> ): boolean {
+			return mapTools.scroll( event.x, event.y, event.delta );
+		},
+		/*
+		================
 		step
 		================
 		*/
