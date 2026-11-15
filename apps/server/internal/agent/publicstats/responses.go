@@ -281,8 +281,9 @@ type StatusResponse struct {
 }
 
 // ScheduleEvent is one event the server runs. Kind is "fortress" (the
-// war), "fortress-registration" or "maintenance"; EndsAt is null for an
-// open-ended maintenance.
+// war), "fortress-registration", "maintenance", "capture-the-flag",
+// "capture-the-flag-registration" or "halloween" (sro-gameworld's
+// public_schedule.go); EndsAt is null for an open-ended maintenance.
 type ScheduleEvent struct {
 	Kind     string  `json:"kind"`
 	Title    string  `json:"title"`

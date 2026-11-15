@@ -162,6 +162,35 @@ func (s FlagWarSettings) startOn(now time.Time) time.Time {
 
 /*
 ================
+NextMatch
+
+The next daily match the scheduler runs, as the public schedule shows
+it: sign-up opens flagWarSignupMinutes before the start. Today's match
+until its start instant, tomorrow's from then on.
+================
+*/
+func (s FlagWarSettings) NextMatch(now time.Time) (signupAt, startsAt time.Time) {
+	s = s.normalized()
+	startsAt = s.startOn(now)
+	if !now.Before(startsAt) {
+		startsAt = startsAt.AddDate(0, 0, 1)
+	}
+	return startsAt.Add(-flagWarSignupMinutes * time.Minute), startsAt
+}
+
+/*
+================
+FlagWarMatchLength
+
+How long one match runs (flagWarMatchDurationMs), for the public calendar.
+================
+*/
+func FlagWarMatchLength() time.Duration {
+	return time.Duration(flagWarMatchDurationMs) * time.Millisecond
+}
+
+/*
+================
 signupOpen
 
 Sign-up is open in the ten minutes before today's start.
