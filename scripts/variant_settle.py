@@ -23,6 +23,11 @@ with what the tree now holds, so files that left the tree leave it too.
 The ledger lives in the build state beside the tree (<root>/.state), never
 in the checkout, so every worktree that rebuilds the variant shares it.
 
+settle only re-times files the variant owns. The variant build hard-links
+the native extraction's folders (build_alexandria_variant.link_tree), and
+a time set on a link is set on the native file too, so a file with more
+than one link keeps whatever time it has: settle records it as it stands.
+
 ===========================================================================
 """
 from __future__ import annotations
@@ -128,7 +133,7 @@ def settle(variant_root: Path, jobs: int = 8) -> dict[str, int]:
 		digests = pool.map(lambda item: file_sha256(item[1]), pending)
 		for (relative, absolute, stat), sha in zip(pending, digests):
 			known = ledger.get(relative)
-			if known and known[0] == stat.st_size and known[2] == sha:
+			if known and known[0] == stat.st_size and known[2] == sha and stat.st_nlink == 1:
 				# Same bytes as the last build left: give the file back its
 				# old time, so (size, mtime) caches downstream still hit.
 				os.utime(absolute, ns=(stat.st_atime_ns, known[1]))

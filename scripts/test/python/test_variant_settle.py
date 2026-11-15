@@ -63,6 +63,19 @@ class Settle(unittest.TestCase):
 		# The next run trusts the new state it recorded.
 		self.assertEqual(variant_settle.settle(self.root, 2)["trusted"], 1)
 
+	def test_a_file_linked_from_another_tree_keeps_its_time(self):
+		# The native extraction holds the other link: re-timing the variant's
+		# link would re-time the native file too.
+		native = self.root / "native-a.txt"
+		self.data.unlink()
+		native.write_bytes(b"native")
+		os.link(native, self.data)
+		variant_settle.settle(self.root, 2)
+		os.utime(native, ns=(LATER_NS, LATER_NS))
+		counts = variant_settle.settle(self.root, 2)
+		self.assertEqual((counts["restored"], counts["changed"]), (0, 1))
+		self.assertEqual(native.stat().st_mtime_ns, LATER_NS)
+
 	def test_removed_file_leaves_the_ledger(self):
 		self.data.unlink()
 		variant_settle.settle(self.root, 2)
