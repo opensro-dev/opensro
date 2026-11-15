@@ -12,6 +12,7 @@ import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-o
 import { MSAA_SAMPLE_COUNT } from "./msaa";
 import {
 	WATER_BEHIND_WEIGHT,
+	WATER_CLARITY,
 	WATER_REFLECTION_MIX,
 	WATER_REFRACTION_STRENGTH,
 	WATER_SHORE_BAND,
@@ -743,7 +744,10 @@ if(env.stages2.w>0.5&&material.reflection.z>0.5&&material.skin.z==0.0&&material.
    let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
    let shore=clamp(1.0-abs(depthBehind-input.viewZ)/${WATER_SHORE_BAND},0.0,1.0);
    let surface=select(lit,waterColor,waterPass.plane.z>0.5);
-   lit=mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX})+vec3f(shore*${WATER_SHORE_FOAM});
+   // Through deep water the seabed fades to the native surface
+   // (WATER_CLARITY); a far depth (nothing drawn) gives no share.
+   let seen=exp(-max(depthBehind-input.viewZ,0.0)/${WATER_CLARITY});
+   lit=mix(surface,mix(behind*${WATER_BEHIND_WEIGHT},surface,${WATER_REFLECTION_MIX}),seen)+vec3f(shore*${WATER_SHORE_FOAM});
   }else if(waterPass.plane.z>0.5){
    // Native: the planar reflection where a mirror exists, the water's lit
    // texture untouched where one does not.
