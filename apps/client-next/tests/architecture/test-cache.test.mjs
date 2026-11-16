@@ -54,12 +54,19 @@ runRunner
 
 Runs the fixture suite; returns the exit code and the runner's whole
 stdout and stderr, for the cases that assert on what the runner printed.
+
+The fixture's environment is exactly the one the case names: the parent's
+SRO_* variables are dropped, as they are cache-key inputs. A release check
+exports SRO_ARABIA=on, so a case comparing an unset flag with "on" saw
+two equal keys there (r195, 11-17) and passed only on the hub.
 ================
 */
 async function runRunner( suite, environment = {} ) {
 	// A top-level run: without node --test's child context, which would turn
 	// the runner's own reporting into the parent's protocol.
-	const { NODE_TEST_CONTEXT, ...env } = process.env;
+	const env = Object.fromEntries(
+		Object.entries( process.env ).filter( ( [key] ) => key !== "NODE_TEST_CONTEXT" && !key.startsWith( "SRO_" ) )
+	);
 	return spawnText( process.execPath, [ runner, suite ], {
 		cwd: root,
 		env: { ...env, ...environment, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }

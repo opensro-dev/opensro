@@ -19,6 +19,7 @@ from unittest import mock
 import arabia_import as arabia  # noqa: E402
 import cap110_monsters as cap110  # noqa: E402
 import constantinople_import as constantinople  # noqa: E402
+import export_world_import as export_world  # noqa: E402
 import god_import as god  # noqa: E402
 import hunting2_import as hunting2  # noqa: E402
 import jupiter_import as jupiter  # noqa: E402
@@ -29,7 +30,7 @@ import styria_import as styria  # noqa: E402
 import winter_event_import as winter  # noqa: E402
 
 # Every module that stages its own character (and skill) shard.
-SHARD_OWNERS = (arabia, cap110, constantinople, god, hunting2, jupiter, muhan, roc, skytemple, styria, winter)
+SHARD_OWNERS = (arabia, cap110, constantinople, export_world, god, hunting2, jupiter, muhan, roc, skytemple, styria, winter)
 LAYER_FLAGS = (arabia.FLAG, muhan.FLAG, winter.FLAG)
 
 

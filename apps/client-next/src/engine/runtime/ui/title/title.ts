@@ -38,7 +38,12 @@ const NARROW_VERSION_BOTTOM = 45;
 createTitleUi
 ================
 */
-export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">, base: string ) {
+export function createTitleUi(
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	base: string,
+	// The Experimental "Fit window labels" row; off draws the original.
+	fitLabels: () => boolean = () => false
+) {
 	const resources = createTitleResources( assets, base );
 	let listAlpha = 0, lastTime: number | null = null;
 	const nameAlpha = new Map<number, number>(), raceAlpha = [ 0, 0 ];
@@ -373,9 +378,7 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 						data.text,
 						state.creation,
 						input,
-						w,
-						h,
-						phase === "customize"
+						{ w, h, interactive: phase === "customize", fitLabels: fitLabels() }
 					);
 					quads.push( ...output.quads );
 					controls.push( ...output.controls );
