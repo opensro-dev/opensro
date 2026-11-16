@@ -327,7 +327,7 @@ type Deps struct {
 	EntryEventFrames func(divisionID string, character *Character) []Packet
 	// EntryEventGroups are the running events' groups every entry lists
 	// beside the character's own (the entered tail and the JSON entry):
-	// port-only, action/halloween_layer.go; nil adds none.
+	// port-only, action/event_groups.go; nil adds none.
 	EntryEventGroups func() []uint32
 
 	Letters       LetterStore
