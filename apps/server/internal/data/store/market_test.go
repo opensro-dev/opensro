@@ -370,10 +370,18 @@ func TestMarketBuyKeepsADeferredGoldWrite(t *testing.T) {
 	s.FlushTickBatch()
 	s.Close()
 	reopened := openTest(t, dir, clock)
+	found := false
 	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
-		if c.Name == buyer.Name && (c.Gold == nil || *c.Gold != want) {
+		if c.Name != buyer.Name {
+			continue
+		}
+		found = true
+		if c.Gold == nil || *c.Gold != want {
 			t.Fatalf("on disk the buyer holds %v gold, want %d", c.Gold, want)
 		}
+	}
+	if !found {
+		t.Fatalf("the reopened store has no %q", buyer.Name)
 	}
 }
 
