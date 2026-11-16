@@ -443,9 +443,17 @@ type divisionTickState struct {
 	shownCOS            map[string]map[uint32]shownCOS
 	monsters            *MonsterMoverOps
 	playerMapDueMs      int64
-	// shownPeers inverted for the session legs only (peer_motion.go).
-	peerWatchers      map[uint32][]string
-	peerWatchersValid bool
+	// peerWatchers is shownPeers inverted, kept where shownPeers changes
+	// (peer_visibility.go); moverPaths is each mover's last fanned-out
+	// path (peer_motion.go). The rest is the visibility pass's scratch.
+	peerWatchers      map[uint32]map[string]struct{}
+	moverPaths        map[uint32]peerPath
+	crossers          []int
+	faceless          []int
+	candidates        []int
+	liveGids          map[uint32]bool
+	sessionIndexes    map[string]int
+	sessionIndexValid bool
 }
 
 /*
@@ -761,13 +769,11 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	span.End()
 	t.watch.step()
 	span = t.zone(ZoneKindSub, "sessionLegs")
-	// One inversion serves every leg: shownPeers changed only above.
-	work.state.indexPeerWatchers()
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
 		t.watch.step()
 	}
-	work.state.dropPeerWatchers()
+	work.state.dropDepartedMovers(work.sessions)
 	span.End()
 	for sessionID := range work.state.settled {
 		if !live[sessionID] {
