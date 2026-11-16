@@ -81,6 +81,9 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 			bytes: characterMeshBytes( p.geometry )
 		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
+		// An authored alpha-blended material: the group draws in the
+		// translucent tier, back to front, whatever its opacity.
+		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.

@@ -320,6 +320,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
+		// The id names an effect program: its group draws in the
+		// translucent tier. Fixed by the id, so set once at admission.
+		effect: boolean;
 		images: WorldTexture[];
 		textures: ImageDraw[];
 		owned: boolean;
@@ -3220,6 +3223,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model,
 				plan: createCharacterRenderPlan( model, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3466,6 +3470,7 @@ the next full prepare pass, so this may run between frames.
 				models.set( id, {
 					model: admitted,
 					plan: createCharacterRenderPlan( admitted, timelines ),
+					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3562,6 +3567,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model: assembled,
 				plan: createCharacterRenderPlan( assembled, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
 				owned: false,
@@ -3765,9 +3771,8 @@ the next full prepare pass, so this may run between frames.
 				orderedGroups.forEach( ( [id, rows], index ) => {
 					const sample = rows[0]!;
 					const fading = frame.opacity( sample ) < 1;
-					const effect = sample.model.includes( EFFECT_PROGRAMS );
-					const blended = fading || effect ||
-						models.get( sample.model )!.model.primitives.some( p => !!p.geometry.material?.blend );
+					const resource = models.get( sample.model )!, effect = resource.effect;
+					const blended = fading || effect || resource.plan.blended;
 					let depth = -Infinity;
 					if ( blended ) {
 						for ( const row of rows ) depth = Math.max( depth, actorDepth( row ) );
