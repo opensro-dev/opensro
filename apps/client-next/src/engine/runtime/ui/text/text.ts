@@ -112,6 +112,21 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		},
 		/*
 		================
+		lineInk
+
+		Where a line's letters fall in a rect it is laid at the top of
+		(vAlign 0): from the cell's height above the baseline (the
+		baseline is the rect's top plus the ascent) to the descent below
+		it. The label wrap spaces its two lines by this (frame.ts).
+		================
+		*/
+		lineInk: ( index = 0, style = 0 ) => {
+			if ( state.kind !== "ready" ) return { top: 0, height: 0 };
+			const font = state.font.fonts[String( index ) + (style === 2 ? ":2" : "")]!;
+			return { top: font.ascent - font.recordHeight, height: font.recordHeight + font.descent };
+		},
+		/*
+		================
 		path
 		================
 		*/
