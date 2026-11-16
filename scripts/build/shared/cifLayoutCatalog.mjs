@@ -1,4 +1,5 @@
 import { readdir } from "node:fs/promises";
+import { compareText } from "./textOrder.mjs";
 
 /**
  * Every shipped resinfo file is a runtime-addressable native resource. The
@@ -10,5 +11,5 @@ import { readdir } from "node:fs/promises";
 export async function discoverCifLayouts( resinfoDir ) {
 	return (await readdir( resinfoDir ))
 		.filter( ( fileName ) => fileName.toLowerCase().endsWith( ".txt" ) )
-		.sort( ( left, right ) => left.localeCompare( right ) );
+		.sort( ( left, right ) => compareText( left, right ) );
 }

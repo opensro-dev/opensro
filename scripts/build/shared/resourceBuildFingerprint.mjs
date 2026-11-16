@@ -32,6 +32,7 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { buildStatePath } from "../../lib/generatedRoot.mjs";
 import { codeClosure } from "./codeStamp.mjs";
+import { janganTombTeleportEnabled } from "./janganTombTeleport.mjs";
 import { muhanEnabled } from "./muhan.mjs";
 import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
@@ -62,6 +63,9 @@ export const ENV_KNOBS = [
 	// Port-only, not native: the server's Muhan teleport overlays join
 	// the teleport bake (shared/muhan.mjs, #3314).
 	"SRO_MUHAN",
+	// Port-only, not native: the Jangan gate's tomb floor links join the
+	// teleport bake (shared/janganTombTeleport.mjs).
+	"SRO_JANGAN_TOMB_TELEPORT",
 	"SRO_SOOK_SURVIVAL_ARENA",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -93,6 +97,7 @@ export function buildKnobLines() {
 	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
 	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
 	lines.push( `posture SRO_MUHAN=${muhanEnabled()}` );
+	lines.push( `posture SRO_JANGAN_TOMB_TELEPORT=${janganTombTeleportEnabled()}` );
 	return lines;
 }
 

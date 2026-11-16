@@ -202,15 +202,15 @@ func BuildItemBody(row WireItem) []byte {
 		quantity = 0xffff
 	}
 	return wire.ItemBody{
-		TradeOwner:        row.TradeOwner,
-		RefObjID:          refObjID,
-		TypeFlags:         row.TypeFlags,
-		Plus:              uint8(plus),
-		VarianceBits:      row.VarianceBits,
-		Durability:        uint32(durability),
-		Quantity:          uint16(quantity),
-		MagicOptions:      magicOptions,
-		TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+		TradeOwner:   row.TradeOwner,
+		RefObjID:     refObjID,
+		TypeFlags:    row.TypeFlags,
+		Plus:         uint8(plus),
+		VarianceBits: row.VarianceBits,
+		Durability:   uint32(durability),
+		Quantity:     uint16(quantity),
+		MagicOptions: magicOptions,
+		Data:         row.Data, Summon: domain.CloneCOS(row.Summon),
 	}.Encode()
 }
 

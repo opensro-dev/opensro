@@ -41,6 +41,7 @@ import import_vsro_alexandria as tables
 import jupiter_import as jupiter
 import later_world_import
 from prepare_client_resources import safe_target, write_atomically
+from sro_paths import trees_overlap
 
 FLAG = "SRO_MALL_CATEGORIES"
 ROOT_ENV = "SRO_V1696_ROOT"
@@ -119,7 +120,7 @@ def select_stones(later_rows):
 # ================
 def add_stones(native, output, v1696_root=None):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("gears stone overlay must be separate from native extraction")
 	marker = output / MARKER
 	prior = cap110.read_json(marker) if marker.exists() else {}

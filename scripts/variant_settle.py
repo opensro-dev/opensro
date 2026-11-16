@@ -88,6 +88,27 @@ def content_files(variant_root: Path) -> list[tuple[str, Path, os.stat_result]]:
 
 
 # ================
+# matches_ledger
+#
+# Whether the tree is exactly what the last settle recorded: the same files,
+# each with its recorded size and mtime. variant_stamp.py asks this before
+# it lets an unchanged build skip; nothing is read but the directory.
+# ================
+def matches_ledger(variant_root: Path) -> bool:
+	ledger = load_ledger(ledger_path(variant_root))
+	if not ledger:
+		return False
+	files = content_files(variant_root)
+	if len(files) != len(ledger):
+		return False
+	for relative, _, stat in files:
+		known = ledger.get(relative)
+		if not known or known[0] != stat.st_size or known[1] != stat.st_mtime_ns:
+			return False
+	return True
+
+
+# ================
 # settle
 #
 # Restores the recorded mtime of every file whose bytes the last build
