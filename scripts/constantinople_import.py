@@ -401,17 +401,7 @@ def add_constantinople(native, output, source=None, closure=sky.copy_resource_cl
 			archive_hashes["Particles"] = tables.sha256_of(particles)
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
-			for sector_x, sector_y in sectors:
-				nav = tables.navmesh_path(sector_x, sector_y)
-				entry = data_index.get(nav)
-				if entry is None:
-					raise ValueError(f"v1.696 Data.pk2 has no {nav}")
-				target = output / "Data_extracted" / "navmesh" / Path(nav).name
-				stored = sro_pk2.payload(data, entry)
-				if target.exists() and target.read_bytes() == stored:
-					continue
-				variant.replace_file(target, stored)
-				copied.append("Data_extracted/" + nav)
+			copied += sky.copy_sector_navmesh(data, data_index, sectors, output, object_remap)
 			ifo_entry = data_index.get("navmesh/objectstring.ifo")
 			if ifo_entry is None:
 				raise ValueError("v1.696 Data.pk2 has no navmesh/objectstring.ifo")
