@@ -186,14 +186,14 @@ function countedTimelines() {
 }
 
 test("re-planning a body hashes only the key times of the clip it newly admitted, for the same charge", () => {
-	const model = catalog(), { timelines, walks } = countedTimelines();
-	createCharacterRenderPlan( model, timelines );
+	const model = catalog(), { timelines, walks } = countedTimelines(), caches = { timelines, bindings: new WeakMap() };
+	createCharacterRenderPlan( model, caches );
 	assert.equal( walks(), 3 );
 	// The second plan reads every clip's charge from the cache.
-	assert.equal( createCharacterRenderPlan( model, timelines ).poseBytes, characterPoseBytes( model ) );
+	assert.equal( createCharacterRenderPlan( model, caches ).poseBytes, characterPoseBytes( model ) );
 	assert.equal( walks(), 3 );
 	// An admitted clip appends to the catalog every assembly of the body shares.
 	const [added] = catalog().clips, extended = { ...model, clips: [ ...model.clips, { ...added, name: "walk" } ] };
-	assert.equal( createCharacterRenderPlan( extended, timelines ).poseBytes, characterPoseBytes( extended ) );
+	assert.equal( createCharacterRenderPlan( extended, caches ).poseBytes, characterPoseBytes( extended ) );
 	assert.equal( walks(), 4 );
 });
