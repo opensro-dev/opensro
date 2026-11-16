@@ -541,6 +541,12 @@ type Runtime struct {
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
 
+	// JobHonor scores job honor (jobhonor.go; port-only, not native,
+	// #3530). Nil, the default, scores nothing; the composition root
+	// installs platform/jobhonor only when EnvJobHonor is on.
+	JobHonor     JobHonorSink
+	jobHonorRuns honorRuns
+
 	// SunDrops counts Sun drops for the #2538 measurement cycle
 	// (sundrops.go; port-only, not native, count-only). Nil, the
 	// default, counts nothing; the composition root installs the

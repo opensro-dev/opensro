@@ -99,6 +99,32 @@ type SealBoardResponse struct {
 	Rows          []SealBoardRow `json:"rows"`
 }
 
+// JobHonorRow is one job honor board row (#3530): the job alias, never
+// the character name; its job; its points over the window; the tier it
+// holds now and the tier the next change gives it ("tonight").
+type JobHonorRow struct {
+	Rank    int    `json:"rank"`
+	Alias   string `json:"alias"`
+	Job     string `json:"job"`
+	Points  int64  `json:"points"`
+	Tier    string `json:"tier"`
+	Tonight string `json:"tonight"`
+}
+
+// JobHonorResponse is GET /public/v1/leaderboards/job-honor. NextChange
+// is the next tier change (05:00 UTC); PeriodEnd, for the previous
+// period, is the change that snapshot was ranked at.
+type JobHonorResponse struct {
+	Job         string        `json:"job"`
+	Period      string        `json:"period"`
+	GeneratedAt string        `json:"generatedAt"`
+	NextChange  string        `json:"nextChange"`
+	PeriodEnd   string        `json:"periodEnd,omitempty"`
+	DailyCap    int           `json:"dailyCap"`
+	WindowDays  int           `json:"windowDays"`
+	Rows        []JobHonorRow `json:"rows"`
+}
+
 // LevelFirst is one P4 level milestone.
 type LevelFirst struct {
 	Level uint8  `json:"level"`
