@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/transport"
 )
@@ -146,6 +147,11 @@ type Sources struct {
 	// contributor; a save the store refuses returns its own error. Nil
 	// leaves the write unserved.
 	TakeContributorTitle func(accountID string) error
+	// Referrals serves the website's referral routes (referrals.go); nil
+	// is SRO_REFERRALS off, and the routes answer 404. ReferralRules are
+	// the constants those routes show.
+	Referrals     ReferralSource
+	ReferralRules ReferralRules
 	// Sample reads the shard's online count and the hub's cumulative
 	// counters for P7 (status.go); nil leaves the status figures zero.
 	Sample func() (online int, metrics transport.Metrics)
@@ -174,6 +180,11 @@ type Sources struct {
 	// unserved (404): SRO_SEAL_BOARD off, the native default.
 	SealCounts        func(weekStart time.Time) ([]sealboard.Count, error)
 	SealCountingSince func(weekStart time.Time) (time.Time, error)
+	// JobHonorCurrent and JobHonorPrevious read the job honor ledger
+	// (platform/jobhonor, #3530): the live window and the newest tier
+	// snapshot. Nil leaves the board unserved (404): SRO_JOB_HONOR off.
+	JobHonorCurrent  func() ([]jobhonor.Standing, error)
+	JobHonorPrevious func() ([]jobhonor.Standing, time.Time, error)
 	// CensusPeople returns the player census's two public counts
 	// (people online now, unique people over 7 days); ok is false
 	// while the census cannot answer. Nil while the connection
@@ -285,6 +296,10 @@ func (s *Service) Handler() http.Handler {
 	// the flag's state leaves no fingerprint (the census' own rule).
 	if s.src.SealCounts != nil {
 		mux.HandleFunc("GET /public/v1/leaderboards/seals", s.cached(boardsMaxAge, s.sealBoard))
+	}
+	// The job honor board likewise exists only while its ledger is wired.
+	if s.src.JobHonorCurrent != nil {
+		mux.HandleFunc("GET /public/v1/leaderboards/job-honor", s.cached(boardsMaxAge, s.jobHonorBoard))
 	}
 	mux.HandleFunc("GET /public/v1/firsts", s.cached(boardsMaxAge, s.firsts))
 	mux.HandleFunc("GET /public/v1/characters", s.cached(charactersMaxAge, s.search))
