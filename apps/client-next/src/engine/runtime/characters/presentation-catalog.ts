@@ -36,6 +36,7 @@ import { skillSoundRoots } from "@/engine/foundation/animation/sound-selectors";
 import { animationMetadata, type AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type {
+	ClipFacts,
 	DeathModel,
 	DropModel,
 	ItemPresentation,
@@ -78,6 +79,29 @@ export interface PublishedResult {
 
 /*
 ================
+clipFacts
+
+A body's clip facts (ClipFacts), from its validated clip list. Each
+choice is the one actor-motion.ts made by scanning the list every frame.
+================
+*/
+export function clipFacts( clips: readonly string[] ): ClipFacts {
+	const names: ReadonlySet<string> = new Set( clips );
+	return {
+		names,
+		fallback: names.has( "stand" ) ? "stand" : clips[0] ?? "",
+		quickDeath: names.has( "deathquick" ) ? "deathquick" : names.has( "downdie" ) ? "downdie" : "death",
+		deathLoop: names.has( "deathLoop" ) ? "deathLoop" : names.has( "deathloop" ) ? "deathloop" : "death",
+		loopsDeath: names.has( "deathLoop" ) || names.has( "deathloop" ),
+		sitting: names.has( "sit" ) ? "sit" : "charselect-state14",
+		sitDown: names.has( "sitdown" ) ? "sitdown" : "charselect-state13",
+		standUp: names.has( "standup" ) ? "standup" : "charselect-state15",
+		hit: names.has( "hit1" ) ? "hit1" : names.has( "hit" ) ? "hit" : ""
+	};
+}
+
+/*
+================
 admitDeathModel
 
 One "death" manifest row: the characterInfo death BSR every requiredBy
@@ -111,6 +135,7 @@ function admitSecondaryModel( row: Partial<Resource> ): SecondaryModel {
 	const model: SecondaryModel = {
 		glb: row.glb,
 		clips: row.clips,
+		clipFacts: clipFacts( row.clips ),
 		animationStates: row.animationStates ? animationMetadata( row.animationStates ) : undefined,
 		ambientParticles: modelAmbientParticles( row.particleModifiers ),
 		animationParticles: particles,
@@ -410,6 +435,9 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						throw new Error( "Invalid character manifest" );
 					}
 				}
+				// The manifest's references share their BSR's clip list
+				// (joinModelResources), so they share its facts.
+				const factsByClips = new Map<readonly string[], ClipFacts>();
 				for ( const row of rows ) {
 					if (
 						row.materialKind !== undefined &&
@@ -426,8 +454,14 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 							))
 					) throw Error( "Invalid monster material variants" );
 					const staged = readStructureVisuals( row, modelAmbientParticles );
+					let facts = factsByClips.get( row.clips );
+					if ( !facts ) {
+						facts = clipFacts( row.clips );
+						factsByClips.set( row.clips, facts );
+					}
 					nextCatalog.set( row.refObjId, {
 						...row,
+						clipFacts: facts,
 						...(staged ? { structureVisuals: staged } : {}),
 						ambientParticles: modelAmbientParticles( row.particleModifiers ),
 						animationParticles: modelAnimationParticles( row.particleModifiers ),

@@ -282,6 +282,11 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 		s.queueBytes += r.f.EncodedLen()
 	}
 	s.queue = append(resend, s.queue...)
+	if s.writeHold {
+		// The re-sent block is ahead of everything the tick's window
+		// keeps back (session_write.go).
+		s.writeHoldAhead += resendCount
+	}
 	s.ring = nil
 	s.ringBytes = 0
 	s.streamPos = lastApplied

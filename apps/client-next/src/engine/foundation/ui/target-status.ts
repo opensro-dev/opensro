@@ -26,6 +26,12 @@ function monsterGrade( grade: number ) {
 		4: [ "giant", "UIIT_STT_MOB_GIANT", 20 ],
 		5: [ "titan", "UIIT_STT_MOB_TITAN", 100 ],
 		6: [ "elite", "UIIT_STT_MOB_ELITE", 4 ],
+		// Grade 7, the strong event monster (MOB_EVE_STRONG_*, the summon
+		// scroll's and Pandora's Box's waves): the v1.150 text names it
+		// (UIIT_STT_MOB_STRONG, "Elite") but ships no tw_icon of its own,
+		// so it wears the elite icon. Its HP is x30, the v1.188 max-HP
+		// switch's grade-7 case (0x4C19F0), as the server computes it.
+		7: [ "elite", "UIIT_STT_MOB_STRONG", 30 ],
 		// Port-only, not native: the optional source population classifies
 		// Apis and the tomb uniques as grade 8 (unique). Native data has no
 		// grade 8 (its monsters are grades 0 and 3, plus the nest grades 1, 4,

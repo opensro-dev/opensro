@@ -1,8 +1,10 @@
 package enterworld
 
 import (
-	"opensro.online/server/internal/domain"
 	"os"
+	"time"
+
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/world/simulation"
@@ -25,6 +27,41 @@ type NpcSpawnConfig struct {
 	// Roster is the immutable shipped npcpos/characterdata projection. An
 	// enabled production composition must provide a non-empty roster.
 	Roster []simulation.NpcDef
+	// Look, when set, dresses one NPC as another reference for a window
+	// (port-only, not native; simulation/npc_looks.go). The bootstrap
+	// resolves it into Looks once the roster is loaded.
+	Look *NpcLookConfig
+	// Looks are the roster's seasonal variants, built from Look; the zero
+	// value answers Roster at every instant.
+	Looks simulation.NpcLookRosters
+}
+
+/*
+================
+NpcLookConfig
+
+Which NPC wears which reference (both by codename), and when.
+================
+*/
+type NpcLookConfig struct {
+	Codename     string
+	LookCodename string
+	StartsAt     time.Time
+	EndsAt       time.Time
+}
+
+/*
+================
+NpcSpawnConfig.RosterAt
+
+The roster spawned from at now: Roster, or its seasonal look variant.
+================
+*/
+func (c NpcSpawnConfig) RosterAt(now time.Time) []simulation.NpcDef {
+	if look, ok := c.Looks.Look(); ok && look.RefObjID != 0 {
+		return c.Looks.At(now)
+	}
+	return c.Roster
 }
 
 // NpcSpawnConfigFromEnv reads the NPC spawn policy.
@@ -68,7 +105,7 @@ func (c NpcSpawnConfig) NpcObjectListRows(entry *LocalPlayerEntry) []Packet {
 	}
 	anchor := c.npcSpawnAnchor(entry)
 	viewer := simulation.Spawn{RegionID: uint16(entry.StartProfile.RegionID), X: entry.StartProfile.X, Y: entry.StartProfile.Y, Z: entry.StartProfile.Z}
-	roster := c.roster()
+	roster := c.RosterAt(time.Now())
 	rows := make([]Packet, 0, len(roster))
 	for _, npc := range roster {
 		if !simulation.NpcVisibleAt(npc, viewer) {
@@ -89,6 +126,9 @@ func (c NpcSpawnConfig) NpcRefObjSnapshot() []RefObjRow {
 		return []RefObjRow{}
 	}
 	roster := c.roster()
+	if look, ok := c.Looks.Look(); ok {
+		roster = append(append(make([]simulation.NpcDef, 0, len(roster)+1), roster...), look)
+	}
 	rows := make([]RefObjRow, 0, len(roster))
 	seen := make(map[uint32]bool)
 	for _, npc := range roster {

@@ -31,6 +31,7 @@ import {
 	type CaveMapPage
 } from "@/engine/foundation/ui/cave-map";
 import {
+	directoryByName,
 	dungeonDirectory,
 	levelBand,
 	monsterDirectory,
@@ -61,17 +62,9 @@ import {
 } from "@/engine/foundation/ui/worldmap-guide";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { dungeonRegionId } from "@/engine/foundation/world/world-space";
+import { GUIDE_MAIN, createGuideScroll, paintGuideTree, treeRow, type GuideTreeRow } from "./map-guide-tree";
 import {
-	GUIDE_SCROLL_ID,
-	GUIDE_SCROLL_THUMB,
-	GUIDE_SCROLL_TRAVEL,
-	GUIDE_TREE_ROWS,
-	GUIDE_MAIN,
-	paintGuideTree,
-	treeRow,
-	type GuideTreeRow
-} from "./map-guide-tree";
-import {
+	GUIDE_HEIGHT,
 	GUIDE_WIDTH,
 	floorSpinner,
 	guideLeft,
@@ -233,7 +226,7 @@ export function createMapToolsHud( options: {
 	let guideTab: "area" | "monster" = "monster";
 	// The guide tree's open group (one at a time) and its first shown row.
 	let drawerRegion: number | null = null;
-	let drawerPage = 0;
+	const guideScroll = createGuideScroll();
 	let mark: { regionId: number; x: number; z: number; refObjId: number; } | null = null;
 	let dungeonView: number | null = null;
 	let floorChoice: { regionId: number; floorIndex: number; } | null = null;
@@ -247,6 +240,14 @@ export function createMapToolsHud( options: {
 	// showed: the floor selector's arrows step from what is on screen.
 	let shownFloors: readonly CaveMapPage[] = [];
 	let shownFloor: CaveMapPage | undefined;
+	// The drawer's groups by shown name (#3554), rebuilt when the
+	// directory, the zone text or the regioncode names change.
+	let groupsFor: {
+		regions: readonly MonsterDirectoryRegion[];
+		zones: MapToolsPaint["zones"];
+		names: RegionNamesLoad;
+		groups: readonly MonsterDirectoryRegion[];
+	} | null = null;
 	let regionLoad: RegionNamesLoad = { kind: "idle" };
 	let guideLoad: GuideLoad = { kind: "idle" };
 	// The guide trees' open main row (one per tab, as the tab switch
@@ -258,10 +259,6 @@ export function createMapToolsHud( options: {
 	// (the tree slot's selected face, CNIFTreeViewSlot).
 	let guideAreaPicked: number | null = null;
 	let pendingFloor: number | null = null;
-	// The rows the last paint showed past one page, and the thumb's
-	// unspent drag in rows, so a slow drag still moves.
-	let guideRange = 0;
-	let thumbCarry = 0;
 	// The last painted frame's layout: a town page point becomes a pose
 	// through that page's bounds.
 	let lastLayout: WorldMapLayout | undefined;
@@ -374,19 +371,36 @@ export function createMapToolsHud( options: {
 
 	/*
 	================
+	drawerGroups
+
+	The drawer's groups: the directory merged by shown name (#3554).
+	================
+	*/
+	function drawerGroups( input: MapToolsPaint ): readonly MonsterDirectoryRegion[] {
+		const regions = directory( input.catalogue, filterBand( input.characterLevel ) );
+		if ( groupsFor?.regions !== regions || groupsFor.zones !== input.zones || groupsFor.names !== regionLoad ) {
+			const names = new Map( regions.map( row => [ row.region, regionName( row.region, input.zones ) ] ) );
+			const groups = directoryByName( regions, names );
+			groupsFor = { regions, zones: input.zones, names: regionLoad, groups };
+		}
+		return groupsFor.groups;
+	}
+
+	/*
+	================
 	guideTree
 
 	Paints the rows on the open guide panel and keeps the clamped scroll.
 	================
 	*/
 	function guideTree( input: MapToolsPaint, paint: MapChromePaint, rows: GuideTreeRow[], empty?: string ) {
-		guideRange = Math.max( 0, rows.length - GUIDE_TREE_ROWS );
-		drawerPage = paintGuideTree(
+		guideScroll.rows( rows.length );
+		paintGuideTree(
 			{
 				panel: [ guideLeft( input ), input.window[1], GUIDE_WIDTH, 0 ],
 				full: input.full,
 				rows,
-				scroll: drawerPage,
+				scroll: guideScroll.first(),
 				hover: input.hover,
 				pressed: null,
 				empty: empty ?? (
@@ -631,24 +645,23 @@ export function createMapToolsHud( options: {
 		================
 		drag
 
-		The guide's thumb: the drag moves the scroll by the rows its
-		pixels stand for over the thumb's travel. False for other ids.
+		The guide's thumb (map-guide-tree.ts createGuideScroll). False
+		for other ids.
 		================
 		*/
 		drag( id: string, dy: number ): boolean {
-			if ( id !== GUIDE_SCROLL_THUMB ) return false;
-			if ( guideRange <= 0 ) return true;
-			thumbCarry += (dy * guideRange) / GUIDE_SCROLL_TRAVEL;
-			// A hair under a whole row still counts as one: a drag across
-			// the whole travel must reach the last row.
-			const step = Math.trunc( thumbCarry + (thumbCarry > 0 ? 1e-6 : -1e-6) );
-			thumbCarry -= step;
-			const next = drawerPage + step;
-			drawerPage = Math.max( 0, Math.min( guideRange, next ) );
-			// Past either end the thumb holds there, and so does the drag:
-			// pixels spent beyond the end are not owed back on the return.
-			if ( next !== drawerPage ) thumbCarry = 0;
-			return true;
+			return guideScroll.drag( id, dy );
+		},
+		/*
+		================
+		scroll
+
+		The wheel over the open guide panel (createGuideScroll, issue
+		#3515). False when the wheel is elsewhere, so the map keeps it.
+		================
+		*/
+		scroll( x: number, y: number, delta: number ): boolean {
+			return guideScroll.wheel( x, y, delta );
 		},
 		/*
 		================
@@ -745,7 +758,7 @@ export function createMapToolsHud( options: {
 		): Pose | null | undefined {
 			if ( id === "map-level-filter" ) {
 				levelFilter = !levelFilter;
-				drawerPage = 0;
+				guideScroll.reset();
 				return null;
 			}
 			if ( id === "map-unique-spawns" ) {
@@ -756,14 +769,14 @@ export function createMapToolsHud( options: {
 				drawerOpen = !drawerOpen;
 				drawerRegion = null;
 				guideOpen = null;
-				drawerPage = 0;
+				guideScroll.reset();
 				return null;
 			}
 			if ( id === "map-guide-tab:area" || id === "map-guide-tab:monster" ) {
 				guideTab = id === "map-guide-tab:area" ? "area" : "monster";
 				drawerRegion = null;
 				guideOpen = null;
-				drawerPage = 0;
+				guideScroll.reset();
 				return null;
 			}
 			const guided = guideActivate( id );
@@ -771,11 +784,7 @@ export function createMapToolsHud( options: {
 			// The guide panel's and the foot's surfaces only keep clicks
 			// off the world.
 			if ( id === "map-guide" || id === "map-foot" ) return null;
-			if ( id === GUIDE_SCROLL_ID + "-up" || id === GUIDE_SCROLL_ID + "-down" ) {
-				// The paint clamps the far end against the rows.
-				drawerPage = Math.max( 0, drawerPage + (id === GUIDE_SCROLL_ID + "-down" ? 1 : -1) );
-				return null;
-			}
+			if ( guideScroll.activate( id ) ) return null;
 			if ( id.startsWith( "map-region:" ) ) {
 				// A group's toggle opens it in place and shuts the one
 				// open before (map1 shows a single open group).
@@ -792,6 +801,8 @@ export function createMapToolsHud( options: {
 					regionId === undefined || refObjId === undefined ||
 					!Number.isInteger( regionId ) || !Number.isInteger( refObjId )
 				) return null;
+				// The sector rows, not the drawer's merged groups: the id
+				// names the species' own sector (#3554).
 				const regions = directory( catalogue, filterBand( characterLevel ) );
 				for ( const region of regions ) {
 					if ( region.region !== regionId ) continue;
@@ -922,6 +933,7 @@ export function createMapToolsHud( options: {
 				spawns: input.offerUniqueSpawns ? uniqueSpawns : undefined
 			} );
 			sideTab( paint, drawerOpen );
+			guideScroll.place( drawerOpen ? [ guideLeft( input ), input.window[1], GUIDE_WIDTH, GUIDE_HEIGHT ] : null );
 			if ( drawerOpen ) {
 				guidePanel( paint, { tab: guideTab, size: input.size } );
 				const catalog = guideLoad.kind === "ready" ? guideLoad.catalog : undefined;
@@ -939,7 +951,7 @@ export function createMapToolsHud( options: {
 					);
 				} else {
 					const rows: GuideTreeRow[] = [];
-					for ( const region of directory( input.catalogue, filterBand( input.characterLevel ) ) ) {
+					for ( const region of drawerGroups( input ) ) {
 						const open = region.region === drawerRegion;
 						rows.push( {
 							id: "map-region:" + region.region,

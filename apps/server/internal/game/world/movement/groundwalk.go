@@ -92,7 +92,8 @@ GroundTickHook
 
 Snapshot publication already advances connected actors. This drain commits
 only accepted poses and publishes native B2F5 stops, after the 0x342F
-notice of a tether refusal. Revision fencing drops a stop superseded by a
+notice of a tether refusal (a destination walk's arrival only with the
+port-only position stream). Revision fencing drops a stop superseded by a
 later input, teleport or life transition.
 ================
 */
@@ -149,7 +150,12 @@ func (rt *Runtime) advanceGroundUpdateForCharacter(division string, character *e
 		frames = append(frames, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: character.ID,
 			Frames: []simulation.Frame{{Opcode: wire.OpCosDistanceError, Payload: []byte{update.Tether}}}})
 	}
-	if committed && (update.Stopped || update.Arrived && !continuing) {
+	// A destination walk that arrives sends nothing natively (StopMove
+	// with broadcast 0, simulation/position_stream.go); its arrival
+	// correction is the port-only position stream. A direction walk's
+	// end keeps its correction: that rule was not read.
+	arrivalCorrection := update.Arrived && !continuing && (directional || rt.PositionStream)
+	if committed && (update.Stopped || arrivalCorrection) {
 		if update.Stopped {
 			rt.directions.clear(update.Key)
 		}

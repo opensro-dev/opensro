@@ -7429,6 +7429,10 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
 				dirty = true;
@@ -22455,7 +22459,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
-					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// Only a companion's owner plate reads its owner; a scan of
+					// every row per player board was the HUD's largest cost.
+					const ownerEntity = entity.kind === "cos" ?
+						next.entities.find( owner => owner.gid === entity.ownerGid ) :
+						undefined;
 					// 854BB8: with no guild record the soldier's row keeps the
 					// owner's name colour, so the label colour is passed only
 					// when the owner actually has a guild (another player by
@@ -24682,51 +24690,70 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] :
 						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
-				// Markup the guide layout cannot read falls back to plain text.
-				let markup: ReturnType<typeof guideTokens> | null = null;
-				if ( hasSml2Markup( filled ) ) {
-					try {
-						markup = guideTokens( filled );
-					} catch {
-						markup = null;
-					}
-				}
-				const layout = guildQuestionLayout(
-					w,
-					h,
-					markup ?
-						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
-						12,
-					false
-				);
-				controls = drawFrame.controls = [];
-				blocks = drawFrame.blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				if ( markup ) {
-					const out = text.guide( markup, layout.name, full, white, resources.size );
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				const [yes, no] = academyAsk ?
 					[ "academy-confirm-yes", "academy-confirm-no" ] :
 					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
-				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
-				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				if ( academyAsk || jobAsk ) {
+					// 5D26F0 types 4-6 and the camp confirms are CIFSimpleMessageBox
+					// type 1: 52DB20 sizes the box to its widest line (600 px wrap), each
+					// <br> starting a line, with Yes and No centred under them (#3550).
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: markupLines( filled ),
+						yes,
+						no
+					} );
+				} else {
+					// Markup the guide layout cannot read falls back to plain text.
+					let markup: ReturnType<typeof guideTokens> | null = null;
+					if ( hasSml2Markup( filled ) ) {
+						try {
+							markup = guideTokens( filled );
+						} catch {
+							markup = null;
+						}
+					}
+					const layout = guildQuestionLayout(
+						w,
+						h,
+						markup ?
+							text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size )
+								.height :
+							12,
+						false
+					);
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							layout.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						),
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					if ( markup ) {
+						const out = text.guide( markup, layout.name, full, white, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+					button(
+						yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
+				}
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {

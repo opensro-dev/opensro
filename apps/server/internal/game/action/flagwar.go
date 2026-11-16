@@ -193,15 +193,17 @@ func FlagWarMatchLength() time.Duration {
 ================
 nearStarts
 
-Today's start and tomorrow's. A start in the first minutes after
-midnight UTC has its sign-up and standby notices on the day before, so
-every check looks at both; the two are a day apart, so at most one of
-them is ever in reach.
+Yesterday's start, today's and tomorrow's. A start in the first minutes
+after midnight UTC has its sign-up and standby notices on the day before,
+so every check looks at tomorrow's too; a tick that stalls across
+midnight right after a late start (23:59) resumes on the next UTC day,
+and only yesterday's start names the edge it still owes (#3706). The
+three are a day apart, so at most one edge of each is ever in reach.
 ================
 */
-func (s FlagWarSettings) nearStarts(now time.Time) [2]time.Time {
+func (s FlagWarSettings) nearStarts(now time.Time) [3]time.Time {
 	today := s.startOn(now)
-	return [2]time.Time{today, today.AddDate(0, 0, 1)}
+	return [3]time.Time{today.AddDate(0, 0, -1), today, today.AddDate(0, 0, 1)}
 }
 
 /*
@@ -253,6 +255,10 @@ type flagWarEvent struct {
 	seq         int64
 	lastTickMs  int64
 	ticked      bool
+	// cancelledStartMs is the latest start instant that resolved without
+	// a match (too few registrants, or no match owner): the public
+	// schedule must not list it as running (#3706).
+	cancelledStartMs int64
 }
 
 /*
@@ -478,7 +484,7 @@ func (rt *Runtime) advanceFlagWar(nowMs int64) []simulation.DivisionFrames {
 				func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby5) }},
 			{start.Add(-time.Minute),
 				func() []simulation.DivisionFrames { return rt.flagWarBroadcast(wire.FlagWarStandby1) }},
-			{start, func() []simulation.DivisionFrames { return rt.flagWarStart(settings) }},
+			{start, func() []simulation.DivisionFrames { return rt.flagWarStart(settings, start) }},
 		}
 		for _, edge := range edges {
 			if previous < edge.at.UnixMilli() && edge.at.UnixMilli() <= nowMs {
@@ -526,11 +532,12 @@ flagWarStart
 
 The start instant: the queue drains in sign-up order. The match
 owner, when installed, takes a full house from there; anything else
-cancels every registrant with the native game-cancel notice and the
-queue clears for tomorrow.
+cancels every registrant with the native game-cancel notice, records
+the start as cancelled for the public schedule (FlagWarCancelled), and
+the queue clears for tomorrow.
 ================
 */
-func (rt *Runtime) flagWarStart(settings FlagWarSettings) []simulation.DivisionFrames {
+func (rt *Runtime) flagWarStart(settings FlagWarSettings, start time.Time) []simulation.DivisionFrames {
 	event := &rt.flagWar
 	event.mu.Lock()
 	registrants := make([]FlagWarRegistrant, 0, len(event.registrants))
@@ -538,10 +545,14 @@ func (rt *Runtime) flagWarStart(settings FlagWarSettings) []simulation.DivisionF
 		registrants = append(registrants, registrant)
 	}
 	event.registrants = make(map[string]FlagWarRegistrant)
+	matched := rt.FlagWarMatchStart != nil && len(registrants) >= settings.MinPlayers
+	if !matched {
+		event.cancelledStartMs = start.UnixMilli()
+	}
 	event.mu.Unlock()
 	sort.Slice(registrants, func(i, j int) bool { return registrants[i].Seq < registrants[j].Seq })
 
-	if rt.FlagWarMatchStart != nil && len(registrants) >= settings.MinPlayers {
+	if matched {
 		return rt.FlagWarMatchStart(registrants)
 	}
 	out := make([]simulation.DivisionFrames, 0, len(registrants))
@@ -556,4 +567,21 @@ func (rt *Runtime) flagWarStart(settings FlagWarSettings) []simulation.DivisionF
 		})
 	}
 	return out
+}
+
+/*
+================
+FlagWarCancelled
+
+Whether the match that starts at start was cancelled at its start
+instant, for the public schedule: a cancelled match is not listed as
+running (#3706). Only the latest cancelled start is kept, which is all
+the schedule asks about (the match that would still be running).
+================
+*/
+func (rt *Runtime) FlagWarCancelled(start time.Time) bool {
+	event := &rt.flagWar
+	event.mu.Lock()
+	defer event.mu.Unlock()
+	return event.cancelledStartMs != 0 && event.cancelledStartMs == start.UnixMilli()
 }
