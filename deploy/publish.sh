@@ -94,7 +94,9 @@ fi
 # The docker driver builds one platform at a time unless Docker uses the
 # containerd image store; a docker-container builder builds and pushes the
 # multi-architecture tag in one go.
-if [ -z "${BUILDX_BUILDER:-}" ] && docker buildx inspect 2>/dev/null | grep -Eq '^Driver: +docker$'; then
+# Captured first: with pipefail, `grep -q` closing the pipe early would fail the inspect.
+current_builder="$(docker buildx inspect 2>/dev/null || true)"
+if [ -z "${BUILDX_BUILDER:-}" ] && grep -Eq '^Driver: +docker$' <<<"$current_builder"; then
     if ! docker buildx inspect silkroad-publish >/dev/null 2>&1; then
         echo "==> creating the buildx builder silkroad-publish (docker-container)" >&2
         docker buildx create --name silkroad-publish --driver docker-container >/dev/null
