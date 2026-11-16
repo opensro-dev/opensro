@@ -86,10 +86,13 @@ func (c *Catalog) loadAvatarOptions(dir string) error {
 			names = append(names, name)
 		}
 		if uint8(part) == avatarDressTypeID {
-			// Native v1.188 magicoptionassign.txt dress row (TID3 13, TID4 2;
-			// avatar-luck-and-4x-stacking.md) appends the Lucky and 4x stacking
-			// options on top of the v1.150 dress entries.
-			names = append(names, enterworld.AvatarV188DressOptions()...)
+			// The dress takes the v1.188 row (TID3 13, TID4 2;
+			// avatar-luck-and-4x-stacking.md): the v1.150 options plus Lucky
+			// and the 4x stacking options, in the v1.188 file order the
+			// client lists them in.
+			if names, err = enterworld.AvatarV188DressRow(names); err != nil {
+				return fmt.Errorf("alchemy: %w", err)
+			}
 		}
 		c.AvatarOptions[uint8(part)] = names
 	}

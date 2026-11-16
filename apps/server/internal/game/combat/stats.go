@@ -39,6 +39,9 @@ type Stats struct {
 	PhysicalBasicRate, PhysicalSkillRate, MagicalBasicRate, MagicalSkillRate float64
 	Berserk                                                                  bool // body-mode1 contributes native result flag4, not attack stats
 	StealthStrike                                                            bool // command issued in body mode 6: hit flag 8 (set by the hit-outcome routine)
+	// OneDamageHits is the defending monster's port-only rule: every hit
+	// lands for exactly 1 (OneDamageCap, monster.MonsterRef.OneDamageHits).
+	OneDamageHits bool
 	// Native B2..B5 final lane factors. Zero is the native no-modifier sentinel.
 	PhysicalOutgoing, MagicalOutgoing, PhysicalIncoming, MagicalIncoming float32
 	// Native AE..B1 received-damage factors by lane and attack kind (odar,
@@ -510,6 +513,7 @@ func MonsterStats(ref monster.MonsterRef) (Stats, error) {
 		)
 	}
 	return Stats{
+		OneDamageHits:   ref.OneDamageHits,
 		Level:           ref.Level,
 		MaxLevel:        ref.Level,
 		PhysicalDefense: ref.PhysicalDefense,

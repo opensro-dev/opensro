@@ -15,7 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
-import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
+import { MAX_ERROR_FRAMES, MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
 import {
 	GPU_TOKEN_PATTERN,
 	reportedDegradedPipelines,
@@ -91,6 +91,40 @@ const SHARED_MOVEMENT_FIELDS = [
 	"localGid",
 	"events"
 ] as const;
+// The error classes an engine throws; a shared error event names one of
+// these, or none.
+const ENGINE_ERROR_CLASSES = [
+	"Error",
+	"RangeError",
+	"TypeError",
+	"ReferenceError",
+	"SyntaxError",
+	"EvalError",
+	"URIError",
+	"AggregateError",
+	"InternalError",
+	"DOMException",
+	"OperationError"
+];
+// Messages the engines word themselves (V8, SpiderMonkey, JavaScriptCore),
+// which carry no game or player text. Any other message stays behind.
+const ENGINE_ERROR_MESSAGES = [
+	"Maximum call stack size exceeded",
+	"too much recursion",
+	"out of memory",
+	"Out of memory",
+	"Invalid array length",
+	"Invalid typed array length",
+	"Invalid string length",
+	"Array buffer allocation failed",
+	"Array size is not a small enough positive integer."
+];
+// A frame as the journal verified it ("    at /assets/index-abc.js:1:2"):
+// a script path of the page and two numbers, nothing else.
+const SHARED_STACK_FRAME = /^ {4}at \/[\w\-.~%@+/]*:\d{1,7}:\d{1,7}$/;
+// A stack header's class: "RangeError: ..." or a bare "Error".
+const STACK_HEADER_CLASS = /^([A-Za-z]*(?:Error|Exception))(?::|$)/;
+
 const TECHNICAL_FIELDS = new Set( [
 	...SHARED_GAMEPLAY_FIELDS,
 	...SHARED_MOVEMENT_FIELDS,
@@ -249,6 +283,8 @@ const TECHNICAL_FIELDS = new Set( [
 	"acknowledged",
 	"cos",
 	"error",
+	"errorClass",
+	"message",
 	"stack",
 	"gameplayError",
 	"worldSequence",
@@ -274,6 +310,10 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	],
 	event: [ "request", "receipt", "correction", "clock", "frame-spike", "world-reset" ],
 	error: MOVEMENT_ERROR_CODES,
+	// An error event's class and message: engine names and engine texts
+	// only (sharedErrorEvent); a free-text message stays on the machine.
+	errorClass: ENGINE_ERROR_CLASSES,
+	message: ENGINE_ERROR_MESSAGES,
 	gameplayError: MOVEMENT_ERROR_CODES,
 	visibility: [ "visible", "hidden" ],
 	reason: [ "spawn", "input", "correction", "receipt", "native", "cast", "displacement", "death", "clear" ],
@@ -484,6 +524,40 @@ function sharedValue( value: unknown, field = "" ): unknown {
 
 /*
 ================
+sharedErrorEvent
+
+An error event as the shared copy carries it. The class comes from the
+stack's header; the header is rebuilt from that class and an engine
+message, so the thrown message's free text never rides along on line 1.
+No line of the stack itself is shared: its frames are the journal's
+frames, each one a location the journal matched to a script the page
+loaded (stackFrames), so a message line shaped like a frame, however the
+message was built or changed, never ships. Each is checked again for that
+shape, and the first MAX_ERROR_FRAMES are kept. sharedValue then admits
+only engine classes and messages.
+================
+*/
+function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unknown> {
+	const { stack, message, frames: journalFrames, ...rest } = event;
+	const firstLine = typeof stack === "string" ? stack.split( "\n", 1 )[0] ?? "" : "";
+	const errorClass = STACK_HEADER_CLASS.exec( firstLine )?.[1];
+	const engineMessage = typeof message === "string" && ENGINE_ERROR_MESSAGES.includes( message ) ?
+		message :
+		undefined;
+	const frames = (Array.isArray( journalFrames ) ? journalFrames : [])
+		.filter( ( frame ): frame is string => typeof frame === "string" && SHARED_STACK_FRAME.test( frame ) )
+		.slice( 0, MAX_ERROR_FRAMES );
+	const header = (errorClass ?? "Error") + (engineMessage ? ": " + engineMessage : "");
+	return {
+		...rest,
+		...(errorClass ? { errorClass } : {}),
+		...(engineMessage ? { message: engineMessage } : {}),
+		...(frames.length ? { stack: [ header, ...frames ].join( "\n" ) } : {})
+	};
+}
+
+/*
+================
 iconlessRows
 
 A row drawn with no icon (it carries no icon path) is marked iconless: the
@@ -653,7 +727,9 @@ export async function createDiagnosticUpload(
 	const events = Array.isArray( timeline.events ) ? timeline.events : [];
 	const sharedTimeline = sharedValue( {
 		clip: timeline.clip,
-		events: events.filter( event => event.kind !== "chat" )
+		events: events.filter( event => event.kind !== "chat" ).map( event =>
+			event.kind === "error" ? sharedErrorEvent( event ) : event
+		)
 	} ) as Record<string, unknown>;
 	const state = read( "state.json" );
 	const gameplay = selectedFields( markIconless( state.gameplay ), SHARED_GAMEPLAY_FIELDS );

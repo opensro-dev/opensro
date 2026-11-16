@@ -14,12 +14,12 @@ avatars_archive_pins.json before any entry is read.
 
 ===========================================================================
 """
-import json
 from pathlib import Path
 import zipfile
 
 import cap110_item_import as shared
 import sro_pk2
+from pin_file import read_pin_field
 
 PIN_FORMAT = "opensro-avatars-archive-pin-v1"
 FOLDERS = shared.FOLDERS
@@ -48,13 +48,7 @@ def write_archive(path, entries):
 # The pinned sha256 of the avatar archive, from its pin file.
 # ================
 def read_pin(pin_file):
-	try:
-		pin = json.loads(Path(pin_file).read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{pin_file} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("sha256"), str):
-		raise SystemExit(f"{pin_file} is not a {PIN_FORMAT} pin file")
-	return pin["sha256"]
+	return read_pin_field(pin_file, PIN_FORMAT, "sha256", str)
 
 
 # ================

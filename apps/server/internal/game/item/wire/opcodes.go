@@ -137,6 +137,12 @@ const (
 	// ErrCodeStorageFull is UIIT_MSG_STRGERR_INVENTORY_FULL (01:07): the bag
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
+	// ErrCodeSpiritAsleep is the v1.188 server's 0x18F9 (port-only behind
+	// SRO_NASRUN, nasrun/clock.go): a Devil's Spirit that is dormant or
+	// whose awakening has lapsed cannot be worn. The v1.150 notice table
+	// has no 01:F9 entry, so its client shows nothing, as for any code it
+	// lacks.
+	ErrCodeSpiritAsleep uint8 = 0xF9
 	// ErrCodeCannotEnterCosBag is UIIT_MSG_COSPETERR_CANT_MOVETO_SUMITEM
 	// (01:B1, a banner): an item class that never enters a companion's
 	// bag. The generic code leaves such a refusal silent; this names the
