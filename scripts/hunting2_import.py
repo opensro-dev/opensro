@@ -293,9 +293,7 @@ def add_hunting2(native, out, v1696_root=None):
 	if not flag_enabled():
 		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
-	v1696_root = Path(v1696_root or os.environ.get(ROOT_ENV, ""))
-	if not str(v1696_root):
-		raise SystemExit(f"Pass the v1.696 client folder or set {ROOT_ENV}.")
+	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
 	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)

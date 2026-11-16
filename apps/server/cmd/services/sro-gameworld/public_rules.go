@@ -101,6 +101,10 @@ var unlistedSettings = map[string]string{
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
 	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
+	// The Styria Clash arena map (#3272 slice 1): the variant build merges
+	// its ground; nothing links to it and the GameWorld reads no switch
+	// until the Battle Arena engine (#3648) makes it a rule.
+	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
