@@ -177,11 +177,18 @@ export interface ExperimentalOptions {
 	// frustum-only draw and pick.
 	readonly dungeonCharacterPvs: boolean;
 	// Port-only, not native: an authored label wider than its box wraps onto
-	// two lines inside it, and an open list that would leave its window opens
-	// upward (the original runs the text past the window's edge and draws the
-	// list below the box). On unless turned off (the owner's choice,
+	// two lines inside it, a button caption wider than its plate keeps its
+	// leading words (in game and on the creation screen), a speech board
+	// breaks between words, and an open list that would leave its window opens
+	// upward (the original runs the text past the window's edge, breaks a
+	// board at any glyph and draws the list below the box). On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original look.
 	readonly fitWindowLabels: boolean;
+	// Port-only, not native: the few retail English strings with a typo read
+	// corrected (text-typos.ts: "<No hopstile Guild>" reads "<No hostile
+	// Guild>"). On unless turned off (the owner's choice, 2026-11-16: retail
+	// presentation defects are not copied); off is the original text.
+	readonly correctTypos: boolean;
 	// Port-only, not native: an item dropped on the other bag page's tab
 	// moves to that page's first free slot (bag-tab-drop.ts). On unless
 	// turned off (the owner's choice, 2026-10-15); off is the original,
@@ -469,7 +476,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, chatItemLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight and dungeonCharacterPvs, which only an explicit false turns off.
+correctTypos, petClickOpensWindow, smartPetPickup, touchInspect, uniqueSpawnPoints, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion, silentWingFlight and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -522,6 +529,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
+		correctTypos: record.correctTypos !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,

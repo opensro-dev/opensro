@@ -68,6 +68,8 @@ export function textLines(
 	return lines;
 }
 
+// A fitted button caption keeps this far inside each side of its plate.
+export const CAPTION_MARGIN = 4;
 // Words a cut caption never ends on: they only lead into what was cut.
 // Space-delimited, so a lookup is " " + word + " ".
 const CAPTION_TRAILING_WORDS = " a an the for of to in on with and or ";
