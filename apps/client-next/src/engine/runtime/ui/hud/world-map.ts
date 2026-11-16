@@ -410,11 +410,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		},
 		/*
 		================
-		drag
+		pointer
+
+		The window's drags and the wheel. The wheel moves only the open
+		guide panel's list (#3554); false when the map leaves it.
 		================
 		*/
-		drag( event: Extract<UiEvent, { kind: "drag"; }> ) {
-			if ( mapTools.drag( event.id, event.dy ) ) return;
+		pointer( event: Extract<UiEvent, { kind: "drag" | "scroll"; }> ): boolean {
+			if ( event.kind === "scroll" ) return mapTools.wheel( event.x, event.y, event.delta );
+			if ( mapTools.drag( event.id, event.dy ) ) return true;
 			if ( event.id === "map-drag" ) {
 				mapX = Math.max( 0, mapX + event.dx );
 				mapY = Math.max( 0, mapY + event.dy );
@@ -425,6 +429,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			) {
 				mapPan = [ mapPan[0] + event.dx, mapPan[1] + event.dy ];
 			}
+			return true;
 		},
 		/*
 		================

@@ -16,8 +16,9 @@ art), drawn with the chat window's faces: the com_scroll_bar track, the
 gold chat_arrow_up / _down arrows and the com_scroll_button thumb, which
 drags. The owner's v1.696 screenshot of the Monster tab shows exactly
 these; the bone-knot gd_scroll_* art (#3392) is not what the guide draws.
-This module paints one frame of the tree; the map tools own which group
-is open, the scroll and the rows themselves.
+This module paints one frame of the tree and owns its scroll (the first
+shown row, the thumb's drag and the wheel, #3554); the map tools own
+which group is open and the rows themselves.
 
 ===========================================================================
 */
@@ -138,15 +139,14 @@ export function treeRow( row: GuideRow, prefix: string, open: number | null, pic
 ================
 GuideTree
 
-One frame's tree: the guide panel's rect, the rows, the first shown
-row, and the text shown when there are no rows.
+One frame's tree: the guide panel's rect, the rows and the text shown
+when there are no rows. The first shown row is the scroll's.
 ================
 */
 export interface GuideTree {
 	panel: UiRect;
 	full: UiRect;
 	rows: readonly GuideTreeRow[];
-	scroll: number;
 	empty: string;
 	hover: string | null;
 	pressed: string | null;
@@ -161,17 +161,18 @@ export interface GuideTree {
 ================
 paintGuideTree
 
-Paints the shown rows and the scrollbar. Returns the scroll clamped to
-the rows, so the owner never keeps a position past the end.
+Paints the rows from first on and the scrollbar. Returns first clamped
+to the rows, so the scroll never keeps a position past the end.
 ================
 */
 export function paintGuideTree(
 	tree: GuideTree,
+	first: number,
 	out: { quads: UiQuad[]; controls: UiControl[]; paths: string[]; }
 ): number {
 	const [left, top] = tree.panel;
 	const range = Math.max( 0, tree.rows.length - GUIDE_TREE_ROWS );
-	const scroll = Math.max( 0, Math.min( range, tree.scroll ) );
+	const scroll = Math.max( 0, Math.min( range, first ) );
 	const image = ( texture: string, rect: UiRect ) => {
 		out.paths.push( texture );
 		out.quads.push( { texture, rect, uv: FULL_UV, color: WHITE, clip: tree.full } );
@@ -269,4 +270,116 @@ function paintScrollbar(
 	button( GUIDE_SCROLL_ID + "-up", SCROLL_UP, "Scroll up", [ x, y - size, size, size ], false );
 	button( GUIDE_SCROLL_ID + "-down", SCROLL_DOWN, "Scroll down", [ x, y + height, size, size ], false );
 	button( GUIDE_SCROLL_THUMB, SCROLL_THUMB, "Scroll the guide", [ x, y + thumb, size, size ], true );
+}
+
+/*
+================
+GuideScroll
+
+The tree's scroll: the first shown row, how far past one page the last
+paint's rows ran, the thumb's unspent drag in rows (so a slow drag still
+moves) and the panel the last frame painted, for the wheel (null while
+the guide is shut).
+================
+*/
+export interface GuideScroll {
+	reset(): void;
+	step( rows: number ): void;
+	paint(
+		tree: GuideTree,
+		area: UiRect,
+		out: { quads: UiQuad[]; controls: UiControl[]; paths: string[]; }
+	): void;
+	hide(): void;
+	wheel( x: number, y: number, delta: number ): boolean;
+	drag( id: string, dy: number ): boolean;
+}
+
+/*
+================
+createGuideScroll
+================
+*/
+export function createGuideScroll(): GuideScroll {
+	let first = 0, range = 0, carry = 0;
+	let area: UiRect | null = null;
+	return {
+		/*
+		================
+		reset
+
+		Back to the first row: a new group set, tab or filter.
+		================
+		*/
+		reset() {
+			first = 0;
+			carry = 0;
+		},
+		/*
+		================
+		step
+
+		The arrows' row step; the next paint clamps the far end.
+		================
+		*/
+		step( rows: number ) {
+			first = Math.max( 0, first + rows );
+		},
+		/*
+		================
+		paint
+		================
+		*/
+		paint( tree, painted, out ) {
+			range = Math.max( 0, tree.rows.length - GUIDE_TREE_ROWS );
+			area = painted;
+			first = paintGuideTree( tree, first, out );
+		},
+		/*
+		================
+		hide
+		================
+		*/
+		hide() {
+			area = null;
+		},
+		/*
+		================
+		wheel
+
+		The mouse wheel over the open panel scrolls its tree (#3554): the
+		Field and Monster trees and a dungeon's species alike. A notch is
+		one row, as the arrows step (CNIFScrollBar). False elsewhere.
+		================
+		*/
+		wheel( x, y, delta ) {
+			if ( !area || x < area[0] || x >= area[0] + area[2] || y < area[1] || y >= area[1] + area[3] ) return false;
+			first = Math.max( 0, Math.min( range, first + Math.sign( delta ) ) );
+			carry = 0;
+			return true;
+		},
+		/*
+		================
+		drag
+
+		The thumb: the drag moves the scroll by the rows its pixels stand
+		for over the thumb's travel. False for other ids.
+		================
+		*/
+		drag( id, dy ) {
+			if ( id !== GUIDE_SCROLL_THUMB ) return false;
+			if ( range <= 0 ) return true;
+			carry += (dy * range) / GUIDE_SCROLL_TRAVEL;
+			// A hair under a whole row still counts as one: a drag across
+			// the whole travel must reach the last row.
+			const rows = Math.trunc( carry + (carry > 0 ? 1e-6 : -1e-6) );
+			carry -= rows;
+			const next = first + rows;
+			first = Math.max( 0, Math.min( range, next ) );
+			// Past either end the thumb holds there, and so does the drag:
+			// pixels spent beyond the end are not owed back on the return.
+			if ( next !== first ) carry = 0;
+			return true;
+		}
+	};
 }

@@ -8686,6 +8686,10 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.pointer( event ) ) {
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && (panel === "Skills" || panel === "Quests") ) {
 				const prefix = panel === "Skills" ? "skill-scroll" : "quest-scroll",
 					up = controls.find( c => c.id === prefix + "-up" ),
@@ -8707,7 +8711,7 @@ export function createUi( ports: UiPorts ) {
 			}
 			if ( event.kind === "drag" ) {
 				if ( panel === "Map" ) {
-					mapHud.drag( event );
+					mapHud.pointer( event );
 					dirty = true;
 					return;
 				}
