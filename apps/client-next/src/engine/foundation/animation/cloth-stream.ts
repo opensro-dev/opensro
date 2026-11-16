@@ -91,6 +91,13 @@ export function createClothStream(
 	const simulation = createCloth( data, mesh.positions );
 	const anchors = new Float32Array( mesh.positions.length );
 	const read = solverPins( data );
+	// The vertices whose solver position can differ from their anchor after
+	// an advance: the free ones and the pins a step reads, in index order. A
+	// pin no step reads is re-anchored to an anchor that never changes, so it
+	// never leaves it (cloth.ts advance).
+	const movable = Int32Array.from(
+		data.pins.flatMap( ( pin, i ) => pin === 0 ? [ i ] : [] ).concat( Array.from( read ) ).sort( ( a, b ) => a - b )
+	);
 	const words = new Uint32Array( count * CLOTH_STREAM_WORDS ), floats = new Float32Array( words.buffer );
 	// One skinned vertex, [x, y, z, nx, ny, nz] (cloth-skin.ts).
 	const skin = new Float64Array( 6 );
@@ -152,11 +159,14 @@ export function createClothStream(
 
 	The solver's positions after an advance. A free vertex always shows
 	them; a pin shows them only when the step moved it off its anchor.
-	started rewrites every pin's flags, for the frame the simulation starts.
+	started rewrites every pin's flags, for the frame the simulation starts,
+	so it visits every vertex; a step visits only the movable ones.
 	================
 	*/
 	function publish( positions: Float32Array, started: boolean ) {
-		for ( let i = 0; i < count; i++ ) {
+		const visited = started ? count : movable.length;
+		for ( let k = 0; k < visited; k++ ) {
+			const i = started ? k : movable[k]!;
 			const at = i * 3, entry = i * CLOTH_STREAM_WORDS;
 			let owned = data.pins[i] === 0;
 			if ( !owned ) {
@@ -205,7 +215,15 @@ export function createClothStream(
 			// Measured from the last update that advanced the solver: frames in
 			// between sum into one delta, as cloth-vertices.ts hold does.
 			const deltaMs = lastTime === undefined ? 0 : Math.trunc( seconds * 1000 ) - Math.trunc( lastTime * 1000 );
-			const input = { anchors, deltaMs, enabled, direction: motion.direction, speed: motion.speed, random };
+			const input = {
+				anchors,
+				deltaMs,
+				enabled,
+				direction: motion.direction,
+				speed: motion.speed,
+				random,
+				pins: read
+			};
 			if ( !enabled ) {
 				// Off: the GPU skins every vertex. The CPU keeps this frame's
 				// anchor and normal of each vertex the solver integrates: a

@@ -19,6 +19,7 @@ import {
 	type CharacterPlanCaches
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
+import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
 /*
 ================
 isCharacterAnimationExtension
@@ -81,8 +82,13 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			bytes: characterMeshBytes( p.geometry )
 		}) ),
 		clocked: model.primitives.some( p => p.emission || p.materialFrames ),
+		// An authored alpha-blended material: the group draws in the
+		// translucent tier, back to front, whatever its opacity.
+		blended: model.primitives.some( p => !!p.geometry.material?.blend ),
 		billboard: model.primitives.some( p => p.billboard || p.ribbon ),
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
+		// The tables every tick of the model's particle graphs reads.
+		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
 		sharedPalette: !model.primitives.some( p =>
 			p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
 		),
