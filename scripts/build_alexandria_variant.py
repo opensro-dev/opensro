@@ -64,6 +64,8 @@ from alexandria_map_tables import (  # noqa: E402
 import import_vsro_alexandria as stage1  # noqa: E402
 import pharaoh_temple as temple  # noqa: E402
 import sro_pk2  # noqa: E402
+import variant_settle  # noqa: E402
+from build_parallelism import build_jobs  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
@@ -813,6 +815,11 @@ def main():
 	if variant == EXTRACTED_ROOT.parent.resolve() or EXTRACTED_ROOT.resolve() in variant.parents:
 		raise SystemExit("The variant root must be a different folder from the native game root.")
 	manifest = build_variant(Path(args.vsro_root), EXTRACTED_ROOT, variant, args.imported_root)
+	# Files the rebuild left byte-identical get their old mtime back, so the
+	# asset build's (size, mtime) caches still hit (variant_settle.py).
+	settled = variant_settle.settle(variant, build_jobs())
+	log(f"settle: {settled['files']} files, {settled['restored']} unchanged kept their time, "
+		f"{settled['changed']} changed, {settled['unread']} matched unread")
 	log(f"tile remap {manifest['tileRemap']}, {manifest['mapFilesAdded']} map files, {manifest['dataFilesAdded']} data files")
 	log(f"Next: SRO_GAME_ROOT={variant} SRO_GENERATED_ROOT={variant / '.generated'} pnpm assets build full")
 
