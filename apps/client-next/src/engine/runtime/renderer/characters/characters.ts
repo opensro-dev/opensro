@@ -2555,7 +2555,9 @@ the next full prepare pass, so this may run between frames.
 						{ clothStream: true } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
-				transform: preview ? view! : identity()
+				transform: preview ? view! : identity(),
+				// updateModifiers rewrites a clocked primitive's material every frame.
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
