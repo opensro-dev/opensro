@@ -101,6 +101,7 @@ var unlistedSettings = map[string]string{
 	// them when the server data is built; the GameWorld reads neither,
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_HONOR_GOODS":   "honor store goods build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Cosmetic item rows the variant build imports; the GameWorld reads no
 	// such switch, the items simply exist in the built data.
@@ -110,6 +111,7 @@ var unlistedSettings = map[string]string{
 	// until the Battle Arena engine (#3648) makes it a rule.
 	"SRO_REFERRALS":    "the website's referral page shows its own numbers from the referral route",
 	"SRO_STYRIA_CLASH": "Styria Clash arena map build input; players cannot reach it until #3648",
+	"SRO_AI_CARAVANS":  "the AI caravans are not seen by players or paid yet; they become a rule with the escort and parley rewards (#3704)",
 	"SRO_CONSIGNMENT":  "the market pages state their own fee, duration and listing cap",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.

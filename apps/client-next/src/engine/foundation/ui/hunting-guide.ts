@@ -165,6 +165,53 @@ export function monsterDirectory(
 
 /*
 ================
+directoryByName
+
+The drawer's groups (issue #3554): one per shown name, not one per
+region sector. A zone spans many sectors, and per-sector groups gave
+eight rows all reading "Grassland Lv.1~2". The later client's Monster
+tree (monster.txt, worldmap-guide.ts) has one main row per hunting
+area with its species under it, so sectors that share a name merge.
+v1.150 has no such list (the drawer is #3167's), so the area row is
+the model. names holds each sector's shown name (a sector it lacks
+stands alone under its own id). A merged group keeps its first sector's id (the lowest
+level, as the list sorts), lists each species once at the anchor of
+the first sector that holds it, and spans the sectors' levels.
+================
+*/
+export function directoryByName(
+	regions: readonly MonsterDirectoryRegion[],
+	names: ReadonlyMap<number, string>
+): readonly MonsterDirectoryRegion[] {
+	const groups = new Map<string, { region: number; monsters: Map<number, MonsterDirectoryMonster>; }>();
+	for ( const row of regions ) {
+		const name = names.get( row.region ) ?? "#" + row.region;
+		let group = groups.get( name );
+		if ( !group ) {
+			group = { region: row.region, monsters: new Map() };
+			groups.set( name, group );
+		}
+		for ( const entry of row.monsters ) {
+			if ( !group.monsters.has( entry.monster.refObjId ) ) group.monsters.set( entry.monster.refObjId, entry );
+		}
+	}
+	const merged: MonsterDirectoryRegion[] = [];
+	for ( const group of groups.values() ) {
+		const monsters = [ ...group.monsters.values() ].sort(
+			( a, b ) => a.monster.level - b.monster.level || a.monster.name.localeCompare( b.monster.name )
+		);
+		merged.push( {
+			region: group.region,
+			minLevel: monsters[0]!.monster.level,
+			maxLevel: monsters[monsters.length - 1]!.monster.level,
+			monsters
+		} );
+	}
+	return merged.sort( ( a, b ) => a.minLevel - b.minLevel || a.region - b.region );
+}
+
+/*
+================
 directoryRegion
 
 One region's directory row from its anchors: one row per species at

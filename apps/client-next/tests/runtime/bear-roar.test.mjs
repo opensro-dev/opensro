@@ -19,6 +19,7 @@ const { createModelDecoder } = await import( "../../src/engine/runtime/assets/wo
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { withBearRoar } = await import( "../../src/engine/foundation/animation/bear-roar.ts" );
 const { createPresentationState } = await import( "../../src/engine/runtime/characters/presentation-state.ts" );
+const { clipFacts } = await import( "../../src/engine/runtime/characters/presentation-catalog.ts" );
 
 for ( const rig of [ "p_bear01", "p_bear02" ] ) {
 	test(`${rig}: a separate roar stands up, opens its jaw and plants its hind feet`, () => {
@@ -79,7 +80,8 @@ test("only a bear's roar emote selects the dedicated clip, and the posture expir
 		heading: 0,
 		emote: { action: 18, atMs: 0, revision: 1 }
 	};
-	const body = { refObjId: 1, codename: "COS_P_BEAR_090", glb: "/bear.glb", clips: [ "stand", "attack1" ] };
+	const clips = [ "stand", "attack1" ];
+	const body = { refObjId: 1, codename: "COS_P_BEAR_090", glb: "/bear.glb", clips, clipFacts: clipFacts( clips ) };
 	const published = {
 		catalog: new Map( [ [ 1, body ] ] ),
 		recoveryByCodename: new Map(),
