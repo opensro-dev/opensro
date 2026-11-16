@@ -306,9 +306,17 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const deferredPoints = new Map<number, { position: readonly number[]; offset: number; }>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	// Per admitted model: the native pick box, and the bind bounds that size
-	// labels and shadows. Both are immutable for the model's lifetime.
+	// labels and shadows. The pick box is immutable for the model's lifetime.
+	// The bind bounds are the clip-less rest pose, which reads only the nodes
+	// and primitives; a clip admission replaces every assembly's model object
+	// but keeps both arrays, so they are keyed by those arrays. Keyed by model,
+	// each admitted clip re-posed every assembly of its body: 1.3 ms a frame
+	// in a 200-player town (2026-10-21).
 	const pickVolumes = new WeakMap<CharacterModel, PickBounds>(),
-		bindBounds = new WeakMap<CharacterModel, PickBounds>();
+		bindBounds = new WeakMap<
+			CharacterModel["primitives"],
+			{ nodes: CharacterModel["nodes"]; bounds: PickBounds; }
+		>();
 	/*
 	================
 	pickVolumeOf
@@ -328,12 +336,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	================
 	*/
 	const bindBoundsOf = ( model: CharacterModel ) => {
-		let bounds = bindBounds.get( model );
-		if ( !bounds ) {
-			bounds = characterBindBounds( model );
-			bindBounds.set( model, bounds );
+		let entry = bindBounds.get( model.primitives );
+		if ( !entry || entry.nodes !== model.nodes ) {
+			// Without clips the pose registers none: the rest pose never reads them.
+			entry = { nodes: model.nodes, bounds: characterBindBounds( { ...model, clips: [] } ) };
+			bindBounds.set( model.primitives, entry );
 		}
-		return bounds;
+		return entry.bounds;
 	};
 	const textures = new Map<WorldTexture, ImageDraw>();
 	// Snapshots retain identity while their fields change. Recheck the complete
