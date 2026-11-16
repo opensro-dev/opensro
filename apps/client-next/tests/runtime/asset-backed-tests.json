@@ -167,6 +167,7 @@
 		"ui-panel-sweep.test.mjs",
 		"ui-protocol.test.mjs",
 		"ui-scene-goldens.test.mjs",
+		"ui-semantics-presentation.test.mjs",
 		"ui-specialized.test.mjs",
 		"ui-text-placement.test.mjs",
 		"ui-text-run-packing.test.mjs",
