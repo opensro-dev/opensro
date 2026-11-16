@@ -11111,6 +11111,14 @@ export function createUi( ports: UiPorts ) {
 			) {
 				return frameDraw.authoredLabeledButton( drawFrame, { node, ox, oy, id, caption, disabled } );
 			}
+			/*
+			================
+			authoredCaption
+			================
+			*/
+			function authoredCaption( node: AuthoredControl, ox: number, oy: number, caption: string ) {
+				return frameDraw.authoredCaption( drawFrame, { node, ox, oy, caption } );
+			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
 			/*
@@ -15144,7 +15152,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
-								authoredText(
+								authoredCaption(
 									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 									ox,
 									oy,
@@ -15305,7 +15313,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
-							authoredText(
+							authoredCaption(
 								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
 								ox,
 								oy,
@@ -16769,13 +16777,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								family[disabled ? 3 : pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!
 							);
 						}
-						authoredText(
+						const label = authoredCaption(
 							{ ...node, color: buttonTextColor( node.color, buttonAccess( false, disabled ) ) },
 							ox,
 							oy,
 							hudCopy( node.text )
 						);
-						controls.push( { id, label: hudCopy( node.text ), rect: r, kind: "button", disabled } );
+						controls.push( { id, label, rect: r, kind: "button", disabled } );
 					}
 					if ( blockTab === 0 && game?.chat?.blockError ) {
 						quads.push(

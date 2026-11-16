@@ -303,6 +303,12 @@ export function comboBox(
 const WINDOW_LABEL_MARGIN = 6;
 // A fitted button caption keeps this far inside each side of its plate.
 const CAPTION_MARGIN = 4;
+// A caption the fit had to shrink or wrap may come this close to the
+// plate's edge: inside the bevel, which is about two pixels wide.
+const CAPTION_TIGHT_MARGIN = 2;
+// The atlas's ui-small face (native-ui-font-atlas.json font 1): one
+// pixel shorter and about a sixth narrower than the ui-default face 0.
+const SMALL_CAPTION_FONT = 1;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -546,19 +552,116 @@ export function authoredLabeledButton(
 		disabled?: boolean;
 	}
 ) {
-	// Port-only, not native (Experimental "Fit window labels", off is
-	// the original): a button caption wider than its plate keeps the
-	// leading words that fit ("Delete message" -> "Delete", "Check
-	// for duplicate entries" -> "Check").
-	const shown = frame.fitWindowLabels() ?
-		captionWords(
-			caption,
-			authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-			line => frame.text.run( line, 0, node.fontIndex ).width
-		) :
-		caption;
-	authoredButton( frame, { node, ox, oy, id, label: shown, disabled } );
-	authoredText( frame, { node, ox, oy, value: shown } );
+	const fit = buttonCaptionFit( frame, { node, ox, oy, caption } );
+	authoredButton( frame, { node, ox, oy, id, label: fit.label, disabled } );
+	drawCaption( frame, { node, ox, oy, fit } );
+}
+
+// A button caption as buttonCaptionFit lays it out.
+interface CaptionFit {
+	label: string;
+	fontIndex: number;
+	lines: string[];
+}
+
+/*
+================
+buttonCaptionFit
+
+How a button's caption is drawn inside its plate and client box. Port-only, not native
+(Experimental "Fit window labels", off is the original, which draws
+every caption whole in its own face and lets it run past the plate,
+#3675). A caption wider than its room is, in order of preference:
+
+  the whole caption in the ui-small face ("Dismiss" on the party
+  window's 44-pixel plate, "Block Removal", the Item Mall's "Buy Item
+  Worn" in its 77-pixel client box);
+  the whole caption on two lines inside the plate, in its own face and
+  then the small one ("Block" / "Registration" on an 88 x 24 plate);
+  the leading words that fit ("Delete message" -> "Delete", "Check for
+  duplicate entries" -> "Check").
+
+The first two keep every word, which matters where two buttons share a
+leading word ("Block Registration" beside "Block Removal").
+================
+*/
+function buttonCaptionFit(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): CaptionFit {
+	const own = node.fontIndex, whole = { label: caption, fontIndex: own, lines: [ caption ] };
+	if ( !frame.fitWindowLabels() || caption === "" ) return whole;
+	// The caption keeps to its client box (the Item Mall's category
+	// buttons inset it past their icon) and inside the plate's bevel.
+	const plate = authoredRect( node, ox, oy ), box = authoredClientRect( node, ox, oy ), text = frame.text;
+	const measure = ( font: number ) => ( line: string ) => text.run( line, 0, font ).width;
+	const comfortable = Math.min( box[2], plate[2] - 2 * CAPTION_MARGIN ),
+		room = Math.min( box[2], plate[2] - 2 * CAPTION_TIGHT_MARGIN );
+	if ( measure( own )( caption ) <= comfortable ) return whole;
+	if ( measure( SMALL_CAPTION_FONT )( caption ) <= room ) {
+		return { label: caption, fontIndex: SMALL_CAPTION_FONT, lines: [ caption ] };
+	}
+	if ( caption.includes( " " ) ) {
+		for ( const font of [ own, SMALL_CAPTION_FONT ] ) {
+			const lines = textLines( caption, room, measure( font ) );
+			const ink = text.lineInk( font );
+			// The pair's ink may fill the plate's height: a line's ink
+			// counts its descent, which most captions leave empty.
+			if ( lines.length === 2 && 2 * ink.height + WRAP_LEADING <= plate[3] ) {
+				return { label: caption, fontIndex: font, lines };
+			}
+		}
+	}
+	const words = captionWords( caption, comfortable, measure( own ) );
+	return { label: words, fontIndex: own, lines: [ words ] };
+}
+
+/*
+================
+authoredCaption
+
+A button's caption, fitted inside its plate (buttonCaptionFit). Windows
+that draw their own plate (the party and blocking windows) draw their
+caption here too, so every button caption takes the same fit. Returns
+the caption shown, the button's accessible label.
+================
+*/
+export function authoredCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): string {
+	const fit = buttonCaptionFit( frame, { node, ox, oy, caption } );
+	drawCaption( frame, { node, ox, oy, fit } );
+	return fit.label;
+}
+
+/*
+================
+drawCaption
+================
+*/
+function drawCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, fit }: { node: AuthoredControl; ox: number; oy: number; fit: CaptionFit; }
+) {
+	if ( fit.lines.length === 1 ) {
+		authoredText( frame, { node: { ...node, fontIndex: fit.fontIndex }, ox, oy, value: fit.lines[0]! } );
+		return;
+	}
+	// Two lines: their ink centred on the plate (wrappedLabelBand with
+	// no room outside it), each line aligned as the caption is.
+	const box = authoredClientRect( node, ox, oy ), plate = authoredRect( node, ox, oy ), text = frame.text;
+	const font = fit.fontIndex, lineHeight = text.extentHeight( font );
+	const { top, pitch } = wrappedLabelBand( plate, [ 0, 0 ], text.lineInk( font ) );
+	fit.lines.forEach( ( line, index ) =>
+		frame.quads.push(
+			...text.quads( line, [ box[0], top + index * pitch, box[2], lineHeight ], frame.full, node.color, {
+				fontIndex: font,
+				hAlign: node.hAlign,
+				vAlign: 0
+			} )
+		)
+	);
 }
 
 /*
