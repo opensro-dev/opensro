@@ -239,6 +239,13 @@ describe( "the test runner", { concurrency: true }, () => {
 			// on it (assetPacks.mjs reads the pack baseline only when it is set).
 			const unsetSuite = { SRO_GENERATED_ROOT: first };
 			assert.deepEqual( await runSuite( suite, unsetSuite ), { status: 0, reused: 1, ran: 0, failed: 0 } );
+			// An unnamed release exports it blank, which every reader treats as
+			// unset: blank shares the unset key, so it cannot vouch for a set one.
+			assert.deepEqual(
+				await runSuite( suite, { ...unsetSuite, SRO_ASSET_PACK_BASELINE: " " } ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a blank baseline is the unset key"
+			);
 			assert.deepEqual(
 				await runSuite( suite, {
 					...unsetSuite,

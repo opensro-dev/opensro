@@ -170,6 +170,17 @@ function testFiles( args ) {
 
 /*
 ================
+locationPresence
+
+A location variable's part of the key: whether it names anything.
+================
+*/
+function locationPresence( value ) {
+	return value?.trim() ? LOCATION_SET : "";
+}
+
+/*
+================
 cacheKey
 ================
 */
@@ -178,16 +189,22 @@ function cacheKey() {
 		// Runner switches and inherited lock ownership are not test inputs.
 		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
-			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-				!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
-			ENV_KEYS.includes( key )
+			(key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
+					!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
+				ENV_KEYS.includes( key )) &&
+			// A blank location variable is unset, and an unset one has no entry.
+			!(LOCATION_VARIABLES.has( key ) && !locationPresence( process.env[key] ))
 		)
 			// A location variable's path is no test input: the files under it
 			// are recorded by content, relative to its tree. Whether it is set
 			// is one: code branches on it (assetPacks.mjs reads the pack
 			// baseline only when SRO_ASSET_PACK_BASELINE is set), so a pass
-			// with it unset never vouches for a run with it set.
-			.sort().map( key => [ key, LOCATION_VARIABLES.has( key ) ? LOCATION_SET : process.env[key] ] )
+			// with it unset never vouches for a run with it set. Blank counts
+			// as unset, as its readers trim it (an unnamed release exports
+			// SRO_ASSET_PACK_BASELINE="").
+			.sort().map(
+				key => [ key, LOCATION_VARIABLES.has( key ) ? locationPresence( process.env[key] ) : process.env[key] ]
+			)
 	);
 	return JSON.stringify( {
 		format: CACHE_FORMAT,
