@@ -154,6 +154,45 @@ test( "a shared glow batch's row states draw each wearer as its one-row batch do
 				canvas.height = height;
 				return canvas;
 			} );
+			// Observe the WebGPU calls (the browser's API, not the client's
+			// source): which device compiles the row-state variant, which bind
+			// groups carry binding 16, and which pipelines each renderer sets.
+			// Variants compile at first use, inside a renderer's frame: each call
+			// is that renderer's (active). Outside a frame none may happen.
+			const variantModules = new WeakSet(), variantPipelines = new WeakSet();
+			const variants = canvases.map( () => ({ modules: 0, bindGroups: 0, plainSets: 0, variantSets: 0 }) );
+			const outside = { modules: 0, bindGroups: 0 };
+			let active = -1;
+			const owner = () => active >= 0 ? variants[active] : outside;
+			const createShaderModule = GPUDevice.prototype.createShaderModule;
+			GPUDevice.prototype.createShaderModule = function( d ) {
+				const module = createShaderModule.call( this, d );
+				if ( d.code.includes( "@binding(16) var<storage,read> rowStates" ) ) {
+					variantModules.add( module );
+					owner().modules++;
+				}
+				return module;
+			};
+			const createRenderPipeline = GPUDevice.prototype.createRenderPipeline;
+			GPUDevice.prototype.createRenderPipeline = function( d ) {
+				const pipeline = createRenderPipeline.call( this, d );
+				if ( variantModules.has( d.vertex.module ) ) variantPipelines.add( pipeline );
+				return pipeline;
+			};
+			const createBindGroup = GPUDevice.prototype.createBindGroup;
+			GPUDevice.prototype.createBindGroup = function( d ) {
+				if ( [ ...d.entries ].some( e => e.binding === 16 ) ) owner().bindGroups++;
+				return createBindGroup.call( this, d );
+			};
+			for ( const encoder of [ GPURenderBundleEncoder, GPURenderPassEncoder ] ) {
+				const setPipeline = encoder.prototype.setPipeline;
+				encoder.prototype.setPipeline = function( pipeline ) {
+					if ( active >= 0 ) {
+						variants[active][variantPipelines.has( pipeline ) ? "variantSets" : "plainSets"]++;
+					}
+					return setPipeline.call( this, pipeline );
+				};
+			}
 			const renderers = canvases.map( c => createRenderer( c ) );
 			const out = document.createElement( "canvas" );
 			out.width = width;
@@ -191,7 +230,9 @@ test( "a shared glow batch's row states draw each wearer as its one-row batch do
 							Array.from( { length: actors }, ( _, j ) => wearer( j, frame ) ) :
 							[ wearer( r - 1, frame ) ];
 						renderers[r].setCharacterActors( list );
+						active = r;
 						renderers[r].frame( { width, height }, frame / 30 );
+						active = -1;
 						if ( frame !== FRAMES - 1 ) continue;
 						// The canvas is opaque (device.ts alphaMode), so the 2D copy's
 						// RGBA8 bytes are the presented bytes, unpremultiplied as-is.
@@ -204,7 +245,7 @@ test( "a shared glow batch's row states draw each wearer as its one-row batch do
 						stats.push( { frameGroups: s.frameGroups, visibleActors: s.visibleActors, draws: s.draws } );
 					}
 				}
-				return { pixels, stats, errors: renderers.map( r => r.error() ) };
+				return { pixels, stats, variants, outside, errors: renderers.map( r => r.error() ) };
 			} finally {
 				renderers.forEach( r => r.dispose() );
 			}
@@ -214,6 +255,17 @@ test( "a shared glow batch's row states draw each wearer as its one-row batch do
 		assert.deepEqual( result.stats[0], { frameGroups: 1, visibleActors: ACTORS, draws: 1 } );
 		for ( let i = 1; i <= ACTORS; i++ ) {
 			assert.deepEqual( result.stats[i], { frameGroups: 1, visibleActors: 1, draws: 1 } );
+		}
+		// The shared renderer compiles and draws the row-state variant; every
+		// lone renderer only ever has the plain shader, and no bind group of
+		// theirs carries binding 16.
+		const [shared, ...lone] = result.variants;
+		assert.deepEqual( result.outside, { modules: 0, bindGroups: 0 } );
+		assert.equal( shared.modules, 1, JSON.stringify( result.variants ) );
+		assert.ok( shared.bindGroups > 0 && shared.variantSets > 0, JSON.stringify( shared ) );
+		for ( const one of lone ) {
+			assert.equal( one.modules + one.bindGroups + one.variantSets, 0, JSON.stringify( one ) );
+			assert.ok( one.plainSets > 0, JSON.stringify( one ) );
 		}
 		const [all, ...alone] = result.pixels;
 		assert.ok( all.every( ( v, i ) => i % 4 !== 3 || v === 255 ), "opaque readback" );
@@ -236,7 +288,7 @@ test( "a shared glow batch's row states draw each wearer as its one-row batch do
 		await mkdir( "temp/artifacts/glow-row-states", { recursive: true } );
 		await writeFile(
 			"temp/artifacts/glow-row-states/result.json",
-			JSON.stringify( { boxes, rows, rest, stats: result.stats }, null, 2 )
+			JSON.stringify( { boxes, rows, rest, stats: result.stats, variants: result.variants }, null, 2 )
 		);
 		for ( const [i, row] of rows.entries() ) {
 			assert.ok( row.count > 100, `wearer ${i} covers pixels: ${JSON.stringify( row )}` );

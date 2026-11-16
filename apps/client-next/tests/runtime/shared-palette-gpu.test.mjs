@@ -74,8 +74,9 @@ function fixture() {
 		e => {
 			throw e;
 		},
-		// One geometry pipeline per state.
-		() => ({
+		// One geometry pipeline per state; it says whether it is the row-state variant.
+		( state, surface, rowStates ) => ({
+			rowStates: !!rowStates,
 			getBindGroupLayout() {
 				return {};
 			}
@@ -360,8 +361,9 @@ test("glow wearers without cloth share one batch whose row states hold each acto
 	// The reference: today's one-row batches, one model an actor.
 	for ( const gid of gids ) referenceOwner.model( "r" + gid, model, [] );
 	const floats = ( draw, n ) => Array.from( bound( draw, n ) );
-	// The material without the five glow floats and the row-state flag.
-	const rest = values => values.filter( ( _, i ) => ![ 48, 49, 50, 52, 53, 55 ].includes( i ) );
+	// The material without the five glow floats.
+	const rest = values => values.filter( ( _, i ) => ![ 48, 49, 50, 52, 53 ].includes( i ) );
+	const rowStates = draw => draw.binding.find( entry => entry.binding === 16 );
 	const merges = new Set(), lit = ( frame, i ) => frame >= 8 || (frame + i) % 3 !== 0;
 	for ( let frame = 0; frame < 12; frame++ ) {
 		const rows = name =>
@@ -413,15 +415,19 @@ test("glow wearers without cloth share one batch whose row states hold each acto
 					const material = floats( draw, 2 ),
 						oneMaterial = floats( one, 2 ),
 						at = `frame ${frame} gid ${gids[actor]} part ${p}`;
+					// The reference is the plain shader with no row-state binding.
+					assert.equal( one.pipeline.rowStates, false );
+					assert.equal( rowStates( one ), undefined );
 					if ( p === 0 || batch.actors.length === 1 ) {
-						// A part without glow, or a one-row batch: today's uniform.
+						// A part without glow, or a one-row batch: today's draw.
+						assert.equal( draw.pipeline.rowStates, false );
+						assert.equal( rowStates( draw ), undefined );
 						assert.deepEqual( material, oneMaterial, at );
 						continue;
 					}
 					merges.add( batch.actors.length );
+					assert.equal( draw.pipeline.rowStates, true, "the glow is read from the row states" );
 					assert.deepEqual( rest( material ), rest( oneMaterial ), at );
-					assert.equal( material[55], 1, "the glow is read from the row states" );
-					assert.equal( oneMaterial[55], 0 );
 					const state = floats( draw, 16 ).slice( row * 8, row * 8 + 8 );
 					assert.deepEqual(
 						[ ...state.slice( 0, 3 ), ...state.slice( 4, 6 ) ],

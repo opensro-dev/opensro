@@ -39,7 +39,8 @@ export interface Geometry {
 	readonly dynamicMaterial?: boolean;
 	// Each instance row carries its own equipment glow colour and UV in a
 	// row-state stream beside the instances (updateRowStates), which the
-	// shader reads in place of the material's: rows of several actors share
+	// draw's shader variant reads in place of the material's (every other
+	// draw keeps the plain shader and no row-state binding): rows of several actors share
 	// one draw while each keeps its own glow phase. Gain, alpha test and the
 	// enabled bit stay in the material uniform (updateEquipmentGlow).
 	readonly rowStates?: boolean;

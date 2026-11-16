@@ -20,11 +20,12 @@ updates go straight to the queue.
 
 A draw uploaded with rowStates also owns a row-state table beside its
 instances (binding 16, ROW_STATE_FLOATS a row): each row's equipment glow
-colour and UV, which the shader reads in place of the material's while
-equipmentUV.w is set. Rows of several actors then share one draw and keep
-their own glow phases. The table lives in a staged slab set too, so a
-frame's row states reach the GPU in the same flush. Every other draw binds
-a 32-byte dummy and never reads it.
+colour and UV, which its pipelines' shader variant (pipelines.ts
+geometrySource) reads in place of the material's. Rows of several actors
+then share one draw and keep their own glow phases. The table lives in a
+staged slab set too, so a frame's row states reach the GPU in the same
+flush. Every other draw keeps the plain shader and a bind group without
+binding 16.
 
 ===========================================================================
 */
@@ -132,7 +133,8 @@ export function createGeometryResources(
 	// The geometry pipeline for state on a scene surface: the HDR stage's
 	// rgba16float intermediate, the MSAA stage's 4x sibling, or the
 	// preview pass's coverage sibling.
-	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface ) => GPURenderPipeline,
+	// rowStates selects the variant a draw with row states needs (Geometry.rowStates).
+	pipelines: ( state: GeometryPipelineState, surface?: SceneSurface, rowStates?: boolean ) => GPURenderPipeline,
 	// Each draw holds a lease on its images for as long as it binds them.
 	images: ImageLeases,
 	worldSampler: GPUSampler,
@@ -357,19 +359,7 @@ export function createGeometryResources(
 			label: "geometry-default-bones",
 			size: 64,
 			usage: GPUBufferUsage.STORAGE
-		} ),
-		// Binding 16 of a draw without row states: one row, never read (its
-		// material's equipmentUV.w is 0).
-		defaultRowStates = created.createBuffer( {
-			label: "geometry-default-row-states",
-			size: ROW_STATE_FLOATS * 4,
-			usage: GPUBufferUsage.STORAGE
 		} );
-	const defaultRowStatesBinding: Binding = Object.freeze( {
-		buffer: defaultRowStates,
-		offset: 0,
-		size: ROW_STATE_FLOATS * 4
-	} );
 	/*
 	================
 	SharedPalette
@@ -447,7 +437,8 @@ export function createGeometryResources(
 		uniform: Binding,
 		storage: Binding,
 		material: Binding,
-		rowStates: Binding,
+		// Binding 16, only for a draw with row states (its pipeline's variant).
+		rowStates: Binding | undefined,
 		pipeline: GPURenderPipeline,
 		clampedSampling: boolean,
 		image?: ImageDraw,
@@ -470,7 +461,7 @@ export function createGeometryResources(
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
-				{ binding: 16, resource: rowStates },
+				...(rowStates ? [ { binding: 16, resource: rowStates } ] : []),
 				{
 					binding: 3,
 					resource: clampedSampling ? lightmapSampler : worldSampler
@@ -497,8 +488,8 @@ export function createGeometryResources(
 		uniform: Binding;
 		material: Binding;
 		instances: Binding;
-		// Binding 16: the draw's row-state table, or the dummy.
-		rowStates: Binding;
+		// Binding 16: the row-state table of a rowStates draw.
+		rowStates?: Binding;
 		// The slab ranges behind the three bindings (no transform for a world
 		// draw); owned marks an instance table with a buffer of its own.
 		stores: {
@@ -606,7 +597,11 @@ export function createGeometryResources(
 		if ( !meta || !buffers ) throw Error( "Unknown or released sibling draw" );
 		let cached = bindings.get( draw );
 		if ( !cached || cached.source !== draw.binding ) {
-			const pipeline = pipelines( meta.state, { sceneFloat: floatScene, fullscreenPreview: previewCoverage } );
+			const pipeline = pipelines(
+				meta.state,
+				{ sceneFloat: floatScene, fullscreenPreview: previewCoverage },
+				!!meta.rowStates
+			);
 			cached = {
 				source: draw.binding,
 				draw: {
@@ -702,7 +697,11 @@ export function createGeometryResources(
 				if ( !meta || meta.water || draw.deferredParticle ) continue;
 				let cached = reflectedBindings.get( draw );
 				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( meta.state, { sceneFloat: floatScene, msaa: msaaScene } );
+					const pipeline = pipelines(
+						meta.state,
+						{ sceneFloat: floatScene, msaa: msaaScene },
+						!!meta.rowStates
+					);
 					const binding = geometryBinding(
 						meta.uniform,
 						meta.instances,
@@ -1180,8 +1179,7 @@ export function createGeometryResources(
 			glowUniform[3] = enabled ? gain : 0;
 			glowUniform.set( uv, 4 );
 			glowUniform[6] = alphaTest ? 1 : 0;
-			// equipmentUV.w: a rowStates draw reads colour and UV from its rows.
-			glowUniform[7] = meta.stores.rowStates ? 1 : 0;
+			glowUniform[7] = 0;
 			writeMaterial( meta, 192, glowUniform );
 		},
 		/*
@@ -1427,8 +1425,6 @@ export function createGeometryResources(
 						// receivers; portrait/doll coordinates belong to another scene.
 						data.world === true ? 1 : 0,
 						mat?.water && environmentImage ? 1 : 0,
-						// equipmentColor and equipmentUV (updateEquipmentGlow); w, the
-						// glow colour and UV come from the row states.
 						0,
 						0,
 						0,
@@ -1436,7 +1432,7 @@ export function createGeometryResources(
 						0,
 						0,
 						0,
-						data.rowStates ? 1 : 0,
+						0,
 						...packTextureStage( mat?.textureStage ),
 						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
 						// draw blends nothing, so its surviving pixels are opaque; z, stage 1
@@ -1452,13 +1448,17 @@ export function createGeometryResources(
 					material = data.dynamicMaterial ?
 						dynamicSlice( dynamicMaterialSlabs.allocate( materialData.byteLength ), materialData ) :
 						slice( materialSlabs.allocate( materialData.byteLength ), materialData );
-				const selected = pipelines( geometryPipelineState( mat ), { sceneFloat: floatScene, msaa: msaaScene } ),
+				const selected = pipelines(
+						geometryPipelineState( mat ),
+						{ sceneFloat: floatScene, msaa: msaaScene },
+						!!data.rowStates
+					),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const binding = geometryBinding(
 					uniform,
 					storage.binding,
 					material.binding,
-					rowStates?.binding ?? defaultRowStatesBinding,
+					rowStates?.binding,
 					selected,
 					clampedSampling,
 					image,
@@ -1500,7 +1500,7 @@ export function createGeometryResources(
 					uniform,
 					material: material.binding,
 					instances: storage.binding,
-					rowStates: rowStates?.binding ?? defaultRowStatesBinding,
+					rowStates: rowStates?.binding,
 					stores: {
 						transform,
 						material,
@@ -1724,7 +1724,7 @@ export function createGeometryResources(
 			msaaScene = sceneMsaa;
 			waterReflection.reformat( sceneFloat ? "rgba16float" : format, sceneMsaa ? MSAA_SAMPLE_COUNT : 1 );
 			for ( const [draw, meta] of metadata ) {
-				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa } );
+				const pipeline = pipelines( meta.state, { sceneFloat, msaa: sceneMsaa }, !!meta.rowStates );
 				DeviceDraw.repipeline(
 					meta.selection,
 					pipeline,
@@ -1823,7 +1823,6 @@ export function createGeometryResources(
 			shadowDummy.destroy();
 			defaultSkin.destroy();
 			defaultBones.destroy();
-			defaultRowStates.destroy();
 		}
 	};
 }
