@@ -82,7 +82,7 @@ export const GUIDE_MAIN = "map-guide-main:";
 const GUIDE_SCROLL_ID = "map-guide-scroll";
 const GUIDE_SCROLL_UP = GUIDE_SCROLL_ID + "-up";
 const GUIDE_SCROLL_DOWN = GUIDE_SCROLL_ID + "-down";
-const GUIDE_SCROLL_THUMB = GUIDE_SCROLL_ID + "-thumb";
+export const GUIDE_SCROLL_THUMB = GUIDE_SCROLL_ID + "-thumb";
 // The thumb's travel in pixels, for turning a drag into rows.
 const GUIDE_SCROLL_TRAVEL = SCROLL_TRACK[3];
 // A hair under a whole row of drag still counts as one, so a drag across
