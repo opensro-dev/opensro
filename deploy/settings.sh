@@ -35,7 +35,7 @@ generated_dir() {
 #
 load_settings() {
     local file key value wanted
-    for file in "$DEPLOY_DIR/deploy.env"; do
+    for file in "${DEPLOY_SETTINGS_FILE:-$DEPLOY_DIR/deploy.env}"; do
         [ -f "$file" ] || continue
         while IFS='=' read -r key value; do
             value="${value%%[[:space:]]*}"
