@@ -20,9 +20,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const load = file => import( sourceFileUrl( file ).href );
-const { createParticleGraph, advanceParticleGraph, particleElementMatrix } = await load(
-	"src/engine/foundation/animation/particle-graph.ts"
+const { advanceParticleGraph } = await load( "src/engine/foundation/animation/particle-graph.ts" );
+const { createParticleGraph, particleSlot, ribbonElementFrames, SLOT_ALIVE, SLOT_SNAPSHOT } = await load(
+	"src/engine/foundation/animation/particle-graph-slots.ts"
 );
+const { createParticleGraphPlan } = await load( "src/engine/foundation/animation/particle-graph-plan.ts" );
 const { HOLDER_FOLLOW, holderFollow, LINK_MATRIX, LINK_TRANSLATE, LINK_TURN } = await load(
 	"src/engine/foundation/animation/particle-holder-link.ts"
 );
@@ -61,6 +63,9 @@ const GRAPH = [
 	emitter( { positionDepth: 1, followDepth: 1, matrixDepth: 1, positions: [ OFFSET ] } ),
 	emitter( { followDepth: 1 } )
 ];
+// Both drawn as a ribbon and by a particle stream, so their ticks write
+// ribbon frames and records.
+const DRAWS = [ 0, 1 ].flatMap( n => [ { particleEmitter: n, ribbon: {} }, { particleEmitter: n } ] );
 
 /*
 ================
@@ -78,27 +83,24 @@ function holder( seconds ) {
 ================
 replay
 
-Draw both elements at every jittered frame for two seconds. draw(element,
-fraction, link) returns the drawn matrix; check gets the frame's holder.
+Draw both elements at every jittered frame for two seconds. draw(n,
+fraction, follow, state) returns emitter n's element's drawn matrix; check
+gets the frame's holder.
 ================
 */
 function replay( draw, check ) {
-	const state = createParticleGraph( GRAPH, 0 );
-	const link = {
-		root: state.root,
-		follow: new Float32Array( HOLDER_FOLLOW ),
-		turned: new Float32Array( 16 ),
-		shift: [ 0, 0, 0 ]
-	};
+	const state = createParticleGraph( GRAPH, 0, createParticleGraphPlan( GRAPH, DRAWS ) );
+	const follow = new Float32Array( HOLDER_FOLLOW );
 	let ms = 0;
 	for ( let frame = 0; ms <= 2000; frame++ ) {
 		const seconds = ms / 1000, transform = holder( seconds );
 		advanceParticleGraph( state, GRAPH, seconds, transform, table );
-		holderFollow( state.root.matrix, state.root.state.position, transform, link.follow );
+		// The holder's tick frame and position are the root slot's (0).
+		holderFollow( state.matrix, state.position, transform, follow );
 		const fraction = seconds * 20 - state.frame;
-		const rigid = state.elements[0][0], follower = state.elements[1][0];
-		if ( rigid?.alive && follower?.alive && state.frame > 1 ) {
-			check( transform, draw( rigid, fraction, link, state ), draw( follower, fraction, link, state ), link );
+		const alive = n => (state.flags[particleSlot( state, n, 0 )] & SLOT_ALIVE) !== 0;
+		if ( alive( 0 ) && alive( 1 ) && state.frame > 1 ) {
+			check( transform, draw( 0, fraction, follow, state ), draw( 1, fraction, follow, state ), state );
 		}
 		ms += FRAME_STEPS_MS[frame % FRAME_STEPS_MS.length];
 	}
@@ -132,18 +134,52 @@ function offsetError( transform, rigid, follower ) {
 /*
 ================
 cpuDraw
+
+The CPU ribbon path's frame of emitter n's element.
 ================
 */
-function cpuDraw( element, fraction, link ) {
+function cpuDraw( n, fraction, follow, state ) {
 	const out = new Float32Array( 16 );
-	particleElementMatrix( element, out, 0, fraction, undefined, link );
+	ribbonElementFrames( state, n, fraction, follow, out, new Float64Array( ROTATION_WORK ) );
 	return out;
+}
+
+/*
+================
+gpuDraw
+
+The GPU record path's frame of emitter n's element, from records (its
+record and its links).
+================
+*/
+function gpuDraw( records, fraction, follow, state ) {
+	const actors = new Float32Array( PARTICLE_ACTOR );
+	actors.set( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ], ACTOR_PALETTE );
+	actors.set( follow, ACTOR_FOLLOW );
+	actors[0] = state.frame / 20;
+	actors[ACTOR_FRACTION] = fraction;
+	const particles = { rows: 1, slots: 1, graph: true, view: 0, lifetime: 1000, loop: false, actors };
+	const slot = presentSlot( particles, records, 0 );
+	assert.ok( slot, "the element is drawn" );
+	return slot.matrix;
+}
+
+/*
+================
+tickRecord
+
+The record emitter n's tick wrote for its element.
+================
+*/
+function tickRecord( state, n ) {
+	const at = state.plan.records[n] * PARTICLE_RECORD;
+	return state.records.slice( at, at + PARTICLE_RECORD );
 }
 
 test("linked elements ride a walking, turning holder at every frame", () => {
 	let worst = 0, checked = 0;
-	replay( cpuDraw, ( transform, rigid, follower, link ) => {
-		assert.equal( link.root.rootLink, 0 );
+	replay( cpuDraw, ( transform, rigid, follower, state ) => {
+		assert.equal( state.link[0], 0, "the holder carries no links of its own" );
 		worst = Math.max( worst, offsetError( transform, rigid, follower ) );
 		checked++;
 	} );
@@ -154,14 +190,21 @@ test("linked elements ride a walking, turning holder at every frame", () => {
 test("each element carries the links its depths name", () => {
 	const state = createParticleGraph( GRAPH, 0 );
 	advanceParticleGraph( state, GRAPH, .2, holder( .2 ), table );
-	assert.equal( state.elements[0][0].rootLink, LINK_TURN | LINK_TRANSLATE | LINK_MATRIX );
-	assert.equal( state.elements[1][0].rootLink, LINK_TRANSLATE );
+	assert.equal( state.link[particleSlot( state, 0, 0 )], LINK_TURN | LINK_TRANSLATE | LINK_MATRIX );
+	assert.equal( state.link[particleSlot( state, 1, 0 )], LINK_TRANSLATE );
 });
 
 test("drawn by last tick velocity alone, the elements trail and overshoot the holder", () => {
-	// The behaviour this replaces, kept as the control of the test above.
+	// The behaviour this replaces, kept as the control of the test above: a
+	// record without the elements' links.
 	let worst = 0;
-	replay( ( element, fraction ) => cpuDraw( element, fraction, undefined ), ( transform, rigid, follower ) => {
+	const unlinked = ( n, fraction, follow, state ) => {
+		const records = new Float32Array( PARTICLE_RECORD ), s = particleSlot( state, n, 0 );
+		const snapshot = state.flags[s] & SLOT_SNAPSHOT ? state.plan.snapshots[n] : -1;
+		writeGraphRecord( records, 0, state, s, snapshot, 0 );
+		return gpuDraw( records, fraction, follow, state );
+	};
+	replay( unlinked, ( transform, rigid, follower ) => {
 		worst = Math.max( worst, offsetError( transform, rigid, follower ) );
 	} );
 	assert.ok( worst > 1, `the unlinked draw drifts (worst ${worst})` );
@@ -169,21 +212,13 @@ test("drawn by last tick velocity alone, the elements trail and overshoot the ho
 
 test("the GPU record path draws what the CPU path draws", () => {
 	let worst = 0;
-	const gpuDraw = ( element, fraction, link, state ) => {
-		const records = new Float32Array( PARTICLE_RECORD ), actors = new Float32Array( PARTICLE_ACTOR );
-		writeGraphRecord( records, 0, element, new Float64Array( ROTATION_WORK ), link );
-		actors.set( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ], ACTOR_PALETTE );
-		actors.set( link.follow, ACTOR_FOLLOW );
-		actors[0] = state.frame / 20;
-		actors[ACTOR_FRACTION] = fraction;
-		const particles = { rows: 1, slots: 1, graph: true, view: 0, lifetime: 1000, loop: false, actors };
-		const slot = presentSlot( particles, records, 0 );
-		assert.ok( slot, "the element is drawn" );
-		const cpu = cpuDraw( element, fraction, link );
-		slot.matrix.forEach( ( value, i ) => worst = Math.max( worst, Math.abs( value - cpu[i] ) ) );
-		return slot.matrix;
+	const both = ( n, fraction, follow, state ) => {
+		const gpu = gpuDraw( tickRecord( state, n ), fraction, follow, state );
+		const cpu = cpuDraw( n, fraction, follow, state );
+		gpu.forEach( ( value, i ) => worst = Math.max( worst, Math.abs( value - cpu[i] ) ) );
+		return gpu;
 	};
-	replay( gpuDraw, () => {} );
+	replay( both, () => {} );
 	assert.ok( worst < 1e-3, `GPU and CPU differ by ${worst}` );
 });
 
