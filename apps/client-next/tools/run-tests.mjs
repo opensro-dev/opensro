@@ -21,7 +21,10 @@ unchanged tree is a stat sweep. The records live in the main checkout's
 .state/client-test-cache, shared by every worktree: an input inside the
 checkout is named relative to it (tools/lib/test-cache-ids.mjs), so a pass
 in one worktree is reused by another whose files hash the same, and a fresh
-worktree starts warm (ops #335: 177 s cold, 9 s warm). The size and mtime
+worktree starts warm (ops #335: 177 s cold, 9 s warm). Inputs under the
+built tree and the other location roots are named relative to their tree,
+and those variables stay out of the key, so a release's fresh variant root
+validates the same records (test-cache-ids.mjs). The size and mtime
 memo names absolute paths, so it stays in each checkout's own .state. Both
 are keyed by the Node version, platform and test environment; any change
 there discards them. SRO_CHECK_FORCE=1 runs everything.
@@ -43,15 +46,19 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveMainCheckout } from "../../../scripts/lib/generatedRoot.mjs";
 import { recordsPath, statsPath as statsFilePath } from "./lib/test-cache-files.mjs";
-import { decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
+import { LOCATION_VARIABLES, cacheRoots, decodeTarget, encodeTarget } from "./lib/test-cache-ids.mjs";
 import { logPathFor } from "./lib/test-input-recorder.mjs";
 
 // 2: checkout-relative input ids, and the stat memo split from the records.
-const CACHE_FORMAT = 2;
+// 3: ids relative to the built tree and the other location roots, whose
+// paths left the key (test-cache-ids.mjs).
+const CACHE_FORMAT = 3;
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const repoRoot = path.resolve( clientRoot, "../.." );
 const SKIP_FLAG = "--skip=";
 const indexPath = recordsPath( repoRoot );
+// The trees input ids are named against (test-cache-ids.mjs cacheRoots).
+const roots = cacheRoots( repoRoot );
 const statsPath = statsFilePath( repoRoot );
 const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-recorder.mjs" ) ).href;
 const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
@@ -168,10 +175,12 @@ cacheKey
 function cacheKey() {
 	const env = Object.fromEntries(
 		// Runner switches and inherited lock ownership are not test inputs.
-		// A fresh lock token must not discard every unchanged test pass.
+		// A fresh lock token must not discard every unchanged test pass. A
+		// location variable is not one either: the files under it are
+		// recorded by content, relative to its tree.
 		Object.keys( process.env ).filter( key =>
 			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
-				!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
+				!key.startsWith( "SRO_REBUILD_LOCK_" ) && !LOCATION_VARIABLES.has( key ) ||
 			ENV_KEYS.includes( key )
 		)
 			.sort().map( key => [ key, process.env[key] ] )
@@ -353,7 +362,9 @@ valid
 function valid( record, fingerprint, name ) {
 	for ( const [id, value] of Object.entries( record.inputs ) ) {
 		const tab = id.indexOf( "\t" );
-		if ( fingerprint( id.slice( 0, tab ), decodeTarget( repoRoot, id.slice( tab + 1 ) ) ) !== value ) {
+		const target = decodeTarget( roots, id.slice( tab + 1 ) );
+		// A tree this run does not set cannot vouch for what the test read.
+		if ( target === null || fingerprint( id.slice( 0, tab ), target ) !== value ) {
 			if ( process.env.SRO_TEST_CACHE_EXPLAIN ) process.stdout.write( `rerun ${name}: ${id} changed\n` );
 			return false;
 		}
@@ -391,9 +402,9 @@ function recordOf( logDir, file, fingerprint ) {
 		const kind = line[0], target = line.slice( 2 );
 		if ( kind === "W" || written.has( target.toLowerCase() ) ) continue;
 		// A probe and a read of the same file share the read's content hash.
-		// The id names the target relative to the checkout when it is inside
-		// it, so another worktree can validate the record.
-		const id = (kind === "E" ? "E" : kind) + "\t" + encodeTarget( repoRoot, target );
+		// The id names the target relative to the checkout or tree holding
+		// it, so another worktree or variant root can validate the record.
+		const id = (kind === "E" ? "E" : kind) + "\t" + encodeTarget( roots, target );
 		inputs[id] = fingerprint( kind, target );
 	}
 	return { inputs };
@@ -421,9 +432,9 @@ async function main() {
 			Object.keys( record.inputs ).map(
 				id => [
 					id.slice( 0, id.indexOf( "\t" ) ),
-					decodeTarget( repoRoot, id.slice( id.indexOf( "\t" ) + 1 ) )
+					decodeTarget( roots, id.slice( id.indexOf( "\t" ) + 1 ) )
 				]
-			)
+			).filter( ( [, target] ) => target !== null )
 		)
 	);
 	const pending = files.filter( file => {

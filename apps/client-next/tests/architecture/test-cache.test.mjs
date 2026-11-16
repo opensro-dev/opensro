@@ -177,6 +177,54 @@ describe( "the test runner", { concurrency: true }, () => {
 		}
 	});
 
+	test("a pass holds in a fresh built tree whose files hash the same, and only there", async () => {
+		// B3: a release builds into a fresh variant root with the built tree's
+		// variable set; with that path in the key and in the ids, the release
+		// client check ran 815 of 815 files cold (710 s on 11-17).
+		const suite = path.join( root, "temp", `test-cache-tree-${process.pid}` );
+		const first = path.join( suite, "tree-a" ), second = path.join( suite, "tree-b" );
+		fs.mkdirSync( first, { recursive: true } );
+		fs.mkdirSync( second, { recursive: true } );
+		try {
+			const resolver = pathToFileURL( path.resolve( root, "../../scripts/lib/generatedRoot.mjs" ) ).href;
+			fs.writeFileSync( path.join( first, "data.txt" ), "one" );
+			fs.writeFileSync( path.join( second, "data.txt" ), "one" );
+			fs.writeFileSync(
+				path.join( suite, "tree.test.mjs" ),
+				'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+					'import fs from "node:fs";\nimport path from "node:path";\n' +
+					`import { GENERATED_ROOT } from ${JSON.stringify( resolver )};\n` +
+					'test( "reads the tree", () => assert.ok( fs.readFileSync( path.join( GENERATED_ROOT, "data.txt" ) ).length ) );\n'
+			);
+			const inTree = tree => ({ SRO_GENERATED_ROOT: tree });
+
+			assert.deepEqual( await runSuite( suite, inTree( first ) ), { status: 0, reused: 0, ran: 1, failed: 0 } );
+			const index = JSON.parse( fs.readFileSync( path.join( suite, ".cache", "index.json" ), "utf8" ) );
+			const ids = Object.values( index.records ).flatMap( record => Object.keys( record.inputs ) );
+			assert.ok( ids.includes( "R\t@generated/data.txt" ), "the tree's file is named relative to the tree" );
+
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 1, ran: 0, failed: 0 },
+				"a fresh tree with the same bytes reuses the pass"
+			);
+
+			fs.writeFileSync( path.join( second, "data.txt" ), "two" );
+			assert.deepEqual(
+				await runSuite( suite, inTree( second ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"the tree's own changed file reruns it"
+			);
+			assert.deepEqual(
+				await runSuite( suite, inTree( first ) ),
+				{ status: 0, reused: 0, ran: 1, failed: 0 },
+				"and the first tree, now different from the record, reruns too"
+			);
+		} finally {
+			fs.rmSync( suite, { recursive: true, force: true } );
+		}
+	});
+
 	test("a worktree's .git link is recorded as the main checkout it names, not its worktree name", async () => {
 		// ops #335: the hub resolver reads each worktree's .git link, whose
 		// bytes name the worktree; hashed as bytes, 190 of 766 runtime files
