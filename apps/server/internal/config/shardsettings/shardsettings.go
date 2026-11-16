@@ -225,6 +225,11 @@ var Settings = []Setting{
 	// native: chat lines are text only. The limit is a tunable (game/tunables).
 	{Env: "SRO_CHAT_ITEM_LINKS", NomadVar: "chat_item_links", Default: "off"},
 	{Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", NomadVar: "chat_item_links_per_message", Default: "1"},
+	// Port-only, not native: the position stream a moving player's viewers
+	// get (simulation/position_stream.go, #3721): a live 0x30E3 every tick,
+	// 0x3122 with every path and 0xB2F5 at the goal. "off" is native: one
+	// 0xB738 per accepted move and nothing on arrival.
+	{Env: "SRO_POSITION_STREAM", NomadVar: "position_stream", Default: "off"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Port-only, off by default: a unique's attackers see its damage ranking.

@@ -390,6 +390,9 @@ func newGameplayPlane(
 	}
 	movementRuntime := movement.NewRuntime(deps, items.Worlds)
 	movementRuntime.Validator = water
+	// SRO_POSITION_STREAM (port-only, not native): the ticker reads the
+	// same switch (worldsession.NewTicker).
+	movementRuntime.PositionStream = simulation.PositionStreamFromEnv()
 	movementRuntime.PathGuard = movement.NewPathGuardFromEnv(water)
 	movementRuntime.ClientClip = movement.NewClientClipFromEnv(water)
 	// Surface ownership (native source pNavCell): every character walk starts

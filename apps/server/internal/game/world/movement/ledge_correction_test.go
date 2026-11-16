@@ -45,6 +45,9 @@ func TestMountedLedgeCorrectionCarriesDeckHeight(t *testing.T) {
 		SpawnSet: true,
 	}
 	rt := testRuntime(character)
+	// The arrival correction pinned here is the port-only position
+	// stream's; a native arrival sends none (simulation/position_stream.go).
+	rt.PositionStream = true
 	rt.ClientClip = &ClientClip{Mode: ClipApply, Validator: validator}
 	rt.Nav = validator
 	rt.EnableGroundWalk()

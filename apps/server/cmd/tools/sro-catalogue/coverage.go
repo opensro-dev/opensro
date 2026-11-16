@@ -99,6 +99,7 @@ var catalogueExempt = map[string]string{
 	"SRO_TRANSPORT_PET_INVENTORY_PAGES":        "a transport's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_CHAT_ITEM_LINKS":                      "chat behaviour at runtime; the catalogue publishes no chat",
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE":          "chat behaviour at runtime; the catalogue publishes no chat",
+	"SRO_POSITION_STREAM":                      "which movement packets viewers get at runtime; the catalogue publishes no packets",
 	"SRO_STORAGE_AUTO_STACK":                   "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
 	"SRO_INVENTORY_PAGES":                      "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                      "a scroll countdown at runtime; the catalogue publishes no timers",
