@@ -69,7 +69,7 @@ at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
   elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
 - The token shop sells the jewel for 20 tokens beside the Spirits.
 
-## What a worn Spirit gives (#3456 step 4)
+## What a worn Spirit gives (#3456, 3c follow-up)
 
 With `SRO_NASRUN` on, a Spirit worn in avatar slot 4 gives its abilities while its clock is awake
 (`internal/game/nasrun/ability.go`, `internal/game/action/spiritability.go`). The rule is the iSRO-R shard's
