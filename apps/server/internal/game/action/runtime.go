@@ -262,6 +262,9 @@ type Runtime struct {
 	Monsters *simulation.MonsterState
 	// Port-only, not native: nil preserves every native admission/reward path.
 	sookArena *sookArenaRuntime
+	// muhanChanges is the Muhan change pairing by change NPC codename
+	// (muhan_change.go). Port-only, not native: empty unless SRO_MUHAN is on.
+	muhanChanges map[string]muhanChange
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
@@ -670,6 +673,10 @@ type Runtime struct {
 	// NasrunSocket opens the Devil's Spirit's fifth avatar socket
 	// (SRO_NASRUN; game/nasrun; port-only, not native). False is native.
 	NasrunSocket bool
+	// NasrunTokens pays Devil's Spirit tokens on unique kills
+	// (SRO_NASRUN; nasrun_tokens.go; port-only, not native). False is
+	// native: no kill pays a token.
+	NasrunTokens bool
 	// PetInventoryPages raises grab pet and transport bags to their
 	// configured pages, each kind on its own (companion inventorypages.go;
 	// port-only, not native; owner 2026-11-07). Zero is native.

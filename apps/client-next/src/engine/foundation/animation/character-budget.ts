@@ -10,7 +10,7 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import { clothData, clothBytes } from "./cloth";
-import { clipTimelineBytes, type ClipTimelineCache } from "./animation-timelines";
+import { clipTimelineBytes, createClipTimelineCache, type ClipTimelineCache } from "./animation-timelines";
 import { paletteBindings } from "./palette-bindings";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
@@ -50,21 +50,54 @@ export const CHARACTER_RENDER_BYTES = 67108864;
 export const POSE_CLIP_ENTRY_BYTES = 96;
 /*
 ================
+CharacterPlanCaches
+
+What a render plan derives from a model's immutable parts, owned by the
+character renderer: per-clip timeline charges, and per-primitive-list
+palette bindings. Admitting a clip keeps a model's primitive list, so a
+re-plan of every assembly of the body computes neither again.
+================
+*/
+export type CharacterPlanCaches = {
+	readonly timelines: ClipTimelineCache;
+	readonly bindings: WeakMap<CharacterModel["primitives"], ReturnType<typeof paletteBindings>>;
+};
+/*
+================
+createCharacterPlanCaches
+================
+*/
+export function createCharacterPlanCaches(): CharacterPlanCaches {
+	return { timelines: createClipTimelineCache(), bindings: new WeakMap() };
+}
+/*
+================
 characterPoseBytes
 
 Charge pose evaluation storage separately from immutable source data. A
 clip costs a pose its entries and, once sampled, one cursor per timeline
 (animation-timelines.ts), not one per channel: a native clip keys all its
-channels at the same times. The renderer passes its timeline cache.
+channels at the same times. A pose keeps one palette per distinct binding
+(palette-bindings.ts), however many primitives draw from it: a body's
+parts on one skin share one. The renderer passes its plan caches.
 ================
 */
-export function characterPoseBytes( model: CharacterModel, timelines?: ClipTimelineCache ): number {
+export function characterPoseBytes( model: CharacterModel, caches?: CharacterPlanCaches ): number {
+	let bindings = caches?.bindings.get( model.primitives );
+	if ( !bindings ) {
+		bindings = paletteBindings( model );
+		caches?.bindings.set( model.primitives, bindings );
+	}
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
-	// weights, sample and one exact palette per primitive/pose revision.
+	// weights, sample and one exact palette per binding/pose revision.
 	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
-		model.primitives.reduce( ( bytes, primitive ) => bytes + primitive.joints.length * 64, 0 ) +
+		model.primitives.reduce(
+			( bytes, primitive ) =>
+				bytes + ((bindings.get( primitive ) ?? primitive) === primitive ? primitive.joints.length * 64 : 0),
+			0
+		) +
 		model.clips.reduce(
-			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, timelines ),
+			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, caches?.timelines ),
 			0
 		) +
 		// The quaternion bracket scratch, sized by the largest clip.

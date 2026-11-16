@@ -129,6 +129,7 @@ func newGameplayPlane(
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.NasrunSocket = nasrun.Enabled(os.Getenv(nasrun.Env))
+	items.NasrunTokens = items.NasrunSocket
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -149,6 +150,15 @@ func newGameplayPlane(
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.
 	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
+	// Port-only, not native (#3349): the Muhan change NPCs' pairing. Off
+	// reads nothing and installs nothing.
+	muhanTransforms, err := monster.LoadMuhanTransforms(devPaths.TextdataDir, monster.MuhanEnabled())
+	if err != nil {
+		return nil, err
+	}
+	if err := items.ConfigureMuhanTransforms(muhanTransforms); err != nil {
 		return nil, err
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime

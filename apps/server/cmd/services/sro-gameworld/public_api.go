@@ -27,7 +27,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
@@ -98,40 +97,6 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 	api.service = service
 	log.Infof("public api: serving on %s", service.Addr())
 	return api
-}
-
-// publicWindowEvents names the fortress lane's windows on the calendar.
-var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {publicstats.ScheduleKindFortressRegistration, "Fortress war registration"},
-	"SiegeProgressing":  {publicstats.ScheduleKindFortress, "Fortress war"},
-}
-
-/*
-================
-publicSchedule
-
-P8's events: the fortress registration and war windows from the lane that
-runs them, and a maintenance release while its gate file is present (the
-release tool writes it at the release's start and removes it at the end,
-so the start is the file's time and the end is open).
-================
-*/
-func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEvent {
-	var events []publicstats.ScheduledEvent
-	if path := strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)); path != "" {
-		if info, err := os.Stat(path); err == nil {
-			events = append(events, publicstats.ScheduledEvent{Kind: "maintenance", Title: "Maintenance", Start: info.ModTime(), Running: true})
-		}
-	}
-	for _, window := range lane.Windows(now.UnixMilli()) {
-		names, ok := publicWindowEvents[window.Name]
-		if !ok {
-			continue
-		}
-		events = append(events, publicstats.ScheduledEvent{Kind: names.kind, Title: names.title, Start: window.Start,
-			End: window.End, Running: window.Running})
-	}
-	return events
 }
 
 /*
@@ -507,7 +472,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return levels.ExpRequired(level)
 		},
-		Schedule:   func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		Schedule: func(now time.Time) []publicstats.ScheduledEvent {
+			return publicSchedule(scheduleSourcesOf(gameplay), now)
+		},
 		Fortresses: func() []publicstats.FortressEntry { return publicFortresses(gameplay.siege, authority, shard) },
 		// A muted author's lines are left out while the mute holds, on or
 		// off line: the by-character restriction record is read directly
