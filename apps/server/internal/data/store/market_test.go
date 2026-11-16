@@ -349,7 +349,7 @@ func TestMarketBuyKeepsADeferredGoldWrite(t *testing.T) {
 	s.BeginTickBatch()
 	s.MutateCharacterDeferred(buyer, "quest-reward", func() { buyer.Gold = int64Ptr(*buyer.Gold + 500) })
 	// 12345 alone cannot pay 12600; with the queued 500 it can.
-	if _, err := s.MarketBuy(MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
+	if _, err := s.MarketBuy(domain.MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer,
 		Payer: buyer, Rules: testMarketRules}); err != nil {
 		t.Fatalf("the buy did not see the deferred gold: %v", err)
 	}

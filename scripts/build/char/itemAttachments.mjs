@@ -64,17 +64,39 @@ skeletons differ - so pick a donor of the item's own race.
 ================
 */
 export function createDonorPool( resolvedRoster ) {
-	const donorFor = ( race, gender ) =>
-		resolvedRoster.find(
-			( m ) => !m.isMount && m.codename.includes( `_${race}_${gender === "M" ? "MAN" : "WOMAN"}_` )
-		) ?? resolvedRoster.find( ( m ) => !m.isMount && (gender === "M" ? /_MAN_/ : /_WOMAN_/).test( m.codename ) );
-	const donors = new Map();
-	const donorSkeletons = new Map(); // donor.bsrPath -> parsed BSK (byName)
+	const loadDonor = createDonorLoader();
 	return async ( race, gender ) => {
-		const donorKey = `${race}|${gender}`;
-		if ( !donors.has( donorKey ) ) donors.set( donorKey, donorFor( race, gender ) );
-		const donor = donors.get( donorKey );
-		if ( !donor ) return null;
+		const donor = chooseDonor( resolvedRoster, race, gender );
+		return donor ? loadDonor( donor ) : null;
+	};
+}
+
+/*
+================
+chooseDonor
+
+The roster model that wears a (race, gender)'s items: one of the item's
+own race, else any of its gender; undefined when none. A cached item-set
+build keys on the choice (buildEquipmentVisuals.mjs), since a roster
+change can move a body to another donor without touching its files.
+================
+*/
+export function chooseDonor( resolvedRoster, race, gender ) {
+	return resolvedRoster.find(
+		( m ) => !m.isMount && m.codename.includes( `_${race}_${gender === "M" ? "MAN" : "WOMAN"}_` )
+	) ?? resolvedRoster.find( ( m ) => !m.isMount && (gender === "M" ? /_MAN_/ : /_WOMAN_/).test( m.codename ) );
+}
+
+/*
+================
+createDonorLoader
+
+Loads a chosen donor's skeleton once per donor BSR: { donor, donorSkel }.
+================
+*/
+export function createDonorLoader() {
+	const donorSkeletons = new Map(); // donor.bsrPath -> parsed BSK (byName)
+	return async ( donor ) => {
 		let donorSkel = donorSkeletons.get( donor.bsrPath );
 		if ( !donorSkel ) {
 			const donorChar = parseCharacterBsr( await loadDataAsset( donor.bsrPath ), donor.bsrPath );
