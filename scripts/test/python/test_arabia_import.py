@@ -26,6 +26,7 @@ from test_skytemple_import import (
 	media_archive,
 	placement_o2,
 	read_rows,
+	region_navmesh,
 	skill,
 	terrain_m,
 	utf16,
@@ -33,6 +34,11 @@ from test_skytemple_import import (
 )
 
 # One region per family, at the source's own sector spacing.
+# The town sector's one placed object: an id the native object.ifo
+# holds as another model, so the import moves it past the native ids.
+TOWN_REGION = 22106
+TOWN_OBJECT = 777
+MOVED_OBJECT = 901
 REGIONS = [(22106, "TOWN"), (19792, "FIELD_01"), (20048, "FIELD_02"),
 	(20559, "FIELD_03"), (21325, "PETRA"), (23378, "DUNGEON"), (31734, "GARDEN")]
 REGION_IDS = {region for region, _family in REGIONS}
@@ -263,7 +269,11 @@ def build_trees(base):
 
 	native_char = ["0"] * 120
 	native_char[0], native_char[1], native_char[2] = "1", "100", "MOB_NATIVE_TEST"
-	write_table(output / text, "characterdata_5000.txt", [native_char])
+	# An NPC kind the native tables own that Arabia also places
+	# (NPC_CH_GACHA_MACHINE's shape): it keeps this row and id 101.
+	native_npc = ["0"] * 120
+	native_npc[0], native_npc[1], native_npc[2] = "1", "101", "NPC_CH_NATIVE_SHOP"
+	write_table(output / text, "characterdata_5000.txt", [native_char, native_npc])
 	write_table(output / text, "skilldata.txt", [["skilldata_5000.txt"]])
 	write_table(output / text, "skilldata_5000.txt", [skill(50, "SKILL_NATIVE")])
 	write_table(output / text, "textdataname.txt", [
@@ -280,7 +290,7 @@ def build_trees(base):
 	write_table(output / text, "regioncode.txt", [["1", "25000", "RN_CH_JANGAN", ""], ["1", "22106", "xxx", ""]])
 	write_table(output / text, "textzonename.txt", [["1", "25000", "x", "", "", "Jangan", "", "", "", "", ""]])
 	write_table(output / text, "textquest.txt", [["1", "SN_NATIVE_QUEST", "x", "", "", "", "", "", "Quest", "", ""]])
-	write_table(output / text, "npcpos.txt", [["100", "25000", "1", "1", "1"]])
+	write_table(output / text, "npcpos.txt", [["100", "25000", "1", "1", "1"], ["101", "25000", "2", "1", "2"]])
 	write_table(output / text, "npcchat.txt", [["1", "NPC_NATIVE", "SN_NATIVE", "0"],
 		["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]])
 	(output / "Map_extracted").mkdir(parents=True)
@@ -305,11 +315,13 @@ def build_trees(base):
 			character(50003, "NPC_AR_TEST", level=1, model="npc\\arabia\\test_1.bsr,npc\\arabia\\test_2.bsr"),
 			character(50004, "NPC_AR_UNNAMED", level=1),
 			character(50005, "NPC_NATIVE_NAMED", level=1),
+			character(50006, "NPC_CH_NATIVE_SHOP", level=1),
 		]),
 		"skilldata.txt": utf16([["skilldata_5000.txt"]]),
 		"skilldata_5000.txt": utf16([skill(70, "SKILL_LATER")]),
 		"npcpos.txt": utf16([["50003", "21325", "10", "1", "20"], ["50001", "19792", "1", "1", "1"],
-			["50004", "22106", "11", "1", "21"], ["50005", "21325", "12", "1", "22"]]),
+			["50004", "22106", "11", "1", "21"], ["50005", "21325", "12", "1", "22"],
+			["50006", "21325", "13", "1", "23"]]),
 		"npcchat.txt": utf16([["1", "NPC_AR_TEST", "SN_NPC_AR_TEST_CHAT", "SN_NPC_AR_TEST_PS"],
 			["1", "NPC_NATIVE_NAMED", "SN_NATIVE_CHAT", "0"]]),
 		"regioncode.txt": utf16([["1", str(region), f"RN_ARABIA_{family}", ""] for region, family in REGIONS]),
@@ -344,14 +356,17 @@ def build_trees(base):
 		map_files[f"{y}/{x}.m"] = terrain_m()
 		map_files[f"{y}/{x}.t"] = b"t"
 		map_files[f"{y}/{x}.o"] = b"o"
-		map_files[f"{y}/{x}.o2"] = placement_o2(None)
+		# The town places 777, which the native catalogue defines
+		# differently: the import moves it to 901 in both files.
+		map_files[f"{y}/{x}.o2"] = placement_o2(TOWN_OBJECT if region == TOWN_REGION else None)
 	# One sector stands unbuilt behind its region code, the boss
 	# lair's shape in miniature: no terrain files, no navmesh.
 	garden_x, garden_y = 31734 & 0xFF, (31734 >> 8) & 0xFF
 	for extension in (".m", ".t", ".o", ".o2"):
 		del map_files[f"{garden_y}/{garden_x}{extension}"]
 	(source / "Map.pk2").write_bytes(map_archive(map_files))
-	data_files = {f"navmesh/nv_{region:04x}.nvm": b"nvm" for region, _family in REGIONS}
+	data_files = {f"navmesh/nv_{region:04x}.nvm": region_navmesh(*([TOWN_OBJECT] if region == TOWN_REGION else []))
+		for region, _family in REGIONS}
 	del data_files[f"navmesh/nv_{31734:04x}.nvm"]
 	(source / "Data.pk2").write_bytes(data_archive(data_files))
 	(source / "Particles.pk2").write_bytes(data_archive({}))
@@ -403,7 +418,11 @@ class ArabiaImportTest(unittest.TestCase):
 			self.assertEqual(rows[12]["SpawnType"], 1)
 			self.assertEqual((rows[13]["HiveKey"], rows[13]["HiveMaxCount"]), ("MOB_ARABIA_UNIQUE", 1))
 			standings = read_rows(text / "npcpos.txt")
-			self.assertEqual(len(standings), 4)
+			self.assertEqual(len(standings), 6)
+			# A placed kind the native tables own gets no second row
+			# under its codename and stands under its native id.
+			self.assertNotIn("NPC_CH_NATIVE_SHOP", [row[2] for row in shard])
+			self.assertIn(["101", "21325", "13", "1", "23"], [row[:5] for row in standings])
 			# The nameless event prop the client's npcpos plants in
 			# the town (NPC_AR_UNNAMED has an SN_ key no text table
 			# holds) is skipped and logged, never shipped nameless.
@@ -422,6 +441,15 @@ class ArabiaImportTest(unittest.TestCase):
 			# The unbuilt garden sector imports no terrain; its
 			# region code row above still imports.
 			self.assertFalse((output / "Map_extracted" / "123" / "246.m").exists())
+			# The town's navmesh names the remapped id its placements
+			# do: the client resolves both through object.ifo, and an
+			# unpatched navmesh failed Baghdad ("Missing navigation BSR").
+			self.assertEqual(summary["objectRemap"], {str(TOWN_OBJECT): MOVED_OBJECT})
+			town_x, town_y = TOWN_REGION & 0xFF, (TOWN_REGION >> 8) & 0xFF
+			self.assertEqual(skytemple_import.o2_object_ids(
+				(output / "Map_extracted" / str(town_y) / f"{town_x}.o2").read_bytes()), {MOVED_OBJECT})
+			self.assertEqual(skytemple_import.nvm_object_ids(
+				(output / "Data_extracted" / "navmesh" / f"nv_{TOWN_REGION:04x}.nvm").read_bytes()), {MOVED_OBJECT})
 			names = {row[1] for row in read_rows(text / "textdataname.txt") if len(row) > 1}
 			self.assertIn("SN_MOB_AR_TEST", names)
 			# A kind whose name the native table already owns rides
@@ -458,7 +486,10 @@ class ArabiaImportTest(unittest.TestCase):
 				self.assertFalse((text / name).exists(), name)
 			self.assertFalse((output / arabia.MARKER).exists())
 			self.assertEqual([row[0] for row in read_rows(text / "skilldata.txt")], ["skilldata_5000.txt"])
-			self.assertEqual(len(read_rows(text / "npcpos.txt")), 1)
+			# Off removes the Arabia standing of the native kind by its
+			# exact row and keeps the native standing under the same id.
+			self.assertEqual([row[:5] for row in read_rows(text / "npcpos.txt")],
+				[["100", "25000", "1", "1", "1"], ["101", "25000", "2", "1", "2"]])
 			self.assertFalse(any(row[1] == "NPC_AR_TEST" for row in read_rows(text / "npcchat.txt")))
 			# The native talk row rides through the whole cycle.
 			self.assertTrue(any(row[1] == "NPC_NATIVE_NAMED" for row in read_rows(text / "npcchat.txt")))

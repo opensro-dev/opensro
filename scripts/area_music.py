@@ -380,7 +380,7 @@ def add_music(vsro_root, native, out, later_root=None):
 		if name in sounded
 	]
 	merged, tracks = merge_music_tables(tables, vsro, areas)
-	later_areas = []
+	later_areas, later_tracks = [], []
 	if later_root is not None:
 		merged, later_tracks, later_areas = add_later_music(later_root, merged, regions)
 		tracks = sorted(set(tracks) | set(later_tracks))
@@ -388,10 +388,39 @@ def add_music(vsro_root, native, out, later_root=None):
 		variant.replace_file(out / textdata / name, content)
 	silent = silent_regions(table_lines(merged["regioninfo.txt"]), regions - native_regions)
 	converted, absent = convert_tracks(vsro_root, tracks, out)
+	later_converted, absent = source_later_tracks(absent, later_tracks, out, later_root)
+	converted += later_converted
 	return {
 		"areas": areas, "laterAreas": later_areas, "tracks": tracks, "converted": converted, "absent": absent,
 		"silentRegions": [list(region) for region in silent]
 	}
+
+
+# ================
+# source_later_tracks
+# ================
+def source_later_tracks(absent, later_tracks, out, later_root, convert=None, pins=None):
+	"""
+	Convert the later areas' tracks the VSRO Music.pk2 lacks (Arabia's town,
+	field, desert and dungeon) from the v1.696 client's own Music.pk2, pinned
+	in v1696_archive_pins.json beside the other v1.696 archives; returns
+	(converted, still absent). A later area's track that no source holds
+	stops the build: the region table already names it, and the client would
+	ask for a file that was never published. convert and pins are injectable
+	for tests.
+	"""
+	convert = convert or convert_tracks
+	wanted = [track for track in absent if track in set(later_tracks)]
+	if not wanted:
+		return [], absent
+	if pins is None:
+		from mall_avatar_import import V1696_SOURCE, source_pins
+		pins = source_pins(V1696_SOURCE)
+	stage1.require_vsro_pin(later_root, ("Music",), pins)
+	converted, missing = convert(later_root, wanted, out)
+	if missing:
+		raise SystemExit(f"no music source holds {', '.join(missing)}, which later areas name")
+	return converted, [track for track in absent if track not in wanted]
 
 
 # ================

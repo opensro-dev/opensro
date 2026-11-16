@@ -32,12 +32,16 @@ export type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
+import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
 import {
-	displaceRegionXZ,
-	sameCoordinateSpace,
-	worldDelta,
-	writeWorldDelta
-} from "@/engine/foundation/world/world-space";
+	locateOnWalkingChain,
+	measureWalkingChain,
+	MIN_CORRECTION_DISTANCE,
+	nearestOnWalkingChain,
+	walkingChainPose,
+	writeWorldVector,
+	type WalkingChain
+} from "@/engine/foundation/gameplay/walking-chain";
 import { createOwnWalkPresenter } from "./own-walk-interpolation";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
@@ -51,7 +55,6 @@ const MAX_UNSEEN_GAP_SECONDS = 2;
 const MAX_EXTRAPOLATION_SECONDS = 0.1;
 const CORRECTION_FREQUENCY = 30;
 const MAX_RECOVERY_STEP_SECONDS = 0.033;
-const MIN_CORRECTION_DISTANCE = 0.01;
 const MAX_CORRECTION_DISTANCE = 96;
 const MAX_RECOVERY_PATHS = 4;
 const MAX_WALK_RECOVERY_SPEED_FACTOR = 1.5;
@@ -103,6 +106,9 @@ interface SampleTrack {
 	carried?: boolean;
 	paths: { from: Pose; to: Pose; }[];
 	walkingPath?: readonly Pose[];
+	// The chain last measured for this track: the next path, slid on from
+	// it, takes the measures of the edges they share (measureWalkingChain).
+	chain?: WalkingChain;
 	previous?: Sample;
 	latest: Sample;
 	clockOffset: number;
@@ -178,101 +184,6 @@ function onCorridor( pose: Pose, from: Pose, to: Pose, walking = false ) {
 
 /*
 ================
-walkingLocation
-
-Locate a pose on the navigation owner's connected sample chain.
-================
-*/
-function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
-	let distance = 0;
-	let hasBest = false, bestEdge = 0, bestFraction = 0, bestDistance = 0, bestError = 0;
-	for ( let i = 1; i < path.length; i++ ) {
-		const from = path[i - 1]!, to = path[i]!;
-		if ( !writeWorldVector( to, from, spanVector ) || !writeWorldVector( pose, from, pointVector ) ) return null;
-		const planar2 = spanVector[0] ** 2 + spanVector[2] ** 2;
-		const fraction = planar2 ?
-			Math.max( 0, Math.min( 1, (pointVector[0] * spanVector[0] + pointVector[2] * spanVector[2]) / planar2 ) ) :
-			spanVector[1] ?
-			Math.max( 0, Math.min( 1, pointVector[1] / spanVector[1] ) ) :
-			0;
-		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] );
-		const miss = hypot2( pointVector[0] - spanVector[0] * fraction, pointVector[2] - spanVector[2] * fraction );
-		if ( miss <= MIN_CORRECTION_DISTANCE ) {
-			const error = miss + Math.abs( pointVector[1] - spanVector[1] * fraction );
-			if (
-				!hasBest ||
-				(latest && error <= MIN_CORRECTION_DISTANCE && bestError <= MIN_CORRECTION_DISTANCE) ||
-				error < bestError
-			) {
-				hasBest = true;
-				bestEdge = i;
-				bestFraction = fraction;
-				bestDistance = distance + length * fraction;
-				bestError = error;
-			}
-		}
-		distance += length;
-	}
-	return hasBest ?
-		{
-			edge: bestEdge,
-			fraction: bestFraction,
-			distance: bestDistance,
-			error: bestError,
-			pose: interpolateMovement( path[bestEdge - 1]!, path[bestEdge]!, bestFraction )
-		} :
-		null;
-}
-
-/*
-================
-nearestWalkingPose
-
-The certified path's point nearest a pose in the plane.
-================
-*/
-function nearestWalkingPose( pose: Pose, path: readonly Pose[] ): Pose | null {
-	let hasBest = false, bestMiss = 0, bestEdge = 0, bestFraction = 0;
-	for ( let i = 1; i < path.length; i++ ) {
-		const from = path[i - 1]!, to = path[i]!;
-		if ( !writeWorldVector( to, from, spanVector ) || !writeWorldVector( pose, from, pointVector ) ) return null;
-		const planar2 = spanVector[0] ** 2 + spanVector[2] ** 2;
-		const fraction = planar2 ?
-			Math.max( 0, Math.min( 1, (pointVector[0] * spanVector[0] + pointVector[2] * spanVector[2]) / planar2 ) ) :
-			0;
-		const miss = hypot2( pointVector[0] - spanVector[0] * fraction, pointVector[2] - spanVector[2] * fraction );
-		if ( !hasBest || miss < bestMiss ) {
-			hasBest = true;
-			bestMiss = miss;
-			bestEdge = i;
-			bestFraction = fraction;
-		}
-	}
-	return hasBest ? interpolateMovement( path[bestEdge - 1]!, path[bestEdge]!, bestFraction ) : null;
-}
-
-/*
-================
-walkingPose
-
-Spend distance along certified edges.
-================
-*/
-function walkingPose( path: readonly Pose[], distance: number ): Pose {
-	for ( let i = 1; i < path.length; i++ ) {
-		const from = path[i - 1]!, to = path[i]!;
-		// A certified chain shares one coordinate space; a mismatched edge was
-		// a spread-of-null TypeError before and stays loud here.
-		if ( !writeWorldVector( to, from, spanVector ) ) throw Error( "Invalid walking path edge" );
-		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] );
-		if ( distance <= length ) return interpolateMovement( from, to, length ? distance / length : 0 );
-		distance -= length;
-	}
-	return path[path.length - 1]!;
-}
-
-/*
-================
 recoverWalking
 
 Spend damped recovery along the worker's certified sample chain.
@@ -282,10 +193,10 @@ function recoverWalking(
 	before: Pose,
 	model: Pose,
 	candidate: Pose,
-	walk: { path: readonly Pose[]; budget: number; }
+	walk: { chain: WalkingChain; budget: number; }
 ) {
-	const { path } = walk;
-	const start = walkingLocation( before, path, true ), end = walkingLocation( model, path, true );
+	const { chain } = walk, { path, spans, lengths } = chain;
+	const start = locateOnWalkingChain( before, chain, true ), end = locateOnWalkingChain( model, chain, true );
 	if ( !start || !end || start.error > MIN_CORRECTION_DISTANCE || end.error > MIN_CORRECTION_DISTANCE ) return null;
 	if ( !writeWorldVector( candidate, before, pointVector ) ) return null;
 	const remaining = end.distance - start.distance;
@@ -294,11 +205,9 @@ function recoverWalking(
 	let distance = start.distance, budget = walk.budget, fraction = start.fraction;
 	if ( travel === 0 ) return before;
 	for ( let edge = start.edge; edge > 0 && edge < path.length && travel > 0; edge += direction ) {
-		// The certified chain shares one coordinate space; a mismatched edge
-		// was a spread-of-null TypeError before and stays loud here.
-		if ( !writeWorldVector( path[edge]!, path[edge - 1]!, spanVector ) ) throw Error( "Invalid walking path edge" );
-		const length = hypot3( spanVector[0], spanVector[1], spanVector[2] ),
-			planar = hypot2( spanVector[0], spanVector[2] );
+		// Both ends were located on this chain, so it shares one coordinate
+		// space: its measured edges are the vectors read here before.
+		const length = lengths[edge - 1]!, planar = hypot2( spans[(edge - 1) * 3]!, spans[(edge - 1) * 3 + 2]! );
 		const available = length * (direction > 0 ? 1 - fraction : fraction);
 		const step = Math.min( available, travel, planar ? budget * length / planar : Infinity );
 		distance += direction * step;
@@ -307,7 +216,7 @@ function recoverWalking(
 		if ( step < available ) break;
 		fraction = direction > 0 ? 0 : 1;
 	}
-	return walkingPose( path, distance );
+	return walkingChainPose( chain, distance );
 }
 
 /*
@@ -377,45 +286,6 @@ function discontinuity( a: Pose, b: Pose ) {
 // scratch for the region delta.
 const spanVector: [number, number, number] = [ 0, 0, 0 ];
 const pointVector: [number, number, number] = [ 0, 0, 0 ];
-const planeVector: [number, number] = [ 0, 0 ];
-
-/*
-================
-writeWorldVector
-
-The allocation-free form of worldVector: writes a->b's world-space vector
-into out, false where worldVector returned null.
-
-Two poses of one region share its frame: no sector offset, and nothing to
-ask about the coordinate space. A walking chain's samples lie 2 units apart
-(walking-history.ts), so nearly every edge of one is that case, and the
-chain is scanned edge by edge several times a frame for each walker. The
-general path's nested calls kept this helper out of line there: with about
-ten walkers among eighty characters the scan and this helper took 11.5 ms
-of each main-thread second and left 23 MB of boxed numbers a second behind;
-5.3 ms and none with it (2026-11-15, Chrome on an M3). The sum with zero
-is the general path's own (the offset is written first, then the
-difference added), so a difference of negative zero reads back as zero on
-both. Exported for world-vector.test.mjs, which holds the two equal bit for
-bit.
-================
-*/
-export function writeWorldVector( a: Pose, b: Pose, out: [number, number, number] ): boolean {
-	if ( a.regionId === b.regionId ) {
-		out[0] = 0 + (a.x - b.x);
-		out[1] = a.y - b.y;
-		out[2] = 0 + (a.z - b.z);
-		return true;
-	}
-	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) {
-		return false;
-	}
-	writeWorldDelta( b, a, planeVector );
-	out[0] = planeVector[0];
-	out[1] = a.y - b.y;
-	out[2] = planeVector[1];
-	return true;
-}
 
 /*
 ================
@@ -450,14 +320,20 @@ of the last two samples. Walking is piecewise linear at constant speed, so
 within a leg this is exact; the leg end bounds it.
 ================
 */
-function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.at ): Pose {
+function sampledModel(
+	row: SampleTrack,
+	now: number,
+	chainOf: ( row: SampleTrack, path: readonly Pose[] ) => WalkingChain,
+	confirmedAt = row.latest.at
+): Pose {
 	const candidate = sampledLinearModel( row, now, confirmedAt );
 	if ( !row.walkingPath || candidate === row.latest.pose ) return candidate;
+	const chain = chainOf( row, row.walkingPath );
 	// A candidate off the certified chain (one that ran past its end) takes
 	// the chain's nearest point, never the stale sample: falling back to the
 	// latest sample drew a step back in X, Z and height.
-	return walkingLocation( candidate, row.walkingPath, true )?.pose ??
-		nearestWalkingPose( candidate, row.walkingPath ) ?? row.latest.pose;
+	return locateOnWalkingChain( candidate, chain, true )?.pose ?? nearestOnWalkingChain( candidate, chain ) ??
+		row.latest.pose;
 }
 
 /*
@@ -575,6 +451,24 @@ export function createPosePresentation() {
 	// Port-only (own-walk-interpolation.ts): the local mover's walk drawn
 	// between its worker ticks instead of extrapolated past the newest one.
 	const ownWalks = createOwnWalkPresenter( turn );
+	// Each walking path, measured once (walking-chain.ts). A publication
+	// replaces a character's path with a new array and never changes one in
+	// place, so a path's measures stay valid while anything holds it.
+	const walkingChains = new WeakMap<readonly Pose[], WalkingChain>();
+	/*
+	================
+	chainOf
+	================
+	*/
+	function chainOf( row: SampleTrack, path: readonly Pose[] ): WalkingChain {
+		let chain = walkingChains.get( path );
+		if ( !chain ) {
+			chain = measureWalkingChain( path, row.chain );
+			walkingChains.set( path, chain );
+		}
+		row.chain = chain;
+		return chain;
+	}
 	// Port-only (#1440): the main-thread mover's frame, set each frame before
 	// poses are asked, for the local player and, while it rides, its mount
 	// (0x85E000: the mount is the mover, the rider sits on it; #1566); the
@@ -688,7 +582,7 @@ export function createPosePresentation() {
 				recover( row, now - row.last );
 				carriedDisplay = row.moving ?
 					displace( row.displayed, [ row.offset[0] - x, row.offset[1] - y, row.offset[2] - z ] ) :
-					displace( sampledModel( row, now ), row.offset );
+					displace( sampledModel( row, now, chainOf ), row.offset );
 				const corridor = input.transition?.corridor;
 				// A new corridor can exclude the old trajectory. Keep its valid
 				// displayed origin rather than turn rejected carry into a snap.
@@ -733,7 +627,7 @@ export function createPosePresentation() {
 				previousFrameAt !== undefined && previousFrameAt - row.latest.at <= MAX_EXTRAPOLATION_SECONDS;
 			const before = preserveDisplay ?
 				carriedDisplay ?? row.displayed :
-				displace( sampledModel( row, now, continuing ? at : undefined ), row.offset );
+				displace( sampledModel( row, now, chainOf, continuing ? at : undefined ), row.offset );
 			// Native 8DD550 advances at skill speed from the skill's own start.
 			// Retiming the old walk at render time invents lag and a later burst.
 			// Reconcile at the actual switch, bounded by the last frame already
@@ -746,7 +640,10 @@ export function createPosePresentation() {
 				);
 				anchor = displacementAnchor( input, switchAt * 1000 - originMs! );
 				if ( anchor ) {
-					beforeSwitch = displace( sampledModel( row, switchAt, continuing ? at : undefined ), row.offset );
+					beforeSwitch = displace(
+						sampledModel( row, switchAt, chainOf, continuing ? at : undefined ),
+						row.offset
+					);
 				}
 			}
 			if ( changed ) {
@@ -774,7 +671,7 @@ export function createPosePresentation() {
 			const walkSpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;
 			if ( input.displacement ) row.recoverySpeed = 0;
 			else if ( walkSpeed > 0 ) row.recoverySpeed = walkSpeed;
-			const jump = worldVector( before, sampledModel( row, now ) );
+			const jump = worldVector( before, sampledModel( row, now, chainOf ) );
 			if ( jump && beforeSwitch && anchor ) {
 				const clockJump = worldVector( beforeSwitch, anchor );
 				if ( clockJump ) {
@@ -788,7 +685,7 @@ export function createPosePresentation() {
 				row.velocity = [ 0, 0, 0 ];
 			}
 		}
-		const model = sampledModel( row, now );
+		const model = sampledModel( row, now, chainOf );
 		if ( revisionChanged && input.transition?.previousPath ) {
 			row.paths.push( input.transition.previousPath );
 		}
@@ -823,7 +720,10 @@ export function createPosePresentation() {
 			row.velocity = [ span[0] * along, span[1] * along, span[2] * along ];
 		}
 		const walked = walkingPath && hypot3( ...row.offset ) > 0 ?
-			recoverWalking( row.displayed, model, drawn, { path: walkingPath, budget: recoveryBudget } ) :
+			recoverWalking( row.displayed, model, drawn, {
+				chain: chainOf( row, walkingPath ),
+				budget: recoveryBudget
+			} ) :
 			null;
 		if ( walked ) {
 			drawn = walked;

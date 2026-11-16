@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-world-vector.test.mjs - pose-presentation.ts writeWorldVector
+world-vector.test.mjs - walking-chain.ts writeWorldVector
 
 Two poses of one region take a fast path that skips the coordinate-space
 check and the sector offset. It must write the general path's own bits:
@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
 
-const { writeWorldVector } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
+const { writeWorldVector } = await import( "../../src/engine/foundation/gameplay/walking-chain.ts" );
 const { DUNGEON_REGION_BIT, REGION_SIZE, sameCoordinateSpace, writeWorldDelta } = await import(
 	"../../src/engine/foundation/world/world-space.ts"
 );
