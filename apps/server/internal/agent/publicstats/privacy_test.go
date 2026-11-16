@@ -302,9 +302,9 @@ func TestBreakNoticeOptInWritesAtOnce(t *testing.T) {
 titleGroup
 
 A fake of the game's Contributor title for the route tests: one member's
-accounts, oldest first, and the one that holds the title. An account
-outside the group is no contributor, and a pick the save refuses leaves
-the holder where it was.
+accounts and the one that holds the title. An account outside the group
+is no contributor, and a take the save refuses leaves the holder where it
+was.
 ================
 */
 type titleGroup struct {
@@ -337,29 +337,29 @@ The read the game's registry answers (TitleOf): ok is false for an account
 outside the group.
 ================
 */
-func (g *titleGroup) title(account string) ([]string, string, bool, bool) {
+func (g *titleGroup) title(account string) (bool, bool, bool) {
 	if !g.has(account) {
-		return nil, "", false, false
+		return false, false, false
 	}
-	return g.accounts, g.holder, false, true
+	return g.holder == account, false, true
 }
 
 /*
 ================
-move
+take
 
-The pick the game's registry answers (MoveTitle): both accounts must be in
-the group, else ErrNotOwned; a save that is refused returns its own error.
+The write the game's registry answers (TakeTitle): an account outside the
+group is ErrNotOwned; a save that is refused returns its own error.
 ================
 */
-func (g *titleGroup) move(signedIn, target string) error {
-	if !g.has(signedIn) || !g.has(target) {
+func (g *titleGroup) take(account string) error {
+	if !g.has(account) {
 		return ErrNotOwned
 	}
 	if g.failSave {
 		return errors.New("save refused")
 	}
-	g.holder = target
+	g.holder = account
 	return nil
 }
 
@@ -385,69 +385,57 @@ func readTitle(t *testing.T, s *Service, account, token string) (int, Contributo
 
 /*
 ================
-TestContributorTitlePickNeedsTheTokenAndTheGroup
+TestContributorTitleNeedsTheTokenAndNamesNoOtherAccount
 
-The Contributor title sits behind the privacy token. A read names the
-member's accounts and the holder; a pick inside the group moves the title
-(204) and the next read shows the new holder. A pick of an account outside
-the group, or one made by an account that is no contributor, answers 404
-and moves nothing. A malformed body is 400, a refused save is 503 and keeps
-the holder, and with no setter the routes are not served at all.
+The Contributor title sits behind the privacy token. A read says only
+whether this account carries the title, and its answer holds no other
+account's id; the write moves the title onto the signed-in account (204)
+and the next read shows it. An account that is no contributor answers 404,
+a refused save is 503 and keeps the holder, and with no setter the routes
+are not served at all.
 ================
 */
-func TestContributorTitlePickNeedsTheTokenAndTheGroup(t *testing.T) {
+func TestContributorTitleNeedsTheTokenAndNamesNoOtherAccount(t *testing.T) {
 	group := &titleGroup{accounts: []string{"alpha", "beta"}, holder: "alpha"}
 	s := privacyService(newFixture(), testWriteToken)
 	s.src.ContributorTitleOf = group.title
-	s.src.MoveContributorTitle = group.move
-	const path = "/v1/accounts/alpha/contributor-title"
+	s.src.TakeContributorTitle = group.take
+	const path = "/v1/accounts/beta/contributor-title"
 	if code, _ := authorizedGet(s, path, ""); code != http.StatusUnauthorized {
 		t.Fatalf("read without a token = %d, want 401", code)
 	}
-	if code := put(s, path, "", `{"account":"beta"}`); code != http.StatusUnauthorized {
-		t.Fatalf("pick without a token = %d, want 401", code)
+	if code := put(s, path, "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("take without a token = %d, want 401", code)
 	}
-	code, out := readTitle(t, s, "alpha", testWriteToken)
-	if code != http.StatusOK || len(out.Accounts) != 2 || out.Accounts[0] != (ContributorTitleAccount{Account: "alpha", Holder: true}) ||
-		out.Accounts[1] != (ContributorTitleAccount{Account: "beta"}) || out.Hidden {
-		t.Fatalf("read = %d %+v", code, out)
+	code, body := authorizedGet(s, path, testWriteToken)
+	if code != http.StatusOK || strings.Contains(string(body), "alpha") {
+		t.Fatalf("beta's read = %d %s, want 200 naming no other account", code, body)
+	}
+	if code, out := readTitle(t, s, "beta", testWriteToken); code != http.StatusOK || out.Carries || out.Hidden {
+		t.Fatalf("beta's read = %d %+v, want a contributor without the title", code, out)
 	}
 	if code, _ := readTitle(t, s, "gamma", testWriteToken); code != http.StatusNotFound {
 		t.Fatalf("read by a non-contributor = %d, want 404", code)
 	}
-	if code := put(s, "/v1/accounts/gamma/contributor-title", testWriteToken, `{"account":"alpha"}`); code != http.StatusNotFound {
-		t.Fatalf("pick by a non-contributor = %d, want 404", code)
-	}
-	if code := put(s, path, testWriteToken, `{"account":"gamma"}`); code != http.StatusNotFound {
-		t.Fatalf("pick of an account outside the group = %d, want 404", code)
-	}
-	for _, body := range []string{`{}`, `{"account":7}`, `{"account":"beta","extra":1}`} {
-		if code := put(s, path, testWriteToken, body); code != http.StatusBadRequest {
-			t.Fatalf("body %s = %d, want 400", body, code)
-		}
-	}
-	if _, out := readTitle(t, s, "alpha", testWriteToken); !out.Accounts[0].Holder {
-		t.Fatalf("refused picks moved the title: %+v", out.Accounts)
-	}
-	if code := put(s, path, testWriteToken, `{"account":"beta"}`); code != http.StatusNoContent {
-		t.Fatalf("pick inside the group = %d, want 204", code)
-	}
-	if code, out := readTitle(t, s, "beta", testWriteToken); code != http.StatusOK || out.Accounts[0].Holder || !out.Accounts[1].Holder {
-		t.Fatalf("read after the pick = %d %+v", code, out)
+	if code := put(s, "/v1/accounts/gamma/contributor-title", testWriteToken, ""); code != http.StatusNotFound || group.holder != "alpha" {
+		t.Fatalf("take by a non-contributor = %d (holder %q), want 404 and no move", code, group.holder)
 	}
 	group.failSave = true
-	if code := put(s, path, testWriteToken, `{"account":"alpha"}`); code != http.StatusServiceUnavailable {
-		t.Fatalf("refused save = %d, want 503", code)
+	if code := put(s, path, testWriteToken, ""); code != http.StatusServiceUnavailable || group.holder != "alpha" {
+		t.Fatalf("refused save = %d (holder %q), want 503 and no move", code, group.holder)
 	}
 	group.failSave = false
-	if _, out := readTitle(t, s, "beta", testWriteToken); !out.Accounts[1].Holder {
-		t.Fatalf("a refused save moved the title: %+v", out.Accounts)
+	if code := put(s, path, testWriteToken, ""); code != http.StatusNoContent {
+		t.Fatalf("take = %d, want 204", code)
+	}
+	if code, out := readTitle(t, s, "beta", testWriteToken); code != http.StatusOK || !out.Carries {
+		t.Fatalf("read after the take = %d %+v", code, out)
 	}
 	unserved := privacyService(newFixture(), testWriteToken)
 	if code, _ := authorizedGet(unserved, path, testWriteToken); code != http.StatusNotFound {
 		t.Fatalf("read with no setter = %d, want 404 (not served)", code)
 	}
-	if code := put(unserved, path, testWriteToken, `{"account":"beta"}`); code != http.StatusNotFound {
-		t.Fatalf("pick with no setter = %d, want 404 (not served)", code)
+	if code := put(unserved, path, testWriteToken, ""); code != http.StatusNotFound {
+		t.Fatalf("take with no setter = %d, want 404 (not served)", code)
 	}
 }

@@ -387,7 +387,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 	// The Contributor title's read answers for a contributor, so its schema meets a real answer.
 	group := &titleGroup{accounts: []string{"alpha", "beta"}, holder: "alpha"}
 	s.src.ContributorTitleOf = group.title
-	s.src.MoveContributorTitle = group.move
+	s.src.TakeContributorTitle = group.take
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)

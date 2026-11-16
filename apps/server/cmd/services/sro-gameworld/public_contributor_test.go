@@ -1,13 +1,13 @@
 /*
 ===========================================================================
 
-public_contributor_test.go - the Contributor title's read and pick through the public API
+public_contributor_test.go - the Contributor title's read and take through the public API
 
 Port-only, not native (#135). The website reaches the registry only through
 publicSources, so these tests drive the real handler: with the title off
-every authenticated call answers 404; with it on, a contributor reads the
-member's accounts and moves the title inside the member's group only, and a
-save the store refuses answers 503 with the old choice kept.
+every authenticated call answers 404; with it on, a contributor reads
+whether its own account carries the title and moves it onto that account
+only, and a save the store refuses answers 503 with the old choice kept.
 
 ===========================================================================
 */
@@ -96,13 +96,13 @@ func titleRead(t *testing.T, handler http.Handler, account string) (int, publics
 
 /*
 ================
-titlePick
+titleTake
 
-The page's pick of target by signedIn: the status it answers.
+The page's "carry it here" by account: the status it answers.
 ================
 */
-func titlePick(handler http.Handler, signedIn, target string) int {
-	code, _ := titleCall(handler, http.MethodPut, "/v1/accounts/"+signedIn+"/contributor-title", titleToken, `{"account":"`+target+`"}`)
+func titleTake(handler http.Handler, account string) int {
+	code, _ := titleCall(handler, http.MethodPut, "/v1/accounts/"+account+"/contributor-title", titleToken, "")
 	return code
 }
 
@@ -120,8 +120,8 @@ func TestContributorTitleAnswersNotFoundWithTheFlagOff(t *testing.T) {
 	if code, _ := titleRead(t, handler, "a1"); code != http.StatusNotFound {
 		t.Fatalf("read with the title off = %d, want 404", code)
 	}
-	if code := titlePick(handler, "a1", "a2"); code != http.StatusNotFound {
-		t.Fatalf("pick with the title off = %d, want 404", code)
+	if code := titleTake(handler, "a2"); code != http.StatusNotFound {
+		t.Fatalf("take with the title off = %d, want 404", code)
 	}
 	if code, _ := titleCall(handler, http.MethodGet, "/v1/accounts/a1/contributor-title", "", ""); code != http.StatusUnauthorized {
 		t.Fatalf("read without a token = %d, want 401", code)
@@ -130,17 +130,18 @@ func TestContributorTitleAnswersNotFoundWithTheFlagOff(t *testing.T) {
 
 /*
 ================
-TestContributorTitlePickMovesWithinTheMembersGroup
+TestContributorTitleTakeMovesItOntoTheSignedInAccount
 
-With the flag on, a contributor reads the member's accounts oldest first
-with the holder. A pick inside the member's group moves the title (204) and
-the next read shows it. A pick across members, or by an account that is no
-contributor, answers 404 and moves nothing. The hidden flag follows the
-account's own "/contributor off" through the same registry. A save the
-store refuses answers 503 and keeps the holder where it was.
+With the flag on, each of a member's accounts reads only whether it
+carries the title; no answer names the member's other accounts. A take
+moves the title onto the signed-in account (204) and both accounts' next
+reads show it; another member keeps its own. An account that is no
+contributor answers 404. The hidden flag follows the account's own
+"/contributor off". A save the store refuses answers 503 and keeps the
+holder where it was.
 ================
 */
-func TestContributorTitlePickMovesWithinTheMembersGroup(t *testing.T) {
+func TestContributorTitleTakeMovesItOntoTheSignedInAccount(t *testing.T) {
 	dir := t.TempDir()
 	members := filepath.Join(dir, contributor.MembersFileName)
 	if err := os.WriteFile(members, []byte(titleMembers), 0o600); err != nil {
@@ -152,31 +153,34 @@ func TestContributorTitlePickMovesWithinTheMembersGroup(t *testing.T) {
 	}
 	handler := titleAPI(t, &gameplayPlane{deps: &enterworld.Deps{}, contributors: registry})
 
-	code, out := titleRead(t, handler, "a1")
-	if code != http.StatusOK || len(out.Accounts) != 2 || !out.Accounts[0].Holder || out.Accounts[1].Account != "a2" || out.Hidden {
-		t.Fatalf("read = %d %+v", code, out)
+	code, body := titleCall(handler, http.MethodGet, "/v1/accounts/a2/contributor-title", titleToken, "")
+	if code != http.StatusOK || strings.Contains(body, "a1") {
+		t.Fatalf("a2's read = %d %s, want 200 naming no other account", code, body)
 	}
-	if code := titlePick(handler, "a1", "b1"); code != http.StatusNotFound {
-		t.Fatalf("pick across members = %d, want 404", code)
+	if _, out := titleRead(t, handler, "a1"); !out.Carries || out.Hidden {
+		t.Fatalf("a1's read = %+v, want the holder", out)
 	}
-	if code := titlePick(handler, "c1", "a2"); code != http.StatusNotFound {
-		t.Fatalf("pick by a non-contributor = %d, want 404", code)
+	if code := titleTake(handler, "c1"); code != http.StatusNotFound {
+		t.Fatalf("take by a non-contributor = %d, want 404", code)
 	}
-	if _, out := titleRead(t, handler, "a1"); !out.Accounts[0].Holder {
-		t.Fatalf("refused picks moved the title: %+v", out.Accounts)
+	if code := titleTake(handler, "a2"); code != http.StatusNoContent {
+		t.Fatalf("take = %d, want 204", code)
 	}
-	if code := titlePick(handler, "a1", "a2"); code != http.StatusNoContent {
-		t.Fatalf("pick inside the member = %d, want 204", code)
+	if _, out := titleRead(t, handler, "a2"); !out.Carries {
+		t.Fatalf("a2 after the take = %+v, want the holder", out)
 	}
-	if code, out := titleRead(t, handler, "a2"); code != http.StatusOK || out.Accounts[0].Holder || !out.Accounts[1].Holder {
-		t.Fatalf("read after the pick = %d %+v", code, out)
+	if _, out := titleRead(t, handler, "a1"); out.Carries {
+		t.Fatalf("a1 after a2's take = %+v, want it moved away", out)
+	}
+	if _, out := titleRead(t, handler, "b1"); !out.Carries {
+		t.Fatalf("another member lost its title: %+v", out)
 	}
 	registry.Command("a2", "/contributor off")
 	if _, out := titleRead(t, handler, "a2"); !out.Hidden {
 		t.Fatalf("a2's hidden flag not read: %+v", out)
 	}
 
-	// A store that refuses the save: the pick answers 503 and the title stays on a1.
+	// A store that refuses the save: the take answers 503 and the title stays on a1.
 	refusedDir := t.TempDir()
 	refusedMembers := filepath.Join(refusedDir, contributor.MembersFileName)
 	if err := os.WriteFile(refusedMembers, []byte(titleMembers), 0o600); err != nil {
@@ -187,10 +191,10 @@ func TestContributorTitlePickMovesWithinTheMembersGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	refusedHandler := titleAPI(t, &gameplayPlane{deps: &enterworld.Deps{}, contributors: refused})
-	if code := titlePick(refusedHandler, "a1", "a2"); code != http.StatusServiceUnavailable {
+	if code := titleTake(refusedHandler, "a2"); code != http.StatusServiceUnavailable {
 		t.Fatalf("refused save = %d, want 503", code)
 	}
-	if _, out := titleRead(t, refusedHandler, "a1"); !out.Accounts[0].Holder {
-		t.Fatalf("a refused save moved the title: %+v", out.Accounts)
+	if _, out := titleRead(t, refusedHandler, "a1"); !out.Carries {
+		t.Fatalf("a refused save moved the title: %+v", out)
 	}
 }

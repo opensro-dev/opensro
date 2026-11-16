@@ -10,7 +10,7 @@ mute book in the shard's authority directory, the chat handler takes its
 division's sessions. With the flag off nothing opens, no hook installs
 and no frame is sent. The website's read and pick of the title (#135)
 reach the same registry through contributorTitleOf and
-moveContributorTitle, which read it at call time: the flag decides each
+takeContributorTitle, which read it at call time: the flag decides each
 request, and off answers not found.
 
 ===========================================================================
@@ -109,32 +109,31 @@ the flag decides every request. Set once at boot, before the public API's
 listener starts.
 ================
 */
-func contributorTitleOf(game *gameplayPlane, accountID string) (accounts []string, holder string, hidden bool, ok bool) {
+func contributorTitleOf(game *gameplayPlane, accountID string) (carries bool, hidden bool, ok bool) {
 	registry := game.contributors
 	if registry == nil {
-		return nil, "", false, false
+		return false, false, false
 	}
 	return registry.TitleOf(accountID)
 }
 
 /*
 ================
-moveContributorTitle
+takeContributorTitle
 
-The website's pick of the Contributor title (port-only, not native; #135).
-The registry moves the title only inside signedIn's own contributor group.
-An account outside that group, or a title that is off, answers
-publicstats.ErrNotOwned: the same not-found an account gets for another
-account's character, so the two cannot be told apart. A save the store
-refuses returns its own error, which the route answers as 503.
+The website's "carry it here" (port-only, not native; #135): the
+account's member's title moves onto it. An account that is no
+contributor, or a title that is off, answers publicstats.ErrNotOwned. A
+save the store refuses returns its own error, which the route answers as
+503.
 ================
 */
-func moveContributorTitle(game *gameplayPlane, signedIn, target string) error {
+func takeContributorTitle(game *gameplayPlane, accountID string) error {
 	registry := game.contributors
 	if registry == nil {
 		return publicstats.ErrNotOwned
 	}
-	err := registry.MoveTitle(signedIn, target)
+	err := registry.TakeTitle(accountID)
 	if errors.Is(err, contributor.ErrNotInGroup) {
 		return publicstats.ErrNotOwned
 	}

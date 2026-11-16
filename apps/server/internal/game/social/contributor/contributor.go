@@ -29,7 +29,7 @@ Two files in the shard's authority directory, one owner each:
   - contributor-titles.json, {"hidden":["<account id>", ...],
     "chosen":{"<label>":"<account id>"}}, owned here: a contributor's
     own "/contributor off" and "/contributor here" choices, and the
-    website's pick of the titled account (MoveTitle, #135). They are
+    website's "carry it here" (TakeTitle, #135). They are
     server settings, so every viewer sees the same state. A chosen
     account the member no longer has falls back to their first.
 
@@ -99,10 +99,9 @@ const (
 // each is its own member.
 const flatMemberPrefix = "account:"
 
-// ErrNotInGroup answers MoveTitle when the two accounts are not both
-// linked to one contributor: the title never leaves its own group. The
-// website answers it as not found.
-var ErrNotInGroup = errors.New("contributor titles: the accounts are not in one contributor's group")
+// ErrNotInGroup answers TakeTitle for an account linked to no contributor.
+// The website answers it as not found.
+var ErrNotInGroup = errors.New("contributor titles: the account is in no contributor's group")
 
 /*
 ================
@@ -162,12 +161,10 @@ type Registry struct {
 	write       func(string, []byte) error
 	// groups is each member's linked accounts, oldest first; memberOf
 	// is its inverse; titled is the one account per member that carries
-	// the title; memberAccounts is each member's accounts after the
-	// one-owner rule, oldest first (resolveLocked).
-	groups         map[string][]string
-	memberOf       map[string]string
-	titled         map[string]bool
-	memberAccounts map[string][]string
+	// the title (resolveLocked).
+	groups   map[string][]string
+	memberOf map[string]string
+	titled   map[string]bool
 	// chosen is each member's "/contributor here" account (persisted).
 	chosen map[string]string
 	// seen is, per account, the title holder its owner last answered the
@@ -197,15 +194,14 @@ refusal. The sync's file never stops it (reloadLocked's rules).
 */
 func Open(dir, membersPath string, write func(string, []byte) error) (*Registry, error) {
 	r := &Registry{
-		membersPath:    membersPath,
-		hiddenPath:     filepath.Join(dir, HiddenFileName),
-		write:          write,
-		groups:         map[string][]string{},
-		memberOf:       map[string]string{},
-		titled:         map[string]bool{},
-		memberAccounts: map[string][]string{},
-		sent:           map[string]bool{},
-		prompted:       map[string]bool{},
+		membersPath: membersPath,
+		hiddenPath:  filepath.Join(dir, HiddenFileName),
+		write:       write,
+		groups:      map[string][]string{},
+		memberOf:    map[string]string{},
+		titled:      map[string]bool{},
+		sent:        map[string]bool{},
+		prompted:    map[string]bool{},
 	}
 	choices, err := readChoices(r.hiddenPath)
 	if err != nil {
@@ -361,13 +357,11 @@ func (r *Registry) reloadLocked() {
 ================
 resolveLocked
 
-Rebuilds memberOf, titled and memberAccounts from groups and chosen:
-each member's title sits on its chosen account while that account is
-still one of its own, else on its first (oldest). An account listed
-under two members (it should not happen) stays with the first member
-read, in label order, so the answer never depends on map order.
-memberAccounts keeps each member's accounts after that rule, the list
-TitleOf reports.
+Rebuilds memberOf and titled from groups and chosen: each member's
+title sits on its chosen account while that account is still one of
+its own, else on its first (oldest). An account listed under two
+members (it should not happen) stays with the first member read, in
+label order, so the answer never depends on map order.
 ================
 */
 func (r *Registry) resolveLocked() {
@@ -378,7 +372,6 @@ func (r *Registry) resolveLocked() {
 	sort.Strings(labels)
 	memberOf := map[string]string{}
 	titled := map[string]bool{}
-	memberAccounts := map[string][]string{}
 	for _, member := range labels {
 		owned := []string{}
 		for _, id := range r.groups[member] {
@@ -390,14 +383,13 @@ func (r *Registry) resolveLocked() {
 		if len(owned) == 0 {
 			continue
 		}
-		memberAccounts[member] = owned
 		pick := owned[0]
 		if chosen, ok := r.chosen[member]; ok && memberOf[chosen] == member {
 			pick = chosen
 		}
 		titled[pick] = true
 	}
-	r.memberOf, r.titled, r.memberAccounts = memberOf, titled, memberAccounts
+	r.memberOf, r.titled = memberOf, titled
 }
 
 /*
@@ -418,45 +410,43 @@ func (r *Registry) Shown(accountID string) bool {
 TitleOf
 
 What the website's account page reads for accountID (port-only, not
-native; #135): its member's accounts oldest first, the one that carries
-the title now, and whether accountID itself hides it. ok is false for an
-account that is no contributor. The list is a copy the caller may keep.
+native; #135): whether accountID carries its member's title now, and
+whether it hides it. ok is false for an account that is no contributor.
+The member's other accounts are never named: a contributor's group holds
+every account its invite keys created, so a list would hand each invitee
+the others' login names.
 ================
 */
-func (r *Registry) TitleOf(accountID string) (accounts []string, holder string, hidden bool, ok bool) {
+func (r *Registry) TitleOf(accountID string) (carries bool, hidden bool, ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	member, linked := r.memberOf[accountID]
 	if !linked {
-		return nil, "", false, false
+		return false, false, false
 	}
-	accounts = append([]string(nil), r.memberAccounts[member]...)
-	return accounts, r.holderLocked(member), r.hidden[accountID], true
+	return r.holderLocked(member) == accountID, r.hidden[accountID], true
 }
 
 /*
 ================
-MoveTitle
+TakeTitle
 
-The website's pick (port-only, not native; #135): signedIn's member's
-title moves to target, which must be one of that member's own accounts.
-Both are looked up in memberOf under the lock, so a link the sync dropped
-a moment ago is refused, not written. Both linked checks are needed: an
-unlinked account reads as the empty member, and two unlinked accounts
-would otherwise match each other. A refusal changes nothing and returns
-ErrNotInGroup. Any other pair goes to moveLocked, so a save that does not
-take returns its error with the old choice still in force.
+The website's "carry it here" (port-only, not native; #135): accountID's
+member's title moves to accountID, exactly as "/contributor here" from
+that account does. The account is looked up in memberOf under the lock,
+so a link the sync dropped a moment ago is refused with ErrNotInGroup and
+nothing is written. A save that does not take returns its error with the
+old choice still in force.
 ================
 */
-func (r *Registry) MoveTitle(signedIn, target string) error {
+func (r *Registry) TakeTitle(accountID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	member, linked := r.memberOf[signedIn]
-	targetMember, targetLinked := r.memberOf[target]
-	if !linked || !targetLinked || targetMember != member {
+	member, linked := r.memberOf[accountID]
+	if !linked {
 		return ErrNotInGroup
 	}
-	_, err := r.moveLocked(member, target)
+	_, err := r.moveLocked(member, accountID)
 	return err
 }
 
@@ -539,7 +529,7 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 moveLocked
 
 The move of a member's title to accountID, which is one of its own:
-"/contributor here" in chat and the website's pick (MoveTitle). The
+"/contributor here" in chat and the website's TakeTitle. The
 account's own shown or hidden state comes with it. The caller checks the
 membership; a save that does not take returns its error and leaves the
 old choice in force, and the chat answer for that error is answerBusy.

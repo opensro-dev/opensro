@@ -147,20 +147,14 @@ type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
 }
 
-// ContributorTitleAccount is one of a contributor's accounts and whether
-// it carries the Contributor title now (port-only, not native; #135).
-type ContributorTitleAccount struct {
-	Account string `json:"account"`
-	Holder  bool   `json:"holder"`
-}
-
 // ContributorTitleResponse is the website's authenticated
-// GET /v1/accounts/{id}/contributor-title (privacy.go): the signed-in
-// contributor's accounts oldest first, and whether this account hides the
-// title. Port-only, not native (#135).
+// GET /v1/accounts/{id}/contributor-title (privacy.go): whether the
+// signed-in account carries its Contributor title and whether it hides
+// it. The member's other accounts are never listed. Port-only, not
+// native (#135).
 type ContributorTitleResponse struct {
-	Accounts []ContributorTitleAccount `json:"accounts"`
-	Hidden   bool                      `json:"hidden"`
+	Carries bool `json:"carries"`
+	Hidden  bool `json:"hidden"`
 }
 
 // CharactersResponse is P5 GET /public/v1/characters.

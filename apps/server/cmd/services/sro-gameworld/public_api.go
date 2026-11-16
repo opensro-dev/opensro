@@ -433,11 +433,11 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 		// The Contributor title's read and pick (port-only, not native; #135)
 		// reach the registry at call time (wiring_contributor.go): with
 		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
-		ContributorTitleOf: func(account string) ([]string, string, bool, bool) {
+		ContributorTitleOf: func(account string) (bool, bool, bool) {
 			return contributorTitleOf(gameplay, account)
 		},
-		MoveContributorTitle: func(signedIn, target string) error {
-			return moveContributorTitle(gameplay, signedIn, target)
+		TakeContributorTitle: func(account string) error {
+			return takeContributorTitle(gameplay, account)
 		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
