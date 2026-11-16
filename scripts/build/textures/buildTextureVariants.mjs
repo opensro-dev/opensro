@@ -69,7 +69,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { defineAction, outputPath } from "../graph/action.mjs";
 import { keyOf, materialize, openStore, readRecord, storeOutputs } from "../graph/store.mjs";
-import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
+import { CLIENT_PUBLIC_ROOT, generatedPath, sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { claimPublicFile, isPublicationOpen } from "../shared/publicationLedger.mjs";
 import { ENCODERS, encoderPath } from "./encoders.mjs";
 import {
@@ -420,7 +420,12 @@ export async function buildTextureVariants( flags = {} ) {
 	const cacheName = `astc-4x4-${ENCODERS.astcenc.version}${PRESET}`;
 	const cacheRoot = flags.out ?
 		path.join( flags.out, "intermediate", "texture-variants", cacheName ) :
-		generatedPath( "intermediate", "texture-variants", cacheName );
+		// Named by the source's SHA-256 under an encoder-and-preset folder, so
+		// trees may share it (generatedRoot.mjs sharedCachePath).
+		sharedCachePath(
+			path.join( "texture-variants", cacheName ),
+			generatedPath( "intermediate", "texture-variants", cacheName )
+		);
 	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : flags.publicRoot;
 	const maskRoot = maskCacheRoot( cacheRoot, await maskCodeHash() );
 	mkdirSync( maskRoot, { recursive: true } );
