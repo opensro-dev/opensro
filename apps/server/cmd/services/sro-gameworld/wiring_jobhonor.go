@@ -41,7 +41,7 @@ func installJobHonor(application *gameWorldApplication, gameplay *gameplayPlane,
 	if err != nil {
 		return fmt.Errorf("job honor: %w", err)
 	}
-	application.jobHonor = service
+	application.ledgers.jobHonor = service
 	gameplay.jobHonor = service
 	gameplay.items.JobHonor = service
 	log.Infof("job honor: trade sales score honor points (%s, port-only, not native); ledger in %s",
