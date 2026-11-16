@@ -49,7 +49,6 @@ the variant reads, for side-by-side frames on a machine without ASTC.
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash } from "../shared/codeStamp.mjs";
@@ -85,6 +84,7 @@ import {
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { textureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const run = promisify( execFile );
 
@@ -317,7 +317,7 @@ goes to (the published tree, or --out's private one). Nothing runs it
 alone: a miss goes through the pass's worker, which stores what it wrote.
 ================
 */
-export function textureVariantAction( publicPath, roots ) {
+function textureVariantAction( publicPath, roots ) {
 	return defineAction( {
 		name: `texture-variant:${publicPath}`,
 		inputRoot: roots.source,
@@ -432,7 +432,7 @@ export async function buildTextureVariants( flags = {} ) {
 					variantBytes += record.outputs[0].size;
 					continue;
 				}
-				const source = await readFile( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+				const source = await readFile( file ), digest = sha256Hex( source );
 				const texture = decodeNativeTexture( new Uint8Array( source ) );
 				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
 					unaligned++;

@@ -45,7 +45,6 @@ The exported pass also takes a publicRoot override for fixture trees
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -69,6 +68,7 @@ import {
 } from "../../../apps/client-next/src/engine/foundation/assets/native-texture.ts";
 import { hdTextureVariantPath } from "../../../apps/client-next/src/engine/foundation/assets/texture-variants.ts";
 import { compareText } from "../shared/textOrder.mjs";
+import { sha256Hex } from "../shared/hash.mjs";
 
 const run = promisify( execFile );
 
@@ -428,7 +428,7 @@ export async function buildHdTextureVariants( flags = {} ) {
 	};
 
 	for ( const [file, publicPath] of textures ) {
-		const source = readFileSync( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+		const source = readFileSync( file ), digest = sha256Hex( source );
 		const texture = decodeNativeTexture( new Uint8Array( source ) );
 		sourceBytes += source.length;
 		const width = texture.width * SCALE, height = texture.height * SCALE;

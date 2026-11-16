@@ -27,6 +27,7 @@ import {
 	runMipGenerator,
 	selectMipGenerator
 } from "./nativeMipGenerator.mjs";
+import { sha256Hex } from "./hash.mjs";
 
 const DDJ_HEADER = 20;
 const DDS_HEADER = 128;
@@ -271,7 +272,7 @@ export async function buildNativeCharacterTextures() {
 			if ( !source.toLowerCase().endsWith( ".ddj" ) ) continue;
 			const bytes = await fs.promises.readFile( source );
 			if ( !compressedSource( bytes ) ) continue;
-			const digest = createHash( "sha256" ).update( bytes ).digest( "hex" );
+			const digest = sha256Hex( bytes );
 			if ( seen.has( digest ) ) continue;
 			seen.add( digest );
 			const cached = cachedEntry( bytes );
