@@ -335,7 +335,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	//     sequential internally: the region bundles share Map_extracted image
 	//     targets, and the animated world objects step scans every
 	//     assets/world/<area>/region-*.json bundle written above it.
-	// The shared file-hash cache (.state/file-hash-cache.json) is only opened by
+	// The shared file-hash cache (buildStatePath( "file-hash-cache.json" )) is only opened by
 	// buildAssetPacks and buildWebAssetManifest, which stay strictly sequential in
 	// the tail below, so its whole-file save() can never interleave.
 	const interfaceImagesLane = async () => {

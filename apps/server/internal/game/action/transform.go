@@ -166,7 +166,7 @@ skill's cast broadcast is not sent, as for every item skill here.
 ==================
 */
 func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, ref *enterworld.ItemRef, rowIndex int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
-	skin := c.MissionInventory[rowIndex].TransformRefObjID
+	skin := c.MissionInventory[rowIndex].Data
 	source, ok := rt.deps.SkillData().(interface {
 		SkillByCodename(string) (enterworld.SkillRow, bool)
 	})

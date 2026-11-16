@@ -811,8 +811,12 @@ class Cap110MonstersTest(unittest.TestCase):
 			shard = (text_root / monsters.CHARACTER_SHARD).read_bytes().decode("utf-16")
 			self.assertIn("MOB_SD_FIELD", shard)
 			self.assertNotIn("MOB_SD_LOW", shard)
-			marker = json.loads((output / monsters.MARKER).read_text(encoding="utf-8"))
+			marker_text = (output / monsters.MARKER).read_text(encoding="utf-8")
+			marker = json.loads(marker_text)
 			self.assertEqual(marker["source"], "client")
+			# The marker is written in key order, so its bytes never follow
+			# the set order the claimed species arrive in.
+			self.assertEqual(marker_text, json.dumps(marker, indent=2, sort_keys=True) + "\n")
 			# The admitted species carries its own characterinfo height
 			# (the name board's anchor), cut to the native width.
 			effect = (text_root / "skilleffect.txt").read_bytes().decode("utf-16").splitlines()

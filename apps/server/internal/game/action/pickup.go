@@ -322,15 +322,15 @@ func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result Op
 	}
 
 	body := wire.ItemBody{
-		TradeOwner:        grantedItem.TradeOwner,
-		TypeFlags:         grantedItem.TypeFlags,
-		Quantity:          grantedItem.Quantity,
-		RefObjID:          grantedItem.RefObjID,
-		Plus:              grantedItem.Plus,
-		VarianceBits:      grantedItem.VarianceBits,
-		Durability:        grantedItem.Durability,
-		MagicOptions:      grantedItem.MagicOptions,
-		TransformRefObjID: grantedItem.TransformRefObjID, Summon: domain.CloneCOS(grantedItem.Summon),
+		TradeOwner:   grantedItem.TradeOwner,
+		TypeFlags:    grantedItem.TypeFlags,
+		Quantity:     grantedItem.Quantity,
+		RefObjID:     grantedItem.RefObjID,
+		Plus:         grantedItem.Plus,
+		VarianceBits: grantedItem.VarianceBits,
+		Durability:   grantedItem.Durability,
+		MagicOptions: grantedItem.MagicOptions,
+		Data:         grantedItem.Data, Summon: domain.CloneCOS(grantedItem.Summon),
 	}
 	// #2885: the grant leads with the granted item's reference rows, as
 	// the shared-recipient and COS receipts already do (#1612). The
@@ -386,18 +386,18 @@ notice links this same form, so its tooltip shows what the bag will hold.
 */
 func groundInventoryItem(g grounditem.Item, quantity uint16) inventory.Item {
 	return inventory.Item{
-		RecordID:          g.RecordID,
-		TradeOwner:        g.TradeOwner,
-		RefObjID:          g.RefObjID,
-		Codename:          g.Codename,
-		TypeFlags:         g.TypeFlags,
-		Plus:              g.Plus,
-		VarianceBits:      g.VarianceBits,
-		Durability:        g.Durability,
-		Quantity:          quantity,
-		MagicOptions:      g.MagicOptions,
-		TransformRefObjID: g.TransformRefObjID,
-		Summon:            domain.CloneCOS(g.Summon),
-		ForgeBound:        g.ForgeBound,
+		RecordID:     g.RecordID,
+		TradeOwner:   g.TradeOwner,
+		RefObjID:     g.RefObjID,
+		Codename:     g.Codename,
+		TypeFlags:    g.TypeFlags,
+		Plus:         g.Plus,
+		VarianceBits: g.VarianceBits,
+		Durability:   g.Durability,
+		Quantity:     quantity,
+		MagicOptions: g.MagicOptions,
+		Data:         g.Data,
+		Summon:       domain.CloneCOS(g.Summon),
+		ForgeBound:   g.ForgeBound,
 	}
 }

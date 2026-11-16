@@ -1193,8 +1193,10 @@ export function createGeometryResources(
 				if ( data.joints ) {
 					for ( const joint of data.joints ) jointMaximum = Math.max( jointMaximum, joint );
 				}
-				if ( data.clothStream && (!skinned || paletteOffsets || data.dynamicVertices) ) {
-					throw Error( "A cloth stream needs an owned skinned mesh" );
+				// The stream lives after the skin entries of the draw's own skin
+				// table; its palette may be the batch's shared one.
+				if ( data.clothStream && (!skinned || data.dynamicVertices) ) {
+					throw Error( "A cloth stream needs a skinned mesh" );
 				}
 				if ( data.joints && data.weights && data.bones ) {
 					if ( mesh && !clothBase ) skinBuffer = mesh.skin;

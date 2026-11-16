@@ -99,7 +99,7 @@ func TestMonsterMaskDropsTheEssenceAtTheRogue(t *testing.T) {
 		t.Fatalf("cast %x", cast.Payload)
 	}
 	drops := rt.CharacterGroundItems(testDivision, c)
-	if len(drops) != 1 || drops[0].Codename != "ITEM_ETC_TRANS_MONSTER" || drops[0].TransformRefObjID != corpse.Ref.RefObjID ||
+	if len(drops) != 1 || drops[0].Codename != "ITEM_ETC_TRANS_MONSTER" || drops[0].Data != corpse.Ref.RefObjID ||
 		drops[0].OwnerJID != enterworld.ObjectIDForCharacter(c) {
 		t.Fatalf("essence %+v", drops)
 	}
