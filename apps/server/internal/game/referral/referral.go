@@ -15,12 +15,12 @@ each one that has, in one transaction per referral. The sweep, not the
 level-up code, does this because a level-up runs inside its character's
 transaction, and a second store transaction there would nest.
 
-INFERENCE: the issue leaves the numbers to the owner. Until the owner sets
-them, the values below are proposals: level 30 is past the beginner zones
-(Jangan's first levels) and takes real play, so a fresh alt mints nothing;
-100 Silk to the inviter and 50 to the invited player are small next to an
-Item Mall price; ten paid invitations per inviter bound what a farm of
-real-but-shared accounts could earn.
+The numbers are the owner's (2026-11-16, #3518): 500 Silk to the inviter
+and 250 to the invited player once one invited character reaches level 30,
+for the first ten invitations of each inviter. Level 30 is past the
+beginner zones (Jangan's first levels) and takes real play, so a fresh alt
+mints nothing; the cap of ten bounds what a farm of real-but-shared
+accounts could earn.
 
 ===========================================================================
 */
@@ -43,9 +43,9 @@ const (
 	// QualifyingLevel is the level one invited character must reach.
 	QualifyingLevel = 30
 	// ReferrerSilk is the inviter's reward per qualified invitation.
-	ReferrerSilk = 100
+	ReferrerSilk = 500
 	// RefereeSilk is the invited account's gift when it qualifies.
-	RefereeSilk = 50
+	RefereeSilk = 250
 	// RewardCap is how many invitations pay the inviter; later ones still
 	// pay the invited player's gift.
 	RewardCap = 10

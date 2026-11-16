@@ -15,8 +15,8 @@ that is not hidden.
 | Rule                 | Value    | Constant          |
 | -------------------- | -------- | ----------------- |
 | Qualifying level     | 30       | `QualifyingLevel` |
-| Inviter reward       | 100 Silk | `ReferrerSilk`    |
-| Invited player gift  | 50 Silk  | `RefereeSilk`     |
+| Inviter reward       | 500 Silk | `ReferrerSilk`    |
+| Invited player gift  | 250 Silk | `RefereeSilk`     |
 | Paid invitations cap | 10       | `RewardCap`       |
 
 These are proposals until the owner sets them (#3518). The website reads them from the referral route and writes no
