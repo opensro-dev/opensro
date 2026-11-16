@@ -135,7 +135,11 @@ re-entry's character data lists the bag as it now stands.
 */
 func portalSpendItems(c *enterworld.Character, link portalLink) byte {
 	// The spend works on a copy and lands whole: a later condition that
-	// fails leaves the bag exactly as it was.
+	// fails leaves the bag exactly as it was. The native pass removes one
+	// slot at a time, so a failed second removal there keeps the first
+	// one spent. That failure cannot follow the check's own find (the
+	// slot was just found under the same lock), so the port refuses
+	// whole instead of keeping a partial spend.
 	spent := &enterworld.Character{MissionInventory: c.MissionInventory}
 	for _, condition := range link.conditions {
 		if condition.kind != portalConditionSpentItem {
