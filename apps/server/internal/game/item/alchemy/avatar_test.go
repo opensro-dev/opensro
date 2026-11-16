@@ -174,7 +174,14 @@ func TestLoadCatalogLoadsV188AvatarOptions(t *testing.T) {
 		}
 		rawAssign[part] = names
 	}
-	wantDress := append(slices.Clone(rawAssign[2]), enterworld.AvatarV188DressOptions()...)
+	// The v1.188 dress row order: Lucky x4 and Ignore Monster Defense x4
+	// each sit together, between INT and HR.
+	wantDress := []string{
+		"MATTR_AVATAR_STR", "MATTR_AVATAR_INT",
+		"MATTR_AVATAR_LUCK", "MATTR_AVATAR_LUCK_2", "MATTR_AVATAR_LUCK_3", "MATTR_AVATAR_LUCK_4",
+		"MATTR_AVATAR_MDIA", "MATTR_AVATAR_MDIA_2", "MATTR_AVATAR_MDIA_3", "MATTR_AVATAR_MDIA_4",
+		"MATTR_AVATAR_HR", "MATTR_AVATAR_HP", "MATTR_AVATAR_DRUA", "MATTR_AVATAR_HPRG",
+	}
 	if !slices.Equal(catalog.AvatarOptions[2], wantDress) {
 		t.Fatalf("dress options = %v, want %v", catalog.AvatarOptions[2], wantDress)
 	}

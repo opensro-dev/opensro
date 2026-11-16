@@ -260,7 +260,8 @@ rules.createSampler.push( geometry );
 for ( const name of [ "createBuffer", "writeBuffer", "createCommandEncoder", "finish", "submit" ] ) {
 	rules[name].push( geometryUploads );
 }
-rules.createBuffer.push( bufferSlabs );
+// A staged set (createStagedSlabs) uploads its mirrors' dirty spans itself.
+for ( const name of [ "createBuffer", "writeBuffer" ] ) rules[name].push( bufferSlabs );
 for (
 	const name of [
 		"createShaderModule",

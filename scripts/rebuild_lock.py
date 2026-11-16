@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Iterator
 
 
-from sro_paths import GENERATED_ROOT
+from sro_paths import GENERATED_ROOT, resolve_build_state_root
 
 
 REBUILD_ROOT = Path(__file__).resolve().parents[1]
@@ -688,8 +688,7 @@ def rebuild_lock_directory(name: str) -> Path:
 	root = LOCKS_ROOT
 	if name == GENERATED_ASSETS_LOCK_NAME:
 		# Beside the tree it guards, so SRO_GENERATED_ROOT and junctions agree with rebuildLock.mjs.
-		generated = GENERATED_ROOT.resolve()
-		root = generated.parent / ".state" / "locks"
+		root = resolve_build_state_root(GENERATED_ROOT.resolve()) / "locks"
 	return root / f"{name}.lock"
 
 

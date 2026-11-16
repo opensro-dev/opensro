@@ -42,6 +42,7 @@ import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
 import { PUBLISH_FAMILIES, REFRESH_FAMILIES } from "../../tasks/assets.mjs";
 import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
 import { listFiles } from "./fsUtils.mjs";
+import { compareText } from "./textOrder.mjs";
 
 const LEDGER_FORMAT = "sro-publication-ledger";
 const LEDGER_VERSION = 1;
@@ -529,7 +530,7 @@ export async function auditClaims( groups, options = {} ) {
 			owners: [ ...status.owners ].filter( ( [, files] ) => files.has( key ) ).map( ( [owner] ) => owner )
 		} );
 	}
-	missingClaimed.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	missingClaimed.sort( ( left, right ) => compareText( left.path, right.path ) );
 	const suspectNames = [ ...onDisk.values() ]
 		.filter( publicPath => /[^\x00-\x7F]/.test( publicPath ) && !isClaimed( publicPath, status.claimed ) )
 		.sort()
@@ -629,7 +630,7 @@ export async function indexClaimReport( index ) {
 		if ( isClaimed( spelling, indexPaths ) ) continue;
 		missingClaimed.push( spelling );
 	}
-	missingClaimed.sort( ( left, right ) => left.localeCompare( right ) );
+	missingClaimed.sort( ( left, right ) => compareText( left, right ) );
 	return {
 		missingOwners: status.missingOwners,
 		retiredOwners: status.retiredOwners,
