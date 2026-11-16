@@ -281,9 +281,11 @@ export const reachabilityRecipes: readonly ExtendedRecipe[] = [
 		source: "tests/runtime/guild-war.test.mjs ended result (214)",
 		controls: [ "war-result-close" ],
 		open( context ) {
+			// The result names the opponent: social-guild-union.ts takes it from
+			// the ended war's row, never from our own guild ("Review Guild").
 			context.state.gameplay.social.warResult = {
 				key: "UIIT_MSG_GUILDWAR_WINERGUILD",
-				names: [ "Review Guild" ],
+				names: [ "Blue" ],
 				sequence: 1
 			};
 		}

@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + `
+const dbSchema = mallAccountsSchema + marketSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + economyBucketSchema + referralSchema + nameReservationsSchema + silkHistorySchema + tradeHistorySchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
