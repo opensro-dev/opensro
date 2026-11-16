@@ -230,6 +230,56 @@ test("two animated-material models on one owner id step one row without throwing
 	assert.throws( () => strict.step( [ body, copy ], 0, () => model ), /Duplicate material instance owner/ );
 });
 
+test("material clocks charge each model's own clock bytes, and a model replaced under its path never reads the old one's", async () => {
+	const { createModelMaterialClocks } = await load( "src/engine/foundation/animation/model-material-clock.ts" );
+	const { characterMaterialClockBytes } = await load( "src/engine/foundation/animation/character-budget.ts" );
+	const colors = count => Array.from( { length: count }, ( _, i ) => ({ time: i * 100, value: [ 1, 0, 0, 1 ] }) );
+	// A colour timeline and texture motion: clocked, 128 + 2 x 40 + 128 bytes.
+	const clocked = {
+		primitives: [ {
+			geometry: {
+				material: {
+					color: [ 1, 1, 1, 1 ],
+					colorTimeline: { duration: 1000, mode: 2, flags: 2, colors: colors( 2 ) },
+					uvVelocity: [ 0, 0, 0, 0, 1, 0 ]
+				}
+			}
+		} ]
+	};
+	// Charged modifier rows of kind 2 only: bytes reserved, no clock runs.
+	const unclocked = count => ({
+		primitives: [ {
+			modifierSource: {
+				modifiers: { materialModifiers: [ { kind: 2, colors: colors( count ) } ], textureModifiers: [] }
+			},
+			geometry: {}
+		} ]
+	});
+	const plain = unclocked( 3 ), replacement = unclocked( 5 );
+	const body = { gid: 1, model: "body" }, prop = { gid: 2, model: "prop" };
+	const owner = createModelMaterialClocks( true );
+	let paths = { body: clocked, prop: plain };
+	const lookup = path => paths[path];
+	owner.step( [ body, prop ], 0, lookup );
+	owner.step( [ body, prop ], .5, lookup );
+	assert.equal( owner.bytes(), characterMaterialClockBytes( clocked ) + characterMaterialClockBytes( plain ) );
+	assert.equal( owner.bytes(), 336 + 248 );
+	assert.ok( owner.get( body )?.[0]?.color, "the clocked model runs its timeline" );
+	assert.equal( owner.get( prop ), undefined, "a model without clocked primitives owns no row" );
+	// The same path now resolves to another model: its charge and its
+	// (absent) clocks are its own, not the first model's.
+	paths = { body: replacement, prop: plain };
+	owner.step( [ body, prop ], 1, lookup );
+	assert.equal( owner.bytes(), characterMaterialClockBytes( replacement ) + characterMaterialClockBytes( plain ) );
+	assert.equal( owner.bytes(), 328 + 248 );
+	assert.equal( owner.get( body ), undefined );
+	// And back: the clocked model is charged and stepped again.
+	paths = { body: clocked, prop: plain };
+	owner.step( [ body, prop ], 1.5, lookup );
+	assert.equal( owner.bytes(), 336 + 248 );
+	assert.ok( owner.get( body )?.[0]?.color );
+});
+
 test("production animation material queue retains clocks through blends, applies LOD, and restores the base pipeline", () => {
 	const base = { color: [ 1, 1, 1, 1 ], ambient: [ 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true };
 	const make = ( state, colors ) => ({
