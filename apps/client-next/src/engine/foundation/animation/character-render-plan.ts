@@ -15,7 +15,8 @@ import {
 	characterPoseBytes,
 	characterBatchBytes,
 	characterMeshBytes,
-	characterSharedMesh
+	characterSharedMesh,
+	characterSharedPalette
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
 import { createParticleGraphPlan } from "@/engine/foundation/animation/particle-graph-plan";
@@ -88,9 +89,7 @@ export function createCharacterRenderPlan( model: CharacterModel, timelines?: Cl
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.
 		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
-		sharedPalette: !model.primitives.some( p =>
-			p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
-		),
+		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
 			0
