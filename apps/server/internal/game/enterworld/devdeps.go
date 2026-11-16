@@ -175,6 +175,17 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			return nil, fmt.Errorf("bootstrap: invalid NPC roster: %w", err)
 		}
 	}
+	// Port-only, not native: a seasonal look (So-Ok's Christmas Gift's
+	// Santa So-Ok) dresses its NPC for its window. A reference the data
+	// does not ship dresses nothing and the boot log says so.
+	if look := npcSpawns.Look; look != nil {
+		ref, ok := simulation.LoadNpcLookRef(textdataDir, look.LookCodename)
+		if !ok {
+			log.Warnf("bootstrap: seasonal look %s is not an enabled NPC reference under %s; %s keeps its own look", look.LookCodename, textdataDir, look.Codename)
+		} else {
+			npcSpawns.Looks = simulation.NewNpcLookRosters(npcSpawns.Roster, simulation.NpcLook{Codename: look.Codename, Look: ref, StartsAt: look.StartsAt, EndsAt: look.EndsAt})
+		}
+	}
 
 	// Monster population (monster-live wave), ON BY DEFAULT (human
 	// ruling seq388; MISSION_SPAWN_MONSTERS=0 is the kill switch). The

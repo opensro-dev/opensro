@@ -74,8 +74,9 @@ function fixture() {
 		e => {
 			throw e;
 		},
-		// One geometry pipeline per state.
-		() => ({
+		// One geometry pipeline per state; it says whether it is the row-state variant.
+		( state, surface, rowStates ) => ({
+			rowStates: !!rowStates,
 			getBindGroupLayout() {
 				return {};
 			}
@@ -339,4 +340,124 @@ test("only immutable skinned primitives are charged as shared meshes", async () 
 		characterBatchBytes( model( cloth ), 1 ) - characterBatchBytes( model( skinned ), 1 ),
 		3 * 92 + 3 * 32 * 2
 	);
+});
+
+test("glow wearers without cloth share one batch whose row states hold each actor's one-row glow", () => {
+	const merged = fixture(), reference = fixture();
+	const mergedOwner = createCharacters(), referenceOwner = createCharacters();
+	const glow = {
+		threshold: 1,
+		image: 0,
+		uv: [ .5, -.25 ],
+		color1: [ 1, .5, 0 ],
+		color2: [ 0, .25, 1 ],
+		period: 700,
+		gain: 2,
+		alphaTest: true
+	};
+	const body = { name: "body", node: 0, image: -1, joints: [ 0 ], inverseBind: I(), geometry: geometry() };
+	const model = {
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		images: [],
+		clips: [ {
+			name: "move",
+			duration: 1,
+			channels: [ {
+				node: 0,
+				path: "translation",
+				interpolation: "LINEAR",
+				times: Float32Array.of( 0, 1 ),
+				values: Float32Array.of( 0, 0, 0, 1, 2, 3 )
+			} ]
+		} ],
+		primitives: [ body, { ...body, name: "weapon", inverseBind: I(), geometry: geometry(), equipmentGlow: glow } ]
+	};
+	// Frame order is not gid order: a merged batch keeps frame order.
+	const gids = [ 3, 1, 4, 2 ];
+	mergedOwner.model( "m", model, [] );
+	// The reference: today's one-row batches, one model an actor.
+	for ( const gid of gids ) referenceOwner.model( "r" + gid, model, [] );
+	const floats = ( draw, n ) => Array.from( bound( draw, n ) );
+	// The material without the five glow floats.
+	const rest = values => values.filter( ( _, i ) => ![ 48, 49, 50, 52, 53 ].includes( i ) );
+	const rowStates = draw => draw.binding.find( entry => entry.binding === 16 );
+	const merges = new Set(), lit = ( frame, i ) => frame >= 8 || (frame + i) % 3 !== 0;
+	for ( let frame = 0; frame < 12; frame++ ) {
+		const rows = name =>
+			gids.map( ( gid, i ) => ({
+				gid,
+				model: name( gid ),
+				clip: "move",
+				time: (frame + i) / 10,
+				loop: true,
+				scale: 1,
+				// The glow's level-of-detail bit flips per actor across frames,
+				// then every actor draws its glow.
+				animationLod: { fraction: lit( frame, i ) ? 0 : .75, crowded: false },
+				pose: { regionId: 257, x: i, y: 0, z: 10, yaw: 0 }
+			}) );
+		mergedOwner.actors( rows( () => "m" ) );
+		referenceOwner.actors( rows( gid => "r" + gid ) );
+		const actual = mergedOwner.prepare( merged.resources.commands, {}, 257, undefined, false, frame * .05 ),
+			expected = referenceOwner.prepare( reference.resources.commands, {}, 257, undefined, false, frame * .05 );
+		merged.resources.flushMaterials();
+		reference.resources.flushMaterials();
+		assert.equal( expected.length, gids.length * 2 );
+		// Each merged batch is the actors with one glow bit, in frame order.
+		const batches = [];
+		for ( let i = 0; i < gids.length; i++ ) {
+			const batch = batches.find( b => b.lit === lit( frame, i ) );
+			if ( batch ) batch.actors.push( i );
+			else batches.push( { lit: lit( frame, i ), actors: [ i ] } );
+		}
+		assert.equal( actual.length, batches.length * 2, `frame ${frame}` );
+		batches.forEach( ( batch, b ) => {
+			batch.actors.forEach( ( actor, row ) => {
+				for ( let p = 0; p < 2; p++ ) {
+					const draw = actual[b * 2 + p], one = expected[actor * 2 + p];
+					assert.equal( draw.instanceCount, batch.actors.length );
+					const instance = floats( draw, 1 ).slice( row * 40, row * 40 + 40 ),
+						oneInstance = floats( one, 1 ).slice( 0, 40 );
+					// Every instance float but the palette offset, and the palette it names.
+					assert.deepEqual(
+						instance.filter( ( _, i ) => i !== 17 ),
+						oneInstance.filter( ( _, i ) => i !== 17 )
+					);
+					const palette = new Float32Array( binding( draw, 7 ).bytes.buffer ),
+						onePalette = new Float32Array( binding( one, 7 ).bytes.buffer );
+					assert.deepEqual(
+						palette.slice( instance[17] * 16, instance[17] * 16 + 16 ),
+						onePalette.slice( oneInstance[17] * 16, oneInstance[17] * 16 + 16 )
+					);
+					const material = floats( draw, 2 ),
+						oneMaterial = floats( one, 2 ),
+						at = `frame ${frame} gid ${gids[actor]} part ${p}`;
+					// The reference is the plain shader with no row-state binding.
+					assert.equal( one.pipeline.rowStates, false );
+					assert.equal( rowStates( one ), undefined );
+					if ( p === 0 || batch.actors.length === 1 ) {
+						// A part without glow, or a one-row batch: today's draw.
+						assert.equal( draw.pipeline.rowStates, false );
+						assert.equal( rowStates( draw ), undefined );
+						assert.deepEqual( material, oneMaterial, at );
+						continue;
+					}
+					merges.add( batch.actors.length );
+					assert.equal( draw.pipeline.rowStates, true, "the glow is read from the row states" );
+					assert.deepEqual( rest( material ), rest( oneMaterial ), at );
+					const state = floats( draw, 16 ).slice( row * 8, row * 8 + 8 );
+					assert.deepEqual(
+						[ ...state.slice( 0, 3 ), ...state.slice( 4, 6 ) ],
+						[ ...oneMaterial.slice( 48, 51 ), ...oneMaterial.slice( 52, 54 ) ],
+						at
+					);
+				}
+			} );
+		} );
+	}
+	assert.deepEqual( [ ...merges ].sort(), [ 2, 3, 4 ], "batches of two, three and four rows were compared" );
+	mergedOwner.dispose( merged.resources.commands, null );
+	referenceOwner.dispose( reference.resources.commands, null );
+	merged.resources.dispose();
+	reference.resources.dispose();
 });

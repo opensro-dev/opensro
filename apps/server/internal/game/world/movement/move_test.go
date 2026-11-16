@@ -403,7 +403,9 @@ TestMoveThenTickBroadcastsLivePosition
 TestMoveThenTickBroadcastsLivePosition is the proof chain the resume
 brief asks for: client 0x7738 -> WorldState mover updated -> the tick
 broadcasts the mover's interpolated 0x30E3 (never the goal) and settles
-with one 0xB2F5.
+with one 0xB2F5. Both are the port-only position stream
+(simulation/position_stream.go); the native fan-out is pinned in
+simulation's peer movement tests.
 ================
 */
 func TestMoveThenTickBroadcastsLivePosition(t *testing.T) {
@@ -430,6 +432,7 @@ func TestMoveThenTickBroadcastsLivePosition(t *testing.T) {
 	source := &staticSource{snapshots: []simulation.SessionSnapshot{snapshot, viewer}}
 	push := &recordingPusher{}
 	ticker := simulation.NewTicker(source, push)
+	ticker.PositionStream = true
 
 	probeMs := testStartMs + 1000 // mid-flight of the 4000ms segment
 	ticker.RunTick(probeMs)

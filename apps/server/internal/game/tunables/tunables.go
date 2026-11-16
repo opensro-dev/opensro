@@ -33,6 +33,10 @@ import (
 	"sync/atomic"
 )
 
+// StablePurifyChanceNative is the stable purify timer's 0x32 (rand % 101 at
+// most it yields a Stable Filth), StablePurifyChance's native default.
+const StablePurifyChanceNative = 50
+
 // Kind is how a tunable's environment value is read.
 type Kind uint8
 
@@ -67,6 +71,7 @@ const (
 	MostWantedNoticesPerMinute = "most_wanted_notices_per_minute"
 	JobKillRepeatMinutes       = "job_kill_repeat_minutes"
 	SoxNoticeMinDegree         = "sox_notice_min_degree"
+	StablePurifyChance         = "stable_purify_chance"
 	ShortNoticeShowMs          = "short_notice_show_ms"
 	ShortNoticeFadeMs          = "short_notice_fade_ms"
 	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
@@ -153,6 +158,11 @@ var Registry = []Setting{
 	{Key: SoxNoticeMinDegree, Env: "SRO_SOX_NOTICE_MIN_DEGREE", Kind: Int, Default: 6, Min: 1, Max: 12,
 		Step: 1, Class: Live, Group: "Notices", Label: "Seal-drop notice minimum degree", Unit: "degree",
 		Help: "Lowest equipment degree a seal drop announces (1 announces every degree)."},
+	// Default is the native 0x32 of the stable's purify timer (rand % 101
+	// at most the chance yields a Stable Filth); quest/gather.go reads it.
+	{Key: StablePurifyChance, Env: "SRO_STABLE_PURIFY_CHANCE", Kind: Int, Default: StablePurifyChanceNative, Min: 0, Max: 100,
+		Step: 1, Class: Live, Group: "Quests", Label: "Stable purify chance", Unit: "of 101",
+		Help: "A holy water purification at the Sunset Witch's stable (QNO_EU_EASTEU_1) yields a Stable Filth when rand % 101 is at most this; 50 is native, 100 always succeeds."},
 	{Key: SookCheckpointSeconds, Env: "SRO_SOOK_CHECKPOINT_SECONDS", Kind: Int, Default: 300, Min: 30, Max: 300,
 		Step: 1, Class: Live, Group: "Survival Arena", Label: "Checkpoint interval", Unit: "seconds",
 		Help: "Seconds of spawning between checkpoint chests, read when a run starts; also sets each wave's budget. 30 is for accelerated testing."},

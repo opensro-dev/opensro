@@ -42,10 +42,19 @@ type ChristmasEvent struct {
 /*
 ================
 ChristmasEventFromEnv
+
+The winter event (#3603) runs only in its own mode: SRO_CHRISTMAS_EVENT_MODE
+unset or "winter", the posture every shard had before the mode existed.
+In any other mode it is off, so two Christmas events never share a window
+(christmas_mode.go).
 ================
 */
 func ChristmasEventFromEnv() ChristmasEvent {
-	return ChristmasEvent{seasonalEventFromEnv(EnvChristmasEvent, EnvChristmasEventWindow)}
+	event := seasonalEventFromEnv(EnvChristmasEvent, EnvChristmasEventWindow)
+	if ChristmasModeFromEnv() != ChristmasModeWinter {
+		event.enabled = false
+	}
+	return ChristmasEvent{event}
 }
 
 /*

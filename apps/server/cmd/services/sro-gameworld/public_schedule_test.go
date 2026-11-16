@@ -91,6 +91,14 @@ func TestPublicScheduleListsTheDailyFlagWar(t *testing.T) {
 		t.Fatalf("five minutes in: matches %+v, want today's running and tomorrow's", matches)
 	}
 
+	// A start the scheduler cancelled is not a running match (#3706):
+	// five minutes in, only tomorrow's match is listed.
+	cancelled := scheduleSources{flagWar: settings, flagWarCancelled: func(at time.Time) bool { return at.Equal(start) }}
+	matches = eventsOfKind(publicSchedule(cancelled, start.Add(5*time.Minute)), publicstats.ScheduleKindFlagWar)
+	if len(matches) != 1 || matches[0].Running || !matches[0].Start.Equal(start.AddDate(0, 0, 1)) {
+		t.Fatalf("cancelled start, five minutes in: matches %+v, want only tomorrow's", matches)
+	}
+
 	if events := publicSchedule(scheduleSources{flagWarOff: true}, start); len(events) != 0 {
 		t.Fatalf("no runtime listed %+v", events)
 	}
