@@ -23217,7 +23217,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"%s",
 							() => inviter?.guildName ?? ""
 						) :
-						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s] has" ).replace(
 							"%s",
 							() => inviter?.name ?? ""
 						),

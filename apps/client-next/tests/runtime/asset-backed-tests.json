@@ -111,6 +111,7 @@
 		"particle-ribbon.test.mjs",
 		"particle-tick-digest.test.mjs",
 		"party-matching-ui.test.mjs",
+		"party-message-text.test.mjs",
 		"penguin-blizzard.test.mjs",
 		"penguin-effects.test.mjs",
 		"pet-info-layout.test.mjs",
