@@ -10,6 +10,7 @@ import { fileHashCacheDisabled, openFileHashCache } from "./shared/fileHashCache
 import { listFiles } from "./shared/fsUtils.mjs";
 import { sha256Hex } from "./shared/hash.mjs";
 import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -76,7 +77,7 @@ export async function buildWebAssetManifest() {
 	}) );
 	await hashCache.save();
 
-	manifestFiles.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	manifestFiles.sort( ( left, right ) => compareText( left.path, right.path ) );
 
 	const version = launcherManifest.version?.value ?? launcherManifest.version?.displayText ?? "unknown";
 	const manifestHash = computeWebManifestHash( version, manifestFiles );

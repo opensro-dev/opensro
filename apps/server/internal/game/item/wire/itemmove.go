@@ -53,8 +53,8 @@ type ItemBody struct {
 	// MagicOptions are the encoded magic-option u64 params (reinforce-leg
 	// shape: low u16 = magicoption.txt param id, high u32 = magnitude).
 	// The count byte is derived from the length.
-	MagicOptions      []uint64
-	TransformRefObjID uint32 // monster capsule Data
+	MagicOptions []uint64
+	Data         uint32 // item record data word (+0x38): capsule monster, Spirit clock
 }
 
 // EncodedSize is the body's variable wire length.
@@ -108,7 +108,7 @@ func (b ItemBody) Encode() []byte {
 	}
 	w := NewWriter(b.EncodedSize()).U32(b.RefObjID)
 	if IsMonsterCapsule(b.TypeFlags) {
-		return w.U32(b.TransformRefObjID).Payload()
+		return w.U32(b.Data).Payload()
 	}
 	if IsCosSummoner(b.TypeFlags) {
 		body, err := encodeCosSummoner(b.TypeFlags, b.Summon)
@@ -171,7 +171,7 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 	out.RefObjID = refObjID
 	if IsMonsterCapsule(typeFlags) {
 		out.Quantity = 1
-		out.TransformRefObjID, err = r.U32()
+		out.Data, err = r.U32()
 		return out, err
 	}
 	if IsCosSummoner(typeFlags) {

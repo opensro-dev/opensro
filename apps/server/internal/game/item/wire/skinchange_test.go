@@ -45,7 +45,7 @@ func TestSkinChangeBody(t *testing.T) {
 // own tail - the mask's monster, a pet summoner's record byte - never the
 // 18-byte equipment body the reference server serializes.
 func TestBand40ItemBodies(t *testing.T) {
-	capsule := ItemBody{RefObjID: 10364, TypeFlags: PackTypeFlags(3, 2, 2, 0), TransformRefObjID: 1933}
+	capsule := ItemBody{RefObjID: 10364, TypeFlags: PackTypeFlags(3, 2, 2, 0), Data: 1933}
 	summoner := ItemBody{RefObjID: 2000, TypeFlags: PackTypeFlags(3, 2, 1, 1), Plus: 7, Durability: 9}
 	for _, tc := range []struct {
 		body ItemBody
@@ -59,7 +59,7 @@ func TestBand40ItemBodies(t *testing.T) {
 			t.Fatalf("%#x body %x (size %d), want %x", tc.body.TypeFlags, got, tc.body.EncodedSize(), tc.want)
 		}
 		back, err := readItemBody(NewReader(got), tc.body.TypeFlags)
-		if err != nil || back.RefObjID != tc.body.RefObjID || back.TransformRefObjID != tc.body.TransformRefObjID {
+		if err != nil || back.RefObjID != tc.body.RefObjID || back.Data != tc.body.Data {
 			t.Fatalf("%#x read back %+v %v", tc.body.TypeFlags, back, err)
 		}
 	}

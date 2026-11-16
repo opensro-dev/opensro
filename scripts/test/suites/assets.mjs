@@ -17,6 +17,7 @@ export default {
 		"scripts/test/assets/petItemIcons.test.mjs",
 		"scripts/test/assets/survivalBuffIcons.test.mjs",
 		"scripts/test/assets/petLootCollar.test.mjs",
+		"scripts/test/assets/crowEgg.test.mjs",
 		"scripts/test/assets/portItemRows.test.mjs",
 		"scripts/test/assets/meshCloth.test.mjs",
 		"scripts/test/assets/unboundCharacterVertices.test.mjs",
@@ -29,6 +30,7 @@ export default {
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",
 		"scripts/test/assets/nativeLensResources.test.mjs",
+		"scripts/test/assets/nativeMipGenerator.test.mjs",
 		"scripts/test/assets/skyImagePublication.test.mjs",
 		"scripts/test/assets/nativeCharacterTextures.test.mjs",
 		"scripts/test/assets/moonlitThiefSuit.test.mjs",
@@ -62,6 +64,7 @@ export default {
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/qinshiTombOverlay.test.mjs",
 		"scripts/test/assets/muhanOverlay.test.mjs",
+		"scripts/test/assets/janganTombTeleport.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
 		"scripts/test/assets/npcAnimationContactMarkers.test.mjs",
@@ -91,6 +94,7 @@ export default {
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
 		"scripts/test/assets/terrainBlockTextures.test.mjs",
 		"scripts/test/assets/objectTextureLevels.test.mjs",
-		"scripts/test/assets/hdTextureVariants.test.mjs"
+		"scripts/test/assets/hdTextureVariants.test.mjs",
+		"scripts/test/assets/textureVariantMasks.test.mjs"
 	]
 };

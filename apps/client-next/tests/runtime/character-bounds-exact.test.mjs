@@ -16,7 +16,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
-const { characterRadius } = await import( "../../src/engine/foundation/animation/character-bounds.ts" );
+const { characterRadius, createCharacterBoundsCache } = await import(
+	"../../src/engine/foundation/animation/character-bounds.ts"
+);
+const { characterBindBounds } = await import( "../../src/engine/foundation/animation/character-pick-volume.ts" );
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { geometryVertex } = await import( "../../src/engine/foundation/rendering/picking.ts" );
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
@@ -123,17 +126,21 @@ test("joint-local bound does not count the bind offset twice", () => {
 	assert.ok( radius >= 101 && radius < 101.01, `radius ${radius}` );
 });
 
-test("published Mangnyang envelope contains every skinned vertex across every clip", async () => {
+/*
+================
+publishedMangnyang
+================
+*/
+async function publishedMangnyang() {
 	const { createModelDecoder } = await import( "../../src/engine/runtime/assets/worker/model/model.ts" ),
 		decoder = createModelDecoder();
-	const model = decoder.character(
-		decoder.decode(
-			readPublishedAssetBytesSync(
-				"/assets/npc/mob/china/mangnyang.glb",
-				CLIENT_PUBLIC_ROOT
-			)
-		)
+	return decoder.character(
+		decoder.decode( readPublishedAssetBytesSync( "/assets/npc/mob/china/mangnyang.glb", CLIENT_PUBLIC_ROOT ) )
 	);
+}
+
+test("published Mangnyang envelope contains every skinned vertex across every clip", async () => {
+	const model = await publishedMangnyang();
 	const radius = characterRadius( model ), pose = createCharacterPose( model );
 	let checked = 0;
 	for ( const clip of model.clips ) {
@@ -154,4 +161,24 @@ test("published Mangnyang envelope contains every skinned vertex across every cl
 	}
 	assert.ok( checked > 10000 );
 	assert.ok( radius < 93, "fixture must tighten the former 93.92-unit bound" );
+});
+
+test("a shared bounds cache gives the uncached radius across a clip admission", async () => {
+	// The renderer admits a clip by replacing each assembly's model with the
+	// same clip objects plus one; the cache keeps each channel's key maximum.
+	const model = await publishedMangnyang(), cache = createCharacterBoundsCache();
+	assert.ok( model.clips.length > 1 );
+	const before = { ...model, clips: model.clips.slice( 0, -1 ) };
+	assert.ok( Object.is( characterRadius( before, cache ), characterRadius( before ) ) );
+	const assembly = { ...model, nodes: [ ...model.nodes ] };
+	assert.ok( Object.is( characterRadius( model, cache ), characterRadius( model ) ) );
+	assert.ok( Object.is( characterRadius( assembly, cache ), characterRadius( assembly ) ) );
+});
+
+test("clip-less bind bounds equal the bind bounds of the model with its clips", async () => {
+	// The renderer caches bind bounds across clip admissions, which only holds
+	// while the rest pose reads no clip.
+	const model = await publishedMangnyang();
+	assert.ok( model.clips.length > 0 );
+	assert.deepEqual( characterBindBounds( { ...model, clips: [] } ), characterBindBounds( model ) );
 });
