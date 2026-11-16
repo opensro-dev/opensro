@@ -33,25 +33,13 @@ export function presentableCursor(
 
 /*
 ================
-preloadCursors
+cursorPreloadUrls
 
-Fetches and decodes every world cursor at once (retail loads them all
-when its cursor manager starts) and calls loaded for each as it is
-ready. load is injected for tests; the page uses decodedImage.
+Every world cursor with its image URL, in worldCursors order: the
+set the cursor owner fetches and decodes when it starts (retail loads
+them all when its cursor manager starts).
 ================
 */
-export function preloadCursors(
-	load: ( url: string ) => Promise<unknown>,
-	loaded: ( value: WorldCursor ) => void
-): Promise<void> {
-	return Promise.all(
-		worldCursors().map( value =>
-			load( cursorAssetUrl( value ) ).then( () => loaded( value ), () => {
-				// A cursor whose image failed still has to stand when asked
-				// for: let the rule name it, so the browser retries the fetch
-				// and draws its fallback meanwhile, as before this preload.
-				loaded( value );
-			} )
-		)
-	).then( () => undefined );
+export function cursorPreloadUrls(): readonly (readonly [WorldCursor, string])[] {
+	return worldCursors().map( value => [ value, cursorAssetUrl( value ) ] as const );
 }

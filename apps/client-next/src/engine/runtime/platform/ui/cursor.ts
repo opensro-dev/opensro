@@ -26,7 +26,7 @@ not ready: the glyph already shown stays until it is.
 ===========================================================================
 */
 import { cursorAssetUrl } from "@/engine/foundation/assets/native-assets";
-import { presentableCursor, preloadCursors } from "@/engine/foundation/ui/cursor-preload";
+import { cursorPreloadUrls, presentableCursor } from "@/engine/foundation/ui/cursor-preload";
 import type { WorldCursor } from "@/engine/foundation/ui/world-cursor";
 
 const DEFAULT_CURSOR: WorldCursor = 0x95;
@@ -75,22 +75,9 @@ function cursorRule( value: WorldCursor ): string {
 		`html[data-sro-cursor-mode="editing"],html[data-sro-cursor-mode="editing"] *{cursor:none!important}`;
 }
 
-/*
-================
-decodedImage
-
-Loads and decodes one cursor image and keeps the element alive for the
-page's life: a held image keeps its resource in the memory cache that
-the CSS cursor rule reads, so the rule finds it already decoded.
-================
-*/
+// The decoded cursor images, held for the page's life: a held image
+// keeps its resource in the memory cache the CSS cursor rule reads.
 const heldCursorImages: HTMLImageElement[] = [];
-function decodedImage( url: string ): Promise<unknown> {
-	const image = new Image();
-	heldCursorImages.push( image );
-	image.src = url;
-	return image.decode();
-}
 
 /*
 ================
@@ -224,11 +211,20 @@ export function createCursor() {
 	// The default glyph's rule stands from the start (the browser fetches
 	// it with the page); the others wait for their images.
 	ready.add( DEFAULT_CURSOR );
-	void preloadCursors( decodedImage, value => {
-		if ( lifetime.signal.aborted ) return;
-		ready.add( value );
-		world();
-	} );
+	for ( const [value, url] of cursorPreloadUrls() ) {
+		const image = new Image();
+		heldCursorImages.push( image );
+		image.src = url;
+		// A cursor whose image failed still has to stand when asked for:
+		// the rule names it, the browser retries and draws its fallback
+		// meanwhile, as before this preload.
+		const admit = () => {
+			if ( lifetime.signal.aborted ) return;
+			ready.add( value );
+			world();
+		};
+		image.decode().then( admit, admit );
+	}
 	return {
 		world( value: WorldCursor ) {
 			worldCursor = value;
