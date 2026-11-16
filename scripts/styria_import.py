@@ -137,7 +137,7 @@ def add_styria(native, out, v1696_root=None):
 		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
 	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
-	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
+	require_v1696_pin(v1696_root, later_world_import.MERGE_ARCHIVES)
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 		regions = arena_regions(tables.table_rows(tables.table_text(media, index, "regioncode.txt")))
