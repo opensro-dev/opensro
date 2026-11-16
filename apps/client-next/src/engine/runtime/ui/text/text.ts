@@ -181,7 +181,8 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 				style.fontStyle,
 				style.hAlign,
 				style.vAlign,
-				style.overflow
+				style.overflow,
+				style.label
 			].join( "|" );
 			let cached = layouts.get( key );
 			if ( cached !== undefined ) {
@@ -241,7 +242,8 @@ again from the caller's own rectangle with layoutGlyphs' expression (a
 difference taken in local coordinates rounds its last bit differently):
 the caller's clip itself when the text avoids overlap, else its
 intersection with the box. The shortened variant is always clipped to the
-intersection. The layout box is the caller's own rectangle.
+intersection; the wrapped one keeps the caller's clip, as its lines stay
+inside the box's columns. The layout box is the caller's own rectangle.
 ================
 */
 function shiftRun(
@@ -268,12 +270,14 @@ function shiftRun(
 	});
 	const shifted = moved( run, overflow === "avoid-overlap" ? clip : bounded );
 	if ( !run.textLayout ) return Object.freeze( shifted );
-	const fitted = run.textLayout.fitted;
+	const { fitted, wrapped } = run.textLayout;
 	return Object.freeze( {
 		...shifted,
 		textLayout: {
 			box,
-			fitted: fitted ? Object.freeze( moved( fitted, bounded ) ) : fitted
+			fitted: fitted ? Object.freeze( moved( fitted, bounded ) ) : fitted,
+			...(wrapped ? { wrapped: Object.freeze( moved( wrapped, clip ) ) } : {}),
+			...(run.textLayout.label ? { label: true } : {})
 		}
 	} );
 }
@@ -314,7 +318,8 @@ function freezePlacement( quad: UiQuad ): UiQuad {
 		textLayout: Object.freeze( {
 			...layout,
 			box: Object.freeze( [ ...layout.box ] ) as UiRect,
-			fitted: layout.fitted ? freezePlacement( layout.fitted ) : layout.fitted
+			fitted: layout.fitted ? freezePlacement( layout.fitted ) : layout.fitted,
+			...(layout.wrapped ? { wrapped: freezePlacement( layout.wrapped ) } : {})
 		} )
 	} );
 }
