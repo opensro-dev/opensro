@@ -368,16 +368,28 @@ test("the merchant, stall and Item Mall labels stay inside their art (#3728)", a
 	);
 	assert.ok( lineNamed( await openRecipe( "breadth:merchant", false ), "Repurchase" ).rect[0] < frame[0] );
 
-	// Stall: the selected tab's bold "Items to sell" reached the 80-pixel
-	// tab's bevel; on, it reads in the regular weight inside it.
-	const stall = fit =>
-		openRecipe( "seeded", fit, state => {
+	// Tabs: Magic Pang's selected "Equipment" (69 pixels bold) ran past
+	// both edges of its 60-pixel tab; on, it reads in the narrow face
+	// inside it. The stall's "Items to sell" only nears its 80-pixel tab's
+	// edges and keeps the native bold, on and off.
+	const pang = await openRecipe( "opener:Magic Pang", true ), equipment = lineNamed( pang, "Equipment" );
+	const pangTab = pang.find( q =>
+		String( q.texture?.src ?? q.texture ).endsWith( "com_tab_on.png" ) &&
+		q.rect[0] < equipment.rect[2] && q.rect[0] + q.rect[2] > equipment.rect[0] &&
+		q.rect[1] < equipment.rect[3] && q.rect[1] + q.rect[3] > equipment.rect[1]
+	).rect;
+	assert.ok(
+		equipment.rect[0] >= pangTab[0] && equipment.rect[2] <= pangTab[0] + pangTab[2],
+		`${equipment.rect} on ${pangTab}`
+	);
+	// Off keeps the bold face (glyphs this file's map does not name).
+	assert.ok( !lines( await openRecipe( "opener:Magic Pang", false ) ).some( l => l.text === "Equipment" ) );
+	for ( const fit of [ true, false ] ) {
+		const stall = await openRecipe( "seeded", fit, state => {
 			state.gameplay.stall = seedJourney( "stall-owner" ).gameplay.stall;
 		} );
-	const onStall = await stall( true ), tab = artRect( onStall, "com_long_tab_on.png" );
-	const sell = lineNamed( onStall, "Items to sell" );
-	assert.ok( sell.rect[0] >= tab[0] + 4 && sell.rect[2] <= tab[0] + tab[2] - 4, `${sell.rect} in ${tab}` );
-	assert.ok( !lines( await stall( false ) ).some( l => l.text === "Items to sell" ), "off keeps the bold face" );
+		assert.ok( !lines( stall ).some( l => l.text === "Items to sell" ), `fit ${fit}: the stall tab stays bold` );
+	}
 
 	// Item Mall: off, "32 spaces" is drawn on its bag icon; on, "32" over
 	// "spaces" starts right of it.

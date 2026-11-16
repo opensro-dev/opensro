@@ -303,8 +303,13 @@ export function comboBox(
 const WINDOW_LABEL_MARGIN = 6;
 // A fitted button caption keeps this far inside each side of its plate.
 const CAPTION_MARGIN = 4;
-// A fitted tab caption stays inside this much of its plate's bevel.
-const TAB_CAPTION_BEVEL = 2;
+// A bold caption's run is this much wider than its ink at most (the last
+// glyph's advance past its ink and the first glyph's origin): "Set game"
+// runs 61 with 58 of ink, "Items to sell" 80 with 77.
+const TAB_RUN_OVERHANG = 3;
+// A fitted tab caption keeps this far inside each side of its plate: the
+// tab centres on its content insets, not the plate.
+const TAB_FIT_MARGIN = 2;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -902,7 +907,7 @@ export function nativeTab(
 		...frame.text.quads( caption, content, frame.full, grey ? GREY_TAB_LABEL : frame.white, {
 			hAlign: 1,
 			vAlign: 1,
-			...tabCaptionFace( frame, caption, r[2] - 2 * TAB_CAPTION_BEVEL, selected ? 2 : 0 )
+			...tabCaptionFace( frame, caption, r[2], selected ? 2 : 0 )
 		} )
 	);
 }
@@ -913,20 +918,22 @@ tabCaptionFace
 
 The face and weight a tab draws its caption in. A selected tab's caption
 is bold (fontStyle 2). Port-only, not native (Experimental "Fit window
-labels"): a caption wider than its plate inside the bevel (the stall's
-one runtime tab, "Items to sell" bold on an 80-pixel com_long_tab, or
-Magic Pang's "Equipment", 69 pixels on 60) drops to the regular weight,
+labels"): a caption whose ink is wider than its plate (Magic Pang's
+"Equipment", 69 bold on a 60-pixel tab) drops to the regular weight,
 then to the narrow face; the atlas has no bold narrow face. The measure
 is the plate, not the content insets: the guild's "Guild info" (62 bold,
-content 60) is centred past its insets but well inside its 72-pixel
-plate, and keeps the native face, as everything does off.
+content 60) is centred past its insets but inside its 72-pixel plate,
+and a caption that only nears its plate's edge ("Set game" on 60, the
+stall's "Items to sell" on 80) keeps the native face, as all do off.
 ================
 */
 function tabCaptionFace( frame: UiAuthoredFrame, caption: string, room: number, fontStyle: number ) {
 	const native = { fontIndex: 0, fontStyle };
-	if ( !frame.fitWindowLabels() || frame.text.run( caption, fontStyle, 0 ).width <= room ) return native;
-	const fontIndex = narrowFace( caption, room, 0, ( line, face ) => frame.text.run( line, 0, face ).width );
-	return { fontIndex, fontStyle: 0 };
+	if ( !frame.fitWindowLabels() || frame.text.run( caption, fontStyle, 0 ).width - TAB_RUN_OVERHANG <= room ) {
+		return native;
+	}
+	const measure = ( line: string, face: number ) => frame.text.run( line, 0, face ).width;
+	return { fontIndex: narrowFace( caption, room - 2 * TAB_FIT_MARGIN, 0, measure ), fontStyle: 0 };
 }
 
 /*
