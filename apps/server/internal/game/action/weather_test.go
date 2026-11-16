@@ -129,7 +129,7 @@ TestCrossingSendsTheNewRegionWeather
 
 The tick that binds a new region sends its weather to that player alone,
 even into a region of the same climate; a region without a climate sends
-the zero weather, which the client draws as clear (native 0x537F24).
+the zero weather, which the client draws as clear, as natively.
 ================
 */
 func TestCrossingSendsTheNewRegionWeather(t *testing.T) {

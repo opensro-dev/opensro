@@ -22,8 +22,8 @@ stays clear):
 
 A crossing into a region without a climate sends the zero weather (kind
 0, which the client draws as clear), as natively: every region's weather
-word starts at zero (the v1.188 region constructor, 0x537F24) and every
-crossing sends the new region's word (0x4E70C9..0x4E70F1). A scene that
+word starts at zero (the v1.188 region constructor) and every crossing
+sends the new region's word (the PR's native-claims table cites both). A scene that
 starts in one sends nothing, since the client already reset its weather.
 The Christmas snow needs no
 case here: while event group 1 is on, the client draws its own snow
