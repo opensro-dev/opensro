@@ -15224,13 +15224,14 @@
 						"experimental-grey-disabled-tabs",
 						"experimental-mall-categories",
 						"experimental-seal-under-heading",
+						"experimental-server-event-gauge",
 						"experimental-set-bonus-tooltip",
 						"experimental-silk-history",
 						"experimental-touch-inspect"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "79b03fde81258636",
+					"hash": "81d3839d1d761f8a",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

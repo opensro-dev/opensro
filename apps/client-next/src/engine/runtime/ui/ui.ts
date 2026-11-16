@@ -422,6 +422,14 @@ import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
 import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import {
+	createServerEventHud,
+	gaugeRatio,
+	gaugeText,
+	SERVER_EVENT_ART,
+	SERVER_EVENT_TEXT_COLOR,
+	serverEventLayout
+} from "./hud/server-event-hud";
 import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
@@ -1597,6 +1605,8 @@ export function createUi( ports: UiPorts ) {
 	const compositeItemHud = createCompositeItemHud();
 	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
 	const uniqueRankHud = createUniqueRankHud();
+	// Port-only, not native to v1.150: the later client's Server Mission gauge (0x34F2).
+	const serverEventHud = createServerEventHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -5395,6 +5405,9 @@ export function createUi( ports: UiPorts ) {
 			dirty = true;
 		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
 			uniqueRankHud.close();
+			dirty = true;
+		} else if ( id === "server-event-close" ) {
+			serverEventHud.close();
 			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
@@ -10370,6 +10383,14 @@ export function createUi( ports: UiPorts ) {
 				phase === "world" &&
 				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
 			) dirty = true;
+			if ( phase === "world" ) {
+				const before = serverEventHud.shown();
+				serverEventHud.reconcile(
+					next.gameplay?.serverEventGauge,
+					experimental.state().saved.serverEventGauge
+				);
+				if ( serverEventHud.shown() !== before ) dirty = true;
+			}
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
 				cosHud.reconcile(
@@ -22782,6 +22803,47 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			// CIFEventGuide::UpdateAcademy (6660F0): sound only on hidden -> shown.
 			if ( academyVisible && !academyWasVisible ) sound( "quest" );
 			academyWasVisible = academyVisible;
+			// Port-only, not native to v1.150 (server-event-hud.ts): the later
+			// client's Server Mission gauge, drawn once its v1.696 art is here.
+			const serverEvent = worldVisible ? serverEventHud.shown() : null;
+			if ( serverEvent ) {
+				const frameArt = SERVER_EVENT_ART + "wind.png";
+				paths.push( frameArt );
+				if ( resources.has( frameArt ) ) {
+					const at = serverEventLayout( w ), ratio = gaugeRatio( serverEvent.count, serverEvent.goal );
+					image( at.frame, frameArt );
+					image( at.snow, SERVER_EVENT_ART + "snow.png" );
+					if ( ratio > 0 ) {
+						image(
+							[ at.gauge[0], at.gauge[1], at.gauge[2] * ratio, at.gauge[3] ],
+							SERVER_EVENT_ART + "gage.png",
+							white,
+							[ 0, 0, ratio, 1 ]
+						);
+					}
+					quads.push(
+						...text.quads(
+							gaugeText( serverEvent.count, serverEvent.goal ),
+							at.text,
+							full,
+							SERVER_EVENT_TEXT_COLOR,
+							{
+								hAlign: 1,
+								vAlign: 1
+							}
+						)
+					);
+					const id = "server-event-close",
+						states = [ "close", "close_focus", "close_press" ].map( face =>
+							SERVER_EVENT_ART + face + ".png"
+						),
+						wanted = states[pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!;
+					paths.push( ...states );
+					image( at.close, resources.has( wanted ) ? wanted : states[0]! );
+					blocks.push( at.frame );
+					controls.push( { id, label: "", rect: at.close, kind: "button" } );
+				}
+			}
 			if ( worldVisible && game?.academy ) {
 				const academy = game.academy,
 					level = game.progression?.level ?? roster.find( c => c.name === next.session?.character )?.level;

@@ -274,6 +274,12 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						id: "experimental-touch-inspect",
 						label: "Tap shows item details",
 						description: "On touch, a tap on an item or skill keeps its tooltip up."
+					},
+					{
+						key: "serverEventGauge",
+						id: "experimental-server-event-gauge",
+						label: "Server Mission gauge",
+						description: "During the winter event, show the shard's Snow Flake Event gauge."
 					}
 				]
 			},
