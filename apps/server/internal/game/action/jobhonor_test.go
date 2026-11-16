@@ -109,7 +109,7 @@ func TestAThiefsStealsDecayPerVictimEachHonorDay(t *testing.T) {
 	thief := honorCharacter(1, "thief-account")
 	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
 	steal := func(victim string, when time.Time) int {
-		rt.openStealRun(thief, victim, when)
+		rt.openStealRun(thief, victim, thief.AccountID, when)
 		return rt.scoreTradeSale(thief, domain.JobThief, full, when)
 	}
 	// An alt trader on another account feeding the same player's thief:
@@ -124,7 +124,7 @@ func TestAThiefsStealsDecayPerVictimEachHonorDay(t *testing.T) {
 	}
 	// Another of the same account's thieves shares the decay.
 	second := honorCharacter(2, "thief-account")
-	rt.openStealRun(second, "AltTrader", at)
+	rt.openStealRun(second, "AltTrader", second.AccountID, at)
 	if got := rt.scoreTradeSale(second, domain.JobThief, full, at); got != 0 {
 		t.Fatalf("the account's second thief kept %d from a spent victim", got)
 	}
@@ -139,12 +139,12 @@ func TestOneLoadPickedUpInStacksIsOneSteal(t *testing.T) {
 	thief := honorCharacter(1, "thief-account")
 	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
 	for range 3 {
-		rt.openStealRun(thief, "Victim", at)
+		rt.openStealRun(thief, "Victim", thief.AccountID, at)
 	}
 	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != honorRunPointCap {
 		t.Fatalf("one load in three stacks kept %d", got)
 	}
-	rt.openStealRun(thief, "Victim", at)
+	rt.openStealRun(thief, "Victim", thief.AccountID, at)
 	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != honorRunPointCap/2 {
 		t.Fatalf("the second load kept %d, want half", got)
 	}
@@ -178,7 +178,7 @@ func TestStealsDecayByTheVictimsAccountNotItsAlias(t *testing.T) {
 	thief := honorCharacter(1, "thief-account")
 	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
 	steal := func(alias string) int {
-		rt.openStealRun(thief, rt.goodsVictim(testDivision, alias), at)
+		rt.openStealRun(thief, rt.goodsVictim(testDivision, alias), thief.AccountID, at)
 		return rt.scoreTradeSale(thief, domain.JobThief, full, at)
 	}
 	// Two trader characters of one alt account are one victim.
@@ -192,12 +192,45 @@ func TestStealsDecayByTheVictimsAccountNotItsAlias(t *testing.T) {
 	}
 	// The thief's own account's trader is no victim at all.
 	own := honorCharacter(2, "alt-account")
-	rt.openStealRun(own, rt.goodsVictim(testDivision, "AltOne"), at.Add(48*time.Hour))
+	rt.openStealRun(own, rt.goodsVictim(testDivision, "AltOne"), own.AccountID, at.Add(48*time.Hour))
 	if got := rt.scoreTradeSale(own, domain.JobThief, full, at.Add(48*time.Hour)); got != 0 {
 		t.Fatalf("a steal from the thief's own account kept %d", got)
 	}
 	// Goods whose owner alias no character carries still decay by alias.
 	if steal("Gone") != honorRunPointCap || steal("Gone") != honorRunPointCap/2 {
 		t.Fatal("an unknown owner alias did not decay")
+	}
+}
+
+/*
+================
+TestAStealScoresOnlyOnTheThiefsOwnKill
+
+The owner's real cost (2026-11-16): goods score only when the thief's
+account killed for them; goods dropped any other way score nothing,
+spend no decay, and spoil an unsold haul they join.
+================
+*/
+func TestAStealScoresOnlyOnTheThiefsOwnKill(t *testing.T) {
+	at := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	rt := honorRuntime(t, at)
+	thief := honorCharacter(1, "thief-account")
+	full := int64(honorRunPointCap) * honorThiefGoldPerPoint
+	for _, lostTo := range []string{"", "other-thief-account"} {
+		rt.openStealRun(thief, "Victim", lostTo, at)
+		if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != 0 {
+			t.Fatalf("goods lost to %q kept %d", lostTo, got)
+		}
+	}
+	// Those pickups spent none of the victim's decay.
+	rt.openStealRun(thief, "Victim", thief.AccountID, at)
+	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != honorRunPointCap {
+		t.Fatalf("the first real loss kept %d, want the whole run", got)
+	}
+	// Free goods of the same victim into an unsold real haul spoil it.
+	rt.openStealRun(thief, "Third", thief.AccountID, at)
+	rt.openStealRun(thief, "Third", "", at)
+	if got := rt.scoreTradeSale(thief, domain.JobThief, full, at); got != 0 {
+		t.Fatalf("a haul mixed with free goods kept %d", got)
 	}
 }

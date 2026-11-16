@@ -409,6 +409,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/uniques/kills":            "/public/v1/uniques/kills",
 		"/public/v1/leaderboards/uniques":     "/public/v1/leaderboards/uniques",
 		"/public/v1/leaderboards/seals":       "/public/v1/leaderboards/seals",
+		"/public/v1/leaderboards/job-honor":   "/public/v1/leaderboards/job-honor",
 		"/public/v1/firsts":                   "/public/v1/firsts",
 		"/public/v1/characters":               "/public/v1/characters?q=k",
 		"/public/v1/characters/{name}":        "/public/v1/characters/Kekw",
