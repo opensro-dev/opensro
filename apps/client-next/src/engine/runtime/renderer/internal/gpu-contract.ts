@@ -460,6 +460,10 @@ export interface GeometryCommands {
 		alphaTest: boolean,
 		enabled: boolean
 	): void;
+	// A rowStates draw's per-row equipment glow, ROW_STATE_FLOATS a row from
+	// row 0: (r, g, b, 0), (u, v, 0, 0). The shader reads them in place of
+	// the uniform's colour and UV; gain, alpha test and enabled stay there.
+	updateRowStates( draw: GeometryDraw, states: Float32Array ): void;
 	updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ): void;
 	updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ): number;
 	// The draw's instances and palettes come from the particle pass this
