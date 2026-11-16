@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
+	"opensro.online/server/internal/platform/jobhonor"
 	"opensro.online/server/internal/platform/processguard"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/platform/sealboard"
@@ -82,6 +83,8 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// jobHonor is the job honor ledger (port-only, #3530); nil off.
+	jobHonor *jobhonor.Service
 	// census is the player census over the connection journal
 	// (port-only, #2717); nil while the journal is off.
 	census *census.Service
@@ -377,6 +380,9 @@ func newGameWorldApplication(
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
+	if err := installJobHonor(application, gameplay, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	installSunDropCount(gameplay)
 	gameplay.installSessionLifecycle(ts.Hub, authority.store)
 	if gameplay.deps.MonsterState != nil {
@@ -647,6 +653,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 			return nil
 		})
 	}
+	if application.jobHonor != nil {
+		group.Go(func() error {
+			application.jobHonor.Run(groupContext)
+			return nil
+		})
+	}
 	if application.sealBoard != nil {
 		group.Go(func() error {
 			application.sealBoard.Run(groupContext)
@@ -723,6 +735,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	// last flush lands before its store closes.
 	if application.sealBoard != nil {
 		drainErr = errors.Join(drainErr, application.sealBoard.Close())
+	}
+	if application.jobHonor != nil {
+		drainErr = errors.Join(drainErr, application.jobHonor.Close())
 	}
 	application.releaseLease()
 	if application.authority != nil {
@@ -883,6 +898,9 @@ func (application *gameWorldApplication) rollback() {
 	}
 	if application.sealBoard != nil {
 		_ = application.sealBoard.Close()
+	}
+	if application.jobHonor != nil {
+		_ = application.jobHonor.Close()
 	}
 	if application.settings != nil {
 		_ = application.settings.Close()

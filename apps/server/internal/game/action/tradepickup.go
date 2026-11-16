@@ -164,6 +164,12 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 	if len(result.Broadcast) > 0 {
 		// Natively goods loaded into a vehicle make it a caravan.
 		rt.registerCaravan(division, c)
+		// Job honor (jobhonor.go): a thief's haul opens a new run. A
+		// trader's run opens only with a purchase, so dropping and
+		// picking up one's own goods never resets the run cap.
+		if enterworld.DressedJob(c) == domain.JobThief {
+			rt.openHonorRun(c)
+		}
 	}
 	return result
 }
