@@ -2556,8 +2556,9 @@
 			"consumer": "src/engine/foundation/animation/cloth-stream.ts",
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
-				"paletteOf",
-				"callback:paletteOf"
+				"current",
+				"keep",
+				"kept"
 			]
 		},
 		{
