@@ -369,15 +369,16 @@ Port-only, not native: shinmu.cpd (MOB_TQ_FLAMEMASTER / MOB_QT_TQ_FLAMEMASTER)
 names degree-10 armor/weapon BSRs (heavy_10_*.bsr, spear_10.bsr) that v1.150
 Data.pk2 does not ship because v1.150 caps at degree 9. When SRO_QINSHI_TOMB
 is on and a _10 branch is absent, substitute the matching _09 BSR from the
-same directory so the Floor 5 unique boss can assemble.
+same directory so the Floor 5 unique boss can assemble. tombCombat is the
+posture to use; undefined reads the shard's (qinshiTombBranchFallback).
 ================
 */
-async function resolveCompoundBranchBsr( branchPath ) {
+async function resolveCompoundBranchBsr( branchPath, tombCombat ) {
 	const direct = await loadOptionalDataAsset( branchPath );
 	if ( direct !== null ) {
 		return { bsrPath: branchPath, buffer: direct };
 	}
-	const fallbackPath = qinshiTombBranchFallback( branchPath );
+	const fallbackPath = qinshiTombBranchFallback( branchPath, tombCombat );
 	if ( fallbackPath !== null ) {
 		const fallback = await loadOptionalDataAsset( fallbackPath );
 		if ( fallback !== null ) {
@@ -414,15 +415,17 @@ branch 0 is the kind-0 character body BSR (skeleton, aggregateBox, animation
 sets); branches 1..N are kind-5 item/hair/weapon BSRs attached through
 CCompound_AttachResourceWithMaterialSet (0x00a9e310) whose c == 1 cover keys
 hide matching body prims via CCompChar_ApplyItemCovers (0x00a89bd0).
+options.tombCombat is the tomb posture for the degree-10 branch fallback
+(resolveCompoundBranchBsr); a cached bake passes the one it is keyed on.
 ================
 */
-export async function assembleCompoundCharacter( cpdPath, source ) {
+export async function assembleCompoundCharacter( cpdPath, source, options = {} ) {
 	const cpdBuffer = source ?? (await loadDataAsset( cpdPath ));
 	const cpd = parseCompound( cpdBuffer, cpdPath );
 	if ( cpd.branches.length === 0 ) {
 		throw new Error( `${cpdPath}: compound has no branches` );
 	}
-	const baseBranch = await resolveCompoundBranchBsr( cpd.branches[0] );
+	const baseBranch = await resolveCompoundBranchBsr( cpd.branches[0], options.tombCombat );
 	const baseBsrPath = baseBranch.bsrPath;
 	const baseBuf = baseBranch.buffer;
 	const baseBsr = parseCharacterBsr( baseBuf, baseBsrPath );
@@ -436,7 +439,7 @@ export async function assembleCompoundCharacter( cpdPath, source ) {
 	const slotByMesh = new Map();
 
 	for ( let branchIndex = 1; branchIndex < cpd.branches.length; branchIndex++ ) {
-		const resolved = await resolveCompoundBranchBsr( cpd.branches[branchIndex] );
+		const resolved = await resolveCompoundBranchBsr( cpd.branches[branchIndex], options.tombCombat );
 		const itemBsrPath = resolved.bsrPath;
 		const itemBuf = resolved.buffer;
 		const itemBsr = parseJmxResourceBsr( itemBuf, itemBsrPath );
