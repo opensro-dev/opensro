@@ -50,6 +50,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
+import state_document  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
@@ -460,8 +461,7 @@ def require_vsro_pin(root, names, pins=None):
 # them again (#3590).
 # ================
 def write_verified_archives(folder):
-	document = {"format": VERIFIED_ARCHIVES_FORMAT, "archives": dict(sorted(_verified_digests.items()))}
-	(folder / VERIFIED_ARCHIVES_NAME).write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+	state_document.write_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives", _verified_digests)
 
 
 # ================
@@ -473,16 +473,12 @@ def write_verified_archives(folder):
 # pin stays exactly as strict. Returns how many archives were admitted.
 # ================
 def admit_verified_archives(folder, pins=None):
-	path = Path(folder) / VERIFIED_ARCHIVES_NAME
-	try:
-		document = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, ValueError):
-		return 0
-	if document.get("format") != VERIFIED_ARCHIVES_FORMAT or not isinstance(document.get("archives"), dict):
+	archives = state_document.read_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives")
+	if archives is None:
 		return 0
 	expected = archive_pins() if pins is None else pins
 	admitted = 0
-	for key, record in document["archives"].items():
+	for key, record in archives.items():
 		try:
 			stat = Path(key).stat()
 		except OSError:

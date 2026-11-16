@@ -128,7 +128,19 @@ PUBLIC_ROOT = GENERATED_ROOT / "client-public"
 # tree they describe, so a fresh worktree finds the last build's.
 # ================
 def resolve_build_state_root(generated_root: Path | None = None) -> Path:
-	return Path(GENERATED_ROOT if generated_root is None else generated_root).parent / ".state"
+	return tree_state_root(Path(GENERATED_ROOT if generated_root is None else generated_root).parent)
+
+
+# ================
+# tree_state_root
+#
+# The build state of one tree: <tree>/.state. The generated tree's state is
+# that of the tree holding it (resolve_build_state_root); a variant game
+# root keeps its own settle ledger and stamp here, beside the caches its
+# asset build writes (SRO_GENERATED_ROOT=<variant>/.generated).
+# ================
+def tree_state_root(tree_root: Path) -> Path:
+	return Path(tree_root) / ".state"
 
 
 BUILD_STATE_ROOT = resolve_build_state_root()
