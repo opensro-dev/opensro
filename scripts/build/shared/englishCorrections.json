@@ -164,6 +164,154 @@
 			"before": "Collect  Purification Fruit (%d)",
 			"after": "Collect Purification Fruit (%d)"
 		},
+		"SN_NC_QNO_CH_BIGMAN_1": {
+			"before": "Repetition available. Link  (Huhoan's account book)",
+			"after": "Repetition available. Link (Huhoan's account book)"
+		},
+		"SN_NC_QNO_CH_EUROPE_2": {
+			"before": "Available Once. Link  (Adventurer's stone)",
+			"after": "Available Once. Link (Adventurer's stone)"
+		},
+		"SN_NC_QNO_CH_EUROPE_3": {
+			"before": "Repetition available. Link  (Wangwon's request)",
+			"after": "Repetition available. Link (Wangwon's request)"
+		},
+		"SN_NC_QNO_CH_GENARAL_BO_2": {
+			"before": "Available Once. Link  (Sweeping bandit archer)",
+			"after": "Available Once. Link (Sweeping bandit archer)"
+		},
+		"SN_NC_QNO_CH_GENARAL_SP_1": {
+			"before": "Available Once. Link  (Sweeping bandit archers)",
+			"after": "Available Once. Link (Sweeping bandit archers)"
+		},
+		"SN_NC_QNO_CH_LOTTERY_1": {
+			"before": "Available Once.Link  (Asa's flute)",
+			"after": "Available Once. Link (Asa's flute)"
+		},
+		"SN_NC_QNO_CH_LOTTERY_2": {
+			"before": "Available Once. Link  (Looking for alcoholic)",
+			"after": "Available Once. Link (Looking for alcoholic)"
+		},
+		"SN_NC_QNO_CH_POTION_3": {
+			"before": "Available Once. Link  (Yangyun's anxiety)",
+			"after": "Available Once. Link (Yangyun's anxiety)"
+		},
+		"SN_NC_QNO_CH_POTION_4": {
+			"before": "Available Once. Link  (Herb delivering)",
+			"after": "Available Once. Link (Herb delivering)"
+		},
+		"SN_NC_QNO_CH_POTION_5": {
+			"before": "Repetition available. Link  (Wangwon's request)",
+			"after": "Repetition available. Link (Wangwon's request)"
+		},
+		"SN_NC_QNO_CH_SHAMAN_2": {
+			"before": "Available Once. Link  (Tree's spirit)",
+			"after": "Available Once. Link (Tree's spirit)"
+		},
+		"SN_NC_QNO_CH_SMITH_1": {
+			"before": "Available Once. Link  (Tutorial)",
+			"after": "Available Once. Link (Tutorial)"
+		},
+		"SN_NC_QNO_CH_SMITH_2": {
+			"before": "Available Once. Link  (Instructing bandit's tactics)",
+			"after": "Available Once. Link (Instructing bandit's tactics)"
+		},
+		"SN_NC_QNO_CH_SPECIAL_2": {
+			"before": "Available 3 Times. Link  (Fierce tiger's molar)",
+			"after": "Available 3 Times. Link (Fierce tiger's molar)"
+		},
+		"SN_NC_QNO_KT_ACCESSORY_1": {
+			"before": "Available 7 Times. Time. Link  (Ishade ice)",
+			"after": "Available 7 Times. Time. Link (Ishade ice)"
+		},
+		"SN_NC_QNO_KT_ACCESSORY_2": {
+			"before": "Available Once. Link  (2nd betting  (Soboi))",
+			"after": "Available Once. Link (2nd betting (Soboi))"
+		},
+		"SN_NC_QNO_KT_ACCESSORY_3": {
+			"before": "Available Once. Link  (2nd betting  (mamoje))",
+			"after": "Available Once. Link (2nd betting (Mamoje))"
+		},
+		"SN_NC_QNO_KT_ARMOR_1": {
+			"before": "Available Once. Link  (Looking for armor materila)",
+			"after": "Available Once. Link (Looking for armor material)"
+		},
+		"SN_NC_QNO_KT_SMITH_2": {
+			"before": "Available Once. Linkquest",
+			"after": "Available Once. Link quest"
+		},
+		"SN_NC_QNO_KT_SMITH_3": {
+			"before": "Available Once. Link  (2nd betting  (Soboi))",
+			"after": "Available Once. Link (2nd betting (Soboi))"
+		},
+		"SN_NC_QNO_WC_ACCESSORY_2": {
+			"before": "Available 3 Times. Link  (Making crackers)",
+			"after": "Available 3 Times. Link (Making crackers)"
+		},
+		"SN_NC_QNO_WC_ACCESSORY_3": {
+			"before": "Available Once. Link  (A Big win)",
+			"after": "Available Once. Link (A Big win)"
+		},
+		"SN_NC_QNO_WC_DOCTOR_2": {
+			"before": "Available Once. Link  (Leegak's secret)",
+			"after": "Available Once. Link (Leegak's secret)"
+		},
+		"SN_NC_QNO_WC_FERRY2_1": {
+			"before": "Available Once. Link  (Chakji's skin)",
+			"after": "Available Once. Link (Chakji's skin)"
+		},
+		"SN_NC_QNO_WC_FERRY3_1": {
+			"before": "Available Once. Link  (Leegak's spite)",
+			"after": "Available Once. Link (Leegak's spite)"
+		},
+		"SN_NC_QNO_WC_GENARAL_SW_2": {
+			"before": "Available 5 Times. Link  (Leegeuk's jewelry)",
+			"after": "Available 5 Times. Link (Leegeuk's jewelry)"
+		},
+		"SN_NC_QNO_WC_GENARAL_SW_3": {
+			"before": "Available 3 Times. Link  (Hidden jewerly)",
+			"after": "Available 3 Times. Link (Hidden jewelry)"
+		},
+		"SN_NC_QNO_WC_POTION_2": {
+			"before": "Available Twice. Link  (Leegak's spite)",
+			"after": "Available Twice. Link (Leegak's spite)"
+		},
+		"SN_NC_QNO_WC_POTION_3": {
+			"before": "Available Once. Link  (Birthday present materilals)",
+			"after": "Available Once. Link (Birthday present materials)"
+		},
+		"SN_NC_QNO_WC_PRIEST2_1": {
+			"before": "Available Once. Link  (Wiping out Tomb Stone)",
+			"after": "Available Once. Link (Wiping out Tomb Stone)"
+		},
+		"SN_NC_QNO_WC_SMITH_2": {
+			"before": "Available Once. Link  (Broken paddle. Dead ravine)",
+			"after": "Available Once. Link (Broken paddle. Dead ravine)"
+		},
+		"SN_NC_QNO_WC_SMITH_3": {
+			"before": "Available Once. Link  (Looking for paddle material)",
+			"after": "Available Once. Link (Looking for paddle material)"
+		},
+		"SN_NC_QNO_WC_SOLDIER_EA2_2": {
+			"before": "Available Once. Link  (Trickery)",
+			"after": "Available Once. Link (Trickery)"
+		},
+		"SN_NC_QNO_WC_SOLDIER_EA2_3": {
+			"before": "Available Once. Link  (Flying man over running man)",
+			"after": "Available Once. Link (Flying man over running man)"
+		},
+		"SN_NC_QNO_WC_SOLDIER_SO_1": {
+			"before": "Available 5 Times. Link  (Employed by hunter guild)",
+			"after": "Available 5 Times. Link (Employed by hunter guild)"
+		},
+		"SN_NC_QNO_WC_SPECIAL_2": {
+			"before": "Available Once. Link  (Ghost Bug's egg)",
+			"after": "Available Once. Link (Ghost Bug's egg)"
+		},
+		"SN_NC_QNO_WC_WAREHOUSE_W_2": {
+			"before": "Available 3 Times. Link  (Earth Taoist's charm)",
+			"after": "Available 3 Times. Link (Earth Taoist's charm)"
+		},
 		"SN_TALK_QEV_CH_EVENT_KISAENG1_A_M1": {
 			"before": "Give 10 clothes and 10 poles and recieve the Taegeug flag.",
 			"after": "Give 10 clothes and 10 poles and receive the Taegeug flag."
