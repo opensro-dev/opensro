@@ -25,7 +25,7 @@ The build reads the VSRO client (`SRO_VSRO_ROOT`, the variant build's own source
 | `MOB_RM_WINGTRIBEKNIGHT` | 8 | 100 |
 | `MOB_RM_WINGTRIBEDUKE` | 0 | 100 |
 
-- **Where the rows go:** `characterdata_230000.txt` / `skilldata_230000.txt`.
+- **Where the rows go:** `characterdata_260000.txt` / `skilldata_260000.txt`.
 - **Identities:** fresh, above every published row. `.opensro-roc.json` records them, so a rebuild never
   moves a kind.
 - **Names:** the arena's Tahomet reuses the native `SN_MOB_RM_TAHOMET` name. The import records only the names

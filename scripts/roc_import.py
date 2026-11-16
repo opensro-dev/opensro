@@ -28,7 +28,7 @@ data holds no population in the arena regions, because the server
 spawns Roc and the Tahomet bosses when the arena opens (step 4,
 worlds 40 and 41). Until that lands the rows are inert.
 
-The kinds ride characterdata_230000.txt / skilldata_230000.txt (one
+The kinds ride characterdata_260000.txt / skilldata_260000.txt (one
 importer per shard name; test_later_shard_bands pins the bands).
 Identities allocate above every published row and the marker keeps
 them across rebuilds. Their models are among the VSRO Data files the
@@ -51,8 +51,8 @@ from prepare_client_resources import write_atomically
 
 FLAG = "SRO_ROC"
 MARKER = ".opensro-roc.json"
-CHARACTER_SHARD = "characterdata_230000.txt"
-SKILL_SHARD = "skilldata_230000.txt"
+CHARACTER_SHARD = "characterdata_260000.txt"
+SKILL_SHARD = "skilldata_260000.txt"
 TEXT_ROOT = later_world_import.TEXT_ROOT
 
 LEVEL_COLUMN = 57
