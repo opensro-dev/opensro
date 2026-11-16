@@ -168,21 +168,54 @@ export function claimRowCount( body ) {
 evaluateClaims
 
 Plain data in, plain verdict out: `files` maps a path to its source at the
-head, so a test needs no git and no pull request.
+head and `baseFiles` to its source at the merge base ("" for a new file), so
+a test needs no git and no pull request.
+
+A citation is new only when no touched file cited that address at the base.
+Reformatting a file or moving a comment re-adds every line it touches, and
+#3794 (six ledger files formatted, no claim changed) failed on twelve
+citations the files already held. A citation moved between two touched
+files is old too; one the change adds anywhere is new.
 ================
 */
-export function evaluateClaims( { diff, body, files } ) {
+export function evaluateClaims( { diff, body, files, baseFiles = () => "" } ) {
+	const touched = [ ...addedLinesByFile( diff ) ].filter( ( [file] ) => CITING_SOURCE.test( file ) );
+	const known = new Set();
+	for ( const [file] of touched ) {
+		for ( const text of commentTextByLine( baseFiles( file ) ).values() ) {
+			for ( const address of citedAddresses( text ) ) known.add( address );
+		}
+	}
 	const citations = [];
-	for ( const [file, added] of addedLinesByFile( diff ) ) {
-		if ( !CITING_SOURCE.test( file ) ) continue;
+	for ( const [file, added] of touched ) {
 		const comments = commentTextByLine( files( file ) );
 		for ( const line of added ) {
 			for ( const address of citedAddresses( comments.get( line ) ?? "" ) ) {
-				citations.push( `${file}:${line} ${address}` );
+				if ( !known.has( address ) ) citations.push( `${file}:${line} ${address}` );
 			}
 		}
 	}
 	return { citations, rows: claimRowCount( body ), ok: citations.length === 0 || claimRowCount( body ) > 0 };
+}
+
+/*
+================
+baseSource
+
+A file's source at the merge base, or "" when the change adds it.
+================
+*/
+function baseSource( commit, file ) {
+	try {
+		return execFileSync( "git", [ "show", `${commit}:${file}` ], {
+			cwd: rebuildRoot,
+			encoding: "utf8",
+			stdio: [ "ignore", "pipe", "ignore" ],
+			maxBuffer: 1 << 30
+		} );
+	} catch {
+		return "";
+	}
 }
 
 /*
@@ -198,10 +231,13 @@ function main() {
 		encoding: "utf8",
 		maxBuffer: 1 << 30
 	} );
+	const mergeBase = execFileSync( "git", [ "merge-base", base, "HEAD" ], { cwd: rebuildRoot, encoding: "utf8" } )
+		.trim();
 	const verdict = evaluateClaims( {
 		diff,
 		body,
-		files: file => readFileSync( path.join( rebuildRoot, file ), "utf8" )
+		files: file => readFileSync( path.join( rebuildRoot, file ), "utf8" ),
+		baseFiles: file => baseSource( mergeBase, file )
 	} );
 	if ( verdict.ok ) {
 		console.log( `native claims: ${verdict.citations.length} new citations, ${verdict.rows} table rows` );

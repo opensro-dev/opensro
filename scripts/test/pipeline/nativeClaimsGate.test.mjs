@@ -95,3 +95,39 @@ ${FILLED_TABLE}` ),
 		1
 	);
 });
+
+test("a citation the file already held is not new when formatting moves it", () => {
+	// #3794: a reformat re-adds every line, so its citations sit on added lines.
+	const base = "// 861580 seeds its best distance.\nconst a=1;\n";
+	const head = "/*\n================\n861580 seeds its best distance.\n================\n*/\nconst a = 1;\n";
+	const verdict = evaluateClaims( {
+		diff: diffFor( "apps/client-next/src/a.ts", 3 ),
+		body: EMPTY_TABLE,
+		files: () => head,
+		baseFiles: () => base
+	} );
+	assert.deepEqual( verdict.citations, [] );
+	assert.equal( verdict.ok, true );
+});
+
+test("a new address beside a held one still asks for a row", () => {
+	const verdict = evaluateClaims( {
+		diff: diffFor( "apps/client-next/src/a.ts", 1 ),
+		body: EMPTY_TABLE,
+		files: () => "// 861580 then 862C60\n",
+		baseFiles: () => "// 861580\n"
+	} );
+	assert.deepEqual( verdict.citations, [ "apps/client-next/src/a.ts:1 862C60" ] );
+	assert.equal( verdict.ok, false );
+});
+
+test("a citation moved between two touched files is not new", () => {
+	const diff = diffFor( "apps/server/a.go", 1 ) + diffFor( "apps/server/b.go", 1 );
+	const verdict = evaluateClaims( {
+		diff,
+		body: "",
+		files: file => file.endsWith( "b.go" ) ? "// 861580\n" : "x := 1\n",
+		baseFiles: file => file.endsWith( "a.go" ) ? "// 861580\n" : ""
+	} );
+	assert.equal( verdict.ok, true );
+});
