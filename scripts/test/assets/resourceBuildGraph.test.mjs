@@ -51,6 +51,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 	assert.deepEqual(
 		labels.filter( ( label ) => !label.startsWith( "code:" ) ),
 		[
+			"survival-art",
 			"extracted",
 			"client-executable",
 			"particle-archive",

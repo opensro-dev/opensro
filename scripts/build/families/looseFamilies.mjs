@@ -69,6 +69,7 @@ import { buildTextResources, completeRestrictionText } from "../shared/textResou
 import { buildDungeonResourceManifest, DUNGEON_RESOURCE_PUBLIC_PATH } from "../world/assets/buildDungeonResources.mjs";
 import { buildDungeonWorlds } from "../world/assets/buildDungeonWorlds.mjs";
 import { copyMissionMinimapTileImages } from "../world/assets/copyMissionMinimapTileImages.mjs";
+import { worldSkyFiles } from "../world/assets/worldSkyFiles.mjs";
 import {
 	buildNativeSkyStarPrimitive,
 	copyReferencedSkyImages,
@@ -86,9 +87,6 @@ const FOOTPRINT_DDJ = /^effect\/footstep_(sand|snow)\.ddj$/;
 const WORLD_ROOT = path.join( publicRoot, "assets", "world" );
 // Lighter sidecar levels for the large world files these families rewrite.
 const WORLD_SIDECAR_LEVELS = { gzipLevel: 3 };
-// The top-level key a sky-carrying world file spells. The world writers are
-// JSON.stringify, which never escapes a key's characters.
-const SKY_KEY = Buffer.from( '"sky"' );
 const SKILL_UI_SCRIPT = path.join(
 	import.meta.dirname,
 	"..",
@@ -233,18 +231,13 @@ validated (update may throw) before any file is replaced. Returns the world
 files carrying a sky, changed or not, so an interrupted run is repaired by
 refreshing their sidecars too.
 
-Six of ~8000 world files carry a sky; a file whose bytes never spell the
-key cannot, so only those are parsed (the full parse was 2.5 GiB of JSON,
-~6 s per call).
+Six of 12,523 world files carry a sky. worldSkyFiles finds them by content
+hash instead of reading 3.7 GB per call, and only they are parsed.
 ================
 */
 async function rewriteWorldSkies( update ) {
 	const changes = [], published = [];
-	for ( const name of await readdir( WORLD_ROOT, { recursive: true } ) ) {
-		if ( !name.endsWith( ".json" ) ) continue;
-		const file = path.join( WORLD_ROOT, name );
-		const bytes = await readFile( file );
-		if ( !bytes.includes( SKY_KEY ) ) continue;
+	for ( const { file, bytes } of await worldSkyFiles( WORLD_ROOT ) ) {
 		const value = JSON.parse( bytes.toString( "utf8" ) );
 		if ( !value.sky ) continue;
 		published.push( file );

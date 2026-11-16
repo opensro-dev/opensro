@@ -200,9 +200,10 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// window's own foot checkbox became the map's native switch, and the
 	// unique spawn points row (#3417) joined World map (M); 66: Silent wing
 	// flight (#3547) joined Sound and connection; 65: Water refraction left
-	// at the owner's request (2026-11-15); 66: Correct English typos joined
+	// at the owner's request (2026-11-15); 66: the Christmas carols row
+	// joined Sound and connection; 67: Correct English typos joined
 	// Windows (2026-11-16).
-	assert.equal( keys.length, 66 );
+	assert.equal( keys.length, 67 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

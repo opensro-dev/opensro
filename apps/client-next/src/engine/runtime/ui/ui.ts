@@ -585,7 +585,7 @@ import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
-import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
+import { uiPublication } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
 import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles, guildCrestUrl } from "@/engine/foundation/ui/guild-crest";
@@ -7643,6 +7643,36 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 				}
 				return;
+			}
+			if (
+				panel === GRANT_PANEL && (event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end")
+			) {
+				// CIFGrantMagicAttributeWnd's list is a CIFScrollManager (6EB3E0).
+				// Its wheel slot (6F35A0) steps the scrollbar one row per wheel
+				// message, up for a positive delta. Inference: a browser deltaY > 0
+				// is a negative Win32 wheel delta, so it moves the list down. The
+				// thumb moves it like the arrows, as its CIFVerticalScroll does.
+				const grant = view?.gameplay?.magicOption,
+					item = view?.gameplay?.inventory.find( r => r.slot === grant?.item ),
+					part = item ? grantableAvatarPart( item.typeFlags ) : null,
+					count = grant?.parts.find( p => p.part === part )?.options.length ?? 0;
+				if ( event.kind === "scroll" ) {
+					const area = controls.find( c => c.id === "magic-option-list" );
+					if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+						magicOptionHud.scroll( Math.sign( event.delta ), count );
+						dirty = true;
+						return;
+					}
+				} else if ( event.id === "magic-option-thumb" ) {
+					if ( event.kind === "drag-end" ) magicOptionHud.endDrag();
+					else {
+						const up = controls.find( c => c.id === "magic-option-up" ),
+							down = controls.find( c => c.id === "magic-option-down" );
+						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
+					}
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
@@ -18462,6 +18492,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const select = ROOT + "interface/guild/gil_bar02_select.png",
 						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
 					paths.push( select, deselect );
+					// The scroll manager's area (32) takes the wheel; pushed before the
+					// rows so a row stays the topmost control under the cursor.
+					const listArea = at( 32 );
+					if ( listArea ) {
+						controls.push( {
+							id: "magic-option-list",
+							label: "Magic option list",
+							rect: authoredRect( listArea, px, py ),
+							kind: "region"
+						} );
+					}
 					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
 						const bar = at( 0x28 + i ), option = options[choice.top + i];
 						if ( !bar ) continue;
@@ -28553,16 +28594,20 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
-			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
-				sameUiSemantics( lastProduct.semantics, semantics );
+			// Semantics are returned only when they change (uiPublication): a
+			// walker's minimap dot republishes quads alone.
+			const product = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			const publication = uiPublication( lastProduct, product );
 			probe?.detailEnd( "ui-compare" );
-			if ( unchanged ) return null;
+			if ( publication === "unchanged" ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			// Keep the semantics last returned: the next comparison is against what was presented.
+			lastProduct = publication === "present" || !lastProduct ?
+				product :
+				{ ...product, semantics: lastProduct.semantics };
 			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
-			return semantics;
+			return publication === "present" ? semantics : null;
 		},
 		/*
 		================

@@ -103,10 +103,10 @@ func TestHalloweenGiftTableIsTheOwnersTable(t *testing.T) {
 		{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
 		{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
 		{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
-		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
-		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
-		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
-		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B", Count: 1, Weight: 1.125},
 	}
 	total := 0.0
 	for i, want := range wantConsumables {
@@ -145,7 +145,12 @@ func TestHalloweenGiftTableIsTheOwnersTable(t *testing.T) {
 	if _, ok := HalloweenPrizeByCodename("ITEM_MALL_AVATAR_M_HALLOWEEN"); ok {
 		t.Fatal("a mall avatar resolved as an event prize")
 	}
-	if _, ok := HalloweenPrizeByCodename("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"); ok {
-		t.Fatal("a B elixir resolved as an event prize (those sell for gold)")
+	// One elixir per kind everywhere (owner 2026-11-16): the event pays the
+	// Intensifying (B) elixir the alchemy shop sells, never the plain A.
+	if _, ok := HalloweenPrizeByCodename("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"); !ok {
+		t.Fatal("the B elixir is not an event prize")
+	}
+	if _, ok := HalloweenPrizeByCodename("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"); ok {
+		t.Fatal("an A elixir resolved as an event prize")
 	}
 }

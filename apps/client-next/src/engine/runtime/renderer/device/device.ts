@@ -302,11 +302,13 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				================
 				submit
 
-				Submit the completed command buffer through the current device generation.
+				Submit the completed command buffer through the current device
+				generation, after the dynamic materials' writes (geometry.ts).
 				================
 				*/
 				submit( buffer: GPUCommandBuffer ) {
 					current();
+					geometry!.flushMaterials();
 					geometry!.uploads.submit( buffer );
 				}
 			} );
