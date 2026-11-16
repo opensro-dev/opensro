@@ -42,11 +42,25 @@ func transformRow(row enterworld.SkillRow) bool {
 	return transformWord(row) == 1
 }
 
-// transformWord is the msch word of a row whose effect fills the block
-// (1 or 2), else 0.
+// mschMuhanChange is the msch word of the Muhan change buffs
+// (SKILL_MUHAN_*_BUFF01). Port-only, not native: the v1.188 server's
+// effect switch handles words 1-6 only, so word 7 just records the
+// instance, and no v1.150 skill carries it. INFERENCE (#3349): the word
+// means "become the form paired with this skill", the mask's body change
+// with the pairing's RefObj, so it fills the block as word 1 does.
+const mschMuhanChange = 7
+
+// transformWord is the word the block holds for a row whose effect fills
+// it: 1 for the mask and the Muhan change, 2 for Duplicate, else 0.
 func transformWord(row enterworld.SkillRow) uint8 {
-	if row.CastGate.MschPresent && (row.CastGate.MschMode == 1 || row.CastGate.MschMode == 2) {
-		return uint8(row.CastGate.MschMode)
+	if !row.CastGate.MschPresent {
+		return 0
+	}
+	switch row.CastGate.MschMode {
+	case 1, mschMuhanChange:
+		return 1
+	case 2:
+		return 2
 	}
 	return 0
 }
