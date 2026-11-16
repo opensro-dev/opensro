@@ -8,7 +8,8 @@ one bracket calculation: one timeline. A native clip keys every bone at
 the same times, so its channels (73 on average for a player body) form a
 single timeline. A pose keeps, for a clip it samples, which timeline
 each channel reads and one mutable cursor per timeline, not a record per
-channel. Sampled values and animation event state are never shared.
+channel. Sampled values and animation event state are never shared. A
+clip's channels by node (clipNodeChannels) are shared by every pose.
 
 ===========================================================================
 */
@@ -119,6 +120,52 @@ export function clipTimelineBytes( clip: TimedClip, cache?: ClipTimelineCache ):
 		cache?.set( clip, bytes );
 	}
 	return bytes;
+}
+
+/*
+================
+ClipNodeChannels
+
+A clip's channels grouped by the node they animate: node n's channels are
+channels[first[n]..first[n + 1]), ascending; a node at or past
+first.length - 1 has none. A pose that builds only some nodes (a socket's
+ancestors, the joints a cloth step reads) samples their channels alone.
+================
+*/
+export interface ClipNodeChannels {
+	readonly first: Int32Array;
+	readonly channels: Int32Array;
+}
+
+/*
+================
+ClipNodeChannelCache
+
+Per-clip ClipNodeChannels, owned by the character renderer
+(CharacterPlanCaches): a clip's channels never change once admitted, so
+every pose of every body that plays the clip shares one index.
+================
+*/
+export type ClipNodeChannelCache = WeakMap<CharacterClip, ClipNodeChannels>;
+
+/*
+================
+clipNodeChannels
+================
+*/
+export function clipNodeChannels( clip: CharacterClip, cache: ClipNodeChannelCache ): ClipNodeChannels {
+	let index = cache.get( clip );
+	if ( index ) return index;
+	let nodes = 0;
+	for ( const channel of clip.channels ) nodes = Math.max( nodes, channel.node + 1 );
+	const first = new Int32Array( nodes + 1 ), channels = new Int32Array( clip.channels.length );
+	for ( const channel of clip.channels ) first[channel.node + 1]!++;
+	for ( let n = 0; n < nodes; n++ ) first[n + 1]! += first[n]!;
+	const fill = first.slice( 0, nodes );
+	for ( let c = 0; c < clip.channels.length; c++ ) channels[fill[clip.channels[c]!.node]!++] = c;
+	index = { first, channels };
+	cache.set( clip, index );
+	return index;
 }
 
 /*

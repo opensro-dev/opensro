@@ -71,6 +71,7 @@ import {
 	CHARACTER_ACTORS,
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
+	characterClothJoints,
 	characterClothSlots,
 	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
@@ -750,7 +751,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			if ( state ) retiredCpuEvaluations += state.pose.cpuEvaluations();
 			state = {
 				model: actor.model,
-				pose: createCharacterPose( model ),
+				pose: createCharacterPose( model, planCaches.nodeChannels ),
 				lod: createPoseLod(),
 				clips: model.clips
 			};
@@ -2654,16 +2655,22 @@ the next full prepare pass, so this may run between frames.
 	(cloth-stream.ts asks for it only on a solver step, on the frame the
 	simulation starts or stops, and on an off frame whose pose it cannot
 	keep). The pose builds its skeleton on the CPU only now, whatever the GPU
-	sampled.
+	sampled, and only what entries need (ClothPalettes current): the other
+	entries of the scratch keep an earlier request's words, which the solver
+	never reads.
 	================
 	*/
-	function clothPalette( group: GroupFrame, primitive: CharacterModel["primitives"][number] ): Float32Array {
+	function clothPalette(
+		group: GroupFrame,
+		primitive: CharacterModel["primitives"][number],
+		entries?: Int32Array
+	): Float32Array {
 		const state = poses.get( group.rows[0]!.gid );
 		if ( !state || state.model !== group.rows[0]!.model ) throw Error( "Missing prepared character pose" );
 		const floats = primitive.joints.length * 16;
 		if ( clothScratch.length < floats ) clothScratch = new Float32Array( floats );
 		const palette = clothScratch.subarray( 0, floats );
-		state.pose.palette( primitive, palette, 0 );
+		state.pose.palette( primitive, palette, 0, entries );
 		return palette;
 	}
 	/*
@@ -2694,14 +2701,16 @@ the next full prepare pass, so this may run between frames.
 	those inputs, which builds the skeleton it held then, and given its own
 	inputs back, which its next palette or socket builds again, bit for bit
 	(animation-pose.ts restore). A new evaluator would cost a catalogue's
-	registration per restart; this costs one skeleton, and the next frame's
-	palette streams see a new revision of the same skeleton.
+	registration per restart; this costs the ancestor chains of the joints
+	entries names (ClothPalettes kept), and the next frame's palette streams
+	see a new revision of the same skeleton.
 	================
 	*/
 	function keptClothPalette(
 		group: GroupFrame,
 		p: number,
-		primitive: CharacterModel["primitives"][number]
+		primitive: CharacterModel["primitives"][number],
+		entries: Int32Array
 	): Float32Array {
 		const inputs = group.batch.clothInputs?.get( p ), state = poses.get( group.rows[0]!.gid );
 		if ( !inputs || !state || state.model !== group.rows[0]!.model ) throw Error( "No kept cloth pose" );
@@ -2710,7 +2719,7 @@ the next full prepare pass, so this may run between frames.
 		if ( clothScratch.length < floats ) clothScratch = new Float32Array( floats );
 		const palette = clothScratch.subarray( 0, floats );
 		state.pose.restore( inputs );
-		state.pose.palette( primitive, palette, 0 );
+		state.pose.palette( primitive, palette, 0, entries );
 		state.pose.restore( clothPoseNow );
 		return palette;
 	}
@@ -2740,8 +2749,14 @@ the next full prepare pass, so this may run between frames.
 		const stream = skinned ? batch.streams?.streams[p] : undefined;
 		let cloth = skinned ? batch.clothStreams?.get( p ) : undefined;
 		if ( skinned && !cloth ) {
-			// Every wearer of the mesh shares its slot list with the plan.
-			cloth = createClothStream( primitive, clothRandom, characterClothSlots( primitive.cloth!, planCaches ) );
+			// Every wearer of the mesh shares its slot list and the palette
+			// entries they read with the plan.
+			cloth = createClothStream(
+				primitive,
+				clothRandom,
+				characterClothSlots( primitive.cloth!, planCaches ),
+				characterClothJoints( primitive, planCaches )
+			);
 			(batch.clothStreams ??= new Map()).set( p, cloth );
 		}
 		let draw = batch.draws[p];
@@ -2773,14 +2788,14 @@ the next full prepare pass, so this may run between frames.
 			// The batch's palette is the row's pose palette; a palette-stream
 			// batch has none on the CPU, so the solver builds it (clothPalette).
 			const palettes: ClothPalettes = {
-				current() {
-					return stream ? clothPalette( group, primitive ) : palette;
+				current( entries ) {
+					return stream ? clothPalette( group, primitive, entries ) : palette;
 				},
 				keep() {
 					return keepClothPose( group, p );
 				},
-				kept() {
-					return keptClothPalette( group, p, primitive );
+				kept( entries ) {
+					return keptClothPalette( group, p, primitive, entries );
 				}
 			};
 			const write = cloth.update( palettes, frame.seconds, enabled, motion );

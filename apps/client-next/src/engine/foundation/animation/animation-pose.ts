@@ -4,19 +4,22 @@
 animation-pose.ts - retained character pose sampling, skin palettes and sockets
 
 Owns clip sampling, native event-before-timed blending, and lazy CPU palette
-materialization. A socket of a pending pose settles only its node's ancestor
-chain; palette settles the rest with the same operations, so both see the
-bytes of one whole materialization. Direct samples retain exact local inputs
-in blend scratch; palette revisions advance only with matrices or radial body
-shape. Layer lifetimes belong to the presentation producers; this consumer
-evaluates every live fade without truncating sparse bone tracks.
+materialization. A pending pose builds only the nodes its consumers read: a
+socket settles its node's ancestor chain, a palette asked for some entries
+(a cloth step) the chains of their joints, and a whole palette the rest. A
+direct pass samples only the channels of the nodes it settles. Every node
+gets the operations of one whole materialization, so every consumer sees
+its bytes. Direct samples retain exact local inputs in blend scratch;
+palette revisions advance only with matrices or radial body shape. Layer
+lifetimes belong to the presentation producers; this consumer evaluates
+every live fade without truncating sparse bone tracks.
 Equipment branches join the socket table without changing explicit private
 bone names (A981A0 searches compound branches in order for a marker).
 
 ===========================================================================
 */
 import { createAttachmentBindPose } from "./equipment-sockets";
-import { createAnimationTimelines } from "./animation-timelines";
+import { clipNodeChannels, createAnimationTimelines, type ClipNodeChannelCache } from "./animation-timelines";
 import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip } from "@/engine/contracts/character";
 import { compose, multiplyDisjoint as multiply, multiplyQuaternion, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
@@ -25,6 +28,8 @@ import { bodyBoneScale } from "./body-shape";
 const DEFAULT_BODY_VOLUME = 2;
 // A node's materialization state in one evaluation (createCharacterPose ready).
 const SETTLING = 1, SETTLED = 2;
+// The radial (Y and Z) rows of a global matrix body volume scales (paletteEntry).
+const RADIAL_WORDS = [ 4, 5, 6, 8, 9, 10 ] as const;
 // Distinct missing clip names one evaluator records: a model is one
 // catalogue row, so a handful of names says everything about it.
 export const MAX_MISSING_CLIPS = 8;
@@ -57,9 +62,13 @@ export function createCharacterPoseInputs(): CharacterPoseInputs {
 /*
 ================
 createCharacterPose
+
+nodeChannels is the shared per-clip channel index (clipNodeChannels); the
+character renderer passes its plan caches' one. Without it the pose keeps
+its own, built only for a clip it samples in part.
 ================
 */
-export function createCharacterPose( model: CharacterModel ) {
+export function createCharacterPose( model: CharacterModel, nodeChannels: ClipNodeChannelCache = new WeakMap() ) {
 	const bindings = paletteBindings( model );
 	const attachmentBind = createAttachmentBindPose( model.nodes );
 	let volume = DEFAULT_BODY_VOLUME, female = false;
@@ -109,12 +118,13 @@ visit
 	for ( let n = 0; n < model.nodes.length; n++ ) {
 		visit( n );
 	}
-	// Parent-first node order, and scratch for one socket's ancestor chain.
+	// Parent-first node order, and scratch for the unsettled ancestor chains
+	// of one request (gather): each node enters it at most once.
 	const order = Int32Array.from( visits ), chain = new Int32Array( model.nodes.length );
 	const animatedLocal = new Uint8Array( model.nodes.length ), changedGlobal = new Uint8Array( model.nodes.length );
-	// Per node of the begun evaluation: 0, SETTLING (in the socket chain being
-	// sampled) or SETTLED. A socket settles only its ancestor chain; palette
-	// settles the rest.
+	// Per node of the begun evaluation: 0, SETTLING (gathered by the request
+	// being settled) or SETTLED. A socket or a palette's entries settle only
+	// their ancestor chains; materialize settles the rest.
 	const ready = new Uint8Array( model.nodes.length );
 	// initialized: every node has settled once. Skipping an unchanged node
 	// stays exact after a partial evaluation because only a fully settled one
@@ -241,16 +251,103 @@ time, as every sampled layer needs before its channels.
 	}
 	/*
 ================
-sampleLayers
+sampleChannel
 
-Sample the begun evaluation's channels whose node is marked with mark in
-ready: every channel of the unsettled nodes (0), or of one socket's chain
-(SETTLING). A channel's result depends only on its values, its cursor and
-its bracket scratch, so a direct pass may sample its nodes in any groups.
-A blended pass samples every node at once (begin).
+Channel channelIndex of clip at its cursor in clocks, written to target
+(width floats). Its result depends only on its values, its cursor and its
+bracket scratch, so a direct pass may sample its nodes in any groups and
+any order and get the bytes of one whole pass.
 ================
 	*/
-	function sampleLayers( mark: number ) {
+	function sampleChannel(
+		clip: CharacterClip,
+		clocks: ReturnType<typeof createAnimationTimelines>,
+		channelIndex: number,
+		target: Float32Array,
+		width: number
+	) {
+		const channel = clip.channels[channelIndex]!;
+		const { low, next, span, fraction } = clocks.cursors[clocks.index[channelIndex]!]!;
+		const values = channel.values;
+		if ( channel.interpolation === "CUBICSPLINE" ) {
+			const t = fraction, t2 = t * t, t3 = t2 * t;
+			for ( let c = 0; c < width; c++ ) {
+				target[c] = (2 * t3 - 3 * t2 + 1) * values[(low * 3 + 1) * width + c]! +
+					(t3 - 2 * t2 + t) * span * values[(low * 3 + 2) * width + c]! +
+					(-2 * t3 + 3 * t2) * values[(next * 3 + 1) * width + c]! +
+					(t3 - t2) * span * values[next * 3 * width + c]!;
+			}
+		} else if ( channel.interpolation === "STEP" || next === low ) {
+			for ( let c = 0; c < width; c++ ) target[c] = values[low * width + c]!;
+		} else if ( width === 4 ) {
+			const at = channelIndex * 4;
+			if ( rotationSamples[at] !== low ) {
+				let dot = 0;
+				for ( let i = 0; i < 4; i++ ) dot += values[low * 4 + i]! * values[next * 4 + i]!;
+				const sign = dot < 0 ? -1 : 1;
+				dot = Math.min( 1, Math.abs( dot ) );
+				const angle = Math.acos( dot );
+				rotationSamples[at] = low;
+				rotationSamples[at + 1] = sign;
+				rotationSamples[at + 2] = angle;
+				rotationSamples[at + 3] = Math.sin( angle );
+			}
+			const sign = rotationSamples[at + 1]!,
+				angle = rotationSamples[at + 2]!,
+				sin = rotationSamples[at + 3]!;
+			const left = sin < 1e-6 ? 1 - fraction : Math.sin( (1 - fraction) * angle ) / sin,
+				right = sin < 1e-6 ? fraction : Math.sin( fraction * angle ) / sin;
+			for ( let i = 0; i < 4; i++ ) {
+				target[i] = values[low * 4 + i]! * left + values[next * 4 + i]! * right * sign;
+			}
+		} else {
+			for ( let c = 0; c < width; c++ ) {
+				target[c] = values[low * width + c]! * (1 - fraction) +
+					values[next * width + c]! * fraction;
+			}
+		}
+	}
+	/*
+================
+directTarget
+
+A direct pass's destination for node n's path: the sampler output itself.
+================
+	*/
+	function directTarget( n: number, path: number ) {
+		return path === 0 ? translations[n]! : path === 1 ? rotations[n]! : scales[n]!;
+	}
+	/*
+================
+sampleNodes
+
+Sample a direct pass's channels of chain[0..count) alone, through the
+clip's shared node index (clipNodeChannels).
+================
+	*/
+	function sampleNodes( count: number ) {
+		const clip = resolved[0]!.clip;
+		if ( !clip ) return;
+		const index = clipNodeChannels( clip, nodeChannels ), indexed = index.first.length - 1;
+		for ( let i = 0; i < count; i++ ) {
+			const n = chain[i]!;
+			if ( n >= indexed ) continue;
+			for ( let k = index.first[n]!; k < index.first[n + 1]!; k++ ) {
+				const channelIndex = index.channels[k]!, kind = clip.channels[channelIndex]!.path;
+				const path = kind === "translation" ? 0 : kind === "rotation" ? 1 : 2;
+				sampleChannel( clip, directClocks!, channelIndex, directTarget( n, path ), path === 1 ? 4 : 3 );
+			}
+		}
+	}
+	/*
+================
+sampleLayers
+
+Sample every channel of the begun evaluation's unsettled nodes: all of
+them for a blended pass (begin), the rest of a direct pass (materialize).
+================
+	*/
+	function sampleLayers() {
 		const direct = directPass;
 		// A single full-weight pass with one channel per node/path has no
 		// blending to accumulate. Sample with the identical interpolation,
@@ -269,59 +366,13 @@ A blended pass samples every node at once (begin).
 				const clocks = direct ? directClocks! : clipClocks( layer.clip, layer.time );
 				for ( let channelIndex = 0; channelIndex < layer.clip.channels.length; channelIndex++ ) {
 					const channel: CharacterClip["channels"][number] = layer.clip.channels[channelIndex]!;
-					if ( ready[channel.node] !== mark ) continue;
+					if ( ready[channel.node] !== 0 ) continue;
 					const path = channel.path === "translation" ? 0 : channel.path === "rotation" ? 1 : 2,
 						width = path === 1 ? 4 : 3;
 					// A single full-weight track owns this node/path. Its
 					// float32 destination is the sampler output itself.
-					const target = direct ?
-						(path === 0 ?
-							translations[channel.node]! :
-							path === 1 ?
-							rotations[channel.node]! :
-							scales[channel.node]!) :
-						width === 4 ?
-						sample :
-						sample3;
-					const { low, next, span, fraction } = clocks.cursors[clocks.index[channelIndex]!]!;
-					const values = channel.values;
-					if ( channel.interpolation === "CUBICSPLINE" ) {
-						const t = fraction, t2 = t * t, t3 = t2 * t;
-						for ( let c = 0; c < width; c++ ) {
-							target[c] = (2 * t3 - 3 * t2 + 1) * values[(low * 3 + 1) * width + c]! +
-								(t3 - 2 * t2 + t) * span * values[(low * 3 + 2) * width + c]! +
-								(-2 * t3 + 3 * t2) * values[(next * 3 + 1) * width + c]! +
-								(t3 - t2) * span * values[next * 3 * width + c]!;
-						}
-					} else if ( channel.interpolation === "STEP" || next === low ) {
-						for ( let c = 0; c < width; c++ ) target[c] = values[low * width + c]!;
-					} else if ( width === 4 ) {
-						const at = channelIndex * 4;
-						if ( rotationSamples[at] !== low ) {
-							let dot = 0;
-							for ( let i = 0; i < 4; i++ ) dot += values[low * 4 + i]! * values[next * 4 + i]!;
-							const sign = dot < 0 ? -1 : 1;
-							dot = Math.min( 1, Math.abs( dot ) );
-							const angle = Math.acos( dot );
-							rotationSamples[at] = low;
-							rotationSamples[at + 1] = sign;
-							rotationSamples[at + 2] = angle;
-							rotationSamples[at + 3] = Math.sin( angle );
-						}
-						const sign = rotationSamples[at + 1]!,
-							angle = rotationSamples[at + 2]!,
-							sin = rotationSamples[at + 3]!;
-						const left = sin < 1e-6 ? 1 - fraction : Math.sin( (1 - fraction) * angle ) / sin,
-							right = sin < 1e-6 ? fraction : Math.sin( fraction * angle ) / sin;
-						for ( let i = 0; i < 4; i++ ) {
-							target[i] = values[low * 4 + i]! * left + values[next * 4 + i]! * right * sign;
-						}
-					} else {
-						for ( let c = 0; c < width; c++ ) {
-							target[c] = values[low * width + c]! * (1 - fraction) +
-								values[next * width + c]! * fraction;
-						}
-					}
+					const target = direct ? directTarget( channel.node, path ) : width === 4 ? sample : sample3;
+					sampleChannel( layer.clip, clocks, channelIndex, target, width );
 					if ( direct ) continue;
 					const index = channel.node * 3 + path;
 					const out = pass[channel.node]![path]!, before = weights[index]!, total = before + layer.weight;
@@ -383,7 +434,7 @@ each group of nodes samples its own channels before it settles.
 		ready.fill( 0 );
 		readyCount = 0;
 		if ( direct && layer!.clip ) directClocks = clipClocks( layer!.clip, layer!.time );
-		else if ( !direct ) sampleLayers( 0 );
+		else if ( !direct ) sampleLayers();
 		begun = true;
 		cpuEvaluations++;
 	}
@@ -459,24 +510,68 @@ Publish a fully settled evaluation.
 	}
 	/*
 ================
+gather
+
+Append to chain[end..) node n's ancestors that neither have settled nor
+were gathered by this request, root first, and mark them SETTLING; returns
+the new end. An ancestor gathered earlier sits earlier in chain, so the
+whole run stays parent first.
+================
+	*/
+	function gather( n: number, end: number ): number {
+		let low = end;
+		for ( let at = n; at >= 0 && ready[at] === 0; at = model.nodes[at]!.parent ) {
+			chain[end++] = at;
+			ready[at] = SETTLING;
+		}
+		for ( let high = end - 1; low < high; low++, high-- ) {
+			const swap = chain[low]!;
+			chain[low] = chain[high]!;
+			chain[high] = swap;
+		}
+		return end;
+	}
+	/*
+================
+settleGathered
+
+Sample (a direct pass) and settle chain[0..count) of the begun evaluation;
+the rest stays pending for a later request. The last node settled
+publishes the evaluation, as materialize does.
+================
+	*/
+	function settleGathered( count: number ) {
+		if ( directPass ) sampleNodes( count );
+		settle( chain, 0, count );
+		if ( readyCount === model.nodes.length ) publishSettled();
+	}
+	/*
+================
 materializeNode
 
-Settle only node n's ancestor chain of the pending evaluation; the rest
-stays pending for palette. A socket of a GPU-sampled pose needs no more.
+Settle only node n's ancestor chain of the pending evaluation. A socket of
+a GPU-sampled pose needs no more.
 ================
 	*/
 	function materializeNode( n: number ) {
 		if ( !cpuPending ) return;
 		if ( !begun ) begin();
-		// The unsettled ancestors, root first, at the end of the scratch.
-		let first = chain.length;
-		for ( let at = n; at >= 0 && ready[at] !== SETTLED; at = model.nodes[at]!.parent ) {
-			chain[--first] = at;
-			ready[at] = SETTLING;
-		}
-		if ( directPass ) sampleLayers( SETTLING );
-		settle( chain, first, chain.length );
-		if ( readyCount === model.nodes.length ) publishSettled();
+		settleGathered( gather( n, 0 ) );
+	}
+	/*
+================
+materializeEntries
+
+Settle only the ancestor chains of the joints behind palette entries
+entries of a primitive with joints. A cloth step reads no others.
+================
+	*/
+	function materializeEntries( joints: readonly number[], entries: Int32Array ) {
+		if ( !cpuPending ) return;
+		if ( !begun ) begin();
+		let end = 0;
+		for ( let i = 0; i < entries.length; i++ ) end = gather( joints[entries[i]!]!, end );
+		settleGathered( end );
 	}
 	/*
 ================
@@ -488,9 +583,28 @@ Settle every node of the pending evaluation not yet settled.
 	function materialize() {
 		if ( !cpuPending ) return;
 		if ( !begun ) begin();
-		if ( directPass ) sampleLayers( 0 );
+		if ( directPass ) sampleLayers();
 		settle( order, 0, order.length );
 		publishSettled();
+	}
+	/*
+================
+paletteEntry
+
+The palette entry of joint, whose inverse bind is view, into out at at.
+================
+	*/
+	function paletteEntry( joint: number, view: Float32Array, out: Float32Array, at: number ) {
+		const factor = thickness[joint]!;
+		let matrix = globals[joint]!;
+		// AB6B20 scales radial Y/Z rows of the native global matrix,
+		// then multiplies inverse bind. Children and sockets stay unchanged.
+		if ( factor !== 1 ) {
+			radial.set( matrix );
+			for ( const n of RADIAL_WORDS ) radial[n]! *= factor;
+			matrix = radial;
+		}
+		multiply( matrix, view, out, at );
 	}
 	/*
 ================
@@ -702,14 +816,22 @@ quaternion scratch is charged and allocated only when playback needs it.
 			hasPose = true;
 			poseVersion++;
 			cpuPending = true;
+			// A begun evaluation belongs to the inputs replaced here: what it
+			// settled is not these inputs' skeleton. Its begin left reuse off.
+			begun = false;
 		},
 		/*
         ================
         palette
+
+        primitive's skin palette into out at offset. entries (ascending palette
+        indices) asks for those alone: only their joints' ancestor chains are
+        built, only they are written, each with the bytes of the whole palette,
+        and the rest of out is left as it was. A whole palette is cached per
+        binding and revision; a partial one is not, and leaves the cache alone.
         ================
         */
-		palette( primitive: CharacterPrimitive, out: Float32Array, offset = 0 ) {
-			materialize();
+		palette( primitive: CharacterPrimitive, out: Float32Array, offset = 0, entries?: Int32Array ) {
 			primitive = bindings.get( primitive ) ?? primitive;
 			let views = inverseViews.get( primitive );
 			if ( !views ) {
@@ -719,6 +841,15 @@ quaternion scratch is charged and allocated only when playback needs it.
 				);
 				inverseViews.set( primitive, views );
 			}
+			if ( entries ) {
+				materializeEntries( primitive.joints, entries );
+				for ( let k = 0; k < entries.length; k++ ) {
+					const i = entries[k]!;
+					paletteEntry( primitive.joints[i]!, views[i]!, out, offset + i * 16 );
+				}
+				return;
+			}
+			materialize();
 			let cached = palettes.get( primitive );
 			if ( !cached ) {
 				cached = { version: -1, data: new Float32Array( primitive.joints.length * 16 ) };
@@ -726,16 +857,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			}
 			if ( cached.version !== paletteVersion ) {
 				for ( let i = 0; i < primitive.joints.length; i++ ) {
-					const joint = primitive.joints[i]!, factor = thickness[joint]!;
-					let matrix = globals[joint]!;
-					// AB6B20 scales radial Y/Z rows of the native global matrix,
-					// then multiplies inverse bind. Children and sockets stay unchanged.
-					if ( factor !== 1 ) {
-						radial.set( matrix );
-						for ( const n of [ 4, 5, 6, 8, 9, 10 ] ) radial[n]! *= factor;
-						matrix = radial;
-					}
-					multiply( matrix, views[i]!, cached.data, i * 16 );
+					paletteEntry( primitive.joints[i]!, views[i]!, cached.data, i * 16 );
 				}
 				cached.version = paletteVersion;
 			}
