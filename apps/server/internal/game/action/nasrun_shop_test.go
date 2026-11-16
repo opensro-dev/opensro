@@ -106,7 +106,71 @@ func TestGoldPurchaseSendsNoTokenShop(t *testing.T) {
 	if _, sent := tokenShopBalance(t, res.Frames); sent {
 		t.Fatal("a gold buy resent the shop")
 	}
-	if balance, _ := tokenShopBalance(t, []wire.Frame{rt.shopCatalog("", c, 17)}); balance != nil {
+	if balance, _ := tokenShopBalance(t, []wire.Frame{rt.shopCatalog(testDivision, c, 17)}); balance != nil {
 		t.Fatalf("a shop with no token offer sent a balance %d", *balance)
+	}
+}
+
+/*
+================
+TestTokenGoodsTravelApartFromTheStock
+
+A client built before the token shop refuses an unknown payment in
+offers and loses its session on it, so token goods go in tokenOffers,
+which that client never reads; the native stock stays in offers.
+================
+*/
+func TestTokenGoodsTravelApartFromTheStock(t *testing.T) {
+	rt, c := merchantFixture(t)
+	c.NasrunTokens = 42
+	gold := rt.Commerce.Tabs[1][0]
+	token := gold
+	token.Slot, token.Price, token.Currency = 3, 60, commerce.PaymentNasrunToken
+	rt.Commerce.Tabs[1] = append(rt.Commerce.Tabs[1], token)
+	var p shopProjection
+	if err := json.Unmarshal(rt.shopCatalog(testDivision, c, 17).Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Offers) != 1 || p.Offers[0].Currency == commerce.PaymentNasrunToken {
+		t.Fatalf("offers = %+v, want the gold offer alone", p.Offers)
+	}
+	if len(p.TokenOffers) != 1 || p.TokenOffers[0].Slot != 3 || p.TokenOffers[0].Currency != commerce.PaymentNasrunToken {
+		t.Fatalf("tokenOffers = %+v, want the token offer alone", p.TokenOffers)
+	}
+	if p.NasrunTokens == nil || *p.NasrunTokens != 42 {
+		t.Fatalf("balance = %v, want 42", p.NasrunTokens)
+	}
+}
+
+/*
+================
+TestNoMerchantBuysASpirit
+
+A Spirit is bought with tokens; selling it for gold would turn tokens
+into gold, so the sale is refused even when its row says canSell.
+================
+*/
+func TestNoMerchantBuysASpirit(t *testing.T) {
+	rt, c := merchantFixture(t)
+	gold := int64(1000)
+	c.Gold = &gold
+	c.MissionInventory = nil
+	offer := rt.Commerce.Tabs[1][0]
+	// The item source's own row is the offer's, so the bag row the buy
+	// makes and the sale's lookup agree that it is a Spirit (3/1/14).
+	offer.Ref.TypeIDs = [4]int64{3, 1, 14, 1}
+	offer.Price, offer.Stack = 100, 1
+	rt.Commerce.Tabs[1][0] = offer
+	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 1})
+	if len(c.MissionInventory) != 1 || goldOf(c) != 900 {
+		t.Fatalf("setup buy: inv=%d gold=%d", len(c.MissionInventory), goldOf(c))
+	}
+	slot := c.MissionInventory[0].Slot
+	res := trade(t, rt, c, wire.ItemMoveRequest{MovementType: 9, NpcGID: 17, SourceSlot: uint8(slot), Quantity: 1})
+	if len(c.MissionInventory) != 1 || goldOf(c) != 900 {
+		t.Fatalf("a Spirit sold: inv=%d gold=%d frames=%+v", len(c.MissionInventory), goldOf(c), res.Frames)
+	}
+	if len(res.Frames) != 1 || res.Frames[0].Payload[len(res.Frames[0].Payload)-1] != wire.ErrCodeCannotDealAtShop {
+		t.Fatalf("sale refusal = %+v, want cannot deal", res.Frames)
 	}
 }

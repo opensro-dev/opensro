@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"reflect"
@@ -141,10 +142,13 @@ type shopProjection struct {
 	Offers     []shopOffer           `json:"offers"`
 	Buyback    []buybackOffer        `json:"buyback"`
 	Error      string                `json:"error,omitempty"`
-	// NasrunTokens is the buyer's Devil's Spirit token balance, sent
-	// only by a shop that sells token goods (port-only, SRO_NASRUN), so
-	// the client can show it and refuse a buy it cannot pay for.
-	NasrunTokens *int64 `json:"nasrunTokens,omitempty"`
+	// TokenOffers are the shop's Devil's Spirit token goods and
+	// NasrunTokens the buyer's balance, sent only by a shop that sells
+	// them (port-only, SRO_NASRUN). They travel apart from Offers so a
+	// client built before them, which refuses an unknown payment in
+	// Offers and loses its session on it, reads the native stock alone.
+	TokenOffers  []shopOffer `json:"tokenOffers,omitempty"`
+	NasrunTokens *int64      `json:"nasrunTokens,omitempty"`
 }
 
 /*
@@ -259,8 +263,13 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 					prices = append(prices, shopPriceRow{Currency: commerce.PaymentHonor, Amount: strconv.FormatUint(o.HonorPrice, 10)})
 				}
 			}
-			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack})
-			if o.Currency == commerce.PaymentNasrunToken && p.NasrunTokens == nil {
+			offer := shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack}
+			if o.Currency != commerce.PaymentNasrunToken {
+				p.Offers = append(p.Offers, offer)
+				return
+			}
+			p.TokenOffers = append(p.TokenOffers, offer)
+			if p.NasrunTokens == nil {
 				balance := snapshot.NasrunTokens
 				p.NasrunTokens = &balance
 			}
@@ -636,6 +645,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			if !commerceSaleAdmitted(ref) {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
+			// Port-only, not native (SRO_NASRUN, #3456 3b): a Devil's
+			// Spirit is bought with tokens, so no merchant buys one for
+			// gold whatever its imported row says; tokens never become
+			// gold. v1.150 has no Spirit, so no native sale changes.
+			if nasrun.IsSpirit(item.TypeFlags) {
 				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}

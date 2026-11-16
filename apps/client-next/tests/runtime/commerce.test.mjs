@@ -154,3 +154,28 @@ test("a token offer and the shop's token balance are admitted, other payments ar
 		assert.throws( () => shopCatalog( encode( {}, { nasrunTokens } ) ), Error, String( nasrunTokens ) );
 	}
 });
+
+/*
+================
+Token offers travel apart from the native stock
+
+The server sends token goods in tokenOffers, which a client built before
+them never reads; this client checks them and joins them to the stock.
+A gold row there, or a token row that is not an object, is refused.
+================
+*/
+test("token offers arrive in tokenOffers and join the stock", () => {
+	const gold = { tab: 0, slot: 0, refObjId: 1, name: "Potion", maxStack: 50, price: "60", currency: 1 };
+	const token = { tab: 0, slot: 1, refObjId: 2, name: "Spirit", maxStack: 1, price: "60", currency: 64 };
+	const encode = ( tokenOffers ) =>
+		new TextEncoder().encode(
+			JSON.stringify( { version: 1, npc: 1, name: "shop", offers: [ gold ], tokenOffers, nasrunTokens: 7 } )
+		);
+	const shop = shopCatalog( encode( [ token ] ) );
+	assert.deepEqual( shop.offers.map( ( o ) => o.currency ), [ 1, 64 ] );
+	assert.equal( shop.tokenOffers, undefined );
+	assert.equal( shop.nasrunTokens, 7 );
+	for ( const bad of [ [ gold ], [ null ], "x" ] ) {
+		assert.throws( () => shopCatalog( encode( bad ) ), /Invalid token offer/, JSON.stringify( bad ) );
+	}
+});

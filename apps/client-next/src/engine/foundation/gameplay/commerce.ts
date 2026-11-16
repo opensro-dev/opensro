@@ -237,6 +237,20 @@ shopCatalog
 export function shopCatalog( p: Uint8Array ): ShopState {
 	const r = commerceJson( p );
 	commerceInteger( r.npc, 0xffffffff, 1 );
+	// Port-only (SRO_NASRUN): the token goods travel apart from the native
+	// stock, so a client built before them reads the stock alone; this one
+	// checks them, joins them to the stock, and the stock's checks below
+	// (count included) then cover them like any other offer.
+	if ( r.tokenOffers !== undefined ) {
+		if ( !Array.isArray( r.tokenOffers ) || !Array.isArray( r.offers ) ) throw Error( "Invalid token offers" );
+		for ( const row of r.tokenOffers ) {
+			if ( !row || typeof row !== "object" || row.currency !== SHOP_CURRENCY_NASRUN_TOKEN ) {
+				throw Error( "Invalid token offer" );
+			}
+		}
+		r.offers = [ ...r.offers, ...r.tokenOffers ];
+		delete r.tokenOffers;
+	}
 	if (
 		typeof r.name !== "string" || r.name.length > 256 ||
 		r.error !== undefined && (typeof r.error !== "string" || r.error.length > 256) || !Array.isArray( r.offers ) ||
