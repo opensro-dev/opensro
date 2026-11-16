@@ -75,6 +75,9 @@ export function createModelEmission( allocate: () => number ) {
 			model: string;
 			scale: number;
 			particles: readonly ModelParticle[];
+			// Each particle's effect program path, made with the row: the
+			// particles are the row's own, so the paths cannot change.
+			programs: string[];
 			ids: number[];
 			started: (number | null)[];
 		}
@@ -114,6 +117,9 @@ export function createModelEmission( allocate: () => number ) {
 						model: actor.model,
 						scale: actor.scale,
 						particles,
+						programs: particles.map( particle =>
+							"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
+						),
 						ids: particles.map( () => allocate() ),
 						started: particles.map( () => null )
 					};
@@ -121,7 +127,7 @@ export function createModelEmission( allocate: () => number ) {
 				}
 				for ( let i = 0; i < particles.length; i++ ) {
 					const particle = particles[i]!,
-						model = "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath );
+						model = row.programs[i]!;
 					if ( out.length >= capacity || !ready( model ) ) continue;
 					if ( row.started[i] === null || seconds < row.started[i]! ) row.started[i] = seconds;
 					out.push( {

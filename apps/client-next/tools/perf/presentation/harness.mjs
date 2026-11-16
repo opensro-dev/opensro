@@ -296,7 +296,8 @@ createPresentationHarness
 ROOT is a repository checkout; session is a parsed session object
 (scenarios.mjs). options.due, when given, replaces the presentation's
 appearance and motion rules (presentation-due.ts), so a run can present
-every entity in full or count the rules' answers. The harness owns Math.random until
+every entity in full or count the rules' answers; options.actors, when
+given, sees every published actor list as the renderer receives it. The harness owns Math.random until
 dispose.
 ================
 */
@@ -393,6 +394,7 @@ export async function createPresentationHarness( root, session, options = {} ) {
 					if ( !sink || typeof value !== "function" ) return value;
 					return ( ...args ) => {
 						record( key, sink( ...args ) );
+						if ( key === "setCharacterActors" ) options.actors?.( ...args );
 						return value.apply( target, args );
 					};
 				}

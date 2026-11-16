@@ -415,7 +415,7 @@ function groundItems( seed ) {
 ================
 settle
 
-Thirteen players and four NPCs stand until their motion is settled (a
+Fifteen players and four NPCs stand until their motion is settled (a
 steady decision, presentation-due.ts); then each meets one kind of input,
 one every 40 frames, that must unsettle it on the frame it lands: a hit
 and the caster's cast (action layers, the WAIT state, the combat stance),
@@ -428,9 +428,11 @@ damage changes its stage model on its own timer, with no new row. Then
 the dress inputs no row of the wearer carries: a cast whose skill hides
 the weapon, the server's job-suit and Moonlit Ash rules over a thief suit,
 and the local player joining an arena team, which dresses a peer of the
-other team in fortress clothes. The target changes and the camera pulls
-back across a LOD rescan: inputs only the advance part reads. 20 s of
-standing lets the idle fidget timers fire.
+other team in fortress clothes. The target changes, to a near player and
+to one beyond the protected animation distance, a pet resolve's stack
+window ends, and the camera pulls back across a LOD rescan: inputs only
+the published actor reads. 20 s of standing lets the idle fidget timers
+fire.
 ================
 */
 function settle( seed ) {
@@ -438,6 +440,7 @@ function settle( seed ) {
 	const players = Array.from( { length: 13 }, ( _, i ) => FIRST_PEER_GID + i );
 	const brute = FIRST_PEER_GID + 20, bare = FIRST_PEER_GID + 21, horse = FIRST_PEER_GID + 22;
 	const tower = FIRST_PEER_GID + 23, towerHp = 10000, thief = FIRST_PEER_GID + 24;
+	const far = FIRST_PEER_GID + 25, resolute = FIRST_PEER_GID + 26;
 	// The gameplay vitals list is replaced whole: keep every row's current one.
 	const vitals = new Map( [ LOCAL_GID, ...players, brute, bare, tower ].map( gid => {
 		const hp = gid === LOCAL_GID ? 1000 : gid === tower ? towerHp : 500;
@@ -449,6 +452,21 @@ function settle( seed ) {
 	};
 	localStart( session, catalogs, rng, [ ...vitals.values() ].filter( row => row.gid !== LOCAL_GID ) );
 	players.forEach( ( gid, i ) => peer( session, catalogs, rng, i, gid, grid( rng, i ) ) );
+	// A player beyond the protected animation distance (300) from the local
+	// player, whose animation becoming the target protects (animationLod),
+	// and one under a pet resolve whose stack window ends with no new row.
+	session.spawn(
+		0,
+		playerRow( catalogs, far, "CHAR_EU_MAN_NOBLE", pose( CENTER, CENTER + 420 ), {
+			equipment: gearFor( catalogs, rng, "CHAR_EU_MAN_NOBLE" )
+		} )
+	);
+	session.spawn(
+		0,
+		playerRow( catalogs, resolute, "CHAR_CH_WOMAN_ADVENTURER", grid( rng, 16 ), {
+			petResolve: { untilMs: session.simulationMs( 700 ), stacks: 3 }
+		} )
+	);
 	// A Chinese man in a thief suit (job slot), of arena team 1.
 	session.spawn(
 		0,
@@ -555,6 +573,7 @@ function settle( seed ) {
 	session.state( arena, LOCAL_GID, { arenaTeam: 0 } );
 	session.state( arena + 120, LOCAL_GID, { arenaTeam: 255 } );
 	session.gameplay( next(), { target: players[3] } );
+	session.gameplay( next(), { target: far } );
 	const pulled = next();
 	for ( let i = 0; i < 240; i++ ) {
 		const back = 120 + 300 * Math.min( 1, i / 120 );

@@ -20,12 +20,15 @@ import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/n
 import { cosScale, monsterScale } from "@/engine/foundation/rendering/monster-scale";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { EntityState } from "@/engine/contracts/world";
+import type { CharacterActor } from "@/engine/contracts/character";
 import type {
 	ActorAppearance,
 	ActorFrame,
 	ActorOwner,
 	ActorPass,
-	MotionDecision
+	KeptRecord,
+	MotionDecision,
+	RecordStamp
 } from "./internal/presentation-contract";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 import { flightSoundDefinition } from "@/engine/foundation/animation/wing-flight";
@@ -38,6 +41,58 @@ createActorAdvance
 ================
 */
 export function createActorAdvance( owner: ActorOwner ) {
+	/*
+	================
+	recordStamp
+
+	The inputs of a steady decision's published actor beyond the decision
+	and the resolved appearance (RecordStamp), read as the actor's own
+	fields read them. Pure reads.
+	================
+	*/
+	function recordStamp(
+		entity: EntityState,
+		resolved: ActorAppearance,
+		decision: MotionDecision,
+		frame: ActorFrame
+	): RecordStamp {
+		const { effects, entityLod, published } = owner;
+		const { gameplay, localMover, seconds } = frame;
+		const { resource } = resolved, { state, renderPose, cast, dead } = decision;
+		const appearance = effects.appearance( entity.gid );
+		return {
+			resolved,
+			manifest: published.manifest,
+			localGid: gameplay?.localGid,
+			shadowSize: !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined,
+			bloodEffects: published.bloodEffects.get( resource.codename ),
+			materialTint: appearance.materialTint,
+			pointLight: appearance.pointLight,
+			boneRotation: appearance.boneRotation,
+			appearanceScale: appearance.scale,
+			fraction: entityLod.fraction( entity.gid ),
+			crowded: entityLod.crowded(),
+			optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+				entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+				entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+				!gameplay?.casts.some( cast => cast.target === entity.gid ),
+			regionId: renderPose.regionId,
+			x: renderPose.x,
+			y: renderPose.y,
+			z: renderPose.z,
+			yaw: characterHeadingYaw( renderPose.angle ),
+			height: published.heights.has( resource.codename ) ?
+				published.heights.get( resource.codename )! *
+				(state.actionHeight ?
+					state.actionHeight.from +
+					(state.actionHeight.to - state.actionHeight.from) *
+						Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
+					1) :
+				undefined,
+			petResolve: (entity.petResolve?.untilMs ?? 0) > seconds * 1000,
+			modifierId: state.modifierId
+		};
+	}
 	return {
 		/*
 		================
@@ -52,8 +107,9 @@ export function createActorAdvance( owner: ActorOwner ) {
 			resolved: ActorAppearance,
 			decision: MotionDecision,
 			frame: ActorFrame,
-			pass: ActorPass
-		) {
+			pass: ActorPass,
+			kept?: KeptRecord
+		): Omit<KeptRecord, "retained"> | undefined {
 			const {
 				committedAuxiliary,
 				displayedDependencies,
@@ -172,91 +228,136 @@ export function createActorAdvance( owner: ActorOwner ) {
 				probe?.detailEnd( "actor-sounds" );
 				probe?.detailBegin( "actor-record" );
 			}
-			displayedDependencies.set( entity.gid, dependencies );
-			if ( auxiliaryCommit !== undefined ) committedAuxiliary.set( entity.gid, auxiliaryCommit );
-			const appearance = effects.appearance( entity.gid ),
-				baseScale = entity.kind === "monster" ?
-					monsterScale( entity.rarity ?? 0, entity.tidWord ?? 0, resource.scalePercent ) :
-					entity.kind === "cos" ?
-					cosScale( resource.scalePercent ) :
-					1;
-			state.modifierResource = resource;
-			state.modifierLayers = layers;
-			state.lastDrawnPose = { ...renderPose };
-			next.set( entity.gid, {
-				shadowSize: !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined,
-				modelAnimation: resource.modifierBindings?.length ?
-					(state.modelAnimation ??= createModelAnimation()).step(
-						dispatch,
-						resource.modifierBindings,
-						resource.modifierSelectors ?? []
-					) :
-					undefined,
-				animationLod: {
-					fraction: entityLod.fraction( entity.gid ),
-					crowded: entityLod.crowded(),
-					// Dispatch and gameplay run above even when a distant skeleton
-					// reuses its last sample. Protect combat and the whole ride.
-					optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
-						entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
-						entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
-						!gameplay?.casts.some( cast => cast.target === entity.gid )
-				},
-				blindable: blindableCharacter( entity, gameplay?.localGid ),
-				blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
-				groundItem: !!entity.groundItem,
-				dungeonBlock: entity.dungeonBlock,
-				previewClip: resource.clipFacts.names.has( armedIdle ) ? armedIdle : "stand",
-				materialTint: appearance.materialTint,
-				pointLight: appearance.pointLight,
-				...(appearance.boneRotation ? { boneRotation: appearance.boneRotation } : {}),
-				modifierId: state.modifierId,
-				bloodEffects: published.bloodEffects.get( resource.codename ),
-				effectBaseScale: baseScale,
-				heightFactor: published.heightFactors.get( resource.codename ),
-				effectAnchor: published.effectAnchors.get( resource.codename ),
-				pickable: !authorityDead || entity.gid === gameplay?.localGid,
-				// 692680: a filtered pick (SHIFT, or a dead local player) takes a
-				// dead player; dead monsters and companions stay out of it.
-				pickWhenFiltered: authorityDead && entity.kind === "player",
-				height: published.heights.has( resource.codename ) ?
-					published.heights.get( resource.codename )! *
-					(state.actionHeight ?
-						state.actionHeight.from +
-						(state.actionHeight.to - state.actionHeight.from) *
-							Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
-						1) :
-					undefined,
-				mountedOn: seat,
-				gid: entity.gid,
-				model,
-				pose: {
-					regionId: renderPose.regionId,
-					x: renderPose.x,
-					y: renderPose.y,
-					z: renderPose.z,
-					yaw: characterHeadingYaw( renderPose.angle )
-				},
-				clip,
-				// A single WAIT/SHOT layer can differ from the base clip. Only
-				// collapse a full-weight timed layer that the base fields reproduce.
-				// decide installs the locomotion blend before it returns.
-				layers: posture || layers.length !== 1 || layers[0]!.clip !== clip ||
-						layers[0]!.loop !== looping || layers[0]!.weight !== 1 || layers[0]!.lane === "event" ||
-						state.locomotion!.outgoing.length ?
-					layers :
-					undefined,
-				time: layers.length === 1 && layers[0]!.clip === clip ?
-					layers[0]!.time :
-					Math.max( 0, seconds - state.started ),
-				loop: looping,
-				scale: Math.fround(
-					baseScale * appearance.scale *
-						(1 +
-							((entity.petResolve?.untilMs ?? 0) > seconds * 1000 ? entity.petResolve!.stacks * .012 : 0))
-				)
-			} );
-			if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
+			// A steady decision's actor: kept for the next frame, and when this
+			// frame reuses the decision that published it with the same
+			// stamp, published again with only its clocks advanced. Every
+			// other field is a function of the decision, the resolved
+			// appearance, the entity row (all three the same) and the stamp.
+			const stamp = decision.steady ? recordStamp( entity, resolved, decision, frame ) : undefined;
+			let record: Omit<KeptRecord, "retained"> | undefined;
+			if ( !owner.due.record( kept, stamp ) && kept && stamp ) {
+				displayedDependencies.set( entity.gid, dependencies );
+				if ( auxiliaryCommit !== undefined ) committedAuxiliary.set( entity.gid, auxiliaryCommit );
+				state.modifierResource = resource;
+				state.modifierLayers = layers;
+				state.lastDrawnPose = { ...renderPose };
+				const actor: CharacterActor = Object.freeze( {
+					...kept.actor,
+					modelAnimation: resource.modifierBindings?.length ?
+						(state.modelAnimation ??= createModelAnimation()).step(
+							dispatch,
+							resource.modifierBindings,
+							resource.modifierSelectors ?? []
+						) :
+						undefined,
+					layers: posture || layers.length !== 1 || layers[0]!.clip !== clip ||
+							layers[0]!.loop !== looping || layers[0]!.weight !== 1 || layers[0]!.lane === "event" ||
+							state.locomotion!.outgoing.length ?
+						layers :
+						undefined,
+					time: layers.length === 1 && layers[0]!.clip === clip ?
+						layers[0]!.time :
+						Math.max( 0, seconds - state.started )
+				} );
+				next.set( entity.gid, actor );
+				if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
+				record = { actor, stamp: kept.stamp };
+			} else {
+				displayedDependencies.set( entity.gid, dependencies );
+				if ( auxiliaryCommit !== undefined ) committedAuxiliary.set( entity.gid, auxiliaryCommit );
+				const appearance = effects.appearance( entity.gid ),
+					baseScale = entity.kind === "monster" ?
+						monsterScale( entity.rarity ?? 0, entity.tidWord ?? 0, resource.scalePercent ) :
+						entity.kind === "cos" ?
+						cosScale( resource.scalePercent ) :
+						1;
+				state.modifierResource = resource;
+				state.modifierLayers = layers;
+				state.lastDrawnPose = { ...renderPose };
+				next.set(
+					entity.gid,
+					Object.freeze( {
+						shadowSize: !entity.groundItem ? published.shadowSizes.get( entity.refObjId ) : undefined,
+						modelAnimation: resource.modifierBindings?.length ?
+							(state.modelAnimation ??= createModelAnimation()).step(
+								dispatch,
+								resource.modifierBindings,
+								resource.modifierSelectors ?? []
+							) :
+							undefined,
+						animationLod: {
+							fraction: entityLod.fraction( entity.gid ),
+							crowded: entityLod.crowded(),
+							// Dispatch and gameplay run above even when a distant skeleton
+							// reuses its last sample. Protect combat and the whole ride.
+							optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+								entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+								entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+								!gameplay?.casts.some( cast => cast.target === entity.gid )
+						},
+						blindable: blindableCharacter( entity, gameplay?.localGid ),
+						blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
+						groundItem: !!entity.groundItem,
+						dungeonBlock: entity.dungeonBlock,
+						previewClip: resource.clipFacts.names.has( armedIdle ) ? armedIdle : "stand",
+						materialTint: appearance.materialTint,
+						pointLight: appearance.pointLight,
+						...(appearance.boneRotation ? { boneRotation: appearance.boneRotation } : {}),
+						modifierId: state.modifierId,
+						bloodEffects: published.bloodEffects.get( resource.codename ),
+						effectBaseScale: baseScale,
+						heightFactor: published.heightFactors.get( resource.codename ),
+						effectAnchor: published.effectAnchors.get( resource.codename ),
+						pickable: !authorityDead || entity.gid === gameplay?.localGid,
+						// 692680: a filtered pick (SHIFT, or a dead local player) takes a
+						// dead player; dead monsters and companions stay out of it.
+						pickWhenFiltered: authorityDead && entity.kind === "player",
+						height: published.heights.has( resource.codename ) ?
+							published.heights.get( resource.codename )! *
+							(state.actionHeight ?
+								state.actionHeight.from +
+								(state.actionHeight.to - state.actionHeight.from) *
+									Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
+								1) :
+							undefined,
+						mountedOn: seat,
+						gid: entity.gid,
+						model,
+						pose: {
+							regionId: renderPose.regionId,
+							x: renderPose.x,
+							y: renderPose.y,
+							z: renderPose.z,
+							yaw: characterHeadingYaw( renderPose.angle )
+						},
+						clip,
+						// A single WAIT/SHOT layer can differ from the base clip. Only
+						// collapse a full-weight timed layer that the base fields reproduce.
+						// decide installs the locomotion blend before it returns.
+						layers: posture || layers.length !== 1 || layers[0]!.clip !== clip ||
+								layers[0]!.loop !== looping || layers[0]!.weight !== 1 || layers[0]!.lane === "event" ||
+								state.locomotion!.outgoing.length ?
+							layers :
+							undefined,
+						time: layers.length === 1 && layers[0]!.clip === clip ?
+							layers[0]!.time :
+							Math.max( 0, seconds - state.started ),
+						loop: looping,
+						scale: Math.fround(
+							baseScale * appearance.scale *
+								(1 +
+									((entity.petResolve?.untilMs ?? 0) > seconds * 1000 ?
+										entity.petResolve!.stacks * .012 :
+										0))
+						)
+					} )
+				);
+				if ( sampleActorDetails ) probe?.detailEnd( "actor-record" );
+				record = stamp && { actor: next.get( entity.gid )!, stamp };
+			}
+			// The record's tail, the same after either record above: foot
+			// contacts over the dispatched ranges, the emission holders, the
+			// committed default wear and equipment particles.
 			if ( actionMask & 0x200 ) {
 				const actor = next.get( entity.gid )!;
 				for ( const row of dispatch ) {
@@ -284,6 +385,7 @@ export function createActorAdvance( owner: ActorOwner ) {
 			if ( state.equipmentParticles?.length ) {
 				particleHolders.push( { actor: next.get( entity.gid )!, particles: state.equipmentParticles } );
 			}
+			return record;
 		}
 	};
 }

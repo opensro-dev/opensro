@@ -852,7 +852,8 @@ export function createActorMotion( owner: ActorOwner ) {
 			// The disguise and weapon the motion set was read from above.
 			armedIdle: motionDisguise || weapon ? weaponNamed.previewIdle : "stand",
 			actionMask: refresh.mask,
-			steady
+			steady,
+			reused: false
 		};
 	}
 	/*
@@ -931,7 +932,8 @@ export function createActorMotion( owner: ActorOwner ) {
 			...decision,
 			nativePose,
 			renderPose: drawnPoses.get( entity.gid ) ?? nativePose,
-			layers: locomotionLayers( decision.state.locomotion!, seconds )
+			layers: locomotionLayers( decision.state.locomotion!, seconds ),
+			reused: true
 		};
 	}
 	// The presentation frame present last ran in, and its count: a retained
@@ -963,11 +965,16 @@ export function createActorMotion( owner: ActorOwner ) {
 			// A steady decide read what the stamp reads and changed none of
 			// it, so the stamp taken before it stands for it.
 			const retain = !reused && decision.steady ? stamp ?? motionStamp( entity, resolved, frame ) : undefined;
-			actorAdvance.advance( entity, resolved, decision, frame, pass );
+			// The actor the retained decision published last frame, when this
+			// frame reuses that decision: advance may publish it again.
+			const kept = reused && decision.state.record?.retained === previous ? decision.state.record : undefined;
+			const record = actorAdvance.advance( entity, resolved, decision, frame, pass, kept );
 			// Retained only once advance has published: a throw leaves the
 			// last retained frame behind, and the next frame decides.
 			if ( reused ) previous!.frame = frameIndex;
 			else decision.state.motion = retain && { decision, stamp: retain, frame: frameIndex };
+			const motion = decision.state.motion;
+			decision.state.record = record && motion && { ...record, retained: motion };
 		}
 	};
 }

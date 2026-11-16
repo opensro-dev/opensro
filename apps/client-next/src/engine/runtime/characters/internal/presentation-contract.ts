@@ -322,6 +322,9 @@ export interface CharacterPresentationState {
 	// The last steady resolve (actor-appearance.ts) and its inputs
 	// (AppearanceRetained); undefined after any resolve that was not steady.
 	appearance?: AppearanceRetained;
+	// The actor the last steady decision published and the inputs of its
+	// fields (KeptRecord); undefined after any frame that was not steady.
+	record?: KeptRecord;
 }
 
 /*
@@ -473,7 +476,71 @@ motion decided again (presentation-due.ts); a test passes always-due ones.
 export interface PresentationDue {
 	readonly appearance: AppearanceDue;
 	readonly motion: MotionDue;
+	readonly record: RecordDue;
 }
+
+/*
+================
+RecordStamp
+
+What the published actor of a steady decision (actor-advance.ts) reads
+beyond the decision and the resolved appearance, as values and
+identities: the catalogue's epoch and the two lookups a rejected manifest
+can leave written without one (shadow size, blood effects), the local
+player, the effects owner's tint, light, bone rotation and scale, the
+level of detail and its optional test, the drawn pose, the action height,
+the pet resolve's stack window and the modifier owner.
+================
+*/
+export interface RecordStamp {
+	readonly resolved: ActorAppearance;
+	readonly manifest: number;
+	readonly localGid: number | undefined;
+	readonly shadowSize: number | undefined;
+	readonly bloodEffects: readonly [string | null, string | null] | undefined;
+	readonly materialTint: readonly [number, number, number] | undefined;
+	readonly pointLight: CharacterPointLight | undefined;
+	readonly boneRotation: CharacterActor["boneRotation"];
+	readonly appearanceScale: number;
+	readonly fraction: number;
+	readonly crowded: boolean;
+	readonly optional: boolean;
+	readonly regionId: number;
+	readonly x: number;
+	readonly y: number;
+	readonly z: number;
+	readonly yaw: number;
+	readonly height: number | undefined;
+	readonly petResolve: boolean;
+	readonly modifierId: number;
+}
+
+/*
+================
+KeptRecord
+
+The actor a steady decision last published, frozen, with its stamp and
+the retained decision it was published from: a frame that reuses that
+decision with the same stamp publishes it again with only its clocks
+(time, layers, model animation) advanced.
+================
+*/
+export interface KeptRecord {
+	readonly actor: CharacterActor;
+	readonly stamp: RecordStamp;
+	readonly retained: MotionRetained | undefined;
+}
+
+/*
+================
+RecordDue
+
+Whether advance must build the actor again, given as MotionDue is: the
+kept record and this frame's stamp, both only when the decision was
+reused from the frame that published it.
+================
+*/
+export type RecordDue = ( kept: KeptRecord | undefined, stamp: RecordStamp | undefined ) => boolean;
 
 /*
 ================
@@ -771,6 +838,8 @@ export interface MotionDecision {
 	// the clock but the locomotion layers: with the same stamp next frame
 	// it would decide the same, so advance may run on this decision again.
 	readonly steady: boolean;
+	// This frame reused the retained decision instead of deciding.
+	readonly reused: boolean;
 }
 
 /*
