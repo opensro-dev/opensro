@@ -2634,6 +2634,14 @@
 			"reason": "characters.ts lends the appearance rule to the per-actor phase through its owner; a test passes its own rule at construction."
 		},
 		{
+			"consumer": "src/engine/runtime/characters/actor-advance.ts",
+			"provider": "src/engine/runtime/characters/presentation-due.ts",
+			"functions": [
+				"recordDue"
+			],
+			"reason": "characters.ts lends the published actor's rule to the per-actor phase through its owner; a test passes its own rule at construction."
+		},
+		{
 			"consumer": "src/engine/foundation/animation/model-emission.ts",
 			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
 			"functions": [
@@ -4233,6 +4241,13 @@
 			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
 		},
 		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "localMover",
+			"function": "recordStamp",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "statusOwner.view",
 			"function": "decide",
@@ -4430,8 +4445,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "effects.appearance",
+			"function": "recordStamp",
+			"kind": "callback",
+			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "entityLod.fraction",
 			"function": "advance",
+			"kind": "callback",
+			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "entityLod.fraction",
+			"function": "recordStamp",
 			"kind": "callback",
 			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
 		},
@@ -4444,8 +4473,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "entityLod.crowded",
+			"function": "recordStamp",
+			"kind": "callback",
+			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
 			"expression": "entityLod.distance",
 			"function": "advance",
+			"kind": "callback",
+			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-advance.ts",
+			"expression": "entityLod.distance",
+			"function": "recordStamp",
 			"kind": "callback",
 			"reason": "Characters LOD owner lends its synchronous per-entity distance and crowd reads to the per-actor phase."
 		},

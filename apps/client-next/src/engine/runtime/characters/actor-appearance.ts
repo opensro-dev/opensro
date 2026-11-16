@@ -29,7 +29,8 @@ import type {
 	ActorPass,
 	AppearanceRetained,
 	AppearanceStamp,
-	Auxiliary
+	Auxiliary,
+	StampScratch
 } from "./internal/presentation-contract";
 
 // How long a character that was never drawn waits, unseen, for its worn
@@ -110,12 +111,16 @@ export function createActorAppearance( owner: ActorOwner ) {
 		}
 		return text;
 	}
+	// The stamp resolve fills each frame; a due entity's is copied before
+	// resolve, and only a steady resolve retains the copy.
+	const scratch = {} as StampScratch<AppearanceStamp>;
 	/*
 	================
 	appearanceStamp
 
 	Every input a steady resolve reads but the residency it asks again
-	(AppearanceStamp), read as resolve reads it. Pure reads: resourceFor's
+	(AppearanceStamp), read as resolve reads it, into the owner's one
+	scratch stamp. Pure reads: resourceFor's
 	trade dress is drawn by presentation-state's earlier call each frame.
 	================
 	*/
@@ -131,27 +136,26 @@ export function createActorAppearance( owner: ActorOwner ) {
 			states
 		} = owner;
 		const { gameplay, nativeServerName, normalFortressClothes } = frame;
-		const state = states.get( entity.gid ), local = pass.localEntity;
-		return {
-			entity,
-			manifest: published.manifest,
-			resource: resourceFor( entity ),
-			disguise: referenceAppearances.get( entity.gid ),
-			skin: activeSkin( entity ),
-			local: entity.gid === gameplay?.localGid,
-			weaponHidden: effects.appearance( entity.gid ).weaponHidden,
-			emoteHidden: !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden,
-			dead: !!state?.dead,
-			fortressIndex: state?.fortressIndex,
-			localTeam: local === undefined ? -1 : local.arenaTeam ?? 255,
-			normalFortressClothes,
-			fortress: gameplay?.fortress,
-			social: gameplay?.social,
-			serverName: nativeServerName,
-			enchantSparks: renderer.enchantSparks?.() === true,
-			jobSuitHidesArmor: gameplay?.jobSuitHidesArmor === true,
-			moonlitThiefSuit: gameplay?.moonlitThiefSuit === true
-		};
+		const state = states.get( entity.gid ), local = pass.localEntity, stamp = scratch;
+		stamp.entity = entity;
+		stamp.manifest = published.manifest;
+		stamp.resource = resourceFor( entity );
+		stamp.disguise = referenceAppearances.get( entity.gid );
+		stamp.skin = activeSkin( entity );
+		stamp.local = entity.gid === gameplay?.localGid;
+		stamp.weaponHidden = effects.appearance( entity.gid ).weaponHidden;
+		stamp.emoteHidden = !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden;
+		stamp.dead = !!state?.dead;
+		stamp.fortressIndex = state?.fortressIndex;
+		stamp.localTeam = local === undefined ? -1 : local.arenaTeam ?? 255;
+		stamp.normalFortressClothes = normalFortressClothes;
+		stamp.fortress = gameplay?.fortress;
+		stamp.social = gameplay?.social;
+		stamp.serverName = nativeServerName;
+		stamp.enchantSparks = renderer.enchantSparks?.() === true;
+		stamp.jobSuitHidesArmor = gameplay?.jobSuitHidesArmor === true;
+		stamp.moonlitThiefSuit = gameplay?.moonlitThiefSuit === true;
+		return stamp;
 	}
 	/*
 	================
@@ -311,6 +315,9 @@ export function createActorAppearance( owner: ActorOwner ) {
 				previous.frame = frameIndex;
 				return previous.result;
 			}
+			// A steady resolve reads what the stamp reads and changes none of
+			// it, so the stamp taken before it stands for it.
+			const taken = stamp && { ...stamp };
 			const resource = resourceFor( entity );
 			if ( !resource ) return null;
 			if ( !resources.ready( resource.glb ) ) {
@@ -569,7 +576,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 				state.appearance = steady ?
 					{
 						result,
-						stamp: stamp ?? appearanceStamp( entity, frame, pass ),
+						stamp: taken ?? { ...appearanceStamp( entity, frame, pass ) },
 						parts: wornModels,
 						assembly: wornAssembly,
 						frame: frameIndex
