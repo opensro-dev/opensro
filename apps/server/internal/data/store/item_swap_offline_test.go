@@ -208,3 +208,55 @@ func TestSwapItemsOfflineShardCoversEveryone(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestSwapItemsOfflineCoversDormantCompanions
+
+An unsummoned pet's record lives in its summoner row; its container is
+swapped too. An active pet whose record is also seated in its summoner row
+(a restore adoption) is one record: its row is swapped and counted once.
+================
+*/
+func TestSwapItemsOfflineCoversDormantCompanions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	sun := domain.InventoryRow{Slot: 0, RefObjID: 1, Codename: "SUN", StackCount: 1}
+	owner := &domain.Character{Name: "Owner"}
+	if err := s.CreateCharacter(testDivision, "acct-Owner", owner); err != nil {
+		t.Fatal(err)
+	}
+	s.Mutate("swap-dormant-fixture", func() {
+		dormant := &domain.CharacterCOS{RefObjID: 7, Container: &domain.COSContainer{Rows: []domain.InventoryRow{sun}}}
+		active := &domain.CharacterCOS{RefObjID: 8, GID: 900, Container: &domain.COSContainer{Rows: []domain.InventoryRow{sun}}}
+		owner.ActiveCOS = active
+		owner.MissionInventory = []domain.InventoryRow{
+			{Slot: 13, RefObjID: 70, Codename: "SCROLL_DORMANT", StackCount: 1, Summon: dormant},
+			{Slot: 14, RefObjID: 80, Codename: "SCROLL_ACTIVE", StackCount: 1, Summon: active},
+		}
+	})
+	preview, err := s.SwapItemsOffline(testDivision, []string{"Owner"}, sunToMoon, false)
+	if err != nil || len(preview) != 2 {
+		t.Fatalf("preview %v %+v", err, preview)
+	}
+	if _, err := s.SwapItemsOffline(testDivision, []string{"Owner"}, sunToMoon, true); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, newTestClock())
+	for _, c := range reopened.Characters().CharactersForDivision(testDivision) {
+		if c.Name != "Owner" {
+			continue
+		}
+		for _, pet := range c.Companions() {
+			if pet.Container == nil || pet.Container.Rows[0].Codename != "MOON" {
+				t.Fatalf("companion %d not swapped: %+v", pet.RefObjID, pet.Container)
+			}
+		}
+		return
+	}
+	t.Fatal("owner not reloaded")
+}

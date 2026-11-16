@@ -248,6 +248,11 @@ func (s *Store) swapItemsOfflineLocked(division string, scope swapScope, swap It
 				return nil, err
 			}
 		}
+		// Dormant records sit in their summoner rows, which swapRows walks
+		// above (and in storage below). The active pet and mercenaries are
+		// held outside any row; an active record also seated in its row is
+		// already swapped there, so it is not counted again. Captured pets
+		// and broods are never stored, so an offline run has none.
 		for _, pet := range append([]*domain.CharacterCOS{next.ActiveCOS}, next.Mercenaries...) {
 			if pet == nil || pet.Container == nil {
 				continue
