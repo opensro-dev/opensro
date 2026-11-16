@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { dataAssetPath, convertedTexturePath, dataRoot } from "./jmxAssetIO.mjs";
+import { noteRead } from "../graph/reads.mjs";
 import { imageSourceRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
@@ -192,6 +193,8 @@ cachedPath with the generator that wrote the entry.
 function cachedEntry( bytes ) {
 	for ( const kind of candidateGenerators() ) {
 		const target = cachePath( bytes, kind );
+		// Which generator's entry is used depends on the probe (graph/reads.mjs).
+		noteRead( target );
 		if ( fs.existsSync( target ) ) return { target, kind };
 	}
 	return null;
@@ -207,6 +210,7 @@ A missing native cache fails the build instead of silently publishing PNGs.
 */
 export function readCharacterTexture( gamePath, pngPath ) {
 	if ( gamePath ) {
+		noteRead( dataAssetPath( gamePath ) );
 		const source = fs.readFileSync( dataAssetPath( gamePath ) );
 		if ( compressedSource( source ) ) {
 			const target = cachedPath( source );
@@ -220,7 +224,9 @@ export function readCharacterTexture( gamePath, pngPath ) {
 			return { bytes, mime: NATIVE_MIME };
 		}
 	}
-	return { bytes: fs.readFileSync( pngPath ?? convertedTexturePath( gamePath ) ), mime: "image/png" };
+	const png = pngPath ?? convertedTexturePath( gamePath );
+	noteRead( png );
+	return { bytes: fs.readFileSync( png ), mime: "image/png" };
 }
 
 /*

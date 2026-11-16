@@ -45,24 +45,37 @@ export function attachedMotionRequests( rows ) {
 
 /*
 ================
+defaultAttachedMotionRequests
+
+The requests every model build asks for: skilleffect.txt's ActionWait
+motions under the shard's tomb posture, read once per posture. A cached
+build step takes this list as a parameter (buildRoster.mjs) instead of
+reading the table inside the step, so a table or posture change moves
+its key.
+================
+*/
+export function defaultAttachedMotionRequests() {
+	const tombKey = qinshiTombCombatEnabled();
+	let requests = requiredByTomb.get( tombKey );
+	if ( !requests ) {
+		requests = attachedMotionRequests(
+			parseSkillAniSet( path.join( retailTextdataRoot, "skilleffect.txt" ) ).values()
+		);
+		requiredByTomb.set( tombKey, requests );
+	}
+	return requests;
+}
+
+/*
+================
 pickAttachedMotionClips
 
 The clip for each request: the request's own set's state, else the
-default set's.
+default set's. Without requests, defaultAttachedMotionRequests.
 ================
 */
 export function pickAttachedMotionClips( bsr, requests ) {
-	let effectiveRequests = requests;
-	if ( !effectiveRequests ) {
-		const tombKey = qinshiTombCombatEnabled();
-		effectiveRequests = requiredByTomb.get( tombKey );
-		if ( !effectiveRequests ) {
-			effectiveRequests = attachedMotionRequests(
-				parseSkillAniSet( path.join( retailTextdataRoot, "skilleffect.txt" ) ).values()
-			);
-			requiredByTomb.set( tombKey, effectiveRequests );
-		}
-	}
+	const effectiveRequests = requests ?? defaultAttachedMotionRequests();
 	return effectiveRequests.flatMap( ( request ) => {
 		const find = ( set ) =>
 			findAnimationSet( bsr, set )?.states.find( ( s ) => s.stateId === request.id && s.animationPath );
