@@ -1,0 +1,6 @@
+count
+done
+endsAtMs
+fortressId
+itemRefId
+startedAtMs
