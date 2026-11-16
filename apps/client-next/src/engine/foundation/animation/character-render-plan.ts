@@ -16,6 +16,7 @@ import {
 	characterBatchBytes,
 	characterMeshBytes,
 	characterSharedMesh,
+	characterSharedPalette,
 	type CharacterPlanCaches
 } from "./character-budget";
 import { meshArrays } from "@/engine/foundation/rendering/geometry-vertices";
@@ -50,6 +51,14 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 	for ( const clip of model.clips ) if ( !clips.has( clip.name ) ) clips.set( clip.name, clip );
 	const emission = model.primitives.some( p => p.emission ),
 		exactCapacity = model.primitives.some( p => p.ribbon );
+	// By primitive: a material clock (model-material-clock.ts) rewrites its
+	// material every frame, so its draw uploads a dynamic material.
+	const dynamicMaterials: readonly boolean[] = model.primitives.map( p =>
+		!!(p.equipmentGlow || p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
+			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
+			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
+			p.geometry.material?.textureFactorPulse)
+	);
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
 	// Store two scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
@@ -64,12 +73,8 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )
 		),
-		materialClocked: model.primitives.some( p =>
-			p.equipmentGlow || p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
-			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 ) ||
-			p.geometry.material?.colorTimeline || p.geometry.material?.uvVelocity || p.geometry.material?.uvAtlas ||
-			p.geometry.material?.textureFactorPulse
-		),
+		materialClocked: dynamicMaterials.includes( true ),
+		dynamicMaterials,
 		clips,
 		emission,
 		exactCapacity,
@@ -89,9 +94,7 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 		continuousGraph: model.particleGraph?.some( e => e.loop || e.emission ) ?? false,
 		// The tables every tick of the model's particle graphs reads.
 		particleGraph: model.particleGraph ? createParticleGraphPlan( model.particleGraph ) : undefined,
-		sharedPalette: !model.primitives.some( p =>
-			p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
-		),
+		sharedPalette: characterSharedPalette( model ),
 		particleBytes: model.primitives.reduce(
 			( sum, p ) => sum + (p.emission?.capacity ?? p.emission?.births.length ?? 0) * 320,
 			0

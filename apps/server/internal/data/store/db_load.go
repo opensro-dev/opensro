@@ -120,6 +120,11 @@ func loadDB(db *sql.DB, current int, currentLayout int, headroom int) (*loadedDB
 			return nil, fmt.Errorf("validating silk history: %w", err)
 		}
 	}
+	if currentLayout >= 13 {
+		if err := validateTradeHistory(db); err != nil {
+			return nil, fmt.Errorf("validating trade history: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},

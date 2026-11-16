@@ -83,8 +83,17 @@ import {
 	windowCorners,
 	type MapChromePaint
 } from "./map-chrome";
-// The window's size and panel for the map HUD, which places the window.
-export { MAP_WINDOW_EXTENT, MAP_WINDOW_HEIGHT, MAP_WINDOW_WIDTH, mapLeftReach, mapPanel } from "./map-chrome";
+// The window's size, panel and own art, for the map HUD that draws and
+// demands it.
+export {
+	MAP_CHROME_ART,
+	MAP_WINDOW_EXTENT,
+	MAP_WINDOW_HEIGHT,
+	MAP_WINDOW_WIDTH,
+	mapLeftReach,
+	mapPanel
+} from "./map-chrome";
+export { GUIDE_TREE_ART } from "./map-guide-tree";
 
 // The level filter note's UI text key: the later client's words for
 // the foot checkbox (the dungeon catalogue already carries them as

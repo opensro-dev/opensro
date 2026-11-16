@@ -24,6 +24,9 @@ authenticated characters on real GameWorld sockets, admitted through the
 local provisioning endpoint (--provisioning, --token), or attached from a
 crowd-host.mjs that holds a matching crowd. It measures what every drawn
 character costs (#3563); its rows record the crowd the client published.
+--act walk=0.5,chat=0.2 [--seed N] makes the crowd live (core/crowd-activity.mjs):
+shares of it walk and chat from a seeded script; each row records the
+activity, its seed and the server's receipts. Without --act it stands.
 
 Each row reports frames per second, frame-interval percentiles, and the
 main thread's frame and world-preparation time per frame. Options add:
@@ -78,7 +81,8 @@ import { frameLimits } from "../../../src/engine/foundation/rendering/video-opti
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
-import { obtainCrowd } from "../core/crowd.mjs";
+import { DEFAULT_ACTIVITY_SEED, obtainCrowd } from "../core/crowd.mjs";
+import { parseActivity } from "../core/crowd-activity.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 import { processCosts } from "../core/trace.mjs";
 
@@ -156,7 +160,8 @@ const LOCATIONS = [ {
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--gpu-process] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
-	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--provisioning URL] [--token FILE]";
+	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--act walk=SHARE,chat=SHARE] [--seed N] " +
+	"[--provisioning URL] [--token FILE]";
 // --gpu-process trace categories, the fewest that serve processCosts:
 // toplevel gives every thread's top-level tasks as complete events with
 // their thread time (tdur); blink.user_timing carries the window marks.
@@ -562,6 +567,8 @@ async function session( options, location, results ) {
 			crowd = await obtainCrowd( {
 				count: options.crowd,
 				fixture: location.fixture,
+				act: options.act,
+				seed: options.seed,
 				provisioningUrl: options.provisioning,
 				tokenPath: options.token,
 				journalPath: `${options.out}/crowd-cleanup.json`
@@ -606,7 +613,11 @@ async function session( options, location, results ) {
 			result.cpuRate = options.cpuRate;
 			result.shadowDetail = options.shadowDetail;
 			result.identity = identity;
-			if ( crowd ) result.crowd = { peers: crowd.peers.length, held: !!crowd.held };
+			// The activity's evidence as the window ended: what ran, its seed and
+			// what the server answered, so a standing row never reads as a living one.
+			if ( crowd ) {
+				result.crowd = { peers: crowd.peers.length, held: !!crowd.held, activity: { ...crowd.activity } };
+			}
 			if ( scene ) {
 				result.serverUptimeMinutes = await serverUptimeMinutes();
 				result.scene = {
@@ -765,6 +776,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
 	crowd: 32,
+	act: "",
+	seed: DEFAULT_ACTIVITY_SEED,
 	provisioning: "http://127.0.0.1:8789",
 	token: path.join( REPO_ROOT, "apps/server/.state/cluster/agent-provisioning-token" ),
 	out: "temp/artifacts/fps-bench",
@@ -777,4 +790,6 @@ if ( options.trace && options.gpuProcess ) {
 	throw Error( "choose --trace or --gpu-process per run; each records a trace" );
 }
 if ( ![ 0, 1, 2 ].includes( options.shadowDetail ) ) throw Error( `unsupported shadow detail ${options.shadowDetail}` );
+if ( !Number.isInteger( options.seed ) || options.seed < 0 ) throw Error( `--seed must be a whole number` );
+parseActivity( options.act );
 await run( options );

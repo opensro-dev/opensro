@@ -432,6 +432,9 @@ func newBootstrapDependencies(
 	}
 	deps.UpdateCharacters = authorityStore.UpdateCharacters
 	deps.ItemSaleNote = authorityStore.NoteItemSale
+	// The trade history rows (trade_history.go, port-only) are noted inside
+	// each trade's commit door, so they ride its transaction.
+	deps.TradeNote = authorityStore.NoteTrade
 	deps.MutateCharacterDeferred = func(character *enterworld.Character, label string, mutate func()) {
 		if character != nil {
 			label += " " + character.Name

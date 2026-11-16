@@ -383,9 +383,15 @@ export function resolveTextOverlaps( quads: readonly UiQuad[] ): UiQuad[] {
 	}
 	const emitted = new Set<UiTextLayout>(), result: UiQuad[] = [];
 	for ( const q of quads ) {
+		// A quad without a layout is passed on as itself: only a layout's
+		// quad is copied, to drop the layout.
+		if ( !q.textLayout ) {
+			result.push( q );
+			continue;
+		}
 		const { textLayout, ...paint } = q;
-		if ( !textLayout || !fitted.has( textLayout ) ) {
-			result.push( textLayout ? paint : q );
+		if ( !fitted.has( textLayout ) ) {
+			result.push( paint );
 			continue;
 		}
 		if ( emitted.has( textLayout ) ) continue;

@@ -10,21 +10,39 @@ same results, bit for bit, in all three scenarios. A change that alters
 results on purpose rewrites the fixture with
 `node tools/particle-tick-digest.mjs --write` and names the effects.
 
+The fixture is the native catalogue's. A native build matches it exactly;
+an expanded build (the Alexandria variant) must keep every recorded
+effect's digest, and its added effects pass (digestDifferences says why).
+
 ===========================================================================
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { particleTickDigests, DIGEST_PATH } from "../helpers/particle-tick-digest.mjs";
+import { digestDifferences, particleTickDigests, DIGEST_PATH } from "../helpers/particle-tick-digest.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
+
+// How many differing effects a failure names.
+const NAMED_DIFFERENCES = 20;
 
 test("every catalogue particle graph ticks to its recorded digest", () => {
 	const expected = JSON.parse( readFileSync( DIGEST_PATH, "utf8" ) ).effects, actual = particleTickDigests();
-	const changed = Object.keys( { ...expected, ...actual } ).filter( path => expected[path] !== actual[path] );
+	const changed = digestDifferences( expected, actual, EXPANDED_BUILD );
 	assert.deepEqual(
-		changed.slice( 0, 20 ).map( path =>
+		changed.slice( 0, NAMED_DIFFERENCES ).map( path =>
 			`${path}: ${expected[path] ?? "(missing)"} -> ${actual[path] ?? "(missing)"}`
 		),
 		[],
 		`${changed.length} effects differ`
 	);
+});
+
+test("an expanded build passes only additions; a changed or lost recorded effect fails on any build", () => {
+	const expected = { "a.efp": "1", "b.efp": "2" }, added = { "a.efp": "1", "b.efp": "2", "c.efp": "3" };
+	assert.deepEqual( digestDifferences( expected, added, true ), [] );
+	assert.deepEqual( digestDifferences( expected, added, false ), [ "c.efp" ] );
+	for ( const expanded of [ true, false ] ) {
+		assert.deepEqual( digestDifferences( expected, { "a.efp": "1", "b.efp": "9" }, expanded ), [ "b.efp" ] );
+		assert.deepEqual( digestDifferences( expected, { "a.efp": "1" }, expanded ), [ "b.efp" ] );
+	}
 });
