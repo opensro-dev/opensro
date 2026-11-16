@@ -1,0 +1,15 @@
+# Build-context filter for server.Dockerfile: the context is the repository
+# root, so everything is excluded and only what the image reads comes back.
+*
+!apps/server/go.mod
+!apps/server/go.sum
+!apps/server/cmd
+!apps/server/internal
+!apps/server/config/compatibility.json
+!apps/server/config/shard-settings.json
+!apps/server/config/mission-chat.json
+!deploy/docker/server-entrypoint.sh
+**/testdata
+**/*_test.go
+# Tracked go:embed data under internal/**/.generated stays; the ignored
+# game-data projection at apps/server/.generated is never under cmd/ or internal/.
