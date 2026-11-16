@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -325,5 +326,40 @@ func TestRemoteLLMURLIsRefused(t *testing.T) {
 	brain := NewBrain(Config{Enabled: true, BrainMode: BrainHybrid, LLMURL: remote})
 	if _, ok := brain.(*HardcodedBrain); !ok {
 		t.Fatalf("NewBrain built %T for a remote URL", brain)
+	}
+}
+
+/*
+================
+TestLLMBrainFollowsNoRedirect
+
+A loopback endpoint that answers 307 cannot pass the prompt on: the second
+server is never asked and the hardcoded brain decides.
+================
+*/
+func TestLLMBrainFollowsNoRedirect(t *testing.T) {
+	var reached atomic.Bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached.Store(true)
+	}))
+	defer elsewhere.Close()
+	bounce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL, http.StatusTemporaryRedirect)
+	}))
+	defer bounce.Close()
+
+	brain := NewBrain(Config{Enabled: true, BrainMode: BrainLLM, LLMURL: bounce.URL, LLMTimeout: 2 * time.Second})
+	dec := brain.Decide(context.Background(), Situation{
+		AgentName: "[AI]Hunter_Kwan",
+		Role:      RoleHunter,
+		RegionID:  RegionJanganFerryEast,
+		HPPercent: 85,
+		Players:   []ObservedPlayer{{Name: "ShadowBlade", JobType: domain.JobThief, HPPercent: 90, Distance: 30}},
+	})
+	if reached.Load() {
+		t.Fatal("the redirect target received the prompt")
+	}
+	if dec.Source != BrainHardcoded {
+		t.Fatalf("a redirect answered the decision: %+v", dec)
 	}
 }

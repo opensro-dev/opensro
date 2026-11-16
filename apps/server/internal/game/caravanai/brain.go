@@ -354,8 +354,15 @@ func NewBrain(cfg Config) Brain {
 		timeout = DefaultLLMTimeout
 	}
 	return &LLMBrain{
-		cfg:      cfg,
-		client:   &http.Client{Timeout: timeout},
+		cfg: cfg,
+		client: &http.Client{
+			Timeout: timeout,
+			// Never follow a redirect: a 307/308 resends the POST body, so a
+			// loopback endpoint could bounce the prompt and its player names
+			// to another host. A redirect answer is not a decision, and the
+			// fallback brain answers instead.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 		fallback: fallback,
 	}
 }
