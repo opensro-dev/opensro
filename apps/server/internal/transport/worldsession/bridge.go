@@ -177,6 +177,9 @@ func NewTicker(
 	}
 	ticker := simulation.NewTicker(bridge, bridge)
 	ticker.Roster = append([]simulation.NpcDef(nil), roster...)
+	// SRO_POSITION_STREAM (port-only, not native): off is the native
+	// movement fan-out (simulation/position_stream.go).
+	ticker.PositionStream = simulation.PositionStreamFromEnv()
 	ticker.Hooks = append(ticker.Hooks, hooks...)
 	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "tick-duration", Hook: tickDurationHook(hub, ticker)})
 	ticker.PhaseObserver = tickPhaseObserver(hub)

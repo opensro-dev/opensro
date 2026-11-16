@@ -661,6 +661,10 @@ func TestCrowdTickWritesOncePerSession(t *testing.T) {
 	)
 	c := newCrowd(t, crowdConfig{players: players, walkers: walkers})
 	t.Cleanup(c.close)
+	// The port-only position stream gives every session output on every
+	// tick (a live sample per walker); the native fan-out sends a walk's
+	// path once, which leaves most ticks with nothing to write.
+	c.ticker.PositionStream = true
 	pusher := &countingPusher{Bridge: c.ticker.Push.(*Bridge), pushed: map[string]int{}}
 	c.ticker.Push = pusher
 	nowMs := time.Now().UnixMilli()

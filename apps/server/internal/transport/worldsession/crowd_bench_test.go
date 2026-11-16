@@ -13,6 +13,9 @@ and, over sockets, the readers and the kernel) per frame:
 
 	go test -run '^$' -bench BenchmarkCrowd -benchtime 300x ./internal/transport/worldsession/
 
+SRO_POSITION_STREAM=on measures the port-only position stream instead of
+the native fan-out (simulation/position_stream.go).
+
 Each case attaches its crowd once and warms it for crowdWarmTicks before
 the first measured tick. It loads the machine (1,000 loopback sockets
 and their readers at the largest case); it is a measurement, not a gate.
@@ -91,6 +94,7 @@ func (c *crowd) measure(b *testing.B) {
 	after := c.hub.Metrics()
 
 	frames := float64(after.FramesOut - before.FramesOut)
+	bytes := float64(after.BytesOut - before.BytesOut)
 	writes := float64(after.WritesOut - before.WritesOut)
 	slices.Sort(durations)
 	var total time.Duration
@@ -101,6 +105,8 @@ func (c *crowd) measure(b *testing.B) {
 	b.ReportMetric(ms(total)/float64(len(durations)), "tick-mean-ms")
 	b.ReportMetric(ms(durations[(len(durations)-1)*99/100]), "tick-p99-ms")
 	b.ReportMetric(frames/seconds, "frames/s")
+	b.ReportMetric(bytes/seconds/1e6, "MB/s")
+	b.ReportMetric(frames/float64(len(durations))/float64(len(c.sessions)), "frames/viewer/tick")
 	b.ReportMetric(writes/seconds, "writes/s")
 	if writes > 0 {
 		b.ReportMetric(frames/writes, "frames/write")
@@ -130,8 +136,10 @@ func BenchmarkCrowd(b *testing.B) {
 	for _, cfg := range []crowdConfig{
 		{players: 600, walkers: 300},
 		{players: 1000, walkers: 500},
+		{players: 1000, walkers: 1000},
 		{ws: true, players: 600, walkers: 300},
 		{ws: true, players: 1000, walkers: 500},
+		{ws: true, players: 1000, walkers: 1000},
 	} {
 		mode := "mem"
 		if cfg.ws {
