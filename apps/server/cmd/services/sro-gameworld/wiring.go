@@ -37,7 +37,6 @@ import (
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/processguard"
 	"opensro.online/server/internal/platform/readiness"
-	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/platform/settingsapi"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -80,8 +79,9 @@ type gameWorldApplication struct {
 	connJournal *connjournal.Journal
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy *economy.Service
-	// sealBoard is the weekly seal-drop counter (port-only); nil off.
-	sealBoard *sealboard.Service
+	// ledgers are the port-only shard ledgers: the seal board and job
+	// honor (wiring_ledgers.go).
+	ledgers shardLedgers
 	// census is the player census over the connection journal
 	// (port-only, #2717); nil while the journal is off.
 	census *census.Service
@@ -374,7 +374,7 @@ func newGameWorldApplication(
 	}
 	installCertificateWatch(application, ts, ownedShard.ID)
 	application.preserveArenaRewards = gameplay.items.PrepareSookShutdown
-	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
+	if err := installShardLedgers(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
 	installSunDropCount(gameplay)
@@ -467,7 +467,7 @@ func newGameWorldApplication(
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
-	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard, application.census)
+	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.ledgers.sealBoard, application.census)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)
@@ -647,12 +647,7 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 			return nil
 		})
 	}
-	if application.sealBoard != nil {
-		group.Go(func() error {
-			application.sealBoard.Run(groupContext)
-			return nil
-		})
-	}
+	application.ledgers.run(group, groupContext)
 	application.goMarketExpiry(groupContext, group)
 	if application.mutes != nil {
 		group.Go(func() error {
@@ -722,9 +717,7 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	// The tick has stopped and the flush loop has joined: the counter's
 	// last flush lands before its store closes.
-	if application.sealBoard != nil {
-		drainErr = errors.Join(drainErr, application.sealBoard.Close())
-	}
+	drainErr = errors.Join(drainErr, application.ledgers.close())
 	application.releaseLease()
 	if application.authority != nil {
 		storeStarted := time.Now()
@@ -882,9 +875,7 @@ func (application *gameWorldApplication) rollback() {
 	if application.economy != nil {
 		_ = application.economy.Close()
 	}
-	if application.sealBoard != nil {
-		_ = application.sealBoard.Close()
-	}
+	_ = application.ledgers.close()
 	if application.settings != nil {
 		_ = application.settings.Close()
 	}

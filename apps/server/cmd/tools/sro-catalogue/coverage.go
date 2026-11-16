@@ -138,6 +138,7 @@ var catalogueExempt = map[string]string{
 	"SRO_MALL_RIDE_SPEED":                      "a ridden vehicle's speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_ANNOUNCE_SOX_DROP":                    "a shard-wide drop notice; the catalogue publishes no notices",
 	"SRO_SEAL_BOARD":                           "a weekly tally kept from committed drops; no catalogue file carries it",
+	"SRO_JOB_HONOR":                            "a ledger scored from committed job events; no catalogue file carries it",
 	"SRO_SEAL_CENSUS":                          "staff telemetry; no catalogue file carries it",
 	"SRO_CONTRIBUTOR_TITLES":                   "a title pushed at runtime from the operations sync's file; no catalogue file carries it",
 	"SRO_SUN_DROP_COUNT":                       "counts Sun drops for one measurement cycle (#2538); it changes no drop",

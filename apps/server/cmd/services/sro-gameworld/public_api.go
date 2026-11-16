@@ -501,6 +501,11 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 		sources.SealCounts = sealBoard.Counts
 		sources.SealCountingSince = sealBoard.CountingSince
 	}
+	// The job honor board (#3530): a nil ledger leaves it unserved.
+	if gameplay.jobHonor != nil {
+		sources.JobHonorCurrent = gameplay.jobHonor.Current
+		sources.JobHonorPrevious = gameplay.jobHonor.Previous
+	}
 	// The player census's public counts (console#9 part 4,
 	// opensro-web#78): a nil service - the connection journal off -
 	// leaves the status fields omitted, and a failed read counts as

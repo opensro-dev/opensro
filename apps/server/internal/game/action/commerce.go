@@ -433,6 +433,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var soldItem string
 	var soldCount int
 	var soldGold int64
+	// Job honor (jobhonor.go): a sale's profit and suited job, scored
+	// after the commit; a goods purchase opens a new run.
+	var honorProfit int64
+	var honorJob uint8
+	var boughtGoods bool
 	label, cargoCapacity := commerceDoorLabel(snapshot, q, isCOS)
 	if cargoCapacity >= 0 {
 		// The stars are read off the snapshot, as the door word was: the
@@ -565,6 +570,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 						refusal = code
 						return false
 					}
+					boughtGoods = true
 					if !rt.buysIntoTransport(c, q.CosGID, isCOS) {
 						refusal = tradeErrOnlyTrader
 						return false
@@ -662,6 +668,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				}
 				if profit > 0 {
 					weeklyCredit = credit
+					honorProfit, honorJob = profit, enterworld.DressedJob(c)
 					// The reference server routes the same ten-percent contribution to the
 					// shard's hunter pool for traders or thief pool for thieves.
 					if !settledPool.Credit(c.Job.Type, int64(float64(credit)*0.1)) {
@@ -746,6 +753,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	}
 	if soldItem != "" {
 		rt.noteItemSale(c.ID, soldItem, soldCount, soldGold)
+	}
+	if boughtGoods {
+		rt.openHonorRun(snapshot)
+	}
+	if honorProfit > 0 {
+		rt.scoreTradeSale(snapshot, honorJob, honorProfit, rt.Now())
 	}
 	if honorCost > 0 {
 		rt.spendHonorPoints(division, snapshot, uint32(honorCost))
