@@ -54,6 +54,24 @@ func processCPUSeconds() float64 {
 	return float64(usage.Utime.Sec+usage.Stime.Sec) + float64(usage.Utime.Usec+usage.Stime.Usec)/1e6
 }
 
+// crowdReportedZones are the tick zones the benchmark reports per tick.
+var crowdReportedZones = []string{"phase:prepare", "sub:peerVisibility", "sub:sessionLegs", "sub:monsterLeg", "phase:hooks"}
+
+/*
+================
+crowd.zoneTotals
+
+The ticker's zone ledger, keyed "<kind>:<name>".
+================
+*/
+func (c *crowd) zoneTotals() map[string]time.Duration {
+	out := map[string]time.Duration{}
+	for _, row := range c.ticker.Zones.Snapshot() {
+		out[row.Kind+":"+row.Name] = row.Total
+	}
+	return out
+}
+
 /*
 ================
 crowd.runTicks
@@ -84,6 +102,7 @@ over the run's wall time.
 */
 func (c *crowd) measure(b *testing.B) {
 	before := c.hub.Metrics()
+	zonesBefore := c.zoneTotals()
 	cpu := processCPUSeconds()
 	started := time.Now()
 	b.ResetTimer()
@@ -92,6 +111,7 @@ func (c *crowd) measure(b *testing.B) {
 	seconds := time.Since(started).Seconds()
 	cpu = processCPUSeconds() - cpu
 	after := c.hub.Metrics()
+	zonesAfter := c.zoneTotals()
 
 	frames := float64(after.FramesOut - before.FramesOut)
 	bytes := float64(after.BytesOut - before.BytesOut)
@@ -118,6 +138,11 @@ func (c *crowd) measure(b *testing.B) {
 	b.ReportMetric(float64(after.WriteErrors-before.WriteErrors), "write-errors")
 	b.ReportMetric(float64(after.Detaches-before.Detaches), "detaches")
 	b.ReportMetric(float64(after.SessionsClosedSlowConsumer-before.SessionsClosedSlowConsumer), "closures")
+	// The tick's own breakdown, as /transport/metrics tick_zones shows it.
+	for _, zone := range crowdReportedZones {
+		spent := zonesAfter[zone] - zonesBefore[zone]
+		b.ReportMetric(float64(spent)/float64(time.Millisecond)/float64(len(durations)), zone+"-ms")
+	}
 	var gap int64
 	for _, reader := range c.readers {
 		gap = max(gap, reader.maxGapNs.Swap(0))
@@ -134,6 +159,9 @@ BenchmarkCrowd
 */
 func BenchmarkCrowd(b *testing.B) {
 	for _, cfg := range []crowdConfig{
+		// The live shape first: the scratch stack's Hotan plaza with NPCs.
+		{hotan: true, players: 1000, walkers: 500},
+		{hotan: true, players: 1000, walkers: 1000},
 		{players: 600, walkers: 300},
 		{players: 1000, walkers: 500},
 		{players: 1000, walkers: 1000},
@@ -150,6 +178,9 @@ func BenchmarkCrowd(b *testing.B) {
 		// after the case.
 		var c *crowd
 		var cancel context.CancelFunc
+		if cfg.hotan {
+			mode += "-hotan"
+		}
 		b.Run(fmt.Sprintf("mode=%s/players=%d/walkers=%d", mode, cfg.players, cfg.walkers), func(b *testing.B) {
 			if c == nil {
 				c = newCrowd(b, cfg)
