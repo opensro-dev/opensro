@@ -278,6 +278,40 @@ test("a deep stack keeps its first twelve frames", async () => {
 	assert.equal( kept[12], frames[11] );
 });
 
+test("a multi-line message never ships a line as a frame, even one with an @", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 5,
+		message: "chat said hi\nmeet me at a@b.c",
+		stack: "TypeError: chat said hi\nmeet me at a@b.c\nfoo@bar.baz\n    at send (/src/chat.ts:4:2)"
+	} ] );
+	assert.equal( event.stack, "TypeError\n    at send (/src/chat.ts:4:2)" );
+	assert.ok( !/@|meet|chat said/.test( event.stack ) );
+});
+
+test("a headerless Firefox stack keeps its frames, and only its frames", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 6,
+		message: "too much recursion",
+		stack: "walk@https://play.example.com/assets/index.js?v=3:1:200\n" +
+			"step@https://play.example.com/assets/index.js:9:8\n" +
+			"meet me at a@b.c\n"
+	} ] );
+	assert.equal( event.errorClass, undefined, "Firefox names no class in its stack" );
+	assert.equal( event.message, "too much recursion" );
+	assert.equal( event.stack, "Error: too much recursion\nwalk@/assets/index.js:1:200\nstep@/assets/index.js:9:8" );
+});
+
+test("a local file frame keeps only the file's name", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 7,
+		stack: "RangeError: Maximum call stack size exceeded\n    at walk (file:///C:/Users/someone/game/index.js:1:2)"
+	} ] );
+	assert.equal( event.stack, "RangeError\n    at walk (index.js:1:2)" );
+});
+
 test("a thrown non-error shares neither a class nor a message", async () => {
 	const [event] = await sharedErrors( [ { kind: "error", t: 4, message: "a player wrote this" } ] );
 	assert.equal( event.errorClass, undefined );

@@ -121,6 +121,15 @@ const ENGINE_ERROR_MESSAGES = [
 ];
 // A shared stack keeps this many frames under its header.
 const MAX_SHARED_STACK_FRAMES = 12;
+// A V8 frame ("    at fn (url:1:2)" or "    at url:1:2"): a stack with a
+// class header holds only these under the message's own lines.
+const STACK_FRAME_V8 = /^\s+at\s.*:\d+:\d+\)?$/;
+// A SpiderMonkey or JavaScriptCore frame ("fn@url:1:2", "@url:1:2"): such a
+// stack has no header and starts at its first frame.
+const STACK_FRAME_AT_SIGN = /^[^\s@]*@\S*:\d+:\d+$/;
+// A local file URL up to its last folder ("file:///C:/Users/name/dir/"),
+// cut so a local build's frame keeps only the file's name.
+const STACK_FILE_FOLDERS = /file:\/\/\/(?:[^\s)]*\/)?/gi;
 // The scheme and host of a frame's URL ("https://host", "blob:https://host",
 // "chrome-extension://id"): cut, so a frame keeps only its path.
 const STACK_URL_ORIGIN = /(?:blob:)?[a-z][a-z0-9+.-]*:\/\/[^/\s)]*/gi;
@@ -533,9 +542,13 @@ sharedErrorEvent
 An error event as the shared copy carries it. The class comes from the
 stack's header; the header is rebuilt from that class and an engine
 message, so the thrown message's free text never rides along on line 1.
-Each frame keeps its path, line and column with the URL's scheme, host and
-query cut, and the first MAX_SHARED_STACK_FRAMES frames are kept.
-sharedValue then admits only engine classes and messages.
+Only lines of a real frame's shape are kept: V8's under a class header,
+"fn@url:line:col" in a headerless stack. A V8 message spans lines before
+its first frame, and none of them is shared, whatever it contains. Each
+frame keeps its path, line and column with the URL's scheme, host and
+query cut (a local file keeps only its name), and the first
+MAX_SHARED_STACK_FRAMES frames are kept. sharedValue then admits only
+engine classes and messages.
 ================
 */
 function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unknown> {
@@ -545,10 +558,13 @@ function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unkn
 	const engineMessage = typeof message === "string" && ENGINE_ERROR_MESSAGES.includes( message ) ?
 		message :
 		undefined;
-	const frames = lines.slice( 1 )
-		.filter( line => /^\s*at\s|@/.test( line ) )
+	const frameShape = errorClass ? STACK_FRAME_V8 : STACK_FRAME_AT_SIGN;
+	const frames = lines
+		.filter( line => frameShape.test( line ) )
 		.slice( 0, MAX_SHARED_STACK_FRAMES )
-		.map( line => line.replace( STACK_URL_ORIGIN, "" ).replace( STACK_URL_QUERY, "" ) );
+		.map( line =>
+			line.replace( STACK_FILE_FOLDERS, "" ).replace( STACK_URL_ORIGIN, "" ).replace( STACK_URL_QUERY, "" )
+		);
 	const header = (errorClass ?? "Error") + (engineMessage ? ": " + engineMessage : "");
 	return {
 		...rest,
