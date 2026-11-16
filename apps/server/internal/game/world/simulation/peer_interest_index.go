@@ -18,31 +18,6 @@ type peerVisibilityKey struct {
 	appearance, live bool
 }
 
-// Spawn/despawn visibility only changes with membership, instance or block.
-// Movement packets and combat still run every tick in their existing lanes.
-// This exact key comparison avoids hashing collisions and stale cross-tick poses.
-func (state *divisionTickState) peerVisibilityChanged(sessions []SessionSnapshot, now int64, live map[string]bool) bool {
-	previous := len(state.peerVisibilityKeys)
-	changed := !state.peerVisibilityValid || previous != len(sessions)
-	for i := range sessions {
-		s := &sessions[i]
-		key := peerVisibilityKey{s.SessionID, s.CharacterID, peerInterestKey{s.DivisionID, s.WorldInstance, peerInterestBlock(s.World.LiveSpawnAt(now))}, s.Appearance != nil, live[s.SessionID]}
-		if i < previous {
-			if state.peerVisibilityKeys[i] != key {
-				changed = true
-				state.peerVisibilityKeys[i] = key
-			}
-		} else {
-			state.peerVisibilityKeys = append(state.peerVisibilityKeys, key)
-		}
-	}
-	if len(sessions) < previous {
-		clear(state.peerVisibilityKeys[len(sessions):])
-		state.peerVisibilityKeys = state.peerVisibilityKeys[:len(sessions)]
-	}
-	return changed
-}
-
 // Tick-local derived index over detached session snapshots. Links are input
 // indexes plus one (zero is absent), avoiding one allocation per occupied cell.
 // Nothing survives the visibility pass or owns mutable character state.

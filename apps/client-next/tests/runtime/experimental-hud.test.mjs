@@ -201,7 +201,8 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// unique spawn points row (#3417) joined World map (M); 66: Silent wing
 	// flight (#3547) joined Sound and connection; 65: Water refraction left
 	// at the owner's request (2026-11-15); 66: the Christmas carols row
-	// joined Sound and connection.
+	// joined Sound and connection. Retail typos are fixed in the reviewed
+	// English table (englishCorrections.json), not by a row.
 	assert.equal( keys.length, 66 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );

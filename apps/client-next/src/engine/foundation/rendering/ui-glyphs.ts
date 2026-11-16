@@ -351,6 +351,18 @@ function wrappedRun(
 
 /*
 ================
+titleTextWidth
+
+The advance width titleText lays value out at, in the style's font.
+================
+*/
+export function titleTextWidth( atlas: FontAtlas, value: string, style: GlyphStyle = {} ): number {
+	const box: UiRect = [ 0, 0, 0, 0 ];
+	return layoutGlyphs( atlas, value, box, box, [ 1, 1, 1, 1 ], style ).width;
+}
+
+/*
+================
 layoutGlyphs
 
 Retail CTextBoard: glyph advances, raw font height + 5, integer alignment.

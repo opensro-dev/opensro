@@ -64,33 +64,35 @@ func TestPeerInterestIndexMatchesExhaustiveVisibility(t *testing.T) {
 func TestPeerVisibilityChangeKeysCoverPublicationInputs(t *testing.T) {
 	base := peerSession("session", "world", 1, "peer")
 	base.World.Spawn = Spawn{RegionID: 0x6060, X: 10, Z: 10}
+	// full: every viewer is recomputed; crossing: only the crosser's pairs.
 	tests := []struct {
-		name   string
-		change func(*SessionSnapshot)
-		want   bool
+		name           string
+		change         func(*SessionSnapshot)
+		full, crossing bool
 	}{
-		{"same-block movement", func(s *SessionSnapshot) { s.World.Spawn.X++ }, false},
-		{"block crossing", func(s *SessionSnapshot) { s.World.Spawn.X += 320 }, true},
-		{"reconnect", func(s *SessionSnapshot) { s.SessionID = "new-scene" }, true},
-		{"character replacement", func(s *SessionSnapshot) { s.CharacterID++ }, true},
-		{"world transfer", func(s *SessionSnapshot) { s.WorldInstance++ }, true},
-		{"division transfer", func(s *SessionSnapshot) { s.DivisionID = "other" }, true},
-		{"appearance unavailable", func(s *SessionSnapshot) { s.Appearance = nil }, true},
+		{"same-block movement", func(s *SessionSnapshot) { s.World.Spawn.X++ }, false, false},
+		{"block crossing", func(s *SessionSnapshot) { s.World.Spawn.X += 320 }, false, true},
+		{"reconnect", func(s *SessionSnapshot) { s.SessionID = "new-scene" }, true, false},
+		{"character replacement", func(s *SessionSnapshot) { s.CharacterID++ }, true, false},
+		{"world transfer", func(s *SessionSnapshot) { s.WorldInstance++ }, true, false},
+		{"division transfer", func(s *SessionSnapshot) { s.DivisionID = "other" }, true, false},
+		{"appearance unavailable", func(s *SessionSnapshot) { s.Appearance = nil }, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := &divisionTickState{}
 			live := map[string]bool{base.SessionID: true}
-			if !state.peerVisibilityChanged([]SessionSnapshot{base}, 0, live) {
+			if full, _ := state.peerVisibilityChanges([]SessionSnapshot{base}, 0, live); !full {
 				t.Fatal("first pass skipped")
 			}
 			state.peerVisibilityValid = true
 			next := base
 			tt.change(&next)
-			if got := state.peerVisibilityChanged([]SessionSnapshot{next}, 0, live); got != tt.want {
-				t.Fatalf("changed %v want %v", got, tt.want)
+			full, crossers := state.peerVisibilityChanges([]SessionSnapshot{next}, 0, live)
+			if full != tt.full || (len(crossers) == 1) != tt.crossing {
+				t.Fatalf("full %v crossers %v, want full %v crossing %v", full, crossers, tt.full, tt.crossing)
 			}
-			if !state.peerVisibilityChanged(nil, 0, nil) {
+			if full, _ := state.peerVisibilityChanges(nil, 0, nil); !full {
 				t.Fatal("disconnect skipped")
 			}
 			if len(state.peerVisibilityKeys) != 0 {

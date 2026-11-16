@@ -243,7 +243,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "fitWindowLabels",
 						id: "experimental-fit-window-labels",
 						label: "Fit window labels",
-						description: "Fit long labels and captions; open lists upward."
+						description: "Fit labels, captions and speech; open lists upward."
 					},
 					{
 						key: "greyDisabledTabs",
