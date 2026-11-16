@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 // stepBudget is how long one step may take in these tests: far below any
@@ -52,6 +53,18 @@ func newRemoteRuntime(t *testing.T, mode BrainMode, brain *gatedBrain) *Runtime 
 		}
 	})
 	return rt
+}
+
+// waitForAnswer waits until the agent's remote answer sits in its channel,
+// so the next step is the one that reads it.
+func waitForAnswer(t *testing.T, rt *Runtime, agent string) {
+	t.Helper()
+	wait.Eventually(t, time.Second, "the remote answer", func() bool {
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		req, pending := rt.inflight[agentKey("div", agent)]
+		return pending && len(req.result) == 1
+	})
 }
 
 func stepWithin(t *testing.T, rt *Runtime, agent string, players []ObservedPlayer, nowMs int64) Decision {
@@ -99,14 +112,8 @@ func TestRemoteBrainNeverHoldsTheStep(t *testing.T) {
 	}
 
 	brain.gate <- struct{}{}
-	deadline := time.Now().Add(time.Second)
-	var applied Decision
-	for now := int64(1_200); time.Now().Before(deadline); now += 100 {
-		if applied = stepWithin(t, rt, "[AI]Hunter_Kwan", nil, now); applied.Source == BrainLLM {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitForAnswer(t, rt, "[AI]Hunter_Kwan")
+	applied := stepWithin(t, rt, "[AI]Hunter_Kwan", nil, 1_200)
 	if applied.Source != BrainLLM || applied.Dialogue != "remote" {
 		t.Fatalf("answered step = %+v, want the remote decision", applied)
 	}
@@ -146,7 +153,7 @@ func TestStaleRemoteAnswerIsDropped(t *testing.T) {
 	}
 
 	brain.gate <- struct{}{}
-	time.Sleep(50 * time.Millisecond)
+	waitForAnswer(t, rt, "[AI]Hunter_Kwan")
 	if d := stepWithin(t, rt, "[AI]Hunter_Kwan", thief, 1_200); d.Source == BrainLLM {
 		t.Fatalf("stale answer applied: %+v", d)
 	}
