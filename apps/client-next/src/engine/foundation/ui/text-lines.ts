@@ -14,6 +14,7 @@ textBoxLines carry it; textBoardLines keeps the native per-glyph break.
 
 ===========================================================================
 */
+import { NARROW_FONT_INDEX } from "@/engine/foundation/rendering/ui-glyphs";
 /*
 ================
 textLines
@@ -66,6 +67,66 @@ export function textLines(
 		lines.push( line.trimEnd() );
 	}
 	return lines;
+}
+
+/*
+================
+narrowFace
+
+Port-only, not native (Experimental "Fit window labels"): the face a
+one-line text wider than width in face 0 is drawn in, so a column head
+or a button caption on a fixed plate ("Experience" on the job ranking's
+56-pixel head, "Dismiss" on the academy's 44-pixel button) reads whole
+instead of running into its neighbour or past its plate. Face 0 falls
+back to NARROW_FONT_INDEX (ui-glyphs.ts) when that is narrower; any
+other face, or a text that fits, keeps its face. For a caller that clips
+a caption to its plate, where the overlap resolver never sees it run
+over (the academy matching's heads).
+================
+*/
+export function narrowFace(
+	value: string,
+	width: number,
+	fontIndex: number,
+	measure: ( value: string, fontIndex: number ) => number
+): number {
+	if ( fontIndex !== 0 ) return fontIndex;
+	const wide = measure( value, fontIndex );
+	if ( wide <= width ) return fontIndex;
+	return measure( value, NARROW_FONT_INDEX ) < wide ? NARROW_FONT_INDEX : fontIndex;
+}
+
+/*
+================
+fitLines
+
+Port-only, not native (Experimental "Fit window labels"): a label's
+lines and face inside width, the first that fits of: one line in its
+face, two in its face, one in NARROW_FONT_INDEX, two in it (the academy
+matching's "Recruitment Condition" in the 62 pixels between its combo
+boxes reads "Recruitment" over "Condition" in the small face). Null
+when none fits.
+================
+*/
+export function fitLines(
+	value: string,
+	width: number,
+	fontIndex: number,
+	measure: ( value: string, fontIndex: number ) => number
+): { lines: string[]; fontIndex: number; } | null {
+	const faces = fontIndex === 0 ? [ 0, NARROW_FONT_INDEX ] : [ fontIndex ];
+	for ( const face of faces ) {
+		const measureFace = ( line: string ) => measure( line, face );
+		if ( measureFace( value ) <= width ) return { lines: [ value ], fontIndex: face };
+		// textLines breaks a word wider than the line at a glyph; a label
+		// never breaks inside a word.
+		if ( value.split( " " ).some( word => measureFace( word ) > width ) ) continue;
+		const lines = textLines( value, width, measureFace );
+		if ( lines.length === 2 && lines.every( line => measureFace( line ) <= width ) ) {
+			return { lines, fontIndex: face };
+		}
+	}
+	return null;
 }
 
 // Words a cut caption never ends on: they only lead into what was cut.
