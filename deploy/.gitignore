@@ -3,6 +3,6 @@
 .env.prod.bak*
 shard.env
 release.env
-local.env
+deploy.env
 backups/
 assets/

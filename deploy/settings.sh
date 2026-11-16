@@ -29,13 +29,13 @@ generated_dir() {
 #
 # load_settings VAR...
 #
-# Sets each VAR the environment leaves empty from deploy/local.env (yours,
-# not versioned), then deploy/deploy.env (versioned, no secrets). A value
-# ends at its first blank, so a comment after it is ignored.
+# Sets each VAR the environment leaves empty from deploy/deploy.env (yours,
+# ignored by git; deploy.example.env shows its keys). A value ends at its
+# first blank, so a comment after it is ignored.
 #
 load_settings() {
     local file key value wanted
-    for file in "$DEPLOY_DIR/local.env" "$DEPLOY_DIR/deploy.env"; do
+    for file in "$DEPLOY_DIR/deploy.env"; do
         [ -f "$file" ] || continue
         while IFS='=' read -r key value; do
             value="${value%%[[:space:]]*}"

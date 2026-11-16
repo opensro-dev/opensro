@@ -12,7 +12,7 @@
 # which listens on the Agent's loopback only. Passwords never reach argv or
 # a log: they travel on stdin.
 #
-# Settings: DEPLOY_HOST, DEPLOY_PATH (deploy.env / local.env). ACCOUNTS_LOCAL=1
+# Settings: DEPLOY_HOST, DEPLOY_PATH (deploy/deploy.env). ACCOUNTS_LOCAL=1
 # targets the local compose project ACCOUNTS_PROJECT instead (the smoke test).
 set -euo pipefail
 
@@ -48,7 +48,7 @@ on_stack() {
         return
     fi
     load_settings DEPLOY_HOST DEPLOY_PATH
-    : "${DEPLOY_HOST:?set DEPLOY_HOST in deploy/deploy.env}"
+    : "${DEPLOY_HOST:?set DEPLOY_HOST in deploy/deploy.env (cp deploy/deploy.example.env deploy/deploy.env)}"
     check_deploy_path
     local flags=(-T)
     [ "$mode" = tty ] && flags=(-t)
