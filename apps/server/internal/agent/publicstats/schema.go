@@ -39,6 +39,7 @@ var endpointTypes = []struct {
 	{"/public/v1/chat", reflect.TypeOf(ChatResponse{})},
 	{"/public/v1/events", reflect.TypeOf(EventsResponse{})},
 	{"/v1/accounts/{id}/characters", reflect.TypeOf(OwnCharactersResponse{})},
+	{"/v1/accounts/{id}/contributor-title", reflect.TypeOf(ContributorTitleResponse{})},
 	{"/v1/accounts/{id}/trades", reflect.TypeOf(OwnTradesResponse{})},
 	{"/v1/accounts/{id}/referrals", reflect.TypeOf(OwnReferralsResponse{})},
 	{"/v1/referral-codes/{code}", reflect.TypeOf(ReferralCodeResponse{})},

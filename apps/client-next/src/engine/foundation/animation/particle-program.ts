@@ -223,17 +223,177 @@ export function particleProgram(
 }
 /*
 ================
-sampleScale
+sampleScaleInto
+
+The random scale graph at at, into out[outAt..outAt+2].
 ================
 */
-function sampleScale( program: ParticleProgram, at: number ) {
+export function sampleScaleInto( program: ParticleProgram, at: number, out: ParticleVector, outAt: number ): void {
 	const points = program.scale!;
-	let right = points.findIndex( p => p.time >= at );
-	if ( right < 0 ) right = points.length - 1;
+	let right = points.length - 1;
+	for ( let i = 0; i < points.length; i++ ) {
+		if ( points[i]!.time >= at ) {
+			right = i;
+			break;
+		}
+	}
 	const a = points[Math.max( 0, right - 1 )]!,
 		b = points[right]!,
 		t = a === b ? 0 : Math.max( 0, Math.min( 1, (at - a.time) / (b.time - a.time) ) );
-	return a.value.map( ( n, i ) => Math.fround( n * (1 - t) + b.value[i]! * t ) );
+	for ( let i = 0; i < 3; i++ ) out[outAt + i] = Math.fround( a.value[i]! * (1 - t) + b.value[i]! * t );
+}
+/*
+================
+sampleScale
+================
+*/
+function sampleScale( program: ParticleProgram, at: number ): number[] {
+	const scale = [ 0, 0, 0 ];
+	sampleScaleInto( program, at, scale, 0 );
+	return scale;
+}
+// The birth steps a program without an order of its own runs.
+const DEFAULT_ORDER = [ "SetSpherePos", "SetGraphRandomScale", "SetConeVel" ] as const;
+/*
+================
+ParticleVector
+
+Where a sample writes a vector: a plain array or flat slot storage.
+================
+*/
+export type ParticleVector = { [index: number]: number; };
+/*
+================
+ParticleSample
+
+The vectors sampleParticle writes: position, velocity and scale at
+position[at..at+2] and so on; work is the caller's three-value scratch.
+================
+*/
+export interface ParticleSample {
+	readonly position: ParticleVector;
+	readonly velocity: ParticleVector;
+	readonly scale: ParticleVector;
+	readonly at: number;
+	readonly work: ParticleVector;
+}
+/*
+================
+coneVector
+
+A cone sample (SetConeVel, ConeForce, SetConePos): speed or distance from
+cone[0..1], polar angle up to cone[2], a full azimuth; three draws. With
+transform, out is the sample turned by its 3x3, plus its translation when
+translate. Writes out[0..2].
+================
+*/
+function coneVector(
+	cone: readonly number[],
+	table: Float32Array,
+	index: number,
+	transform: ArrayLike<number> | undefined,
+	translate: boolean,
+	out: ParticleVector
+): number {
+	index = (index + 1) % table.length;
+	const speed = Math.fround( table[index]! * (cone[1]! - cone[0]!) + cone[0]! );
+	index = (index + 1) % table.length;
+	const polar = Math.fround( table[index]! * cone[2]! );
+	index = (index + 1) % table.length;
+	const azimuth = Math.fround( table[index]! * 6.2831854820251465 );
+	const x = Math.fround( -Math.sin( polar ) * speed );
+	const v0 = Math.fround( x * Math.cos( azimuth ) ),
+		v1 = Math.fround( Math.cos( polar ) * speed ),
+		v2 = Math.fround( x * Math.sin( azimuth ) );
+	if ( !transform ) {
+		out[0] = v0;
+		out[1] = v1;
+		out[2] = v2;
+		return index;
+	}
+	for ( let i = 0; i < 3; i++ ) {
+		out[i] = translate ?
+			Math.fround( v0 * transform[i]! + v1 * transform[4 + i]! + v2 * transform[8 + i]! + transform[12 + i]! ) :
+			Math.fround( v0 * transform[i]! + v1 * transform[4 + i]! + v2 * transform[8 + i]! );
+	}
+	return index;
+}
+/*
+================
+sampleParticle
+
+A program's birth sample (CRT draws from table after index) into out, and
+the cursor after it. Allocates nothing, so the particle graph's tick can
+sample births and random-sample commands into its own storage.
+================
+*/
+export function sampleParticle(
+	program: ParticleProgram,
+	table: Float32Array,
+	index: number,
+	transform: ArrayLike<number> | undefined,
+	out: ParticleSample
+): number {
+	const position = out.position, velocity = out.velocity, scale = out.scale, at = out.at, cone = out.work;
+	for ( let i = 0; i < 3; i++ ) {
+		position[at + i] = 0;
+		velocity[at + i] = 0;
+		scale[at + i] = 1;
+	}
+	const order = program.order ?? DEFAULT_ORDER;
+	for ( let o = 0; o < order.length; o++ ) {
+		const op = order[o]!;
+		// The sibling base (0x39) is skipped without a sibling, and a birth
+		// sampled here has none; particle-graph.ts supplies one when it exists.
+		if ( op === "SetSpherePos" && program.sphere && program.sphereFlags !== SPHERE_POS_SIBLING ) {
+			let attempts = 0, length = 0;
+			do {
+				for ( let i = 0; i < 3; i++ ) {
+					index = (index + 1) % table.length;
+					position[at + i] = Math.fround( (table[index]! - 0.5) * 2 );
+				}
+				if ( ++attempts > 5000 ) throw Error( "Invalid particle random stream" );
+				const x = position[at]!, y = position[at + 1]!, z = position[at + 2]!;
+				length = 0 + x * x + y * y + z * z;
+			} while ( length > 1 );
+			for ( let i = 0; i < 3; i++ ) position[at + i] = Math.fround( position[at + i]! * program.sphere[i]! );
+		}
+		if ( op === "SetGraphRandomScale" && program.scale ) {
+			index = (index + 1) % table.length;
+			sampleScaleInto( program, table[index]!, scale, at );
+		}
+		if ( op === "SetConeVel" && program.cone ) {
+			index = coneVector(
+				program.cone,
+				table,
+				index,
+				program.coneFlags === 2 ? transform : undefined,
+				true,
+				cone
+			);
+			for ( let i = 0; i < 3; i++ ) velocity[at + i] = cone[i]!;
+		}
+		if ( op === "ConeForce" && program.coneForce ) {
+			index = coneVector(
+				program.coneForce,
+				table,
+				index,
+				program.coneForceFlags === 2 ? transform : undefined,
+				true,
+				cone
+			);
+			for ( let i = 0; i < 3; i++ ) velocity[at + i] = Math.fround( velocity[at + i]! + cone[i]! );
+		}
+		if ( op === "SetConePos" && program.conePos ) {
+			const turned = program.conePosFlags === 2 || program.conePosFlags === 7;
+			index = coneVector( program.conePos, table, index, turned ? transform : undefined, false, cone );
+			if ( program.conePosFlags === 7 && transform ) {
+				for ( let i = 0; i < 3; i++ ) cone[i] = Math.fround( cone[i]! + transform[12 + i]! );
+			}
+			for ( let i = 0; i < 3; i++ ) position[at + i] = Math.fround( position[at + i]! + cone[i]! );
+		}
+	}
+	return index;
 }
 /*
 ================
@@ -246,95 +406,8 @@ export function initializeParticle(
 	index: number,
 	transform?: ArrayLike<number>
 ) {
-	const random = () => {
-		index = (index + 1) % table.length;
-		return table[index]!;
-	};
-	const position = [ 0, 0, 0 ], velocity = [ 0, 0, 0 ];
-	let scale = [ 1, 1, 1 ];
-	for ( const op of program.order ?? [ "SetSpherePos", "SetGraphRandomScale", "SetConeVel" ] ) {
-		// The sibling base (0x39) is skipped without a sibling, and a birth
-		// sampled here has none; particle-graph.ts supplies one when it exists.
-		if ( op === "SetSpherePos" && program.sphere && program.sphereFlags !== SPHERE_POS_SIBLING ) {
-			let attempts = 0;
-			do {
-				for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( (random() - 0.5) * 2 );
-				if ( ++attempts > 5000 ) throw Error( "Invalid particle random stream" );
-			} while ( position.reduce( ( n, v ) => n + v * v, 0 ) > 1 );
-			for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! * program.sphere[i]! );
-		}
-		if ( op === "SetGraphRandomScale" && program.scale ) scale = sampleScale( program, random() );
-		if ( op === "SetConeVel" && program.cone ) {
-			const speed = Math.fround( random() * (program.cone[1]! - program.cone[0]!) + program.cone[0]! ),
-				polar = Math.fround( random() * program.cone[2]! ),
-				azimuth = Math.fround( random() * 6.2831854820251465 );
-			const x = Math.fround( -Math.sin( polar ) * speed );
-			let v = [
-				Math.fround( x * Math.cos( azimuth ) ),
-				Math.fround( Math.cos( polar ) * speed ),
-				Math.fround( x * Math.sin( azimuth ) )
-			];
-			if ( program.coneFlags === 2 && transform ) {
-				v = [ 0, 1, 2 ].map( i =>
-					Math.fround(
-						v[0]! * transform[i]! + v[1]! * transform[4 + i]! + v[2]! * transform[8 + i]! +
-							transform[12 + i]!
-					)
-				);
-			}
-			velocity[0] = v[0]!;
-			velocity[1] = v[1]!;
-			velocity[2] = v[2]!;
-		}
-		if ( op === "ConeForce" && program.coneForce ) {
-			const speed = Math.fround(
-					random() * (program.coneForce[1]! - program.coneForce[0]!) + program.coneForce[0]!
-				),
-				polar = Math.fround( random() * program.coneForce[2]! ),
-				azimuth = Math.fround( random() * 6.2831854820251465 );
-			const x = Math.fround( -Math.sin( polar ) * speed );
-			let v = [
-				Math.fround( x * Math.cos( azimuth ) ),
-				Math.fround( Math.cos( polar ) * speed ),
-				Math.fround( x * Math.sin( azimuth ) )
-			];
-			if ( program.coneForceFlags === 2 && transform ) {
-				v = [ 0, 1, 2 ].map( i =>
-					Math.fround(
-						v[0]! * transform[i]! + v[1]! * transform[4 + i]! + v[2]! * transform[8 + i]! +
-							transform[12 + i]!
-					)
-				);
-			}
-			velocity[0] = Math.fround( velocity[0]! + v[0]! );
-			velocity[1] = Math.fround( velocity[1]! + v[1]! );
-			velocity[2] = Math.fround( velocity[2]! + v[2]! );
-		}
-		if ( op === "SetConePos" && program.conePos ) {
-			const dist = Math.fround( random() * (program.conePos[1]! - program.conePos[0]!) + program.conePos[0]! ),
-				polar = Math.fround( random() * program.conePos[2]! ),
-				azimuth = Math.fround( random() * 6.2831854820251465 );
-			const x = Math.fround( -Math.sin( polar ) * dist );
-			let p = [
-				Math.fround( x * Math.cos( azimuth ) ),
-				Math.fround( Math.cos( polar ) * dist ),
-				Math.fround( x * Math.sin( azimuth ) )
-			];
-			if ( (program.conePosFlags === 2 || program.conePosFlags === 7) && transform ) {
-				p = [ 0, 1, 2 ].map( i =>
-					Math.fround( p[0]! * transform[i]! + p[1]! * transform[4 + i]! + p[2]! * transform[8 + i]! )
-				);
-			}
-			if ( program.conePosFlags === 7 && transform ) {
-				p[0] = Math.fround( p[0]! + transform[12]! );
-				p[1] = Math.fround( p[1]! + transform[13]! );
-				p[2] = Math.fround( p[2]! + transform[14]! );
-			}
-			position[0] = Math.fround( position[0]! + p[0]! );
-			position[1] = Math.fround( position[1]! + p[1]! );
-			position[2] = Math.fround( position[2]! + p[2]! );
-		}
-	}
+	const position = [ 0, 0, 0 ], velocity = [ 0, 0, 0 ], scale = [ 1, 1, 1 ];
+	index = sampleParticle( program, table, index, transform, { position, velocity, scale, at: 0, work: [ 0, 0, 0 ] } );
 	const angularVelocity = program.rVelocity ? Float32Array.from( program.rVelocity ) : undefined;
 	return {
 		index,

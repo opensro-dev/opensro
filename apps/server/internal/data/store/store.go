@@ -635,6 +635,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		db.Close()
 		return nil, nil, err
 	}
+	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
+	if err := ensureMarket(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
 	// The referral tables (#3518) are additive the same way.
 	if err := ensureReferrals(db); err != nil {
 		db.Close()

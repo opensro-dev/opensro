@@ -136,6 +136,16 @@ type Sources struct {
 	// same way.
 	SetBreakNotice func(accountID, name string, on bool) error
 	WriteToken     string
+	// ContributorTitleOf reads the Contributor title an account sees
+	// (contributor.Registry.TitleOf, port-only, #135): whether this
+	// account carries it, whether it hides it, and ok false for an
+	// account that is no contributor. Nil leaves the read unserved.
+	ContributorTitleOf func(accountID string) (carries bool, hidden bool, ok bool)
+	// TakeContributorTitle moves the account's member's title onto the
+	// account itself, else returns ErrNotOwned for an account that is no
+	// contributor; a save the store refuses returns its own error. Nil
+	// leaves the write unserved.
+	TakeContributorTitle func(accountID string) error
 	// Referrals serves the website's referral routes (referrals.go); nil
 	// is SRO_REFERRALS off, and the routes answer 404. ReferralRules are
 	// the constants those routes show.

@@ -11,9 +11,9 @@ Unused capacity must stay empty; replacing a row must retire its old tail.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { createParticleGraph, advanceParticleGraph } = await import(
-	"../../src/engine/foundation/animation/particle-graph.ts"
-);
+const { advanceParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph.ts" );
+const { createParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph-slots.ts" );
+const { createParticleGraphPlan } = await import( "../../src/engine/foundation/animation/particle-graph-plan.ts" );
 const {
 	beginParticleFrame,
 	createParticleStream,
@@ -66,14 +66,20 @@ function fixture() {
 	const stream = createParticleStream( model, 0, 1 );
 	const gpuRecords = new Float32Array( stream.records.length );
 	const random = { table: Float32Array.of( .25, .5, .75 ), index: 0 };
-	const history = () => ({ graph: createParticleGraph( graph, 0 ), matrices: [], programs: [] });
+	const plan = createParticleGraphPlan( graph, model.primitives );
+	const history = () => ({ graph: createParticleGraph( graph, 0, plan ), matrices: [], programs: [], origin: 1 });
 	/*
 	================
 	frame
+
+	A region change shifts the graph by a region's width, as the renderer's
+	regionOffsetXZ does.
 	================
 	*/
 	function frame( owner, time, origin = 1, active = true ) {
-		advanceParticleGraph( owner.graph, graph, time, identity, random.table );
+		const shift = (owner.origin - origin) * 1920;
+		owner.origin = origin;
+		advanceParticleGraph( owner.graph, graph, time, identity, random.table, Infinity, shift, 0 );
 		beginParticleFrame( stream, undefined, Number( active ) );
 		if ( active ) {
 			writeParticleRow( stream, 0, {
@@ -88,8 +94,7 @@ function fixture() {
 				},
 				history: owner,
 				pose: undefined,
-				opacity: 1,
-				origin
+				opacity: 1
 			}, random );
 		}
 		const start = stream.dirtyStart, end = stream.dirtyEnd;
