@@ -858,6 +858,9 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 		buyer.MissionInventory = rowsFromInvItems(buyerBag.Items())
 		setGold(buyer, goldOf(buyer)-offer.Price)
 		setGold(owner, goldOf(owner)+offer.Price-commission)
+		// The committed branch only: the sale's two records join this
+		// door's transaction (tradehistory.go).
+		rt.noteTrades(stallTradeRecords(division, owner, buyer, offer, commission, kind == wire.StallEventNetworkSold))
 		return true
 	})
 	if !sold {

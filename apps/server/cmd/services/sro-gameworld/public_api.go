@@ -27,7 +27,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
@@ -99,38 +98,41 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 	return api
 }
 
-// publicWindowEvents names the fortress lane's windows on the calendar.
-var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {"fortress-registration", "Fortress war registration"},
-	"SiegeProgressing":  {"fortress", "Fortress war"},
+/*
+================
+publicFortressTown
+
+A fortress codename's town in lower case (FORTRESS_JANGAN -> "jangan"),
+the one name the guild list and the fortress list share.
+================
+*/
+func publicFortressTown(codeName string) string {
+	return strings.ToLower(strings.TrimPrefix(codeName, "FORTRESS_"))
 }
 
 /*
 ================
-publicSchedule
+publicFortresses
 
-P8's events: the fortress registration and war windows from the lane that
-runs them, and a maintenance release while its gate file is present (the
-release tool writes it at the release's start and removes it at the end,
-so the start is the file's time and the end is open).
+P11's rows: every fortress the siege lane serves, named by its codename's
+town as the guild list names it, with the occupying guild's name. A guild
+the store no longer has reads as unclaimed rather than as a bare id.
 ================
 */
-func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEvent {
-	var events []publicstats.ScheduledEvent
-	if path := strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)); path != "" {
-		if info, err := os.Stat(path); err == nil {
-			events = append(events, publicstats.ScheduledEvent{Kind: "maintenance", Title: "Maintenance", Start: info.ModTime(), Running: true})
+func publicFortresses(lane *siege.Lane, authority *store.Store, shard string) []publicstats.FortressEntry {
+	holdings := lane.Holdings()
+	out := make([]publicstats.FortressEntry, 0, len(holdings))
+	for _, holding := range holdings {
+		entry := publicstats.FortressEntry{Town: publicFortressTown(holding.CodeName),
+			TaxRate: int(holding.TaxRate)}
+		if holding.GuildID != 0 {
+			if guild, _, ok := authority.Guilds().Guild(shard, holding.GuildID); ok {
+				entry.Owner = guild.Name
+			}
 		}
+		out = append(out, entry)
 	}
-	for _, window := range lane.Windows(now.UnixMilli()) {
-		names, ok := publicWindowEvents[window.Name]
-		if !ok {
-			continue
-		}
-		events = append(events, publicstats.ScheduledEvent{Kind: names.kind, Title: names.title, Start: window.Start,
-			End: window.End, Running: window.Running})
-	}
-	return events
+	return out
 }
 
 /*
@@ -179,6 +181,23 @@ func setPrivacyFlag(
 		return errors.New("privacy write not persisted")
 	}
 	return nil
+}
+
+/*
+================
+publicTradePage
+
+One page of an account's trade history (trades.go), read from the authority
+store. A character the account does not own answers publicstats.ErrNotOwned,
+the answer every account read gives for a name that is not the account's.
+================
+*/
+func publicTradePage(authority *store.Store, shard, account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
+	page, err := authority.TradeHistory(shard, account, character, before, limit)
+	if errors.Is(err, store.ErrTradeCharacterNotOwned) {
+		return domain.TradePage{}, publicstats.ErrNotOwned
+	}
+	return page, err
 }
 
 /*
@@ -310,7 +329,7 @@ func publicGuildEntries(authority *store.Store, shard string) []publicstats.Guil
 	if records, _, err := authority.Fortresses().FortressState(shard); err == nil {
 		towns := map[uint32]string{}
 		for _, row := range enterworld.DefaultSiegeFortressDataRows() {
-			towns[row.FortressID] = strings.ToLower(strings.TrimPrefix(row.CodeName, "FORTRESS_"))
+			towns[row.FortressID] = publicFortressTown(row.CodeName)
 		}
 		for _, record := range records {
 			if record.GuildID != 0 {
@@ -430,6 +449,18 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
 		},
+		// The Contributor title's read and pick (port-only, not native; #135)
+		// reach the registry at call time (wiring_contributor.go): with
+		// SRO_CONTRIBUTOR_TITLES off there is none, and both answer not found.
+		ContributorTitleOf: func(account string) (bool, bool, bool) {
+			return contributorTitleOf(gameplay, account)
+		},
+		TakeContributorTitle: func(account string) error {
+			return takeContributorTitle(gameplay, account)
+		},
+		Trades: func(account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
+			return publicTradePage(authority, shard, account, character, before, limit)
+		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
 			online := 0
@@ -449,7 +480,10 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return levels.ExpRequired(level)
 		},
-		Schedule: func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		Schedule: func(now time.Time) []publicstats.ScheduledEvent {
+			return publicSchedule(scheduleSourcesOf(gameplay), now)
+		},
+		Fortresses: func() []publicstats.FortressEntry { return publicFortresses(gameplay.siege, authority, shard) },
 		// A muted author's lines are left out while the mute holds, on or
 		// off line: the by-character restriction record is read directly
 		// (Hub.CharacterRestricted). restriction.Report would also send

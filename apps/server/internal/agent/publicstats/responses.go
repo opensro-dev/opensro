@@ -173,6 +173,46 @@ type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
 }
 
+// ContributorTitleResponse is the website's authenticated
+// GET /v1/accounts/{id}/contributor-title (privacy.go): whether the
+// signed-in account carries its Contributor title and whether it hides
+// it. The member's other accounts are never listed. Port-only, not
+// native (#135).
+type ContributorTitleResponse struct {
+	Carries bool `json:"carries"`
+	Hidden  bool `json:"hidden"`
+}
+
+// OwnTradeItem is one item stack a trade moved: its reference and count.
+type OwnTradeItem struct {
+	RefObjID uint32 `json:"refObjId"`
+	Quantity uint16 `json:"quantity"`
+}
+
+// OwnTrade is one trade of the account as the named character saw it
+// (trades.go): the gold it paid and received, the network commission it
+// paid, and the stacks it gave and received. A hidden counterparty reads as
+// "a hunter" in otherName.
+type OwnTrade struct {
+	AtMs          int64          `json:"atMs"`
+	Character     string         `json:"character"`
+	Kind          string         `json:"kind"`
+	OtherName     string         `json:"otherName"`
+	GoldPaid      uint64         `json:"goldPaid"`
+	GoldReceived  uint64         `json:"goldReceived"`
+	Commission    uint64         `json:"commission"`
+	ItemsGiven    []OwnTradeItem `json:"itemsGiven"`
+	ItemsReceived []OwnTradeItem `json:"itemsReceived"`
+}
+
+// OwnTradesResponse is the website's authenticated
+// GET /v1/accounts/{id}/trades (trades.go): one page, newest first. next is
+// the cursor that asks for the page after it, or null on the last page.
+type OwnTradesResponse struct {
+	Trades []OwnTrade `json:"trades"`
+	Next   *string    `json:"next"`
+}
+
 // CharactersResponse is P5 GET /public/v1/characters.
 type CharactersResponse struct {
 	Characters []CharacterSummary `json:"characters"`
@@ -306,9 +346,19 @@ type StatusResponse struct {
 	UniquePlayers7d *int `json:"uniquePlayers7d"`
 }
 
-// ScheduleEvent is one event the server runs. Kind is "fortress" (the
-// war), "fortress-registration" or "maintenance"; EndsAt is null for an
-// open-ended maintenance.
+// The schedule's event kinds (sro-gameworld's public_schedule.go publishes
+// them; opensro-web labels each one).
+const (
+	ScheduleKindMaintenance = "maintenance"
+	ScheduleKindFlagWar     = "capture-the-flag"
+	// ScheduleKindFlagWarSignup is the ten-minute sign-up before a match.
+	ScheduleKindFlagWarSignup = "capture-the-flag-registration"
+	ScheduleKindHalloween     = "halloween"
+)
+
+// ScheduleEvent is one event the server runs. Kind is one of the
+// ScheduleKind constants, or "fortress" (the war) or
+// "fortress-registration"; EndsAt is null for an open-ended maintenance.
 type ScheduleEvent struct {
 	Kind     string  `json:"kind"`
 	Title    string  `json:"title"`
@@ -321,6 +371,30 @@ type ScheduleEvent struct {
 type ScheduleResponse struct {
 	ServerTime string          `json:"serverTime"`
 	Events     []ScheduleEvent `json:"events"`
+}
+
+// FortressRow is one fortress on P11 GET /public/v1/fortresses.
+type FortressRow struct {
+	Fortress string  `json:"fortress" doc:"The fortress by town in lower case (\"jangan\"), as GuildRow.fortress."`
+	Owner    *string `json:"owner" doc:"The occupying guild's name; null while unclaimed."`
+	TaxRate  int     `json:"taxRate" doc:"The tax rate the owner set, in percent (-20 to 20)."`
+}
+
+// FortressWindow is one fortress period: the one running now, else the next.
+type FortressWindow struct {
+	StartsAt string  `json:"startsAt"`
+	EndsAt   *string `json:"endsAt"`
+	Running  bool    `json:"running"`
+}
+
+// FortressesResponse is P11 GET /public/v1/fortresses. The war state is
+// shard-wide: every fortress registers and fights in the same windows.
+type FortressesResponse struct {
+	ServerTime   string          `json:"serverTime"`
+	State        string          `json:"state" doc:"\"war\", \"registration\" or \"peace\"."`
+	Registration *FortressWindow `json:"registration" doc:"Guild registration for the war: running now, else the next; null when none is scheduled."`
+	War          *FortressWindow `json:"war" doc:"The fortress war: running now, else the next; null when none is scheduled."`
+	Fortresses   []FortressRow   `json:"fortresses"`
 }
 
 // ChatLine is one public chat line. Kind is "chat" (ordinary beta chat,

@@ -16,6 +16,7 @@ async function load( path ) {
 }
 import { test } from "node:test";
 import assert from "node:assert/strict";
+const { createPaletteStreams } = await load( "src/engine/runtime/renderer/characters/palette-streams.ts" );
 const { createCharacterRenderPlan, characterBatchBytes, characterPoseBytes, createCharacterStateIndex } = {
 	...(await load( "src/engine/foundation/animation/character-render-plan.ts" )),
 	...(await load( "src/engine/foundation/animation/character-budget.ts" )),
@@ -34,6 +35,7 @@ test("admission plans preserve every capacity reservation including irregular pa
 				{ length: 3 },
 				( _, i ) => ({
 					joints: Array( i + 1 ).fill( 0 ),
+					inverseBind: new Float32Array( (i + 1) * 16 ),
 					emission,
 					geometry: {
 						positions: new Float32Array( 9 + i * 3 ),
@@ -50,6 +52,50 @@ test("admission plans preserve every capacity reservation including irregular pa
 		}
 		assert.throws( () => plan.batchBytes( 513 ), /capacity/ );
 		assert.equal( plan.clips.get( "walk" ), model.clips[0] );
+	}
+});
+test("a shared-palette batch is charged one palette per distinct binding, as palette-streams keeps them", () => {
+	// Three skinned parts: the first two bind the same joints through the
+	// same inverse binds (a body's parts), the third its own. distinct breaks
+	// the second part's binding by one bit.
+	const model = ( distinct, emitter ) => ({
+		nodes: [ {}, {} ],
+		clips: [],
+		primitives: [ 0, 1, 2 ].map( i => ({
+			joints: i === 2 ? [ 0 ] : [ 0, 1 ],
+			inverseBind: Float32Array.from(
+				{ length: (i === 2 ? 1 : 2) * 16 },
+				( _, k ) => k % 5 === 0 ? 1 : distinct && i === 1 && k === 3 ? 2 ** -20 : 0
+			),
+			emission: emitter && i === 2 ? { capacity: 4, births: [ 0 ], lifetime: 1 } : undefined,
+			geometry: {
+				positions: new Float32Array( 9 ),
+				indices: new Uint32Array( 3 ),
+				joints: new Uint32Array( 12 ),
+				weights: new Float32Array( 12 )
+			}
+		}) )
+	});
+	// Two joints of 64 bytes, its CPU stream and its GPU copy, per slot.
+	const palette = 2 * 64 * 2;
+	for ( const count of [ 1, 2, 3, 8 ] ) {
+		const slots = 2 ** Math.ceil( Math.log2( count ) );
+		assert.equal(
+			characterBatchBytes( model( true, false ), count ) - characterBatchBytes( model( false, false ), count ),
+			slots * palette,
+			`count ${count}: the shared binding is charged once`
+		);
+		// The owner keeps exactly that many streams.
+		const kept = new Set(
+			createPaletteStreams( model( false, false ), slots ).streams.map( stream => stream.data )
+		);
+		assert.equal( kept.size, 2 );
+		// An emitter batch keeps a palette per primitive: sharing changes nothing.
+		assert.equal(
+			characterBatchBytes( model( true, true ), count ),
+			characterBatchBytes( model( false, true ), count ),
+			`count ${count}: an emitter batch is charged per primitive`
+		);
 	}
 });
 test("state indices retain delivered rows across render frames and replace lifecycle state atomically", () => {

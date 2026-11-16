@@ -13,21 +13,29 @@ results on purpose rewrites the fixture with
 The fixture is the native catalogue's. A native build matches it exactly;
 an expanded build (the Alexandria variant) must keep every recorded
 effect's digest, and its added effects pass (digestDifferences says why).
+So does a build that read the operator's optional later-client glow tables
+(scripts/import_vsro_item_glow.py): they name enchant sparks the native
+catalogue never loads (system_enchant_b_01.efp), so the catalogue gains
+effects while every recorded one must still match.
 
 ===========================================================================
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { digestDifferences, particleTickDigests, DIGEST_PATH } from "../helpers/particle-tick-digest.mjs";
 import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
+import { vsroItemGlowRoot } from "../../../../scripts/build/char/equipmentGlowMetadata.mjs";
 
 // How many differing effects a failure names.
 const NAMED_DIFFERENCES = 20;
+// A build that adds effects to the native catalogue: the variant, or the
+// optional glow import the asset build reads when it is present.
+const ADDS_EFFECTS = EXPANDED_BUILD || existsSync( vsroItemGlowRoot );
 
 test("every catalogue particle graph ticks to its recorded digest", () => {
 	const expected = JSON.parse( readFileSync( DIGEST_PATH, "utf8" ) ).effects, actual = particleTickDigests();
-	const changed = digestDifferences( expected, actual, EXPANDED_BUILD );
+	const changed = digestDifferences( expected, actual, ADDS_EFFECTS );
 	assert.deepEqual(
 		changed.slice( 0, NAMED_DIFFERENCES ).map( path =>
 			`${path}: ${expected[path] ?? "(missing)"} -> ${actual[path] ?? "(missing)"}`

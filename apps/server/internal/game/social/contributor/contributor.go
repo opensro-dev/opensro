@@ -28,7 +28,8 @@ Two files in the shard's authority directory, one owner each:
     corrupt one keeps the last good set and logs.
   - contributor-titles.json, {"hidden":["<account id>", ...],
     "chosen":{"<label>":"<account id>"}}, owned here: a contributor's
-    own "/contributor off" and "/contributor here" choices. They are
+    own "/contributor off" and "/contributor here" choices, and the
+    website's "carry it here" (TakeTitle, #135). They are
     server settings, so every viewer sees the same state. A chosen
     account the member no longer has falls back to their first.
 
@@ -97,6 +98,10 @@ const (
 // flatMemberPrefix labels an account read from a flat "accounts" list:
 // each is its own member.
 const flatMemberPrefix = "account:"
+
+// ErrNotInGroup answers TakeTitle for an account linked to no contributor.
+// The website answers it as not found.
+var ErrNotInGroup = errors.New("contributor titles: the account is in no contributor's group")
 
 /*
 ================
@@ -402,6 +407,52 @@ func (r *Registry) Shown(accountID string) bool {
 
 /*
 ================
+TitleOf
+
+What the website's account page reads for accountID (port-only, not
+native; #135): whether accountID carries its member's title now, and
+whether it hides it. ok is false for an account that is no contributor.
+The member's other accounts are never named: a list would hand whoever
+signs in on one of them the others' login names. The group holds only the
+accounts the member linked by their own Discord sign-in (the operations
+sync drops invite-key links, opensro-ops#376).
+================
+*/
+func (r *Registry) TitleOf(accountID string) (carries bool, hidden bool, ok bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	member, linked := r.memberOf[accountID]
+	if !linked {
+		return false, false, false
+	}
+	return r.holderLocked(member) == accountID, r.hidden[accountID], true
+}
+
+/*
+================
+TakeTitle
+
+The website's "carry it here" (port-only, not native; #135): accountID's
+member's title moves to accountID, exactly as "/contributor here" from
+that account does. The account is looked up in memberOf under the lock,
+so a link the sync dropped a moment ago is refused with ErrNotInGroup and
+nothing is written. A save that does not take returns its error with the
+old choice still in force.
+================
+*/
+func (r *Registry) TakeTitle(accountID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	member, linked := r.memberOf[accountID]
+	if !linked {
+		return ErrNotInGroup
+	}
+	_, err := r.moveLocked(member, accountID)
+	return err
+}
+
+/*
+================
 Command
 
 The chat intake: "/contributor", "/contributor on", "/contributor off"
@@ -424,7 +475,11 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 		return answerNotMember, true
 	}
 	if len(fields) == 2 && fields[1] == "here" {
-		return r.moveLocked(member, accountID), true
+		moved, err := r.moveLocked(member, accountID)
+		if err != nil {
+			return answerBusy, true
+		}
+		return moved, true
 	}
 	if len(fields) == 2 && fields[1] == "keep" {
 		return r.keepLocked(member, accountID), true
@@ -474,17 +529,20 @@ func (r *Registry) Command(accountID, message string) (answer string, handled bo
 ================
 moveLocked
 
-"/contributor here": the member's title moves to accountID, which is
-one of its own. The account's own shown or hidden state comes with it.
+The move of a member's title to accountID, which is one of its own:
+"/contributor here" in chat and the website's TakeTitle. The
+account's own shown or hidden state comes with it. The caller checks the
+membership; a save that does not take returns its error and leaves the
+old choice in force, and the chat answer for that error is answerBusy.
 ================
 */
-func (r *Registry) moveLocked(member, accountID string) string {
+func (r *Registry) moveLocked(member, accountID string) (string, error) {
 	state := answerShown
 	if r.hidden[accountID] {
 		state = answerHidden
 	}
 	if r.titled[accountID] {
-		return state
+		return state, nil
 	}
 	next := make(map[string]string, len(r.chosen)+1)
 	for label, id := range r.chosen {
@@ -495,13 +553,13 @@ func (r *Registry) moveLocked(member, accountID string) string {
 	seen := r.seenWithLocked(accountID, accountID)
 	if err := r.saveAllLocked(r.hidden, next, seen); err != nil {
 		log.WithError(err).Warn("contributor titles: choice save failed")
-		return answerBusy
+		return "", err
 	}
 	r.chosen, r.seen = next, seen
 	r.resolveLocked()
 	// The next roster pass sends the changed roster to everyone.
 	r.pushDueMs = 0
-	return answerMoved + " " + state
+	return answerMoved + " " + state, nil
 }
 
 /*

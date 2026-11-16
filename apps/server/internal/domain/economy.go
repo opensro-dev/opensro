@@ -98,6 +98,9 @@ var economyDoorReasons = map[string]economyDoorReason{
 	// caravan outcome the trade-sale doors complete, told apart from an
 	// ordinary purchase so a run's start is on the ledger too (#3162).
 	"trade-load": {loss: "trade_goods_cost"},
+	// A market buy paid in gold (port-only, store/market.go): the buyer's
+	// gold moves to the seller's warehouse, less the 1% fee.
+	"market-buy": {loss: "market_sale"},
 }
 
 // economyMemberReasons maps a settlement door whose label names its subject
@@ -248,6 +251,7 @@ var economyReasonKinds = map[string]string{
 	"teleport_fee":         EconomyKindBurn,
 	"exchange":             EconomyKindTransfer,
 	"stall_sale":           EconomyKindTransfer,
+	"market_sale":          EconomyKindTransfer,
 	"storage_withdraw":     EconomyKindTransfer,
 	"storage_deposit":      EconomyKindTransfer,
 	"guild_storage":        EconomyKindTransfer,

@@ -351,6 +351,9 @@ type Store struct {
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
 	ledger economyLedger
+	// trades holds the trade rows noted by committed trades until the
+	// commit that writes them (trade_history.go).
+	trades tradeHistoryState
 
 	// defaultSkills is Options.DefaultSkills and serves current-schema
 	// character creation.
@@ -633,6 +636,11 @@ func (s *Store) openAndLoadDB(path string) (*sql.DB, *loadedDB, error) {
 		return nil, nil, err
 	}
 	if err := ensureCaravanAgentTables(db); err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	// The market tables (port-only, SRO_CONSIGNMENT): additive too.
+	if err := ensureMarket(db); err != nil {
 		db.Close()
 		return nil, nil, err
 	}

@@ -21,7 +21,9 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/wait"
@@ -166,13 +168,13 @@ without a fortress lane, nothing is invented.
 func TestPublicScheduleShowsMaintenanceWhileTheGateExists(t *testing.T) {
 	gate := filepath.Join(t.TempDir(), "maintenance-gate.json")
 	t.Setenv(agentapi.EnvMaintenanceGate, gate)
-	if events := publicSchedule(nil, time.Now()); len(events) != 0 {
+	if events := publicSchedule(scheduleSources{flagWarOff: true}, time.Now()); len(events) != 0 {
 		t.Fatalf("no gate and no lane listed %+v", events)
 	}
 	if err := os.WriteFile(gate, []byte(`{"accounts":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	events := publicSchedule(nil, time.Now())
+	events := publicSchedule(scheduleSources{flagWarOff: true}, time.Now())
 	if len(events) != 1 || events[0].Kind != "maintenance" || !events[0].Running || !events[0].End.IsZero() {
 		t.Fatalf("gate present listed %+v, want one running open-ended maintenance", events)
 	}
@@ -268,5 +270,54 @@ func TestPublicChatHidesMutedAuthorAfterLogoff(t *testing.T) {
 	lines := sources.Chat()
 	if len(lines) != 1 || lines[0].Author != "Bob" {
 		t.Fatalf("chat after the muted author left = %+v, want only Bob's line", lines)
+	}
+}
+
+/*
+================
+TestPublicFortressesNameTheOccupyingGuild
+
+P11's wiring: every fortress of the lane by town, the occupier named from
+the guild store, and a guild the store no longer holds read as unclaimed.
+================
+*/
+func TestPublicFortressesNameTheOccupyingGuild(t *testing.T) {
+	const shard = "test"
+	options := store.Options{DefaultSkills: func(string, []uint32) ([]uint32, error) { return []uint32{1}, nil }}
+	authority, err := store.Open(t.TempDir(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { authority.Close() })
+	master := &domain.Character{Name: "Kekw", ModelCodename: "CHAR_CH_MAN_ADVENTURER"}
+	if err := authority.CreateCharacter(shard, "alpha", master); err != nil {
+		t.Fatal(err)
+	}
+	guildID, err := authority.Guilds().CreateGuild(shard, enterworld.GuildRecord{Name: "Silk", Level: 2},
+		enterworld.GuildMemberRecord{CharID: master.ID, JID: 1, Name: master.Name, PermMask: 0xffffffff}, master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fortresses := fortress.New([]fortress.Catalog{{ID: 1, CodeName: "FORTRESS_JANGAN"}, {ID: 3, CodeName: "FORTRESS_HOTAN"},
+		{ID: 6, CodeName: "FORTRESS_BANDIT"}})
+	lane, err := siege.NewLane(siege.LaneConfig{Division: shard, Fortresses: fortresses})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fortresses.Occupy(shard, 1, guildID) || !fortresses.Occupy(shard, 3, 999) {
+		t.Fatal("occupy refused")
+	}
+	got := publicFortresses(lane, authority, shard)
+	want := []publicstats.FortressEntry{{Town: "jangan", Owner: "Silk"}, {Town: "hotan"}, {Town: "bandit"}}
+	if len(got) != len(want) {
+		t.Fatalf("fortresses %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("fortress %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if rows := publicFortresses(nil, authority, shard); len(rows) != 0 {
+		t.Fatalf("no lane served %+v", rows)
 	}
 }
