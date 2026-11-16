@@ -27,11 +27,12 @@ native behaviour.
 ## The live server's tick counters
 
 Contributors without host access read the live tick counters through
-`/transport/metrics/tick`: the tick fields of `/transport/metrics`
-(`tick_*`, `tick_ms_histogram`, `tick_phase_ms`, `slow_hooks`,
-`slow_divisions`, `publication_holds`, `tick_commit`,
-`monster_navigation`, `tick_zones`, `runtime`) plus `captured_at`,
-and nothing else. The counters are cumulative since boot, so take two
+`https://opensro.online/ops/tick-metrics`: the tick fields of
+`/transport/metrics` (`tick_*`, `tick_ms_histogram`, `tick_spikes`,
+`tick_phase_ms`, `slow_hooks`, `slow_divisions`, `publication_holds`,
+`tick_commit`, `monster_navigation`, `tick_zones`, `runtime`) plus
+`live_sessions` and `captured_at`, and nothing else. `sro-loadtest
+-metrics` and `tick_acceptance.py` read it like the full document. The counters are cumulative since boot, so take two
 pulls a few minutes apart and read the difference. The operator hands
 out a personal, revocable login for it at the edge (opensro-ops
 `hosts/vps1/TICK-METRICS.md`); ask on the project's Discord.

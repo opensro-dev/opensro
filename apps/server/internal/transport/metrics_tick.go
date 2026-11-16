@@ -12,13 +12,22 @@ subset here, in the process, means a leaked login exposes timings and
 counters only: Caddy cannot trim a JSON document, so the trim must happen
 before the edge.
 
-The fields keep their PathMetrics names and shapes, so a tool that reads
-one document reads the other (sro-loadtest's metricsSnapshot, the bench
-scripts, tick_acceptance.py). captured_at is added so two pulls can be
-turned into a window without trusting the puller's clock.
+The fields keep their PathMetrics names and shapes, and the view carries
+every field sro-loadtest's metricsSnapshot and tick_acceptance.py decode
+(the tick_* family, live_sessions, tick_spikes, runtime), so those tools
+read either document; a field they read and the view lacked would decode
+as zero and report a quiet wrong window. captured_at is added so two
+pulls can be turned into a window without trusting the puller's clock.
 
-Like PathMetrics, this path is loopback-only by the listener; the edge
-must never proxy it without authentication.
+The path sits outside /transport/ on purpose. Both public edges proxy
+/transport/* to this listener (the shard route on opensro.online and the
+play site), and each closes only the exact path /transport/metrics.
+Checked from outside on 2026-11-16: an unknown /transport/ path reaches the
+GameWorld's own 404 there, any other path stops at the website or Caddy.
+A view under /transport/metrics/ would have been public from the deploy
+until the edge closed it; out here no edge reaches it, whatever the order
+of the server release and the edge change. The authenticated edge route is
+the only way in.
 
 ===========================================================================
 */
@@ -31,8 +40,9 @@ import (
 	"time"
 )
 
-// PathMetricsTick is the tick-only view; see the file banner.
-const PathMetricsTick = "/transport/metrics/tick"
+// PathMetricsTick is the tick-only view; see the file banner for why it is
+// not under /transport/.
+const PathMetricsTick = "/ops/tick-metrics"
 
 /*
 ================
@@ -51,6 +61,11 @@ type TickMetrics struct {
 	TickMaxMs     float64       `json:"tick_max_ms"`
 	TickOverruns  uint64        `json:"tick_overruns"`
 	TickHistogram TickHistogram `json:"tick_ms_histogram"`
+	// TickSpikes is the spike journal's mirror: closed bursts with their
+	// slowest step, phase and hook (code labels) and the session count.
+	TickSpikes []TickSpike `json:"tick_spikes,omitempty"`
+	// LiveSessions is the load the window ran under (a count only).
+	LiveSessions int `json:"live_sessions"`
 
 	TickPhaseMs       map[string]Histogram     `json:"tick_phase_ms"`
 	SlowHooks         map[string]SlowHookStats `json:"slow_hooks"`
@@ -80,6 +95,8 @@ func tickMetricsFrom(m Metrics, now time.Time) TickMetrics {
 		TickMaxMs:         m.TickMaxMs,
 		TickOverruns:      m.TickOverruns,
 		TickHistogram:     m.TickHistogram,
+		TickSpikes:        m.TickSpikes,
+		LiveSessions:      m.LiveSessions,
 		TickPhaseMs:       m.TickPhaseMs,
 		SlowHooks:         m.SlowHooks,
 		SlowDivisions:     m.SlowDivisions,

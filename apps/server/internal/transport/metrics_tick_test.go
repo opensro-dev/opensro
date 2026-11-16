@@ -26,11 +26,13 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// tickViewKeys is every top-level key the tick view may carry. Keys
-// marked omitempty in TickMetrics appear here because the test installs
-// their providers.
+// tickViewKeys is every top-level key the tick view carries in this
+// test. Of the omitempty keys, monster_navigation and tick_zones appear
+// because the test installs their providers; tick_spikes stays absent
+// because the spike journal is not enabled here.
 var tickViewKeys = []string{
 	"captured_at",
+	"live_sessions",
 	"monster_navigation",
 	"publication_holds",
 	"runtime",
