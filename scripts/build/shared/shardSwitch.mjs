@@ -26,6 +26,28 @@ import { serverSourceRoot } from "../world/paths.mjs";
 const SHARD_PROFILE = path.join( "config", "shard-settings.json" );
 const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
 
+// file -> { size, mtimeMs, text }: the profile and the registry as last read.
+const sourceTexts = new Map();
+
+/*
+================
+readSourceText
+
+A server source file's text, read again only when its size or mtime
+moved. The bake asks a switch's posture once per skill row and once per
+model (qinshiTombCombatEnabled); reading and scanning shardsettings.go
+each time cost the npc lane about 1.8 s of a warm build.
+================
+*/
+function readSourceText( file ) {
+	const stat = fs.statSync( file );
+	const known = sourceTexts.get( file );
+	if ( known && known.size === stat.size && known.mtimeMs === stat.mtimeMs ) return known.text;
+	const text = fs.readFileSync( file, "utf8" );
+	sourceTexts.set( file, { size: stat.size, mtimeMs: stat.mtimeMs, text } );
+	return text;
+}
+
 /*
 ================
 shardSwitchPosture
@@ -38,11 +60,11 @@ the build, never read as off.
 */
 export function shardSwitchPosture( env ) {
 	const serverRoot = serverSourceRoot();
-	const profile = JSON.parse( fs.readFileSync( path.join( serverRoot, SHARD_PROFILE ), "utf8" ) );
+	const profile = JSON.parse( readSourceText( path.join( serverRoot, SHARD_PROFILE ) ) );
 	if ( typeof profile[env] === "string" ) {
 		return profile[env];
 	}
-	const registry = fs.readFileSync( path.join( serverRoot, SHARD_REGISTRY ), "utf8" );
+	const registry = readSourceText( path.join( serverRoot, SHARD_REGISTRY ) );
 	const row = new RegExp( `\\{\\s*Env:\\s*"${env}"[^}]*?Default:\\s*"([^"]*)"` ).exec( registry );
 	if ( !row ) {
 		throw new Error( `${env}: no Default in ${SHARD_REGISTRY}; the bake cannot see the shard's posture` );

@@ -19,6 +19,7 @@ manifest against these same functions.
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { sharedCacheEnvironment } from "../../lib/goEnvironment.mjs";
 import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
@@ -40,6 +41,43 @@ const CHARACTERDATA_TYPE_ID2 = 10;
 const CHARACTERDATA_TYPE_ID3 = 11;
 const CHARACTERDATA_TYPE_ID4 = 12;
 const ROSTER_EXPORT_MAX_BYTES = 16 * 1024 * 1024;
+
+// serverRoot -> the sro-evidence executable built from it this process.
+const evidenceTools = new Map();
+
+/*
+================
+evidenceTool
+
+sro-evidence built once per process and server tree, into the temp
+folder, removed when the process exits. The npc bake asks it for three
+rosters; three `go run`s linked the tool three times (about 1.3 s each,
+against 0.6 s for one build and 0.6 s per run of the binary).
+================
+*/
+function evidenceTool( serverRoot ) {
+	const known = evidenceTools.get( serverRoot );
+	if ( known ) return known;
+	const extension = process.platform === "win32" ? ".exe" : "";
+	const tool = path.join( os.tmpdir(), `sro-evidence-${process.pid}-${evidenceTools.size}${extension}` );
+	const build = spawnSync( "go", [ "build", "-o", tool, "./cmd/tools/sro-evidence" ], {
+		cwd: serverRoot,
+		// Compiled once for every checkout (goEnvironment.mjs).
+		env: sharedCacheEnvironment( process.env ),
+		encoding: "utf8"
+	} );
+	if ( build.error || build.status !== 0 ) {
+		throw new Error(
+			`[npc] go build ./cmd/tools/sro-evidence failed in ${serverRoot}: ${build.error ?? ""} ${
+				build.stderr ?? ""
+			}`
+				.trim()
+		);
+	}
+	process.once( "exit", () => fs.rmSync( tool, { force: true } ) );
+	evidenceTools.set( serverRoot, tool );
+	return tool;
+}
 
 /*
 ================
@@ -71,16 +109,15 @@ function loadServerRoster( subcommand, expectedFormat, label, env = process.env 
 	const serverRoot = path.resolve(
 		process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( repositoryRoot, "apps", "server" )
 	);
-	const result = spawnSync( "go", [ "run", "./cmd/tools/sro-evidence", subcommand, "-textdata-dir", textdataDir ], {
+	const result = spawnSync( evidenceTool( serverRoot ), [ subcommand, "-textdata-dir", textdataDir ], {
 		cwd: serverRoot,
-		// Compiled once for every checkout (goEnvironment.mjs).
-		env: sharedCacheEnvironment( env ),
+		env,
 		encoding: "utf8",
 		maxBuffer: ROSTER_EXPORT_MAX_BYTES
 	} );
 	if ( result.error || result.status !== 0 ) {
 		throw new Error(
-			`[npc] ${label} roster export failed (go run ./cmd/tools/sro-evidence ${subcommand} in ${serverRoot}): ` +
+			`[npc] ${label} roster export failed (sro-evidence ${subcommand} in ${serverRoot}): ` +
 				`${result.error ?? ""} ${result.stderr ?? ""}`.trim()
 		);
 	}
