@@ -16,6 +16,10 @@
 #   e. a rollback to the previous release moves current back
 #   f. a release that was never synced is refused before anything stops
 #   g. restarting the Agent alone keeps the GameWorld's control calls authorized
+#   h. restarting identity alone: the Agent recovers by itself
+#   i. a failure after the stop (the backup) brings the previous release back up
+#   j. a rollback across a schema upgrade is refused before anything stops
+# and in b: the backup is readable by its owner only.
 set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -85,6 +89,8 @@ ASSETS_RELEASE=r1 rollout || fail "b: rollout failed"
 compose exec -T agent curl -fsS -o /dev/null http://127.0.0.1:8787/readyz || fail "b: the Agent is not ready"
 case "$(served_release)" in *r1*) ;; *) fail "b: web does not serve r1" ;; esac
 [ "$(backups)" = 1 ] || fail "b: $(backups) backups after one rollout"
+mode="$(ls -l "$stack"/backups/silkroad-*.tar.gz | head -n 1 | cut -c1-10)"
+[ "$mode" = "-rw-------" ] || fail "b: the backup holds secrets and is $mode"
 echo "ok    b"
 
 echo "==> c. a second release"
@@ -99,8 +105,7 @@ echo "==> d. one backup per rollout"
 echo "ok    d"
 
 echo "==> e. rollback"
-ASSETS_RELEASE="$(value PREVIOUS_ASSETS_RELEASE)" IMAGE_TAG="$(value PREVIOUS_IMAGE_TAG)" rollout \
-    || fail "e: rollback failed"
+(cd "$stack" && bash ./rollout.sh --rollback) > "$stack/last-rollout.log" 2>&1 || fail "e: rollback failed"
 [ "$(readlink "$stack/assets/current")" = releases/r1 ] || fail "e: current is $(readlink "$stack/assets/current")"
 case "$(served_release)" in *r1*) ;; *) fail "e: web does not serve r1 after the rollback" ;; esac
 echo "ok    e"
@@ -127,5 +132,34 @@ while [ $SECONDS -lt $until_at ]; do
     sleep 5
 done
 echo "ok    g"
+
+echo "==> h. identity restarts alone"
+compose restart identity >/dev/null 2>&1
+recovered=0
+until_at=$((SECONDS + 90))
+while [ $SECONDS -lt $until_at ]; do
+    if compose exec -T agent curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json 2>/dev/null \
+        && [ "$(compose ps --format '{{.Health}}' agent)" = healthy ]; then
+        recovered=1
+        break
+    fi
+    sleep 5
+done
+[ "$recovered" = 1 ] || fail "h: the Agent did not recover after identity restarted"
+echo "ok    h"
+
+echo "==> i. a failure after the stop"
+if ROLLOUT_BACKUP_IMAGE=alpine:does-not-exist-silkroad ASSETS_RELEASE=r2 rollout; then fail "i: the rollout succeeded with a broken backup"; fi
+grep -q "previous release" "$stack/last-rollout.log" || fail "i: no recovery message"
+compose exec -T agent curl -fsS -o /dev/null http://127.0.0.1:8787/readyz || fail "i: the Agent was left stopped"
+[ "$(compose ps --format '{{.Health}}' gameworld-global-official)" = healthy ] || fail "i: the GameWorld was left stopped"
+echo "ok    i"
+
+echo "==> j. rollback across a schema upgrade"
+printf 'UPGRADED_SCHEMA=1\nPRE_UPGRADE_BACKUP=backups/example.tar.gz\n' >> "$stack/release.env"
+if (cd "$stack" && bash ./rollout.sh --rollback) > "$stack/last-rollout.log" 2>&1; then fail "j: a rollback across a schema upgrade ran"; fi
+grep -q "backups/example.tar.gz" "$stack/last-rollout.log" || fail "j: the refusal does not name the backup to restore"
+[ "$(compose ps --format '{{.Health}}' gameworld-global-official)" = healthy ] || fail "j: the refused rollback stopped the GameWorld"
+echo "ok    j"
 
 echo "rollout_test: passed"

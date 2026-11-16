@@ -3,9 +3,13 @@
 #
 #   IMAGE_REPO=<repo> IMAGE_TAG=<tag> ASSETS_RELEASE=<id> ~/silkroad/rollout.sh
 #   ~/silkroad/rollout.sh                    the release in release.env again
+#   ~/silkroad/rollout.sh --rollback         the previous image tag and asset release
 #
-# deploy.sh runs it after publishing the images and syncing the assets. A
-# rollback is the same call with the PREVIOUS_* values of release.env.
+# deploy.sh runs it after publishing the images and syncing the assets.
+# --rollback takes the PREVIOUS_* values of release.env together, and is
+# refused when the release that is up upgraded the shard's schema: an older
+# binary refuses a newer authority, so that rollback needs the backup the
+# upgrade was taken from (README "Backups").
 #
 # Order, stopping at the first failure: check the folder, pull and check the
 # image architecture, provision what is missing (never replacing anything),
@@ -15,15 +19,25 @@
 # release, start everything waiting for its health check, and only then
 # rewrite release.env and prune old images and asset releases.
 #
+# A failure after the services stop brings the previous release back up when
+# it happens before the upgrade, and says what is down when it happens after.
+#
 # ROLLOUT_SKIP_PULL=1 uses local images (deploy/test/rollout_test.sh).
 set -euo pipefail
 
+# The backups hold every secret of the stack (session keys, tokens, hashes).
+umask 077
+
 cd "$(dirname "$0")"
+
+rollback=0
+if [ "${1:-}" = "--rollback" ]; then rollback=1; fi
 
 PROJECT="${COMPOSE_PROJECT_NAME:-silkroad}"
 KEEP_BACKUPS=5
 KEEP_RELEASES=2
 STATE_VOLUMES=(cluster agent identity shard-global-official)
+BACKUP_IMAGE="${ROLLOUT_BACKUP_IMAGE:-alpine:3.20}"
 
 fail() { echo "rollout: $*" >&2; exit 1; }
 
@@ -34,6 +48,18 @@ if grep -q '=change-me' .env.prod; then
     fail "$PWD/.env.prod still has change-me values"
 fi
 grep -Eq '^SRO_DOMAIN=.+' .env.prod || fail "$PWD/.env.prod has no SRO_DOMAIN"
+
+release_value() { sed -nE "s/^$1=(.*)$/\1/p" release.env 2>/dev/null; }
+
+if [ "$rollback" = 1 ]; then
+    [ -f release.env ] || fail "--rollback: no release.env, nothing was rolled out here"
+    if [ "$(release_value UPGRADED_SCHEMA)" = 1 ]; then
+        fail "--rollback refused: the release that is up upgraded the shard's schema, and the previous binary would refuse it. Restore $(release_value PRE_UPGRADE_BACKUP) first (README \"Backups\"), then roll out the previous release"
+    fi
+    IMAGE_TAG="$(release_value PREVIOUS_IMAGE_TAG)"
+    ASSETS_RELEASE="$(release_value PREVIOUS_ASSETS_RELEASE)"
+    [ -n "$IMAGE_TAG" ] && [ -n "$ASSETS_RELEASE" ] || fail "--rollback: release.env names no previous release"
+fi
 
 # The environment wins over release.env, which holds the release that is up.
 previous_tag="" previous_release=""
@@ -65,6 +91,8 @@ if [ "${ROLLOUT_SKIP_PULL:-}" != 1 ]; then
     echo "==> pull $IMAGE_REPO:<role>-$IMAGE_TAG"
     compose --profile jobs pull provision derive-public agent identity web \
         || fail "pull failed: is $IMAGE_TAG published, and did $(whoami) run 'docker login ${IMAGE_REPO%%/*}'?"
+    # Pulled now, not at the backup: nothing may fetch from the network once the game is down.
+    docker pull -q "$BACKUP_IMAGE" >/dev/null || fail "cannot pull $BACKUP_IMAGE for the backup"
 fi
 
 # An image of another architecture only fails at its first exec: check before anything stops.
@@ -85,21 +113,57 @@ if ! compose run --rm -T --no-deps --entrypoint test provision -e /cluster/accou
     fail "no account yet: run deploy/accounts.sh --bootstrap <id> from your machine, then this rollout again"
 fi
 
+#
+# recover
+#
+# Runs when a step after the stop fails. Before the upgrade the previous
+# release is untouched, so it comes back up; after it, only a person can
+# tell whether the authority is usable, so it says what is down instead.
+#
+stage=stopped
+recover() {
+    status=$?
+    [ "$status" -ne 0 ] || return 0
+    echo "rollout: FAILED with the services stopped" >&2
+    if [ "$stage" = stopped ] && [ -n "$previous_tag" ] && [ -n "$previous_release" ]; then
+        echo "rollout: bringing the previous release back up ($previous_tag, assets $previous_release)" >&2
+        IMAGE_TAG="$previous_tag" ASSETS_DIR="./assets/releases/$previous_release" bash -c '
+            compose() { docker compose -p "$0" -f docker-compose.prod.yml --env-file .env.prod "$@"; }
+            compose up -d identity &&
+            compose up -d --wait --force-recreate --no-deps agent &&
+            compose up -d --wait gameworld-global-official web' "$PROJECT" >&2 \
+            || echo "rollout: the previous release did not come back; the stack is DOWN" >&2
+    else
+        echo "rollout: the stack is DOWN (stage: $stage). The backup taken before the upgrade is ${backup:-none}; see README \"Backups\"" >&2
+    fi
+    exit "$status"
+}
+trap recover EXIT
+
 echo "==> stop the GameWorld, then the Agent"
 compose stop gameworld-global-official
 compose stop agent
 
 mkdir -p backups
+chmod 700 backups
 backup="backups/silkroad-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
 echo "==> backup $backup"
 mounts=()
 for volume in "${STATE_VOLUMES[@]}"; do mounts+=(-v "${PROJECT}_$volume:/backup/$volume:ro"); done
-docker run --rm "${mounts[@]}" alpine tar -C /backup -czf - . > "$backup.partial"
+docker run --rm "${mounts[@]}" "$BACKUP_IMAGE" tar -C /backup -czf - . > "$backup.partial"
 mv "$backup.partial" "$backup"
 ls -1 backups/silkroad-*.tar.gz | sort -r | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f --
 
 echo "==> upgrade"
-compose run --rm upgrade
+stage=upgrade
+upgrade_report="$(compose run --rm upgrade 2>&1)"
+echo "$upgrade_report"
+upgraded=0
+case "$upgrade_report" in
+    *"already in the current format"*|*"no authority yet"*) ;;
+    *) upgraded=1 ;;
+esac
+stage=starting
 
 echo "==> assets $ASSETS_RELEASE"
 ln -sfn "releases/$ASSETS_RELEASE" assets/current.next
@@ -113,6 +177,7 @@ compose up -d identity
 compose up -d --wait --force-recreate --no-deps agent
 compose up -d --wait gameworld-global-official web
 compose ps
+stage=up
 
 {
     printf 'IMAGE_REPO=%s\nIMAGE_TAG=%s\nASSETS_RELEASE=%s\n' "$IMAGE_REPO" "$IMAGE_TAG" "$ASSETS_RELEASE"
@@ -120,6 +185,9 @@ compose ps
         printf 'PREVIOUS_IMAGE_TAG=%s\nPREVIOUS_ASSETS_RELEASE=%s\n' "$previous_tag" "$previous_release"
     else
         sed -nE '/^PREVIOUS_/p' release.env
+    fi
+    if [ "$upgraded" = 1 ]; then
+        printf 'UPGRADED_SCHEMA=1\nPRE_UPGRADE_BACKUP=%s\n' "$backup"
     fi
 } > release.env.next
 mv release.env.next release.env

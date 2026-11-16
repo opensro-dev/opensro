@@ -99,8 +99,10 @@ if [ "$bootstrap" = 1 ]; then
     exit 0
 fi
 
+# The provisioning token goes to curl as a header file, never on its argv
+# (ps would show it to every user of the host).
 password="$(read_password)"
 printf '%s\n' "$password" | json_body \
-    | on_stack stdin '$COMPOSE exec -T agent sh -c "curl -fsS -X POST -H \"Authorization: Bearer \$(cat /cluster/agent-provisioning-token)\" -H content-type:application/json --data-binary @- http://127.0.0.1:8789/v1/accounts"'
+    | on_stack stdin '$COMPOSE exec -T agent sh -c "umask 077; headers=\$(mktemp); trap \"rm -f \$headers\" EXIT; printf \"Authorization: Bearer %s\\n\" \"\$(cat /cluster/agent-provisioning-token)\" > \$headers; curl -fsS -X POST -H @\$headers -H content-type:application/json --data-binary @- http://127.0.0.1:8789/v1/accounts"'
 echo
 echo "account '$id' created"

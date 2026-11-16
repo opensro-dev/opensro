@@ -61,7 +61,7 @@ token), `shard-global-official` (o SQLite do shard), `identity-out` e `gamedata-
 | Publicar e subir o que está no checkout | `deploy/deploy.sh` |
 | Subir uma tag já publicada | `IMAGE_TAG=<tag> SKIP_PUBLISH=1 deploy/deploy.sh` |
 | Só rodar o rollout no servidor | `cd ~/silkroad && ./rollout.sh` (repete o que está em `release.env`) |
-| Voltar para a versão anterior | no servidor: `IMAGE_TAG=<PREVIOUS_IMAGE_TAG> ASSETS_RELEASE=<PREVIOUS_ASSETS_RELEASE> ./rollout.sh`, com os valores de `release.env` |
+| Voltar para a versão anterior | no servidor: `cd ~/silkroad && ./rollout.sh --rollback` (imagem e assets juntos). Ele recusa quando a versão no ar atualizou o schema do shard: aí é restaurar o backup que ele indica e depois subir a versão anterior |
 | Criar uma conta | `deploy/accounts.sh <id>` |
 | Ver os logs | no servidor: `cd ~/silkroad && docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f gameworld-global-official` |
 
@@ -72,17 +72,20 @@ recentes.
 ## Backups
 
 Cada rollout para o GameWorld e o Agent e grava todos os volumes de estado em
-`~/silkroad/backups/silkroad-<UTC>.tar.gz`. Ficam os 5 mais recentes. Para restaurar um:
+`~/silkroad/backups/silkroad-<UTC>.tar.gz`, legível só pelo dono (contém as chaves e os hashes de senha).
+Ficam os 5 mais recentes. Se algo falhar depois de parar os serviços e antes do upgrade, o rollout sobe de novo
+a versão anterior sozinho; depois do upgrade, ele avisa que a stack está parada e qual backup usar. Para
+restaurar um:
 
 ```sh
 cd ~/silkroad
 C="docker compose -f docker-compose.prod.yml --env-file .env.prod --env-file release.env"
 $C stop
 for v in cluster agent identity shard-global-official; do
-    docker run --rm -v silkroad_$v:/v alpine sh -c 'rm -rf /v/* /v/.[!.]* 2>/dev/null; true'
+    docker run --rm -v silkroad_$v:/v alpine:3.20 sh -c 'rm -rf /v/* /v/.[!.]* 2>/dev/null; true'
 done
 docker run --rm $(for v in cluster agent identity shard-global-official; do printf -- '-v silkroad_%s:/backup/%s ' $v $v; done) \
-    -v "$PWD/backups:/b:ro" alpine tar -C /backup -xzf /b/silkroad-<UTC>.tar.gz
+    -v "$PWD/backups:/b:ro" alpine:3.20 tar -C /backup -xzf /b/silkroad-<UTC>.tar.gz
 ./rollout.sh
 ```
 
@@ -94,6 +97,6 @@ Rodam na sua máquina, com as imagens locais (`deploy/build-images.sh`):
 |---|---|
 | `cd deploy/identity && go test ./...` | o token passa no verificador real do Agent do upstream |
 | `deploy/test/smoke.sh` | a stack sobe, `/api` e `/shards` respondem, o login funciona, `accounts.sh` cria conta, `provision` não troca chaves |
-| `deploy/test/rollout_test.sh` | primeira subida sem conta, rollout, troca de assets, backup, rollback, release ausente, Agent reiniciado sozinho |
+| `deploy/test/rollout_test.sh` | primeira subida sem conta, rollout, troca de assets, backup só do dono, `--rollback`, release ausente, Agent ou `identity` reiniciados sozinhos, falha no backup com volta automática, rollback recusado depois de upgrade de schema |
 | `deploy/test/publish_test.sh` | tag e recusa sem `IMAGE_REPO` |
 | `deploy/test/deploy_test.sh` | proteção do `DEPLOY_PATH`, release de assets completa, smoke servindo dela |

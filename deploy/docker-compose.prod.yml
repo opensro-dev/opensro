@@ -87,8 +87,10 @@ services:
       identity:
         condition: service_started
     healthcheck:
-      # Ready, and the JWKS it verifies GameWorld tokens with is reachable.
-      test: ["CMD", "sh", "-c", "curl -fsS -o /dev/null http://127.0.0.1:8787/readyz && curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json"]
+      # The JWKS on loopback, then readiness. A restarted identity leaves this container in its
+      # old, empty namespace; compose never restarts an unhealthy container, so the check ends
+      # the Agent (PID 1 handles SIGTERM) and `restart` brings it back inside identity's new one.
+      test: ["CMD", "sh", "-c", "if ! curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json; then kill 1; exit 1; fi; curl -fsS -o /dev/null http://127.0.0.1:8787/readyz"]
       interval: 10s
       timeout: 5s
       retries: 12
