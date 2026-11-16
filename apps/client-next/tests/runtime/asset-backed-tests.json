@@ -26,6 +26,7 @@
 		"chat-link-gesture.test.mjs",
 		"chat-presentation.test.mjs",
 		"chat-time.test.mjs",
+		"cloth-stream-table.test.mjs",
 		"combat-followup.test.mjs",
 		"compact-guild.test.mjs",
 		"companion-potions.test.mjs",
