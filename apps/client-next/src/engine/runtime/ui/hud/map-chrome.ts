@@ -112,6 +112,44 @@ const GUIDE_MONSTER_TAB: UiRect = [ 80, 8, 56, 24 ];
 
 /*
 ================
+MAP_CHROME_ART
+
+Every image these paint functions can draw, in every state and face: the
+edges and corner, the globe, both follow pins, the level filter's faces,
+the floor spinner's arrows (live and disabled), the foot frame, the side
+tab and its handle, the guide panel's tile and frames, the black tile the
+tree stands on, and both guide tabs on and off. The shut M window asks for
+this set (world-map.ts), so a press that opens it in any state is admitted
+on its own frame: admission holds a window whole until its art is resident
+(frame/admission.ts), while native loads it synchronously and never waits
+(53FF00, 5405DF).
+================
+*/
+export const MAP_CHROME_ART: readonly string[] = [
+	...EDGES,
+	CORNER,
+	GLOBE,
+	PIN_AUTO,
+	PIN_PASSIVE,
+	FLOOR_UP,
+	FLOOR_UP_OFF,
+	FLOOR_DOWN,
+	FLOOR_DOWN_OFF,
+	FOOT_FRAME,
+	CHECK_ON,
+	CHECK_OFF,
+	SIDE_TAB,
+	SIDE_OPEN,
+	SIDE_CLOSED,
+	GUIDE_TILE,
+	GUIDE_BLACK,
+	...frameParts().map( part => GUIDE_FRAME + part + ".png" ),
+	...frameParts().map( part => GUIDE_INNER + part + ".png" ),
+	...Object.values( GUIDE_TABS ).flatMap( tab => [ tab.on, tab.off ] )
+];
+
+/*
+================
 MapChromeText
 
 Only the font operation the chrome uses.
