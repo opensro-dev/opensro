@@ -91,6 +91,44 @@ const SHARED_MOVEMENT_FIELDS = [
 	"localGid",
 	"events"
 ] as const;
+// The error classes an engine throws; a shared error event names one of
+// these, or none.
+const ENGINE_ERROR_CLASSES = [
+	"Error",
+	"RangeError",
+	"TypeError",
+	"ReferenceError",
+	"SyntaxError",
+	"EvalError",
+	"URIError",
+	"AggregateError",
+	"InternalError",
+	"DOMException",
+	"OperationError"
+];
+// Messages the engines word themselves (V8, SpiderMonkey, JavaScriptCore),
+// which carry no game or player text. Any other message stays behind.
+const ENGINE_ERROR_MESSAGES = [
+	"Maximum call stack size exceeded",
+	"too much recursion",
+	"out of memory",
+	"Out of memory",
+	"Invalid array length",
+	"Invalid typed array length",
+	"Invalid string length",
+	"Array buffer allocation failed",
+	"Array size is not a small enough positive integer."
+];
+// A shared stack keeps this many frames under its header.
+const MAX_SHARED_STACK_FRAMES = 12;
+// The scheme and host of a frame's URL ("https://host", "blob:https://host",
+// "chrome-extension://id"): cut, so a frame keeps only its path.
+const STACK_URL_ORIGIN = /(?:blob:)?[a-z][a-z0-9+.-]*:\/\/[^/\s)]*/gi;
+// A query or fragment between a frame's path and its line:column.
+const STACK_URL_QUERY = /[?#][^\s):]*/g;
+// A stack header's class: "RangeError: ..." or a bare "Error".
+const STACK_HEADER_CLASS = /^([A-Za-z]*(?:Error|Exception))(?::|$)/;
+
 const TECHNICAL_FIELDS = new Set( [
 	...SHARED_GAMEPLAY_FIELDS,
 	...SHARED_MOVEMENT_FIELDS,
@@ -249,6 +287,8 @@ const TECHNICAL_FIELDS = new Set( [
 	"acknowledged",
 	"cos",
 	"error",
+	"errorClass",
+	"message",
 	"stack",
 	"gameplayError",
 	"worldSequence",
@@ -274,6 +314,10 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	],
 	event: [ "request", "receipt", "correction", "clock", "frame-spike", "world-reset" ],
 	error: MOVEMENT_ERROR_CODES,
+	// An error event's class and message: engine names and engine texts
+	// only (sharedErrorEvent); a free-text message stays on the machine.
+	errorClass: ENGINE_ERROR_CLASSES,
+	message: ENGINE_ERROR_MESSAGES,
 	gameplayError: MOVEMENT_ERROR_CODES,
 	visibility: [ "visible", "hidden" ],
 	reason: [ "spawn", "input", "correction", "receipt", "native", "cast", "displacement", "death", "clear" ],
@@ -484,6 +528,38 @@ function sharedValue( value: unknown, field = "" ): unknown {
 
 /*
 ================
+sharedErrorEvent
+
+An error event as the shared copy carries it. The class comes from the
+stack's header; the header is rebuilt from that class and an engine
+message, so the thrown message's free text never rides along on line 1.
+Each frame keeps its path, line and column with the URL's scheme, host and
+query cut, and the first MAX_SHARED_STACK_FRAMES frames are kept.
+sharedValue then admits only engine classes and messages.
+================
+*/
+function sharedErrorEvent( event: Record<string, unknown> ): Record<string, unknown> {
+	const { stack, message, ...rest } = event;
+	const lines = typeof stack === "string" ? stack.split( "\n" ) : [];
+	const errorClass = STACK_HEADER_CLASS.exec( lines[0] ?? "" )?.[1];
+	const engineMessage = typeof message === "string" && ENGINE_ERROR_MESSAGES.includes( message ) ?
+		message :
+		undefined;
+	const frames = lines.slice( 1 )
+		.filter( line => /^\s*at\s|@/.test( line ) )
+		.slice( 0, MAX_SHARED_STACK_FRAMES )
+		.map( line => line.replace( STACK_URL_ORIGIN, "" ).replace( STACK_URL_QUERY, "" ) );
+	const header = (errorClass ?? "Error") + (engineMessage ? ": " + engineMessage : "");
+	return {
+		...rest,
+		...(errorClass ? { errorClass } : {}),
+		...(engineMessage ? { message: engineMessage } : {}),
+		...(frames.length ? { stack: [ header, ...frames ].join( "\n" ) } : {})
+	};
+}
+
+/*
+================
 iconlessRows
 
 A row drawn with no icon (it carries no icon path) is marked iconless: the
@@ -653,7 +729,9 @@ export async function createDiagnosticUpload(
 	const events = Array.isArray( timeline.events ) ? timeline.events : [];
 	const sharedTimeline = sharedValue( {
 		clip: timeline.clip,
-		events: events.filter( event => event.kind !== "chat" )
+		events: events.filter( event => event.kind !== "chat" ).map( event =>
+			event.kind === "error" ? sharedErrorEvent( event ) : event
+		)
 	} ) as Record<string, unknown>;
 	const state = read( "state.json" );
 	const gameplay = selectedFields( markIconless( state.gameplay ), SHARED_GAMEPLAY_FIELDS );

@@ -216,27 +216,74 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 	assert.match( event.stack, /at loop/ );
 });
 
-test("the shared report keeps a sanitised stack, never one carrying a URL", async () => {
-	const input = {
-		"timeline.json": JSON.stringify( {
-			events: [
-				{
-					kind: "error",
-					t: 1,
-					message: "private wording",
-					stack: "RangeError: boom\n    at stallBuy (/src/stall.ts:10:5)"
-				},
-				{ kind: "error", t: 2, stack: "Error: x\n    at f (https://example.com/src/f.ts:1:1)" }
-			]
-		} )
-	};
+/*
+================
+sharedErrors
+
+The error events of a shared report built from the given timeline events.
+================
+*/
+async function sharedErrors( events ) {
+	const input = { "timeline.json": JSON.stringify( { events } ) };
 	const blob = await createDiagnosticUpload( input, { id: "BR-TEST", clip: null, maxBytes: 2 * 1024 * 1024 } );
 	const entries = readZipEntries( await blob.arrayBuffer() );
-	const timeline = JSON.parse( entries.get( "timeline.json" ).data.toString() );
-	assert.equal( timeline.events.length, 2 );
-	assert.match( timeline.events[0].stack, /at stallBuy \(\/src\/stall\.ts:10:5\)/ );
-	assert.equal( timeline.events[0].message, undefined, "the free-text message stays on the player's machine" );
-	assert.equal( timeline.events[1].stack, undefined, "a stack still carrying a URL scheme stays behind" );
+	return JSON.parse( entries.get( "timeline.json" ).data.toString() ).events;
+}
+
+test("the shared report keeps a stack's frames but never the thrown free text", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 1,
+		message: "private wording",
+		stack: "RangeError: private wording\n    at stallBuy (/src/stall.ts:10:5)"
+	} ] );
+	assert.match( event.stack, /at stallBuy \(\/src\/stall\.ts:10:5\)/ );
+	assert.equal( event.errorClass, "RangeError" );
+	assert.equal( event.message, undefined, "the free-text message stays on the player's machine" );
+	assert.ok( !event.stack.includes( "private wording" ), "nor rides along in the stack's header" );
+});
+
+test("a stack carrying an origin keeps its frames without scheme, host or query", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 2,
+		message: "Maximum call stack size exceeded",
+		stack: "RangeError: Maximum call stack size exceeded\n" +
+			"    at walk (https://play.example.com/assets/index-abc.js?v=7:1:2345)\n" +
+			"    at step (blob:https://play.example.com/0f3c-11aa:9:8)\n" +
+			"    at run@https://play.example.com/assets/main.js#top:3:4"
+	} ] );
+	assert.equal( event.errorClass, "RangeError" );
+	assert.equal( event.message, "Maximum call stack size exceeded", "an engine text names the failure" );
+	assert.equal(
+		event.stack,
+		"RangeError: Maximum call stack size exceeded\n" +
+			"    at walk (/assets/index-abc.js:1:2345)\n" +
+			"    at step (/0f3c-11aa:9:8)\n" +
+			"    at run@/assets/main.js:3:4"
+	);
+	assert.ok( !/example|:\/\/|\?v=/.test( event.stack ) );
+});
+
+test("a deep stack keeps its first twelve frames", async () => {
+	const frames = Array.from( { length: 40 }, ( _, i ) => `    at f${i} (/src/f.ts:${i}:1)` );
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 3,
+		stack: [ "RangeError: Maximum call stack size exceeded", ...frames ].join( "\n" )
+	} ] );
+	const kept = event.stack.split( "\n" );
+	assert.equal( kept.length, 13 );
+	assert.equal( kept[1], frames[0] );
+	assert.equal( kept[12], frames[11] );
+});
+
+test("a thrown non-error shares neither a class nor a message", async () => {
+	const [event] = await sharedErrors( [ { kind: "error", t: 4, message: "a player wrote this" } ] );
+	assert.equal( event.errorClass, undefined );
+	assert.equal( event.message, undefined );
+	assert.equal( event.stack, undefined );
+	assert.equal( event.kind, "error" );
 });
 
 test("dispose disconnects the error capture", t => {
