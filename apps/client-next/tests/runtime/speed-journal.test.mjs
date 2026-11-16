@@ -66,6 +66,7 @@ test("the mount journal records the first state and each change only", () => {
 });
 
 test("the buff projection carries numbers only, never a subject's name", () => {
+	/** @type {import("../../src/engine/foundation/gameplay/buff-slots.ts").BuffSlot[]} */
 	const slots = [
 		{
 			state: "active",
@@ -117,7 +118,11 @@ test("combat journals the local player's effect adds and teardowns, not a peer's
 		effectDurationMs: 1000,
 		zeroEffectDuration: false
 	}) ) );
-	c.cooldownReferences( 10, [ 1, 2 ].map( id => ({ id, icon: "skill/a.ddj", name: "Buff" }) ) );
+	// Only the fields combat reads; the rest of SkillMetadata is the catalog's.
+	const catalog = /** @type {import("../../src/engine/foundation/gameplay/skill-catalog.ts").SkillMetadata[]} */ (
+		/** @type {unknown} */ ([ 1, 2 ].map( id => ({ id, icon: "skill/a.ddj", name: "Buff" }) ))
+	);
+	c.cooldownReferences( 10, catalog );
 	const apply = ( gid, skill, token, at ) =>
 		c.receive( 0xb419, Uint8Array.from( [ ...u32( gid ), ...u32( skill ), ...u32( token ), 2 ] ), at );
 	apply( 10, 1, 100, 5 );
