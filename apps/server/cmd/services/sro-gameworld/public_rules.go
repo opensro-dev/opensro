@@ -61,6 +61,9 @@ var unlistedSettings = map[string]string{
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
 	"SRO_CHAT_ITEM_LINKS_PER_MESSAGE": "the limit of the item-link rule",
+	// The movement packets a moving player's viewers get (#3721): a wire
+	// detail that changes no rule a player meets.
+	"SRO_POSITION_STREAM":             "which movement packets viewers get, not a rule players meet",
 	"SRO_MALL_STARTER_SILK":           "the starting silk of the beta silk rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
