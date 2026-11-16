@@ -76,6 +76,38 @@ The random function is supplied so tests can exercise the native gust gate.
 */
 export function createCloth( data: ClothData, rest: Float32Array ) {
 	const positions = new Float32Array( rest ), previous = new Float32Array( rest );
+	// The vertices a step integrates (every one but pin 1), in index order, so
+	// the gust gate draws its random numbers in the same order.
+	const integrated = Int32Array.from(
+		data.pins.flatMap( ( pin, i ) => pin === 1 ? [] : [ i ] )
+	);
+	// Per integrated vertex, its gravity and wind weights: they depend on its
+	// mobility and the cloth's constants alone.
+	const gravityY = new Float64Array( integrated.length ), windWeight = new Float64Array( integrated.length );
+	for ( let k = 0; k < integrated.length; k++ ) {
+		const weight = data.mobility[integrated[k]!]!;
+		gravityY[k] = Math.fround( (data.gravityMobility * weight + 1) * data.gravity * -5 );
+		windWeight[k] = Math.fround( data.windMobility * weight + 1 );
+	}
+	// The constraints in solving order, flattened: each edge's endpoints, its
+	// rest length, and each endpoint's share of a correction, which depends on
+	// the two mobilities alone.
+	const edges = data.order.length;
+	const edgeA = new Int32Array( edges ), edgeB = new Int32Array( edges );
+	const edgeRest = new Float64Array( edges ),
+		edgeShareA = new Float64Array( edges ),
+		edgeShareB = new Float64Array( edges );
+	for ( let edge = 0; edge < edges; edge++ ) {
+		const constraint = data.constraints[data.order[edge]!]!, a = constraint[0], b = constraint[1];
+		const sum = Math.fround( data.mobility[a]! + data.mobility[b]! );
+		edgeA[edge] = a;
+		edgeB[edge] = b;
+		edgeRest[edge] = constraint[2];
+		edgeShareA[edge] = Math.fround( data.mobility[a]! / sum );
+		edgeShareB[edge] = Math.fround( data.mobility[b]! / sum );
+	}
+	// Every pinned vertex: what advance re-anchors unless told which.
+	const pinned = Int32Array.from( data.pins.flatMap( ( pin, i ) => pin === 0 ? [] : [ i ] ) );
 	let elapsed = 0, initialized = false;
 	// A step may move pinned vertices (pin 2 integrates, constraints pull a
 	// mobile pin 1). due checks whether re-anchoring would actually change them.
@@ -86,21 +118,17 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 	================
 	*/
 	function step( direction: readonly number[], speed: number, random: () => number ) {
-		const force = data.force ?? direction;
-		const { mobility, pins, order, constraints, damping } = data;
+		const force = data.force ?? direction, damping = data.damping;
 		// A77530 clamps positive motion to .2..1 before scaling by 900.
 		const wind = (speed > 0 ? Math.max( .2, Math.min( 1, speed ) ) * 900 : speed) + 100;
-		for ( let i = 0; i < mobility.length; i++ ) {
-			if ( pins[i] === 1 ) continue;
-			const weight = mobility[i]!;
+		for ( let k = 0; k < integrated.length; k++ ) {
+			const i = integrated[k]!;
 			const gust = random() % data.windPeriod === 0;
-			const gravityY = Math.fround( (data.gravityMobility * weight + 1) * data.gravity * -5 );
-			const windWeight = Math.fround( data.windMobility * weight + 1 );
 			for ( let axis = 0; axis < 3; axis++ ) {
 				const at = i * 3 + axis;
-				const gravity = axis === 1 ? gravityY : 0;
+				const gravity = axis === 1 ? gravityY[k]! : 0;
 				const push = gust ?
-					Math.fround( Math.fround( force[axis]! * wind ) * windWeight ) :
+					Math.fround( Math.fround( force[axis]! * wind ) * windWeight[k]! ) :
 					0;
 				const acceleration = Math.fround( Math.fround( gravity + push ) * FORCE_STEP );
 				const current = positions[at]!;
@@ -111,19 +139,17 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 		}
 		for ( let pass = 0; pass < CONSTRAINT_PASSES; pass++ ) {
 			let settled = true;
-			for ( let edge = 0; edge < order.length; edge++ ) {
-				const constraint = constraints[order[edge]!]!;
-				const a = constraint[0], b = constraint[1], at = a * 3, bt = b * 3;
+			for ( let edge = 0; edge < edges; edge++ ) {
+				const at = edgeA[edge]! * 3, bt = edgeB[edge]! * 3;
 				const dx = Math.fround( positions[bt]! - positions[at]! );
 				const dy = Math.fround( positions[bt + 1]! - positions[at + 1]! );
 				const dz = Math.fround( positions[bt + 2]! - positions[at + 2]! );
 				const length = Math.fround( Math.sqrt( Math.fround( dx * dx + dy * dy + dz * dz ) ) );
-				const extension = Math.fround( length - constraint[2] );
+				const extension = Math.fround( length - edgeRest[edge]! );
 				// A779D3..A779E6 corrects extension only; compressed edges stay free.
 				if ( extension < EXTENSION_TOLERANCE ) continue;
 				settled = false;
-				const sum = Math.fround( mobility[a]! + mobility[b]! );
-				const wa = Math.fround( mobility[a]! / sum ), wb = Math.fround( mobility[b]! / sum );
+				const wa = edgeShareA[edge]!, wb = edgeShareB[edge]!;
 				// Keep the float32 stores and a/b order while exposing fixed axes to the JIT.
 				const cx = Math.fround( Math.fround( dx / length ) * extension );
 				positions[at]! += Math.fround( cx * wa );
@@ -142,6 +168,11 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 		/*
 		================
 		advance
+
+		Re-anchors the pins (input.pins when given, every pin otherwise), then
+		runs the steps that fall due. An owner may name only the pins a step
+		reads (cloth-stream.ts solverPins): any other pin is never moved, so
+		its position already equals its unchanged anchor.
 		================
 		*/
 		advance(
@@ -152,6 +183,7 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 				direction: readonly number[];
 				speed: number;
 				random: () => number;
+				pins?: Int32Array;
 			}
 		) {
 			if ( !initialized || !input.enabled ) {
@@ -160,10 +192,10 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 				elapsed = 0;
 				initialized = true;
 			}
-			for ( let i = 0; i < data.pins.length; i++ ) {
-				if ( data.pins[i] === 0 ) continue;
+			const anchored = input.pins ?? pinned;
+			for ( let k = 0; k < anchored.length; k++ ) {
 				// Preserve the anchor copy without allocating a view for every pin/frame.
-				const at = i * 3;
+				const at = anchored[k]! * 3;
 				positions[at] = input.anchors[at]!;
 				positions[at + 1] = input.anchors[at + 1]!;
 				positions[at + 2] = input.anchors[at + 2]!;

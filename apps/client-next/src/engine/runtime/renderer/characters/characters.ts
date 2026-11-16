@@ -320,6 +320,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
+		// The id names an effect program: its group draws in the
+		// translucent tier. Fixed by the id, so set once at admission.
+		effect: boolean;
 		images: WorldTexture[];
 		textures: ImageDraw[];
 		owned: boolean;
@@ -1425,21 +1428,26 @@ the next full prepare pass, so this may run between frames.
 	emission cycle moves backwards or changes.
 	================
 	*/
-	function particleHistory( frame: PrepareFrame, actor: CharacterActor, model: CharacterModel, storage: number ) {
+	function particleHistory(
+		frame: PrepareFrame,
+		actor: CharacterActor,
+		model: CharacterModel,
+		plan: ModelResource["plan"]
+	) {
 		let history = particleBirths.get( actor.gid );
 		if (
 			!history || history.model !== actor.model || actor.time < history.time ||
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
 			const graph = model.particleGraph ?
-				createParticleGraph( model.particleGraph, particleRandom.index ) :
+				createParticleGraph( model.particleGraph, particleRandom.index, plan.particleGraph ) :
 				undefined;
 			history = {
 				model: actor.model,
 				time: actor.time,
 				cycle: frame.cycles.get( actor.gid ) ?? 0,
 				origin: frame.origin,
-				bytes: storage,
+				bytes: plan.particleBytes,
 				graph,
 				link: graph ?
 					{
@@ -1648,7 +1656,7 @@ the next full prepare pass, so this may run between frames.
 	*/
 	function advanceEmitter( frame: PrepareFrame, actor: CharacterActor, resource: ModelResource ) {
 		const { byGid, origin } = frame, model = resource.model;
-		const history = particleHistory( frame, actor, model, resource.plan.particleBytes );
+		const history = particleHistory( frame, actor, model, resource.plan );
 		const transform = transformFor( actor, byGid, origin, frame.transforms );
 		if ( !transform ) return;
 		const shift = regionOffsetXZ( origin, history.origin );
@@ -3215,6 +3223,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model,
 				plan: createCharacterRenderPlan( model, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: [ ...images ],
 				textures: [],
 				owned: false,
@@ -3461,6 +3470,7 @@ the next full prepare pass, so this may run between frames.
 				models.set( id, {
 					model: admitted,
 					plan: createCharacterRenderPlan( admitted, timelines ),
+					effect: id.includes( EFFECT_PROGRAMS ),
 					images: [ ...images ],
 					textures: [],
 					owned: true,
@@ -3557,6 +3567,7 @@ the next full prepare pass, so this may run between frames.
 			models.set( id, {
 				model: assembled,
 				plan: createCharacterRenderPlan( assembled, timelines ),
+				effect: id.includes( EFFECT_PROGRAMS ),
 				images: pixels,
 				textures: [],
 				owned: false,
@@ -3760,9 +3771,8 @@ the next full prepare pass, so this may run between frames.
 				orderedGroups.forEach( ( [id, rows], index ) => {
 					const sample = rows[0]!;
 					const fading = frame.opacity( sample ) < 1;
-					const effect = sample.model.includes( EFFECT_PROGRAMS );
-					const blended = fading || effect ||
-						models.get( sample.model )!.model.primitives.some( p => !!p.geometry.material?.blend );
+					const resource = models.get( sample.model )!, effect = resource.effect;
+					const blended = fading || effect || resource.plan.blended;
 					let depth = -Infinity;
 					if ( blended ) {
 						for ( const row of rows ) depth = Math.max( depth, actorDepth( row ) );
