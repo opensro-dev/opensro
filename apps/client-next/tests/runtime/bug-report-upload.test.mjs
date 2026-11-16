@@ -248,6 +248,21 @@ test("a report keeps the inventory journal's slot rows", async () => {
 	assert.deepEqual( documents["state.json"].gameplay.inventoryJournal, journal );
 });
 
+test("a report keeps the speed, effect, mount and buff journals (#3508)", async () => {
+	const input = fixture();
+	const journals = {
+		speedJournal: [ 1000, 7, 55, 55, 40, 100 ],
+		effectJournal: [ 900, 0xb419, 7, 3, 100 ],
+		mountJournal: [ 0, 0, 800, 55 ],
+		buffJournal: [ 7, 3, 100, 1, 900, 50 ]
+	};
+	input["state.json"] = JSON.stringify( { gameplay: { inventory: [], ...journals } } );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	for ( const [field, journal] of Object.entries( journals ) ) {
+		assert.deepEqual( documents["state.json"].gameplay[field], journal, field );
+	}
+});
+
 test("a browser without raw DEFLATE still sends a bounded stored ZIP", async t => {
 	t.mock.method( globalThis, "CompressionStream", function unavailable() {
 		throw Error( "unsupported" );

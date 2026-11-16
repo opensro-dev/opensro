@@ -55,7 +55,7 @@ func TestParseExtraGoods(t *testing.T) {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
-	if err != nil || !reflect.DeepEqual(list, []ExtraGood{{"STORE_CH_POTION_TAB1", "ITEM_ETC_ALL_SPOTION_01", 1000}}) {
+	if err != nil || !reflect.DeepEqual(list, []ExtraGood{{Tab: "STORE_CH_POTION_TAB1", Codename: "ITEM_ETC_ALL_SPOTION_01", Price: 1000}}) {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	for _, bad := range []string{"tab:item", "tab:item:0", "tab:item:4294967296", "tab:item:-1", "tab:item:x",
@@ -296,13 +296,13 @@ func TestExtraGoodsRefuseWhatAShopCannotSell(t *testing.T) {
 	full := c.tabIDs["STORE_CH_SMITH_TAB2"]
 	c.Tabs[full] = append(c.Tabs[full], Offer{Slot: maxShopSlot, Ref: c.Tabs[full][0].Ref, Price: 1, Currency: PaymentGold})
 	for name, good := range map[string]ExtraGood{
-		"unknown tab":  {"STORE_NOWHERE", "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01", 1},
-		"unknown item": {"STORE_CH_SMITH_TAB3", "ITEM_NOT_A_THING", 1},
-		"gold heap":    {"STORE_CH_SMITH_TAB3", "ITEM_ETC_GOLD_01", 1},
-		"full tab":     {"STORE_CH_SMITH_TAB2", "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01", 1},
+		"unknown tab":  {Tab: "STORE_NOWHERE", Codename: "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01", Price: 1},
+		"unknown item": {Tab: "STORE_CH_SMITH_TAB3", Codename: "ITEM_NOT_A_THING", Price: 1},
+		"gold heap":    {Tab: "STORE_CH_SMITH_TAB3", Codename: "ITEM_ETC_GOLD_01", Price: 1},
+		"full tab":     {Tab: "STORE_CH_SMITH_TAB2", Codename: "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_01", Price: 1},
 	} {
 		before := len(c.Tabs[c.tabIDs[good.Tab]])
-		ok := []ExtraGood{{"STORE_CH_SMITH_TAB3", "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_02", 1}}
+		ok := []ExtraGood{{Tab: "STORE_CH_SMITH_TAB3", Codename: "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_02", Price: 1}}
 		err := c.AddExtraGoods(append(ok, good), refs)
 		if err == nil || !strings.Contains(err.Error(), EnvShopExtraGoods) {
 			t.Fatalf("%s accepted (%v)", name, err)

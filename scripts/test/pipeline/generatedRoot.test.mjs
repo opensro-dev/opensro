@@ -22,6 +22,9 @@ import {
 	resolveBuildStateRoot,
 	resolveGeneratedRoot,
 	resolveMainCheckout,
+	resolveSharedCacheRoot,
+	SHARED_CACHE_ROOT_ENV,
+	sharedCachePath,
 	worktreeCopies
 } from "../../lib/generatedRoot.mjs";
 import { findGeneratedPaths, findRootVariableReads } from "../../checks/check_generated_root.mjs";
@@ -167,9 +170,23 @@ test("only the owners read the root variables", () => {
 		const line of [
 			"const root = process.env.SRO_GENERATED_ROOT;",
 			'root = os.environ.get("SRO_GAME_ROOT")',
-			'projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")'
+			'projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")',
+			"const shared = process.env.SRO_SHARED_CACHE_ROOT;"
 		]
 	) assert.equal( findRootVariableReads( line ).length, 1, line );
 	assert.equal( findRootVariableReads( "// process.env.SRO_GENERATED_ROOT" ).length, 0 );
 	assert.equal( findRootVariableReads( 'const name = "SRO_GENERATED_ROOT";' ).length, 0 );
+});
+
+test("content-named caches stay beside the tree unless a shared cache root is set", () => {
+	const local = path.join( os.tmpdir(), "variant", ".state", "actions" );
+	assert.equal( resolveSharedCacheRoot( {} ), null );
+	assert.equal( sharedCachePath( "actions", local, null ), local );
+	const shared = path.join( os.tmpdir(), "release-cache" );
+	assert.equal( resolveSharedCacheRoot( { [SHARED_CACHE_ROOT_ENV]: shared } ), path.resolve( shared ) );
+	assert.equal( sharedCachePath( "actions", local, shared ), path.join( shared, "actions" ) );
+	assert.throws(
+		() => resolveSharedCacheRoot( { [SHARED_CACHE_ROOT_ENV]: "release-cache" } ),
+		/must be an absolute path/
+	);
 });

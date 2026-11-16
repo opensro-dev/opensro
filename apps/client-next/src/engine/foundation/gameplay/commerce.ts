@@ -11,6 +11,7 @@ buyback ledger. Pure decoders: the inventory owner applies their results.
 */
 import { itemTooltipReference, type ItemTooltipReference } from "./item-tooltip-reference";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { ITEM_MOVE_RESPONSE_OPCODE } from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -21,7 +22,7 @@ The trailing byte is retained without inventing a buyback-slot interpretation.
 ================
 */
 export function saleResult( opcode: number, p: Uint8Array ) {
-	if ( opcode !== 0xb06d || p[0] !== 1 || (p[1] !== 9 && p[1] !== 20) ) return null;
+	if ( opcode !== ITEM_MOVE_RESPONSE_OPCODE || p[0] !== 1 || (p[1] !== 9 && p[1] !== 20) ) return null;
 	const cos = p[1] === 20, offset = cos ? 6 : 2;
 	if ( p.length !== offset + 8 ) throw Error( "Invalid sale result" );
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
@@ -64,6 +65,10 @@ export interface CommercePreview {
 export const SHOP_CURRENCY_GOLD = 1;
 export const SHOP_CURRENCY_GUILD_POINT = 8;
 export const SHOP_CURRENCY_HONOR = 32;
+// Port-only, not native (SRO_NASRUN, #3456 step 3b): the Devil's Spirit
+// token goods. v1.150 has no such payment; the server prices only its own
+// token offers in it and sends the buyer's balance with the shop.
+export const SHOP_CURRENCY_NASRUN_TOKEN = 64;
 // The most price rows a package can carry: one per currency above.
 const SHOP_PRICE_ROWS_MAX = 3;
 
@@ -136,6 +141,9 @@ export interface ShopState {
 	readonly name: string;
 	readonly offers: readonly ShopOffer[];
 	readonly error?: string;
+	// The buyer's Devil's Spirit token balance, sent only by a shop that
+	// sells token goods (port-only, SRO_NASRUN).
+	readonly nasrunTokens?: number;
 }
 
 /*
@@ -230,6 +238,20 @@ shopCatalog
 export function shopCatalog( p: Uint8Array ): ShopState {
 	const r = commerceJson( p );
 	commerceInteger( r.npc, 0xffffffff, 1 );
+	// Port-only (SRO_NASRUN): the token goods travel apart from the native
+	// stock, so a client built before them reads the stock alone; this one
+	// checks them, joins them to the stock, and the stock's checks below
+	// (count included) then cover them like any other offer.
+	if ( r.tokenOffers !== undefined ) {
+		if ( !Array.isArray( r.tokenOffers ) || !Array.isArray( r.offers ) ) throw Error( "Invalid token offers" );
+		for ( const row of r.tokenOffers ) {
+			if ( !row || typeof row !== "object" || row.currency !== SHOP_CURRENCY_NASRUN_TOKEN ) {
+				throw Error( "Invalid token offer" );
+			}
+		}
+		r.offers = [ ...r.offers, ...r.tokenOffers ];
+		delete r.tokenOffers;
+	}
 	if (
 		typeof r.name !== "string" || r.name.length > 256 ||
 		r.error !== undefined && (typeof r.error !== "string" || r.error.length > 256) || !Array.isArray( r.offers ) ||
@@ -247,7 +269,8 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 			throw Error( "Invalid shop price" );
 		}
 		if (
-			row.currency !== undefined && row.currency !== SHOP_CURRENCY_GOLD && row.currency !== SHOP_CURRENCY_HONOR
+			row.currency !== undefined && row.currency !== SHOP_CURRENCY_GOLD && row.currency !== SHOP_CURRENCY_HONOR &&
+			row.currency !== SHOP_CURRENCY_NASRUN_TOKEN
 		) throw Error( "Invalid shop currency" );
 		if ( row.prices !== undefined ) shopPrices( row.prices, row.currency ?? SHOP_CURRENCY_GOLD, row.price );
 		if ( row.contents !== undefined ) {
@@ -285,6 +308,7 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 		}
 	}
 	if ( r.cosGid !== undefined ) commerceInteger( r.cosGid, 0xffffffff, 1 );
+	if ( r.nasrunTokens !== undefined ) commerceInteger( r.nasrunTokens, Number.MAX_SAFE_INTEGER );
 	if ( r.buyback !== undefined && r.buyback !== null ) buybackEntries( r.buyback );
 	if ( r.saleQuotes !== undefined && r.saleQuotes !== null ) {
 		if ( !Array.isArray( r.saleQuotes ) || r.saleQuotes.length > 256 ) throw Error( "Invalid sale quotes" );

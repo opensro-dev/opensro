@@ -18,7 +18,8 @@ into the same extracted root and only fills gaps, so what a build
 writes stays until another build rewrites it. The marker each import
 writes is therefore the reap's enrolment: the monster pass's owned
 rows and files, and the region merge's (files written, availability
-sectors, region ids, zone-name prefixes). The tile and object
+sectors, region ids, zone-name prefixes; the particle files the
+merged models name are enrolled with the Data files). The tile and object
 catalogs need no enrolment: the Alexandria stage rebuilds both from
 the native bytes on every build before any later-world merge runs,
 so a build with a switch off leaves native catalogs behind on its
@@ -37,6 +38,7 @@ through skytemple_import; they take no WorldImport spec.
 
 ===========================================================================
 """
+import contextlib
 import json
 import mmap
 import os
@@ -49,6 +51,7 @@ from alexandria_map_tables import append_rows, native_text_row, table_text
 import cap110_monsters as cap110
 import cap110_skill_effects as effects
 import import_vsro_alexandria as tables
+import skilldata_enc as skill_tables
 import sro_pk2
 from pin_file import read_pin_field
 from prepare_client_resources import file_digest, write_atomically
@@ -58,6 +61,14 @@ TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
 PIN_FORMAT = "opensro-vsro-archive-pins-v1"
 
 _verified_archives = set()
+# The v1.696 archives a region merge reads. Particles carries the effect
+# programs the merged models name (particle_closure); every caller pins
+# this set before merge_world reads it.
+MERGE_ARCHIVES = ("Map", "Media", "Data", "Particles")
+# The merged Data files that seed the particle closure: the models and
+# compound objects, the files whose particle sets name effect programs.
+PARTICLE_SEED_EXTENSIONS = (".bsr", ".cpd")
+DATA_PREFIX = "data_extracted/"
 
 
 # ================
@@ -351,6 +362,12 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		later = later_characters(read)
 		claims = {}
 		for family, codes in claimed.items():
@@ -366,7 +383,7 @@ def add_monsters(spec, v1696_root, native, output, source_root, enabled, sub_ena
 			missing = sorted(codes - set(refs))
 			if missing:
 				raise ValueError(f"{spec.label} {family} nests name unadmitted monsters: {missing}")
-		staged = stage_kinds(spec.label, read, refs, text_root, prior, spec.character_shard, spec.skill_shard,
+		staged = stage_kinds(spec.label, read, has, refs, text_root, prior, spec.character_shard, spec.skill_shard,
 			lambda code: code.startswith(spec.info_prefixes))
 		populations = spec.build_populations(rows, sub_enabled)
 		for group, filename in spec.population_files:
@@ -410,10 +427,13 @@ def later_characters(read):
 # and characterinfo rows. refs maps codename to its converted row and
 # is renumbered in place; info_owned picks the characterinfo rows the
 # import claims; extra_skills names skills to stage that no kind's
-# skill columns reach. Returns the summary keys every later-world marker
+# skill columns reach. has(name) says whether the later archive holds a
+# textdata file: the client's skills are read the way the client reads
+# them (skilldata_enc.client_skill_rows), its encrypted set when it ships
+# one, else the plain manifest. Returns the summary keys every later-world marker
 # records, so the reap finds exactly what this build owned.
 # ================
-def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
+def stage_kinds(label, read, has, refs, text_root, prior, character_shard, skill_shard, info_owned, extra_skills=()):
 	native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != character_shard for r in tables.table_rows(p.read_bytes())]
 	occupied = {int(r[1]) for r in native_chars}
 	allocated = cap110.allocate_identities(occupied, sorted(refs), prior.get("characters", {}))
@@ -421,8 +441,7 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 		row[1] = str(allocated[code])
 	native_skills = [r for p in text_root.glob("skilldata_*.txt") if p.name != skill_shard for r in tables.table_rows(p.read_bytes()) if len(r) == 118]
 	needed = {int(s) for r in refs.values() for s in r[89:99] if int(s)}
-	client_skills = [r for shard in tables.table_rows(read("skilldata.txt"))
-		for r in tables.table_rows(read(shard[0])) if len(r) > 3 and r[1].isdigit()]
+	client_skills = [r for r in skill_tables.client_skill_rows(read, has) if len(r) > 3 and r[1].isdigit()]
 	# Skills no staged kind names in its skill columns (a Muhan change
 	# form's BUFF01, cast by its NPC) are staged by codename.
 	extra = {r[3]: int(r[1]) for r in client_skills if r[3] in set(extra_skills)}
@@ -475,8 +494,12 @@ def stage_kinds(label, read, refs, text_root, prior, character_shard, skill_shar
 		"characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added},
 		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
 		"characterInfo": sorted(owned_info | {r[0] for r in info}),
-		"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
-			| {r[1] for r in texts}) & {r[5] for r in refs.values()}),
+		# Owned names are the rows this build added plus the ones a
+		# previous build added, never a row the table already held: a
+		# later kind may reuse a native symbol (MOB_RM_TAHOMET_ROC names
+		# itself SN_MOB_RM_TAHOMET), and the off reap drops every owned
+		# symbol, so claiming the native row would strip the native name.
+		"nameSymbols": sorted(({r[1] for r in texts} | set(prior.get("nameSymbols", []))) & {r[5] for r in refs.values()}),
 	}
 
 
@@ -553,7 +576,7 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 	source_root = source_root or os.environ.get(spec.source_env, "")
 	if not source_root:
 		raise SystemExit(f"{spec.source_env} names no population export folder")
-	require_pin(spec, v1696_root, ("Map", "Media", "Data"), pins_for)
+	require_pin(spec, v1696_root, MERGE_ARCHIVES, pins_for)
 	export = read_population(spec, source_root)
 	regions = spec.regions_of(export, sub_enabled)
 	return merge_world(spec, native, out, v1696_root, regions,
@@ -566,7 +589,8 @@ def add_world(spec, native, out, v1696_root, source_root, sub_enabled, pins_for)
 # One world's variant-side merge over a resolved region set: the
 # regions' terrain remapped onto the merged tile catalog, their
 # navmesh and availability bits, every Data file the native tree
-# lacks, the regions' minimap tiles and names, and the monster
+# lacks and the particle closure of its models, the regions' minimap
+# tiles and names, and the monster
 # population (build_monsters, the caller's own pass, run last).
 #
 # The variant root is reused across builds (see the header): the
@@ -683,6 +707,11 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 	mapinfo = out / "Data_extracted" / "navmesh" / "mapinfo.mfo"
 	variant.replace_file(mapinfo, variant.enable_regions(mapinfo.read_bytes(), sectors))
 
+	# Particles: the effect programs the merged models name, and what
+	# those programs use. The Data pass above copies the models alone.
+	particles = particle_closure(native, out, v1696_root, written)
+	written |= set(particles["added"])
+
 	# Media: the regions' minimap tiles and their code and zone rows.
 	media_path, media_handle, media_data = tables.open_archive(v1696_root, "Media")
 	try:
@@ -727,8 +756,59 @@ def merge_world(spec, native, out, v1696_root, regions, build_monsters):
 		"enabled": True, "regions": len(regions), "localRegions": len(local_regions), "mapFilesAdded": len(terrains),
 		"tileTexturesAdded": textures, "mapFilesMissing": sorted(map_missing),
 		"dataFilesAdded": data_added, "navmeshAdded": nav_added, "minimapTiles": minimaps,
+		"particleFilesAdded": len(particles["added"]), "particleGaps": particles["gaps"],
 		**table_summary, "monsters": monsters
 	}
+
+
+# ================
+# particle_closure
+#
+# The particle half of a region merge. The Data pass copies every model
+# the native tree lacks, and those models' particle sets name effect
+# programs (.efp) the Particles archive holds; the client's effect build
+# refuses a model whose program it cannot resolve. So every model and
+# compound object the merge has enrolled - this build's and earlier
+# builds' alike, since a kept variant may hold models an older build
+# merged without their effects - seeds the closure walk the Sky Temple
+# and Arabia imports use, over the v1.696 Data and Particles archives.
+#
+# Later-client content ships with holes, so the walk tolerates them
+# (the Arabia posture) and the summary names them; it never invents
+# a missing file. Returns the files this build wrote, as enrolment
+# paths (the record's lower-case, overlay-relative form), and the gaps.
+# ================
+def particle_closure(native, out, v1696_root, written, closure=None, archives=None):
+	if closure is None:
+		import skytemple_import
+		closure = skytemple_import.copy_resource_closure
+	archives = archives or closure_archives
+	seeds = sorted(path[len(DATA_PREFIX):] for path in written
+		if path.startswith(DATA_PREFIX) and path.endswith(PARTICLE_SEED_EXTENSIONS))
+	if not seeds:
+		return {"added": [], "gaps": {}}
+	with archives(v1696_root) as opened:
+		result = closure(seeds, opened, native, out, tolerate_gaps=True)
+	added = sorted(path.lower() for path in result["files"])
+	gaps = {key: result[key] for key in ("missingEffects", "missingFiles", "unparsedFiles") if result.get(key)}
+	return {"added": added, "gaps": gaps}
+
+
+# ================
+# closure_archives
+#
+# The v1.696 Data and Particles archives in the closure walk's shape
+# ({name: (mmap, index)}), closed when the walk is done.
+# ================
+@contextlib.contextmanager
+def closure_archives(v1696_root):
+	opened = {name: tables.open_archive(v1696_root, name) for name in ("Data", "Particles")}
+	try:
+		yield {name: (data, tables.archive_index(data)) for name, (_, _, data) in opened.items()}
+	finally:
+		for _, handle, data in opened.values():
+			data.close()
+			handle.close()
 
 
 # ================

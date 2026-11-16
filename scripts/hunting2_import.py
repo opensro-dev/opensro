@@ -244,6 +244,12 @@ def add_monsters(v1696_root, native, output):
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 
+		# ================
+		# has
+		# ================
+		def has(name):
+			return tables.TEXTDATA + name.lower() in index
+
 		regions = hunting_regions(tables.table_rows(read("regioncode.txt")))
 		if not regions:
 			raise ValueError(f"the v1.696 client has no {REGION_CODE} regions")
@@ -259,7 +265,7 @@ def add_monsters(v1696_root, native, output):
 		missing = sorted(set(codes) - set(refs))
 		if missing:
 			raise ValueError(f"hunting ground placements name unadmitted monsters: {missing}")
-		staged = later_world_import.stage_kinds("hunting ground", read, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
+		staged = later_world_import.stage_kinds("hunting ground", read, has, refs, text_root, prior, CHARACTER_SHARD, SKILL_SHARD,
 			lambda code: code in refs)
 		population = synthesize_population(placements, refs)
 		write_atomically(text_root / FIELD_FILE, (json.dumps(population) + "\n").encode())
@@ -295,7 +301,7 @@ def add_hunting2(native, out, v1696_root=None):
 		later_world_import.reap_world(SPEC, native, out)
 		return {"enabled": False}
 	v1696_root = later_world_import.client_root(v1696_root, ROOT_ENV)
-	require_v1696_pin(v1696_root, ("Map", "Media", "Data"))
+	require_v1696_pin(v1696_root, later_world_import.MERGE_ARCHIVES)
 	with open(v1696_root / "Media.pk2", "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as media:
 		index = tables.archive_index(media)
 		regions = hunting_regions(tables.table_rows(tables.table_text(media, index, "regioncode.txt")))

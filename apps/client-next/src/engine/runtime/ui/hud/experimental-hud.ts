@@ -243,7 +243,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "fitWindowLabels",
 						id: "experimental-fit-window-labels",
 						label: "Fit window labels",
-						description: "Fit long labels and captions; open lists upward."
+						description: "Fit labels, captions and speech; open lists upward."
 					},
 					{
 						key: "greyDisabledTabs",
@@ -422,8 +422,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "christmasCarols",
 						id: "experimental-christmas-carols",
 						label: "Christmas carols",
-						description:
-							"Play carols during the Christmas event: in the snow, or in the towns for So-Ok's Christmas Gift."
+						description: "Carols in the snow and in towns at Christmas."
 					},
 					{
 						key: "webTransport",

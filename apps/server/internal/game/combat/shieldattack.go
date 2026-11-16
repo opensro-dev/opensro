@@ -56,7 +56,7 @@ func ShieldPhysicalDefense(character *domain.Character, items enterworld.ItemRef
 		if err != nil {
 			return 0, false
 		}
-		stats, _, err := deriveItemStats(ref, varianceBits, uint8(clampInt64(row.Plus, 0, math.MaxUint8)))
+		stats, _, err := deriveItemStats(ref, varianceBits, uint8(min(max(row.Plus, 0), math.MaxUint8)))
 		if err != nil {
 			return 0, false
 		}

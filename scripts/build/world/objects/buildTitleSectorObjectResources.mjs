@@ -16,12 +16,12 @@ named roots differ byte for byte.
 ===========================================================================
 */
 import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { CPD_SIGNATURE, parseCompound } from "./compound.mjs";
 import { bindSceneryParticleBones, hasSceneryBoneEntries, loadScenerySkeleton } from "./sceneryBones.mjs";
 import { probeBlockTextureFile, publishBlockTextureFile } from "../assets/blockTextures.mjs";
-import { exists } from "../io.mjs";
+import { notedExists as exists, notedReadFile as readFile } from "../io.mjs";
 import { imageSourceRoot, normalizeAssetPath, publicRoot, toGameRelative, toImageSourceRelative } from "../paths.mjs";
 import {
 	BSR_SIGNATURE,

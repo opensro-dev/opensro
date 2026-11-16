@@ -849,8 +849,13 @@ export function createCharacterPresentation(
 		sunDropMarkers.step( entities );
 		const settled = new Set<number>();
 		for ( const entity of entities ) {
-			const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
-			if ( state?.dead && resource ) {
+			// Only a dead character reads its resource. presentation-state's
+			// pass already asked appearanceRef for every entity this frame,
+			// so the trade dress and skin it consults change nothing here.
+			const state = states.get( entity.gid );
+			if ( !state?.dead ) continue;
+			const resource = published.catalog.get( appearanceRef( entity ) );
+			if ( resource ) {
 				const clip = state.postureClip ??
 						(state.clip === "deathquick" || state.clip === "downdie" ? state.clip : "death"),
 					start = state.postureStarted ?? state.started;

@@ -29,6 +29,7 @@ through the temple worlds; no gate or entry is created here.
 
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { noteRead } from "../../graph/reads.mjs";
 import { decodeJmxText } from "../../shared/jmxBinaryReader.mjs";
 
 // Port-only, not native (#3295): the Mirror Dimension temple interiors
@@ -70,6 +71,7 @@ fileExists
 ================
 */
 async function fileExists( candidatePath ) {
+	noteRead( candidatePath );
 	try {
 		await access( candidatePath );
 		return true;
@@ -93,6 +95,7 @@ export async function readDungeonInfoRows( filePath ) {
 	try {
 		// Paths are CP949 byte strings in this retail table, decoded like every other
 		// JMX name so they match the extracted tree (ASCII rows are unchanged).
+		noteRead( filePath );
 		text = decodeJmxText( await readFile( filePath ) );
 	} catch ( error ) {
 		if ( error?.code === "ENOENT" ) return [];

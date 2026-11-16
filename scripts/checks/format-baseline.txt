@@ -55,7 +55,6 @@ apps/client-next/src/engine/foundation/gameplay/cast-results.ts
 apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
-apps/client-next/src/engine/foundation/gameplay/cos-timer.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
@@ -67,16 +66,11 @@ apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
-apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
-apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
-apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
-apps/client-next/src/engine/foundation/gameplay/target-notices.ts
 apps/client-next/src/engine/foundation/gameplay/training.ts
 apps/client-next/src/engine/foundation/gameplay/vitals.ts
 apps/client-next/src/engine/foundation/gameplay/weather.ts
-apps/client-next/src/engine/foundation/gameplay/whisper-block.ts
 apps/client-next/src/engine/foundation/gameplay/world-clock.ts
 apps/client-next/src/engine/foundation/math/angles.ts
 apps/client-next/src/engine/foundation/navigation/contact-response.ts
@@ -96,7 +90,6 @@ apps/client-next/src/engine/foundation/rendering/star-flicker.ts
 apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
-apps/client-next/src/engine/foundation/ui/academy-layout.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
@@ -297,7 +290,6 @@ apps/client-next/tools/verify-bsr-transforms.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
-scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs
 scripts/build/char/buildSkillEffectRecords.mjs

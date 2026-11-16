@@ -183,8 +183,9 @@ func (p *sessionWorld) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	var combatEligible bool
 	var nativeBodyStatus uint8
 	var worldInstance uint32
+	var watch simulation.MovementWatch
 	p.rt.deps.Read(p.divisionID, func() {
-		p.rt.Worlds.SnapshotInto(key, &dst.World, func() simulation.WorldState { return simulation.SeedWorldState(p.character) })
+		watch = p.rt.Worlds.SnapshotIntoWatched(key, &dst.World, func() simulation.WorldState { return simulation.SeedWorldState(p.character) })
 		anchor = p.rt.npcAnchor(p.character)
 		captured = p.captureFor()
 		if resolved, ok := p.rt.deps.CharacterBodyRadius(p.character); ok {
@@ -220,6 +221,11 @@ func (p *sessionWorld) WorldSnapshotInto(dst *simulation.SessionSnapshot) {
 	dst.CombatEligible = combatEligible
 	dst.NativeBodyStatus = nativeBodyStatus
 	dst.MovementCurrent = func() bool {
+		// One atomic load while nothing moved (the common case: every
+		// frame of a tick asks); the locked compare only after a change.
+		if watch.Unchanged() {
+			return true
+		}
 		expected := simulation.WorldState{LifeRevision: lifeRevision, Spawn: spawn, MovementMode: movementMode}
 		if hasSegment {
 			expected.MoveSegment = &segment

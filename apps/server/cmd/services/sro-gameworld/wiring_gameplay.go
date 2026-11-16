@@ -274,6 +274,9 @@ func newGameplayPlane(
 		return nil, err
 	}
 	extraGoods = append(extraGoods, xlGoods...)
+	// SRO_NASRUN (port-only, not native, #3456 3b): the Devil's Spirit
+	// token goods on the honor stores (commerce/nasrungoods.go).
+	extraGoods = append(extraGoods, commerce.NasrunGoodsFromEnv()...)
 	// SRO_ALEXANDRIA_HIDE_D11_GOODS (port-only, not native, #2842):
 	// degree-11 goods leave Alexandria's own shops as ConfigureCommerce
 	// loads them, so it is set first. "off" (the default) is native:

@@ -314,6 +314,19 @@ func (st *WorldStore) advanceGroundWalkTo(key string, w *WorldState, now int64) 
 	if st.groundConfig.Now == nil || st.groundConfig.Step == nil || !w.groundActive() {
 		return
 	}
+	before := movementFieldsOf(w)
+	st.stepGroundWalkTo(key, w, now)
+	st.noteMovementLocked(key, before, w)
+}
+
+/*
+================
+stepGroundWalkTo
+
+advanceGroundWalkTo's step, without the movement revision note.
+================
+*/
+func (st *WorldStore) stepGroundWalkTo(key string, w *WorldState, now int64) {
 	g := *w.Ground
 	if now <= g.At {
 		return

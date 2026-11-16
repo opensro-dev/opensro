@@ -7,6 +7,7 @@ cos-transfer.ts - items crossing between the player bag and a COS bag
 */
 import type { CosRecord, InventoryItem } from "@/engine/contracts/gameplay";
 import { planWholeTransfer, sameStackIdentity, stackable } from "./container-transfer";
+import { ITEM_MOVE_REQUEST_OPCODE } from "@/engine/contracts/opcodes";
 
 /*
 ================
@@ -94,5 +95,5 @@ export function cosTransferRequest( gid: number, toCos: boolean, source: number,
 	new DataView( payload.buffer ).setUint32( 1, gid, true );
 	payload[5] = source;
 	payload[6] = destination;
-	return { opcode: 0x706d, payload };
+	return { opcode: ITEM_MOVE_REQUEST_OPCODE, payload };
 }

@@ -24,6 +24,7 @@ import {
 	FIRST_PEER_GID,
 	MOVEMENT_SEATED,
 	MOVEMENT_RUN,
+	ALIVE,
 	DEAD,
 	seeded,
 	wear,
@@ -93,6 +94,10 @@ const WOMEN = [ 1, 3, 8 ];
 // The crowd slot of the other arena team, the one in a thief suit and the
 // one in a trader's suit.
 const ARENA_PEER = 13, THIEF_PEER = 14, TRADER_PEER = 17;
+// The standing peers whose presentation changes with no new row: a pet
+// resolve's stack window ends (2), and a berserk ends and its scale
+// eases back (3).
+const RESOLVE_PEER = 2, BERSERK_PEER = 3;
 // The scene's skills. SKILL has a ready, a wait and a shot, each its
 // attack clip (effects.ts animTable0..2), so a cast lays action layers, a
 // WAIT and the combat stance; HIDING_SKILL is a shot alone that hides the
@@ -103,6 +108,25 @@ const SKILL = 2, HIDING_SKILL = 3;
 // target. HOST_SKILL, attached to a body, plays the body's attached motion
 // default 188 (effects.ts hostMotions).
 const SILENT_SKILL = 4, HOST_SKILL = 5;
+// The scene's one effect program: an anchor with nothing to draw, the
+// smallest program the effect decoder admits (program.ts: a leaf node that
+// never ends, renders nothing and emits nothing). The beast and the ghost
+// carry it as an ambient particle on their neck (model-emission.ts).
+const GLOW = "scene/glow.efp";
+const GLOW_MODIFIERS = [ {
+	kind: 2,
+	stateId: -1,
+	animationSetName: "ambient",
+	entries: [ {
+		effectPath: GLOW,
+		boneName: "Bip01 Neck",
+		vector3c: [ 0, 0, 0 ],
+		field00: 0,
+		field4c: 0,
+		flag53: 0,
+		flags50: [ 0, 0, 0 ]
+	} ]
+} ];
 const STATE = {
 	loop: true,
 	durationMs: 1000,
@@ -235,14 +259,20 @@ export function sceneCatalogs() {
 			refObjId: 9201,
 			kind: "monster",
 			glb: "/assets/npc/scene/beast.glb",
-			clips: Object.keys( MONSTER_CLIPS )
+			clips: Object.keys( MONSTER_CLIPS ),
+			particleModifiers: GLOW_MODIFIERS,
+			// Its stand clip drives a modifier set, so its actor carries a
+			// model animation frame (model-animation.ts) every frame.
+			animationBindings: [ { set: "default", stateId: 0, clip: "stand" } ],
+			modifierSets: [ { kind: 1, stateId: 0, animationSetName: "default", count: 0, firstBaseWord4: 0 } ]
 		},
 		MOB_PROBE_GHOST: {
 			codename: "MOB_PROBE_GHOST",
 			refObjId: 9203,
 			kind: "monster",
 			glb: "/assets/npc/scene/beast.glb",
-			clips: Object.keys( MONSTER_CLIPS )
+			clips: Object.keys( MONSTER_CLIPS ),
+			particleModifiers: GLOW_MODIFIERS
 		},
 		STRUCTURE_PROBE_TOWER: {
 			codename: "STRUCTURE_PROBE_TOWER",
@@ -273,8 +303,10 @@ export function sceneCatalogs() {
 		CH_M_3: { glb: "/assets/char/scene/ally.glb", parts: [ "ally" ] },
 		CH_M_4: { glb: "/assets/char/scene/arena.glb", parts: [ "arena" ] }
 	};
+	// The hair a Chinese body in berserk (Hwan) wears on its neck.
+	const hwan = { CH_M: { glb: "/assets/char/scene/hwan.glb", parts: [ "hwan" ], clip: "stand", bone: "Bip01 Neck" } };
 	return {
-		roster: { models, dress: { equipment, defaultWear, fortressWear } },
+		roster: { models, dress: { equipment, defaultWear, fortressWear, hwan } },
 		items,
 		npcs,
 		byCode: new Map( ITEMS.map( ( [id, codename] ) => [ codename, id ] ) ),
@@ -287,8 +319,8 @@ export function sceneCatalogs() {
 sceneSources
 
 Every published path the scene's presentation asks for, as bytes: the
-eight presentation manifests, the skill records and the GLBs. A path not
-here is absent, as a missing file is.
+eight presentation manifests, the skill records, the effect program
+catalogue and the GLBs. A path not here is absent, as a missing file is.
 ================
 */
 export function sceneSources() {
@@ -315,8 +347,21 @@ export function sceneSources() {
 		[HOST_SKILL]: { authoredStages: [], attachedMotion: { set: "default", id: 188 } }
 	} );
 	json( "/assets/skill/namedEffectRecords.json", {} );
+	const anchor = {
+		name: "anchor",
+		lifeCommand: { name: "NeverExtinct" },
+		viewCommand: { name: "ViewNone" },
+		renderCommand: { name: "RenderNone" },
+		emitterProgram: [],
+		preProgram: [],
+		postEmitterProgram: [],
+		renderProgram: [],
+		children: [],
+		globalData: { totalFrames: 20, parameters: [] }
+	};
+	json( "/assets/effects/programs.json", { framesPerSecond: 20, effects: { [GLOW]: { scale: 1, root: anchor } } } );
 	for ( const body of Object.values( BODIES ) ) sources.set( body.glb, glb( "body", PLAYER_CLIPS ) );
-	for ( const part of [ ...ITEMS.map( item => item[4] ), ...DEFAULT_WEAR, "moonlit", "ally", "arena" ] ) {
+	for ( const part of [ ...ITEMS.map( item => item[4] ), ...DEFAULT_WEAR, "moonlit", "ally", "arena", "hwan" ] ) {
 		sources.set( `/assets/char/scene/${part}.glb`, glb( part, PART_CLIPS ) );
 	}
 	sources.set( catalogs.npcs.MOB_PROBE_BEAST.glb, glb( "body", MONSTER_CLIPS ) );
@@ -361,8 +406,14 @@ the end (peers 0..3), with one peer per input that must unsettle it:
 9 is frozen then slowed, 10 leaves view for one frame, 11 and 12 attack
 the beast (the second cast hides the weapon, a third kills it), 13 is of
 the other arena team, 14 and 17 wear job suits, 15 casts with no motion,
-16 hosts an attached motion, 18 emotes, 19 picks up. The ghost dies by
-its vitals alone and the tower changes its stage on its own timer.
+16 hosts two attached motions, one after the other ends, 18 emotes, 19
+picks up. Of the standing four, 2's pet resolve runs out with no new
+row and 3 goes berserk and back (its scale held at 1.1 by the effects
+owner, then eased back). The beast and the ghost carry a glow particle,
+and the beast a model animation frame: the ghost dies by its vitals
+alone and leaves, its particle handed to its fading copy, and the camera
+pulls back at the end until the dead beast's particle is hidden by
+distance. The tower changes its stage on its own timer.
 ================
 */
 export function sceneSession( seed ) {
@@ -412,6 +463,8 @@ export function sceneSession( seed ) {
 			{ equipment: man( "ITEM_CH_M_PROBE_TUNIC", "ITEM_CH_M_PROBE_THIEF_SUIT" ) } :
 			i === TRADER_PEER ?
 			{ equipment: man( "ITEM_CH_M_PROBE_TUNIC", "ITEM_CH_M_PROBE_TRADER_SUIT" ) } :
+			i === RESOLVE_PEER ?
+			{ petResolve: { untilMs: session.simulationMs( 650 ), stacks: 3 } } :
 			{};
 		session.spawn(
 			0,
@@ -464,14 +517,22 @@ export function sceneSession( seed ) {
 	} );
 	session.gameplay( 280, { casts: [] } );
 	// An attached effect plays its host motion on a standing body.
+	// A second, joining while the first plays, leaves first.
 	const host = { gid: peers[16], skill: HOST_SKILL, token: 900, phase: 1 };
+	const second = { gid: peers[16], skill: HOST_SKILL, token: 901, phase: 1 };
 	session.gameplay( 300, { attachedEffects: [ host ] } );
+	session.gameplay( 330, { attachedEffects: [ host, second ] } );
+	session.gameplay( 390, { attachedEffects: [ host ] } );
 	session.gameplay( 420, { attachedEffects: [] } );
 	// The tower's damage turns its stage model on its own timer, with no new row.
 	setVital( 440, tower, { hp: towerHp / 5 } );
 	cast( session, 500, peers[11], beast, { type: 0, damage: 40, fatal: false } );
 	cast( session, 600, peers[12], beast, { type: 0, damage: 40, fatal: false }, HIDING_SKILL );
+	// Berserk (body state 1) on a standing body, no cast near it.
+	session.state( 560, peers[BERSERK_PEER], { appearanceState: [ ALIVE, 0, 1, 0, 0, 0, 0 ] } );
+	session.state( 680, peers[BERSERK_PEER], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ] } );
 	setVital( 640, ghost, { hp: 0 } );
+	session.despawn( 690, ghost );
 	cast( session, 700, peers[11], beast, { type: 0, damage: 420, fatal: true } );
 	// The dress inputs no row of the wearer carries: the local player joins
 	// and leaves an arena team (fortress clothes on a peer of the other
@@ -481,6 +542,12 @@ export function sceneSession( seed ) {
 	session.gameplay( 760, { jobSuitHidesArmor: true } );
 	session.gameplay( 820, { moonlitThiefSuit: true } );
 	session.gameplay( 860, { jobSuitHidesArmor: false, moonlitThiefSuit: false } );
+	// The camera pulls back past the distance that hides a particle
+	// (entity-lod.ts: 720 units) while the dead beast lies still.
+	for ( let at = 900; at < 1000; at++ ) {
+		const back = 120 + 1100 * Math.min( 1, (at - 900) / 60 );
+		session.view( at, { x: CENTER, y: 60 + back * .3, z: CENTER - back }, -0.35 );
+	}
 	// 16 s of standing lets the idle fidget timers fire (random-idle.ts: 15 s).
 	return session.finish( 17 * FRAME_HZ );
 }

@@ -33,7 +33,7 @@ import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { MESSAGE_FRAME, MESSAGE_TILE, partyProposalAssets } from "@/engine/foundation/ui/party-proposal";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { captionWords, textLines } from "@/engine/foundation/ui/text-lines";
+import { CAPTION_MARGIN, captionWords, narrowFace, textLines } from "@/engine/foundation/ui/text-lines";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 
 export { beginWindow, endWindow, unloadedImages } from "./admission";
@@ -301,8 +301,6 @@ export function comboBox(
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
-// A fitted button caption keeps this far inside each side of its plate.
-const CAPTION_MARGIN = 4;
 // The blank between a wrapped label's two lines, below the first line's
 // descent: one label reads as one, apart from the rows beside it.
 const WRAP_LEADING = 1;
@@ -373,18 +371,21 @@ authoredText
 
 A static's text in its client rect. clipToControl keeps it inside
 that rect: true ends a long line with an ellipsis, "clip" cuts it
-at the edge.
+at the edge. A static that carries a text key is a label; label
+overrides that for a caption or a value its caller lets run past its
+box like one (the academy's "80(80)" level in its 19-pixel field).
 ================
 */
 export function authoredText(
 	frame: UiAuthoredFrame,
-	{ node, ox, oy, value, clipToControl = false, fontStyle = 0 }: {
+	{ node, ox, oy, value, clipToControl = false, fontStyle = 0, label = node.text !== "" }: {
 		node: AuthoredControl;
 		ox: number;
 		oy: number;
 		value: string;
 		clipToControl?: boolean | "clip";
 		fontStyle?: number;
+		label?: boolean;
 	}
 ) {
 	const quads = frame.quads, paths = frame.paths, text = frame.text, full = frame.full;
@@ -421,7 +422,7 @@ export function authoredText(
 	// (clipToControl, the guild page's "Guild master" before the race
 	// mark) wraps too, its lines inside the box's columns, instead of
 	// being cut to "Guild ma..." (#3674).
-	if ( clipToControl !== "clip" && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && label && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
@@ -466,8 +467,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
-			// A keyed static is a label; a value field's text keeps to its box.
-			label: node.text !== "",
+			// A label may run past its box; a value field's text keeps to it.
+			label,
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})
@@ -532,6 +533,30 @@ export function authoredButton(
 
 /*
 ================
+fittedCaption
+
+Port-only, not native (Experimental "Fit window labels", off is the
+original): a button caption wider than its plate keeps the leading
+words that fit ("Delete message" -> "Delete", "Check for duplicate
+entries" -> "Check"); a single word still wider takes the narrow face
+("Dismiss" on the academy's 44-pixel plate). Returns the caption and
+the node to draw it with.
+================
+*/
+export function fittedCaption(
+	frame: UiAuthoredFrame,
+	{ node, ox, oy, caption }: { node: AuthoredControl; ox: number; oy: number; caption: string; }
+): { value: string; node: AuthoredControl; } {
+	if ( !frame.fitWindowLabels() ) return { value: caption, node };
+	const room = authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
+		measure = ( line: string, fontIndex: number ) => frame.text.run( line, 0, fontIndex ).width;
+	const value = captionWords( caption, room, line => measure( line, node.fontIndex ) ),
+		fontIndex = narrowFace( value, room, node.fontIndex, measure );
+	return { value, node: fontIndex === node.fontIndex ? node : { ...node, fontIndex } };
+}
+
+/*
+================
 authoredLabeledButton
 ================
 */
@@ -546,19 +571,9 @@ export function authoredLabeledButton(
 		disabled?: boolean;
 	}
 ) {
-	// Port-only, not native (Experimental "Fit window labels", off is
-	// the original): a button caption wider than its plate keeps the
-	// leading words that fit ("Delete message" -> "Delete", "Check
-	// for duplicate entries" -> "Check").
-	const shown = frame.fitWindowLabels() ?
-		captionWords(
-			caption,
-			authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
-			line => frame.text.run( line, 0, node.fontIndex ).width
-		) :
-		caption;
-	authoredButton( frame, { node, ox, oy, id, label: shown, disabled } );
-	authoredText( frame, { node, ox, oy, value: shown } );
+	const shown = fittedCaption( frame, { node, ox, oy, caption } );
+	authoredButton( frame, { node, ox, oy, id, label: shown.value, disabled } );
+	authoredText( frame, { node: shown.node, ox, oy, value: shown.value } );
 }
 
 /*
@@ -684,6 +699,9 @@ export interface MessageBox {
 	readonly no: string;
 	readonly yesDisabled?: boolean;
 	readonly single?: "confirm" | "cancel";
+	// Per drawn line; white where absent. 52E720's SetTextAndResize takes
+	// each appended line's own colour (5D3EB0's gold name line).
+	readonly colors?: readonly UiQuad["color"][];
 }
 
 /*
@@ -715,7 +733,7 @@ export function simpleMessageBox( frame: UiAuthoredFrame, box: MessageBox ) {
 		...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
 	);
 	for ( const [i, line] of lines.entries() ) {
-		quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
+		quads.push( ...text.quads( line, layout.lines[i]!, full, box.colors?.[i] ?? white, { vAlign: 0 } ) );
 	}
 	if ( box.single === "confirm" ) {
 		button( frame, {
