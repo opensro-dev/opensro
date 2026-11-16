@@ -120,6 +120,12 @@ var Settings = []Setting{
 	// them when the server data is built, and the GameWorld reads neither.
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	// Port-only, not native: the rest of the honor line the v1.150 client
+	// authored and never shipped (#3548): degree 10-11 honor weapons, the
+	// Chinese honor shields, the European tab and the degree 10-11 stones.
+	// Build time only: honor_items.py and honor_shops.py read it when the
+	// server data is built. Degrees 10-11 need SRO_CAP110_ITEMS too.
+	{Env: "SRO_HONOR_GOODS", NomadVar: "honor_goods", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the later client's mall avatars (outfits, hats,
 	// attachments). Cosmetic, so the owner approved it on by default
