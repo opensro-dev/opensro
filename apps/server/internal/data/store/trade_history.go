@@ -17,10 +17,9 @@ keeps its rows, and the next commit that succeeds writes each row exactly once.
 
 Rows older than tradeHistoryRetention are dropped by the same commits that
 write new ones, a bounded batch at a time (pruneTradeHistoryTx), so the
-table cannot grow without end. INFERENCE: the original keeps no record at
-all, so the port chooses the window; half a year covers any dispute a
-player raises with staff. The owner asked for a retention (2026-11-16);
-the window is this constant.
+table cannot grow without end. The original keeps no record at all, so
+the window is the port's: ninety days (tradeHistoryRetention, the owner's
+choice on 2026-11-16).
 
 The read side answers from the table, never from the roster. A counterparty's
 current privacy choice is applied by the read side (publicstats): TradeHistory
@@ -70,7 +69,7 @@ CREATE INDEX IF NOT EXISTS trade_history_at ON trade_history (at_ms);
 
 const (
 	// tradeHistoryRetention is how long a trade row is kept.
-	tradeHistoryRetention = 180 * 24 * time.Hour
+	tradeHistoryRetention = 90 * 24 * time.Hour
 	// tradeHistoryPruneBatch bounds the rows one commit deletes, so a large
 	// backlog (a retention change, a long-idle shard) drains over several
 	// commits instead of stalling one.
