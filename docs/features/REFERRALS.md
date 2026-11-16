@@ -40,6 +40,6 @@ numbers of its own.
 | ---------------------------------------- | ----------------------------- |
 | `GET /v1/accounts/{id}/referrals`        | own code, rules, invites      |
 | `PUT /v1/accounts/{id}/referrer`         | link at sign-up               |
-| `GET /v1/referral-codes/{code}`          | whose invitation it is        |
+| `GET /v1/referral-codes/{code}` | whose invitation it is; the inviter's account for the site only |
 | `GET /v1/referrals/held`                 | staff list of held referrals  |
 | `PUT /v1/referrals/{referee}/approved`   | staff approval                |
