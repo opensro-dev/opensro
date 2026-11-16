@@ -198,3 +198,16 @@ test("an accepted opening opens the Academy tab (CGInterface_OpenAcademyTab 69C8
 		f.dispose();
 	}
 });
+
+test("the fee question draws each line whole in a box sized to it (52DB20, #3550)", () => {
+	const { f, step } = storageTalk( 60, false );
+	try {
+		step();
+		f.ui.event( { kind: "activate", id: "npc-academy-open" } );
+		step();
+		assert.ok( f.hasText( "Fee of 100,000 gold is needed to establish an Academy." ), "the first line broke" );
+		assert.ok( f.hasText( "Would you like to establish an Academy?" ), "the second line broke" );
+	} finally {
+		f.dispose();
+	}
+});
