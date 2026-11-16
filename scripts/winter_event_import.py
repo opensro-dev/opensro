@@ -48,10 +48,12 @@ from prepare_client_resources import write_atomically
 FLAG = "SRO_CHRISTMAS_EVENT"
 ROOT_ENV = "SRO_V1696_ROOT"
 MARKER = ".opensro-winter-event.json"
-# The 220000 identity band: 210000 is the Constantinople fortress's.
-# One importer owns one shard file in a build.
-CHARACTER_SHARD = "characterdata_220000.txt"
-SKILL_SHARD = "skilldata_220000.txt"
+# The 240000 identity band: 210000 is the Constantinople fortress's,
+# 220000 Muhan's and 230000 Styria's. One importer owns one shard file in
+# a build: a layer's off reap unlinks its shard, so a shared band would
+# delete the other layer's rows (test_later_shard_bands.py).
+CHARACTER_SHARD = "characterdata_240000.txt"
+SKILL_SHARD = "skilldata_240000.txt"
 PREFIX = "MOB_EV_WINTER_"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
 # Character row columns (cap110_monsters.py's layout).
