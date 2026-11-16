@@ -120,6 +120,7 @@ var catalogueExempt = map[string]string{
 	"SRO_NAME_CHANGE_SCROLL":                   "adds a scroll to the Item Mall; the catalogue publishes no mall listing, and items.json publishes the scroll either way",
 	"SRO_KILL_STATS":                           "staff telemetry; no catalogue file carries it",
 	"SRO_CONSIGNMENT":                          "the player market's escrow; no catalogue file carries listings",
+	"SRO_REFERRALS":                            "account referrals for the website; no catalogue file carries them",
 	"SRO_NASRUN":                               "an avatar socket rule at runtime; items.json publishes the Spirit rows only when the build imported them",
 	"SRO_CONNECTION_JOURNAL":                   "staff census and the status page's people counts; no catalogue file carries it",
 	"SRO_JOB_SUIT_HIDES_ARMOR":                 "how a worn suit is drawn; the catalogue publishes no rendering",

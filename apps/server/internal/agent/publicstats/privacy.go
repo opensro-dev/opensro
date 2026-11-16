@@ -76,6 +76,7 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		return
 	}
 	digest := sha256.Sum256([]byte(token))
+	s.installReferrals(mux, digest)
 	mux.HandleFunc("GET /v1/accounts/{id}/characters", func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r, digest) {
 			return
