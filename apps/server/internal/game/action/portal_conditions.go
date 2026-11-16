@@ -4,17 +4,16 @@
 portal_conditions.go - teleport link Restrict kinds 4, 5 and 6
 
 The item and job conditions of a teleport link, as the reference server's
-link check evaluates them (SR_GameServer v1.188 CRefTeleportLink_CheckState,
-0x513A70). The Roc summit gate's link (GATE_RC_MOUNTAIN_GATE ->
+link check evaluates them (v1.188; the addresses are in #3765's
+native-claims table). The Roc summit gate's link (GATE_RC_MOUNTAIN_GATE ->
 GATE_RC_ROC_GATE, #3399) carries all three:
 
 	kind 4  Data_1 names an item the traveller must hold in the bag, or
 	        the link refuses 0x1C23;
 	kind 5  the same test, and one of that item is spent once every
-	        condition has passed (the player's item removal, vt+0x230 =
-	        0x4EEB70);
-	kind 6  the traveller must be outside job mode (job state 4, read
-	        through vt+0x11C = 0x4DDC80), or the link refuses 0x1C24.
+	        condition has passed (the player's item removal);
+	kind 6  the traveller must be outside job mode (the player's job
+	        state reads 4), or the link refuses 0x1C24.
 
 portal.go loads the rows and runs portalAdmission; this file owns what
 the three kinds read and spend.
