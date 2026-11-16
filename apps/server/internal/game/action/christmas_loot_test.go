@@ -1,7 +1,8 @@
 /*
 ===========================================================================
 
-christmas_loot_test.go - Red Santa Socks: who drops them, what So-ok gives
+christmas_loot_test.go - the winter event's snow flakes: who drops them,
+what So-ok gives for them, when they leave
 
 ===========================================================================
 */
@@ -10,7 +11,6 @@ package action
 import (
 	"bytes"
 	"testing"
-	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -18,16 +18,18 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 )
+
+// testSnowflakeRef is the fixture's snow flake reference.
+const testSnowflakeRef = 28244
 
 /*
 ================
 christmasLootRuntime
 
-The Halloween fixture's items plus the socks, the Santa Hats and the
-Santa Wings; the Christmas window is the Halloween tests' 1970 one.
+The Halloween fixture's items plus the snow flake, the socks and two of
+So-ok's gifts; the Christmas window is the Halloween tests' 1970 one.
 ================
 */
 func christmasLootRuntime(t *testing.T, c *enterworld.Character, on bool) *Runtime {
@@ -39,10 +41,10 @@ func christmasLootRuntime(t *testing.T, c *enterworld.Character, on bool) *Runti
 			NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": maxStack}),
 		}
 	}
+	items[progression.ChristmasSnowflakeCodename] = etc(testSnowflakeRef, progression.ChristmasSnowflakeCodename, [4]int64{3, 3, 9, 0}, 250)
 	items[progression.ChristmasSockCodename] = etc(23463, progression.ChristmasSockCodename, [4]int64{3, 3, 9, 0}, 50)
-	items["ITEM_ETC_E041225_SANTA_HAT_M"] = etc(3654, "ITEM_ETC_E041225_SANTA_HAT_M", [4]int64{3, 1, 13, 0}, 1)
-	items["ITEM_ETC_E041225_SANTA_HAT_F"] = etc(3655, "ITEM_ETC_E041225_SANTA_HAT_F", [4]int64{3, 1, 13, 0}, 1)
-	items["ITEM_ETC_E041225_SANTA_WINGS"] = etc(3653, "ITEM_ETC_E041225_SANTA_WINGS", [4]int64{3, 3, 3, 0}, 50)
+	items["ITEM_MALL_DAMAGE_ABS_20P_SCROLL"] = etc(5001, "ITEM_MALL_DAMAGE_ABS_20P_SCROLL", [4]int64{3, 3, 13, 1}, 50)
+	items["ITEM_COS_C_RUDOLPH"] = etc(5002, "ITEM_COS_C_RUDOLPH", [4]int64{3, 3, 1, 2}, 1)
 	rt, _ := newTestRuntime(c, items)
 	setting := "off"
 	if on {
@@ -56,98 +58,43 @@ func christmasLootRuntime(t *testing.T, c *enterworld.Character, on bool) *Runti
 
 /*
 ================
-sockRow
+flakeRow
 ================
 */
-func sockRow(slot, count int64) enterworld.InventoryRow {
+func flakeRow(slot, count int64) enterworld.InventoryRow {
 	return enterworld.InventoryRow{
-		Slot: slot, RefObjID: 23463, Codename: progression.ChristmasSockCodename,
+		Slot: slot, RefObjID: testSnowflakeRef, Codename: progression.ChristmasSnowflakeCodename,
 		TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: count,
 	}
 }
 
 /*
 ================
-TestChristmasSockDrops
+TestSnowSlaveLeavesItsSnowflakeEveryTime
 
-Each winter monster leaves its count of socks; any other monster and
-the event off leave none.
+A Snow Slave's kill plan is its flake, owned by the killer, whatever the
+draw (the owner's 100%), and nothing else; with the event off the plan is
+the native one and holds no flake.
 ================
 */
-func TestChristmasSockDrops(t *testing.T) {
-	rt := christmasLootRuntime(t, testCharacter(), true)
-	now := time.UnixMilli(1_000_000)
-	for codename, want := range map[string]int{
-		progression.ChristmasSnowSlaveCodename:    progression.ChristmasSnowSlaveSocks,
-		progression.ChristmasKnightCodename(90):   progression.ChristmasKnightSocks,
-		progression.ChristmasPrincessCodename(90): progression.ChristmasPrincessSocks,
-		"MOB_CH_MANGNYANG":                        0,
-	} {
-		socks := rt.christmasSockDrops(monster.Instance{Ref: monster.MonsterRef{Codename: codename}}, simulation.Spawn{}, "Hunter", now)
-		if len(socks) != want {
-			t.Fatalf("%s left %d socks, want %d", codename, len(socks), want)
-		}
-		for _, sock := range socks {
-			if sock.Codename != progression.ChristmasSockCodename {
-				t.Fatalf("%s left %s", codename, sock.Codename)
-			}
-		}
-	}
-	off := christmasLootRuntime(t, testCharacter(), false)
-	if socks := off.christmasSockDrops(monster.Instance{Ref: monster.MonsterRef{Codename: progression.ChristmasSnowSlaveCodename}}, simulation.Spawn{}, "Hunter", now); len(socks) != 0 {
-		t.Fatalf("event off: %d socks", len(socks))
-	}
-}
-
-/*
-================
-TestSnowSlaveLeavesOnlyItsSocks
-
-A Snow Slave's kill plan is its socks, owned by the killer, whatever the
-level gap; with the event off the plan is the native one.
-================
-*/
-func TestSnowSlaveLeavesOnlyItsSocks(t *testing.T) {
+func TestSnowSlaveLeavesItsSnowflakeEveryTime(t *testing.T) {
 	c := testCharacter()
 	level := int64(90)
 	c.Level = &level
 	slave := monster.Instance{Ref: monster.MonsterRef{Codename: progression.ChristmasSnowSlaveCodename, Level: 1, MaxHP: 5}}
 	rt := christmasLootRuntime(t, c, true)
-	rt.DropRoll = func() (uint32, error) { return 0, nil }
-	drops := rt.planMonsterKillLoot(c, slave, monster.Pose{}, rt.Now().UnixMilli())
-	if len(drops) != progression.ChristmasSnowSlaveSocks {
-		t.Fatalf("Snow Slave left %d items, want only its %d socks", len(drops), progression.ChristmasSnowSlaveSocks)
-	}
-	for _, drop := range drops {
-		if drop.Codename != progression.ChristmasSockCodename || drop.OwnerJID != enterworld.ObjectIDForCharacter(c) {
-			t.Fatalf("Snow Slave left %s owned by %d", drop.Codename, drop.OwnerJID)
+	for _, draw := range []uint32{0, 16384, 32767} {
+		rt.DropRoll = func() (uint32, error) { return draw, nil }
+		drops := rt.planMonsterKillLoot(c, slave, monster.Pose{}, rt.Now().UnixMilli())
+		if len(drops) != 1 || drops[0].Codename != progression.ChristmasSnowflakeCodename || drops[0].OwnerJID != enterworld.ObjectIDForCharacter(c) {
+			t.Fatalf("draw %d: Snow Slave left %+v, want its one flake", draw, drops)
 		}
 	}
 	off := christmasLootRuntime(t, c, false)
 	off.DropRoll = func() (uint32, error) { return 0, nil }
 	for _, drop := range off.planMonsterKillLoot(c, slave, monster.Pose{}, off.Now().UnixMilli()) {
-		if drop.Codename == progression.ChristmasSockCodename {
-			t.Fatal("event off: a Snow Slave left socks")
-		}
-	}
-}
-
-/*
-================
-TestChristmasWinterMonsterKeepsTheLevelGap
-
-A level-90 hunter's roll on a level-1 winter unique: its ordinary loot
-meets the native threshold, which admits nothing, with the event on as
-off. Its socks come from outside admission (TestSnowSlaveLeavesOnlyItsSocks).
-================
-*/
-func TestChristmasWinterMonsterKeepsTheLevelGap(t *testing.T) {
-	knight := monster.Instance{Ref: monster.MonsterRef{Codename: progression.ChristmasKnightCodename(20), Level: 1}}
-	for _, enabled := range []bool{true, false} {
-		rt := christmasLootRuntime(t, testCharacter(), enabled)
-		rt.DropRoll = dropRollSequence(0)
-		if rt.admitMonsterDrop(90, knight) {
-			t.Fatalf("event %v: the winter unique's loot skipped the native gap", enabled)
+		if drop.Codename == progression.ChristmasSnowflakeCodename {
+			t.Fatal("event off: a Snow Slave left a flake")
 		}
 	}
 }
@@ -156,10 +103,10 @@ func TestChristmasWinterMonsterKeepsTheLevelGap(t *testing.T) {
 ================
 TestChristmasExchangeAtSoOk
 
-So-ok offers the one shipped row only while the event runs; no pair
-answers the no-socks line; one click trades every pair in the bag, one
-present each, with the talk line alone (no banner); a female
-character's costume piece is the female one.
+So-ok offers the winter row only while the event runs; fewer than ten
+flakes answer QUEST_E; one click trades every ten flakes in the bag, a
+gift each, with the talk line alone (no banner), and the odd flakes
+stay.
 ================
 */
 func TestChristmasExchangeAtSoOk(t *testing.T) {
@@ -178,15 +125,15 @@ func TestChristmasExchangeAtSoOk(t *testing.T) {
 		t.Fatal("options offered at another NPC")
 	}
 
-	c.MissionInventory = nil
-	frames, err := rt.ExchangeChristmasSocks(c, halloweenSoOkCodename)
-	if err != nil || len(frames) != 1 || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(christmasTalkNoSocks)) {
-		t.Fatal("no-socks exchange", frames, err)
+	c.MissionInventory = []enterworld.InventoryRow{flakeRow(20, 9)}
+	frames, err := rt.ExchangeChristmasSnowflakes(c, halloweenSoOkCodename)
+	if err != nil || len(frames) != 1 || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(christmasTalkNoFlakes)) {
+		t.Fatal("too few flakes", frames, err)
 	}
 
-	c.MissionInventory = []enterworld.InventoryRow{sockRow(20, 4)}
+	c.MissionInventory = []enterworld.InventoryRow{flakeRow(20, 25)}
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
-	frames, err = rt.ExchangeChristmasSocks(c, halloweenSoOkCodename)
+	frames, err = rt.ExchangeChristmasSnowflakes(c, halloweenSoOkCodename)
 	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(christmasTalkGranted)) {
 		t.Fatal("granted exchange", frames, err)
 	}
@@ -195,74 +142,59 @@ func TestChristmasExchangeAtSoOk(t *testing.T) {
 			t.Fatal("a banner went out; the talk line alone answers")
 		}
 	}
-	if bagCount(c, progression.ChristmasSockCodename) != 0 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 4*3 {
-		t.Fatal("one click, a present per pair", c.MissionInventory)
-	}
-
-	female := testCharacter()
-	gender := int64(enterworld.GenderFemale)
-	female.Gender = &gender
-	female.ModelCodename = "CHAR_CH_WOMAN_ADVENTURER"
-	female.MissionInventory = []enterworld.InventoryRow{sockRow(20, progression.ChristmasSocksPerGift)}
-	rt = christmasLootRuntime(t, female, true)
-	rt.DropRoll = func() (uint32, error) { return 28016, nil } // roll 85.5 of 100: the red hat band (84, 87]
-	if _, err := rt.ExchangeChristmasSocks(female, halloweenSoOkCodename); err != nil {
-		t.Fatal(err)
-	}
-	if bagCount(female, "ITEM_ETC_E041225_SANTA_HAT_F") != 1 || bagCount(female, progression.ChristmasSockCodename) != 0 {
-		t.Fatal("female hat", female.MissionInventory)
+	if bagCount(c, progression.ChristmasSnowflakeCodename) != 5 || bagCount(c, "ITEM_MALL_DAMAGE_ABS_20P_SCROLL") != 2 {
+		t.Fatal("one click, a gift per ten flakes", c.MissionInventory)
 	}
 }
 
 /*
 ================
-TestEveryChristmasItemIsInShippedData
+TestEveryChristmasGiftIsInShippedData
 
-The socks and every present by codename, both sexes of a costume piece:
-a typo would roll a present the grant then refuses.
+Every gift by codename: a typo would roll a gift the grant then refuses.
+The flake itself is imported from the later client, so it is not here.
 ================
 */
-func TestEveryChristmasItemIsInShippedData(t *testing.T) {
+func TestEveryChristmasGiftIsInShippedData(t *testing.T) {
 	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(clientdata.RetailTextdataDir(t))
-	codenames := []string{progression.ChristmasSockCodename}
 	for _, gift := range progression.ChristmasGifts() {
-		codenames = append(codenames, gift.Codename)
-		if gift.FemaleCodename != "" {
-			codenames = append(codenames, gift.FemaleCodename)
-		}
-	}
-	for _, codename := range codenames {
-		if ref, ok := items.ItemRefByCodename(codename); !ok || ref == nil {
-			t.Fatalf("%s is not in shipped data", codename)
+		if ref, ok := items.ItemRefByCodename(gift.Codename); !ok || ref == nil {
+			t.Fatalf("%s is not in shipped data", gift.Codename)
 		}
 	}
 }
 
 /*
 ================
-TestChristmasSocksLeaveWhenTheEventIsOff
+TestChristmasTokensLeaveAtEntry
 
-With the event off, a world entry takes every pair from the bag and
-from a pet's bag, and leaves every other row; with it on, nothing moves.
+A world entry outside the event takes every flake from the bag and from
+a pet's bag; inside it the flakes stay. The Red Santa Socks leave at
+every entry. Every other row stays.
 ================
 */
-func TestChristmasSocksLeaveWhenTheEventIsOff(t *testing.T) {
+func TestChristmasTokensLeaveAtEntry(t *testing.T) {
 	character := func() *enterworld.Character {
 		c := testCharacter()
-		c.MissionInventory = []enterworld.InventoryRow{sockRow(20, 7), {Slot: 21, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 5}}
-		c.ActiveCOS = &enterworld.CharacterCOS{Container: &domain.COSContainer{Rows: []enterworld.InventoryRow{sockRow(0, 3)}}}
+		c.MissionInventory = []enterworld.InventoryRow{
+			flakeRow(20, 7),
+			{Slot: 21, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 5},
+			{Slot: 22, RefObjID: 23463, Codename: progression.ChristmasSockCodename, TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: 2},
+		}
+		c.ActiveCOS = &enterworld.CharacterCOS{Container: &domain.COSContainer{Rows: []enterworld.InventoryRow{flakeRow(0, 3)}}}
 		return c
 	}
 	on := character()
-	if christmasLootRuntime(t, on, true).RemoveExpiredEventItems(on) || bagCount(on, progression.ChristmasSockCodename) != 7 {
-		t.Fatal("event on: socks removed")
+	if !christmasLootRuntime(t, on, true).RemoveExpiredEventItems(on) || bagCount(on, progression.ChristmasSnowflakeCodename) != 7 ||
+		bagCount(on, progression.ChristmasSockCodename) != 0 {
+		t.Fatal("event on: flakes must stay, socks leave", on.MissionInventory)
 	}
 	off := character()
 	if !christmasLootRuntime(t, off, false).RemoveExpiredEventItems(off) {
 		t.Fatal("event off: no removal reported")
 	}
-	if bagCount(off, progression.ChristmasSockCodename) != 0 || len(off.ActiveCOS.Container.Rows) != 0 || bagCount(off, "ITEM_ETC_HP_POTION_01") != 5 {
+	if bagCount(off, progression.ChristmasSnowflakeCodename) != 0 || len(off.ActiveCOS.Container.Rows) != 0 || bagCount(off, "ITEM_ETC_HP_POTION_01") != 5 {
 		t.Fatal("event off: bag", off.MissionInventory, off.ActiveCOS.Container.Rows)
 	}
 	if christmasLootRuntime(t, off, false).RemoveExpiredEventItems(off) {

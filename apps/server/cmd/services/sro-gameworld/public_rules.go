@@ -739,7 +739,7 @@ func petInventoryPagesNow(kind string, pages uint8) string {
 christmasRule
 
 The Christmas switch's rule in the mode it runs (progression/christmas_mode.go):
-the winter event of #3603, or So-Ok's Christmas Gift.
+the winter event (Winter Princess and Knights), or So-Ok's Christmas Gift.
 ================
 */
 func christmasRule(now time.Time) publicstats.Rule {
@@ -752,6 +752,6 @@ func christmasRule(now time.Time) publicstats.Rule {
 	}
 	return publicstats.Rule{Flag: progression.EnvChristmasEvent, On: progression.ChristmasEventFromEnv().ActiveAt(now),
 		Native: native,
-		Now:    "While the event runs, the towns wear their Christmas decoration, and every two hours it snows for an hour: Snow Slaves fill every field during the snowfall and melt when it stops. Every hit on a Snow Slave lands for 1, so it falls in five hits. They drop Red Santa Socks; So-ok trades each pair for a present. A White Knight comes to three fields every hour at half past, and Princess Miyene at 13:00 and 21:00 UTC. When the event ends, the socks leave every bag.",
-		Why:    "The original Christmas event's snow, with the later client's town decoration, for its seasonal window."}
+		Now:    "Winter Princess and Knights: while the event runs, the towns wear their Christmas decoration and it snows for one hour every two hours. Half of the champions born in the open world are Snow Slaves; every hit on one lands for 1, and it drops a Snow flake half the time. So-ok trades every 10 snow flakes for a random gift. Two Server Missions fill as the whole shard plays: So-ok's exchanges complete the Snow Flake Event (18 per player online, plus 100), which gives everyone +20% EXP and skill EXP for an hour; Snow Slave kills complete the Snow Slave Hunting Event (360 per player online, plus 100), whose last hunter wins +100% EXP and skill EXP for three hours. Each hunt completed summons White Knights on 40 fixed points, and every fifth summons the Princesses. When the event ends, the snow flakes leave every bag.",
+		Why:    "The v1.188 server's winter event (Server Missions 30001-30004) with the original Christmas snow and the later client's town decoration, for its seasonal window."}
 }

@@ -152,8 +152,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
-		step("advanceChristmasWaves", rt.advanceChristmasWaves)
-		step("advanceChristmasSnowSlaves", rt.advanceChristmasSnowSlaves)
+		step("advanceWinterMissions", rt.advanceWinterMissions)
 		step("advancePandoraBoxes", rt.advancePandoraBoxes)
 		frames("advanceEventGroups", rt.advanceEventGroups)
 		// Retirement is presentation-only. Reward state was already committed

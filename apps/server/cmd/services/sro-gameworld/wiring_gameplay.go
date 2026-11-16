@@ -255,6 +255,10 @@ func newGameplayPlane(
 	// SRO_CHRISTMAS_EVENT_MODE=so_ok_2006 (port-only, not native): So-Ok's
 	// Christmas Gift on the same switch and window (wiring_christmas.go).
 	items.SoOkChristmas = sookChristmasFromEnv(deps.ItemReferences())
+	// The winter Server Missions keep their rows in the authority's
+	// metadata (wiring_christmas.go).
+	items.WinterMissionStore = authorityStore
+	items.WinterMissionGoals = winterMissionGoalsFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -397,6 +401,7 @@ func newGameplayPlane(
 		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTest)
 		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
+		installWinterSpawnReplacements(deps.MonsterState, items)
 		for _, division := range authorityStore.DivisionIDs() {
 			deps.MonsterState.StartDivision(division)
 		}

@@ -463,8 +463,11 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = partyRewardFactors(members, impact.Instance, rt.PartyShareFloor)
 		}
 		for i, a := range members {
-			exp, sexp := monsterContributionReward(a.character, impact.Instance, rt.deps.LevelData(), g.damage, factors[i], a.party != nil && a.party.Options&1 != 0)
-			exp, sexp = paramJobRewardBonus(a.character, exp, sexp, now)
+			base, baseSkill := monsterContributionReward(a.character, impact.Instance, rt.deps.LevelData(), g.damage, factors[i], a.party != nil && a.party.Options&1 != 0)
+			exp, sexp := paramJobRewardBonus(a.character, base, baseSkill, now)
+			// The winter Snow Flake Event's +20% while it runs
+			// (winter_missions.go).
+			exp, sexp = rt.winterExpUpBonus(division, base, baseSkill, exp, sexp, now)
 			// Port-only, not native (thiefparty.go): the member's party's thieves.
 			exp = thiefPartyExp(exp, rt.thiefPartyPercent(division, a.party, settings))
 			// Academy cumulated buff (#2270): the member accumulates (or
@@ -577,6 +580,9 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		}
 	}
 	rt.countKillStatKill(killer, now)
+	// The winter Snow Slave Hunting Event counts the kill
+	// (winter_missions.go).
+	rt.reportWinterKill(division, killer, impact.Instance, now)
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out
 }

@@ -16,8 +16,10 @@ package main
 import (
 	log "github.com/sirupsen/logrus"
 
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -38,6 +40,48 @@ func christmasEventFromEnv() progression.ChristmasEvent {
 		log.Infof("christmas: the Christmas event runs inside its configured window (%s)", progression.EnvChristmasEvent)
 	}
 	return event
+}
+
+/*
+================
+winterMissionGoalsFromEnv
+
+SRO_WINTER_MISSION_GOALS (port-only, not native): fixed test goals for the
+winter Server Missions. A value that does not parse keeps the native goals
+and says so.
+================
+*/
+func winterMissionGoalsFromEnv() progression.WinterMissionGoals {
+	goals, err := progression.WinterMissionGoalsFromEnv()
+	if err != nil {
+		log.Warnf("christmas: %v; the native mission goals are kept", err)
+		return nil
+	}
+	if goals != nil {
+		log.Infof("christmas: the winter Server Missions run on fixed test goals (%s=%v)", progression.EnvWinterMissionGoals, map[uint32]int(goals))
+	}
+	return goals
+}
+
+/*
+================
+installWinterSpawnReplacements
+
+The winter event's Snow Slaves come from the open world's nests: while it
+runs, half of the champions are born Snow Slaves (action/winter_missions.go).
+With the event off nothing is installed: the native spawn. A data build
+without the winter monsters installs an empty table and says so.
+================
+*/
+func installWinterSpawnReplacements(monsters *simulation.MonsterState, items *action.Runtime) {
+	if !items.Christmas.Enabled() {
+		return
+	}
+	snowman, found := monsters.ReferenceByCodename(progression.ChristmasSnowSlaveCodename)
+	if !found {
+		log.Warnf("christmas: the monster data holds no %s; no Snow Slave will spawn", progression.ChristmasSnowSlaveCodename)
+	}
+	monsters.SetSpawnReplacements(items.WinterSpawnReplacements(snowman, found))
 }
 
 /*
@@ -86,13 +130,18 @@ func sookChristmasFromEnv(items enterworld.ItemRefSource) progression.SoOkChrist
 ================
 sookChristmasNpcLook
 
-So-ok's Santa look for So-Ok's Christmas Gift's window, or nil when the
-event does not run in this boot's posture (the dressed roster is built
-once, so the window read at boot is the one that dresses her).
+So-ok's Santa look for the running Christmas event's window, or nil when
+neither runs in this boot's posture (the dressed roster is built once, so
+the window read at boot is the one that dresses her): So-Ok's Christmas
+Gift, or the winter event (port-only, owner 2026-11-16: the host of
+Winter Princess and Knights wears the Santa dress too).
 ================
 */
 func sookChristmasNpcLook() *enterworld.NpcLookConfig {
-	event := progression.SoOkChristmasFromEnv()
+	event := progression.SoOkChristmasFromEnv().SeasonalEvent
+	if !event.Enabled() {
+		event = progression.ChristmasEventFromEnv().SeasonalEvent
+	}
 	startsAt, endsAt, valid := event.Window()
 	if !event.Enabled() || !valid {
 		return nil

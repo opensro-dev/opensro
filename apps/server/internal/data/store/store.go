@@ -160,6 +160,8 @@ type changeSet struct {
 	halloweenBoxes bool
 	// sookArenaAccounts is the survival arena's account plane (#3322).
 	sookArenaAccounts bool
+	// winterMissions is the winter Server Missions' plane.
+	winterMissions bool
 }
 
 func newChangeSet() changeSet {
@@ -188,7 +190,8 @@ func (changes changeSet) empty() bool {
 		!changes.tradeRewards &&
 		!changes.jobRankings &&
 		!changes.halloweenBoxes &&
-		!changes.sookArenaAccounts
+		!changes.sookArenaAccounts &&
+		!changes.winterMissions
 }
 
 // groundState owns the boundary between the live gameplay registry and its
