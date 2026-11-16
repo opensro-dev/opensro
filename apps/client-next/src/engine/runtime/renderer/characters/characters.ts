@@ -18,12 +18,14 @@ import { selectEquipmentGlow } from "@/engine/foundation/rendering/equipment-glo
 import { createPoseLod } from "@/engine/foundation/animation/pose-lod";
 import { createDeferredParticles, particleQueryPoint } from "@/engine/foundation/animation/deferred-particles";
 import { createModelMaterialClocks } from "@/engine/foundation/animation/model-material-clock";
+import { advanceParticleGraph } from "@/engine/foundation/animation/particle-graph";
 import {
 	createParticleGraph,
-	advanceParticleGraph,
-	particleElementMatrix,
+	particleSlot,
+	ribbonElementFrames,
+	SLOT_ALIVE,
 	type ParticleGraphState
-} from "@/engine/foundation/animation/particle-graph";
+} from "@/engine/foundation/animation/particle-graph-slots";
 import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
 import { HOLDER_FOLLOW, holderFollow } from "@/engine/foundation/animation/particle-holder-link";
@@ -333,7 +335,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		dependencies?: readonly string[];
 	}>();
 	const materialClocks = createModelMaterialClocks(), deferred = createDeferredParticles();
-	// Scratch for the ribbon element frames' rotation (particleElementMatrix).
+	// Scratch for the ribbon element frames' rotation (ribbonElementFrames).
 	const rotationWork = new Float64Array( ROTATION_WORK );
 	// Scratch basis for faceEffectMesh, which runs per billboard actor.
 	const billboardAxes = new Float64Array( 9 );
@@ -475,7 +477,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// deferredActors: visible actors the render budget kept from drawing;
 	// deferredBodies: those of them without emission.
 	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0, deferredBodies = 0;
-	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
+	let retained: Set<string> | null = null;
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
@@ -1451,14 +1453,7 @@ the next full prepare pass, so this may run between frames.
 				origin: frame.origin,
 				bytes: plan.particleBytes,
 				graph,
-				link: graph ?
-					{
-						root: graph.root,
-						follow: new Float32Array( HOLDER_FOLLOW ),
-						turned: new Float32Array( 16 ),
-						shift: [ 0, 0, 0 ]
-					} :
-					undefined,
+				follow: graph ? new Float32Array( HOLDER_FOLLOW ) : undefined,
 				programs: model.primitives.map( () => [] ),
 				matrices: model.primitives.map( p =>
 					p.emission ?
@@ -1499,10 +1494,10 @@ the next full prepare pass, so this may run between frames.
 		);
 		particleRandom.index = graph.index;
 		// B153A0 carries linked elements by the holder every draw: this
-		// frame's holder against the graph's last tick (particle-holder-link.ts).
-		if ( history.link ) {
-			holderFollow( graph.root.matrix, graph.root.state.position, transform, history.link.follow );
-		}
+		// frame's holder against the graph's last tick (particle-holder-link.ts),
+		// whose frame and position are the root slot's (0).
+		const follow = history.follow!;
+		holderFollow( graph.matrix, graph.position, transform, follow );
 		// Graph ribbons are strips through their elements' drawn
 		// frames; other graph primitives are drawn from their tick
 		// records by the GPU pass (particle-streams.ts).
@@ -1510,20 +1505,8 @@ the next full prepare pass, so this may run between frames.
 		for ( let p = 0; p < model.primitives.length; p++ ) {
 			const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
 			if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
-			const elements = graph.elements[emitter]!;
 			matrices.fill( NaN );
-			for ( let b = 0; b < elements.length; b++ ) {
-				const element = elements[b];
-				if ( !element?.alive ) continue;
-				particleElementMatrix(
-					element,
-					matrices,
-					b * 16,
-					fraction,
-					rotationWork,
-					history.link
-				);
-			}
+			ribbonElementFrames( graph, emitter, fraction, follow, matrices, rotationWork );
 		}
 	}
 	/*
@@ -2341,23 +2324,22 @@ the next full prepare pass, so this may run between frames.
 	================
 	orderRibbonElements
 
-	Newest first into ribbonOrder: live graph elements by birth (ties keep
-	slot order), or the emission's births in reverse. Returns the count.
+	Newest first into ribbonOrder: graph emitter n's live elements by birth
+	(ties keep slot order), or the emission's births in reverse. Returns the
+	count.
 	================
 	*/
-	function orderRibbonElements(
-		elements: readonly ({ alive: boolean; born: number; } | undefined)[] | undefined,
-		births: number
-	) {
+	function orderRibbonElements( graph: ParticleGraphState | undefined, n: number | undefined, births: number ) {
 		let count = 0;
-		const total = elements ? elements.length : births;
+		const elements = graph && n !== undefined, base = elements ? graph.plan.base[n]! : 0;
+		const total = elements ? graph.counts[n]! : births;
 		if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
 		for ( let i = 0; i < total; i++ ) {
 			const b = elements ? i : total - 1 - i;
-			if ( elements && !elements[b]?.alive ) continue;
+			if ( elements && !(graph.flags[base + b]! & SLOT_ALIVE) ) continue;
 			let at = count++;
 			while (
-				elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
+				elements && at > 0 && graph.birth[base + ribbonOrder[at - 1]!]! < graph.birth[base + b]!
 			) {
 				ribbonOrder[at] = ribbonOrder[at - 1]!;
 				at--;
@@ -2385,24 +2367,24 @@ the next full prepare pass, so this may run between frames.
 			matrices = history.matrices[p]!,
 			material = primitive.materialFrames!,
 			alpha = frame.opacity( actor );
-		const elements = primitive.particleEmitter === undefined ?
-			undefined :
-			history.graph?.elements[primitive.particleEmitter];
-		const count = orderRibbonElements( elements, emission.births.length );
+		const graph = primitive.particleEmitter === undefined ? undefined : history.graph;
+		const emitter = primitive.particleEmitter ?? 0;
+		const count = orderRibbonElements( graph, primitive.particleEmitter, emission.births.length );
 		// Graph elements are born on the graph's own clock.
 		const graphTime = history.graph ? particleGraphTime( history.graph, actor.time ) : actor.time;
 		groupChains.clear();
 		ribbonGroups.length = 0;
 		for ( let k = 0; k < count; k++ ) {
 			const b = ribbonOrder[k]!,
-				element = elements?.[b],
-				birth = element ? element.clockBirth / 20 : emission.births[b]!;
-			if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
+				s = graph ? particleSlot( graph, emitter, b ) : -1,
+				birth = graph ? graph.clockBirth[s]! / 20 : emission.births[b]!;
+			if ( !graph && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
 				continue;
 			}
 			// A group opens at its first element, drawn or not: the
-			// groups keep the order the elements first name them.
-			const key = element?.parent ?? 0;
+			// groups keep the order the elements first name them. A live
+			// element's parent holds it, so its slot names one parent.
+			const key = graph ? graph.parent[s]! : 0;
 			let points = groupChains.get( key );
 			if ( !points ) {
 				points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
@@ -2410,7 +2392,7 @@ the next full prepare pass, so this may run between frames.
 				groupChains.set( key, points );
 				ribbonGroups.push( points );
 			}
-			const elapsed = (element ? graphTime : actor.time) - birth,
+			const elapsed = (graph ? graphTime : actor.time) - birth,
 				age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
 			if (
 				age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )
@@ -2560,7 +2542,9 @@ the next full prepare pass, so this may run between frames.
 						{ clothStream: clothSlots } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
-				transform: preview ? view! : identity()
+				transform: preview ? view! : identity(),
+				// updateModifiers rewrites a clocked primitive's material every frame.
+				...(group.plan.dynamicMaterials[p] ? { dynamicMaterial: true } : {})
 			},
 			resource.textures[primitive.image],
 			paletteOffsets,
@@ -2588,7 +2572,6 @@ the next full prepare pass, so this may run between frames.
 			particleRow.history = particleBirths.get( actor.gid )!;
 			particleRow.pose = poses.get( actor.gid )!.pose;
 			particleRow.opacity = group.fading ? frame.opacity( actor ) : 1;
-			particleRow.origin = frame.origin;
 			writeParticleRow( particles, i, particleRow, particleRandom );
 		}
 		let draw = batch.draws[p];
@@ -3381,12 +3364,12 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		retain( ids: readonly string[] ) {
-			retainedScratch.clear();
-			for ( const id of ids ) retainedScratch.add( id );
-			if ( !retained || retained.size !== retainedScratch.size || ids.some( id => !retained!.has( id ) ) ) {
-				const previous = retained;
-				retained = retainedScratch;
-				retainedScratch = previous ?? new Set();
+			// A new set each call, not a long-lived scratch cleared and refilled
+			// every frame: V8 allocates a long-lived set's next table in the old
+			// generation, where only a full collection frees it.
+			const next = new Set( ids );
+			if ( !retained || retained.size !== next.size || ids.some( id => !retained!.has( id ) ) ) {
+				retained = next;
 				residencyDirty = true;
 			}
 		},
@@ -3880,7 +3863,6 @@ the next full prepare pass, so this may run between frames.
 			portraits = [];
 			retained?.clear();
 			retained = null;
-			retainedScratch.clear();
 			actors = [];
 			requestedAssemblies.clear();
 		}

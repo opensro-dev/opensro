@@ -95,6 +95,13 @@ type Item struct {
 	ForgeBound bool
 	// DroppedBy records the character that dropped or earned it.
 	DroppedBy string
+	// LostTo is the account whose player kill scattered these trade goods
+	// (a transport's death, or its rider's under SRO_TRADER_CARGO_DROP),
+	// "" for any other drop. Port-only, not native: job honor
+	// (game/action/jobhonor.go) scores a thief's haul only when the
+	// thief's own account dealt that kill. Memory only: a restart forgets
+	// it, as it forgets the honor runs, so restored goods score nothing.
+	LostTo string
 	// DroppedAt is when the drop hit the ground; the fixture-policy expiry
 	// sweep keys off it. The zero value means "never expires", matching the
 	// fixture, which skips entries without a timestamp.

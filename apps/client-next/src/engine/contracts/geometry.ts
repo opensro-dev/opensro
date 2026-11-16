@@ -32,6 +32,11 @@ export interface Geometry {
 	// (updatePositions). Only such meshes keep a CPU mirror of their packed
 	// vertices; every other mesh drops it once the GPU holds the bytes.
 	readonly dynamicVertices?: boolean;
+	// The caller rewrites the material uniform every frame (a material clock:
+	// equipment glow, colour timeline, texture motion, TEXTUREFACTOR pulse).
+	// Such materials share staged slabs that reach the GPU in one write a
+	// frame; any other material is written once (its rare updates still work).
+	readonly dynamicMaterial?: boolean;
 	// A skinned cloth mesh's stream slots: the vertex each entry of its cloth
 	// stream holds, in index order (cloth-stream.ts clothStreamSlots). Its
 	// skin table carries a slot map of one entry a vertex and the stream,

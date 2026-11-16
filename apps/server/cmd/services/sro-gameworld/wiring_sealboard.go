@@ -42,7 +42,7 @@ func installSealBoard(application *gameWorldApplication, gameplay *gameplayPlane
 	if err != nil {
 		return fmt.Errorf("seal board: %w", err)
 	}
-	application.sealBoard = service
+	application.ledgers.sealBoard = service
 	gameplay.items.SealDrops = service
 	log.Infof("seal board: weekly seal-drop counting ON (%s); counts in %s",
 		action.EnvSealBoard, filepath.Join(dir, sealboard.FileName))

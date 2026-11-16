@@ -24,19 +24,34 @@ const { createJournal, JOURNAL_WINDOW_MS, timelineEvents } = await import(
 const { createDiagnosticUpload } = await import( "../../src/engine/runtime/bug-report/archive.ts" );
 
 const ORIGIN = "http://127.0.0.1:5174";
+// The paths the fake page loaded code from.
+const PAGE_SCRIPTS = new Set( [
+	"/src/stall.ts",
+	"/src/frame.ts",
+	"/src/chat.ts",
+	"/src/f.ts",
+	"/assets/index-abc.js",
+	"/assets/index.js"
+] );
 
 /*
 ================
 installPage
 
-A fake page: an event-target window and the origin stacks are built from.
+A fake page: an event-target window, the origin stacks are built from and
+the scripts it loaded (PAGE_SCRIPTS, or the default lookup over a given
+document's script elements).
 ================
 */
-function installPage( t ) {
+/**
+ * @param {import("node:test").TestContext} t
+ * @param {{ document?: { scripts: { src: string }[] }, scripts?: Set<string> }} [page]
+ */
+function installPage( t, { document, scripts = PAGE_SCRIPTS } = {} ) {
 	let now = 0;
 	t.mock.method( performance, "now", () => now );
 	const saved = new Map(
-		[ "window", "location" ].map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] )
+		[ "window", "location", "document" ].map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] )
 	);
 	t.after( () => {
 		for ( const [key, descriptor] of saved ) {
@@ -47,7 +62,11 @@ function installPage( t ) {
 	const window = new EventTarget();
 	Object.defineProperty( globalThis, "window", { value: window, configurable: true } );
 	Object.defineProperty( globalThis, "location", { value: { origin: ORIGIN }, configurable: true } );
-	const journal = createJournal( /** @type {HTMLCanvasElement} */ ({}) );
+	if ( document ) Object.defineProperty( globalThis, "document", { value: document, configurable: true } );
+	const journal = createJournal(
+		/** @type {HTMLCanvasElement} */ ({}),
+		document ? {} : { scriptPaths: () => scripts }
+	);
 	t.after( () => journal.dispose() );
 	return {
 		window,
@@ -203,6 +222,7 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 				kind: "error",
 				t: -180,
 				stack: "RangeError: Maximum call stack size exceeded\n    at loop (/src/loop.ts:1:1)",
+				frames: [ "    at /src/loop.ts:1:1" ],
 				count: 31,
 				lastT: 9
 			} ]
@@ -213,30 +233,214 @@ test("the shared report keeps a kept failure's count and last time", async () =>
 	const [event] = JSON.parse( entries.get( "timeline.json" ).data.toString() ).events;
 	assert.equal( event.count, 31 );
 	assert.equal( event.lastT, 9 );
-	assert.match( event.stack, /at loop/ );
+	assert.equal( event.stack, "RangeError\n    at /src/loop.ts:1:1" );
+	assert.equal( event.frames, undefined, "the frames travel only inside the rebuilt stack" );
 });
 
-test("the shared report keeps a sanitised stack, never one carrying a URL", async () => {
-	const input = {
-		"timeline.json": JSON.stringify( {
-			events: [
-				{
-					kind: "error",
-					t: 1,
-					message: "private wording",
-					stack: "RangeError: boom\n    at stallBuy (/src/stall.ts:10:5)"
-				},
-				{ kind: "error", t: 2, stack: "Error: x\n    at f (https://example.com/src/f.ts:1:1)" }
-			]
-		} )
-	};
+/*
+================
+sharedErrors
+
+The error events of a shared report built from the given timeline events.
+================
+*/
+async function sharedErrors( events ) {
+	const input = { "timeline.json": JSON.stringify( { events } ) };
 	const blob = await createDiagnosticUpload( input, { id: "BR-TEST", clip: null, maxBytes: 2 * 1024 * 1024 } );
 	const entries = readZipEntries( await blob.arrayBuffer() );
-	const timeline = JSON.parse( entries.get( "timeline.json" ).data.toString() );
-	assert.equal( timeline.events.length, 2 );
-	assert.match( timeline.events[0].stack, /at stallBuy \(\/src\/stall\.ts:10:5\)/ );
-	assert.equal( timeline.events[0].message, undefined, "the free-text message stays on the player's machine" );
-	assert.equal( timeline.events[1].stack, undefined, "a stack still carrying a URL scheme stays behind" );
+	return JSON.parse( entries.get( "timeline.json" ).data.toString() ).events;
+}
+
+/*
+================
+sharedThrow
+
+Throws value on a fake page that loaded PAGE_SCRIPTS and returns the
+journal's record and its shared copy.
+================
+*/
+async function sharedThrow( t, value, message ) {
+	const page = installPage( t );
+	const event = new Event( "error" );
+	Object.assign( event, { error: value, message } );
+	page.window.dispatchEvent( event );
+	const [record] = page.errors();
+	const [shared] = await sharedErrors( [ { ...record, t: 1 } ] );
+	return { record, shared };
+}
+
+/*
+================
+withStack
+
+An error of the given class and message carrying stack, as an engine
+would have written it.
+================
+*/
+function withStack( ErrorClass, message, stack ) {
+	const error = new ErrorClass( message );
+	error.stack = stack;
+	return error;
+}
+
+test("the shared report keeps a stack's frames but never the thrown free text", async t => {
+	const error = withStack(
+		RangeError,
+		"private wording",
+		`RangeError: private wording\n    at stallBuy (${ORIGIN}/src/stall.ts:10:5)`
+	);
+	const { shared } = await sharedThrow( t, error, error.message );
+	assert.equal( shared.stack, "RangeError\n    at /src/stall.ts:10:5" );
+	assert.equal( shared.errorClass, "RangeError" );
+	assert.equal( shared.message, undefined, "the free-text message stays on the player's machine" );
+});
+
+test("a frame keeps only its path, line and column; other origins and blobs stay behind", async t => {
+	const error = withStack(
+		RangeError,
+		"Maximum call stack size exceeded",
+		"RangeError: Maximum call stack size exceeded\n" +
+			`    at walk (${ORIGIN}/assets/index-abc.js?v=7:1:2345)\n` +
+			`    at step (blob:${ORIGIN}/0f3c-11aa:9:8)\n` +
+			"    at lure (https://elsewhere.example/assets/index-abc.js:5:6)\n" +
+			"    at async Promise.all (index 0)\n" +
+			`    at run (${ORIGIN}/assets/index.js#top:3:4)`
+	);
+	const { shared } = await sharedThrow( t, error, error.message );
+	assert.equal( shared.errorClass, "RangeError" );
+	assert.equal( shared.message, "Maximum call stack size exceeded", "an engine text names the failure" );
+	assert.equal(
+		shared.stack,
+		"RangeError: Maximum call stack size exceeded\n    at /assets/index-abc.js:1:2345\n    at /assets/index.js:3:4"
+	);
+});
+
+test("a deep stack keeps its first twelve frames", async t => {
+	const lines = Array.from( { length: 40 }, ( _, i ) => `    at f${i} (${ORIGIN}/src/f.ts:${i + 1}:1)` );
+	const error = withStack( RangeError, "x", [ "RangeError: x", ...lines ].join( "\n" ) );
+	const { shared } = await sharedThrow( t, error, error.message );
+	const kept = shared.stack.split( "\n" );
+	assert.equal( kept.length, 13 );
+	assert.equal( kept[1], "    at /src/f.ts:1:1" );
+	assert.equal( kept[12], "    at /src/f.ts:12:1" );
+});
+
+test("a multi-line message never ships a line as a frame, even one with an @", async t => {
+	const message = "chat said hi\nmeet me at a@b.c\nfoo@bar.baz";
+	const error = withStack( TypeError, message, `TypeError: ${message}\n    at send (${ORIGIN}/src/chat.ts:4:2)` );
+	const { shared } = await sharedThrow( t, error, message );
+	assert.equal( shared.stack, "TypeError\n    at /src/chat.ts:4:2" );
+});
+
+test("a headerless Firefox stack keeps its frames, and only its frames", async t => {
+	const error = withStack(
+		Error,
+		"too much recursion",
+		`walk@${ORIGIN}/assets/index.js?v=3:1:200\nstep@${ORIGIN}/assets/index.js:9:8\nmeet me at a@b.c\n`
+	);
+	const { shared } = await sharedThrow( t, error, error.message );
+	assert.equal( shared.errorClass, undefined, "Firefox names no class in its stack" );
+	assert.equal(
+		shared.stack,
+		"Error: too much recursion\n    at /assets/index.js:1:200\n    at /assets/index.js:9:8"
+	);
+});
+
+test("a local file frame is no page script and stays behind", async t => {
+	const error = withStack(
+		RangeError,
+		"x",
+		"RangeError: x\n    at walk (file:///C:/Users/someone/game/index.js:1:2)"
+	);
+	const { shared } = await sharedThrow( t, error, error.message );
+	assert.equal( shared.stack, undefined );
+});
+
+// opensro-web2-claude's review probes on #3702, kept as written.
+test("review probe: a message line shaped like a V8 frame never ships", async t => {
+	const message = "parse failed\n    at PLAYER TEXT HERE:1:2";
+	const error = withStack( TypeError, message, `TypeError: ${message}\n    at send (${ORIGIN}/src/chat.ts:4:2)` );
+	const { shared } = await sharedThrow( t, error, message );
+	assert.equal( shared.stack, "TypeError\n    at /src/chat.ts:4:2" );
+});
+
+test("review probe: a message cut at a newline after the throw never ships its frame-shaped tail", async t => {
+	const message = "parse failed\n    at PLAYER TEXT HERE:1:2\n    at MORE PLAYER TEXT:3:4";
+	const error = withStack( TypeError, message, `TypeError: ${message}\n    at send (${ORIGIN}/src/chat.ts:4:2)` );
+	error.message = "parse failed";
+	const { shared } = await sharedThrow( t, error, error.message );
+	assert.equal( shared.stack, "TypeError\n    at /src/chat.ts:4:2" );
+});
+
+test("a message line naming a page script ships its location, never its words", async t => {
+	const message = `hi\n    at PLAYER WORDS (${ORIGIN}/src/chat.ts:7:8)`;
+	const error = withStack( TypeError, message, `TypeError: ${message}\n    at send (${ORIGIN}/src/chat.ts:4:2)` );
+	const { shared } = await sharedThrow( t, error, message );
+	assert.ok( !/PLAYER|WORDS|hi/.test( shared.stack ), shared.stack );
+	assert.ok(
+		shared.stack.split( "\n" ).slice( 1 ).every( line => /^ {4}at \/src\/chat\.ts:\d+:\d+$/.test( line ) ),
+		shared.stack
+	);
+});
+
+test("a plain object carrying a stack ships only page-script locations", async t => {
+	const value = { stack: `Error: x\n    at PLAYER TEXT HERE:1:2\n    at send (${ORIGIN}/src/chat.ts:4:2)` };
+	const { record, shared } = await sharedThrow( t, value, "x" );
+	assert.match( String( record?.stack ), /PLAYER TEXT/, "the local journal keeps it whole" );
+	assert.equal( shared.stack, "Error\n    at /src/chat.ts:4:2" );
+});
+
+test("an error renamed with a newline never ships the name's second line", async t => {
+	const error = withStack(
+		TypeError,
+		"boom",
+		`TypeError\n    at PLAYER TEXT HERE:1:2: boom\n    at send (${ORIGIN}/src/chat.ts:4:2)`
+	);
+	error.name = "TypeError\n    at PLAYER TEXT HERE:1:2";
+	const { shared } = await sharedThrow( t, error, "boom" );
+	assert.equal( shared.stack, "TypeError\n    at /src/chat.ts:4:2" );
+});
+
+test("the shared copy never parses a stack: an event without the journal's frames ships none", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 7,
+		stack: "TypeError: x\n    at send (/src/chat.ts:4:2)"
+	} ] );
+	assert.equal( event.stack, undefined );
+	assert.equal( event.errorClass, "TypeError" );
+});
+
+test("the shared copy drops a frame that is not the journal's shape", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 8,
+		stack: "TypeError: x",
+		frames: [ "    at PLAYER TEXT HERE:1:2", "    at send (/src/chat.ts:4:2)", "    at /src/chat.ts:4:2" ]
+	} ] );
+	assert.equal( event.stack, "TypeError\n    at /src/chat.ts:4:2" );
+});
+
+test("by default the page's own script elements name its scripts", t => {
+	const page = installPage( t, { document: { scripts: [ { src: `${ORIGIN}/assets/index-abc.js` }, { src: "" } ] } } );
+	throwNow(
+		page,
+		withStack(
+			RangeError,
+			"x",
+			`RangeError: x\n    at a (${ORIGIN}/assets/index-abc.js:1:2)\n    at b (${ORIGIN}/assets/other.js:3:4)`
+		)
+	);
+	const [record] = page.errors();
+	assert.deepEqual( record?.frames, [ "    at /assets/index-abc.js:1:2" ] );
+});
+
+test("a thrown non-error shares neither a class nor a message", async () => {
+	const [event] = await sharedErrors( [ { kind: "error", t: 4, message: "a player wrote this" } ] );
+	assert.equal( event.errorClass, undefined );
+	assert.equal( event.message, undefined );
+	assert.equal( event.stack, undefined );
+	assert.equal( event.kind, "error" );
 });
 
 test("dispose disconnects the error capture", t => {

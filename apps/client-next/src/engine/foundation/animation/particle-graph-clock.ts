@@ -13,7 +13,8 @@ tick simulation itself stays in particle-graph.ts.
 ===========================================================================
 */
 
-import type { ParticleEmitter, ParticleGraphState } from "@/engine/foundation/animation/particle-graph";
+import type { ParticleEmitter } from "@/engine/foundation/animation/particle-graph";
+import type { ParticleGraphState } from "@/engine/foundation/animation/particle-graph-slots";
 import { PARTICLE_TICKS_PER_SECOND } from "@/engine/foundation/animation/particle-presentation";
 
 // The replayed window of a late-started graph, in longest root-to-leaf

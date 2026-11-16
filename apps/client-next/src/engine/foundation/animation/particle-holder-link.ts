@@ -143,7 +143,7 @@ export function rootTickShift(
 	delta: ArrayLike<number>,
 	origin: ArrayLike<number>,
 	position: ArrayLike<number>,
-	out: number[]
+	out: Float64Array | number[]
 ): void {
 	const x = previous[0]! - origin[0]!, y = previous[1]! - origin[1]!, z = previous[2]! - origin[2]!;
 	for ( let axis = 0; axis < 3; axis++ ) {

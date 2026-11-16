@@ -190,6 +190,9 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
+	// The Experimental "Fit window labels" row; absent reads as off (a
+	// window's admission fits its text with it, ui-glyphs resolveTextOverlaps).
+	fitWindowLabels?(): boolean;
 }
 
 /*
@@ -206,6 +209,7 @@ export interface UiAuthoredFrame extends UiFrame {
 	readonly text: UiFrame["text"] & {
 		run( value: string, fontStyle?: number, fontIndex?: number ): { width: number; };
 		extentHeight( index?: number, style?: number ): number;
+		lineInk( index?: number, style?: number ): { top: number; height: number; };
 		guide(
 			tokens: readonly GuideToken[],
 			rect: UiRect,

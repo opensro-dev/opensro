@@ -199,6 +199,10 @@ export function uiFixture(
 			scenes.at( -1 )?.quads.filter( q => q.texture === fontAtlas.image ).map( q => q.uv.join( "," ) ) ?? [];
 		return actual.some( ( _, start ) => pattern.every( ( uv, i ) => actual[start + i] === uv ) );
 	}
+	// The semantics the HUD last returned: what the platform bridge holds.
+	// A step returns semantics only when they changed, so a test reading the
+	// current controls after a pixel-only change reads them here.
+	let presented = null;
 	/*
 	================
 	checkedStep
@@ -209,6 +213,7 @@ export function uiFixture(
 	function checkedStep( state, now ) {
 		const result = ui.step( state, now );
 		if ( result ) {
+			presented = result;
 			const ids = result.controls.map( control => control.id );
 			assert.equal(
 				new Set( ids ).size,
@@ -238,6 +243,7 @@ export function uiFixture(
 			}
 		},
 		hasText,
+		presented: () => presented,
 		scenes,
 		products,
 		textures,

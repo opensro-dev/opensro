@@ -195,6 +195,10 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
+	// Port-only, not native: the Christmas event's snow and town
+	// decoration (progression/christmas.go). Off is native.
+	{Env: "SRO_CHRISTMAS_EVENT", NomadVar: "christmas_event", Default: "off"},
+	{Env: "SRO_CHRISTMAS_EVENT_WINDOW", NomadVar: "christmas_event_window", Default: ""},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_MALL_STARTER_SILK", NomadVar: "mall_starter_silk", Default: "700"},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -269,6 +273,12 @@ var Settings = []Setting{
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
+	// The market escrow (opensro#3529, opensro-web#148; port-only, not
+	// native; "off" serves no market route and writes no market row).
+	{Env: "SRO_CONSIGNMENT", NomadVar: "consignment", Default: "off"},
+	// The referral system (#3518, port-only, not native; "off" serves no
+	// referral route and pays nothing, which is native).
+	{Env: "SRO_REFERRALS", NomadVar: "referrals", Default: "off"},
 	// The Devil's Spirit's fifth avatar socket (#3456, port-only, not
 	// native; "off" is native: avatar storage keeps four slots). The same
 	// switch imports the Spirit's item rows at build time.
@@ -326,6 +336,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
 	// Moon and Sun drops per job alias. Off is native: nothing counts.
 	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
+	// Owner, 2026-11-15 (#3530 spec): job honor points, a shared account
+	// cap and daily tiers. Port-only; off is native: nothing scores.
+	{Env: "SRO_JOB_HONOR", NomadVar: "job_honor", Default: "off"},
 	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
