@@ -143,3 +143,28 @@ func TestWindowsFollowTheWarSchedule(t *testing.T) {
 		t.Fatal("a nil lane listed windows")
 	}
 }
+
+/*
+================
+TestHoldingsReadTheLiveFortressTable
+
+The site's fortress rows follow the authority: unclaimed until a guild
+occupies it, then that guild with the rate it set.
+================
+*/
+func TestHoldingsReadTheLiveFortressTable(t *testing.T) {
+	lane, authority, _ := laneFixture(t)
+	if got := lane.Holdings(); len(got) != 1 || got[0] != (Holding{CodeName: "FORTRESS_JANGAN"}) {
+		t.Fatalf("unclaimed holdings %+v", got)
+	}
+	if !authority.Occupy("d", 1, 42) || !authority.SetTaxRate("d", 1, -5) {
+		t.Fatal("occupy or tax refused")
+	}
+	if got := lane.Holdings(); len(got) != 1 || got[0] != (Holding{CodeName: "FORTRESS_JANGAN", GuildID: 42, TaxRate: -5}) {
+		t.Fatalf("held holdings %+v", got)
+	}
+	var none *Lane
+	if none.Holdings() != nil {
+		t.Fatal("a nil lane serves fortresses")
+	}
+}
