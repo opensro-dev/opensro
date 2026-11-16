@@ -85,7 +85,8 @@ plus the metrics snapshots and the CPU profile beside it.
 */
 func runChurn(cfg runConfig, opts churnOptions, acct botAccount, outDir string) (churnSummary, error) {
 	summary := churnSummary{Account: acct.ID, RatePerSecond: opts.rate, Stages: map[string]int{}}
-	if opts.rate <= 0 || opts.rate > maxChurnRate || opts.duration <= 0 {
+	// Written as one positive range test so a NaN rate fails it too.
+	if !(opts.rate > 0 && opts.rate <= maxChurnRate) || opts.duration <= 0 {
 		return summary, fmt.Errorf("churn needs a rate in (0, %d] a second and a positive duration", maxChurnRate)
 	}
 	dir := filepath.Join(outDir, "churn")
