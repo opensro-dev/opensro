@@ -663,6 +663,16 @@ type Runtime struct {
 	// client build; progression/christmas.go): its event snow and the
 	// towns' decoration. The zero value is off.
 	Christmas progression.ChristmasEvent
+	// SoOkChristmas is So-Ok's Christmas Gift, the December 2006 event
+	// (port-only, not native; progression/sook_christmas.go). It shares
+	// the Christmas switch and window, in its own mode, so it never runs
+	// beside Christmas. The zero value is off.
+	SoOkChristmas progression.SoOkChristmas
+	// sookChristmasGroups and sookChristmasSnow are its window and
+	// snowfall states advanceEventGroups last saw; tick goroutine only.
+	sookChristmasGroups, sookChristmasSnow eventGroupWatch
+	// pandora is the open Pandora's Boxes (pandorabox.go; port-only).
+	pandora pandoraBoxes
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.

@@ -24,7 +24,8 @@ import (
 ================
 walkUntilGroundTerminal
 
-Ticks the ground walk until it publishes its terminal frames.
+Ticks the ground walk until it ends, returning what its end published:
+nothing for a native arrival (simulation/position_stream.go).
 ================
 */
 func walkUntilGroundTerminal(t *testing.T, rt *Runtime, character *enterworld.Character, fromMs int64) ([]simulation.DivisionFrames, int64) {
@@ -33,7 +34,7 @@ func walkUntilGroundTerminal(t *testing.T, rt *Runtime, character *enterworld.Ch
 		setDirectionClock(rt, now)
 		// Reading the world plane runs its ground steps.
 		directionWorld(rt, character)
-		if frames := rt.GroundTickHook()(now); len(frames) > 0 {
+		if frames := rt.GroundTickHook()(now); len(frames) > 0 || !directionWorld(rt, character).GroundActive() {
 			return frames, now
 		}
 	}
@@ -81,8 +82,8 @@ func TestTraderStopsPastTheTransportRange(t *testing.T) {
 		t.Fatalf("walking back: %v", outcome.Refusal)
 	}
 	terminal, _ = walkUntilGroundTerminal(t, rt, character, now)
-	if len(terminal) != 1 || terminal[0].Frames[0].Opcode != wire.OpObjectSourceCorrection {
-		t.Fatalf("walking back ended with %+v, want only the arrival", terminal)
+	if len(terminal) != 0 {
+		t.Fatalf("walking back ended with %+v, want the native arrival's silence", terminal)
 	}
 	if rest := directionWorld(rt, character).Spawn; rest.X != 0 {
 		t.Fatalf("walking back stopped at %+v, want its goal", rest)
@@ -95,8 +96,23 @@ TestUntetheredTraderWalksAway
 ================
 */
 func TestUntetheredTraderWalksAway(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		untetheredTraderWalksAway(t, stream)
+	}
+}
+
+/*
+================
+untetheredTraderWalksAway
+
+The walk reaches its goal; only the port-only position stream announces
+the arrival.
+================
+*/
+func untetheredTraderWalksAway(t *testing.T, stream bool) {
 	character := clipTestCharacter()
 	rt := testRuntime(character)
+	rt.PositionStream = stream
 	rt.EnableGroundWalk()
 	anchor := simulation.Spawn{RegionID: 0x6B4F, X: 30 - 995, Z: 110}
 	key := simulation.WorldKey("0", character.Name)
@@ -109,8 +125,12 @@ func TestUntetheredTraderWalksAway(t *testing.T) {
 		t.Fatalf("admission: %v", outcome.Refusal)
 	}
 	terminal, _ := walkUntilGroundTerminal(t, rt, character, testStartMs)
-	if len(terminal) != 1 {
-		t.Fatalf("frames %+v, want only the arrival", terminal)
+	want := 0
+	if stream {
+		want = 1
+	}
+	if len(terminal) != want {
+		t.Fatalf("position stream %v: frames %+v, want %d (the arrival only with the stream)", stream, terminal, want)
 	}
 	if rest := directionWorld(rt, character).Spawn; rest.X != 400 {
 		t.Fatalf("an untethered trader stopped at %+v", rest)

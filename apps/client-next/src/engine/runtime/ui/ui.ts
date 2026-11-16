@@ -7432,6 +7432,10 @@ export function createUi( ports: UiPorts ) {
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "scroll" && panel === "Map" && mapHud.scroll( event ) ) {
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
 				dirty = true;
@@ -22514,7 +22518,11 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
-					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// Only a companion's owner plate reads its owner; a scan of
+					// every row per player board was the HUD's largest cost.
+					const ownerEntity = entity.kind === "cos" ?
+						next.entities.find( owner => owner.gid === entity.ownerGid ) :
+						undefined;
 					// 854BB8: with no guild record the soldier's row keeps the
 					// owner's name colour, so the label colour is passed only
 					// when the owner actually has a guild (another player by

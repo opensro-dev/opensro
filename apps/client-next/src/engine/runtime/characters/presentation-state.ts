@@ -175,7 +175,7 @@ export function createPresentationState() {
 				enterDeath( entry, shownDead, {
 					previousMask: state?.actionMask ?? 0,
 					deathModel: deathModels.has( resource.codename ),
-					deathLoop: resource.clips.includes( "deathLoop" ) || resource.clips.includes( "deathloop" ),
+					deathLoop: resource.clipFacts.loopsDeath,
 					uncensored
 				} );
 				if ( shownDead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
@@ -236,7 +236,7 @@ export function createPresentationState() {
 							};
 						} else if (
 							action !== null && !moving && !castByActor.has( entity.gid ) &&
-							resource.clips.includes( `emote${action}` )
+							resource.clipFacts.names.has( `emote${action}` )
 						) {
 							entry.posture = transitionPosture( entry.posture, {
 								kind: "emote",

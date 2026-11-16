@@ -112,3 +112,59 @@ type MarketSale struct {
 	Fee          int64  `json:"fee"`
 	AtMs         int64  `json:"atMs"`
 }
+
+/*
+================
+MarketListRequest
+
+One listing: from the warehouse (Character nil, the website) or from a
+character's bag (the game, on the action lane). Admit is the trade rule
+(the exchange's: RefObjCommon CanTrade, not forge-bound, not a summoned
+pet); the store knows no item references, so the caller supplies it.
+================
+*/
+type MarketListRequest struct {
+	Division  string
+	Account   string
+	Character *Character
+	Slot      int64
+	Currency  string
+	Price     int64
+	Admit     func(InventoryRow) error
+	Rules     MarketRules
+}
+
+/*
+================
+MarketBuyRequest
+
+A buy names the listing and the version the buyer saw. A gold listing is
+paid from Payer, one of the buyer's characters; a Silk listing from the
+buyer's purchased Silk. The caller makes sure a website buy's Payer is
+offline (game/market), since its record is then the store's alone.
+================
+*/
+type MarketBuyRequest struct {
+	ListingID    int64
+	Version      int64
+	BuyerAccount string
+	Payer        *Character
+	Rules        MarketRules
+}
+
+/*
+================
+MarketQuery
+
+Which open listings a search wants. Codenames, when given, narrows the
+search to those items (the caller resolves a category or a name to
+codenames from the item references).
+================
+*/
+type MarketQuery struct {
+	Division  string
+	Currency  string
+	Codenames []string
+	Limit     int
+	Offset    int
+}

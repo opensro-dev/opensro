@@ -409,11 +409,17 @@ func (rt *Runtime) RemoveExpiredEventItems(character *enterworld.Character) bool
 Runtime.RemoveExpiredHalloweenBoxes
 
 Once a configured window has ended, every remaining box leaves the
-character (removeEventItems).
+character (removeEventItems). So-Ok's Christmas Gift trades the same box
+(port-only, sook_christmas.go): while either event runs the boxes stay,
+and the end of either window retires them once neither runs.
 ================
 */
 func (rt *Runtime) RemoveExpiredHalloweenBoxes(character *enterworld.Character) bool {
-	if character == nil || !rt.Halloween.CleanupDueAt(rt.Now()) {
+	now := rt.Now()
+	if character == nil || rt.Halloween.ActiveAt(now) || rt.SoOkChristmas.ActiveAt(now) {
+		return false
+	}
+	if !rt.Halloween.CleanupDueAt(now) && !rt.SoOkChristmas.BoxesExpireAt(now) {
 		return false
 	}
 	return removeEventItems(character, progression.HalloweenBoxCodename)
