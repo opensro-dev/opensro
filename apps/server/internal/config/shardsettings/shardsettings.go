@@ -172,6 +172,12 @@ var Settings = []Setting{
 	// (#3270). Build and server read the same switch; off leaves
 	// every imported row out of the build and the population unread.
 	{Env: "SRO_HUNTING2", NomadVar: "hunting2", Default: "off", Catalogue: true},
+	// Port-only, not native: the Styria Clash arena map (#3272): its four
+	// regions' terrain and navmesh from the v1.696 client. Build only for
+	// now: no server code reads it until the Battle Arena engine (#3648)
+	// lands behind the same switch. Not a catalogue setting: the map
+	// adds no monsters or worlds. "off" is native.
+	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of

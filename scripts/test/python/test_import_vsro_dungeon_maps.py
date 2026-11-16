@@ -97,7 +97,8 @@ class DungeonMapSignTests(unittest.TestCase):
 		label = rows[0]["labels"][0]
 		self.assertEqual(label["text"], "English A")
 		self.assertEqual((label["x"], label["y"]), (120, 34))
-		self.assertEqual(label["font"], 16)
+		# The font is cell 14; cell 13 before it is not the font (#3514).
+		self.assertEqual(label["font"], 9)
 		self.assertEqual(label["color"], [255, 128, 0])
 		self.assertEqual(rows[0]["signs"], [])
 

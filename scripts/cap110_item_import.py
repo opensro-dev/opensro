@@ -27,7 +27,7 @@ import cap110_items as items
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
-from sro_paths import EXTRACTED_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, REPO_ROOT, trees_overlap
 
 FLAG = "SRO_CAP110_ITEMS"
 REPORT_NAME = ".opensro-cap110-items.json"
@@ -87,6 +87,27 @@ def resource_dependencies(requests):
 	if len(dependencies) != len(requests):
 		raise ValueError("resource parser response count mismatch")
 	return dependencies
+
+
+# ================
+# tolerant_dependencies
+#
+# resource_dependencies for a batch that may hold files the audit cannot
+# parse. One such file fails its whole batch, so a failing batch is split
+# in halves until each failure is a single request: k bad files in n cost
+# about 2k*log2(n) parser runs, where one run per request cost n (the
+# v1.696 Arabia closure spent about 170 s of its 5 minutes that way, two
+# bad files in a batch of hundreds). Returns one entry per request, in
+# request order: its dependency list, or the ValueError its own run raised.
+# ================
+def tolerant_dependencies(requests):
+	try:
+		return resource_dependencies(requests)
+	except ValueError as error:
+		if len(requests) <= 1:
+			return [error] * len(requests)
+	middle = len(requests) // 2
+	return tolerant_dependencies(requests[:middle]) + tolerant_dependencies(requests[middle:])
 
 
 # ================
@@ -175,7 +196,7 @@ def copy_resource_closure(pending, native, output, archives):
 # ================
 def add_items(vsro_root, native, output):
 	native, output = native.resolve(), output.resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("item output must be separate from the native extraction")
 	marker = output / REPORT_NAME
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

@@ -93,6 +93,7 @@ var catalogueExempt = map[string]string{
 	"SRO_PET_PACING":                           "pet movement speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_PET_INVENTORY_PAGES":                  "a pet's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_FORT_CONSTANTINOPLE":                  "the Constantinople fortress's registration and structures at runtime; the catalogue publishes no fortress state",
+	"SRO_STYRIA_CLASH":                         "a build input that merges the arena's terrain and navmesh into the client map; the catalogue publishes no regions or arena state",
 	"SRO_GRAB_PET_INVENTORY_PAGES":             "a grab pet's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_TRANSPORT_PET_INVENTORY_PAGES":        "a transport's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_CHAT_ITEM_LINKS":                      "chat behaviour at runtime; the catalogue publishes no chat",

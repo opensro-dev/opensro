@@ -96,6 +96,7 @@ from arabia_gates import prepare_gates  # noqa: E402
 from prepare_client_resources import write_atomically  # noqa: E402
 from skytemple_import import (  # noqa: E402
 	copy_resource_closure,
+	copy_sector_navmesh,
 	later_object_texts,
 	merge_object_catalog_remap,
 	o2_object_ids,
@@ -105,7 +106,7 @@ from skytemple_import import (  # noqa: E402
 	source_root,
 	verify_archives,
 )
-from sro_paths import MAIN_CHECKOUT_ROOT  # noqa: E402
+from sro_paths import MAIN_CHECKOUT_ROOT, trees_overlap  # noqa: E402
 
 FLAG = "SRO_ARABIA"
 SOURCE_ENV = "SRO_V1696_ROOT"
@@ -484,7 +485,7 @@ def arabia_resource_closure(seeds, archives, native, output):
 # ================
 def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_closure):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("arabia output must be separate from the native extraction")
 	marker = output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
@@ -846,17 +847,7 @@ def add_arabia(native, output, source=None, nests=None, closure=arabia_resource_
 			archive_hashes["Particles"] = tables.sha256_of(particles)
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
-			for sector_x, sector_y in sectors:
-				nav = tables.navmesh_path(sector_x, sector_y)
-				entry = data_index.get(nav)
-				if entry is None:
-					raise ValueError(f"v1.696 Data.pk2 has no {nav}")
-				target = output / "Data_extracted" / "navmesh" / Path(nav).name
-				stored = sro_pk2.payload(data, entry)
-				if target.exists() and target.read_bytes() == stored:
-					continue
-				variant.replace_file(target, stored)
-				copied.append("Data_extracted/" + nav)
+			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):

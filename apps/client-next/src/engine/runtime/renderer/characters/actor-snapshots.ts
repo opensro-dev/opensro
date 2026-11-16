@@ -146,6 +146,7 @@ export function createActorSnapshots() {
 			undefined;
 		target.animationLod = source.animationLod ? { ...source.animationLod } : undefined;
 		target.deferredParticle = source.deferredParticle ? { ...source.deferredParticle } : undefined;
+		target.holderVisible = source.holderVisible;
 		target.modifierId = source.modifierId;
 		target.groundItem = source.groundItem;
 		target.dungeonBlock = source.dungeonBlock;
