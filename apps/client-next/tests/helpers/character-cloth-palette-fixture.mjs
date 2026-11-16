@@ -29,7 +29,7 @@ const { identity } = await import( "../../src/engine/foundation/rendering/world-
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 const { createGeometryResources } = await import( "../../src/engine/runtime/renderer/device/geometry.ts" );
 const { skinClothVertex } = await import( "../../src/engine/foundation/animation/cloth-skin.ts" );
-const { CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL } = await import(
+const { CLOTH_STREAM_WORDS, STREAM_POSITION, STREAM_NORMAL, CLOTH_NO_SLOT } = await import(
 	"../../src/engine/foundation/animation/cloth-stream.ts"
 );
 const { packGeometryVertices } = await import( "../../src/engine/foundation/rendering/geometry-vertices.ts" );
@@ -202,9 +202,14 @@ function captureGeometry( tags, gpuAvailable, gpuTakes ) {
 				bones: source.bones?.slice(),
 				offsets: offsets?.slice(),
 				capturedVertices: undefined,
-				// A skinned cloth draw's mesh and the stream its owner wrote.
+				// A skinned cloth draw's mesh, its slot map and the stream its
+				// owner wrote, one entry a slot.
 				cloth: source.clothStream ?
-					{ geometry: source, stream: new Uint32Array( source.positions.length / 3 * CLOTH_STREAM_WORDS ) } :
+					{
+						geometry: source,
+						map: slotMap( source.clothStream, source.positions.length / 3 ),
+						stream: new Uint32Array( source.clothStream.length * CLOTH_STREAM_WORDS )
+					} :
 					undefined,
 				fade: undefined,
 				appearance: undefined,
@@ -429,18 +434,32 @@ function captureGeometry( tags, gpuAvailable, gpuTakes ) {
 
 /*
 ================
+slotMap
+
+Each vertex's stream slot, or CLOTH_NO_SLOT, from the slots of an upload's
+clothStream, as the device's slot map holds them.
+================
+*/
+function slotMap( slots, count ) {
+	const map = new Uint32Array( count ).fill( CLOTH_NO_SLOT );
+	slots.forEach( ( vertex, slot ) => map[vertex] = slot );
+	return map;
+}
+
+/*
+================
 clothVertices
 
 A skinned cloth draw's vertices as its vertex shader composes them: each
-vertex skinned by its palette, except where the cloth stream says the
-solver owns the position or the normal.
+vertex skinned by its palette, except where its slot's cloth stream entry
+says the solver owns the position or the normal.
 ================
 */
 function clothVertices( draw ) {
-	const { geometry, stream } = draw.cloth, floats = new Float32Array( stream.buffer );
+	const { geometry, map, stream } = draw.cloth, floats = new Float32Array( stream.buffer );
 	const vertices = packGeometryVertices( geometry ), skin = new Float64Array( 6 );
 	for ( let i = 0; i < geometry.positions.length / 3; i++ ) {
-		const entry = i * CLOTH_STREAM_WORDS, flags = stream[entry + 3];
+		const entry = map[i] * CLOTH_STREAM_WORDS, flags = map[i] === CLOTH_NO_SLOT ? 0 : stream[entry + 3];
 		skinClothVertex( geometry, draw.bones, i, skin );
 		for ( let axis = 0; axis < 3; axis++ ) {
 			vertices[i * 14 + axis] = flags & STREAM_POSITION ? floats[entry + axis] : skin[axis];

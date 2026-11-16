@@ -480,7 +480,7 @@ export interface GeometryCommands {
 	// Writes a packed vertex stream (14 floats a vertex) at vertex base of a
 	// dynamicVertices draw: a terrain layer member taking its slot.
 	writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
-	// Writes cloth stream entries (cloth-stream.ts) from vertex first on, into
+	// Writes cloth stream entries (cloth-stream.ts) from slot first on, into
 	// a draw uploaded with clothStream.
 	writeClothStream( draw: GeometryDraw, first: number, entries: Uint32Array ): void;
 	// Writes a packed vertex stream at vertex base of any draw, keeping no CPU

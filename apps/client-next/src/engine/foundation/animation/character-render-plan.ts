@@ -53,8 +53,8 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
 	// Store two scalars instead of a model-by-actor table. Emitted slots scale
 	// with the padded actor capacity too. Ribbons retain their exact capacity.
-	const one = exactCapacity ? 0 : characterBatchBytes( model, 1 ),
-		two = exactCapacity ? 0 : characterBatchBytes( model, 2 ),
+	const one = exactCapacity ? 0 : characterBatchBytes( model, 1, caches ),
+		two = exactCapacity ? 0 : characterBatchBytes( model, 2, caches ),
 		base = one * 2 - two,
 		stride = two - one;
 	return {
@@ -111,7 +111,7 @@ export function createCharacterRenderPlan( model: CharacterModel, caches?: Chara
 			return count === 0 ?
 				0 :
 				exactCapacity ?
-				characterBatchBytes( model, count ) :
+				characterBatchBytes( model, count, caches ) :
 				base + stride * 2 ** Math.ceil( Math.log2( count ) );
 		}
 	};

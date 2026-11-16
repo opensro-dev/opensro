@@ -477,13 +477,14 @@ fn waterBumpOffset(uv:vec2f)->vec2f{
 struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
- // A cloth draw marks its instances with its stream base (opacity.w,
- // cloth-stream.ts): a vertex the solver owns takes the stream's position or
- // normal, every other vertex is skinned. Cloth keeps vss0's unnormalized
- // normal, as when the CPU skinned it.
+ // A cloth draw marks its instances with its vertex count V (opacity.w,
+ // geometry.ts markCloth): a vertex's slot map entry (V + vertex) names its
+ // stream slot, whose entry (2V + slot, cloth-stream.ts) says whether the
+ // solver owns its position or normal; every other vertex is skinned. Cloth
+ // keeps vss0's unnormalized normal, as when the CPU skinned it.
  let cloth=u32(instances[i].opacity.w);
  if(material.skin.x!=0){let v=skinVertices[vertex];let base=select(select(i*u32(abs(material.skin.x)),0u,material.skin.x<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);let skin=bones[base+v.joints.x]*v.weights.x+bones[base+v.joints.y]*v.weights.y+bones[base+v.joints.z]*v.weights.z+bones[base+v.joints.w]*v.weights.w;p=skin*p;n=skin*n;
-  if(cloth>0u){let c=skinVertices[cloth+vertex];if((c.joints.w&1u)!=0u){p=vec4f(bitcast<vec3f>(c.joints.xyz),1);}if((c.joints.w&2u)!=0u){n=vec4f(c.weights.xyz,0);}}}
+  if(cloth>0u){let slot=skinVertices[cloth+vertex].joints.x;if(slot!=0xffffffffu){let c=skinVertices[2u*cloth+slot];if((c.joints.w&1u)!=0u){p=vec4f(bitcast<vec3f>(c.joints.xyz),1);}if((c.joints.w&2u)!=0u){n=vec4f(c.weights.xyz,0);}}}}
  o.worldY=(instance*p).y;
  o.worldXZ=(instance*p).xz;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));o.uv=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
  // Undo only projection scaling to recover the native camera-space position.

@@ -70,6 +70,7 @@ import {
 	CHARACTER_ACTORS,
 	CHARACTER_RENDER_BYTES,
 	CHARACTER_RESIDENT_BYTES,
+	characterClothSlots,
 	createCharacterPlanCaches
 } from "@/engine/foundation/animation/character-budget";
 import { multiply } from "@/engine/foundation/math/pose-math";
@@ -2528,6 +2529,9 @@ the next full prepare pass, so this may run between frames.
 		const primitive = group.model.primitives[p]!;
 		const authored = group.modifierClocks?.[p]?.material ?? primitive.geometry.material,
 			base = authored!;
+		// A skinned cloth draw's slot map follows its stream's slots: drawCloth
+		// makes the stream first.
+		const clothSlots = group.batch.clothStreams?.get( p )?.slots;
 		return frame.geometry.upload(
 			{
 				...primitive.geometry,
@@ -2553,7 +2557,7 @@ the next full prepare pass, so this may run between frames.
 				// stream (drawCloth); an unskinned one keeps CPU vertices.
 				...(primitive.cloth ?
 					primitive.geometry.joints && primitive.geometry.weights ?
-						{ clothStream: true } :
+						{ clothStream: clothSlots } :
 						{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
 					{}),
 				transform: preview ? view! : identity()
@@ -2677,6 +2681,12 @@ the next full prepare pass, so this may run between frames.
 		// A skinned piece of a shared-palette batch reads the body's palette
 		// stream, which the GPU may sample (writeBatchRows).
 		const stream = skinned ? batch.streams?.streams[p] : undefined;
+		let cloth = skinned ? batch.clothStreams?.get( p ) : undefined;
+		if ( skinned && !cloth ) {
+			// Every wearer of the mesh shares its slot list with the plan.
+			cloth = createClothStream( primitive, clothRandom, characterClothSlots( primitive.cloth!, planCaches ) );
+			(batch.clothStreams ??= new Map()).set( p, cloth );
+		}
 		let draw = batch.draws[p];
 		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights ||
 			stream?.mappingChanged;
@@ -2694,13 +2704,7 @@ the next full prepare pass, so this may run between frames.
 		}
 		batch.draws[p] = draw;
 		const palette = batch.palettes[p]!;
-		if ( skinned ) {
-			batch.clothStreams ??= new Map();
-			let cloth = batch.clothStreams.get( p );
-			if ( !cloth ) {
-				cloth = createClothStream( primitive, clothRandom );
-				batch.clothStreams.set( p, cloth );
-			}
+		if ( cloth ) {
 			let paletteOf = () => palette;
 			if ( stream ) {
 				boneUploadBytes +=
@@ -2715,12 +2719,12 @@ the next full prepare pass, so this may run between frames.
 			if ( write ) geometry.writeClothStream( draw, write.first, write.entries );
 		} else {
 			batch.cloth ??= new Map();
-			let cloth = batch.cloth.get( p );
-			if ( !cloth ) {
-				cloth = createClothVertices( primitive, clothRandom );
-				batch.cloth.set( p, cloth );
+			let vertices = batch.cloth.get( p );
+			if ( !vertices ) {
+				vertices = createClothVertices( primitive, clothRandom );
+				batch.cloth.set( p, vertices );
 			}
-			geometry.writeVertices( draw, 0, cloth.update( palette, frame.seconds, enabled, motion ) );
+			geometry.writeVertices( draw, 0, vertices.update( palette, frame.seconds, enabled, motion ) );
 		}
 		if ( preview ) geometry.updateTransform( draw, view! );
 		updateModifiers( geometry, group, draw, p, true );

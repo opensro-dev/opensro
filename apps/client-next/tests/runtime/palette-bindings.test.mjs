@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { paletteBindings } = await import( "../../src/engine/foundation/animation/palette-bindings.ts" );
-const { characterPoseBytes, createCharacterPlanCaches } = await import(
+const { characterBatchBytes, characterPoseBytes, createCharacterPlanCaches } = await import(
 	"../../src/engine/foundation/animation/character-budget.ts"
 );
 const { createCharacterRenderPlan } = await import( "../../src/engine/foundation/animation/character-render-plan.ts" );
@@ -161,5 +161,58 @@ test("re-planning a body, or the body extended by a clip, computes its bindings 
 	// Admitting a clip re-plans { ...model, clips }: the same primitive list.
 	const extended = { ...body, clips: [ clip ] };
 	assert.equal( createCharacterRenderPlan( extended, caches ).poseBytes, characterPoseBytes( extended ) );
+	assert.equal( computed, 1 );
+});
+test("re-planning a body, a second wearer's assembly, or the body extended by a clip, computes its cloth slots once", () => {
+	const caches = createCharacterPlanCaches(), store = caches.clothSlots.set.bind( caches.clothSlots );
+	let computed = 0;
+	caches.clothSlots.set = ( cloth, slots ) => {
+		computed++;
+		return store( cloth, slots );
+	};
+	// A three-vertex cloth piece: one free vertex, one read pin, one unread pin.
+	const piece = {
+		name: "part:EQ0",
+		node: 0,
+		image: -1,
+		joints: [ 0 ],
+		inverseBind: identity(),
+		geometry: {
+			positions: Float32Array.of( -1, -1, 0, 1, -1, 0, 0, 1, 0 ),
+			indices: Uint32Array.of( 0, 1, 2 ),
+			transform: identity(),
+			joints: new Uint32Array( 12 ),
+			weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+		},
+		cloth: {
+			mobility: [ 1, 0, 0 ],
+			pins: [ 0, 1, 1 ],
+			constraints: [ [ 0, 1, 1 ] ],
+			order: [ 0 ],
+			force: null,
+			gravity: 1,
+			gravityMobility: 0,
+			windMobility: 0,
+			damping: .9,
+			windPeriod: 1
+		}
+	};
+	const nodes = [ {
+		name: "n0",
+		parent: -1,
+		translation: [ 0, 0, 0 ],
+		rotation: [ 0, 0, 0, 1 ],
+		scale: [ 1, 1, 1 ]
+	} ];
+	const body = { nodes, images: [], clips: [], primitives: [ piece ] };
+	const charged = model => createCharacterRenderPlan( model, caches ).batchBytes( 1 );
+	assert.equal( charged( body ), characterBatchBytes( body, 1 ) );
+	assert.equal( charged( body ), characterBatchBytes( body, 1 ) );
+	// Another wearer's assembly spreads the part's primitive: the same cloth data.
+	const wearer = { ...body, primitives: [ { ...piece, joints: [ 0 ] } ] };
+	assert.equal( charged( wearer ), characterBatchBytes( wearer, 1 ) );
+	// Admitting a clip re-plans { ...model, clips }: the same primitive list.
+	const extended = { ...body, clips: [ { name: "stand", duration: 1, channels: [] } ] };
+	assert.equal( charged( extended ), characterBatchBytes( extended, 1 ) );
 	assert.equal( computed, 1 );
 });
