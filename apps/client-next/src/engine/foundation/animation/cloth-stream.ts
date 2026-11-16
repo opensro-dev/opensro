@@ -73,13 +73,16 @@ ClothPalettes
 The pose palettes a stream's update may ask for, all on the CPU. current
 is this frame's. On an off frame, keep stores what rebuilds this frame's
 palette later, without building it (false when it cannot); kept rebuilds
-the palette of the frame of the last keep that returned true.
+the palette of the frame of the last keep that returned true. entries
+(clothStreamJoints) names the only palette entries the stream reads from
+the result, so only they need be built; current without it is the whole
+palette.
 ================
 */
 export interface ClothPalettes {
-	current(): Float32Array;
+	current( entries?: Int32Array ): Float32Array;
 	keep(): boolean;
-	kept(): Float32Array;
+	kept( entries: Int32Array ): Float32Array;
 }
 
 /*
@@ -132,6 +135,26 @@ export function clothStreamSlots( data: ClothData ): Int32Array {
 
 /*
 ================
+clothStreamJoints
+
+The palette entries skinning the slots' vertices reads (cloth-skin.ts reads
+a joint only where its weight is not zero), ascending. Every update anchors
+slots alone but the first, which anchors every vertex; so no other entry of
+a palette asked for these is ever read. One to seven on the 204 shipped
+player cloth pieces, of 43 to 45 joints (2026-11-16).
+================
+*/
+export function clothStreamJoints( mesh: Geometry, slots: Int32Array ): Int32Array {
+	if ( !mesh.joints || !mesh.weights ) throw Error( "A cloth stream needs a skinned mesh" );
+	const read = new Set<number>();
+	for ( const i of slots ) {
+		for ( let k = 0; k < 4; k++ ) if ( mesh.weights[i * 4 + k] ) read.add( mesh.joints[i * 4 + k]! );
+	}
+	return Int32Array.from( read ).sort();
+}
+
+/*
+================
 validClothStreamSlots
 
 Whether slots can name a stream's vertices on a mesh of vertices: strictly
@@ -151,14 +174,15 @@ export function validClothStreamSlots( slots: unknown, vertices: number ): slots
 createClothStream
 
 One mesh instance's solver and stream; each actor keeps its own. slots is
-the mesh's clothStreamSlots, which a caller may share between the
-streams of every wearer of the mesh.
+the mesh's clothStreamSlots and joints its clothStreamJoints, which a
+caller may share between the streams of every wearer of the mesh.
 ================
 */
 export function createClothStream(
 	primitive: { geometry: Geometry; cloth?: ClothData; },
 	random: () => number,
-	slots = clothStreamSlots( primitive.cloth! )
+	slots = clothStreamSlots( primitive.cloth! ),
+	joints = clothStreamJoints( primitive.geometry, slots )
 ) {
 	const mesh = primitive.geometry, data = primitive.cloth!, count = mesh.positions.length / 3;
 	if ( !mesh.joints || !mesh.weights ) throw Error( "A cloth stream needs a skinned mesh" );
@@ -293,10 +317,11 @@ export function createClothStream(
 		palettes gives the pose's palette on the CPU (ClothPalettes), asked
 		only for the solver's steps, the frame the simulation starts or stops,
 		and an off frame whose palette cannot be kept: a skeleton the GPU
-		samples is built on the CPU for nothing else. An off frame after the
-		first only keeps its pose's inputs; a restart rebuilds the last off
-		frame's palette from them (kept) and anchors from it what every off
-		frame used to anchor, so the solver restarts exactly where
+		samples is built on the CPU for nothing else, and after the first
+		frame only for the entries the slots read (joints). An off frame
+		after the first only keeps its pose's inputs; a restart rebuilds the
+		last off frame's palette from them (kept) and anchors from it what
+		every off frame used to anchor, so the solver restarts exactly where
 		createClothVertices does.
 		================
 		*/
@@ -339,27 +364,28 @@ export function createClothStream(
 					}
 				}
 				if ( !stopping && palettes.keep() ) stale = true;
-				else anchorIntegrated( palettes.current() );
+				else anchorIntegrated( palettes.current( joints ) );
 				lastTime = seconds;
 				lastEnabled = false;
 				return written();
 			}
 			if ( lastTime === undefined ) {
-				// The first frame: every vertex's anchor and normal now.
+				// The first frame: every vertex's anchor and normal now, from
+				// the whole palette.
 				const palette = palettes.current();
 				for ( let i = 0; i < count; i++ ) anchor( i, palette );
 				publish( simulation.advance( input ), true );
 			} else if ( !lastEnabled ) {
 				// The simulation starts again: the solver resets to the last off
 				// frame's anchors, then the pins re-anchor to this frame's.
-				if ( stale ) anchorIntegrated( palettes.kept() );
+				if ( stale ) anchorIntegrated( palettes.kept( joints ) );
 				simulation.advance( { ...input, deltaMs: 0, enabled: false } );
-				const palette = palettes.current();
+				const palette = palettes.current( joints );
 				for ( const i of read ) anchor( i, palette );
 				publish( simulation.advance( input ), true );
 			} else if ( simulation.pending( deltaMs ) ) {
 				// A step falls due: re-anchor the pins it reads to this frame's skeleton.
-				const palette = palettes.current();
+				const palette = palettes.current( joints );
 				for ( const i of read ) anchor( i, palette );
 				publish( simulation.advance( input ), false );
 			} else {
