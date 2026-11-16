@@ -15,6 +15,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { dataAssetPath, convertedTexturePath, dataRoot } from "./jmxAssetIO.mjs";
 import { noteRead } from "../graph/reads.mjs";
+import { sharedCachePath } from "../../lib/generatedRoot.mjs";
 import { imageSourceRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
@@ -37,7 +38,9 @@ const DXT5 = 0x35545844;
 const NTX_MAGIC = 0x3158544e;
 const MAX_DIMENSION = 8192;
 const NATIVE_MIME = "application/x-sro-texture";
-const cacheRoot = path.join( imageSourceRoot, "native-character" );
+// Entries are named by the generator's hash and the source bytes, so trees
+// may share them (generatedRoot.mjs sharedCachePath).
+const cacheRoot = sharedCachePath( "native-character", path.join( imageSourceRoot, "native-character" ) );
 // Source bytes and generator code both govern generated mip cache identity.
 // D3DX and the portable native_texture_mips.py never share entries
 // (nativeMipGenerator.mjs); a reader takes the first candidate it finds.
