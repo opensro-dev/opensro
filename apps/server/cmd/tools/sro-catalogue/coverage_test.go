@@ -341,6 +341,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_BETA_SHOP_ONLY_DEGREE9", "on", growth, "droptables", ""},
 		{"SRO_ELIXIR_DROPS_OFF", "off", growth, "droptables", ""},
 		{"SRO_ALCHEMY_MATERIAL_DROPS_OFF", "on", growth, "droptables", ""},
+		{"SRO_ABOVE_DEGREE9_DROPS_OFF", "on", nil, "droptables", ""},
 		{"SRO_SUN_EVENT_ONLY", "on", nil, "droptables", ""},
 		{"SRO_SUN_DROP_RATE", "5", growth, "droptables", ""},
 		{"SRO_UNIQUE_GAP_EXEMPT", "off", nil, "droptables", ""},

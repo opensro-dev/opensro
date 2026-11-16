@@ -233,7 +233,7 @@ materialize
 						width === 4 ?
 						sample :
 						sample3;
-					const { low, next, span, fraction } = clocks.channels[channelIndex]!;
+					const { low, next, span, fraction } = clocks.cursors[clocks.index[channelIndex]!]!;
 					const values = channel.values;
 					if ( channel.interpolation === "CUBICSPLINE" ) {
 						const t = fraction, t2 = t * t, t3 = t2 * t;

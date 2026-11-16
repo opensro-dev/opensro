@@ -10,6 +10,8 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import { clothData, clothBytes } from "./cloth";
+import { clipTimelineBytes, type ClipTimelineCache } from "./animation-timelines";
+import { paletteBindings } from "./palette-bindings";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -17,6 +19,10 @@ import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/imag
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
+// The node graph a decoded model may carry. An effect program compiles into
+// one, and the native EFP tree has no node count of its own: B29EF8 reads a
+// u32 child count and B29F10..B29F33 recurses with no bound.
+export const CHARACTER_NODES = 1024;
 export const CHARACTER_IMAGES = 64;
 // A structural count guard; the byte budget governs retained sources. Native
 // equipment shares refcounted resources rather than copying each actor's items.
@@ -39,19 +45,29 @@ export const CHARACTER_SOURCE_BYTES = 16777216;
 // Additional renderer storage, separate from decoded source residency. Includes
 // CPU poses/palettes and GPU copies, padded instances and expanded draw geometry.
 export const CHARACTER_RENDER_BYTES = 67108864;
+// A pose's entries for each clip of its model: the name map and the
+// sampling eligibility sets (animation-pose.ts registerClip).
+export const POSE_CLIP_ENTRY_BYTES = 96;
 /*
 ================
 characterPoseBytes
 
-Charge pose evaluation storage separately from immutable source data.
+Charge pose evaluation storage separately from immutable source data. A
+clip costs a pose its entries and, once sampled, one cursor per timeline
+(animation-timelines.ts), not one per channel: a native clip keys all its
+channels at the same times. The renderer passes its timeline cache.
 ================
 */
-export function characterPoseBytes( model: CharacterModel ): number {
+export function characterPoseBytes( model: CharacterModel, timelines?: ClipTimelineCache ): number {
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
 	// weights, sample and one exact palette per primitive/pose revision.
 	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
 		model.primitives.reduce( ( bytes, primitive ) => bytes + primitive.joints.length * 64, 0 ) +
-		model.clips.reduce( ( bytes, clip ) => bytes + clip.channels.length * 80, 0 ) +
+		model.clips.reduce(
+			( bytes, clip ) => bytes + POSE_CLIP_ENTRY_BYTES + clipTimelineBytes( clip, timelines ),
+			0
+		) +
+		// The quaternion bracket scratch, sized by the largest clip.
 		model.clips.reduce( ( max, clip ) => Math.max( max, clip.channels.length ), 0 ) * 32;
 }
 /*
@@ -77,9 +93,51 @@ export function characterMaterialClockBytes( model: CharacterModel ): number {
 }
 /*
 ================
+characterSharedMesh
+
+Whether a primitive draws from a mesh the device keeps one GPU copy of,
+shared by every batch that draws it (device/geometry.ts sharedMesh): an
+immutable skinned primitive. Cloth and ribbons rewrite their vertices each
+frame, so each batch keeps its own stream.
+================
+*/
+export function characterSharedMesh( primitive: CharacterModel["primitives"][number] ): boolean {
+	return !primitive.cloth && !primitive.ribbon && !!primitive.geometry.joints && !!primitive.geometry.weights;
+}
+/*
+================
+characterMeshBytes
+
+The one GPU copy of a shared mesh: its packed vertex stream (14 floats a
+vertex), its indices and its skin table (four joints and four weights a
+vertex).
+================
+*/
+export function characterMeshBytes( geometry: CharacterModel["primitives"][number]["geometry"] ): number {
+	return geometry.positions.length / 3 * 14 * 4 + geometry.indices.byteLength + (geometry.joints?.length ?? 0) * 8;
+}
+/*
+================
+characterSharedPalette
+
+Whether a model's batches keep their palettes as shared streams
+(palette-streams.ts): every primitive skinned, none an emitter, a ribbon
+or a billboard.
+================
+*/
+export function characterSharedPalette( model: CharacterModel ): boolean {
+	return !model.primitives.some( p =>
+		p.emission || p.ribbon || p.billboard || !p.geometry.joints || !p.geometry.weights
+	);
+}
+/*
+================
 characterBatchBytes
 
-Charge retained batch capacity rather than only this frame's visible population.
+Charge retained batch capacity rather than only this frame's visible
+population. A shared mesh is charged once per frame plan, not here
+(characterMeshBytes); a batch's own streams (cloth, ribbons, unskinned
+meshes) keep a GPU copy and a CPU mirror each.
 ================
 */
 export function characterBatchBytes( model: CharacterModel, count: number ): number {
@@ -87,8 +145,28 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 	// Mesh and particle batches retain capacity across membership changes.
 	// Reserve unused particle slots too; ribbons retain exact-sized strips.
 	if ( !model.primitives.some( p => p.ribbon ) ) count = 2 ** Math.ceil( Math.log2( count ) );
+	// A shared-palette batch keeps one palette stream per distinct binding
+	// (palette-streams.ts), its CPU data and its GPU copy, however many
+	// primitives draw from it: a body's parts share one. Every other batch
+	// keeps a palette per primitive.
+	const bindings = characterSharedPalette( model ) ? paletteBindings( model ) : undefined;
+	const streams = new Set<CharacterModel["primitives"][number]>();
+	/*
+	================
+	palettes
+
+	The palette bytes primitive adds: its stream's on the first primitive
+	of a shared binding, none on the others, its own otherwise.
+	================
+	*/
+	const palettes = ( primitive: CharacterModel["primitives"][number], instances: number ) => {
+		if ( !bindings ) return instances * primitive.joints.length * 64 * 2;
+		const stream = bindings.get( primitive ) ?? primitive;
+		if ( streams.has( stream ) ) return 0;
+		streams.add( stream );
+		return count * stream.joints.length * 64 * 2;
+	};
 	// Reserve bounded pose indices/revisions and per-binding offsets as well.
-	// Palette storage below deliberately charges the unshared worst case.
 	return count * (72 + 64) + model.primitives.reduce( ( bytes, primitive ) => {
 		const geometry = primitive.geometry,
 			instances = count * (primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1),
@@ -100,9 +178,12 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 				2 *
 				160 :
 				0) +
-			instances * primitive.joints.length * 64 * 2 + slots * 112 + instances * 96 +
-			geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
-			(geometry.joints?.length ?? 0) * 8 * 2 + 64 + 96 + 20;
+			palettes( primitive, instances ) + slots * 112 + instances * 96 +
+			(characterSharedMesh( primitive ) ?
+				0 :
+				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
+				(geometry.joints?.length ?? 0) * 8 * 2) +
+			64 + 96 + 20;
 	}, 0 );
 }
 /*
@@ -118,7 +199,7 @@ export function characterBytes(
 	images: readonly (NativeTexture | { width: number; height: number; })[]
 ): number {
 	if (
-		model.nodes.length > 1024 || model.primitives.length > CHARACTER_PRIMITIVES ||
+		model.nodes.length > CHARACTER_NODES || model.primitives.length > CHARACTER_PRIMITIVES ||
 		model.images.length > CHARACTER_IMAGES || images.length !== model.images.length ||
 		images.some( ( image, index ) =>
 			image.width !== model.images[index]!.width || image.height !== model.images[index]!.height

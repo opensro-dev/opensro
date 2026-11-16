@@ -135,6 +135,10 @@ export function validateGeometry(
 		!geometryIndicesInRange( data.indices, vertices ) ||
 		!(data.transform instanceof Float32Array) || data.transform.length !== 16 ||
 		data.world !== undefined && typeof data.world !== "boolean" ||
+		// A cloth stream rides a skinned mesh's own skin table, never a dynamic one.
+		data.clothStream !== undefined &&
+			(typeof data.clothStream !== "boolean" ||
+				data.clothStream && (!data.joints || !data.weights || data.dynamicVertices)) ||
 		// A worker-packed stream belongs to a dynamic mesh and covers every vertex.
 		data.vertices !== undefined &&
 			(!(data.vertices instanceof Float32Array) || data.vertices.length !== vertices * 14 ||
@@ -216,6 +220,7 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 		weights: data.weights?.slice(),
 		bones: data.bones?.slice(),
 		dynamicVertices: data.dynamicVertices,
+		clothStream: data.clothStream,
 		vertices: data.vertices?.slice()
 	} satisfies Record<keyof Geometry, unknown>;
 	return owned;

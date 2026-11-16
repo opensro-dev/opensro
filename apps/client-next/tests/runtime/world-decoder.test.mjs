@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
+import { EXPANDED_BUILD } from "../helpers/expanded-build.mjs";
 
 const { createWorldDecoder } = await import(
 	sourceFileUrl( path.join( root, "src/engine/runtime/assets/worker/world/world.ts" ) ).href
@@ -505,7 +506,10 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 		read( "/assets/world/outdoor/regions/region-694f.json" ),
 		async p => read( p )
 	);
-	assert.equal( bundle.objects.placements.length, 3324 );
+	// The native region holds 3324 placements; an expanded build adds the
+	// later client's scenery to it, and must still fit the same admission.
+	if ( !EXPANDED_BUILD ) assert.equal( bundle.objects.placements.length, 3324 );
+	else assert.ok( bundle.objects.placements.length >= 3324 );
 	const scene = decoder.decode( bundle );
 
 	const { worldSceneBytes, copyWorldScene, prepareWorldScene, WORLD_SCENE_BYTES } = await import(
@@ -515,7 +519,9 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	assert.ok( worldSceneBytes( scene ) < WORLD_SCENE_BYTES );
 	// Authored cloth needs independent simulation per placement: 44 formerly
 	// instanced draws split without removing scenery or raising admission.
-	assert.equal( scene.groups.length, 961, "All scenery and independent cloth draws fit the budget" );
+	if ( !EXPANDED_BUILD ) {
+		assert.equal( scene.groups.length, 961, "All scenery and independent cloth draws fit the budget" );
+	}
 	const cloth = scene.groups.filter( g => g.geometry.cloth );
 	assert.ok( cloth.length );
 	assert.ok( cloth.every( g => g.geometry.instances.length === 16 ) );

@@ -33,6 +33,11 @@ const LETTER_CHILD_WIDTH = 439;
 const LETTER_CHILD_HEIGHT = 271;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
+// The Guild tab's member list (ifguild.txt GDR_GUILD_USERVIEW_SCROLLMGR,
+// id 82, 328 x 139): six 23-pixel gil_bar02 rows (5E8850) and the same
+// vertical scroll as the Friends list, 139 - 2 * 16 pixels of track.
+const GUILD_MEMBER_VISIBLE_ROWS = 6;
+const GUILD_MEMBER_SCROLL_TRACK = 107;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
 // stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
 const ACTION_STALL = 1009;
@@ -985,6 +990,8 @@ const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // msgbox2_window_ has no centre tile: the letter popups' own tiles and black
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
+// ifapprenticeshiphonorranking's RankingListBtn column heads (ids 20-24).
+const ACADEMY_HONOR_HEADER_IDS = [ 20, 21, 22, 23, 24 ] as const;
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const PARTY_MATCH_VISIBLE_ROWS = 12;
 // The properties dialog (ifsetpartymode) lists Auto Share above Distribution
@@ -1840,6 +1847,11 @@ export function createUi( ports: UiPorts ) {
 		socialPage = 0,
 		confirmSocial = "",
 		partyOptions = 4;
+	// The Guild tab's member list scroll (ifguild.txt id 82): the first
+	// visible row, one row per wheel tick or arrow click.
+	// Whether the last frame drew the paged compact guild list instead of
+	// the native window, so the wheel moves the list that is on screen.
+	let guildMemberOffset = 0, compactGuildShown = false;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
 	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
@@ -2393,6 +2405,7 @@ export function createUi( ports: UiPorts ) {
 		grantPowerHud.close();
 		if ( next !== "Guild tools" ) socialMember = 0;
 		socialPage = 0;
+		guildMemberOffset = 0;
 		inventorySlot = -1;
 		goldDialog = false;
 		splitStack = null;
@@ -4155,6 +4168,8 @@ export function createUi( ports: UiPorts ) {
 		else if ( id === "friend-sort" ) friendOffset = 0;
 		else if ( id === "friend-up" ) friendOffset = Math.max( 0, friendOffset - 1 );
 		else if ( id === "friend-down" ) friendOffset++;
+		else if ( id === "guild-member-up" ) guildMemberOffset = Math.max( 0, guildMemberOffset - 1 );
+		else if ( id === "guild-member-down" ) guildMemberOffset++;
 		else if ( id === "friend-whisper" ) {
 			const row = view.gameplay?.friends?.rows.find( r => r.jid === friendSelected );
 			if ( row ) beginWhisper( row.name );
@@ -5972,6 +5987,7 @@ export function createUi( ports: UiPorts ) {
 				guildTab = tab;
 				socialMember = 0;
 				socialPage = 0;
+				guildMemberOffset = 0;
 			}
 		} // 5C50B0 / 81AFB0: only the local academy master opens mode 2.
 		else if ( id === "academy-notice" ) {
@@ -6031,6 +6047,7 @@ export function createUi( ports: UiPorts ) {
 			guildDescending = guildSort === sort ? !guildDescending : false;
 			guildSort = sort;
 			socialPage = 0;
+			guildMemberOffset = 0;
 		} else if ( id.startsWith( "alchemy-count:" ) ) {
 			alchemyQuantity = String( Math.max( 1, Number( alchemyQuantity ) + Number( id.slice( 14 ) ) ) );
 		} else if ( id === "alchemy-all" ) {
@@ -7370,7 +7387,8 @@ export function createUi( ports: UiPorts ) {
 						members ? social?.guild?.members.length ?? 0 : social?.wars?.length ?? 0,
 						members ? 3 : guildTab === 2 ? 6 : 9
 					);
-				} else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				} else if ( compactGuildShown ) socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				else guildMemberOffset = Math.max( 0, guildMemberOffset + Math.sign( event.delta ) );
 				dirty = true;
 				return;
 			}
@@ -7553,6 +7571,16 @@ export function createUi( ports: UiPorts ) {
 					return;
 				}
 			}
+			if ( event.kind === "drag" && event.id === "guild-member-thumb" && panel === "Guild" ) {
+				const members = view?.gameplay?.social?.guild?.members.length ?? 0,
+					extra = Math.max( 0, members - GUILD_MEMBER_VISIBLE_ROWS );
+				guildMemberOffset = Math.max(
+					0,
+					Math.min( extra, guildMemberOffset + event.dy * extra / GUILD_MEMBER_SCROLL_TRACK )
+				);
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "friend-thumb" && panel === "Guild" ) {
 				const extra = Math.max( 0, (view?.gameplay?.friends?.rows.length ?? 0) - FRIEND_VISIBLE_ROWS );
 				friendOffset = Math.max( 0, Math.min( extra, friendOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
@@ -7585,6 +7613,36 @@ export function createUi( ports: UiPorts ) {
 					dirty = true;
 				}
 				return;
+			}
+			if (
+				panel === GRANT_PANEL && (event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end")
+			) {
+				// CIFGrantMagicAttributeWnd's list is a CIFScrollManager (6EB3E0).
+				// Its wheel slot (6F35A0) steps the scrollbar one row per wheel
+				// message, up for a positive delta. Inference: a browser deltaY > 0
+				// is a negative Win32 wheel delta, so it moves the list down. The
+				// thumb moves it like the arrows, as its CIFVerticalScroll does.
+				const grant = view?.gameplay?.magicOption,
+					item = view?.gameplay?.inventory.find( r => r.slot === grant?.item ),
+					part = item ? grantableAvatarPart( item.typeFlags ) : null,
+					count = grant?.parts.find( p => p.part === part )?.options.length ?? 0;
+				if ( event.kind === "scroll" ) {
+					const area = controls.find( c => c.id === "magic-option-list" );
+					if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+						magicOptionHud.scroll( Math.sign( event.delta ), count );
+						dirty = true;
+						return;
+					}
+				} else if ( event.id === "magic-option-thumb" ) {
+					if ( event.kind === "drag-end" ) magicOptionHud.endDrag();
+					else {
+						const up = controls.find( c => c.id === "magic-option-up" ),
+							down = controls.find( c => c.id === "magic-option-down" );
+						if ( up && down ) magicOptionHud.drag( event.dy, down.rect[1] - up.rect[1] - 32, count );
+					}
+					dirty = true;
+					return;
+				}
 			}
 			if ( event.kind === "scroll" && panel === "Blocking" ) {
 				const area = controls.find( c => c.id === "blocking-list" );
@@ -10362,6 +10420,7 @@ export function createUi( ports: UiPorts ) {
 					socialAmount = "";
 					socialMember = 0;
 					socialPage = 0;
+					guildMemberOffset = 0;
 					confirmSocial = "";
 					selectedSkill = 0;
 					skillPage = 0;
@@ -17117,7 +17176,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hudData.portals,
 								target?.refObjId ?? 0,
 								key => hudData.zones[key] ?? copy( key ),
-								game.targetTaxRate ?? 0
+								{ taxRate: game.targetTaxRate ?? 0, group: npcPanel.destinationGroup() }
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
@@ -18227,6 +18286,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						] );
 					nativeFrame( root, px, py, hudCopy( root.text ), "academy-honor-close" );
 					nativePage( layout, px, py, [ 3, 4, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 ] );
+					// 6E8C10 creates RankingListBtn and leaves it shown: the five column
+					// heads (Rank, Class, Guardian, Level, Graduation; CIFButton ids
+					// 20-24 on the gil_subj_button plates) beside the Guild bar (25).
+					// No handler of the window reads them, so they draw as plates
+					// with their captions and take no input.
+					for ( const id of ACADEMY_HONOR_HEADER_IDS ) {
+						const head = byId( id );
+						if ( !head ) continue;
+						authoredImage( head, px, py );
+						authoredText( head, px, py, hudCopy( head.text ) );
+					}
 					const confirm = byId( 3 );
 					if ( confirm ) {
 						authoredLabeledButton( confirm, px, py, "academy-honor-confirm", hudCopy( confirm.text ) );
@@ -18235,6 +18305,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						const holder = byId( 30 + index );
 						if ( !holder ) continue;
 						const [sx, sy] = authoredRect( holder, px, py );
+						// CIFApprenticeShipHonorSlot (6E91D0) derives from CIFBarWnd (its
+						// base 6F5990 sets the CIFBarWnd vtable), so every one of the ten
+						// slots 6E8C10 creates draws its com_bar01_ bar, filled or not.
+						const bar = barChrome( authoredRect( holder, px, py ), holder.texture, resources.size, full );
+						paths.push( ...bar.paths );
+						quads.push( ...bar.quads );
 						nativePage( slotLayout, sx, sy, [ 1, 2, 3, 4, 5, 6 ] );
 						if ( !slot ) continue;
 						for ( const node of slotNodes ) {
@@ -18307,6 +18383,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					const select = ROOT + "interface/guild/gil_bar02_select.png",
 						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
 					paths.push( select, deselect );
+					// The scroll manager's area (32) takes the wheel; pushed before the
+					// rows so a row stays the topmost control under the cursor.
+					const listArea = at( 32 );
+					if ( listArea ) {
+						controls.push( {
+							id: "magic-option-list",
+							label: "Magic option list",
+							rect: authoredRect( listArea, px, py ),
+							kind: "region"
+						} );
+					}
 					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
 						const bar = at( 0x28 + i ), option = options[choice.top + i];
 						if ( !bar ) continue;
@@ -20619,6 +20706,23 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						paths.push( ...bar.paths );
 						quads.push( ...bar.quads );
 					}
+					// The scroll manager draws its vertical scroll even when every row fits,
+					// as the sibling Hostility list (600120). A union holds at most
+					// ALLIANCE_MAX_GUILDS (8) guilds against nine rows, so it never moves.
+					const unionScroll = chatScrollbar(
+						"union-scroll",
+						[ gx + list.rect[0] + list.rect[2] - 16, gy + list.rect[1] + 16, 16, list.rect[3] - 32 ],
+						rows.length,
+						Math.floor( list.rect[3] / 23 ),
+						0,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...unionScroll.paths );
+					quads.push( ...unionScroll.quads );
+					controls.push( ...unionScroll.controls );
 					rows.slice( 0, Math.floor( list.rect[3] / 23 ) ).forEach( ( row, i ) => {
 						const ox = gx + list.rect[0], oy = gy + list.rect[1] + i * 23;
 						authoredText( slotAt( 11 ), ox, oy, row.name );
@@ -21517,7 +21621,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.push( ...memberScroll.quads );
 						controls.push( ...memberScroll.controls );
 					}
-					if ( compact && (w < 477 || h < 393) ) {
+					compactGuildShown = !!compact && (w < 477 || h < 393);
+					if ( compactGuildShown ) {
 						const admission = beginWindow();
 						appendCompactGuild();
 						endWindow( admission, "compact-guild" );
@@ -21713,7 +21818,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									),
 									s = at( 82 ),
 									slot = hudData.windows.ifguildmemberslot!;
-								socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
+								guildMemberOffset = Math.max(
+									0,
+									Math.min(
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ),
+										guildMemberOffset
+									)
+								);
+								const first = Math.round( guildMemberOffset );
 								// Register the empty region first so member/authority controls win hits.
 								controls.push( {
 									id: "guild-list",
@@ -21735,7 +21847,29 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										gy + 138,
 										self?.grade === 0
 									);
-								} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
+								} else {
+									// The scroll manager's vertical scroll sits at its right edge,
+									// between 16-pixel arrows, as the Friends list's (iffriend id 30).
+									const scroll = chatScrollbar(
+										"guild-member",
+										[
+											gx + s.rect[0] + s.rect[2] - 16,
+											gy + s.rect[1] + 16,
+											16,
+											GUILD_MEMBER_SCROLL_TRACK
+										],
+										Math.max( GUILD_MEMBER_VISIBLE_ROWS, rows.length ),
+										GUILD_MEMBER_VISIBLE_ROWS,
+										Math.max( 0, rows.length - GUILD_MEMBER_VISIBLE_ROWS ) - guildMemberOffset,
+										resources.size,
+										full,
+										hover,
+										pressed
+									);
+									paths.push( ...scroll.paths );
+									quads.push( ...scroll.quads );
+									controls.push( ...scroll.controls );
+									rows.slice( first, first + GUILD_MEMBER_VISIBLE_ROWS ).forEach( ( row, i ) => {
 										const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
 										if ( row.id === socialMember ) {
 											image(
@@ -21801,7 +21935,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 											kind: "button",
 											selected: row.id === socialMember
 										} );
-									} );}
+									} );
+								}
 								// 5E3090 mode 3 hides the command section beneath the panel.
 								if ( !grantPowerHud.isOpen() ) {
 									for (

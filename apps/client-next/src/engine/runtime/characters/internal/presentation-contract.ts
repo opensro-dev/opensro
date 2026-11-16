@@ -431,11 +431,15 @@ export interface ActorOwner {
 		setCharacterAssembly( id: string, base: string, parts: readonly CharacterAttachment[] ): void;
 		// Port-only, not native: the Experimental enchant sparks; absent is off.
 		enchantSparks?(): boolean;
+		// Port-only, not native: the Experimental silent wing flight; absent is off.
+		silentWingFlight?(): boolean;
 	};
 	readonly resourceFor: ( entity: EntityState ) => Resource | undefined;
 	readonly resources: {
 		animation( body: string, name: string, path: string ): boolean;
 		duration( path: string, clip: string ): number;
+		/** True while the source waits out a failure's retry. */
+		failed( path: string ): boolean;
 		plan( paths: readonly string[] ): boolean;
 		prioritize( paths: readonly string[] ): void;
 		ready( path: string ): boolean;

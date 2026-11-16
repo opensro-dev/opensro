@@ -63,6 +63,13 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		if q.MovementType == wire.MoveTypeCosToPlayer && isPickupTradeGoods(item.TypeFlags) {
 			return false
 		}
+		// Nor does a good leave the bag for a companion: goods load only
+		// at the specialty shop (buysIntoTransport). A row already in a
+		// bag is taken out and refunded by the load-time repair
+		// (traderepair.go) instead.
+		if q.MovementType == wire.MoveTypePlayerToCos && isPickupTradeGoods(item.TypeFlags) {
+			return false
+		}
 		if fault := source.TransferWholeTo(dest, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
 			return false
 		}

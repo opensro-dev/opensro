@@ -245,6 +245,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		silentWingFlight
+
+		Read by the character presenter as it advances an actor's sounds.
+		================
+		*/
+		silentWingFlight() {
+			return experimental.silentWingFlight;
+		},
+		/*
+		================
 		dungeonCharacterPvs
 		================
 		*/
@@ -734,19 +744,22 @@ export function createRenderer(
 					forward: basis.forward,
 					up: basis.up
 				};
-				const characterDraws = characters.prepare(
+				const characterFrame = characters.prepare(
 					device.geometry()!,
 					device.images()!,
 					preview ? 0 : scene.originRegion,
 					preview ? viewProjection( preview, viewport.width / Math.max( 1, viewport.height ) ) : scene.matrix,
 					!!preview,
 					timeSeconds,
-					false,
 					video.records[video.active][7] === 1,
 					world.night(),
 					video.records[video.active][12] === 1,
 					scene.reflectionMatrix
 				);
+				// The light effects behind a query draw after the world, in the
+				// deferred pass; the rest with the characters.
+				const characterDraws = characterFrame.filter( draw => !draw.deferredParticle ),
+					deferredCharacterDraws = characterFrame.filter( draw => draw.deferredParticle );
 				const shadowDraws = world.characterShadows(
 					preview ?
 						[] :
@@ -879,12 +892,7 @@ export function createRenderer(
 				probe?.renderMark( "labels-portraits" );
 				const deferredPlan = preview ?
 						null :
-						characters.deferredPlan(
-							scene.originRegion,
-							scene.camera.eye,
-							video.records[video.active][7] === 1,
-							world.night()
-						),
+						characters.deferredPlan( scene.camera.eye ),
 					targetSurface = surface;
 				// Port-only, not native. Experimental owns the opt-in; 100 keeps
 				// the native surface and pass order. UI keeps its full resolution.
@@ -897,29 +905,16 @@ export function createRenderer(
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
 						viewport,
-						// The refraction stage samples the frame: the canvas
-						// texture cannot be bound, the retained frame can.
-						experimental.postProcessing || !!deferredPlan?.query ||
-							(experimental.waterRefraction && !preview),
+						experimental.postProcessing || !!deferredPlan?.query,
 						renderScale,
 						experimental.sceneFxaa
 					);
 				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred();
-					// The continuation's draws reach the second submit: same rule.
-					return device.geometry()!.singleSampled( staleDraws.live(
-						"deferred-particles",
-						characters.prepare(
-							device.geometry()!,
-							device.images()!,
-							scene.originRegion,
-							scene.matrix,
-							false,
-							timeSeconds,
-							true
-						).filter( draw => draw.deferredParticle )
-					) );
+					// The deferred pass's draws reach the second submit: same rule.
+					return device.geometry()!.singleSampled(
+						staleDraws.live( "deferred-particles", deferredCharacterDraws )
+					);
 				};
 				const deferredPass = deferredPlan ?
 					{
@@ -981,15 +976,6 @@ export function createRenderer(
 						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
 						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
 					];
-				// Experimental > Effects > Water refraction (port-only, not
-				// native): armed like the occlusion stage, never for preview
-				// frames, and only with a scene depth to copy.
-				const refraction = device.waterRefraction(
-					sceneWidth,
-					sceneHeight,
-					experimental.waterRefraction && !preview && !!surface.depth(),
-					scene.camera
-				);
 				const pending = frame!.draw(
 					separate ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
@@ -1028,12 +1014,7 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
-						water: refraction ? { stage: refraction, transparentStart: opaqueWorld.length } : undefined,
-						// Kept follows the water setting, not this frame's arming: a
-						// preview frame or one without scene depth disarms the
-						// water, and keying on it would recreate the 4x colour
-						// every time the two kinds of frame alternate.
-						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa, experimental.waterRefraction ),
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
 						sceneScale: separate ?
 							{
 								view: color,

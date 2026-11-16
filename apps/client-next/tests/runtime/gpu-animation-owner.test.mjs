@@ -23,6 +23,8 @@ async function load( path ) {
 }
 const { createGpuAnimationResources } = { ...(await load( "src/engine/runtime/renderer/device/animation.ts" )) };
 globalThis.GPUBufferUsage = { UNIFORM: 1, COPY_DST: 2, STORAGE: 4 };
+// WebGPU's default minStorageBufferOffsetAlignment.
+const ALIGNMENT = 256;
 /*
 ================
 I
@@ -32,6 +34,9 @@ const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 
 /*
 ================
 fixture
+
+The fake device keeps every buffer's bytes, so a test reads what a
+dispatch's bound input range holds, as the shader would at submit.
 ================
 */
 function fixture( { reject = false, failBinding = false } = {} ) {
@@ -72,6 +77,7 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 				const b = {
 					size,
 					label,
+					bytes: new Uint8Array( size ),
 					destroyed: 0,
 					/*
 					================
@@ -90,9 +96,9 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 			createBindGroup
 			================
 			*/
-			createBindGroup() {
+			createBindGroup( { entries } ) {
 				if ( failBinding ) throw Error( "binding failed" );
-				return {};
+				return { entries };
 			},
 			queue: {
 				/*
@@ -101,7 +107,8 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 				================
 				*/
 				writeBuffer( buffer, offset, data, start = 0, length = data.byteLength ) {
-					writes.push( { label: buffer.label, values: [ ...new Float32Array( data, start, length / 4 ) ] } );
+					buffer.bytes.set( new Uint8Array( data, start, length ), offset );
+					writes.push( { label: buffer.label, offset, length } );
 				}
 			}
 		};
@@ -128,13 +135,60 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 			clips: [ clip ],
 			primitives: [ primitive ]
 		};
+	const owner = createGpuAnimationResources( gpu );
+	/*
+	================
+	encode
+
+	Encodes the pending streams. Each dispatch reports its bound input
+	range and the rows it holds when the pass is encoded: every write comes
+	before it, as every write comes before the frame's submit.
+	================
+	*/
+	function encode() {
+		const dispatches = [];
+		let group;
+		owner.encode( {
+			/*
+			================
+			beginComputePass
+			================
+			*/
+			beginComputePass() {
+				return {
+					setPipeline() {},
+					/*
+					================
+					setBindGroup
+					================
+					*/
+					setBindGroup( _index, bound ) {
+						group = bound;
+					},
+					/*
+					================
+					dispatchWorkgroups
+					================
+					*/
+					dispatchWorkgroups( count ) {
+						const { buffer, offset, size } = group.entries.find( e => e.binding === 2 ).resource;
+						const values = [ ...new Float32Array( buffer.bytes.buffer, offset, count * 4 ) ];
+						dispatches.push( { count, buffer, offset, size, values } );
+					},
+					end() {}
+				};
+			}
+		} );
+		return dispatches;
+	}
 	return {
 		buffers,
 		writes,
 		primitive,
 		clip,
 		model,
-		owner: createGpuAnimationResources( gpu ),
+		owner,
+		encode,
 		source: new Float32Array( 16 ),
 		output: { size: 64 }
 	};
@@ -146,7 +200,7 @@ test("an appended clip rebinds compute inputs while retaining the geometry palet
 	const clip = { ...f.clip, name: "new-action" }, model = { ...f.model, clips: [ f.clip, clip ] };
 	assert.equal( f.owner.prepare( f.source, f.output, model, f.primitive, [ { clip, time: .3 } ] ), true );
 	assert.equal( f.owner.stats().models, 1 );
-	assert.equal( f.writes.at( -1 ).values[1], 1, "new catalog selects the appended clip" );
+	assert.equal( f.encode()[0].values[1], 1, "new catalog selects the appended clip" );
 	assert.throws( () =>
 		f.owner.prepare(
 			f.source,
@@ -166,7 +220,8 @@ test("STEP phase cannot round forward across a key; cancellation removes queued 
 	assert.ok(
 		f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .5 - Number.EPSILON } ] )
 	);
-	assert.ok( f.writes.at( -1 ).values[0] < .5 );
+	assert.ok( f.encode()[0].values[0] < .5 );
+	f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .2 } ] );
 	f.owner.cancel( f.source );
 	f.owner.encode( {
 		/*
@@ -226,34 +281,12 @@ test("sparse GPU inputs preserve destination indices around CPU-owned slots", as
 		null,
 		{ clip: f.clip, time: .6 }
 	] );
-	const inputs = f.writes.at( -1 ).values;
+	const [dispatch] = f.encode();
+	const inputs = dispatch.values;
 	assert.equal( inputs.length, 8 );
 	assert.equal( inputs[2], 1 );
 	assert.equal( inputs[6], 3 );
-	let count = 0;
-	f.owner.encode( {
-		/*
-		================
-		beginComputePass
-		================
-		*/
-		beginComputePass() {
-			return {
-				setPipeline() {},
-				setBindGroup() {},
-				/*
-				================
-				dispatchWorkgroups
-				================
-				*/
-				dispatchWorkgroups( n ) {
-					count = n;
-				},
-				end() {}
-			};
-		}
-	} );
-	assert.equal( count, 2 );
+	assert.equal( dispatch.count, 2 );
 	f.owner.dispose();
 });
 
@@ -285,4 +318,106 @@ test("models on the same clips share one clip buffer until the last one is relea
 	assert.equal( f.owner.stats().clipSets, 0 );
 	assert.equal( f.owner.stats().staticBytes, 0 );
 	f.owner.dispose();
+});
+
+/*
+================
+stream
+
+A stream of capacity poses on the fixture's one-joint primitive, with
+the rows its samples must put in the bound input range.
+================
+*/
+function stream( f, capacity, times ) {
+	const samples = times.map( time => time === null ? null : { clip: f.clip, time } );
+	const rows = times.flatMap( ( time, i ) => time === null ? [] : [ time, 0, i, 0 ] );
+	return {
+		source: new Float32Array( capacity * 16 ),
+		output: { size: capacity * 64 },
+		capacity,
+		samples,
+		rows
+	};
+}
+
+/*
+================
+inputWrites
+
+The arena writes the fixture recorded since count writes.
+================
+*/
+const inputWrites = ( f, count ) => f.writes.slice( count ).filter( w => w.label === "animation-inputs" ).length;
+
+/*
+================
+sharedInputs
+
+Every stream binds a range of one input slab. The bytes a dispatch's
+range holds are the rows prepare was given, beside a released neighbour
+and in its reused range; each encode uploads them in one write, or none
+when nothing is pending.
+================
+*/
+test("stream inputs share one slab, uploaded once an encode, through release and reuse", async () => {
+	const f = fixture();
+	await f.owner.ready;
+	const check = ( streams, label ) => {
+		const before = f.writes.length;
+		for ( const s of streams ) assert.ok( f.owner.prepare( s.source, s.output, f.model, f.primitive, s.samples ) );
+		assert.equal( inputWrites( f, before ), 0, `${label}: prepare writes only the mirror` );
+		const dispatches = f.encode();
+		assert.equal( inputWrites( f, before ), 1, `${label}: one input write an encode` );
+		assert.equal( dispatches.length, streams.length );
+		dispatches.forEach( ( d, i ) => {
+			assert.equal( d.size, streams[i].capacity * 16, `${label}: the binding keeps its own buffer's size` );
+			assert.equal( d.offset % ALIGNMENT, 0 );
+			assert.deepEqual( d.values, streams[i].rows, `${label}: stream ${i} reads its own rows` );
+		} );
+		assert.equal( new Set( dispatches.map( d => d.buffer ) ).size, 1, `${label}: one input buffer` );
+		return dispatches;
+	};
+	const a = stream( f, 1, [ .25 ] ),
+		b = stream( f, 20, [ null, .5, .75, null, .125 ] ),
+		c = stream( f, 3, [ .375, null, .625 ] );
+	const first = check( [ a, b, c ], "first frame" );
+	f.owner.release( b.source );
+	const d = stream( f, 17, [ .5, .25 ] );
+	const second = check( [ a, c, d ], "reused range" );
+	assert.equal( second[2].offset, first[1].offset, "the released range is handed out again" );
+	assert.deepEqual( [ second[0].offset, second[1].offset ], [ first[0].offset, first[2].offset ] );
+	assert.equal( f.owner.stats().inputUploads, 2 );
+	const idle = f.writes.length;
+	assert.deepEqual( f.encode(), [] );
+	f.owner.prepare( a.source, a.output, f.model, f.primitive, a.samples );
+	f.owner.cancel( a.source );
+	assert.deepEqual( f.encode(), [] );
+	assert.equal( inputWrites( f, idle ), 0, "nothing pending, nothing written" );
+	for ( const s of [ a, c, d ] ) f.owner.release( s.source );
+	f.owner.dispose();
+	assert.ok( f.buffers.every( buffer => buffer.destroyed === 1 ) );
+});
+
+/*
+================
+streamBudget
+
+The stream budget refuses what it refused with a buffer a stream: one
+stream at the budget fits the arena at its limit, one pose more does not.
+================
+*/
+test("the stream budget admits a stream at the limit and refuses one past it", async () => {
+	const f = fixture();
+	await f.owner.ready;
+	// 16 bytes a pose plus the 48-byte configuration uniform, within 8 MB.
+	const fits = Math.floor( ((8 << 20) - 48) / 16 );
+	const over = stream( f, fits + 1, [ .5 ] );
+	assert.equal( f.owner.prepare( over.source, over.output, f.model, f.primitive, over.samples ), false );
+	assert.equal( f.owner.stats().models, 0 );
+	const most = stream( f, fits, [ .5 ] );
+	assert.ok( f.owner.prepare( most.source, most.output, f.model, f.primitive, most.samples ) );
+	assert.deepEqual( f.encode()[0].values, most.rows );
+	f.owner.release( most.source );
+	f.owner.dispose();
+	assert.ok( f.buffers.every( buffer => buffer.destroyed === 1 ) );
 });

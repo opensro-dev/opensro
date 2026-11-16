@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 import {
+	defaultMotionClipPaths,
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateClip
@@ -35,6 +36,7 @@ import {
 	readUInt32Array
 } from "../../build/shared/jmxBinaryReader.mjs";
 import { readJsonOrNullSync, readJsonOrUndefined, writeJsonIfChanged } from "../../build/shared/jsonOut.mjs";
+import { writeStateFile, writeStateJson } from "../../build/shared/stateFile.mjs";
 import { quatMultiply, quatRotateVector } from "../../build/shared/math3d.mjs";
 import { extractResinfoSection, parseResinfoSummary } from "../../build/shared/resinfoParser.mjs";
 import {
@@ -134,6 +136,35 @@ test("shared JSON, hash, existence, and atomic publish contracts", async ( t ) =
 		} ).changed,
 		false
 	);
+});
+
+test("concurrent saves of one shared build cache leave one whole cache and no temp files", async ( t ) => {
+	const root = await mkdtemp( path.join( os.tmpdir(), "sro-state-json-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	// Two worktrees saving the cache beside the shared tree at once: each
+	// payload is large enough that an in-place write would interleave.
+	const cachePath = path.join( root, "state", "file-hash-cache.json" );
+	const payloads = Array.from( { length: 8 }, ( _, writer ) => ({
+		writer,
+		entries: Object.fromEntries(
+			Array.from( { length: 4000 }, ( _, i ) => [ "k" + i, "v".repeat( 64 ) + writer ] )
+		)
+	}) );
+	await Promise.all( payloads.map( payload => writeStateJson( cachePath, payload ) ) );
+	const saved = JSON.parse( await readFile( cachePath, "utf8" ) );
+	assert.deepEqual( saved, payloads[saved.writer] );
+	assert.deepEqual( await readdir( path.dirname( cachePath ) ), [ "file-hash-cache.json" ] );
+});
+
+test("a state file of raw bytes is replaced whole and leaves no temp file", async ( t ) => {
+	const root = await mkdtemp( path.join( os.tmpdir(), "sro-state-file-" ) );
+	t.after( () => rm( root, { recursive: true, force: true } ) );
+	const target = path.join( root, "pack-member-gzip", "ab", "ab12.gz" );
+	const bytes = Buffer.from( [ 0x1f, 0x8b, 0, 255, 10 ] );
+	assert.equal( await writeStateFile( target, Buffer.from( "older" ) ), true );
+	assert.equal( await writeStateFile( target, bytes ), true );
+	assert.deepEqual( await readFile( target ), bytes );
+	assert.deepEqual( await readdir( path.dirname( target ) ), [ "ab12.gz" ] );
 });
 
 test("superseded generated artifacts move to a recoverable archive with provenance", async ( t ) => {
@@ -347,6 +378,22 @@ test("shared animation and ResInfo helpers retain authored selection/order", () 
 	assert.deepEqual( pickDefaultSetSoundEvents( bsr, 7, "snd_run1" ), [
 		{ cursorMs: 125, cue: "SND_RUN1" }
 	] );
+
+	// One BAN for every state (the v1.696 devil hat, 2026-11-15): a body
+	// bakes it once as walk; an auxiliary part keeps its stand too.
+	const oneMotion = {
+		animationSets: [ {
+			name: "default",
+			states: [ 0, 1, 7, 14 ].map( ( stateId ) => ({ stateId, animationPath: "hair.ban", trackEvents: [] }) )
+		} ]
+	};
+	assert.deepEqual( defaultMotionClipPaths( oneMotion ), { walk: "hair.ban", run: null, stand: null } );
+	assert.deepEqual( defaultMotionClipPaths( oneMotion, { standSharesWalk: true } ), {
+		walk: "hair.ban",
+		run: null,
+		stand: "hair.ban"
+	} );
+	assert.deepEqual( defaultMotionClipPaths( bsr ).run, "run.ban" );
 
 	const lines = [
 		"Section = Create,0,0,",
