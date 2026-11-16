@@ -297,7 +297,9 @@ export async function buildAuxiliarySet( bsrPath, glb, part ) {
 		bsr = parseCharacterBsr( buffer, bsrPath ),
 		link = parseAttachPartLink( buffer );
 	if ( !bsr.skeletonAttachBone ) throw Error( `Missing auxiliary socket ${bsrPath}` );
-	const avatar = await assembleAvatar( bsrPath, { slotForMesh: () => `part:${part}` } );
+	// standSharesWalk: a one-motion part (one BAN for every state) still
+	// needs its stand clip, which the runtime starts it on.
+	const avatar = await assembleAvatar( bsrPath, { slotForMesh: () => `part:${part}`, standSharesWalk: true } );
 	const clips = avatar.clips.map( c => c.role );
 	if ( !clips.includes( "stand" ) ) throw Error( `Missing auxiliary initial track ${bsrPath}` );
 	writeIntoPublicTreeSync( path.join( publicAssets, glb.slice( "/assets/".length ) ), avatarToGlb( avatar ) );

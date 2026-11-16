@@ -324,6 +324,28 @@ class ArchiveTests(unittest.TestCase):
 			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
 			self.assertTrue({"SN_COS_P_DOG", "SN_ITEM_PET_DOG"} <= {row[1] for row in name_rows if len(row) > 1})
 
+	def test_v1696_name_text_behind_a_shard_index_is_found(self):
+		# v1.696 ships textdata_object.txt as an index of TextData_Object_<n>
+		# parts, and each part's rows carry 17 columns: a numeric text id
+		# after the service cell, "0" where a translation is absent.
+		with tempfile.TemporaryDirectory() as folder:
+			base = Path(folder)
+			native, output = base / "native", base / "out"
+			self._tree(native, *native_wolf())
+			def v1696(key, english):
+				return ["1", "1400", key, "k", "0", "0", "0", "0", "0", english, "0", "0", "0", english, english, english, english]
+			texts = [v1696("SN_COS_P_DOG", "Dog"), v1696("SN_ITEM_PET_DOG", "Dog scroll")]
+			entries = self._entries([char_row("COS_P_DOG", 9001)], [scroll("ITEM_PET_DOG", 9002, "COS_P_DOG")])
+			text = "media/" + importer.tables.TEXTDATA
+			entries[f"{text}textdata_object.txt"] = importer._encode([["TextData_Object_1000.txt"]])
+			entries[f"{text}textdata_object_1000.txt"] = importer._encode(texts)
+			zip_path, pin_path = self._archive(base, entries)
+			report = self._run(zip_path, pin_path, native, output)
+			self.assertEqual(report["missingNameText"], [])
+			name_rows = importer.characters.translation_rows((output / importer.TEXT_ROOT / "textdataname.txt").read_bytes())
+			english = {row[1]: row[8] for row in name_rows if len(row) > 8}
+			self.assertEqual((english.get("SN_COS_P_DOG"), english.get("SN_ITEM_PET_DOG")), ("Dog", "Dog scroll"))
+
 	def test_a_pass_that_selects_nothing_drops_its_manifest_lines(self):
 		with tempfile.TemporaryDirectory() as folder:
 			base = Path(folder)

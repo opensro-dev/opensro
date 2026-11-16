@@ -18,6 +18,13 @@ scenarios (scenarios.mjs):
   skill   - skills and attacks on a live monster;
   cross   - walking across a region boundary until arrival.
 
+The crowd location (--at crowd, run only when named) stands --crowd N real
+peers (at most 32) in a grid in front of the character (core/crowd.mjs):
+authenticated characters on real GameWorld sockets, admitted through the
+local provisioning endpoint (--provisioning, --token), or attached from a
+crowd-host.mjs that holds a matching crowd. It measures what every drawn
+character costs (#3563); its rows record the crowd the client published.
+
 Each row reports frames per second, frame-interval percentiles, and the
 main thread's frame and world-preparation time per frame. Options add:
 
@@ -55,6 +62,8 @@ Both boundaries are recorded; changed or unknown state invalidates the row.
 
 ===========================================================================
 */
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
@@ -62,8 +71,10 @@ import { frameLimits } from "../../../src/engine/foundation/rendering/video-opti
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
+import { obtainCrowd } from "../core/crowd.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 
+const REPO_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../../../.." );
 const GOAL_FPS = 500;
 const CROSS_LIMIT_MS = 30000;
 const SCENARIOS = [ "still", "drag", "move", "skill", "cross", "combat" ];
@@ -127,10 +138,19 @@ const LOCATIONS = [ {
 		startYawRadians: 0
 	},
 	scenarios: [ "still", "drag", "move" ]
+}, {
+	// A crowd of real peers (--crowd) on the acceptance bench's Europe field:
+	// the per-character cost of the renderer, the labels and the actors.
+	name: "crowd",
+	fixture: MISSION_MOVEMENT_FIXTURES.movement,
+	crowd: true,
+	scenarios: [ "still", "drag" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
-	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable]";
+	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable] [--crowd N] [--provisioning URL] [--token FILE]";
+// How long the client may take to publish every admitted peer.
+const CROWD_PUBLISH_MS = 30000;
 
 // Units the character may stand from where a sample expects it (the boot
 // fixture start, or its place before a revive) before the sample is rejected.
@@ -298,6 +318,24 @@ function localPose( page ) {
 
 /*
 ================
+crowdInView
+
+Waits until the client publishes every peer of the crowd.
+================
+*/
+async function crowdInView( page, peers ) {
+	await page.waitForFunction(
+		names => {
+			const entities = globalThis.__benchRuntime.entities();
+			return names.every( name => entities.some( entity => entity.name === name ) );
+		},
+		peers.map( peer => peer.character ),
+		{ timeout: CROWD_PUBLISH_MS }
+	);
+}
+
+/*
+================
 row
 ================
 */
@@ -348,7 +386,7 @@ One location: open the client there and run its scenarios.
 */
 async function session( options, location, results ) {
 	console.log( `Opening ${location.name}: frame limit ${options.frameLimit || "uncapped"}, CPU ${options.cpuRate}x` );
-	let scene = null, captures = null, capturing = false;
+	let scene = null, captures = null, capturing = false, crowd = null;
 	const client = await openClient( location.fixture, {
 		counts: options.counts,
 		spans: options.spans,
@@ -378,6 +416,18 @@ async function session( options, location, results ) {
 				if ( error.scene ) scene = error.scene;
 				throw error;
 			} );
+		}
+		if ( location.crowd ) {
+			// The crowd journals its accounts there before the first admission.
+			await mkdir( options.out, { recursive: true } );
+			crowd = await obtainCrowd( {
+				count: options.crowd,
+				fixture: location.fixture,
+				provisioningUrl: options.provisioning,
+				tokenPath: options.token,
+				journalPath: `${options.out}/crowd-cleanup.json`
+			} );
+			await crowdInView( client.page, crowd.peers );
 		}
 		captures = await createCaptures( client.page, {
 			dir: options.out,
@@ -417,6 +467,7 @@ async function session( options, location, results ) {
 			result.cpuRate = options.cpuRate;
 			result.shadowDetail = options.shadowDetail;
 			result.identity = identity;
+			if ( crowd ) result.crowd = { peers: crowd.peers.length, held: !!crowd.held };
 			if ( scene ) {
 				result.serverUptimeMinutes = await serverUptimeMinutes();
 				result.scene = {
@@ -511,6 +562,9 @@ async function session( options, location, results ) {
 			}
 		}
 		await closeClient( client );
+		// A crowd this session admitted is closed (its accounts disabled); a
+		// held one stays with its host.
+		if ( crowd && !crowd.held ) await crowd.close();
 	}
 }
 
@@ -553,7 +607,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	seconds: 3,
 	// combat runs only when named: it needs a GM character and an isolated
 	// server, since its monsters stay until that server stops.
-	at: LOCATIONS.map( l => l.name ).filter( name => name !== "combat" ),
+	// crowd runs only when named too: it needs the provisioning endpoint.
+	at: LOCATIONS.map( l => l.name ).filter( name => name !== "combat" && name !== "crowd" ),
 	only: SCENARIOS,
 	counts: false,
 	paced: false,
@@ -566,6 +621,9 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	trace: false,
 	combat: "MOB_CH_TIGER:10:GIANT",
 	vulnerable: false,
+	crowd: 32,
+	provisioning: "http://127.0.0.1:8789",
+	token: path.join( REPO_ROOT, "apps/server/.state/cluster/agent-provisioning-token" ),
 	out: "temp/artifacts/fps-bench",
 	json: ""
 }, USAGE );

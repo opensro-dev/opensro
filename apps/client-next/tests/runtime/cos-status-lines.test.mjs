@@ -90,11 +90,12 @@ world
 
 A local player (gid 1) with the given companions summoned and the given
 bag rows. Bag rows are {slot, refObjId, typeFlags}; companions are
-cosSpawn rows keyed by their own refObjId/band.
+cosSpawn rows keyed by their own refObjId/band. Later companions are
+known to the reference snapshot but not summoned: a test spawns them.
 ================
 */
-/** @param {{ companions?: CompanionRow[], bagItems?: BagRow[], capeReqGender?: number, wearerSex?: number }} [options] */
-function world( { companions = [], bagItems = [], capeReqGender, wearerSex } = {} ) {
+/** @param {{ companions?: CompanionRow[], later?: CompanionRow[], bagItems?: BagRow[], capeReqGender?: number, wearerSex?: number }} [options] */
+function world( { companions = [], later = [], bagItems = [], capeReqGender, wearerSex } = {} ) {
 	const sent = [],
 		readEntity = wearerSex === undefined ?
 			undefined :
@@ -115,7 +116,7 @@ function world( { companions = [], bagItems = [], capeReqGender, wearerSex } = {
 	game.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
-		refObjSnapshot: companions.map( row => ({
+		refObjSnapshot: [ ...companions, ...later ].map( row => ({
 			kind: "cos",
 			refObjId: row.refObjId,
 			tidWord: (row.band << 11) | 0x1c6
@@ -251,11 +252,15 @@ test("activating an ordinary item still uses it, with no specialty line", () => 
 shopWorld
 
 The specialty refusal at the shop: a merchant (gid 17) selected and open,
-its catalog offering one trade good, with the given companion summoned.
+its catalog offering one trade good (and a potion unless the page is the
+specialty page alone), with the given companion summoned (none when the
+band is 0). Later companions are known but not summoned.
 ================
 */
-function shopWorld( band, items = [] ) {
-	const { game, sent } = world( { companions: [ pet( band, { items } ) ] } );
+/** @param {number} band @param {BagRow[]} [items] @param {{ specialtyOnly?: boolean, later?: CompanionRow[] }} [options] */
+function shopWorld( band, items = [], { specialtyOnly = false, later = [] } = {} ) {
+	const companions = band ? [ pet( band, { items } ) ] : [];
+	const { game, sent } = world( { companions, later } );
 	const npc = { gid: 17, kind: "npc", regionId: 1, x: 0, y: 0, z: 0, heading: 0 };
 	game.command( { kind: "select", gid: 17 }, 1, npc );
 	// The selection grant: type 1, capability word 0x801 (a merchant).
@@ -296,9 +301,13 @@ function shopWorld( band, items = [] ) {
 			} ]
 		} ]
 	};
+	if ( specialtyOnly ) catalog.offers = catalog.offers.slice( 0, 1 );
 	game.receive( { opcode: 11, payload: new TextEncoder().encode( JSON.stringify( catalog ) ) }, 4 );
 	return { game, sent };
 }
+
+/** The presented shop after the frames so far. */
+const presentedShop = game => game.take()?.shop;
 
 test("buying a specialty good into a pickup pet prints the line and sends nothing", () => {
 	const { game, sent } = shopWorld( 4 );
@@ -313,6 +322,27 @@ test("buying the same good into a transport sends the purchase", () => {
 	const frame = game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 0, quantity: 1 }, 5, cosEntity );
 	assert.equal( frame.opcode, 0x706d );
 	assert.deepEqual( noticeKeys( game ), [] );
+});
+
+test("buying a specialty good into the bag prints the line and sends nothing", () => {
+	// 567830: with no transport out the native buy handler prints the
+	// line and composes no request; the bag never takes a trade good.
+	const { game, sent } = shopWorld( 0, [], { specialtyOnly: true } );
+	const before = sent.length;
+	assert.equal( game.command( { kind: "shop-buy", tab: 0, slot: 0, quantity: 1 }, 5 ), null );
+	assert.equal( sent.length, before );
+	assert.deepEqual( noticeKeys( game ), [ SPECIALTY ] );
+});
+
+test("a transport summoned after the specialty shop opened becomes the shop's COS", () => {
+	const transport = pet( 2 );
+	const { game } = shopWorld( 0, [], { specialtyOnly: true, later: [ transport ] } );
+	assert.equal( presentedShop( game )?.specialty, true );
+	assert.equal( presentedShop( game )?.cosGid, undefined );
+	game.receive( { opcode: 0x3158, payload: cosSpawn( transport ) }, 5 );
+	assert.equal( presentedShop( game )?.cosGid, transport.gid );
+	const frame = game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 0, quantity: 1 }, 6, cosEntity );
+	assert.equal( frame.opcode, 0x706d );
 });
 
 test("selling from a pickup pet at a shop prints the trade-shop line and sends nothing", () => {

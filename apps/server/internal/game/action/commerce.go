@@ -565,6 +565,10 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 						refusal = code
 						return false
 					}
+					if !rt.buysIntoTransport(c, q.CosGID, isCOS) {
+						refusal = tradeErrOnlyTrader
+						return false
+					}
 				}
 			}
 			capacity := uint16(inventory.BagEnd(c) - inventory.EquipmentSlotEnd)

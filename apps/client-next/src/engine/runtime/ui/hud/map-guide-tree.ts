@@ -10,15 +10,20 @@ a lamp, eight rows at a time beside the stock vertical scrollbar. Every
 offset here was matched to the pixel against the v1.188 screenshot of
 an open guide (map1): rows at 14,37 of the panel on a 30 pitch, the
 toggle at 3,3 of its row, the lamp at 34,7, the scrollbar's up arrow at
-264,56 and its down arrow at 264,234. The scrollbar is the guide's own
-(interface/guide/gd_scroll_*, issue #3392): the line, the arrows and a
-thumb that drags. This module paints one frame of the tree; the map
-tools own which group is open, the scroll and the rows themselves.
+264,56 and its down arrow at 264,234. The scrollbar is the stock one
+(CNIFTreeView's CNIFScrollBar: worldmapguide_renewal2.2dt names no scroll
+art), drawn with the chat window's faces: the com_scroll_bar track, the
+gold chat_arrow_up / _down arrows and the com_scroll_button thumb, which
+drags. The owner's v1.696 screenshot of the Monster tab shows exactly
+these; the bone-knot gd_scroll_* art (#3392) is not what the guide draws.
+This module paints one frame of the tree; the map tools own which group
+is open, the scroll and the rows themselves.
 
 ===========================================================================
 */
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
+import type { GuideRow } from "@/engine/foundation/ui/worldmap-guide";
 
 const GUIDE = "/assets/images/Media_extracted/interface/guide/";
 const GROUP_BAR = GUIDE + "gd_long_index_open.png";
@@ -27,10 +32,11 @@ const LEAF_BAR = GUIDE + "gd_long_contents_event.png";
 const TOGGLE_CLOSED = GUIDE + "gd_index_button_close.png";
 const TOGGLE_OPEN = GUIDE + "gd_index_button_open.png";
 const LAMP = GUIDE + "gd_contents_lamp.png";
-const SCROLL_LINE = GUIDE + "gd_scroll_line.png";
-const SCROLL_UP = GUIDE + "gd_scroll_up";
-const SCROLL_DOWN = GUIDE + "gd_scroll_down";
-const SCROLL_THUMB = GUIDE + "gd_scroll_button";
+const INTERFACE = "/assets/images/Media_extracted/interface/";
+const SCROLL_LINE = INTERFACE + "ifcommon/com_scroll_bar.png";
+const SCROLL_UP = INTERFACE + "chattingwnd/chat_arrow_up";
+const SCROLL_DOWN = INTERFACE + "chattingwnd/chat_arrow_down";
+const SCROLL_THUMB = INTERFACE + "ifcommon/com_scroll_button";
 // A button's faces: normal, hover, pressed.
 const FACES = [ ".png", "_focus.png", "_press.png" ] as const;
 
@@ -44,11 +50,11 @@ const LAMP_RECT: UiRect = [ 34, 7, 8, 16 ];
 const LABEL_LEFT = 28;
 // The scrollbar's track: the up arrow sits above it, the down arrow
 // below, the thumb's top travels its height (CIFVerticalScroll's
-// layout), and the 12 px line stands centred in the 16 px column.
+// layout), and the track fills the 16 px column.
 const SCROLL_TRACK: UiRect = [ 264, 72, 16, 146 ];
 const SCROLL_BUTTON = 16;
-const SCROLL_LINE_WIDTH = 12;
-const SCROLL_LINE_HEIGHT = 292;
+// A main row's id prefix, in both trees.
+export const GUIDE_MAIN = "map-guide-main:";
 export const GUIDE_SCROLL_ID = "map-guide-scroll";
 export const GUIDE_SCROLL_THUMB = GUIDE_SCROLL_ID + "-thumb";
 // The thumb's travel in pixels, for turning a drag into rows.
@@ -86,6 +92,25 @@ export interface GuideTreeRow {
 	lamp?: boolean;
 	color: keyof typeof COLORS;
 	badge?: boolean;
+}
+
+/*
+================
+treeRow
+
+A guide row as the tree paints it.
+================
+*/
+export function treeRow( row: GuideRow, prefix: string, open: number | null, picked: number | null ): GuideTreeRow {
+	return {
+		id: (row.main ? GUIDE_MAIN : prefix) + row.index,
+		label: row.label,
+		group: row.main,
+		open: row.main ? row.index === open : undefined,
+		lamp: !row.main && row.index === picked,
+		color: row.color,
+		badge: row.badge
+	};
 }
 
 /*
@@ -184,7 +209,7 @@ export function paintGuideTree(
 ================
 paintScrollbar
 
-The guide's own bar: gd_scroll_line from the track's top to the down
+The stock bar: com_scroll_bar from the track's top to the down
 arrow, the arrows above and below, and the thumb, whose top travels
 the track as the scroll runs from the first row to the last.
 ================
@@ -197,12 +222,11 @@ function paintScrollbar(
 ) {
 	const x = tree.panel[0] + SCROLL_TRACK[0], y = tree.panel[1] + SCROLL_TRACK[1];
 	const height = SCROLL_TRACK[3] + SCROLL_BUTTON;
-	// The line art is taller than the track: its top part shows rather
-	// than a squeezed whole, so its knots keep their spacing.
+	// The track art stretches over the column, as chatScrollbar's does.
 	out.quads.push( {
 		texture: SCROLL_LINE,
-		rect: [ x + (SCROLL_BUTTON - SCROLL_LINE_WIDTH) / 2, y, SCROLL_LINE_WIDTH, height ],
-		uv: [ 0, 0, 1, Math.min( 1, height / SCROLL_LINE_HEIGHT ) ],
+		rect: [ x, y, SCROLL_BUTTON, height ],
+		uv: FULL_UV,
 		color: WHITE,
 		clip: tree.full
 	} );

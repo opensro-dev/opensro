@@ -124,6 +124,47 @@ func TestCosToPlayerRefusesTradeGoods(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPlayerToCosRefusesTradeGoods
+
+A good that reached the bag before bag buys were refused must not load
+into a transport: that is the teleport leg of the goods carry exploit.
+The event food under the same TID3 still crosses.
+================
+*/
+func TestPlayerToCosRefusesTradeGoods(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	items["ITEM_ETC_TRADE_WC_04"] = &enterworld.ItemRef{RefObjID: 5005, Codename: "ITEM_ETC_TRADE_WC_04", TypeIDs: [4]int64{3, 3, 8, 1}}
+	items["ITEM_ETC_E050314_CANDY_01"] = &enterworld.ItemRef{RefObjID: 5006, Codename: "ITEM_ETC_E050314_CANDY_01", TypeIDs: [4]int64{3, 3, 8, 0}}
+	rt, _ := newTestRuntime(c, testCosSource(items))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, Container: &domain.COSContainer{Capacity: 2}}
+	c.MissionInventory = append(c.MissionInventory,
+		domain.InventoryRow{Slot: 30, RefObjID: 5005, Codename: "ITEM_ETC_TRADE_WC_04", TypeFlags: wire.PackTypeFlags(3, 3, 8, 1), StackCount: 40},
+		domain.InventoryRow{Slot: 31, RefObjID: 5006, Codename: "ITEM_ETC_E050314_CANDY_01", TypeFlags: wire.PackTypeFlags(3, 3, 8, 0), StackCount: 1})
+
+	before := c.Snapshot()
+	p, err := (wire.ItemMoveRequest{MovementType: wire.MoveTypePlayerToCos, CosGID: gid, SourceSlot: 30, DestSlot: 0}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) != 1 || r.Frames[0].Payload[0] != 2 || !reflect.DeepEqual(before, c.Snapshot()) {
+		t.Fatalf("bag trade goods loaded into the transport or the refusal moved state: %+v", r)
+	}
+
+	p, err = (wire.ItemMoveRequest{MovementType: wire.MoveTypePlayerToCos, CosGID: gid, SourceSlot: 31, DestSlot: 0}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) < 1 || r.Frames[0].Payload[0] != 1 || len(c.ActiveCOS.Container.Rows) != 1 {
+		t.Fatalf("event food no longer crosses to the companion: %+v", r)
+	}
+}
+
 func TestPlayerCOSOccupiedEquipmentSwapPreservesBothBodies(t *testing.T) {
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, testCosSource(testItems()))
