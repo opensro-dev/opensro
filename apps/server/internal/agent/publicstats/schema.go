@@ -35,12 +35,14 @@ var endpointTypes = []struct {
 	{"/public/v1/guilds", reflect.TypeOf(GuildsResponse{})},
 	{"/public/v1/status", reflect.TypeOf(StatusResponse{})},
 	{"/public/v1/schedule", reflect.TypeOf(ScheduleResponse{})},
+	{"/public/v1/fortresses", reflect.TypeOf(FortressesResponse{})},
 	{"/public/v1/chat", reflect.TypeOf(ChatResponse{})},
 	{"/public/v1/events", reflect.TypeOf(EventsResponse{})},
 	{"/v1/accounts/{id}/characters", reflect.TypeOf(OwnCharactersResponse{})},
 	{"/v1/market/categories", reflect.TypeOf(MarketCategoriesResponse{})},
 	{"/v1/market/listings", reflect.TypeOf(MarketListingsResponse{})},
 	{"/v1/accounts/{id}/market", reflect.TypeOf(OwnMarketResponse{})},
+	{"/v1/accounts/{id}/trades", reflect.TypeOf(OwnTradesResponse{})},
 }
 
 /*

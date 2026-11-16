@@ -5,6 +5,8 @@ geometry-uploads.test.mjs - submission upload counts, bytes and retirement
 
 The immediate path is the old writeBuffer reference. A fake queue executes
 copies only at submit and checks every byte of each original destination.
+A dynamic material's clock updates reach its uniform in one write a frame
+with the bytes the direct writes leave.
 The shared loader imports the shipped TypeScript without a private bundle.
 
 ===========================================================================
@@ -85,6 +87,10 @@ function fixture( options = {} ) {
 		queue: {
 			writeTexture() {},
 			writeBuffer( buffer, offset, data, start, size ) {
+				// A typed array source writes its whole view (the material updates).
+				if ( ArrayBuffer.isView( data ) ) {
+					[data, start, size] = [ data.buffer, data.byteOffset, data.byteLength ];
+				}
 				assert.equal( buffer.destroyed, false );
 				assert.equal( buffer.usage & GPU_BUFFER_USAGE.COPY_DST, GPU_BUFFER_USAGE.COPY_DST );
 				assert.equal( (offset | size) % 4, 0 );
@@ -352,4 +358,109 @@ test("device-sized pages spill without exceeding maxBufferSize or losing byte or
 	arena.retirement.close();
 	old.resources.dispose();
 	arena.resources.dispose();
+});
+
+/*
+================
+material
+
+The draw's material uniform bytes (binding 2).
+================
+*/
+function material( draw ) {
+	const { buffer, offset, size } = draw.binding.find( entry => entry.binding === 2 ).resource;
+	return buffer.bytes.subarray( offset, offset + size );
+}
+
+/*
+================
+modify
+
+One frame's material clock updates of every kind, the glow twice: the
+last write of a range wins, as on the queue.
+================
+*/
+function modify( commands, draw, tick ) {
+	const value = (tick % 8 + 1) / 8;
+	commands.updateTextureFactor( draw, Float32Array.of( value, 0, 1, value / 2 ) );
+	commands.updateMaterialColors( draw, Float32Array.of( value, 2, 3 ), 3 );
+	commands.updateMaterialColors( draw, Float32Array.of( 4, value, 6 ), 2 );
+	commands.updateEquipmentGlow( draw, Float32Array.of( 1, 2, 3 ), Float32Array.of( 4, 5 ), 1, true, true );
+	commands.updateEquipmentGlow( draw, Float32Array.of( value, 7, 8 ), Float32Array.of( 9, value ), 2, false, true );
+	commands.updateTextureTransform( draw, new Float32Array( 8 ).fill( value + 1 ) );
+}
+
+/*
+================
+Dynamic material updates reach the GPU in one write a frame with the direct writes' bytes
+================
+*/
+test("dynamic material updates reach the GPU in one write a frame with the direct writes' bytes", () => {
+	const old = fixture(), staged = fixture();
+	const expected = Array.from( { length: ACTORS }, () => old.resources.commands.upload( geometry() ) );
+	const actual = Array.from(
+		{ length: ACTORS },
+		() => staged.resources.commands.upload( { ...geometry(), dynamicMaterial: true } )
+	);
+	const dynamicWrites = () => staged.writes.filter( buffer => buffer.label === "geometry-material-dynamic" ).length;
+	for ( let tick = 0; tick < 3; tick++ ) {
+		old.writes.length = 0;
+		staged.writes.length = 0;
+		staged.retirement.open();
+		staged.resources.beginFrame();
+		for ( let i = 0; i < ACTORS; i++ ) {
+			modify( old.resources.commands, expected[i], tick + i );
+			modify( staged.resources.commands, actual[i], tick + i );
+		}
+		assert.equal( dynamicWrites(), 0, "updates wait in the mirror" );
+		staged.resources.flushMaterials();
+		staged.resources.uploads.submit( [] );
+		assert.equal( dynamicWrites(), 1, "one write for the frame's every update" );
+		for ( let i = 0; i < ACTORS; i++ ) {
+			assert.deepEqual( material( actual[i] ), material( expected[i] ), `draw ${i}` );
+		}
+		assert.equal( old.writes.length, ACTORS * 7, "the static path keeps its direct writes" );
+		staged.resources.endFrame();
+		staged.retirement.close();
+	}
+	staged.writes.length = 0;
+	staged.retirement.open();
+	staged.resources.beginFrame();
+	staged.resources.flushMaterials();
+	staged.resources.uploads.submit( [] );
+	staged.resources.endFrame();
+	staged.retirement.close();
+	assert.equal( dynamicWrites(), 0, "a frame without an update writes nothing" );
+	old.resources.dispose();
+	staged.resources.dispose();
+});
+
+/*
+================
+A dynamic draw released in the frame of its last update commits it before its range returns
+================
+*/
+test("a dynamic draw released in the frame of its last update commits it before its range returns", () => {
+	const old = fixture(), staged = fixture();
+	const expected = old.resources.commands.upload( geometry() ),
+		draw = staged.resources.commands.upload( { ...geometry(), dynamicMaterial: true } );
+	const range = draw.binding.find( entry => entry.binding === 2 ).resource;
+	staged.retirement.open();
+	staged.resources.beginFrame();
+	modify( old.resources.commands, expected, 5 );
+	modify( staged.resources.commands, draw, 5 );
+	staged.resources.commands.release( draw );
+	// Abandoned: endFrame alone, as when a frame throws before its submit.
+	staged.resources.endFrame();
+	assert.deepEqual( material( draw ), material( expected ) );
+	const during = staged.resources.commands.upload( { ...geometry(), dynamicMaterial: true } );
+	assert.notEqual( during.binding.find( entry => entry.binding === 2 ).resource.offset, range.offset );
+	staged.retirement.close();
+	const reused = staged.resources.commands.upload( { ...geometry(), dynamicMaterial: true } ),
+		fresh = old.resources.commands.upload( geometry() );
+	assert.equal( reused.binding.find( entry => entry.binding === 2 ).resource.offset, range.offset );
+	staged.resources.flushMaterials();
+	assert.deepEqual( material( reused ), material( fresh ), "the reused range holds its new owner's bytes" );
+	old.resources.dispose();
+	staged.resources.dispose();
 });

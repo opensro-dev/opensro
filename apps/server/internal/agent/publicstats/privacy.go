@@ -4,6 +4,7 @@
 privacy.go - the website's privacy setting (port-only)
 
 	GET /v1/accounts/{id}/characters                 -> 200 own characters
+	GET /v1/accounts/{id}/trades                     -> 200 own trade history (trades.go)
 	PUT /v1/accounts/{id}/characters/{name}/hidden       {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/break-notice {"on": bool} -> 204
@@ -70,6 +71,9 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		}
 		s.ownCharacters(w, r.PathValue("id"))
 	})
+	if s.src.Trades != nil {
+		s.installTrades(mux, digest)
+	}
 	mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/hidden", func(w http.ResponseWriter, r *http.Request) {
 		s.putFlag(w, r, digest, s.src.SetHidden)
 	})
