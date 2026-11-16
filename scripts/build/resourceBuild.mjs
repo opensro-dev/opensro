@@ -136,13 +136,12 @@ async function buildHdTexturePacksStep() {
 // The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
 // by their code closures. The world lane is not memoized; it reads the
 // outdoor build's public output, which no lane key covers. Nor are fonts,
-// audio and cursors (plan B5): the cursors and the font repairs are actions
-// (cursors.mjs, fontResources.mjs), so warm, the fonts lane costs about 1.8 s
-// (mostly the GDI atlas); audio's copies confirm unchanged files by digest,
-// about 1.9 s warm.
+// audio, cursors and text (plan B5): the cursors and the font repairs are
+// actions (cursors.mjs, fontResources.mjs), so warm, the fonts lane costs
+// about 1.8 s (mostly the GDI atlas); audio's copies confirm unchanged files
+// by digest, about 1.9 s warm; text parses its catalogs in 0.3 s.
 const LANE_MODULES = {
 	interfaceImages: [ "./cif.mjs", "./launcher.mjs", "./world/assets/copyMissionMinimapTileImages.mjs" ],
-	text: [ "./text.mjs", "./launcher.mjs", "./config.mjs" ],
 	titleCharacters: [
 		"./char/buildRoster.mjs",
 		"./char/buildCrowdVatAssets.mjs",
@@ -457,7 +456,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		worldResults
 	] = await runResourceTasks( [
 		lane( "interface-images", { modules: laneModules( "interfaceImages" ) }, interfaceImagesLane ),
-		lane( "text", { modules: laneModules( "text" ) }, textLane ),
+		textLane,
 		fontsLane,
 		audioLane,
 		cursorAssetsLane,
