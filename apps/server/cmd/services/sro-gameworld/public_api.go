@@ -220,6 +220,23 @@ func setPrivacyFlag(
 
 /*
 ================
+publicTradePage
+
+One page of an account's trade history (trades.go), read from the authority
+store. A character the account does not own answers publicstats.ErrNotOwned,
+the answer every account read gives for a name that is not the account's.
+================
+*/
+func publicTradePage(authority *store.Store, shard, account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
+	page, err := authority.TradeHistory(shard, account, character, before, limit)
+	if errors.Is(err, store.ErrTradeCharacterNotOwned) {
+		return domain.TradePage{}, publicstats.ErrNotOwned
+	}
+	return page, err
+}
+
+/*
+================
 readPublicWriteToken
 
 The write token file, or "" (write disabled) when unset, unreadable or
@@ -466,6 +483,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 		SetBreakNotice: func(account, name string, on bool) error {
 			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
 				func(c *domain.Character) *bool { return &c.BreakNotice })
+		},
+		Trades: func(account, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error) {
+			return publicTradePage(authority, shard, account, character, before, limit)
 		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
