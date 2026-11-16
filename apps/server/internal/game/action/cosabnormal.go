@@ -167,6 +167,9 @@ type cosAbnormalOwner struct {
 	// hit and by Hit for a fatal periodic hit, so the death
 	// settlement can name the dealer on its cargo log line (cosdeath.go).
 	winnerName string
+	// winnerAccount is that player's account ("" with winnerName): the
+	// scattered cargo is stamped lost to it, for job honor (jobhonor.go).
+	winnerAccount string
 	// winnerCape is the fatal dealer's free-battle group (0 for a
 	// monster dealer): the kill credit's relation gate on a transport's
 	// cargo reads it at settlement (cosdeath.go). A companion dealer
@@ -488,6 +491,7 @@ func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reas
 		// dealer's relation too, not only a strike's (cosdeath.go).
 		if dealer := o.sources[source].killer.player; dealer != nil {
 			o.winnerName = dealer.Name
+			o.winnerAccount = dealer.AccountID
 			_, o.winnerCape = o.rt.playerRelationEquipment(dealer)
 		}
 	}

@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
+import { correctedUiSystemCatalog } from "../helpers/corrected-text.mjs";
 /*
 ================
 load
@@ -2158,7 +2159,18 @@ test("message scrolling uses current layout and a modal blocks captured backgrou
 });
 
 test("party proposal projects native controls, blocks background input and preserves response ownership", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_STT_PARTY_SOMEUSER", "UIIT_STT_PARTY_PROPOSAL_ASK" ] )
+		);
 	try {
 		f.ui.step( f.state, 0 );
 		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
@@ -2171,8 +2183,8 @@ test("party proposal projects native controls, blocks background input and prese
 		f.ui.event( { kind: "drag", id: "invite-drag", dx: 90, dy: -20 } );
 		semantic = f.ui.step( invite, 110 );
 		assert.deepEqual( semantic.controls.find( c => c.id === "invite-accept" ).rect, [ 812, 481, 76, 24 ] );
-		assert.ok( f.hasText( "[Player]has" ) );
-		assert.ok( f.hasText( "Party application success. Will you accept it?" ) );
+		assert.ok( f.hasText( "[Player] has" ) );
+		assert.ok( f.hasText( "invited you to a party. Will you accept?" ) );
 		assert.equal( f.ui.blocks( 100, 100 ), true );
 		f.ui.event( { kind: "activate", id: "logout" } );
 		f.ui.event( { kind: "activate", id: "submit" } );
@@ -2198,7 +2210,18 @@ test("party proposal projects native controls, blocks background input and prese
 	}
 });
 test("guild proposal uses native agreement text, guild admission and independent drag lifetime", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_MSG_GUILD_JOIN_REQUEST" ] )
+		);
 	try {
 		for ( let t = 0; t < 1000; t += 100 ) f.ui.step( f.state, t );
 		f.state.gameplay = { ...f.state.gameplay, social: { invitation: { type: 5, gid: 1 } } };
@@ -2206,7 +2229,7 @@ test("guild proposal uses native agreement text, guild admission and independent
 		assert.ok( !scene?.controls.some( c => c.id === "invite-accept" ), "native requires inviter guild data" );
 		f.state.entities = [ { ...f.state.entities[0], guildName: "Silkroad" } ];
 		scene = f.ui.step( f.state, 1200 );
-		assert.ok( f.hasText( "[Player]has applied for your guild." ) );
+		assert.ok( f.hasText( "[Player] has invited you to join a guild." ) );
 		assert.ok( f.hasText( "Do you want to join [Silkroad]guild?" ) );
 		assert.deepEqual( scene.controls.filter( c => c.kind === "button" ).map( c => [ c.id, c.label, c.rect ] ), [ [
 			"invite-accept",
@@ -2362,7 +2385,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 		for ( let i = 1; i <= 5; i++ ) f.ui.step( f.state, i * 20 );
 		assert.ok( f.hasText( "Lv 1" ) );
 		const mounted = { ...f.state, gameplay: { ...f.state.gameplay, progression: { level: 2, masteries: [] } } };
-		assert.ok( f.ui.step( mounted, 200 ) );
+		let published = f.scenes.length;
+		f.ui.step( mounted, 200 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Lv 2" ) );
 		const selected = {
 			...mounted,
@@ -2374,7 +2399,9 @@ test("displayed changes redraw without a dependency list and unchanged output st
 			...selected,
 			entities: [ selected.entities[0], { ...selected.entities[1], name: "Renamed NPC" } ]
 		};
-		assert.ok( f.ui.step( renamed, 400 ) );
+		published = f.scenes.length;
+		f.ui.step( renamed, 400 );
+		assert.ok( f.scenes.length > published );
 		assert.ok( f.hasText( "Renamed NPC" ) );
 		const count = f.scenes.length, uploads = f.textures.length;
 		for ( let now = 500; now < 5000; now += 100 ) assert.equal( f.ui.step( renamed, now ), null );
@@ -3666,8 +3693,8 @@ test("Apply commits every tab, as OK does, and keeps the Options window open", (
 		assert.equal( saved[0].records[0][9], 0 );
 		// The input tab is committed with the rest.
 		assert.equal( bindings.length, 1 );
-		const result = f.ui.step( f.state, 1700 );
-		assert.ok( result.controls.some( c => c.id === "option-apply" ) );
+		f.ui.step( f.state, 1700 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "option-apply" ) );
 		f.ui.event( { kind: "activate", id: "option-video-record:1" } );
 		f.ui.event( { kind: "activate", id: "option-video-choice:10:0" } );
 		f.ui.event( { kind: "activate", id: "option-cancel" } );
@@ -3706,8 +3733,8 @@ test("player and lower-bar retention invalidate independently for vitals, progre
 		assert.equal( resized.player.rebuilds, sp.player.rebuilds + 1 );
 		assert.equal( resized.bar.rebuilds, sp.bar.rebuilds + 1 );
 		f.ui.event( { kind: "activate", id: "ability-details" } );
-		const semantics = f.ui.step( { ...f.state }, 1004 );
-		assert.ok( semantics.controls.some( c => c.id === "ability-details" ) );
+		f.ui.step( { ...f.state }, 1004 );
+		assert.ok( f.presented()?.controls.some( c => c.id === "ability-details" ) );
 		assert.equal( f.ui.stats().layoutRetention.player.rebuilds, resized.player.rebuilds + 1 );
 	} finally {
 		f.dispose();

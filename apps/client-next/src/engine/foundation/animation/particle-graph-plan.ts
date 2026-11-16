@@ -11,6 +11,11 @@ which child emitters emit from an element. The plan holds those, built
 once per model, so the tick reads tables instead of walking ancestors,
 searching frame lists and building objects.
 
+The plan also lays out a graph's flat slot storage
+(particle-graph-slots.ts): where each emitter's slots start in the
+graph's arrays, and which emitters keep the tick pose and records their
+primitives draw.
+
 The plan is immutable; a graph state is created with the plan of its
 model (createParticleGraph) and every tick reads it.
 
@@ -50,6 +55,21 @@ Per emitter n of graph:
   emitter order.
 - sibling[n]: 1 when its commands read the element's predecessor.
 - horizon: the last tick the graph can change.
+
+The slot layout (particle-graph-slots.ts): slot 0 is the holder (the
+graph root), and emitter n holds slots[n] slots from base[n]; total counts
+them all. draws[n] holds DRAW_* bits of the primitives that draw emitter
+n. Per-emitter blocks start at their first entry in the graph's array, or
+-1 when the emitter has none, and each array's length is the total named
+beside it:
+- snapshots: the tick pose of an emitter a primitive draws.
+- records: the GPU tick records of an emitter a particle stream draws.
+- ribbons: the ribbon tick frames of an emitter a ribbon draws.
+- groups: the emission group totals of an emission emitter, one per slot
+  of its parent emitter (one for the holder).
+- orders: the birth order of an emitter whose elements parent emission
+  groups or have siblings.
+- latest: the parent slots one sibling pass indexes, at most.
 ================
 */
 export interface ParticleGraphPlan {
@@ -65,7 +85,40 @@ export interface ParticleGraphPlan {
 	readonly emittingChildren: readonly (readonly number[])[];
 	readonly sibling: Uint8Array;
 	readonly horizon: number;
+	readonly base: Int32Array;
+	readonly slots: Int32Array;
+	readonly total: number;
+	readonly draws: Uint8Array;
+	readonly snapshots: Int32Array;
+	readonly snapshotTotal: number;
+	readonly records: Int32Array;
+	readonly recordTotal: number;
+	readonly ribbons: Int32Array;
+	readonly ribbonTotal: number;
+	readonly groups: Int32Array;
+	readonly groupTotal: number;
+	readonly orders: Int32Array;
+	readonly orderTotal: number;
+	readonly latest: number;
 }
+
+/*
+================
+ParticleGraphDraw
+
+What the plan reads of a model primitive: the graph emitter it draws, as
+a ribbon or as a particle stream (runtime/renderer/characters).
+================
+*/
+export interface ParticleGraphDraw {
+	readonly particleEmitter?: number;
+	readonly ribbon?: unknown;
+}
+
+// draws bits: a particle stream draws the emitter from its tick records; a
+// ribbon draws a strip through its elements' frames.
+export const DRAW_RECORDS = 1;
+export const DRAW_RIBBON = 2;
 
 // The frame list of a program step that names none: its first frame.
 const FIRST_FRAME = [ 0 ] as const;
@@ -198,13 +251,40 @@ function tickHorizon( graph: readonly ParticleEmitter[] ): number {
 
 /*
 ================
+blockStarts
+
+Where each emitter's block starts in one array, sizes[n] entries for an
+emitter that has one (size >= 0) and -1 for one that has none; the array's
+length is the sum, written at starts[sizes.length] - so starts has one
+entry more than sizes.
+================
+*/
+function blockStarts( sizes: readonly number[], first = 0 ): Int32Array {
+	const starts = new Int32Array( sizes.length + 1 );
+	let next = first;
+	for ( let n = 0; n < sizes.length; n++ ) {
+		const size = sizes[n]!;
+		starts[n] = size < 0 ? -1 : next;
+		if ( size > 0 ) next += size;
+	}
+	starts[sizes.length] = next;
+	return starts;
+}
+
+/*
+================
 createParticleGraphPlan
 
 Emitters name parents before themselves (particle-graph.ts ticks parents
 first), so each emitter's links are found from its ancestors' already.
+draws are the model's primitives; a graph ticked with none keeps no tick
+pose or records.
 ================
 */
-export function createParticleGraphPlan( graph: readonly ParticleEmitter[] ): ParticleGraphPlan {
+export function createParticleGraphPlan(
+	graph: readonly ParticleEmitter[],
+	draws: readonly ParticleGraphDraw[] = []
+): ParticleGraphPlan {
 	const rootLink = new Int32Array( graph.length ), root: LinkNode = { rootLink: 0 };
 	const node = ( emitter: number | undefined ): LinkNode | undefined =>
 		emitter === undefined ? undefined : emitter < 0 ? root : { rootLink: rootLink[emitter]! };
@@ -218,6 +298,38 @@ export function createParticleGraphPlan( graph: readonly ParticleEmitter[] ): Pa
 			root
 		);
 	}
+	const emittingChildren = graph.map( ( _, n ) => {
+		const children: number[] = [];
+		for ( let child = 0; child < graph.length; child++ ) {
+			if ( graph[child]!.parent === n && graph[child]!.emission ) children.push( child );
+		}
+		return children;
+	} );
+	const sibling = Uint8Array.from( graph, def => needsSibling( def ) ? 1 : 0 );
+	// A fixed-birth emitter holds a slot per birth; an emission emitter, its
+	// live capacity (the tick throws past it).
+	const slots = Int32Array.from( graph, def => def.emission ? def.capacity ?? def.births.length : def.births.length );
+	const drawn = new Uint8Array( graph.length );
+	for ( const draw of draws ) {
+		const n = draw.particleEmitter;
+		if ( n === undefined ) continue;
+		if ( !(n >= 0 && n < graph.length) ) throw Error( "Particle primitive of no graph emitter" );
+		drawn[n]! |= draw.ribbon ? DRAW_RIBBON : DRAW_RECORDS;
+	}
+	const sized = ( has: ( n: number ) => boolean ) => graph.map( ( _, n ) => has( n ) ? slots[n]! : -1 );
+	const base = blockStarts( [ ...slots ], 1 );
+	const snapshots = blockStarts( sized( n => drawn[n] !== 0 ) );
+	const records = blockStarts( sized( n => (drawn[n]! & DRAW_RECORDS) !== 0 ) );
+	const ribbons = blockStarts( sized( n => (drawn[n]! & DRAW_RIBBON) !== 0 ) );
+	const groups = blockStarts(
+		graph.map( def => !def.emission ? -1 : def.parent < 0 ? 1 : slots[def.parent]! )
+	);
+	const orders = blockStarts( sized( n => emittingChildren[n]!.length > 0 || sibling[n] === 1 ) );
+	let latest = 0;
+	for ( let n = 0; n < graph.length; n++ ) {
+		const parent = graph[n]!.parent;
+		if ( sibling[n] ) latest = Math.max( latest, parent < 0 ? 1 : slots[parent]! );
+	}
 	return {
 		graph,
 		rootLink,
@@ -228,14 +340,23 @@ export function createParticleGraphPlan( graph: readonly ParticleEmitter[] ): Pa
 		spinFrames: graph.map( def => frameTable( def.program?.spinFrames ?? FIRST_FRAME ) ),
 		attractionFrames: graph.map( def => frameTable( def.program?.attractionFrames ?? FIRST_FRAME ) ),
 		samples: graph.map( def => (def.commands ?? []).map( sampleProgram ) ),
-		emittingChildren: graph.map( ( _, n ) => {
-			const children: number[] = [];
-			for ( let child = 0; child < graph.length; child++ ) {
-				if ( graph[child]!.parent === n && graph[child]!.emission ) children.push( child );
-			}
-			return children;
-		} ),
-		sibling: Uint8Array.from( graph, def => needsSibling( def ) ? 1 : 0 ),
-		horizon: tickHorizon( graph )
+		emittingChildren,
+		sibling,
+		horizon: tickHorizon( graph ),
+		base,
+		slots,
+		total: base[graph.length]!,
+		draws: drawn,
+		snapshots,
+		snapshotTotal: snapshots[graph.length]!,
+		records,
+		recordTotal: records[graph.length]!,
+		ribbons,
+		ribbonTotal: ribbons[graph.length]!,
+		groups,
+		groupTotal: groups[graph.length]!,
+		orders,
+		orderTotal: orders[graph.length]!,
+		latest
 	};
 }

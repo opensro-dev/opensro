@@ -69,13 +69,15 @@ type Slab = {
 ================
 Stage
 
-A staged buffer's mirror and the byte span written since the last flush
-(empty while low >= high).
+A staged buffer's mirror, as bytes and as the floats over the same
+memory, and the byte span written since the last flush (empty while
+low >= high).
 ================
 */
 type Stage = {
 	buffer: GPUBuffer;
 	bytes: Uint8Array<ArrayBuffer>;
+	floats: Float32Array<ArrayBuffer>;
 	low: number;
 	high: number;
 };
@@ -141,7 +143,15 @@ function slabSet( device: GPUDevice, label: string, usage: number, retire: Retir
 	================
 	*/
 	function mirror( buffer: GPUBuffer, size: number ) {
-		if ( staged ) stages.set( buffer, { buffer, bytes: new Uint8Array( size ), low: Infinity, high: 0 } );
+		if ( !staged ) return;
+		const bytes = new Uint8Array( size );
+		stages.set( buffer, {
+			buffer,
+			bytes,
+			floats: new Float32Array( bytes.buffer, 0, size >> 2 ),
+			low: Infinity,
+			high: 0
+		} );
 	}
 	/*
 	================
@@ -268,19 +278,24 @@ function slabSet( device: GPUDevice, label: string, usage: number, retire: Retir
 		================
 		write
 
-		Copies the first bytes of source into slice's mirror range (staged
-		sets only). The GPU sees them after the next flush.
+		Copies the first bytes of source into slice's mirror range, at byte
+		at within the range (staged sets only). The GPU sees them after the
+		next flush. A whole Float32Array copies without a temporary view: the
+		per-draw updates of a frame write hundreds of them.
 		================
 		*/
-		write( slice: BufferSlice, source: ArrayBufferView, bytes: number ) {
+		write( slice: BufferSlice, source: ArrayBufferView, bytes: number, at = 0 ) {
 			const { buffer, offset, size } = slice.binding, stage = stages.get( buffer );
-			if ( !stage || bytes % 4 || bytes > size || bytes > source.byteLength ) {
-				throw Error( "Invalid staged slab write" );
-			}
+			if (
+				!stage || bytes % 4 || at % 4 || at < 0 || at + bytes > size || bytes > source.byteLength
+			) throw Error( "Invalid staged slab write" );
 			if ( !bytes ) return;
-			stage.bytes.set( new Uint8Array( source.buffer, source.byteOffset, bytes ), offset );
-			stage.low = Math.min( stage.low, offset );
-			stage.high = Math.max( stage.high, offset + bytes );
+			const start = offset + at;
+			// Same-type typed array copies keep every bit pattern (NaN payloads).
+			if ( source instanceof Float32Array && bytes === source.byteLength ) stage.floats.set( source, start / 4 );
+			else stage.bytes.set( new Uint8Array( source.buffer, source.byteOffset, bytes ), start );
+			stage.low = Math.min( stage.low, start );
+			stage.high = Math.max( stage.high, start + bytes );
 			dirty.add( stage );
 		},
 		/*

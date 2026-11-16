@@ -90,15 +90,17 @@ func (rt *Runtime) loadedTransport(pet *enterworld.CharacterCOS) bool {
 dropRiddenCargoInDoor
 
 The death-while-riding case, called from releaseRiddenVehicleInDoor before
-the vehicle is released. The caller holds c's door. Returns the drops'
+the vehicle is released. lostTo is the killing player's account ("" for
+a monster or no dealer), stamped on the bags for job honor. The caller
+holds c's door. Returns the drops'
 public frames, nil when the rule is off or the ride carries nothing.
 ================
 */
-func (rt *Runtime) dropRiddenCargoInDoor(division string, c *enterworld.Character, now int64) []wire.Frame {
+func (rt *Runtime) dropRiddenCargoInDoor(division string, c *enterworld.Character, now int64, lostTo string) []wire.Frame {
 	if !rt.TraderCargoDrop || !rt.loadedTransport(c.ActiveCOS) {
 		return nil
 	}
-	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now, "rider-death", "")
+	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now, cargoLoss{cause: "rider-death", lostTo: lostTo})
 }
 
 /*
@@ -157,7 +159,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 	if allowed, known := world.RegionPlayerCombat(at.RegionID); known && !allowed {
 		return nil
 	}
-	public := rt.scatterTransportCargo(division, c, pet, now, "disconnect", "")
+	public := rt.scatterTransportCargo(division, c, pet, now, cargoLoss{cause: "disconnect"})
 	gid := pet.GID
 	if pet.Mounted {
 		public = append(public, wire.Frame{Opcode: wire.OpCosRideState,

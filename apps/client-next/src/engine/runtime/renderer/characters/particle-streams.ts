@@ -18,7 +18,7 @@ only when drawn and only to their whole tick.
 */
 
 import type { CharacterActor, CharacterModel, CharacterPrimitive } from "@/engine/contracts/character";
-import type { ParticleGraphState, ParticleLink } from "@/engine/foundation/animation/particle-graph";
+import { SLOT_ALIVE, type ParticleGraphState } from "@/engine/foundation/animation/particle-graph-slots";
 import { particleGraphTime } from "@/engine/foundation/animation/particle-graph-clock";
 import { advanceParticle, type ParticleInstance } from "@/engine/foundation/animation/particle-program";
 import {
@@ -38,8 +38,7 @@ import {
 	PARTICLE_RECORD,
 	particleView,
 	recordLive,
-	writeEmittedRecord,
-	writeGraphRecord
+	writeEmittedRecord
 } from "@/engine/foundation/animation/particle-records";
 import { cameraAxes } from "@/engine/foundation/rendering/effect-billboard";
 import type { ParticlePresentation } from "../internal/gpu-contract";
@@ -55,7 +54,7 @@ lifetime): its graph, or its primitives' birth matrices and programs.
 export interface ParticleHistory {
 	readonly graph?: ParticleGraphState;
 	// The graph's holder follow this frame (particle-holder-link.ts).
-	readonly link?: ParticleLink;
+	readonly follow?: Float32Array;
 	readonly matrices: readonly (Float32Array | undefined)[];
 	readonly programs: readonly (ParticleInstance | undefined)[][];
 }
@@ -86,7 +85,6 @@ export interface ParticleRow {
 	// The pose an own-emission particle's palette starts from.
 	pose: { palette( primitive: CharacterPrimitive, out: Float32Array, offset: number ): void; } | undefined;
 	opacity: number;
-	origin: number;
 }
 
 /*
@@ -95,7 +93,7 @@ createParticleRow
 ================
 */
 export function createParticleRow(): ParticleRow {
-	return { actor: undefined, history: undefined, pose: undefined, opacity: 1, origin: 0 };
+	return { actor: undefined, history: undefined, pose: undefined, opacity: 1 };
 }
 
 /*
@@ -103,8 +101,9 @@ export function createParticleRow(): ParticleRow {
 ParticleStream
 
 A batch primitive's presentation input, with what its records were last
-written from: per actor, its history, graph tick and origin. A row whose
-actor changes (new batch membership) has a new history and is rewritten.
+written from: per actor, its history and, for a graph, the revision of
+the graph's records. A row whose actor changes (new batch membership) has
+a new history and is rewritten.
 ================
 */
 export interface ParticleStream extends ParticlePresentation {
@@ -113,8 +112,7 @@ export interface ParticleStream extends ParticlePresentation {
 	// Graph particles start from the model's bind scale.
 	readonly graphPalette?: Float32Array;
 	readonly owners: (ParticleHistory | undefined)[];
-	readonly ticks: Float64Array;
-	readonly origins: Float64Array;
+	readonly revisions: Float64Array;
 	readonly liveCounts: Uint32Array;
 	readonly extents: Uint32Array;
 	readonly work: Float64Array;
@@ -160,8 +158,7 @@ export function createParticleStream( model: CharacterModel, index: number, rows
 		index,
 		graphPalette,
 		owners: new Array( rows ).fill( undefined ),
-		ticks: new Float64Array( rows ).fill( NaN ),
-		origins: new Float64Array( rows ).fill( NaN ),
+		revisions: new Float64Array( rows ).fill( NaN ),
 		liveCounts: new Uint32Array( rows ),
 		extents: new Uint32Array( rows ),
 		work: new Float64Array( ROTATION_WORK ),
@@ -184,38 +181,37 @@ function markDirty( stream: ParticleStream, start: number, end: number ): void {
 ================
 writeGraphRow
 
-A graph changes only at its ticks and region crossings: the actor's
-records are rewritten then, and otherwise left alone.
+A graph's tick writes its drawn emitters' records into the graph's own
+storage (particle-graph.ts) whenever it ticks or shifts with a region
+crossing; the actor's records are copied from there as a block when they
+changed, and otherwise left alone. Slots past the graph's in the previous
+owner's extent are copied too: the graph holds them empty.
 ================
 */
-function writeGraphRow( stream: ParticleStream, index: number, history: ParticleHistory, origin: number ): void {
-	const graph = history.graph!, base = index * stream.slots;
-	const elements = graph.elements[stream.primitive.particleEmitter!]!;
-	if ( elements.length > stream.slots ) throw Error( "Particle graph outside its emission capacity" );
-	if (
-		stream.owners[index] === history && stream.ticks[index] === graph.frame && stream.origins[index] === origin
-	) {
+function writeGraphRow( stream: ParticleStream, index: number, history: ParticleHistory ): void {
+	const graph = history.graph!, n = stream.primitive.particleEmitter!, plan = graph.plan;
+	const count = graph.counts[n]!, first = plan.records[n]!;
+	if ( count > stream.slots ) throw Error( "Particle graph outside its emission capacity" );
+	if ( first < 0 ) throw Error( "Particle graph emitter without its records" );
+	if ( stream.owners[index] === history && stream.revisions[index] === graph.revision ) {
 		stream.live += stream.liveCounts[index]!;
 		return;
 	}
-	// Initial upload clears the full allocation. Later ticks need only the used
-	// prefix, including the previous owner's tail when membership or time resets.
-	const extent = Math.max( elements.length, stream.extents[index]! );
-	let live = 0;
-	for ( let b = 0; b < extent; b++ ) {
-		const element = elements[b];
-		if ( element?.alive ) {
-			writeGraphRecord( stream.records, base + b, element, stream.work, history.link );
-			live++;
-		} else hideRecord( stream.records, base + b );
+	const extent = Math.max( count, stream.extents[index]! ), base = index * stream.slots;
+	if ( extent ) {
+		stream.records.set(
+			graph.records.subarray( first * PARTICLE_RECORD, (first + extent) * PARTICLE_RECORD ),
+			base * PARTICLE_RECORD
+		);
+		markDirty( stream, base, base + extent );
 	}
+	let live = 0;
+	for ( let b = 0, s = plan.base[n]!; b < count; b++, s++ ) if ( graph.flags[s]! & SLOT_ALIVE ) live++;
 	stream.live += live;
 	stream.liveCounts[index] = live;
-	stream.extents[index] = elements.length;
+	stream.extents[index] = count;
 	stream.owners[index] = history;
-	stream.ticks[index] = graph.frame;
-	stream.origins[index] = origin;
-	if ( extent ) markDirty( stream, base, base + extent );
+	stream.revisions[index] = graph.revision;
 }
 
 /*
@@ -305,8 +301,8 @@ export function writeParticleRow(
 		actors[at + ACTOR_TIME] = graphTime;
 		actors[at + ACTOR_FRACTION] = graphTime * PARTICLE_TICKS_PER_SECOND - graph.frame;
 		actors.set( stream.graphPalette, at + ACTOR_PALETTE );
-		if ( history.link ) actors.set( history.link.follow, at + ACTOR_FOLLOW );
-		writeGraphRow( stream, index, history, row.origin );
+		if ( history.follow ) actors.set( history.follow, at + ACTOR_FOLLOW );
+		writeGraphRow( stream, index, history );
 		return;
 	}
 	if ( !row.pose ) throw Error( "Emitted particle stream without its pose" );

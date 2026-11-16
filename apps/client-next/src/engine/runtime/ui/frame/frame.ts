@@ -303,6 +303,39 @@ export function comboBox(
 const WINDOW_LABEL_MARGIN = 6;
 // A fitted button caption keeps this far inside each side of its plate.
 const CAPTION_MARGIN = 4;
+// The blank between a wrapped label's two lines, below the first line's
+// descent: one label reads as one, apart from the rows beside it.
+const WRAP_LEADING = 1;
+
+/*
+================
+wrappedLabelBand
+
+Where a wrapped label's two lines go (the Experimental "Fit window
+labels"): the top of the first line's rect, laid at its top (vAlign 0),
+and the pitch to the second. A box sized for one line has no room for
+two at the font's full extent (two such lines ran 8 pixels into each
+neighbouring row, #3673), so the pair stacks at its ink height plus
+WRAP_LEADING, and tighter, down to the ink height where the first line's
+descent meets the second line's letters, when room ([above, below],
+layout labelRoom) needs it. The pair's ink is centred on the box, then
+moved inside the band; a pair taller than its band even at the tightest
+pitch stays centred on the band. Without room the band is unbounded.
+================
+*/
+function wrappedLabelBand( box: UiRect, room: readonly [number, number] | undefined, ink: {
+	top: number;
+	height: number;
+} ) {
+	const [above, below] = room ?? [ Infinity, Infinity ];
+	const bandTop = box[1] - above, bandBottom = box[1] + box[3] + below;
+	const pitch = Math.max( ink.height, Math.min( ink.height + WRAP_LEADING, bandBottom - bandTop - ink.height ) );
+	const block = pitch + ink.height;
+	let inkTop = box[1] + (box[3] - block) / 2;
+	if ( block <= bandBottom - bandTop ) inkTop = Math.min( Math.max( inkTop, bandTop ), bandBottom - block );
+	else inkTop = bandTop + (bandBottom - bandTop - block) / 2;
+	return { top: inkTop - ink.top, pitch };
+}
 // The lattice cell of CIFLattice art (36 x 36 inventory squares).
 const LATTICE_CELL = 36;
 // The Yes/No pair's buttons are this wide (52E720).
@@ -384,12 +417,15 @@ export function authoredText(
 	// use the room to the window's left margin; the wrap width splits
 	// the label near its middle (never under its longest word) so a
 	// label whose room is the rest of the window still breaks in two
-	// instead of ellipsizing.
-	if ( !clipToControl && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
+	// instead of ellipsizing. A label its caller keeps inside its box
+	// (clipToControl, the guild page's "Guild master" before the race
+	// mark) wraps too, its lines inside the box's columns, instead of
+	// being cut to "Guild ma..." (#3674).
+	if ( clipToControl !== "clip" && frame.fitWindowLabels() && node.text !== "" && value.includes( " " ) ) {
 		const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 		const width = measure( value );
 		if ( width > box[2] ) {
-			const room = node.hAlign === 2 ?
+			const room = node.hAlign === 2 && !clipToControl ?
 					Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
 					box[2],
 				balanced = Math.max(
@@ -403,19 +439,19 @@ export function authoredText(
 				const lines = textLines( value, wrapWidth, measure );
 				if ( lines.length !== 2 || !lines.every( line => measure( line ) <= room ) ) continue;
 				const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
-					top = box[1] + (box[3] - 2 * lineHeight) / 2;
+					{ top, pitch } = wrappedLabelBand( box, node.room, text.lineInk( node.fontIndex ?? 0 ) );
 				lines.forEach( ( line, index ) =>
 					quads.push(
 						...text.quads(
 							line,
-							[ box[0], top + index * lineHeight, box[2], lineHeight ],
+							[ box[0], top + index * pitch, box[2], lineHeight ],
 							full,
 							node.color,
 							{
 								fontIndex: node.fontIndex,
 								fontStyle,
 								hAlign: node.hAlign,
-								vAlign: 1
+								vAlign: 0
 							}
 						)
 					)
@@ -430,6 +466,8 @@ export function authoredText(
 			fontStyle,
 			hAlign: node.hAlign,
 			vAlign: node.vAlign,
+			// A keyed static is a label; a value field's text keeps to its box.
+			label: node.text !== "",
 			...(clipToControl ?
 				{ overflow: clipToControl === "clip" ? "clip" as const : "ellipsis" as const } :
 				{})

@@ -11,9 +11,9 @@ must remain isolated when birth serials no longer match storage order.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { createParticleGraph, advanceParticleGraph } = await import(
-	"../../src/engine/foundation/animation/particle-graph.ts"
-);
+const { advanceParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph.ts" );
+const { createParticleGraph } = await import( "../../src/engine/foundation/animation/particle-graph-slots.ts" );
+const { particleElements } = await import( "../helpers/particle-slots.mjs" );
 const matrix = new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 const table = new Float32Array( [ .25, .5, .75 ] );
 
@@ -56,10 +56,10 @@ test("sibling commands preserve parent isolation and slot execution order after 
 	let recycled = false;
 	for ( let tick = 0; tick < 40; tick++ ) {
 		const old = new Map(
-			state.elements[1].filter( e => e !== undefined ).map( e => [ e.serial, e.state.position[0] ] )
+			particleElements( state, 1 ).filter( e => e !== undefined ).map( e => [ e.serial, e.position[0] ] )
 		);
 		advanceParticleGraph( state, graph, tick / 20, matrix, table );
-		const rows = state.elements[1].flatMap( e => e?.alive ? [ e ] : [] );
+		const rows = particleElements( state, 1 ).flatMap( e => e?.alive ? [ e ] : [] );
 		const executed = new Map();
 		for ( const element of rows ) {
 			const previous = rows.filter( e => e.parent === element.parent && e.serial < element.serial )
@@ -68,7 +68,7 @@ test("sibling commands preserve parent isolation and slot execution order after 
 			// a predecessor in a later slot still carries last tick's position.
 			const predecessorX = previous && (executed.get( previous.serial ) ?? old.get( previous.serial ));
 			const expected = previous ? predecessorX + 1 : old.get( element.serial ) ?? 0;
-			assert.equal( element.state.position[0], expected );
+			assert.equal( element.position[0], expected );
 			executed.set( element.serial, expected );
 		}
 		if ( rows.some( ( e, i ) => i > 0 && e.serial < rows[i - 1].serial ) ) recycled = true;
