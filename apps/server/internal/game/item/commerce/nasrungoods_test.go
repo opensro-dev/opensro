@@ -48,3 +48,24 @@ func TestNasrunGoodsFollowTheSwitch(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestNasrunIsNotAnExtraGoodsSetting
+
+The rules page shows SRO_SHOP_EXTRA_GOODS's row from ExtraGoodsFromEnv:
+with that setting off and SRO_NASRUN on, the row must stay off, so the
+token goods never come back through it.
+================
+*/
+func TestNasrunIsNotAnExtraGoodsSetting(t *testing.T) {
+	t.Setenv(EnvShopExtraGoods, "")
+	t.Setenv(nasrun.Env, "on")
+	goods, err := ExtraGoodsFromEnv()
+	if err != nil || len(goods) != 0 {
+		t.Fatalf("extra goods off, Nasrun on: %d goods, %v; want none", len(goods), err)
+	}
+	if len(NasrunGoodsFromEnv()) == 0 {
+		t.Fatal("Nasrun on lists no token goods")
+	}
+}

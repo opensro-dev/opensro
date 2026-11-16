@@ -157,7 +157,10 @@ func ExtraGoodsFromEnv() ([]ExtraGood, error) {
 	if active {
 		goods = regroupJanganAlchemy(goods)
 	}
-	return append(goods, NasrunGoodsFromEnv()...), nil
+	// The Devil's Spirit token goods (SRO_NASRUN) are not this setting's:
+	// the shop builders append NasrunGoodsFromEnv beside it, so the rules
+	// page's extra-goods row reads only SRO_SHOP_EXTRA_GOODS.
+	return goods, nil
 }
 
 /*
