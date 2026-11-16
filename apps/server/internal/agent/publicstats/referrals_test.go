@@ -161,7 +161,7 @@ func TestReferralRoutesLinkListAndApprove(t *testing.T) {
 	if strings.Contains(string(body), "gamma") || strings.Contains(string(body), "delta") {
 		t.Fatalf("own referrals name an invited account: %s", body)
 	}
-	var own ownReferralsResponse
+	var own OwnReferralsResponse
 	if err := json.Unmarshal(body, &own); err != nil {
 		t.Fatal(err)
 	}

@@ -83,21 +83,36 @@ const (
 	referralQualified = "qualified"
 )
 
-type referralInvite struct {
+// ReferralInvite is one invited account as its inviter sees it: when, and
+// how far, never who.
+type ReferralInvite struct {
 	LinkedMs    int64  `json:"linkedMs"`
 	Status      string `json:"status"`
 	QualifiedMs int64  `json:"qualifiedMs,omitempty"`
 	EarnedSilk  uint32 `json:"earnedSilk"`
 }
 
-type ownReferralsResponse struct {
+// OwnReferralsResponse answers GET /v1/accounts/{id}/referrals.
+type OwnReferralsResponse struct {
 	Code       string           `json:"code"`
 	Rules      ReferralRules    `json:"rules"`
-	Invites    []referralInvite `json:"invites"`
+	Invites    []ReferralInvite `json:"invites"`
 	EarnedSilk uint32           `json:"earnedSilk"`
 }
 
-type heldReferral struct {
+// ReferralCodeResponse answers GET /v1/referral-codes/{code}.
+type ReferralCodeResponse struct {
+	Inviter string `json:"inviter"`
+	Account string `json:"account"`
+}
+
+// HeldReferralsResponse answers GET /v1/referrals/held.
+type HeldReferralsResponse struct {
+	Referrals []HeldReferral `json:"referrals"`
+}
+
+// HeldReferral is one referral waiting for staff.
+type HeldReferral struct {
 	Referee  string `json:"referee"`
 	Referrer string `json:"referrer"`
 	LinkedMs int64  `json:"linkedMs"`
@@ -146,9 +161,9 @@ func (s *Service) ownReferrals(w http.ResponseWriter, r *http.Request) {
 		writeStatus(w, http.StatusServiceUnavailable, "unavailable")
 		return
 	}
-	out := ownReferralsResponse{Code: code, Rules: s.src.ReferralRules, Invites: []referralInvite{}}
+	out := OwnReferralsResponse{Code: code, Rules: s.src.ReferralRules, Invites: []ReferralInvite{}}
 	for _, row := range rows {
-		invite := referralInvite{LinkedMs: row.LinkedMs, Status: referralJoined, EarnedSilk: row.ReferrerSilk}
+		invite := ReferralInvite{LinkedMs: row.LinkedMs, Status: referralJoined, EarnedSilk: row.ReferrerSilk}
 		switch {
 		case row.QualifiedMs != 0:
 			invite.Status, invite.QualifiedMs = referralQualified, row.QualifiedMs
@@ -225,7 +240,7 @@ func (s *Service) referralCode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.Unlock()
-	writeJSON(w, map[string]string{"inviter": inviter, "account": owner})
+	writeJSON(w, ReferralCodeResponse{Inviter: inviter, Account: owner})
 }
 
 /*
@@ -239,11 +254,9 @@ func (s *Service) heldReferrals(w http.ResponseWriter, _ *http.Request) {
 		writeStatus(w, http.StatusServiceUnavailable, "unavailable")
 		return
 	}
-	out := struct {
-		Referrals []heldReferral `json:"referrals"`
-	}{Referrals: []heldReferral{}}
+	out := HeldReferralsResponse{Referrals: []HeldReferral{}}
 	for _, row := range rows {
-		out.Referrals = append(out.Referrals, heldReferral{Referee: row.Referee, Referrer: row.Referrer, LinkedMs: row.LinkedMs})
+		out.Referrals = append(out.Referrals, HeldReferral{Referee: row.Referee, Referrer: row.Referrer, LinkedMs: row.LinkedMs})
 	}
 	writeJSON(w, out)
 }
