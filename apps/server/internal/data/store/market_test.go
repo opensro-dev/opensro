@@ -444,3 +444,31 @@ func TestMarketSearch(t *testing.T) {
 		t.Fatalf("filters: silk %d, named %d, empty %d", len(none), len(named), len(other))
 	}
 }
+
+/*
+================
+TestMarketBuyNeverSpendsGiftSilk
+
+A Silk listing is paid from purchased Silk only: gift Silk (the referral
+reward, #3671) never buys a listing and so never reaches a seller. Written
+by opensro-web2's reading of eae40ca29, which mutated debitSilkTx to fall
+back to gift Silk and found no test failed.
+================
+*/
+func TestMarketBuyNeverSpendsGiftSilk(t *testing.T) {
+	t.Parallel()
+	s, _, _, _ := marketFixture(t)
+	listing := listSword(t, s, domain.MarketSilk, 500)
+	if _, err := s.syncDBLocked().Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, 0, 800, 0)`, marketBuyer); err != nil {
+		t.Fatal(err)
+	}
+	buy := MarketBuyRequest{ListingID: listing.ID, Version: listing.Version, BuyerAccount: marketBuyer, Rules: testMarketRules}
+	if _, err := s.MarketBuy(buy); !errors.Is(err, domain.ErrMarketFunds) {
+		t.Fatalf("gift Silk paid a listing: %v", err)
+	}
+	buyerWallet, _ := readMallBalance(s.syncDBLocked(), marketBuyer)
+	sellerWallet, _ := readMallBalance(s.syncDBLocked(), marketSeller)
+	if buyerWallet.GiftSilk != 800 || buyerWallet.Silk != 0 || sellerWallet.Silk != 0 {
+		t.Fatalf("wallets moved: buyer %+v, seller %+v", buyerWallet, sellerWallet)
+	}
+}
