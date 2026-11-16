@@ -312,6 +312,45 @@ test("a local file frame keeps only the file's name", async () => {
 	assert.equal( event.stack, "RangeError\n    at walk (index.js:1:2)" );
 });
 
+// opensro-web2-claude's review probe on #3702, kept as written.
+test("review probe: a message line shaped like a V8 frame never ships", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 6,
+		message: "parse failed\n    at PLAYER TEXT HERE:1:2",
+		stack: "TypeError: parse failed\n    at PLAYER TEXT HERE:1:2\n    at send (/src/chat.ts:4:2)"
+	} ] );
+	assert.ok( !/PLAYER TEXT/.test( event.stack ?? "" ), event.stack );
+	assert.match( event.stack, /at send/ );
+});
+
+test("the journal's header count skips a long message's every line, even past its slice", async t => {
+	const page = installPage( t );
+	const message = "x".repeat( 600 ) + "\n    at PLAYER TEXT HERE:1:2";
+	const error = new TypeError( message );
+	error.stack = `TypeError: ${message}\n    at send (${ORIGIN}/src/chat.ts:4:2)`;
+	const event = new Event( "error" );
+	Object.assign( event, { error, message } );
+	page.window.dispatchEvent( event );
+	const [record] = page.errors();
+	assert.equal( record?.headerLines, 2, "counted from the whole message, not the 500-character slice" );
+	assert.equal( String( record?.message ).length, 500 );
+	const [shared] = await sharedErrors( [ { ...record, t: 1 } ] );
+	assert.equal( shared.stack, "TypeError\n    at send (/src/chat.ts:4:2)" );
+	assert.equal( shared.headerLines, undefined, "the count itself is never shared" );
+});
+
+test("a message at the journal's cap with no header count ships no frames", async () => {
+	const [event] = await sharedErrors( [ {
+		kind: "error",
+		t: 7,
+		message: "x".repeat( 500 ),
+		stack: "TypeError: " + "x".repeat( 500 ) + "\n    at PLAYER TEXT HERE:1:2\n    at send (/src/chat.ts:4:2)"
+	} ] );
+	assert.equal( event.stack, undefined, "the cut message's true length is unknown" );
+	assert.equal( event.errorClass, "TypeError" );
+});
+
 test("a thrown non-error shares neither a class nor a message", async () => {
 	const [event] = await sharedErrors( [ { kind: "error", t: 4, message: "a player wrote this" } ] );
 	assert.equal( event.errorClass, undefined );

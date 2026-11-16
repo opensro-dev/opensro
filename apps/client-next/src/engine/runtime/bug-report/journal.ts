@@ -38,7 +38,8 @@ export const JOURNAL_WINDOW_MS = 120000;
 const MAX_EVENTS = 6000;
 const MAX_SCRIPTS = 3;
 const FRAME_GROUP_MS = 1000;
-const MAX_ERROR_MESSAGE = 500;
+// archive.ts reads a message at this cap as possibly cut short.
+export const MAX_ERROR_MESSAGE = 500;
 const MAX_ERROR_STACK = 1600;
 // The distinct failures kept for the page's life, each its first throw plus
 // a repeat count. Past this many, new failures fall back to the ring.
@@ -125,17 +126,24 @@ thrown value carries one, its stack. The stack is the only part that can
 name the failure (a RangeError's message alone never says where), so it
 travels with the report; the page's origin is stripped first, the same
 trim the long-frame script names get, and both fields are sliced.
+headerLines counts the stack's lines that hold the class and the whole
+message (V8 opens a stack with them), taken before the message is sliced,
+so the shared copy can skip a long message's every line.
 ================
 */
-function errorEventFields( error: unknown, fallback: string ): { message: string; stack?: string; } {
+function errorEventFields(
+	error: unknown,
+	fallback: string
+): { message: string; stack?: string; headerLines?: number; } {
 	const thrown = error instanceof Error ? error : null,
-		message = (thrown?.message || fallback || String( error )).slice( 0, MAX_ERROR_MESSAGE ),
+		fullMessage = thrown?.message || fallback || String( error ),
+		message = fullMessage.slice( 0, MAX_ERROR_MESSAGE ),
 		rawStack = thrown?.stack ?? (error as { stack?: unknown; } | null)?.stack,
 		origin = typeof location !== "undefined" ? location.origin : "",
 		stack = typeof rawStack === "string" && rawStack ?
 			(origin ? rawStack.replaceAll( origin, "" ) : rawStack).slice( 0, MAX_ERROR_STACK ) :
 			undefined;
-	return stack ? { message, stack } : { message };
+	return stack ? { message, stack, headerLines: fullMessage.split( "\n" ).length } : { message };
 }
 
 /*
