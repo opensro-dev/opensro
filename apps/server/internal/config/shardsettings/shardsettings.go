@@ -178,6 +178,14 @@ var Settings = []Setting{
 	// lands behind the same switch. Not a catalogue setting: the map
 	// adds no monsters or worlds. "off" is native.
 	{Env: "SRO_STYRIA_CLASH", NomadVar: "styria_clash", Default: "off"},
+	// Port-only, not native: AI caravan and thief agents on the Jangan -
+	// Donwhang - Hotan highway (#3650, epic #3704). Slice 1 sends no
+	// frames to a client and pays no reward. Its brain settings
+	// (SRO_AGENT_*) are deliberately not job variables: the LLM brain is
+	// off by owner decision and refuses any URL that is not loopback
+	// (caravanai.LoopbackURL). Not a catalogue setting: the catalogue
+	// publishes no agent state. "off" is native.
+	{Env: "SRO_AI_CARAVANS", NomadVar: "ai_caravans", Default: "off"},
 	// Port-only, not native: the Constantinople fortress area from the
 	// v1.696 client (enterworld/fortressdata.go, #3275). Build and
 	// server read the same switch; off leaves every imported row out of

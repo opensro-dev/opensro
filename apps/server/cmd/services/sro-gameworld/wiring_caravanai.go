@@ -37,6 +37,10 @@ func (game *gameplayPlane) wireCaravanAgents() {
 	if !cfg.Enabled {
 		return
 	}
+	if cfg.RefusedLLMURL != "" {
+		// The LLM brain may only reach a model on this host (config.go).
+		log.Warnf("job: %s is not a loopback URL; AI caravan agents use the hardcoded brain", caravanai.EnvAgentLLMURL)
+	}
 	var memStore caravanai.MemoryStore
 	if s, ok := game.deps.Characters.(caravanai.MemoryStore); ok {
 		memStore = s

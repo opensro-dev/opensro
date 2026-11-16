@@ -7,11 +7,19 @@ Reads the opt-in environment switches that control whether AI Caravan & Thief
 agents populate the Jangan <-> Donwhang <-> Hotan trade highway and which
 decision brain (hardcoded, llm, or hybrid) drives them.
 
+The LLM brain's prompt carries nearby players' names and stats, and the owner
+has kept it off pending a decision (#3704). Until then it may only reach a
+model on the same host: an SRO_AGENT_LLM_URL that is not loopback is refused
+and the agents run on the hardcoded brain (LoopbackURL). The SRO_AGENT_*
+settings are not job variables (shardsettings), so no deployment sets them.
+
 ===========================================================================
 */
 package caravanai
 
 import (
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -70,6 +78,31 @@ type Config struct {
 	LLMModel   string
 	LLMKey     string
 	LLMTimeout time.Duration
+	// RefusedLLMURL is the SRO_AGENT_LLM_URL that ConfigFromEnv refused
+	// as not loopback; BrainMode is then BrainHardcoded.
+	RefusedLLMURL string
+}
+
+/*
+==================
+LoopbackURL
+
+Whether an LLM endpoint URL names this host: an http or https URL whose
+host is "localhost" or a loopback IP literal (127.0.0.0/8, ::1). Any other
+host could carry the prompt's player names off the machine.
+==================
+*/
+func LoopbackURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 /*
@@ -108,13 +141,18 @@ func ConfigFromEnv() Config {
 		llmModel = DefaultLLMModel
 	}
 	llmKey := strings.TrimSpace(os.Getenv(EnvAgentLLMKey))
+	refused := ""
+	if mode != BrainHardcoded && llmURL != "" && !LoopbackURL(llmURL) {
+		refused, mode, llmURL = llmURL, BrainHardcoded, ""
+	}
 	return Config{
-		Enabled:    enabled,
-		BrainMode:  mode,
-		LLMURL:     llmURL,
-		LLMModel:   llmModel,
-		LLMKey:     llmKey,
-		LLMTimeout: DefaultLLMTimeout,
+		Enabled:       enabled,
+		BrainMode:     mode,
+		LLMURL:        llmURL,
+		LLMModel:      llmModel,
+		LLMKey:        llmKey,
+		LLMTimeout:    DefaultLLMTimeout,
+		RefusedLLMURL: refused,
 	}
 }
 

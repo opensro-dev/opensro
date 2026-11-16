@@ -278,3 +278,52 @@ func TestRuntimeParleyHonorBetrayalAndContracts(t *testing.T) {
 		t.Fatalf("expected IronGuard trust +25 after escort completion, got %+v", hunterMem)
 	}
 }
+
+/*
+================
+TestLoopbackURL
+
+Only an http(s) URL naming this host may carry the LLM brain's prompt.
+================
+*/
+func TestLoopbackURL(t *testing.T) {
+	t.Parallel()
+	for raw, want := range map[string]bool{
+		"http://127.0.0.1:11434/v1/chat/completions": true,
+		"http://127.8.9.10/v1":                       true,
+		"https://localhost/v1":                       true,
+		"http://[::1]:8080/v1":                       true,
+		"https://api.openai.com/v1/chat/completions": false,
+		"http://10.0.0.5:11434/v1":                   false,
+		"http://localhost.example.com/v1":            false,
+		"ftp://127.0.0.1/v1":                         false,
+		"":                                           false,
+	} {
+		if got := LoopbackURL(raw); got != want {
+			t.Errorf("LoopbackURL(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
+/*
+================
+TestRemoteLLMURLIsRefused
+
+A remote SRO_AGENT_LLM_URL leaves the agents on the hardcoded brain, from
+the environment and from a Config built by hand.
+================
+*/
+func TestRemoteLLMURLIsRefused(t *testing.T) {
+	const remote = "https://llm.example.com/v1/chat/completions"
+	t.Setenv(EnvAICaravans, "on")
+	t.Setenv(EnvAgentBrain, "llm")
+	t.Setenv(EnvAgentLLMURL, remote)
+	cfg := ConfigFromEnv()
+	if cfg.BrainMode != BrainHardcoded || cfg.LLMURL != "" || cfg.RefusedLLMURL != remote {
+		t.Fatalf("ConfigFromEnv kept a remote brain: %+v", cfg)
+	}
+	brain := NewBrain(Config{Enabled: true, BrainMode: BrainHybrid, LLMURL: remote})
+	if _, ok := brain.(*HardcodedBrain); !ok {
+		t.Fatalf("NewBrain built %T for a remote URL", brain)
+	}
+}

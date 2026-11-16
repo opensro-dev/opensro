@@ -338,13 +338,15 @@ type LLMBrain struct {
 NewBrain
 
 NewBrain returns a Brain configured according to cfg (HardcodedBrain when
-BrainMode is BrainHardcoded or LLMURL is empty, otherwise LLMBrain with
-HardcodedBrain fallback).
+BrainMode is BrainHardcoded or LLMURL is empty or not loopback, otherwise
+LLMBrain with HardcodedBrain fallback). The loopback check is repeated here,
+not only in ConfigFromEnv, so no Config built another way reaches a remote
+endpoint (config.go).
 ==================
 */
 func NewBrain(cfg Config) Brain {
 	fallback := NewHardcodedBrain()
-	if (cfg.BrainMode != BrainLLM && cfg.BrainMode != BrainHybrid) || strings.TrimSpace(cfg.LLMURL) == "" {
+	if (cfg.BrainMode != BrainLLM && cfg.BrainMode != BrainHybrid) || !LoopbackURL(cfg.LLMURL) {
 		return fallback
 	}
 	timeout := cfg.LLMTimeout
