@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
+import { correctedUiSystemCatalog } from "../helpers/corrected-text.mjs";
 /*
 ================
 load
@@ -2158,7 +2159,18 @@ test("message scrolling uses current layout and a modal blocks captured backgrou
 });
 
 test("party proposal projects native controls, blocks background input and preserves response ownership", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_STT_PARTY_SOMEUSER", "UIIT_STT_PARTY_PROPOSAL_ASK" ] )
+		);
 	try {
 		f.ui.step( f.state, 0 );
 		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
@@ -2171,8 +2183,8 @@ test("party proposal projects native controls, blocks background input and prese
 		f.ui.event( { kind: "drag", id: "invite-drag", dx: 90, dy: -20 } );
 		semantic = f.ui.step( invite, 110 );
 		assert.deepEqual( semantic.controls.find( c => c.id === "invite-accept" ).rect, [ 812, 481, 76, 24 ] );
-		assert.ok( f.hasText( "[Player]has" ) );
-		assert.ok( f.hasText( "Party application success. Will you accept it?" ) );
+		assert.ok( f.hasText( "[Player] has" ) );
+		assert.ok( f.hasText( "invited you to a party. Will you accept?" ) );
 		assert.equal( f.ui.blocks( 100, 100 ), true );
 		f.ui.event( { kind: "activate", id: "logout" } );
 		f.ui.event( { kind: "activate", id: "submit" } );
@@ -2198,7 +2210,18 @@ test("party proposal projects native controls, blocks background input and prese
 	}
 });
 test("guild proposal uses native agreement text, guild admission and independent drag lifetime", () => {
-	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			correctedUiSystemCatalog( [ "UIIT_MSG_GUILD_JOIN_REQUEST" ] )
+		);
 	try {
 		for ( let t = 0; t < 1000; t += 100 ) f.ui.step( f.state, t );
 		f.state.gameplay = { ...f.state.gameplay, social: { invitation: { type: 5, gid: 1 } } };
@@ -2206,7 +2229,7 @@ test("guild proposal uses native agreement text, guild admission and independent
 		assert.ok( !scene?.controls.some( c => c.id === "invite-accept" ), "native requires inviter guild data" );
 		f.state.entities = [ { ...f.state.entities[0], guildName: "Silkroad" } ];
 		scene = f.ui.step( f.state, 1200 );
-		assert.ok( f.hasText( "[Player]has applied for your guild." ) );
+		assert.ok( f.hasText( "[Player] has invited you to join a guild." ) );
 		assert.ok( f.hasText( "Do you want to join [Silkroad]guild?" ) );
 		assert.deepEqual( scene.controls.filter( c => c.kind === "button" ).map( c => [ c.id, c.label, c.rect ] ), [ [
 			"invite-accept",

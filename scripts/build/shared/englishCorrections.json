@@ -186,6 +186,11 @@
 			"before": "Merchang",
 			"after": "Merchant"
 		},
+		"UIIT_MSG_DEAL_ASK": {
+			"before": "Applied for the exchange. Will you accept it?",
+			"after": "requested an exchange. Will you accept it?",
+			"why": "Second line under UIIT_STT_PARTY_SOMEUSER, as for the party question; the Korean reads \"[%s] has requested an exchange. Will you accept?\" (#3677)."
+		},
 		"UIIT_MSG_FLEAMARKET_ERR_NOTHING_TO_SELL": {
 			"before": "Cannot open a new shop whithout the registered goods.",
 			"after": "Cannot open a new shop without the registered goods."
@@ -218,6 +223,11 @@
 		"UIIT_MSG_GUILD_ERROR_GUILD_EXIT_SIEGE": {
 			"before": "Cannot leave the alliance during the seige.",
 			"after": "Cannot leave the alliance during the siege."
+		},
+		"UIIT_MSG_GUILD_JOIN_REQUEST": {
+			"before": "[%s]has applied for your guild.",
+			"after": "[%s] has invited you to join a guild.",
+			"why": "The invitee reads it, above UIIT_MSG_GUILD_QUESTION_JOIN (\"Do you want to join [%s]guild?\"); the Korean cell says [%s] asked for the joining, and the invitee has no guild for anyone to apply to (#3677)."
 		},
 		"UIIT_MSG_GUILD_NAME_GRANT_INPUT": {
 			"before": "Enter the title to adress [%s]",
@@ -304,9 +314,29 @@
 			"before": "Chage the view point.  View point chages on every click: Free view -> Third-party view -> Quarter view -> (again) Free view.",
 			"after": "Change the view point.  View point changes on every click: Free view -> Third-party view -> Quarter view -> (again) Free view."
 		},
+		"UIIT_STT_PARTYMATCH_JOIN_PROGRESS": {
+			"before": "<sml2><font color=\"255,239,218,164\">[%s]</font>You <font color=\"255,239,218,164\">[%s]</font> have joined this party. </sml2>",
+			"after": "<sml2><font color=\"255,239,218,164\">[%s]</font> has applied to join <font color=\"255,239,218,164\">[%s]</font>'s party.</sml2>",
+			"why": "The Korean cell reads \"[%s] has applied to join [%s]'s party\" (applicant, then leader); the English named both and also said \"You\" (#3677)."
+		},
+		"UIIT_STT_PARTYMATCH_JOIN_REQUEST": {
+			"before": "<sml2><font color=\"255,239,218,164\">[%s]</font>You have successfully joined this party.<br> Confirm?</sml2>",
+			"after": "<sml2><font color=\"255,239,218,164\">[%s]</font> has asked to join your party.<br> Accept?</sml2>",
+			"why": "The Korean cell reads \"[%s] has requested to join the party. Will you accept?\"; the leader sees it about an applicant, so \"You have successfully joined this party\" told the leader the opposite (#3677)."
+		},
 		"UIIT_STT_PARTY_INFO": {
 			"before": "Party informaiton",
 			"after": "Party information"
+		},
+		"UIIT_STT_PARTY_PROPOSAL_ASK": {
+			"before": "Party application success. Will you accept it?",
+			"after": "invited you to a party. Will you accept?",
+			"why": "Second line under UIIT_STT_PARTY_SOMEUSER (\"[%s] has\"); the Korean pair reads \"[%s] has invited you to a party. Will you accept?\", not \"Party application success\" (#3677)."
+		},
+		"UIIT_STT_PARTY_SOMEUSER": {
+			"before": "[%s]has",
+			"after": "[%s] has",
+			"why": "Spacing: the name ran into \"has\" (#3677)."
 		},
 		"UIIT_STT_QUESTGUIDE2": {
 			"before": "Qust Dictionary",

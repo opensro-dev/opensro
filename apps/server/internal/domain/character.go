@@ -415,6 +415,15 @@ type Character struct {
 	// from at first load, kept so schema 34/35 records still load.
 	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
 	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
+	// NasrunTokens is the character's Devil's Spirit token balance, earned
+	// on unique kills and spent at the token shop; NasrunTokenDay is the
+	// token day (nasrun.TokenDay) NasrunTokenDayCount belongs to, the
+	// tokens earned that day under the daily cap (port-only, not native:
+	// SRO_NASRUN, game/nasrun/tokens.go; schema 46). Bound to the
+	// character: nothing moves a balance to another.
+	NasrunTokens        int64 `json:"nasrunTokens,omitempty"`
+	NasrunTokenDay      int64 `json:"nasrunTokenDay,omitempty"`
+	NasrunTokenDayCount int64 `json:"nasrunTokenDayCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).

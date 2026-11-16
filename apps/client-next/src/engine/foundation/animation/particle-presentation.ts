@@ -30,49 +30,26 @@ export interface ParticleTickPose {
 	readonly position: number[];
 	readonly scale: number[];
 	readonly rotation: Float32Array;
-	readonly matrix: Float32Array;
-	// The last tick step of the graph element frame (continueRotation's cache).
-	matrixStep?: Float64Array;
-}
-
-// A step cache: the previous and current 3x3 it was found for (0..17), its
-// state (18: 0 empty, 1 a rotation, 2 none), and axis xyz and angle (19..22).
-const STEP_CACHE = 23;
-const STEP_STATE = 18;
-const STEP_EMPTY = 0;
-const STEP_ROTATION = 1;
-const STEP_NONE = 2;
-
-/*
-================
-createStepCache
-================
-*/
-export function createStepCache(): Float64Array {
-	return new Float64Array( STEP_CACHE );
 }
 
 /*
 ================
 snapshotParticleTick
 
-Record the state a particle had at the start of its latest tick. The
-optional matrix is the owning graph element's frame.
+Record the state a particle had at the start of its latest tick.
 ================
 */
-export function snapshotParticleTick( state: ParticleInstance, matrix?: Float32Array ): void {
+export function snapshotParticleTick( state: ParticleInstance ): void {
 	const previous = state.previous ?? {
 		position: [ 0, 0, 0 ],
 		scale: [ 1, 1, 1 ],
-		rotation: new Float32Array( 16 ),
-		matrix: new Float32Array( 16 )
+		rotation: new Float32Array( 16 )
 	};
 	for ( let axis = 0; axis < 3; axis++ ) {
 		previous.position[axis] = state.position[axis]!;
 		previous.scale[axis] = state.scale[axis]!;
 	}
 	previous.rotation.set( state.rotation );
-	if ( matrix ) previous.matrix.set( matrix );
 	state.previous = previous;
 }
 
@@ -81,72 +58,13 @@ export const ROTATION_WORK = 27;
 
 /*
 ================
-continueRotation
-
-Write current * step^fraction into out at offset, where step is the
-rotation taken from previous to current (previous^-1 * current). The
-translation row and any scale of current are kept. A step that is not a
-rotation, or is too large to be motion, leaves current as is. work is
-caller scratch of at least ROTATION_WORK entries.
-
-Most particles do not rotate between ticks; they take the copy path. The
-step changes only at a tick, so with a cache (createStepCache, one per
-tick pose) its axis and angle are found once per tick and each frame only
-turns by its fraction; the cache answers only for the exact inputs it was
-found for, so the result is unchanged.
-================
-*/
-export function continueRotation(
-	previous: ArrayLike<number>,
-	current: ArrayLike<number>,
-	fraction: number,
-	out: Float32Array,
-	offset: number,
-	work: Float64Array = new Float64Array( ROTATION_WORK ),
-	cache?: Float64Array
-): void {
-	for ( let i = 0; i < 16; i++ ) out[offset + i] = current[i]!;
-	if ( fraction <= 0 ) return;
-	if (
-		previous[0] === current[0] && previous[1] === current[1] && previous[2] === current[2] &&
-		previous[4] === current[4] && previous[5] === current[5] && previous[6] === current[6] &&
-		previous[8] === current[8] && previous[9] === current[9] && previous[10] === current[10]
-	) return;
-	let x: number, y: number, z: number, angle: number;
-	if ( cache && cache[STEP_STATE] !== STEP_EMPTY && stepInputsMatch( cache, previous, current ) ) {
-		if ( cache[STEP_STATE] === STEP_NONE ) return;
-		x = cache[19]!;
-		y = cache[20]!;
-		z = cache[21]!;
-		angle = cache[22]!;
-	} else {
-		const found = invert3( previous, work ) && stepRotation( current, work );
-		if ( cache ) {
-			for ( let i = 0; i < 9; i++ ) {
-				const at = (i / 3 | 0) * 4 + i % 3;
-				cache[i] = previous[at]!;
-				cache[9 + i] = current[at]!;
-			}
-			cache[STEP_STATE] = found ? STEP_ROTATION : STEP_NONE;
-			for ( let i = 0; i < 4; i++ ) cache[19 + i] = work[18 + i]!;
-		}
-		if ( !found ) return;
-		x = work[18]!;
-		y = work[19]!;
-		z = work[20]!;
-		angle = work[21]!;
-	}
-	turnByStep( current, x, y, z, angle, fraction, out, offset, work );
-}
-
-/*
-================
 turnByStep
 
 Write current * step^fraction into out at offset for a step given as unit
-axis xyz and angle: the per-frame half of continueRotation, which the
-GPU particle pass repeats (particle-records.ts). Only the 3x3 part
-turns; the rest of current is copied. An angle of 0 copies current.
+axis xyz and angle (tickRotationStep, found once a tick): a frame's
+continuation of the last tick's rotation, which the GPU particle pass
+repeats (particle-records.ts). Only the 3x3 part turns; the rest of
+current is copied. An angle of 0 copies current.
 ================
 */
 export function turnByStep(
@@ -178,16 +96,16 @@ export function turnByStep(
 tickRotationStep
 
 The rotation the last tick took from previous to current (the step
-continueRotation continues), written as axis xyz and angle into
-out[at..at+3]. The angle is 0 when the tick did not turn, or when its step
-is not a rotation: continueRotation then leaves current as is. work is
-scratch of at least ROTATION_WORK entries.
+turnByStep continues), written as axis xyz and angle into out[at..at+3].
+The angle is 0 when the tick did not turn, or when its step is not a
+rotation or is too large to be motion (a reset): turnByStep then leaves
+current as is. work is scratch of at least ROTATION_WORK entries.
 ================
 */
 export function tickRotationStep(
 	previous: ArrayLike<number>,
 	current: ArrayLike<number>,
-	out: Float32Array,
+	out: Float32Array | Float64Array,
 	at: number,
 	work: Float64Array
 ): void {
@@ -231,21 +149,6 @@ function invert3( m: ArrayLike<number>, work: Float64Array ): boolean {
 	work[6] = (b * f - c * e) / det;
 	work[7] = (c * d - a * f) / det;
 	work[8] = (a * e - b * d) / det;
-	return true;
-}
-
-/*
-================
-stepInputsMatch
-
-True when cache was found for these exact previous and current 3x3.
-================
-*/
-function stepInputsMatch( cache: Float64Array, previous: ArrayLike<number>, current: ArrayLike<number> ): boolean {
-	for ( let i = 0; i < 9; i++ ) {
-		const at = (i / 3 | 0) * 4 + i % 3;
-		if ( cache[i] !== previous[at] || cache[9 + i] !== current[at] ) return false;
-	}
 	return true;
 }
 

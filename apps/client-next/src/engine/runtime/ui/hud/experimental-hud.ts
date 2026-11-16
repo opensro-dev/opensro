@@ -422,7 +422,7 @@ export const EXPERIMENTAL_TABS: readonly ExperimentalTab[] = [
 						key: "christmasCarols",
 						id: "experimental-christmas-carols",
 						label: "Christmas carols",
-						description: "Play the Christmas carols during the Christmas event's snowfalls."
+						description: "Play carols during the Christmas event's snow."
 					},
 					{
 						key: "webTransport",

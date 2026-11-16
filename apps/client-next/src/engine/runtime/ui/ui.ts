@@ -23335,7 +23335,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							"%s",
 							() => inviter?.guildName ?? ""
 						) :
-						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s] has" ).replace(
 							"%s",
 							() => inviter?.name ?? ""
 						),
@@ -26989,7 +26989,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						quads.length = mallAdmission[0];
 						controls = drawFrame.controls = [];
 					} else {
-						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
+						const painted = resolveTextOverlaps(
+							quads.slice( mallAdmission[0] ),
+							experimental.state().saved.fitWindowLabels
+						);
 						quads.length = mallAdmission[0];
 						quads.push( ...painted );
 					}
@@ -28590,7 +28593,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = drawFrame.quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads, experimental.state().saved.fitWindowLabels );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			// Semantics are returned only when they change (uiPublication): a

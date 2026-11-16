@@ -40,14 +40,36 @@ func (s *Store) GrantSilk(accountID string, amount uint32) (domain.MallBalance, 
 		return domain.MallBalance{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	balance, err := creditSilkTx(tx, accountID, amount, s.now().UnixMilli())
+	if err != nil {
+		return domain.MallBalance{}, err
+	}
+	return balance, tx.Commit()
+}
+
+/*
+================
+creditSilkTx
+
+Adds amount to the account's silk inside tx, creating the wallet when it
+has none, and records the charge in silk_history. Zero moves nothing and
+writes nothing. A total past the wallet's uint32 is refused whole rather
+than clamped. GrantSilk, the referral rewards and a market sale's
+proceeds share it.
+================
+*/
+func creditSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) (domain.MallBalance, error) {
 	var balance domain.MallBalance
-	err = tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
+	err := tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
 		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return domain.MallBalance{}, err
 	}
+	if amount == 0 {
+		return balance, nil
+	}
 	if uint64(balance.Silk)+uint64(amount) > math.MaxUint32 {
-		return domain.MallBalance{}, fmt.Errorf("silk grant: wallet would overflow")
+		return domain.MallBalance{}, fmt.Errorf("silk credit: wallet would overflow")
 	}
 	balance.Silk += amount
 	_, err = tx.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, ?, ?)
@@ -55,8 +77,40 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.
 	if err != nil {
 		return domain.MallBalance{}, err
 	}
-	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
+	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
 		return domain.MallBalance{}, err
 	}
-	return balance, tx.Commit()
+	return balance, nil
+}
+
+/*
+================
+debitSilkTx
+
+Takes amount from the account's purchased silk (never gift silk, which
+must not turn into gold) inside tx, and records the use in silk_history.
+Not enough is domain.ErrMarketFunds and changes nothing.
+================
+*/
+func debitSilkTx(tx *sql.Tx, accountID string, amount uint32, atMs int64) (domain.MallBalance, error) {
+	var balance domain.MallBalance
+	err := tx.QueryRow("SELECT silk, gift_silk, points FROM mall_accounts WHERE account_id = ?", accountID).
+		Scan(&balance.Silk, &balance.GiftSilk, &balance.Points)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.MallBalance{}, domain.ErrMarketFunds
+	}
+	if err != nil {
+		return domain.MallBalance{}, err
+	}
+	if balance.Silk < amount {
+		return domain.MallBalance{}, domain.ErrMarketFunds
+	}
+	balance.Silk -= amount
+	if _, err := tx.Exec("UPDATE mall_accounts SET silk = ? WHERE account_id = ?", balance.Silk, accountID); err != nil {
+		return domain.MallBalance{}, err
+	}
+	if err := insertSilkHistoryTx(tx, accountID, atMs, silkHistoryUse, domain.MallBalance{Silk: amount}); err != nil {
+		return domain.MallBalance{}, err
+	}
+	return balance, nil
 }
