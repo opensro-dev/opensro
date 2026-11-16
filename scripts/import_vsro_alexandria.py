@@ -50,7 +50,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sro_pk2  # noqa: E402
-from prepare_client_resources import safe_target, write_atomically  # noqa: E402
+from pin_file import read_pin_field  # noqa: E402
+import state_document  # noqa: E402
+from prepare_client_resources import file_digest, safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
 
 FLAG_ENV = "SRO_ALEXANDRIA"
@@ -407,13 +409,7 @@ VERIFIED_ARCHIVES_FORMAT = "sro-verified-vsro-archives"
 
 def archive_pins():
 	"""The pinned VSRO archive hashes (vsro_archive_pins.json beside this tool)."""
-	try:
-		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
-	except (OSError, ValueError) as error:
-		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
-	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
-		raise SystemExit(f"{PIN_FILE} is not a {PIN_FORMAT} pin file")
-	return pin["archives"]
+	return read_pin_field(PIN_FILE, PIN_FORMAT, "archives")
 
 
 def verify_vsro_archive(root, name, pins=None):
@@ -431,11 +427,7 @@ def verify_vsro_archive(root, name, pins=None):
 		raise SystemExit(f"{PIN_FILE.name} pins no {name}.pk2; pin the archive before reading it")
 	if not path.is_file():
 		raise SystemExit(f"{path} not found; --vsro-root must be the pinned VSRO client folder")
-	hasher = hashlib.sha256()
-	with open(path, "rb") as handle:
-		for chunk in iter(lambda: handle.read(HASH_CHUNK), b""):
-			hasher.update(chunk)
-	actual = hasher.hexdigest()
+	actual = file_digest(path)
 	if actual != expected:
 		raise SystemExit(
 			f"{path} does not match the pinned VSRO archive: sha256 is {actual}, pinned is {expected}. "
@@ -460,8 +452,7 @@ def require_vsro_pin(root, names, pins=None):
 # them again (#3590).
 # ================
 def write_verified_archives(folder):
-	document = {"format": VERIFIED_ARCHIVES_FORMAT, "archives": dict(sorted(_verified_digests.items()))}
-	(folder / VERIFIED_ARCHIVES_NAME).write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+	state_document.write_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives", _verified_digests)
 
 
 # ================
@@ -473,16 +464,12 @@ def write_verified_archives(folder):
 # pin stays exactly as strict. Returns how many archives were admitted.
 # ================
 def admit_verified_archives(folder, pins=None):
-	path = Path(folder) / VERIFIED_ARCHIVES_NAME
-	try:
-		document = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, ValueError):
-		return 0
-	if document.get("format") != VERIFIED_ARCHIVES_FORMAT or not isinstance(document.get("archives"), dict):
+	archives = state_document.read_document(Path(folder) / VERIFIED_ARCHIVES_NAME, VERIFIED_ARCHIVES_FORMAT, "archives")
+	if archives is None:
 		return 0
 	expected = archive_pins() if pins is None else pins
 	admitted = 0
-	for key, record in document["archives"].items():
+	for key, record in archives.items():
 		try:
 			stat = Path(key).stat()
 		except OSError:

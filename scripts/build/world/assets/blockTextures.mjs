@@ -273,7 +273,7 @@ generatorHash
 
 The encoder's own bytes fold into every cache key: a change to
 native_texture_mips.py can never serve an artifact the old code produced
-(nativeCharacterTextures.mjs's GENERATOR_HASH rule).
+(the nativeMipGenerator.mjs generatorHash rule).
 ================
 */
 async function generatorHash() {
