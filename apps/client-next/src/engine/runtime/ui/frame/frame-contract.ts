@@ -190,6 +190,9 @@ export interface UiFrame {
 	pressed: string | null;
 	hover: string | null;
 	focus: string | null;
+	// The Experimental "Fit window labels" row; absent reads as off (a
+	// window's admission fits its text with it, ui-glyphs resolveTextOverlaps).
+	fitWindowLabels?(): boolean;
 }
 
 /*
