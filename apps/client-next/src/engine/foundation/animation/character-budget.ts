@@ -111,8 +111,9 @@ export function characterPoseBytes( model: CharacterModel, caches?: CharacterPla
 		caches?.bindings.set( model.primitives, bindings );
 	}
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
-	// weights, sample and one exact palette per binding/pose revision.
-	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
+	// weights, socket chain scratch, sample, per-node flags and one exact palette per
+	// binding/pose revision.
+	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6 + 1) * 4 + 3) + 16 +
 		model.primitives.reduce(
 			( bytes, primitive ) =>
 				bytes + ((bindings.get( primitive ) ?? primitive) === primitive ? primitive.joints.length * 64 : 0),
