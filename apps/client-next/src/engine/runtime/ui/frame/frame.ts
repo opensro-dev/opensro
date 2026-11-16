@@ -594,16 +594,16 @@ function buttonCaptionFit(
 	// The caption keeps to its client box (the Item Mall's category
 	// buttons inset it past their icon) and inside the plate's bevel.
 	const plate = authoredRect( node, ox, oy ), box = authoredClientRect( node, ox, oy ), text = frame.text;
-	const measure = ( font: number ) => ( line: string ) => text.run( line, 0, font ).width;
 	const comfortable = Math.min( box[2], plate[2] - 2 * CAPTION_MARGIN ),
 		room = Math.min( box[2], plate[2] - 2 * CAPTION_TIGHT_MARGIN );
-	if ( measure( own )( caption ) <= comfortable ) return whole;
-	if ( measure( SMALL_CAPTION_FONT )( caption ) <= room ) {
+	if ( text.run( caption, 0, own ).width <= comfortable ) return whole;
+	if ( text.run( caption, 0, SMALL_CAPTION_FONT ).width <= room ) {
 		return { label: caption, fontIndex: SMALL_CAPTION_FONT, lines: [ caption ] };
 	}
 	if ( caption.includes( " " ) ) {
 		for ( const font of [ own, SMALL_CAPTION_FONT ] ) {
-			const lines = textLines( caption, room, measure( font ) );
+			const measure = ( line: string ) => text.run( line, 0, font ).width;
+			const lines = textLines( caption, room, measure );
 			const ink = text.lineInk( font );
 			// The pair's ink may fill the plate's height: a line's ink
 			// counts its descent, which most captions leave empty.
@@ -612,7 +612,7 @@ function buttonCaptionFit(
 			}
 		}
 	}
-	const words = captionWords( caption, comfortable, measure( own ) );
+	const words = captionWords( caption, comfortable, line => text.run( line, 0, own ).width );
 	return { label: words, fontIndex: own, lines: [ words ] };
 }
 

@@ -51,6 +51,7 @@ async function openScene( name, fit ) {
 	const script = SCENE_SCRIPTS.find( entry => entry.name === name );
 	assert.ok( script, name );
 	const fx = uiFixture();
+	/** @type {any} */
 	const ctx = { fx, state: fx.state, now: 0, scene: undefined, semantics: undefined, event: e => fx.ui.event( e ) };
 	const settle = ( ticks = 16 ) => {
 		for ( let i = 0; i < ticks; i++ ) {
@@ -60,7 +61,7 @@ async function openScene( name, fit ) {
 		ctx.scene = fx.scenes.at( -1 );
 	};
 	try {
-		fx.ui.event( { kind: "experimental-preferences", value: { fitWindowLabels: fit } } );
+		fx.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } }) );
 		settle();
 		for ( const beat of script.beats ) {
 			beat.run( ctx );
