@@ -36,6 +36,7 @@ import cap110_monsters as monsters
 import import_vsro_alexandria as tables
 import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
+from sro_paths import trees_overlap
 
 MARKER = ".opensro-cap110-rewards.json"
 REWARDS_FILE = "cap110-rewards.txt"
@@ -225,7 +226,7 @@ def remove_owned(text_root, prior):
 # ================
 def add_rewards(vsro_root, native, output, source_root=None):
 	native, output = Path(native).resolve(), Path(output).resolve()
-	if native == output or native in output.parents or output in native.parents:
+	if trees_overlap(native, output):
 		raise ValueError("reward overlay must be separate from native extraction")
 	text_root, marker = output / TEXT_ROOT, output / MARKER
 	prior = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}

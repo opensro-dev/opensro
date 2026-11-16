@@ -109,6 +109,7 @@
 		"particle-catalog.test.mjs",
 		"particle-orientation.test.mjs",
 		"particle-ribbon.test.mjs",
+		"particle-tick-digest.test.mjs",
 		"party-matching-ui.test.mjs",
 		"penguin-blizzard.test.mjs",
 		"penguin-effects.test.mjs",
@@ -179,6 +180,7 @@
 		"wolf-howl.test.mjs",
 		"world-compound.test.mjs",
 		"world-decoder.test.mjs",
+		"world-map-open.test.mjs",
 		"world-map-tools.test.mjs",
 		"world-music.test.mjs",
 		"world-surfaces.test.mjs"

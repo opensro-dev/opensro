@@ -154,7 +154,7 @@ func TestPublicScheduleKindsAllPublish(t *testing.T) {
 		}
 	}
 	for _, names := range publicWindowEvents {
-		if names.kind != scheduleKindFortress && names.kind != scheduleKindFortressRegistration {
+		if names.kind != publicstats.ScheduleKindFortress && names.kind != publicstats.ScheduleKindFortressRegistration {
 			t.Errorf("fortress window kind %q has no calendar constant", names.kind)
 		}
 	}

@@ -35,17 +35,10 @@ import (
 	"opensro.online/server/internal/game/siege"
 )
 
-// The fortress lane's kinds. They move to publicstats with #3649
-// (ScheduleKindFortress, ScheduleKindFortressRegistration).
-const (
-	scheduleKindFortressRegistration = "fortress-registration"
-	scheduleKindFortress             = "fortress"
-)
-
 // publicWindowEvents names the fortress lane's windows on the calendar.
 var publicWindowEvents = map[string]struct{ kind, title string }{
-	"AllowSiegeRequest": {scheduleKindFortressRegistration, "Fortress war registration"},
-	"SiegeProgressing":  {scheduleKindFortress, "Fortress war"},
+	"AllowSiegeRequest": {publicstats.ScheduleKindFortressRegistration, "Fortress war registration"},
+	"SiegeProgressing":  {publicstats.ScheduleKindFortress, "Fortress war"},
 }
 
 /*

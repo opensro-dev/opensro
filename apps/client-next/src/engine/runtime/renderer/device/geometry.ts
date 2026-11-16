@@ -12,6 +12,12 @@ indices and skin table, shared by those draws (sharedMesh). A terrain
 layer keeps none: its members own their packed streams, and streamVertices
 writes a member's stream (or a patched range of it) straight to its slot.
 
+A material uploaded with dynamicMaterial (a character primitive with a
+material clock) lives in a staged slab set: its per-frame updates land in
+a CPU mirror, and flushMaterials sends them in one write a slab before
+each frame submit. Every other material is written once and its rare
+updates go straight to the queue.
+
 ===========================================================================
 */
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
@@ -24,7 +30,7 @@ import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
 import { destroyNow, type Retire } from "./retirement";
 import { MSAA_SAMPLE_COUNT } from "./msaa";
-import { createBufferSlabs, type BufferSlice } from "./buffer-slabs";
+import { createBufferSlabs, createStagedSlabs, type BufferSlice } from "./buffer-slabs";
 import { DeviceDraw } from "./device-draw";
 import { createGeometryUploads } from "./geometry-uploads";
 import type { createParticlePresentation } from "./particles";
@@ -152,7 +158,8 @@ export function createGeometryResources(
 
 	The GPU copy of an immutable skinned mesh, made on its first upload and
 	counted on every later one. The skin table interleaves each vertex's four
-	joints and four weights, as the skinning shaders read it.
+	joints and four weights, as the skinning shaders read it; a cloth draw
+	reads its own table instead, which holds its solver's stream as well.
 	================
 	*/
 	function sharedMesh( gpu: GPUDevice, data: Geometry ): SharedMesh {
@@ -266,6 +273,11 @@ export function createGeometryResources(
 	const transformSlabs = createBufferSlabs( created, "geometry-transform", uniformUsage, retire ),
 		materialSlabs = createBufferSlabs( created, "geometry-material", uniformUsage, retire ),
 		instanceSlabs = createBufferSlabs( created, "geometry-instances", instanceUsage, retire );
+	// Materials rewritten every frame, apart from the static ones: a flush
+	// writes a slab's span from its lowest to its highest written range.
+	const dynamicMaterialSlabs = createStagedSlabs( created, "geometry-material-dynamic", uniformUsage, retire );
+	// updateEquipmentGlow's packed vec4 pair, reused by every call.
+	const glowUniform = new Float32Array( 8 );
 	// Vertex and index ranges align to their element: a draw addresses them
 	// by baseVertex and firstIndex (VERTEX_BYTES is the packed 14-float vertex).
 	const vertexSlabs = createBufferSlabs(
@@ -344,6 +356,31 @@ export function createGeometryResources(
 		for ( let i = 0; i < offsets.length; i++ ) {
 			if ( offsets[i]! + jointMaximum >= joints ) throw Error( "Palette offset outside bone storage" );
 		}
+	}
+	/*
+	================
+	writeMaterial
+
+	data at byte at of the draw's material uniform: into the staged mirror
+	for a dynamic material, straight to the queue for a static one (a caller
+	that updates a material it did not upload as dynamic still gets its
+	bytes, as before).
+	================
+	*/
+	function writeMaterial(
+		meta: { dynamicMaterial: boolean; material: Binding; stores: { material: BufferSlice; }; },
+		at: number,
+		data: Float32Array
+	) {
+		if ( meta.dynamicMaterial ) {
+			dynamicMaterialSlabs.write( meta.stores.material, data, data.byteLength, at );
+			return;
+		}
+		current().queue.writeBuffer(
+			meta.material.buffer,
+			meta.material.offset + at,
+			data as Float32Array<ArrayBuffer>
+		);
 	}
 	/*
 	================
@@ -448,6 +485,8 @@ export function createGeometryResources(
 		clampedSampling: boolean;
 		// The material uniform's TEXTUREFACTOR offset in bytes (its last vec4).
 		textureFactorOffset: number;
+		// stores.material is a dynamicMaterialSlabs range (Geometry.dynamicMaterial).
+		dynamicMaterial: boolean;
 		// The draw handle itself, which this owner updates in place.
 		selection: DeviceDraw;
 	}>();
@@ -1022,11 +1061,7 @@ export function createGeometryResources(
 			if ( rgba.length !== 4 || !rgba.every( v => Number.isFinite( v ) && v >= 0 && v <= 1 ) ) {
 				throw Error( "Invalid texture factor" );
 			}
-			current().queue.writeBuffer(
-				meta.material.buffer,
-				meta.material.offset + meta.textureFactorOffset,
-				rgba as Float32Array<ArrayBuffer>
-			);
+			writeMaterial( meta, meta.textureFactorOffset, rgba );
 		},
 		/*
 		================
@@ -1037,10 +1072,14 @@ export function createGeometryResources(
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( rgb.length !== 3 || !rgb.every( Number.isFinite ) ) throw Error( "Invalid material colors" );
-			const { buffer, offset } = meta.material;
-			if ( flags & 2 ) current().queue.writeBuffer( buffer, offset, rgb as Float32Array<ArrayBuffer> );
-			if ( flags & 1 ) current().queue.writeBuffer( buffer, offset + 128, rgb as Float32Array<ArrayBuffer> );
+			if ( flags & 2 ) writeMaterial( meta, 0, rgb );
+			if ( flags & 1 ) writeMaterial( meta, 128, rgb );
 		},
+		/*
+		================
+		updateEquipmentGlow
+		================
+		*/
 		updateEquipmentGlow(
 			draw: GeometryDraw,
 			color: Float32Array,
@@ -1052,14 +1091,16 @@ export function createGeometryResources(
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if (
-				color.length !== 3 || uv.length !== 2 || ![ ...color, ...uv ].every( Number.isFinite ) ||
-				![ 1, 2 ].includes( gain )
+				color.length !== 3 || uv.length !== 2 || !color.every( Number.isFinite ) ||
+				!uv.every( Number.isFinite ) ||
+				gain !== 1 && gain !== 2
 			) throw Error( "Invalid equipment glow uniforms" );
-			current().queue.writeBuffer(
-				meta.material.buffer,
-				meta.material.offset + 192,
-				Float32Array.of( ...color, enabled ? gain : 0, ...uv, alphaTest ? 1 : 0, 0 )
-			);
+			glowUniform.set( color );
+			glowUniform[3] = enabled ? gain : 0;
+			glowUniform.set( uv, 4 );
+			glowUniform[6] = alphaTest ? 1 : 0;
+			glowUniform[7] = 0;
+			writeMaterial( meta, 192, glowUniform );
 		},
 		/*
 		================
@@ -1070,11 +1111,7 @@ export function createGeometryResources(
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( matrix.length !== 8 || !matrix.every( Number.isFinite ) ) throw Error( "Invalid texture transform" );
-			current().queue.writeBuffer(
-				meta.material.buffer,
-				meta.material.offset + 144,
-				matrix as Float32Array<ArrayBuffer>
-			);
+			writeMaterial( meta, 144, matrix );
 		},
 		/*
 		================
@@ -1126,6 +1163,19 @@ export function createGeometryResources(
 			};
 			/*
 			================
+			dynamicSlice
+
+			A dynamic material's range: its every byte goes through the staged
+			mirror, which flushMaterials sends before the next frame submit.
+			================
+			*/
+			const dynamicSlice = ( store: BufferSlice, data: Float32Array ) => {
+				slices.push( store );
+				dynamicMaterialSlabs.write( store, data, data.byteLength );
+				return store;
+			};
+			/*
+			================
 			buffer
 			================
 			*/
@@ -1144,8 +1194,9 @@ export function createGeometryResources(
 				// which a baseVertex would shift: skinned streams keep buffers of
 				// their own, one copy shared by every draw of an immutable mesh.
 				const skinned = !!(data.joints && data.weights && data.bones);
-				// A cloth stream's skin table is its own: the owner writes the stream into it.
-				mesh = skinned && !data.dynamicVertices && !data.clothStream ? sharedMesh( gpu, data ) : undefined;
+				// A cloth stream shares the mesh's vertices and indices: the owner
+				// writes the stream into the draw's own skin table, never into them.
+				mesh = skinned && !data.dynamicVertices ? sharedMesh( gpu, data ) : undefined;
 				// The asset worker packs terrain (Geometry.vertices); pack anything else here.
 				const interleaved = mesh ?
 					undefined :
@@ -1191,11 +1242,13 @@ export function createGeometryResources(
 				if ( data.joints ) {
 					for ( const joint of data.joints ) jointMaximum = Math.max( jointMaximum, joint );
 				}
-				if ( data.clothStream && (!skinned || paletteOffsets || data.dynamicVertices) ) {
-					throw Error( "A cloth stream needs an owned skinned mesh" );
+				// The stream lives after the skin entries of the draw's own skin
+				// table; its palette may be the batch's shared one.
+				if ( data.clothStream && (!skinned || data.dynamicVertices) ) {
+					throw Error( "A cloth stream needs a skinned mesh" );
 				}
 				if ( data.joints && data.weights && data.bones ) {
-					if ( mesh ) skinBuffer = mesh.skin;
+					if ( mesh && !clothBase ) skinBuffer = mesh.skin;
 					else {
 						// A cloth mesh's table holds its stream after the skin entries,
 						// all zero: until the owner writes it, the GPU skins every vertex.
@@ -1313,7 +1366,9 @@ export function createGeometryResources(
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),
-					material = slice( materialSlabs.allocate( materialData.byteLength ), materialData );
+					material = data.dynamicMaterial ?
+						dynamicSlice( dynamicMaterialSlabs.allocate( materialData.byteLength ), materialData ) :
+						slice( materialSlabs.allocate( materialData.byteLength ), materialData );
 				const selected = pipelines( geometryPipelineState( mat ), { sceneFloat: floatScene, msaa: msaaScene } ),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const binding = geometryBinding(
@@ -1383,6 +1438,7 @@ export function createGeometryResources(
 					jointMaximum,
 					clampedSampling,
 					textureFactorOffset: materialData.byteLength - 16,
+					dynamicMaterial: !!data.dynamicMaterial,
 					selection: draw
 				} );
 				return draw;
@@ -1471,10 +1527,32 @@ export function createGeometryResources(
 		uploads,
 		/*
 		================
-		endFrame
+		flushMaterials
+
+		The dynamic materials' updates in one write a slab. The device calls
+		it before every frame submit, the deferred frame's included, so the
+		writes precede the commands that read them; endFrame calls it too.
 		================
 		*/
-		endFrame: uploads.endFrame,
+		flushMaterials() {
+			dynamicMaterialSlabs.flush();
+		},
+		/*
+		================
+		endFrame
+
+		An abandoned frame still commits its material updates, as the direct
+		writes did, while retirement still holds the ranges released this
+		frame.
+		================
+		*/
+		endFrame() {
+			try {
+				dynamicMaterialSlabs.flush();
+			} finally {
+				uploads.endFrame();
+			}
+		},
 		commands,
 		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
 		/*
@@ -1639,6 +1717,7 @@ export function createGeometryResources(
 			drawMeshes.clear();
 			transformSlabs.dispose();
 			materialSlabs.dispose();
+			dynamicMaterialSlabs.dispose();
 			instanceSlabs.dispose();
 			vertexSlabs.dispose();
 			indexSlabs.dispose();

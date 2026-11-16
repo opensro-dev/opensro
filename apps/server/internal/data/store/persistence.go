@@ -332,6 +332,15 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	if err := flushLedgerItemsTx(tx, s.ledger.items); err != nil {
 		return err
 	}
+	// The trade rows noted by this attempt's doors ride the same
+	// transaction (trade_history.go); a failed commit keeps them pending.
+	trades := s.snapshotPendingTrades()
+	if err := flushTradeHistoryTx(tx, trades); err != nil {
+		return err
+	}
+	if err := pruneTradeHistoryTx(tx, s.now()); err != nil {
+		return err
+	}
 	built := s.mu.now().Sub(begun) - phases[commitPhaseEncode]
 	if s.writer != nil {
 		// Asynchronous (commit_writer.go): the batch is the disk's next
@@ -357,6 +366,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
 	s.ledger.items = nil
+	s.forgetPendingTrades(len(trades))
 
 	if ground != nil {
 		s.retainGroundChangesLocked(ground)
