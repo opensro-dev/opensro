@@ -582,6 +582,37 @@ export interface ActorPass {
 
 /*
 ================
+MotionDecision
+
+What actor-motion.ts decide hands advance (actor-advance.ts) for one
+actor this frame: its retained state, the layers to play at this frame's
+time, the overlay installations decide bound, and the choices the
+published actor is built from.
+================
+*/
+export interface MotionDecision {
+	readonly state: CharacterPresentationState;
+	readonly nativePose: Pose;
+	readonly renderPose: Pose;
+	// Advance writes each dispatched layer back in place.
+	readonly layers: CharacterLayer[];
+	// The overlay installations bound this frame; advance drops the others.
+	readonly activationKeys: ReadonlySet<string>;
+	readonly installations: Map<string, AnimationActivation>;
+	readonly cast: CastState | undefined;
+	readonly dead: boolean;
+	readonly authorityDead: boolean;
+	readonly seat: number | undefined;
+	readonly clip: string;
+	readonly looping: boolean;
+	readonly posture: Posture | undefined;
+	readonly armedIdle: string;
+	// The action mask after this frame's transitions (0x200: state 9, feet).
+	readonly actionMask: number;
+}
+
+/*
+================
 ActorAppearance
 
 The appearance phase's result for one character: its resource and the
