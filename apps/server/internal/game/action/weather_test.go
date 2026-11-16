@@ -128,7 +128,8 @@ func TestSceneStartsWithItsRegionWeather(t *testing.T) {
 TestCrossingSendsTheNewRegionWeather
 
 The tick that binds a new region sends its weather to that player alone,
-even into a region of the same climate.
+even into a region of the same climate; a region without a climate sends
+the zero weather, which the client draws as clear (native 0x537F24).
 ================
 */
 func TestCrossingSendsTheNewRegionWeather(t *testing.T) {
@@ -145,6 +146,11 @@ func TestCrossingSendsTheNewRegionWeather(t *testing.T) {
 	}
 	if got = weatherDeliveries(t, rt.TickHook()(3000)); len(got) != 0 {
 		t.Fatalf("a quiet tick delivered %v", got)
+	}
+	placeWeatherCharacter(rt, characters[0], 0)
+	got = weatherDeliveries(t, rt.TickHook()(4000))
+	if len(got) != 1 || !bytes.Equal(got[characters[0].ID], []byte{0, 0}) {
+		t.Fatalf("crossing into a climate-less region delivered %v, want only % X to %d", got, []byte{0, 0}, characters[0].ID)
 	}
 }
 

@@ -20,7 +20,12 @@ stays clear):
     (SceneWeatherFrames), because the client drops the server's weather
     at every world reset and entry (event-environment.ts).
 
-A region without a climate sends nothing. The Christmas snow needs no
+A crossing into a region without a climate sends the zero weather (kind
+0, which the client draws as clear), as natively: every region's weather
+word starts at zero (the v1.188 region constructor, 0x537F24) and every
+crossing sends the new region's word (0x4E70C9..0x4E70F1). A scene that
+starts in one sends nothing, since the client already reset its weather.
+The Christmas snow needs no
 case here: while event group 1 is on, the client draws its own snow
 whatever 0x3BDE says.
 
@@ -175,7 +180,8 @@ func (rt *Runtime) stepWeather(nowMs int64) (*climate.World, uint32, []weatherCr
 Runtime.advanceWeather
 
 One tick of every climate, then the frames: the players of each climate
-that changed, and every crossing noted since the last tick. The store
+that changed, and every crossing noted since the last tick, a crossing
+into a climate-less region included. The store
 lookups run outside the weather lock. With nothing changed and nothing
 crossed it allocates nothing.
 ================
@@ -201,9 +207,13 @@ func (rt *Runtime) advanceWeather(nowMs int64) []simulation.DivisionFrames {
 		})
 	}
 	for _, crossing := range crossings {
-		if weather, ok := world.RegionWeather(crossing.region); ok {
-			out = rt.appendWeatherFrame(out, crossing.division, crossing.name, weather)
+		// A region without a climate keeps the zero weather word (see the
+		// file banner), so the crossing still sends it.
+		weather, ok := world.RegionWeather(crossing.region)
+		if !ok {
+			weather = climate.Weather{}
 		}
+		out = rt.appendWeatherFrame(out, crossing.division, crossing.name, weather)
 	}
 	// Drop the names before the buffer is reused.
 	clear(crossings)

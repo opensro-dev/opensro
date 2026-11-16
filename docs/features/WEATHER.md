@@ -27,7 +27,8 @@ Unset reads as on. The ops GameWorld job carries it as the Nomad variable `weath
   - when a loading scene ends (first entry, teleport, resumed transport), because the client drops the server's
     weather at each world reset.
 
-  A region without a climate sends nothing.
+  A region without a climate is clear: a crossing into it sends the zero weather (kind 0, drawn as clear), as
+  natively, and a scene that starts in it sends nothing, since the client has just reset its weather.
 
 The package holds no clock or random source of its own; the caller passes both, so its tests are deterministic.
 
