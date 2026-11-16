@@ -170,6 +170,12 @@ type Sources struct {
 	// journal is off (SRO_CONNECTION_JOURNAL). Nil and not-ok both
 	// answer null people fields (opensro-web#78).
 	CensusPeople func() (peopleNow int, uniquePeople7d int, ok bool)
+	// Trades reads one page of the account's trade history in the shard's
+	// division (store trade_history.go), newest first: every trade of the
+	// account, or only character's when it is set. A character the account
+	// does not own answers ErrNotOwned. Nil leaves the route unserved; the
+	// route also needs WriteToken (privacy.go's guard).
+	Trades func(accountID, character string, before *domain.TradeCursor, limit int) (domain.TradePage, error)
 }
 
 /*

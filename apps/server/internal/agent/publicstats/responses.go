@@ -147,6 +147,36 @@ type OwnCharactersResponse struct {
 	Characters []OwnCharacter `json:"characters"`
 }
 
+// OwnTradeItem is one item stack a trade moved: its reference and count.
+type OwnTradeItem struct {
+	RefObjID uint32 `json:"refObjId"`
+	Quantity uint16 `json:"quantity"`
+}
+
+// OwnTrade is one trade of the account as the named character saw it
+// (trades.go): the gold it paid and received, the network commission it
+// paid, and the stacks it gave and received. A hidden counterparty reads as
+// "a hunter" in otherName.
+type OwnTrade struct {
+	AtMs          int64          `json:"atMs"`
+	Character     string         `json:"character"`
+	Kind          string         `json:"kind"`
+	OtherName     string         `json:"otherName"`
+	GoldPaid      uint64         `json:"goldPaid"`
+	GoldReceived  uint64         `json:"goldReceived"`
+	Commission    uint64         `json:"commission"`
+	ItemsGiven    []OwnTradeItem `json:"itemsGiven"`
+	ItemsReceived []OwnTradeItem `json:"itemsReceived"`
+}
+
+// OwnTradesResponse is the website's authenticated
+// GET /v1/accounts/{id}/trades (trades.go): one page, newest first. next is
+// the cursor that asks for the page after it, or null on the last page.
+type OwnTradesResponse struct {
+	Trades []OwnTrade `json:"trades"`
+	Next   *string    `json:"next"`
+}
+
 // CharactersResponse is P5 GET /public/v1/characters.
 type CharactersResponse struct {
 	Characters []CharacterSummary `json:"characters"`
