@@ -457,6 +457,9 @@ func newGameWorldApplication(
 	// the marks directory, and one audit event per committed change.
 	gameplay.items.Crests = authority.crests
 	gameplay.items.RecordCrestChange = func(change action.CrestChange) { journal.Record(crestChangeEvent(change)) }
+	// A finished Halloween window's boxes leave characters who never
+	// enter again, before admission opens (#3587).
+	sweepExpiredHalloweenBoxes(authority.store, gameplay.items)
 	// The mute book opens before admission: a muted character's first
 	// bind after a restart must already find its record (#2671).
 	application.mutes, err = openMuteBook(ts.Hub, ownedShard.ID)

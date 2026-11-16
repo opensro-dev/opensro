@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"reflect"
@@ -109,7 +110,8 @@ type shopOffer struct {
 	Ref           uint32             `json:"refObjId"`
 	Name          string             `json:"name"`
 	Price         string             `json:"price"`
-	// Currency is the refpricepolicyofitem payment type: 1 gold, 32 honor.
+	// Currency is the refpricepolicyofitem payment type: 1 gold, 8 guild
+	// points, 32 honor; 64 is the port-only Devil's Spirit token.
 	Currency uint8          `json:"currency"`
 	Prices   []shopPriceRow `json:"prices,omitempty"`
 	Stack    uint16         `json:"maxStack"`
@@ -140,6 +142,13 @@ type shopProjection struct {
 	Offers     []shopOffer           `json:"offers"`
 	Buyback    []buybackOffer        `json:"buyback"`
 	Error      string                `json:"error,omitempty"`
+	// TokenOffers are the shop's Devil's Spirit token goods and
+	// NasrunTokens the buyer's balance, sent only by a shop that sells
+	// them (port-only, SRO_NASRUN). They travel apart from Offers so a
+	// client built before them, which refuses an unknown payment in
+	// Offers and loses its session on it, reads the native stock alone.
+	TokenOffers  []shopOffer `json:"tokenOffers,omitempty"`
+	NasrunTokens *int64      `json:"nasrunTokens,omitempty"`
 }
 
 /*
@@ -254,7 +263,16 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 					prices = append(prices, shopPriceRow{Currency: commerce.PaymentHonor, Amount: strconv.FormatUint(o.HonorPrice, 10)})
 				}
 			}
-			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack})
+			offer := shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack}
+			if o.Currency != commerce.PaymentNasrunToken {
+				p.Offers = append(p.Offers, offer)
+				return
+			}
+			p.TokenOffers = append(p.TokenOffers, offer)
+			if p.NasrunTokens == nil {
+				balance := snapshot.NasrunTokens
+				p.NasrunTokens = &balance
+			}
 		})
 	}
 	b, _ := json.Marshal(p)
@@ -428,6 +446,10 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	var collected int64
 	var guildPointCost uint64
 	var honorCost uint64
+	// tokenCost is the Devil's Spirit tokens a token offer spends
+	// (port-only, SRO_NASRUN; commerce/nasrungoods.go). The balance is the
+	// buyer's own record, so it is spent inside the door, with the goods.
+	var tokenCost uint64
 	// The ordinary sale's item evidence (noteItemSale after the
 	// commit): the sold item, how many, the gold credited.
 	var soldItem string
@@ -482,6 +504,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		collected = 0
 		guildPointCost = 0
 		honorCost = 0
+		tokenCost = 0
 		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
 		switch q.MovementType {
@@ -523,6 +546,15 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					return false
 				}
 				guildPointCost = cost
+				cost = 0
+			case commerce.PaymentNasrunToken:
+				// Port-only, not native: no v1.150 refusal names tokens, so
+				// a short balance is the native silent refusal. The browser
+				// client shows the balance and never sends such a buy.
+				if c.NasrunTokens < 0 || cost > uint64(c.NasrunTokens) {
+					return false
+				}
+				tokenCost = cost
 				cost = 0
 			default:
 				if cost > balance {
@@ -613,6 +645,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			if !commerceSaleAdmitted(ref) {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
+			// Port-only, not native (SRO_NASRUN, #3456 3b): a Devil's
+			// Spirit is bought with tokens, so no merchant buys one for
+			// gold whatever its imported row says; tokens never become
+			// gold. v1.150 has no Spirit, so no native sale changes.
+			if nasrun.IsSpirit(item.TypeFlags) {
 				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
@@ -724,6 +764,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			c.MissionInventory = rowsFromInvItems(inv.Items())
 		}
 		setGold(c, balance)
+		c.NasrunTokens -= int64(tokenCost)
 		c.Buyback, c.BuybackNext = buyback, nextID
 		if q.MovementType == wire.MoveTypeShopSell {
 			frames = append(frames, rt.buybackFrame(c, q.NpcGID, npc.RefObjID, 0, nil, ""))
@@ -766,6 +807,13 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	if guildPointCost > 0 {
 		result = rt.spendGuildPoints(division, snapshot, uint32(guildPointCost), result)
 	}
+	if tokenCost > 0 {
+		// Port-only (SRO_NASRUN): the spend is told as 3a tells an award,
+		// and the shop is sent again so the client's balance follows.
+		after := rt.characterSnapshot(division, c)
+		result.Frames = append(result.Frames, sookBanner(fmt.Sprintf(nasrunTokenSpentNotice, tokenCost, after.NasrunTokens)),
+			rt.shopCatalog(division, c, q.NpcGID))
+	}
 	rt.collectFortressTax(division, npc, collected)
 	return result
 }
@@ -774,12 +822,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 ================
 offerUnitPrice
 
-Gold prices carry the town tax; guild-point and honor prices are the
-authored points.
+Gold prices carry the town tax; guild-point, honor and token prices are
+the authored points.
 ================
 */
 func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
-	if o.Currency == commerce.PaymentHonor || o.Currency == commerce.PaymentGuildPoint {
+	if o.Currency == commerce.PaymentHonor || o.Currency == commerce.PaymentGuildPoint || o.Currency == commerce.PaymentNasrunToken {
 		return o.Price, o.Price > 0
 	}
 	return commerce.AdjustPrice(o.Price, tax, true)

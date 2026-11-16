@@ -159,6 +159,7 @@ import {
 	type EventInterfaceLayout
 } from "@/engine/foundation/ui/event-interface";
 import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
+import { columnHeadKey, columnHeadLayout } from "@/engine/foundation/ui/column-heads";
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
@@ -15101,14 +15102,31 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												label,
 												false
 											);
-											if ( label ) authoredText( child, sx, sy, label );
+											if ( label ) {
+												const shown = frameDraw.fittedCaption( drawFrame, {
+													node: child,
+													ox: sx,
+													oy: sy,
+													caption: label
+												} );
+												authoredText( shown.node, sx, sy, shown.value );
+											}
 										}
 										continue;
 									}
 									authoredChrome( child, sx, sy );
 									if ( child.id === 11 ) authoredText( child, sx, sy, member.name );
 									if ( child.id === 13 ) {
-										authoredText( child, sx, sy, member.entryLevel + "(" + member.level + ")" );
+										// Under "Fit window labels" the "80(80)" level runs
+										// past its 19-pixel field into the free room, as a
+										// label does, instead of reading "8...".
+										frameDraw.authoredText( drawFrame, {
+											node: child,
+											ox: sx,
+											oy: sy,
+											value: member.entryLevel + "(" + member.level + ")",
+											label: true
+										} );
 									}
 									if ( child.id === 14 && rank ) {
 										authoredText( child, sx, sy, hudCopy( rankKeys[rank]! ) );
@@ -15155,11 +15173,13 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
+								// The caption fitted to its plate (fittedCaption).
+								const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 								authoredText(
-									disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+									disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 									ox,
 									oy,
-									copy
+									shown.value
 								);
 							}
 							continue;
@@ -15170,7 +15190,14 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								authoredText( { ...node, color: tooltipColor( 0xffffe194 ) }, ox, oy, leader.name );
 							}
 							if ( node.id === 44 ) {
-								authoredText( node, ox, oy, leader.entryLevel + "(" + leader.level + ")" );
+								// The leader's level, fitted as the members' (above).
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox,
+									oy,
+									value: leader.entryLevel + "(" + leader.level + ")",
+									label: true
+								} );
 							}
 							if ( node.id === 45 && academyRank( leader ) === 7 ) {
 								authoredText( node, ox, oy, hudCopy( "UIIT_STT_TC_GUARDIAN" ) );
@@ -15316,11 +15343,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
+							const shown = frameDraw.fittedCaption( drawFrame, { node, ox, oy, caption: copy } );
 							authoredText(
-								disabled ? { ...node, color: tooltipColor( 0xff999999 ) } : node,
+								disabled ? { ...shown.node, color: tooltipColor( 0xff999999 ) } : shown.node,
 								ox,
 								oy,
-								copy
+								shown.value
 							);
 						}
 						if ( node.type === "CIFPartySlot" ) {
@@ -18209,7 +18237,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						// 646FC0 relabels the title (20) and header (28) by job, and shows the
 						// own entry (10, 13-16) or the "no entry" line (60).
 						if ( contribution ) custom.push( 10, 13, 14, 15, 16, 20, 28, 60 );
-						nativePage( layout, px, py, custom );
+						nativePage( columnHeadLayout( layout ), px, py, custom );
 						const say = ( id: number, value: string ) => {
 							const node = byId( id );
 							if ( node ) authoredText( node, px, py, value );
@@ -18251,7 +18279,17 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							nativePage( slotLayout, sx, sy, [ 10, 11, 12, 13, 14 ] );
 							for ( const node of slotNodes ) {
 								const value = slot[node.id];
-								if ( value !== undefined ) authoredText( node, sx, sy, value );
+								if ( value === undefined ) continue;
+								// The title of level ("Apprentice Merchant" in 82 pixels)
+								// is fitted as a label under "Fit window labels" rather
+								// than cut to "Apprentice M...".
+								frameDraw.authoredText( drawFrame, {
+									node,
+									ox: sx,
+									oy: sy,
+									value,
+									label: node.name === "GDR_JOB_RANK_GRADENAME"
+								} );
 							}
 						}
 						const spin = byId( spinId );
@@ -21774,7 +21812,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 												"UIIT_STT_TITLE",
 												"UIIT_STT_GUILD_POSITION"
 											][guildNameMode]! :
-											node.text
+											columnHeadKey( node.text )
 									);
 								authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
 							}
@@ -22621,20 +22659,22 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								av - bv :
 								String( av ).localeCompare( String( bv ) )) * (academyAscending ? 1 : -1);
 						} );
-					const projected = academyLayout(
-						guideData,
-						{ ...academy, rows },
-						academySelection,
-						ax,
-						ay,
-						full,
-						resources.size,
-						( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+					const projected = academyLayout( {
+						data: guideData,
+						state: { ...academy, rows },
+						selected: academySelection,
+						x: ax,
+						y: ay,
+						clip: full,
+						size: resources.size,
+						text: ( s, r, c, color, style ) => text.quads( s, r, c, color, style ),
+						measure: ( value, fontIndex ) => text.run( value, 0, fontIndex ).width,
 						hover,
 						pressed,
-						{ name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
-						level
-					);
+						filter: { name: academyName, grade: academyGrade, kind: academyKind, open: academyCombo },
+						level,
+						fitLabels: experimental.state().saved.fitWindowLabels
+					} );
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
@@ -28155,7 +28195,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
 									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
 									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
-									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" ),
+									// Port-only (SRO_NASRUN): no native string names the token.
+									nasrunToken: "Devil's Spirit tokens",
+									nasrunTokenHeld: "You hold"
 								} )
 							];
 						}

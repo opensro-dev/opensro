@@ -9,9 +9,15 @@ budgets bound memory; the structural limits reject malformed sources.
 
 ===========================================================================
 */
-import { clothData, clothBytes } from "./cloth";
-import { clipTimelineBytes, createClipTimelineCache, type ClipTimelineCache } from "./animation-timelines";
+import { clothData, clothBytes, type ClothData } from "./cloth";
+import {
+	clipTimelineBytes,
+	createClipTimelineCache,
+	type ClipNodeChannelCache,
+	type ClipTimelineCache
+} from "./animation-timelines";
 import { paletteBindings } from "./palette-bindings";
+import { CLOTH_STREAM_WORDS, clothStreamJoints, clothStreamSlots } from "./cloth-stream";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -54,14 +60,27 @@ export const POSE_CLIP_ENTRY_BYTES = 96;
 CharacterPlanCaches
 
 What a render plan derives from a model's immutable parts, owned by the
-character renderer: per-clip timeline charges, and per-primitive-list
-palette bindings. Admitting a clip keeps a model's primitive list, so a
-re-plan of every assembly of the body computes neither again.
+character renderer: per-clip timeline charges and channel-by-node indexes
+(every pose of the renderer shares the clip's one), per-primitive-list
+palette bindings, and per-cloth-piece stream slots and the palette entries
+they read. Admitting a clip keeps a model's primitive list, and with it
+each primitive's cloth data and mesh, which an assembly shares with every
+other wearer of the part (characters.ts assembly spreads the part's
+primitive), so a re-plan of every assembly of the body computes none of
+them again. The indexes are a few words a channel, slot or entry, held
+once for the renderer, not per pose or per plan.
 ================
 */
 export type CharacterPlanCaches = {
 	readonly timelines: ClipTimelineCache;
+	readonly nodeChannels: ClipNodeChannelCache;
 	readonly bindings: WeakMap<CharacterModel["primitives"], ReturnType<typeof paletteBindings>>;
+	readonly clothSlots: WeakMap<ClothData, Int32Array>;
+	// With the mesh they were read from: the entries depend on it too.
+	readonly clothJoints: WeakMap<
+		ClothData,
+		{ readonly mesh: CharacterModel["primitives"][number]["geometry"]; readonly joints: Int32Array; }
+	>;
 };
 /*
 ================
@@ -69,7 +88,55 @@ createCharacterPlanCaches
 ================
 */
 export function createCharacterPlanCaches(): CharacterPlanCaches {
-	return { timelines: createClipTimelineCache(), bindings: new WeakMap() };
+	return {
+		timelines: createClipTimelineCache(),
+		nodeChannels: new WeakMap(),
+		bindings: new WeakMap(),
+		clothSlots: new WeakMap(),
+		clothJoints: new WeakMap()
+	};
+}
+/*
+================
+characterClothSlots
+
+A cloth piece's stream slots (cloth-stream.ts clothStreamSlots), computed
+once per cloth data when the plan caches are given. Every wearer's stream
+and its draw's slot map take the same list; nobody writes it.
+================
+*/
+export function characterClothSlots( cloth: ClothData, caches?: CharacterPlanCaches ): Int32Array {
+	let slots = caches?.clothSlots.get( cloth );
+	if ( !slots ) {
+		slots = clothStreamSlots( cloth );
+		caches?.clothSlots.set( cloth, slots );
+	}
+	return slots;
+}
+/*
+================
+characterClothJoints
+
+The palette entries a skinned cloth piece's stream reads (cloth-stream.ts
+clothStreamJoints), computed once per cloth data when the plan caches are
+given: a piece's cloth data and mesh come from one decoded primitive. The
+entries are kept with that mesh, so a cloth data met with another mesh is
+read again, not trusted.
+================
+*/
+export function characterClothJoints(
+	primitive: Pick<CharacterModel["primitives"][number], "cloth" | "geometry">,
+	caches?: CharacterPlanCaches
+): Int32Array {
+	let read = caches?.clothJoints.get( primitive.cloth! );
+	if ( !read || read.mesh !== primitive.geometry ) {
+		read = {
+			mesh: primitive.geometry,
+			joints: clothStreamJoints( primitive.geometry, characterClothSlots( primitive.cloth!, caches ) )
+		};
+		caches?.clothJoints.set( primitive.cloth!, read );
+	}
+	return read.joints;
 }
 /*
 ================
@@ -90,8 +157,9 @@ export function characterPoseBytes( model: CharacterModel, caches?: CharacterPla
 		caches?.bindings.set( model.primitives, bindings );
 	}
 	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
-	// weights, sample and one exact palette per binding/pose revision.
-	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
+	// weights, socket chain scratch, sample, per-node flags and one exact palette per
+	// binding/pose revision.
+	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6 + 1) * 4 + 3) + 16 +
 		model.primitives.reduce(
 			( bytes, primitive ) =>
 				bytes + ((bindings.get( primitive ) ?? primitive) === primitive ? primitive.joints.length * 64 : 0),
@@ -185,10 +253,11 @@ characterBatchBytes
 Charge retained batch capacity rather than only this frame's visible
 population. A shared mesh is charged once per frame plan, not here
 (characterMeshBytes); a batch's own streams (ribbons, unskinned cloth and
-meshes) keep a GPU copy and a CPU mirror each.
+meshes) keep a GPU copy and a CPU mirror each. The renderer passes its
+plan caches.
 ================
 */
-export function characterBatchBytes( model: CharacterModel, count: number ): number {
+export function characterBatchBytes( model: CharacterModel, count: number, caches?: CharacterPlanCaches ): number {
 	if ( !count ) return 0;
 	// Mesh and particle batches retain capacity across membership changes.
 	// Reserve unused particle slots too; ribbons retain exact-sized strips.
@@ -231,8 +300,12 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 			(count > 1 && characterRowGlow( primitive ) ? slots * ROW_STATE_FLOATS * 4 : 0) +
 			(characterSharedMesh( primitive ) ?
 				// A shared cloth piece keeps a skin table of its own: the skin
-				// entries, then its solver's stream (device/geometry.ts).
-				primitive.cloth ? (geometry.joints?.length ?? 0) * 8 * 2 : 0 :
+				// entries, a slot map of one entry a vertex, then its solver's
+				// stream of one entry a slot (device/geometry.ts).
+				primitive.cloth ?
+					(geometry.joints?.length ?? 0) * 8 * 2 +
+					characterClothSlots( primitive.cloth, caches ).length * CLOTH_STREAM_WORDS * 4 :
+					0 :
 				geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
 				(geometry.joints?.length ?? 0) * 8 * 2) +
 			64 + 96 + 20;
