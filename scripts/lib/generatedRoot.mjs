@@ -15,6 +15,13 @@ check:generated-root gate enforces it), so moving or sharing the tree is
 one environment variable. A build run with the variable set writes into
 the shared tree, which is the canonical tree, not a private copy.
 
+The build's reuse caches (the file hash cache, the lane memo, the gzip and
+minify caches) describe this tree, not the checkout that last built it, so
+they live beside it: the generated root's sibling .state, where the
+generated-assets lock already lives (rebuildLock.mjs). A fresh release
+worktree then finds the caches the last build left instead of starting
+cold (owner 2026-11-16: "why we always build from beginning?").
+
 The server's game-data projection is a separate, module-local tree with
 its own override (SRO_SERVER_GAME_DATA_ROOT, apps/server/AGENTS.md).
 
@@ -123,6 +130,34 @@ A path inside the generated root.
 */
 export function generatedPath( ...parts ) {
 	return path.join( GENERATED_ROOT, ...parts );
+}
+
+/*
+================
+resolveBuildStateRoot
+
+The build state beside a generated root: its sibling .state. The main
+checkout's tree gives the hub's .state; a release staging's variant tree
+(SRO_GENERATED_ROOT=<variant>/.generated) gives <variant>/.state, where its
+generated-assets lock already lives.
+================
+*/
+export function resolveBuildStateRoot( generatedRoot = GENERATED_ROOT ) {
+	return path.join( path.dirname( generatedRoot ), ".state" );
+}
+
+export const BUILD_STATE_ROOT = resolveBuildStateRoot();
+
+/*
+================
+buildStatePath
+
+A path inside the build state beside the generated root: the reuse caches
+that describe this tree. sro_paths.py build_state_path is the Python twin.
+================
+*/
+export function buildStatePath( ...parts ) {
+	return path.join( BUILD_STATE_ROOT, ...parts );
 }
 
 /*

@@ -158,6 +158,7 @@ Useful options:
 | `--cpu` | A CPU profile per scenario |
 | `--counts` | WebGPU commands per frame (draws, bundles, buffer writes, submits); slows the frame, so read only its counts |
 | `--trace` | A Chrome trace per location (main thread, workers, GPU process) |
+| `--gpu-process` | CPU and wall ms per frame of Chrome's GPU-process threads, from a separate traced window (below) |
 | `--paced` | Retain the browser's display pacing |
 | `--frame-limit 60` | Exercise the player's 60 FPS limit; also accepts 120, 240 or 0 (the default, uncapped) |
 | `--cpu-rate 4` | Apply Chrome CPU throttling after world warm-up |
@@ -172,6 +173,46 @@ Captures go to `temp/artifacts/fps-bench/<location>-<scenario>.*`.
 The machine is shared with whatever else runs on it: numbers move by up to
 a quarter between runs. Compare runs made back to back, never a number
 from this morning with one from now, and measure a change more than once.
+
+### The GPU process: `--gpu-process`
+
+Every WebGPU call the page makes (draws, `queue.writeBuffer`, compute
+dispatches, submits) is serialized and replayed in Chrome's GPU process,
+where Dawn decodes and validates it and hands it to the driver. That is
+CPU time the main thread's numbers do not show and the GPU timestamp
+queries do not see. `--gpu-process` reports it per frame:
+
+```
+SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:4181 node tools/perf/bench/fps-bench.mjs --only still,drag --gpu-process
+```
+
+After each timed window the scenario runs a second window under a
+Chrome trace, so the trace never slows the row's own fps. The row gains
+`gpuProcess`: the GPU main thread's (`CrGpuMain`) CPU and wall ms per
+frame, every GPU-process thread above 2% busy, the renderer main
+thread for comparison, and the frames these divide by (the traced
+window's own frame-probe count and fps, the same source as a row's fps).
+
+- **What it is:** CPU time in the GPU process. CPU is thread time; wall
+  is the time a thread had a task open, which also counts blocking waits
+  inside the task (for example a Metal submit waiting on the driver).
+  Busy is wall over the window.
+- **What it is not:** time on the GPU. GPU execution time is the
+  timestamp queries' job; a frame can be bound by either.
+- **Where the work is:** on an Apple-silicon Mac (Metal) the WebGPU
+  commands run on `CrGpuMain` (`WebGPUDecoderImpl::HandleDawnCommands`,
+  with `Queue::Submit` the largest part); `VizCompositorThread` is the
+  display compositor, which an uncapped client keeps busy with many tiny
+  tasks. Check the thread names on other platforms before comparing.
+- **Trace categories:** `toplevel` (each thread's top-level tasks, with
+  their thread time) and `blink.user_timing` (the marks that place the
+  window), nothing else. Nested slices count once: wall is the union of a
+  thread's task intervals, CPU the thread time of top-level tasks.
+  `processCosts` in `tools/perf/core/trace.mjs` is the reducer.
+- The trace is reduced as it arrives and not saved: an uncapped client's
+  GPU process posts hundreds of thousands of tasks a second. Use
+  `--trace` for a trace to read (the two do not combine). `cross` and
+  `combat` run once per session and get no traced window.
 
 ### Effects without a server
 

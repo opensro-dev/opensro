@@ -45,13 +45,15 @@ export const ACTION_CENSUS_ROOTS = [
 	"src/engine/foundation/gameplay/fortress-production.ts"
 ];
 
-// The census's non-TypeScript inputs, checkout-relative: the tool and
-// this gate, the source model both read through, the loader that strips
+// The census's non-TypeScript inputs, checkout-relative: the tool, its
+// expanded-build rule and this gate, the source model both read through, the loader that strips
 // types, the committed census the run diffs against, the asset-root
 // resolver, the stamp keeper itself, and the lockfile that pins the
 // toolchain the model parses with.
 export const ACTION_CENSUS_FILES = [
 	"apps/client-next/tools/ui-action-census.mjs",
+	"apps/client-next/tools/census-expanded.mjs",
+	"scripts/lib/expandedBuild.mjs",
 	"apps/client-next/tools/ui-action-census-gate.mjs",
 	"apps/client-next/tools/project.mjs",
 	"apps/client-next/tests/helpers/native-source-loader.mjs",
