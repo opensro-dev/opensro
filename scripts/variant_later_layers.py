@@ -58,7 +58,7 @@ LATER_LAYERS = (
 	("exportWorld", export_world_import.add_export_world),
 	# The Pharaoh Temple's monsters ride the temple's own switch
 	# (SRO_PHARAOH_TEMPLE), in its dungeons build_alexandria_variant
-	# stages: no region merge, its own identity band (260000). The
+	# stages: no region merge, its own identity band (270000). The
 	# dungeons' own summary is the manifest's "pharaohTemple".
 	("pharaohTempleMonsters", pharaoh_temple_import.add_pharaoh_temple_monsters),
 	# The gears magic stones ride the mall's own switch

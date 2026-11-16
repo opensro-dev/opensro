@@ -28,7 +28,7 @@ stages.
 
 | Part | Result (real inputs) |
 | --- | --- |
-| Monsters | 24 kinds in `characterdata_260000.txt`, 83 skills in `skilldata_260000.txt` |
+| Monsters | 24 kinds in `characterdata_270000.txt`, 83 skills in `skilldata_270000.txt` |
 | Placements | 101 nests across the seven dungeons, joining the default world |
 | Keepers | Selkis, Neith, Anubis, Isis and Seth (grade 3), one each in their sanctums (Anubis two), on a 3-hour respawn |
 

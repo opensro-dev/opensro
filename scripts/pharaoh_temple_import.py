@@ -26,7 +26,7 @@ neither source places by nest.
 
 No region merge: the dungeons are VSRO Data the variant build already
 stages. The import is the shared monster pass (later_world_import.
-add_monsters) with a band of its own, 260000. Port-only, not native,
+add_monsters) with a band of its own, 270000. Port-only, not native,
 as the temple itself is.
 
 ===========================================================================
@@ -41,10 +41,11 @@ FLAG = "SRO_PHARAOH_TEMPLE"
 ROOT_ENV = "SRO_V1696_ROOT"
 SOURCE_ENV = "SRO_PHARAOH_TEMPLE_DATABASE"
 MARKER = ".opensro-pharaoh-temple.json"
-# The 260000 identity band, after the export-world areas' 250000. One
+# The 270000 identity band, after the export-world areas' 250000 and
+# Roc's 260000 (#3762). One
 # importer owns one shard file in a build (test_later_shard_bands).
-CHARACTER_SHARD = "characterdata_260000.txt"
-SKILL_SHARD = "skilldata_260000.txt"
+CHARACTER_SHARD = "characterdata_270000.txt"
+SKILL_SHARD = "skilldata_270000.txt"
 POPULATION_FILE = "pharaoh-temple.txt"
 POPULATION_NAME = "temple-population.json"
 PIN_FILE = Path(__file__).with_name("v1696_archive_pins.json")
