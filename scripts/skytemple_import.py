@@ -106,6 +106,15 @@ MAPO_SIGNATURE_BYTES = 12
 MAPO_BLOCKS = 36
 MAPO_LOD_GROUPS = 4
 MAPO_RECORD_BYTES = 30
+# JMXVNVM 1000 region navmesh, as scripts/build/world/navmesh/parseNavmesh.mjs:
+# a 12-byte signature, a u16 object count, then per object 32 bytes whose
+# first u32 is the object id and whose last u16 is its link edge count,
+# followed by that many 6-byte link edges.
+NVM_SIGNATURE = b"JMXVNVM 1000"
+NVM_SIGNATURE_BYTES = 12
+NVM_OBJECT_BYTES = 32
+NVM_LINK_COUNT_OFFSET = 30
+NVM_LINK_EDGE_BYTES = 6
 
 PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp", ".cpd")
 ARCHIVE_FOLDERS = {"Data": "Data_extracted", "Particles": "Particles_extracted"}
@@ -340,6 +349,80 @@ def patch_o2_objects(data, remap):
 
 
 # ================
+# nvm_object_offsets
+#
+# The byte offset of every object record in a region navmesh. The object
+# list is the file's first section; the cells and edges after it carry
+# object indices, never object ids, so they are left alone.
+# ================
+def nvm_object_offsets(data):
+	if data[:NVM_SIGNATURE_BYTES] != NVM_SIGNATURE:
+		raise ValueError("not a JMXVNVM 1000 navmesh")
+	(count,) = struct.unpack_from("<H", data, NVM_SIGNATURE_BYTES)
+	offsets, at = [], NVM_SIGNATURE_BYTES + 2
+	for _object in range(count):
+		if at + NVM_OBJECT_BYTES > len(data):
+			raise ValueError(f"navmesh object list runs past its {len(data)} bytes")
+		offsets.append(at)
+		(links,) = struct.unpack_from("<H", data, at + NVM_LINK_COUNT_OFFSET)
+		at += NVM_OBJECT_BYTES + links * NVM_LINK_EDGE_BYTES
+	return offsets
+
+
+# ================
+# nvm_object_ids
+# ================
+def nvm_object_ids(data):
+	"""The object ids a region navmesh places."""
+	return {struct.unpack_from("<I", data, at)[0] for at in nvm_object_offsets(data)}
+
+
+# ================
+# patch_nvm_objects
+#
+# A region navmesh with its object ids remapped, as patch_o2_objects
+# remaps the sector's placements. The client resolves a navmesh object
+# through object.ifo by this id (navigation.ts), so a navmesh copied
+# unpatched beside a patched .o2 names the later client's id for an
+# object the merged catalogue moved: Baghdad's dungeon exits, gates and
+# palace failed to load that way ("Missing navigation BSR 2631").
+# ================
+def patch_nvm_objects(data, remap):
+	offsets = nvm_object_offsets(data)
+	if not remap:
+		return data
+	out = bytearray(data)
+	for at in offsets:
+		(object_id,) = struct.unpack_from("<I", out, at)
+		if object_id in remap:
+			struct.pack_into("<I", out, at, remap[object_id])
+	return bytes(out)
+
+
+# ================
+# copy_sector_navmesh
+#
+# Each sector's region navmesh from the later Data.pk2 into the variant,
+# its object ids remapped with the sector placements' (patch_nvm_objects),
+# rewritten only when its bytes change. Returns the variant paths written.
+# ================
+def copy_sector_navmesh(data, data_index, sectors, output, remap):
+	copied = []
+	for sector_x, sector_y in sectors:
+		nav = tables.navmesh_path(sector_x, sector_y)
+		entry = data_index.get(nav)
+		if entry is None:
+			raise ValueError(f"v1.696 Data.pk2 has no {nav}")
+		target = output / "Data_extracted" / "navmesh" / Path(nav).name
+		stored = patch_nvm_objects(sro_pk2.payload(data, entry), remap)
+		if target.exists() and target.read_bytes() == stored:
+			continue
+		variant.replace_file(target, stored)
+		copied.append("Data_extracted/" + nav)
+	return copied
+
+
+# ================
 # merge_object_catalog_remap
 #
 # The current object.ifo with the later rows added, and the remap of
@@ -417,7 +500,7 @@ def later_object_texts(read):
 # the missing bytes is not an option.
 # ================
 def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
-	from cap110_item_import import normalized_path, resource_dependencies
+	from cap110_item_import import normalized_path, resource_dependencies, tolerant_dependencies
 	pending = {("Data", normalized_path(seed)) for seed in seeds}
 	seen, written, missing_sounds, missing_effects = set(), [], [], []
 	missing_files, unparsed_files = [], []
@@ -465,18 +548,15 @@ def copy_resource_closure(seeds, archives, native, output, tolerate_gaps=False):
 				requests.append({"path": name, "bytes": base64.b64encode(raw).decode("ascii"),
 					"native": origin, "sounds": "data", "particles": "all"})
 		if requests:
-			try:
+			if not tolerate_gaps:
 				dependencies = resource_dependencies(requests)
-			except ValueError:
-				if not tolerate_gaps:
-					raise
+			else:
 				dependencies = []
-				for request in requests:
-					try:
-						dependencies.append(resource_dependencies([request])[0])
-					except ValueError:
+				for request, result in zip(requests, tolerant_dependencies(requests)):
+					if isinstance(result, ValueError):
 						unparsed_files.append(request["path"])
-						dependencies.append([])
+						result = []
+					dependencies.append(result)
 			for names in dependencies:
 				for dep in names:
 					if isinstance(dep, dict):
@@ -806,17 +886,7 @@ def add_skytemple(native, output, source=None, closure=copy_resource_closure):
 			archive_hashes["Particles"] = tables.sha256_of(particles)
 			archives = {"Data": (data, data_index),
 				"Particles": (particles, tables.archive_index(particles))}
-			for sector_x, sector_y in sectors:
-				nav = tables.navmesh_path(sector_x, sector_y)
-				entry = data_index.get(nav)
-				if entry is None:
-					raise ValueError(f"v1.696 Data.pk2 has no {nav}")
-				target = output / "Data_extracted" / "navmesh" / Path(nav).name
-				stored = sro_pk2.payload(data, entry)
-				if target.exists() and target.read_bytes() == stored:
-					continue
-				variant.replace_file(target, stored)
-				copied.append("Data_extracted/" + nav)
+			copied += copy_sector_navmesh(data, data_index, sectors, output, object_remap)
 			merged_objects = tables.object_catalog((output / "Map_extracted" / "object.ifo").read_bytes())
 			final_ids = {object_remap.get(object_id, object_id) for object_id in used_objects}
 			if not final_ids <= set(merged_objects):

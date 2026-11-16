@@ -40,7 +40,6 @@ apps/client-next/src/engine/foundation/animation/presentation-ids.ts
 apps/client-next/src/engine/foundation/animation/preview-idle.ts
 apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
-apps/client-next/src/engine/foundation/animation/scenery-emission.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
 apps/client-next/src/engine/foundation/assets/asset-budget.ts
@@ -87,7 +86,6 @@ apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
-apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts

@@ -39,6 +39,7 @@ import {
 	worldMapDungeonPose,
 	worldMapFrame,
 	worldMapPageAt,
+	worldMapPageCaption,
 	worldMapPages,
 	worldMapPresentation,
 	worldMapPointMarkers,
@@ -351,7 +352,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// selects Manual Movement State, preserving its existing behavior.
 			if ( id.startsWith( "map-town:" ) ) {
 				mapTools.clearView();
-				const page = Number( id.slice( 9 ) );
+				const page = Number.parseInt( id.slice( 9 ), 10 );
 				if ( worldMapPages( mapLayout ).some( p => p.id === page ) ) {
 					mapPage = page;
 					mapFollow = false;
@@ -482,6 +483,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				authoredButton = input.authoredButton,
 				closeButton = input.closeButton,
 				image = input.image;
+			// A page's caption string: a town's UIIT_STT_ text, a fortress's
+			// SN_ object text (576949).
+			const pageName = ( page: { readonly name: string; readonly caption?: string; } ) => {
+				const key = worldMapPageCaption( page );
+				return key.startsWith( "SN_" ) ? hudData?.strings?.[key] ?? key : hudCopy( key );
+			};
 
 			let hover = input.hover;
 			lastLevel = game?.progression?.level;
@@ -768,12 +775,18 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				] :
 				[];
 			if ( caveMap ) mapHits.push( ...cavePageHits( caveMap ) );
+			// Several icons can open one page (the three fort_worldmap icons
+			// 91006-91008 all open 1001): each later one gets a "#n" suffix so
+			// control identities stay unique; the activation reads the page id.
+			const townHitCount = new Map<number, number>();
 			for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 				const page = worldMapPages( mapLayout ).find( p => p.id === icon.destination );
 				if ( page ) {
+					const seen = townHitCount.get( page.id ) ?? 0;
+					townHitCount.set( page.id, seen + 1 );
 					mapHits.push( {
-						id: "map-town:" + page.id,
-						label: hudCopy( "UIIT_STT_" + page.name ),
+						id: "map-town:" + page.id + (seen > 0 ? "#" + seen : ""),
+						label: pageName( page ),
 						rect: r,
 						kind: "button",
 						draggable: true
@@ -858,7 +871,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					// carries: "Underground Level 1 of Tomb of Qin-Shi".
 					caption = (cavePage && caveMap ? cavePage.caption : undefined) ||
 						(page ?
-							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + pageName( page ) :
 							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
 						"World Map";
 				windowBox( caption, mx, my, mw, mh );
