@@ -507,6 +507,11 @@ type Runtime struct {
 	// value is native.
 	MaterialDrops progression.MaterialDrops
 
+	// AboveDegree9Drops keeps every item above degree 9 out of monster
+	// drops while the area polls run (port-only, not native; owner
+	// 2026-11-16). The zero value drops every degree.
+	AboveDegree9Drops progression.AboveDegree9Drops
+
 	// FastDenReturn halves the Bandit Den scroll's countdown (denreturn.go;
 	// port-only, not native; owner 2026-10-14). False is native.
 	FastDenReturn bool

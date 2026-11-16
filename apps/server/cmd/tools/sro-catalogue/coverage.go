@@ -57,6 +57,7 @@ var catalogueReaders = map[string]string{
 	"SRO_BETA_SHOP_ONLY_DEGREE9":             "BuildDropTables publishes it in the beta object (beta.shopOnlyDegree9)",
 	"SRO_ELIXIR_DROPS_OFF":                   "BuildDropTables publishes it in the beta object (beta.elixirDropsOff)",
 	"SRO_ALCHEMY_MATERIAL_DROPS_OFF":         "BuildDropTables publishes it in the beta object (beta.materialDropsOff)",
+	"SRO_ABOVE_DEGREE9_DROPS_OFF":            "BuildDropTables publishes it at the top level (aboveDegree9DropsOff)",
 	"SRO_SUN_EVENT_ONLY":                     "BuildDropTables and run read it (progression.SunEventOnlyFromEnv): the Sun rows leave the drop tables and the shops",
 	"SRO_SUN_DROP_RATE":                      "BuildDropTables reads it (progression.SunRateFromEnv) for beta.sunDropRate and the widened rare tables",
 	"SRO_UNIQUE_GAP_EXEMPT":                  "BuildDropTables publishes it in the unique object (unique.gapExempt, progression.UniqueRulesFromEnv)",
