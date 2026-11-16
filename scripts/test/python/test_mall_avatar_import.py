@@ -343,6 +343,29 @@ class MallTests(unittest.TestCase):
 		self.assertEqual(len(set(serials)), 2)
 
 	# ================
+	# test_a_later_sources_stale_rows_do_not_move_the_authored_ones
+	#
+	# A rebuild over the same variant still holds the rows a later source
+	# wrote last time. Read through without_packages, they move neither the
+	# authored identities nor the slots, so an unchanged rebuild writes the
+	# same tables; read raw, they walk both upward.
+	# ================
+	def test_a_later_sources_stale_rows_do_not_move_the_authored_ones(self):
+		later, current, avatars = self.tables()
+		clean, _ = importer.mall_rows(later, avatars, current, {90000}, list_all=True)
+		stale = {name: list(rows) for name, rows in current.items()}
+		stale["refpackageitem.txt"].append(["1", "11", "95000", "PACKAGE_STALE"] + ["0"] * 13)
+		stale["refscrapofpackageitem.txt"].append(["1", "11", "PACKAGE_STALE", "ITEM_STALE"] + ["0"] * 24 + ["95000"])
+		stale["refpricepolicyofitem.txt"].append(["1", "11", "PACKAGE_STALE", "2", "130"])
+		stale["refshopgoods.txt"].append(["1", "11", "MALL_AVATAR_DRESS", "PACKAGE_STALE", "200"] + ["-1", "xxx"] * 4)
+		filtered, _ = importer.mall_rows(
+			later, avatars, importer.without_packages(stale, {"PACKAGE_STALE"}), {90000}, list_all=True
+		)
+		raw, _ = importer.mall_rows(later, avatars, stale, {90000}, list_all=True)
+		self.assertEqual(filtered, clean)
+		self.assertNotEqual(raw, clean)
+
+	# ================
 	# test_a_full_tab_is_refused
 	# ================
 	def test_a_full_tab_is_refused(self):

@@ -97,7 +97,7 @@ func maskFixture(t *testing.T, maskLevel uint8, holding uint32) (*Runtime, *fake
 	rt.deps.ItemReferences().(staticItemSource)[item.Codename] = item
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 		Slot: maskSlot, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags(),
-		StackCount: 1, TransformRefObjID: holding,
+		StackCount: 1, Data: holding,
 	})
 	return rt, clock, c, instances[0]
 }

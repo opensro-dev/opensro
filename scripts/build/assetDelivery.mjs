@@ -18,6 +18,7 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { publishAssetPackManifest, validatePackedFontAtlases } from "./assetPackPublication.mjs";
+import { compareText } from "./shared/textOrder.mjs";
 
 export const DELIVERY_VERSION = 2;
 const ANIMATION_CATALOG = /^\/assets\/world\/[^/]+\/animated-objects\.json(?:\.gz)?$/i;
@@ -74,7 +75,7 @@ export async function prepareAssetDelivery( index, root ) {
 	}
 
 	const catalogs = index.assets.filter( entry => isAnimationCatalog( entry.path ) )
-		.sort( ( a, b ) => a.packPath.localeCompare( b.packPath ) || a.offset - b.offset );
+		.sort( ( a, b ) => compareText( a.packPath, b.packPath ) || a.offset - b.offset );
 	for ( const entry of catalogs ) {
 		const raw = await memberBytes( entry );
 		const document = JSON.parse( (entry.path.endsWith( ".gz" ) ? gunzipSync( raw ) : raw).toString( "utf8" ) );

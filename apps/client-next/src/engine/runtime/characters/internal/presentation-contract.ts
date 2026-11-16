@@ -438,6 +438,8 @@ export interface ActorOwner {
 	readonly resources: {
 		animation( body: string, name: string, path: string ): boolean;
 		duration( path: string, clip: string ): number;
+		/** True while the source waits out a failure's retry. */
+		failed( path: string ): boolean;
 		plan( paths: readonly string[] ): boolean;
 		prioritize( paths: readonly string[] ): void;
 		ready( path: string ): boolean;

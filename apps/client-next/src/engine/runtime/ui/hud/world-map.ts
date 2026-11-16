@@ -352,7 +352,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// selects Manual Movement State, preserving its existing behavior.
 			if ( id.startsWith( "map-town:" ) ) {
 				mapTools.clearView();
-				const page = Number( id.slice( 9 ) );
+				const page = Number.parseInt( id.slice( 9 ), 10 );
 				if ( worldMapPages( mapLayout ).some( p => p.id === page ) ) {
 					mapPage = page;
 					mapFollow = false;
@@ -786,11 +786,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				] :
 				[];
 			if ( caveMap ) mapHits.push( ...cavePageHits( caveMap ) );
+			// Several icons can open one page (the three fort_worldmap icons
+			// 91006-91008 all open 1001): each later one gets a "#n" suffix so
+			// control identities stay unique; the activation reads the page id.
+			const townHitCount = new Map<number, number>();
 			for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 				const page = worldMapPages( mapLayout ).find( p => p.id === icon.destination );
 				if ( page ) {
+					const seen = townHitCount.get( page.id ) ?? 0;
+					townHitCount.set( page.id, seen + 1 );
 					mapHits.push( {
-						id: "map-town:" + page.id,
+						id: "map-town:" + page.id + (seen > 0 ? "#" + seen : ""),
 						label: pageName( page ),
 						rect: r,
 						kind: "button",

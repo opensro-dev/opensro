@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import { clothVertexCase } from "./cloth-vertex-cases.mjs";
 import { createStrictGpu, GPU_BUFFER_USAGE, GPU_TEXTURE_USAGE } from "./strict-gpu.mjs";
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
+const { createCharacterPose } = await import( "../../src/engine/foundation/animation/animation-pose.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { identity } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
@@ -177,8 +178,10 @@ Record the data a draw consumes. Palette offsets are expanded during hashing
 so deduplicated buffers compare against ordinary per-instance palettes.
 ================
 */
-function captureGeometry( tags, gpuAvailable ) {
+function captureGeometry( tags, gpuAvailable, gpuTakes ) {
 	let gpuCalls = 0;
+	// What a sampling GPU holds, by the palette source's buffer (gpuTakes).
+	const gpuMemory = new Map(), references = new Map();
 	let device = deviceFixture();
 	const commands = {
 		...device.resources.commands,
@@ -238,6 +241,15 @@ function captureGeometry( tags, gpuAvailable ) {
 		updateBones( draw, bones, revision ) {
 			const uploaded = device.resources.commands.updateBones( draw.deviceDraw, bones, revision );
 			draw.bones = bones.slice();
+			// The slots the GPU sampled hold its palette, not the poisoned CPU copy.
+			const memory = gpuMemory.get( bones.buffer ), base = bones.byteOffset / 4;
+			if ( memory ) {
+				// Its own bone buffer would receive the stale CPU copy instead.
+				assert.ok( draw.offsets, `${draw.tag} reads sampled palettes through the shared palette` );
+				for ( let k = 0; k < draw.bones.length; k++ ) {
+					if ( Number.isNaN( draw.bones[k] ) ) draw.bones[k] = memory[base + k];
+				}
+			}
 			return uploaded;
 		},
 		/*
@@ -282,6 +294,34 @@ function captureGeometry( tags, gpuAvailable ) {
 		commands.prepareGpuBones = () => {
 			gpuCalls++;
 			return false;
+		};
+	}
+	// A device that samples skeletons (gpuTakes): each slot it takes lands in
+	// its own memory, computed by the CPU's evaluator for the same clip and
+	// time, and the CPU copy of that slot is poisoned, as a real GPU leaves it
+	// stale. A consumer that reads the CPU copy reads NaN.
+	if ( gpuTakes ) {
+		commands.prepareGpuBones = ( source, model, primitive, samples ) => {
+			gpuCalls++;
+			let memory = gpuMemory.get( source.buffer );
+			if ( !memory ) {
+				memory = new Float32Array( source.buffer.byteLength / 4 );
+				gpuMemory.set( source.buffer, memory );
+			}
+			let reference = references.get( model );
+			if ( !reference ) {
+				reference = createCharacterPose( model );
+				references.set( model, reference );
+			}
+			const stride = primitive.joints.length * 16, base = source.byteOffset / 4;
+			for ( let i = 0; i < samples.length; i++ ) {
+				const sample = samples[i];
+				if ( !sample ) continue;
+				reference.evaluate( sample.clip.name, sample.time, false );
+				reference.palette( primitive, memory, base + i * stride );
+				source.fill( NaN, i * stride, (i + 1) * stride );
+			}
+			return true;
 		};
 	}
 	return {
@@ -450,15 +490,15 @@ captureClothPalettes
 export function captureClothPalettes(
 	gpuAvailable = false,
 	admitUnusedClip = false,
-	{ moving = false, variants = false } = {}
+	{ moving = false, variants = false, gpuTakes = false } = {}
 ) {
 	const random = createPresentationRandom( RANDOM_SEED, 1, 100000 );
 	const owner = createCharacters( random ), tags = new Map();
 	owner.model( "body-first", model( false, tags ), [] );
 	owner.model( "cloth-first", model( true, tags ), [] );
-	const geometry = captureGeometry( tags, gpuAvailable ), clock = clothVertexCase( true, true );
+	const geometry = captureGeometry( tags, gpuAvailable, gpuTakes ), clock = clothVertexCase( true, true );
 	const frames = [];
-	let boneWriteBytes = 0;
+	let boneWriteBytes = 0, cpuEvaluations = 0;
 	try {
 		for ( let frame = 0; frame < FRAME_COUNT; frame++ ) {
 			if ( admitUnusedClip && frame === 31 ) {
@@ -529,7 +569,6 @@ export function captureClothPalettes(
 				view,
 				preview,
 				input.seconds,
-				false,
 				true,
 				true,
 				input.enabled
@@ -562,7 +601,8 @@ export function captureClothPalettes(
 				}
 			}
 			const trace = random.takeTrace();
-			boneWriteBytes += geometry.verify( draws );
+			// The device's buffers hold the poisoned CPU copy where the GPU sampled.
+			if ( !gpuTakes ) boneWriteBytes += geometry.verify( draws );
 			frames.push( {
 				clothPlacementWrites: geometry.clothPlacementWrites( draws ),
 				poseEligibility: owner.stats( true ).poseEligibility,
@@ -574,9 +614,10 @@ export function captureClothPalettes(
 				)
 			} );
 		}
+		cpuEvaluations = owner.stats().cpuEvaluations;
 	} finally {
 		owner.dispose( geometry.commands, null );
 		geometry.dispose();
 	}
-	return { frames, gpuCalls: geometry.gpuCalls(), boneWriteBytes };
+	return { frames, gpuCalls: geometry.gpuCalls(), boneWriteBytes, cpuEvaluations };
 }
