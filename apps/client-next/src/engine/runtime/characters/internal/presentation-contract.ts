@@ -316,7 +316,80 @@ export interface CharacterPresentationState {
 	equipmentParticles?: readonly ModelParticle[];
 	defaultWear?: { resource: Resource; keys: readonly string[]; };
 	fortressIndex?: number;
+	// The last steady decision and the inputs it was taken from
+	// (MotionRetained); undefined after any frame that was not steady.
+	motion?: MotionRetained;
 }
+
+/*
+================
+MotionStamp
+
+What a steady decide (actor-motion.ts) read, as values and identities: a
+frame whose stamp equals the retained one's would decide the same again.
+The entity row stands for every row field decide reads: the world
+projection replaces a row on any change and freezes it (presentation.ts).
+The published catalogue's epoch stands for its animation states, motion
+URLs and dress. Each other term is one read of an owner decide makes.
+================
+*/
+export interface MotionStamp {
+	readonly entity: EntityState;
+	readonly glb: string;
+	readonly codename: string;
+	readonly clips: readonly string[];
+	readonly clipFacts: ClipFacts;
+	readonly animationStates: Record<string, AnimationMetadata> | undefined;
+	// The appearance's avatar commit; every empty commit is one value.
+	readonly commit: readonly number[] | undefined;
+	readonly manifest: number;
+	readonly hpZero: boolean;
+	readonly abnormal: number;
+	readonly healthDead: boolean;
+	readonly pendingDeath: boolean;
+	// The token of a hit with damage, the only hit that changes the state.
+	readonly hitToken: string | undefined;
+	readonly cast: CastState | undefined;
+	readonly waiting: boolean;
+	readonly actionLayers: number;
+	readonly hostMotions: number;
+	readonly stance: boolean;
+	readonly posture: Posture | undefined;
+	// An idle fidget is set on a clip the body holds.
+	readonly idle: boolean;
+	readonly poseMoving: boolean;
+	readonly weaponSet: string | undefined;
+	readonly armed: boolean;
+	readonly local: boolean;
+}
+
+/*
+================
+MotionRetained
+
+A steady decision, its stamp, and the presentation frame it was last
+presented at: it stands for decide only on the very next frame, so a
+frame the entity was not presented (unselected, not resolved, a throw)
+ends it.
+================
+*/
+export interface MotionRetained {
+	readonly decision: MotionDecision;
+	readonly stamp: MotionStamp;
+	frame: number;
+}
+
+/*
+================
+MotionDue
+
+Whether decide must run for an entity this frame. retained and stamp are
+both given only when a steady decision from the previous frame exists;
+the production rule is presentation-due.ts motionDue, and a test passes
+an always-due rule to present every entity in full.
+================
+*/
+export type MotionDue = ( retained: MotionRetained | undefined, stamp: MotionStamp | undefined ) => boolean;
 
 /*
 ================
@@ -523,6 +596,7 @@ export interface ActorOwner {
 		readonly idleStates: ReadonlyMap<number, PresentationIdleState>;
 		readonly combatStanceEnds: ReadonlyMap<number, number>;
 	};
+	readonly motionDue: MotionDue;
 }
 
 /*
@@ -609,6 +683,10 @@ export interface MotionDecision {
 	readonly armedIdle: string;
 	// The action mask after this frame's transitions (0x200: state 9, feet).
 	readonly actionMask: number;
+	// decide changed no retained state and nothing it decided depends on
+	// the clock but the locomotion layers: with the same stamp next frame
+	// it would decide the same, so advance may run on this decision again.
+	readonly steady: boolean;
 }
 
 /*

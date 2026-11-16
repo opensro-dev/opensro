@@ -25,12 +25,15 @@ import { movementGait } from "@/engine/foundation/gameplay/native-movement";
 import { approachHeading, castFacing } from "@/engine/foundation/gameplay/cast-facing";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
+import type { AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
 import type {
 	ActorAppearance,
 	ActorFrame,
 	ActorOwner,
 	ActorPass,
-	MotionDecision
+	MotionDecision,
+	MotionRetained,
+	MotionStamp
 } from "./internal/presentation-contract";
 import { createActorAdvance } from "./actor-advance";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
@@ -41,6 +44,24 @@ const STALL_MOTION = 80;
 // pose-presentation.ts), the rate a body turns back at when a cast
 // facing leaves its yaw behind.
 const CAST_YAW_RELEASE_WORDS_PER_SECOND = 98304;
+// The stamp's one value for every empty avatar commit: the appearance phase
+// hands a fresh empty list each frame to bodies without an assembly.
+const EMPTY_COMMIT: readonly number[] = Object.freeze( [] );
+
+/*
+================
+sameSelection
+
+Two avatar override selections with the same order and choice: a commit
+selected again over its own result returns an equal one.
+================
+*/
+function sameSelection( a: AvatarOverrideSelection | undefined, b: AvatarOverrideSelection | undefined ) {
+	if ( !a || !b ) return a === b;
+	if ( a.selected !== b.selected || a.order.length !== b.order.length ) return false;
+	for ( let i = 0; i < a.order.length; i++ ) if ( a.order[i] !== b.order[i] ) return false;
+	return true;
+}
 
 /*
 ================
@@ -156,6 +177,14 @@ export function createActorMotion( owner: ActorOwner ) {
 		const nativePose = logicalPose( entity ), facts = resource.clipFacts, clips = facts.names;
 
 		let state = states.get( entity.gid );
+		// steady: this decide changes no retained state and decides nothing
+		// from the clock but the locomotion layers (MotionDecision.steady).
+		// Each statement below that would change state, or whose choice the
+		// clock alone can change, clears it. A rider waits on its mount's
+		// first draw (seatedVehicle), which no input of its own shows.
+		let steady = !!state?.modifierResource && state.modifierResource.glb === resource.glb &&
+			state.activations !== undefined && !localMover( entity.gid ) && entity.gid !== gameplay?.localGid &&
+			!entity.mountedOn;
 		if ( !state ) {
 			state = { modifierId: allocateActor(), clip: "", started: seconds };
 			states.set( entity.gid, state );
@@ -185,6 +214,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				published.dress?.avatarVisualOverrides ?? {}
 			);
 		if ( selectedOverride ) avatarOverrides.set( entity.gid, selectedOverride );
+		if ( overrideCommit !== undefined && !sameSelection( previousOverride, selectedOverride ) ) steady = false;
 		const overrideChanged = previousOverride?.selected !== selectedOverride?.selected;
 		const override = selectedOverride?.selected === undefined ?
 			undefined :
@@ -203,6 +233,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				cast.target !== entity.gid && !entity.mountedOn ?
 			entitiesByGid.get( cast.target ) :
 			undefined;
+		if ( state.castFacing || state.castYawRelease ) steady = false;
 		state.castFacing = castFacing( state.castFacing, {
 			caster: nativePose,
 			target: castTarget && logicalPose( castTarget ),
@@ -211,6 +242,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			revision: (localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0,
 			seconds
 		} );
+		if ( state.castFacing ) steady = false;
 		// The frame's drawn pose, resolved once in presentPoses
 		// (#1442c); the tracked cast yaw (8DC440) still turns its
 		// angle on top, as it already did over a held pose.
@@ -232,6 +264,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			state.castYawRelease = turned === target ? undefined : { angle: turned, at: seconds };
 		}
 		if ( hit && hit.damage > 0 && state.hitToken !== hit.token ) {
+			steady = false;
 			state.hitToken = hit.token;
 			state.hitStarted = hit.at;
 			state.hitCritical = hit.critical;
@@ -243,6 +276,7 @@ export function createActorMotion( owner: ActorOwner ) {
 		const sitting = !stall && entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
 		const seat = seatedVehicle( entity, output.displayed );
 		const sittingClip = facts.sitting;
+		if ( state.dead !== dead || state.sitting !== sitting || stall ) steady = false;
 		if ( state.dead !== undefined && state.dead !== dead ) {
 			// 8E64F0: downdie from state 4; otherwise the motion-4 one-shot only
 			// when state 2 or 3 was active, over the deathLoop base.
@@ -275,6 +309,7 @@ export function createActorMotion( owner: ActorOwner ) {
 		// Death selects its own clip; it does not clear the lock.
 		const poseFrozen = statusView.poseLocked;
 		if ( poseFrozen || stall ) moving = false;
+		if ( poseFrozen || statusView.rate !== 1 ) steady = false;
 		const requestedMoving = moving;
 		const movementRevision = (localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0;
 		const displaced = (localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath)?.displacement ===
@@ -334,6 +369,10 @@ export function createActorMotion( owner: ActorOwner ) {
 			localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath,
 			state.actionRevision !== movementRevision
 		);
+		if (
+			inputChanged || commands.length || refresh.effects.length || refresh.mask !== state.actionMask ||
+			state.actionRevision !== movementRevision || state.actionMode !== entity.movementMode || waiting || cast
+		) steady = false;
 		state.actionRevision = movementRevision;
 		state.actionMask = refresh.mask;
 		if ( inputChanged ) {
@@ -377,6 +416,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			}
 			moving = false;
 		}
+		if ( state.navigationHold ) steady = false;
 		// 8EADF0 tries the selected item override (+0x118, 8E7210 direct
 		// without DEFAULT fallback) before the weapon animation set
 		// (CCObjCharacter_ResolveWeaponAnimationPrefix 8E83F0 stores it at
@@ -401,6 +441,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				motionSet || "default";
 		let combatIdle: ReturnType<typeof skillMotionResolveAnimation>;
 		if ( (presentationState.combatStanceEnds.get( entity.gid ) ?? -Infinity) > seconds ) {
+			steady = false;
 			const metadata = published.animationStates.get( resource.codename ),
 				stanceSet = !entity.mountedOn && motionSet || "default",
 				stanceKey = !entity.mountedOn ? motionSetKey : "default";
@@ -488,16 +529,17 @@ export function createActorMotion( owner: ActorOwner ) {
 					definition = published.animationStates.get( resource.codename )?.[candidate] ??
 						resource.animationStates?.[candidate],
 					url = published.nativeMotionUrls.get( resource.codename )?.get( candidate );
-				if (
-					definition &&
-					(clips.has( candidate ) ||
-						url && resources.animation( resource.glb, candidate, url ))
-				) {
+				if ( !definition ) continue;
+				if ( clips.has( candidate ) || url && resources.animation( resource.glb, candidate, url ) ) {
 					clip = candidate;
 					break;
 				}
+				// A motion still loading is asked for again every frame until
+				// it lands (resources.ts keeps only the loads a frame wants).
+				if ( url ) steady = false;
 			}
 		}
+		if ( baseRole !== "stand" || state.clip !== clip ) steady = false;
 		if ( state.clip !== clip ) {
 			state.clip = clip;
 			state.started = seconds;
@@ -516,6 +558,9 @@ export function createActorMotion( owner: ActorOwner ) {
 			state.started = seconds - state.rateSample;
 			state.frozenSample = undefined;
 		} else {
+			if (
+				state.frozenSample !== undefined || state.rateSample !== undefined || state.rateClock !== undefined
+			) steady = false;
 			state.frozenSample = undefined;
 			state.rateSample = undefined;
 			state.rateClock = undefined;
@@ -644,6 +689,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.locomotion = { ...state.locomotion, enter: 0, outgoing: [] };
 			}
 		}
+		if ( previousLocomotion !== state.locomotion || previousLocomotion.clip === "" ) steady = false;
 		const layers: CharacterLayer[] = locomotionLayers(
 			state.locomotion,
 			seconds
@@ -672,6 +718,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			state.postureClip && clips.has( state.postureClip ) &&
 			state.postureStarted !== undefined
 		) {
+			steady = false;
 			const elapsed = Math.max( 0, seconds - state.postureStarted ),
 				duration = resources.duration( resource.glb, state.postureClip );
 			if ( elapsed < duration + .2 ) {
@@ -688,6 +735,7 @@ export function createActorMotion( owner: ActorOwner ) {
 		}
 		if ( !dead ) {
 			for ( const motion of effects.hostMotions( entity.gid ) ) {
+				steady = false;
 				const role = `attached-${motion.set.replaceAll( "_", "-" )}-${motion.id}`,
 					definition = (resource.animationStates ?? published.animationStates.get( resource.codename ))
 						?.[role];
@@ -709,12 +757,14 @@ export function createActorMotion( owner: ActorOwner ) {
 				}
 			}
 		}
+		if ( actionLayersByActor.get( entity.gid )?.length ) steady = false;
 		if ( !dead ) layers.unshift( ...(actionLayersByActor.get( entity.gid ) ?? []) );
 		// Normal hit clips contain sparse tracks. They must leave untouched bones
 		// on the timed lane instead of resetting the entire skeleton to bind pose.
 		const hitClip = facts.hit;
 		const posture = presentationState.idleStates.get( entity.gid )?.posture;
 		if ( !dead && posture ) {
+			steady = false;
 			const role = posture.kind === "emote" ?
 				posture.clip :
 				posture.kind === "recover" ?
@@ -737,6 +787,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			!dead && reaction && clips.has( reaction ) && state.hitStarted !== undefined &&
 			seconds - state.hitStarted < resources.duration( resource.glb, reaction ) + .2
 		) {
+			steady = false;
 			const age = Math.max( 0, seconds - state.hitStarted ),
 				duration = resources.duration( resource.glb, reaction );
 			layers.unshift( {
@@ -749,11 +800,13 @@ export function createActorMotion( owner: ActorOwner ) {
 			} );
 		}
 		if ( entity.pickupRevision !== undefined && entity.pickupRevision !== state.pickupRevision ) {
+			steady = false;
 			state.pickupRevision = entity.pickupRevision;
 			state.pickupStarted = seconds;
 		}
 		const idle = presentationState.idleStates.get( entity.gid )?.idle;
 		if ( !stall && idle?.clip && clips.has( idle.clip ) ) {
+			steady = false;
 			const idleClip = idle.clip, age = Math.max( 0, seconds - idle.started );
 			const idleLayers = bindLayers(
 				oneShotLayers( idleClip, clip, age, resources.duration( resource.glb, idleClip ), .2 ),
@@ -771,6 +824,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			clips.has( "pick" ) &&
 			seconds - state.pickupStarted < resources.duration( resource.glb, "pick" )
 		) {
+			steady = false;
 			layers.splice( 0, layers.length - 1, {
 				clip: "pick",
 				time: Math.max( 0, seconds - state.pickupStarted ),
@@ -797,20 +851,123 @@ export function createActorMotion( owner: ActorOwner ) {
 			posture,
 			// The disguise and weapon the motion set was read from above.
 			armedIdle: motionDisguise || weapon ? weaponNamed.previewIdle : "stand",
-			actionMask: refresh.mask
+			actionMask: refresh.mask,
+			steady
 		};
 	}
+	/*
+	================
+	motionStamp
+
+	Every input a steady decide reads, read as decide reads it
+	(MotionStamp). Pure reads: decide's own calls stay where they are.
+	================
+	*/
+	function motionStamp( entity: EntityState, resolved: ActorAppearance, frame: ActorFrame ): MotionStamp {
+		const { effects, health, posePresentation, published, referenceAppearances, wornEquipment, presentationState } =
+			owner;
+		const {
+			actionLayersByActor,
+			castByActor,
+			gameplay,
+			hitByActor,
+			localMover,
+			pendingDeaths,
+			seconds,
+			vitalsByGid,
+			waitingActors
+		} = frame;
+		const { resource, overrideCommit } = resolved, gid = entity.gid;
+		const vital = vitalsByGid.get( gid ),
+			hit = hitByActor.get( gid ),
+			entry = presentationState.idleStates.get( gid );
+		const disguise = referenceAppearances.get( gid ),
+			weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 );
+		return {
+			entity,
+			glb: resource.glb,
+			codename: resource.codename,
+			clips: resource.clips,
+			clipFacts: resource.clipFacts,
+			animationStates: resource.animationStates,
+			commit: overrideCommit?.length === 0 ? EMPTY_COMMIT : overrideCommit,
+			manifest: published.manifest,
+			hpZero: vital?.hp === 0,
+			abnormal: vital?.abnormal ?? 0,
+			healthDead: !!health?.dead( gid ),
+			pendingDeath: pendingDeaths.has( gid ),
+			hitToken: hit && hit.damage > 0 ? hit.token : undefined,
+			cast: castByActor.get( gid ),
+			waiting: waitingActors.has( gid ),
+			actionLayers: actionLayersByActor.get( gid )?.length ?? 0,
+			hostMotions: effects.hostMotions( gid ).length,
+			stance: (presentationState.combatStanceEnds.get( gid ) ?? -Infinity) > seconds,
+			posture: entry?.posture,
+			idle: !!entry?.idle.clip && resource.clipFacts.names.has( entry.idle.clip ),
+			poseMoving: posePresentation.moving( gid ),
+			weaponSet: disguise ?
+				weaponAnimationSet( disguise.weapon << 11 ) :
+				weapon ?
+				weaponAnimationSet( weapon.typeFlags ) :
+				undefined,
+			armed: !!(disguise || weapon),
+			local: localMover( gid ) || gid === gameplay?.localGid
+		};
+	}
+	/*
+	================
+	reuse
+
+	The retained steady decision for this frame: its choices stand, and
+	what the clock and the drawn pose move is taken again as decide takes
+	it on a steady frame (no cast facing, yaw release or navigation hold
+	turns the drawn pose; the locomotion layers at this frame's time).
+	================
+	*/
+	function reuse( retained: MotionRetained, entity: EntityState, frame: ActorFrame ): MotionDecision {
+		const { drawnPoses, logicalPose, seconds } = frame;
+		const decision = retained.decision, nativePose = logicalPose( entity );
+		return {
+			...decision,
+			nativePose,
+			renderPose: drawnPoses.get( entity.gid ) ?? nativePose,
+			layers: locomotionLayers( decision.state.locomotion!, seconds )
+		};
+	}
+	// The presentation frame present last ran in, and its count: a retained
+	// decision stands only on the frame after the one it was presented at.
+	let presentedFrame: ActorFrame | undefined, frameIndex = 0;
 	return {
 		/*
 		================
 		present
 
 		Builds the character's animation layers, advances its sounds and
-		publishes its actor into frame.next: decide, then advance.
+		publishes its actor into frame.next: decide, then advance. When the
+		rule finds the entity's previous steady decision still due to repeat,
+		advance runs on it instead of a new decide.
 		================
 		*/
 		present( entity: EntityState, resolved: ActorAppearance, frame: ActorFrame, pass: ActorPass ) {
-			actorAdvance.advance( entity, resolved, decide( entity, resolved, frame, pass ), frame, pass );
+			if ( frame !== presentedFrame ) {
+				presentedFrame = frame;
+				frameIndex++;
+			}
+			const retained = owner.states.get( entity.gid )?.motion,
+				previous = retained?.frame === frameIndex - 1 ? retained : undefined,
+				stamp = previous && motionStamp( entity, resolved, frame );
+			// The rule sees every presented entity; one with nothing retained
+			// is always due.
+			const reused = !owner.motionDue( previous, stamp ) && !!previous;
+			const decision = reused ? reuse( previous!, entity, frame ) : decide( entity, resolved, frame, pass );
+			// A steady decide read what the stamp reads and changed none of
+			// it, so the stamp taken before it stands for it.
+			const retain = !reused && decision.steady ? stamp ?? motionStamp( entity, resolved, frame ) : undefined;
+			actorAdvance.advance( entity, resolved, decision, frame, pass );
+			// Retained only once advance has published: a throw leaves the
+			// last retained frame behind, and the next frame decides.
+			if ( reused ) previous!.frame = frameIndex;
+			else decision.state.motion = retain && { decision, stamp: retain, frame: frameIndex };
 		}
 	};
 }

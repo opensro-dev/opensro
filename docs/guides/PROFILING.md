@@ -307,8 +307,11 @@ naming the frame, the gid, the JSON path and both values. The scenarios
 world-batch streams built from the published catalogs and a seed: a 200
 player standing crowd for 60 s, walkers, combat with hits, a knockdown and
 a death, sit and stand, a stall, a ride, equipment changes, freeze and slow,
-emotes, pickups, spawn churn, a camera path across LOD rescans and ground
-items. A replay takes one to seven seconds per scenario and about a minute
+emotes, pickups, spawn churn, a camera path across LOD rescans, ground
+items, and `settle`: a still crowd that then meets each kind of input a
+skipped decide must notice (presentation-due.ts; the runtime test
+`presentation-due.test.mjs` replays it with the production rule and with
+an always-due one). A replay takes one to seven seconds per scenario and about a minute
 for the standing crowd.
 
 What it proves: the two trees present the same session identically. What it

@@ -766,6 +766,134 @@ function groundItems( seed ) {
 	return session.finish( 12 * FRAME_HZ );
 }
 
+/*
+================
+settle
+
+Thirteen players and four NPCs stand until their motion is settled (a
+steady decision, presentation-due.ts); then each meets one kind of input,
+one every 40 frames, that must unsettle it on the frame it lands: a hit
+and the caster's cast (action layers, the WAIT state, the combat stance),
+a death, an emote, sitting and standing, an equipment change, a mount and
+a dismount, a stall, a teleport to another region and back, a pickup, an
+attached effect's host motion, a disguise (an attached msch 3 reference
+appearance: the body changes with no new row), a slow; a monster is knocked down, one
+with no appearance state dies by its vitals alone, and a guard tower's
+damage changes its stage model on its own timer, with no new row. The target changes and
+the camera pulls back across a LOD rescan: inputs only the advance part
+reads. 20 s of standing lets the idle fidget timers fire.
+================
+*/
+function settle( seed ) {
+	const catalogs = loadCatalogs(), rng = seeded( seed ), session = createSession( "settle", seed );
+	const players = Array.from( { length: 13 }, ( _, i ) => FIRST_PEER_GID + i );
+	const brute = FIRST_PEER_GID + 20, bare = FIRST_PEER_GID + 21, horse = FIRST_PEER_GID + 22;
+	const tower = FIRST_PEER_GID + 23, towerHp = 10000;
+	// The gameplay vitals list is replaced whole: keep every row's current one.
+	const vitals = new Map( [ LOCAL_GID, ...players, brute, bare, tower ].map( gid => {
+		const hp = gid === LOCAL_GID ? 1000 : gid === tower ? towerHp : 500;
+		return [ gid, { gid, hp, maxHp: hp, abnormal: 0 } ];
+	} ) );
+	const setVital = ( at, gid, changes ) => {
+		vitals.set( gid, { ...vitals.get( gid ), ...changes } );
+		session.gameplay( at, { vitals: [ ...vitals.values() ] } );
+	};
+	localStart( session, catalogs, rng, [ ...vitals.values() ].filter( row => row.gid !== LOCAL_GID ) );
+	players.forEach( ( gid, i ) => peer( session, catalogs, rng, i, gid, grid( rng, i ) ) );
+	session.spawn( 0, npcRow( catalogs, brute, "MOB_CH_TIGER", grid( rng, 20 ) ) );
+	const { appearanceState: _state, ...bareRow } = npcRow( catalogs, bare, "MOB_CH_MANGNYANG", grid( rng, 22 ) );
+	session.spawn( 0, bareRow );
+	session.spawn( 0, npcRow( catalogs, horse, "COS_C_HORSE1", grid( rng, 24 ), { ownerGid: players[6] } ) );
+	session.spawn(
+		0,
+		npcRow( catalogs, tower, "STRUCTURE_GUARD_TOWER_01", grid( rng, 27 ), { maxHp: towerHp, structureState: 0 } )
+	);
+	// Only the brute's hp is seeded: a seeded hp stands over the vitals'
+	// (presentation.ts), and the bare monster dies by its vitals.
+	session.event( 0, { kind: "hp-seed", gid: brute, hp: 500 } );
+	let at = 300, token = 0;
+	const next = () => at += 40;
+	/*
+	================
+	cast
+
+	One cast's life as combat() writes it: received, shot with its impact
+	30 frames later, finished 50 frames after that.
+	================
+	*/
+	const cast = ( when, caster, target, impact ) => {
+		const base = { token: ++token, caster, target, skill: 2, damage: impact.damage, fatal: impact.fatal };
+		const received = { ...base, receivedAtMs: session.simulationMs( when ) };
+		session.gameplay( when, { casts: [ received ] } );
+		session.event( when + 30, {
+			kind: "hp-result",
+			gid: target,
+			key: `${token}:${target}:0`,
+			fatal: impact.fatal
+		} );
+		session.gameplay( when + 30, {
+			casts: [ {
+				...received,
+				shotAtMs: session.simulationMs( when + 30 ),
+				results: [ { target, impacts: [ { flags: 0, secondaryAmount: 0, ...impact } ] } ]
+			} ]
+		} );
+		session.gameplay( when + 80, { casts: [] } );
+	};
+	cast( next(), players[1], players[0], { type: 0, damage: 50, fatal: false } );
+	const death = next();
+	session.state( death, players[2], { appearanceState: [ DEAD, 0, 0, 0, 0, 0, 0 ] } );
+	setVital( death, players[2], { hp: 0 } );
+	const emoted = next();
+	session.state( emoted, players[3], { emote: { action: 1, revision: 1, atMs: session.simulationMs( emoted ) } } );
+	const sat = next();
+	session.state( sat, players[4], { movementMode: MOVEMENT_SEATED } );
+	session.state( sat + 240, players[4], { movementMode: MOVEMENT_RUN } );
+	session.state( next(), players[5], { equipment: gearFor( catalogs, rng, CROWD_BODIES[5 % CROWD_BODIES.length] ) } );
+	const mounted = next();
+	session.state( mounted, players[6], { mountedOn: horse } );
+	session.state( mounted + 120, players[6], { mountedOn: undefined } );
+	const stalled = next();
+	session.state( stalled, players[7], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, STALL_TITLE ] } );
+	session.state( stalled + 240, players[7], { appearanceState: [ ALIVE, 0, 0, 0, 0, 0, 0 ] } );
+	const home = session.row( players[8] ), away = next();
+	session.state( away, players[8], { regionId: REGION + 1, x: 400, z: 400 } );
+	session.state( away + 120, players[8], { regionId: home.regionId, x: home.x, z: home.z } );
+	session.state( next(), players[9], { pickupRevision: 1 } );
+	// Skill 20507 attaches motion default 188 to its host (the adventurer
+	// bodies hold attached-default-188).
+	// The attached effects list is replaced whole too.
+	const effects = new Map();
+	const attach = ( when, key, effect ) => {
+		if ( effect ) effects.set( key, effect );
+		else effects.delete( key );
+		session.gameplay( when, { attachedEffects: [ ...effects.values() ] } );
+	};
+	const attached = next();
+	attach( attached, "motion", { gid: players[10], skill: 20507, token: 900, phase: 1 } );
+	attach( attached + 180, "motion" );
+	// Skill 9452 is a type 3 reference appearance (characterActionData.json).
+	const disguised = next();
+	attach( disguised, "disguise", { gid: players[12], skill: 9452, token: 901, phase: 1 } );
+	attach( disguised + 240, "disguise" );
+	// A slow changes nothing a single timed layer shows: the pickup while it
+	// holds is the multi-layer frame that reads the slowed clock.
+	const slowed = next();
+	setVital( slowed, players[11], { abnormal: 0x2 } );
+	session.state( slowed + 60, players[11], { pickupRevision: 1 } );
+	setVital( slowed + 180, players[11], { abnormal: 0 } );
+	cast( next(), players[1], brute, { type: 4, damage: 30, fatal: false } );
+	setVital( next(), bare, { hp: 0 } );
+	setVital( next(), tower, { hp: towerHp / 5 } );
+	session.gameplay( next(), { target: players[3] } );
+	const pulled = next();
+	for ( let i = 0; i < 240; i++ ) {
+		const back = 120 + 300 * Math.min( 1, i / 120 );
+		session.view( pulled + i, { x: CENTER, y: 60 + back * .3, z: CENTER - back }, -0.35 );
+	}
+	return session.finish( 20 * FRAME_HZ );
+}
+
 export const SCENARIOS = {
 	standing,
 	walkers,
@@ -779,7 +907,8 @@ export const SCENARIOS = {
 	pickup,
 	churn,
 	camera,
-	"ground-items": groundItems
+	"ground-items": groundItems,
+	settle
 };
 
 /*

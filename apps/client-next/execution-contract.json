@@ -2611,6 +2611,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/characters/actor-motion.ts",
+			"provider": "src/engine/runtime/characters/presentation-due.ts",
+			"functions": [
+				"motionDue"
+			],
+			"reason": "characters.ts lends the motion rule to the per-actor phase through its owner; a test passes its own rule at construction."
+		},
+		{
 			"consumer": "src/engine/foundation/animation/model-emission.ts",
 			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
 			"functions": [
@@ -4113,6 +4121,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "logicalPose",
+			"function": "reuse",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "allocateActor",
 			"function": "decide",
 			"kind": "callback",
@@ -4127,8 +4142,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "health?.dead",
+			"function": "motionStamp",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "localMover",
 			"function": "decide",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "localMover",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
 		},
@@ -4155,8 +4184,22 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "referenceAppearances.get",
+			"function": "motionStamp",
+			"kind": "callback",
+			"reason": "Characters reference-appearance owner lends its synchronous lookup to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "wornEquipment",
 			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters owner lends this synchronous helper (wornEquipment) to the per-actor phase; the original loop called it directly."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "wornEquipment",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters owner lends this synchronous helper (wornEquipment) to the per-actor phase; the original loop called it directly."
 		},
@@ -4171,6 +4214,13 @@
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "posePresentation.moving",
 			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "posePresentation.moving",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
 		},
@@ -4248,6 +4298,13 @@
 			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "effects.hostMotions",
 			"function": "decide",
+			"kind": "callback",
+			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "effects.hostMotions",
+			"function": "motionStamp",
 			"kind": "callback",
 			"reason": "Characters effect owner lends its synchronous appearance and host-motion reads to the per-actor phase."
 		},

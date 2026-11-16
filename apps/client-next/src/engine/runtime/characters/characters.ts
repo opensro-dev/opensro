@@ -49,6 +49,7 @@ import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
 import { createActorPresentation } from "./actor-presentation";
+import { motionDue as presentationMotionDue } from "./presentation-due";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import { createSpawnFades } from "./spawn-fades";
@@ -67,6 +68,7 @@ import {
 import type {
 	Auxiliary,
 	CharacterPresentationState,
+	MotionDue,
 	PresentationAppearance,
 	PresentationDisappear,
 	PresentationOutput
@@ -144,7 +146,10 @@ export function createCharacterPresentation(
 		release( key: string, now: number ): void;
 		finishedCasts(): void;
 	},
-	soundEnabled?: () => boolean
+	soundEnabled?: () => boolean,
+	// When an entity's motion is decided again (presentation-due.ts); a test
+	// passes an always-due rule to compare against every entity in full.
+	motionDue: MotionDue = presentationMotionDue
 ) {
 	let probe: CharacterFrameProbe | undefined;
 	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
@@ -271,7 +276,8 @@ export function createCharacterPresentation(
 		states,
 		statusOwner,
 		wornEquipment,
-		presentationState
+		presentationState,
+		motionDue
 	} );
 	/*
 	================
