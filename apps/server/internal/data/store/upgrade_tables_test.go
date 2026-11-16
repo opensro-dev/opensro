@@ -80,6 +80,7 @@ func TestUpgradeSourceLayoutRefusesOutsideTheWindow(t *testing.T) {
 		{preSookArenaAccountVersion, CurrentLayoutVersion, true},
 		{preTradeHistoryVersion, preTradeHistoryLayoutVersion, true},
 		{preTradeHistoryVersion, CurrentLayoutVersion, true},
+		{preNasrunTokensVersion, CurrentLayoutVersion, true},
 		{CurrentVersion, preGuildWarLayoutVersion, true},
 		{UpgradeFromVersion - 1, preMallLayoutVersion, false},
 		{CurrentVersion + 1, CurrentLayoutVersion, false},
