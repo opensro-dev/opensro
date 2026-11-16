@@ -27,6 +27,10 @@ risk. The victim is the account behind the goods' trade owner (the native
 owner alias), not the alias: one account holds four characters, and
 four trader aliases would be four victims. Several stacks of one load
 picked up into one unsold run are one steal.
+A steal also needs a real loss (owner, 2026-11-16): the thief's account
+must have killed the trader, or the trader's transport, whose death
+scattered the goods. Goods a monster's kill, a logout or another
+player dropped score nothing, so no alt can hand goods over for free.
 The steal counts are memory only: a restart forgets them, as it forgets
 the open runs. INFERENCE: worth a restart's reset, which the operator
 alone can cause.
@@ -111,8 +115,10 @@ type honorRuns struct {
 
 // honorRun is one run: the points it scored, and for a thief's haul the
 // victim and the halvings its steal decay applies (honorStealsScored or
-// more scores nothing).
+// more scores nothing). sold marks a haul that has reached a sale, so a
+// later pickup opens a new steal even when the sale scored nothing.
 type honorRun struct {
+	sold   bool
 	scored int
 	victim string
 	decay  int
@@ -206,19 +212,35 @@ func honorAccountVictim(account string) string {
 ================
 openStealRun
 
-A thief's haul of victim's goods (goodsVictim's key). More of the same victim's goods into
-a run that has not sold yet are the same steal; otherwise a new run
-opens and the steal counts toward the victim's decay for the day.
+A thief's haul of victim's goods (goodsVictim's key), lost to the
+account lostTo (grounditem.Item.LostTo; "" when no player's kill
+dropped them). More of the same victim's goods into a run that has not
+sold yet are the same steal; otherwise a new run opens and the steal
+counts toward the victim's decay for the day. Only a real loss scores
+and counts: goods the thief's own account did not kill for open a run
+that scores nothing.
 ================
 */
-func (rt *Runtime) openStealRun(c *enterworld.Character, victim string, at time.Time) {
+func (rt *Runtime) openStealRun(c *enterworld.Character, victim, lostTo string, at time.Time) {
 	if rt == nil || rt.JobHonor == nil || c == nil {
 		return
 	}
 	rt.jobHonorRuns.mu.Lock()
 	defer rt.jobHonorRuns.mu.Unlock()
 	runs := &rt.jobHonorRuns
-	if run := runs.runs[c.ID]; run != nil && run.victim == victim && run.scored == 0 {
+	// A steal scores only on a real loss (owner, 2026-11-16): goods the
+	// thief's own account took by killing their trader or its transport
+	// (grounditem.Item.LostTo). Goods dropped any other way - a monster's
+	// kill, a logout, another player's kill - cost the thief nothing to
+	// take, so a player's own trader alt could feed them. One such pickup
+	// spoils the whole unsold haul: a sale cannot be split by stack, so
+	// mixing free goods into a real haul would otherwise score them.
+	realLoss := lostTo != "" && lostTo == c.AccountID
+	run := runs.runs[c.ID]
+	if run != nil && !run.sold && run.victim == victim {
+		if !realLoss {
+			run.decay = honorStealsScored
+		}
 		return
 	}
 	day := jobhonor.DayStart(at).Unix()
@@ -237,7 +259,7 @@ func (rt *Runtime) openStealRun(c *enterworld.Character, victim string, at time.
 	// Goods of the thief's own account are no steal: with several
 	// characters online at once, one account could run a trader and a
 	// thief together. The run scores nothing and counts toward nothing.
-	if victim == honorAccountVictim(c.AccountID) {
+	if victim == honorAccountVictim(c.AccountID) || !realLoss {
 		runs.runs[c.ID] = &honorRun{victim: victim, decay: honorStealsScored}
 		return
 	}
@@ -274,6 +296,7 @@ func (rt *Runtime) scoreTradeSale(c *enterworld.Character, job uint8, profit int
 		rt.jobHonorRuns.runs[c.ID] = run
 	}
 	if job == domain.JobThief {
+		run.sold = true
 		// A thief's sale with no steal behind it (goods the thief never
 		// hauled this run) scores nothing; a decayed steal halves.
 		if run.victim == "" || run.decay >= honorStealsScored {
