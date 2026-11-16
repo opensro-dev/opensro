@@ -12,8 +12,8 @@ Two modes:
 	identity -derive-public <private ring> -out <file>
 	    Write the GameWorld's public session key ring once and exit.
 
-The service runs in the Agent's network namespace (docker compose
-network_mode: service:agent): the Agent's verifier accepts plain HTTP
+The Agent runs in this service's network namespace (docker compose
+network_mode: service:identity): the Agent's verifier accepts plain HTTP
 only on loopback, so the JWKS lives on 127.0.0.1 and no other container
 can reach it.
 

@@ -71,17 +71,24 @@ services:
       SRO_AGENT_DIRECTORY_STATE_PATH: /data/agent/shard-leases.json
       SRO_AGENT_PROVISIONING_TOKEN_PATH: /cluster/agent-provisioning-token
       SRO_AGENT_SESSION_KEYRING_PATH: /cluster/agent-session-keys.json
-      # The identity service shares this container's network namespace, so the JWKS is on
+      # This container runs in the identity service's network namespace, so the JWKS is on
       # loopback: the Agent's verifier accepts plain HTTP only there.
       SRO_NOMAD_IDENTITY_ISSUER: http://127.0.0.1:8080
       SRO_NOMAD_JWKS_URL: http://127.0.0.1:8080/jwks.json
       SRO_NOMAD_NAMESPACE: silkroad
+    # identity owns the network namespace (and the `agent` name on the stack network): it is a
+    # small process that rarely restarts, so restarting the Agent never strands the JWKS.
+    network_mode: service:identity
     volumes:
       - *catalog
       - cluster:/cluster
       - agent:/data/agent
+    depends_on:
+      identity:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8787/readyz"]
+      # Ready, and the JWKS it verifies GameWorld tokens with is reachable.
+      test: ["CMD", "sh", "-c", "curl -fsS -o /dev/null http://127.0.0.1:8787/readyz && curl -fsS -o /dev/null http://127.0.0.1:8080/jwks.json"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -92,13 +99,13 @@ services:
   identity:
     image: *identity-image
     command: ["-key", "/identity/key.json", "-out-dir", "/out", "-shards", "global-official", "-namespace", "silkroad"]
-    network_mode: service:agent
     volumes:
       - identity:/identity
       - identity-out:/out
-    depends_on:
-      agent:
-        condition: service_started
+    networks:
+      default:
+        # The Agent shares this namespace: web and the GameWorld reach it as agent:8787.
+        aliases: [agent]
     restart: unless-stopped
 
   gameworld-global-official:
@@ -135,8 +142,6 @@ services:
     depends_on:
       agent:
         condition: service_healthy
-      identity:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8788/transport/readyz"]
       interval: 10s
