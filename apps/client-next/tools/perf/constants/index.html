@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+===========================================================================
+
+index.html - the WebGPU call-cost page (constants.js does the work)
+
+Open it from any static file server on localhost; it needs no game assets,
+no build and no server code. docs/guides/PROFILING.md says how to read it.
+
+===========================================================================
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>WebGPU call costs</title>
+		<link rel="icon" href="data:,">
+		<style>
+			:root { color-scheme: light dark; font: 14px/1.4 system-ui, sans-serif; }
+			body { margin: 16px; }
+			table { border-collapse: collapse; margin: 12px 0; }
+			th, td { border: 1px solid #8884; padding: 3px 8px; text-align: right; }
+			th:nth-child(-n+4), td:nth-child(-n+4) { text-align: left; }
+			pre { max-height: 24em; overflow: auto; border: 1px solid #8884; padding: 8px; }
+			.muted { opacity: 0.75; }
+		</style>
+	</head>
+	<body>
+		<h1>WebGPU call costs</h1>
+		<p class="muted">
+			Each case runs at N = <span id="sizes">-</span>. Frames run back to back (not paced by the display); the
+			cost per unit is the slope of a least-squares line through the per-size medians. Keep this tab in front
+			and the machine quiet while it runs.
+		</p>
+		<p id="progress" role="status">Starting...</p>
+		<p><button id="copy" type="button">Copy JSON</button></p>
+		<table>
+			<thead>
+				<tr>
+					<th>Case</th>
+					<th>Form</th>
+					<th>Per</th>
+					<th>What</th>
+					<th>main µs/unit</th>
+					<th>R²</th>
+					<th>loop µs/unit</th>
+					<th>R²</th>
+					<th>loop - main µs/unit</th>
+					<th>main ms at largest N</th>
+					<th>loop ms at largest N</th>
+				</tr>
+			</thead>
+			<tbody id="results"></tbody>
+		</table>
+		<ul id="notes" class="muted"></ul>
+		<details>
+			<summary>JSON (also in <code>window.__gpuConstants</code>)</summary>
+			<pre id="json"></pre>
+		</details>
+		<script type="module" src="./constants.js"></script>
+	</body>
+</html>

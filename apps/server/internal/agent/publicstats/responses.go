@@ -297,6 +297,30 @@ type ScheduleResponse struct {
 	Events     []ScheduleEvent `json:"events"`
 }
 
+// FortressRow is one fortress on P11 GET /public/v1/fortresses.
+type FortressRow struct {
+	Fortress string  `json:"fortress" doc:"The fortress by town in lower case (\"jangan\"), as GuildRow.fortress."`
+	Owner    *string `json:"owner" doc:"The occupying guild's name; null while unclaimed."`
+	TaxRate  int     `json:"taxRate" doc:"The tax rate the owner set, in percent (-20 to 20)."`
+}
+
+// FortressWindow is one fortress period: the one running now, else the next.
+type FortressWindow struct {
+	StartsAt string  `json:"startsAt"`
+	EndsAt   *string `json:"endsAt"`
+	Running  bool    `json:"running"`
+}
+
+// FortressesResponse is P11 GET /public/v1/fortresses. The war state is
+// shard-wide: every fortress registers and fights in the same windows.
+type FortressesResponse struct {
+	ServerTime   string          `json:"serverTime"`
+	State        string          `json:"state" doc:"\"war\", \"registration\" or \"peace\"."`
+	Registration *FortressWindow `json:"registration" doc:"Guild registration for the war: running now, else the next; null when none is scheduled."`
+	War          *FortressWindow `json:"war" doc:"The fortress war: running now, else the next; null when none is scheduled."`
+	Fortresses   []FortressRow   `json:"fortresses"`
+}
+
 // ChatLine is one public chat line. Kind is "chat" (ordinary beta chat,
 // shard-wide), "global" (the Global Chatting item) or "notice" (an
 // operator announcement, Character null). Gameplay announcements are
