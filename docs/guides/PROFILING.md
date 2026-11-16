@@ -74,7 +74,12 @@ a freshly admitted crowd has at most 32 peers; hold one crowd with
 
 Every local peer logs in from 127.0.0.1, so 600 logins take about an hour.
 An Agent session lasts 12 hours, so provision the crowd once, then hold it
-from its saved sessions in about a minute as often as needed:
+from its saved sessions in about a minute as often as needed.
+
+Run it against a local stack on a scratch world (`SRO_LOCAL_STATE_ROOT` set
+to a scratch directory when the stack starts), never the owner's own local
+world: the accounts stay in that world's database, disabled, after
+`--retire`.
 
 ```
 node tools/perf/bench/crowd-provision.mjs --fixture FIXTURE.json --count 600 --accounts ACCOUNTS.json
