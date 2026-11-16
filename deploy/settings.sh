@@ -25,3 +25,39 @@ generated_dir() {
         *) echo "generated_dir: unknown tree '$1'" >&2; return 1 ;;
     esac
 }
+
+#
+# load_settings VAR...
+#
+# Sets each VAR the environment leaves empty from deploy/local.env (yours,
+# not versioned), then deploy/deploy.env (versioned, no secrets). A value
+# ends at its first blank, so a comment after it is ignored.
+#
+load_settings() {
+    local file key value wanted
+    for file in "$DEPLOY_DIR/local.env" "$DEPLOY_DIR/deploy.env"; do
+        [ -f "$file" ] || continue
+        while IFS='=' read -r key value; do
+            value="${value%%[[:space:]]*}"
+            for wanted in "$@"; do
+                [ "$key" = "$wanted" ] || continue
+                [ -n "${!wanted:-}" ] || printf -v "$wanted" '%s' "$value"
+            done
+        done < <(grep -E '^[A-Z_]+=' "$file")
+    done
+}
+
+#
+# check_deploy_path
+#
+# Refuses a DEPLOY_PATH that could reach something else on the host: empty,
+# the home itself, a parent, a quote. A folder holding another stack is caught on the host by the .silkroad marker.
+#
+check_deploy_path() {
+    DEPLOY_PATH="${DEPLOY_PATH#\~/}"
+    DEPLOY_PATH="${DEPLOY_PATH%/}"
+    case "$DEPLOY_PATH" in
+        ""|"/"|"."|".."|../*|*/..|*/../*) echo "refusing DEPLOY_PATH='$DEPLOY_PATH'" >&2; return 1 ;;
+        *\'*|*\"*|*[[:space:]]*) echo "DEPLOY_PATH cannot contain quotes or spaces" >&2; return 1 ;;
+    esac
+}

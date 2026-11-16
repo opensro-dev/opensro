@@ -85,8 +85,8 @@ check "packs manifest" "$base/assets/packs/manifest.json"
 # A real title login through the edge: the seeded account and the session key ring.
 protocol="$(sed -nE 's/^export const RELEASE_PROTOCOL = ([0-9]+);/\1/p' \
     "$REPO_ROOT/apps/client-next/src/engine/foundation/release/protocol.ts")"
-login() { # password
-    printf '{"id":"smoke","password":"%s","serverId":"global-official"}' "$1" \
+login() { # password [id]
+    printf '{"id":"%s","password":"%s","serverId":"global-official"}' "${2:-smoke}" "$1" \
         | curl -fsS --max-time 10 -H "X-OpenSRO-Protocol: $protocol" -H 'content-type: application/json' \
             --data @- "$base/api/title/login"
 }
@@ -98,6 +98,23 @@ case "$(login "not-$password")" in
     *'"ok":false'*) echo "ok    wrong password refused" ;;
     *) echo "smoke: a wrong password was not refused" >&2; exit 1 ;;
 esac
+
+echo "==> accounts.sh"
+accounts() { ACCOUNTS_LOCAL=1 ACCOUNTS_PROJECT="$PROJECT" "$DEPLOY_DIR/accounts.sh" "$@"; }
+second="$(openssl rand -hex 12)"
+printf '%s\n' "$second" | accounts smoke2 >/dev/null
+case "$(login "$second" smoke2)" in
+    *'"ok":true'*) echo "ok    accounts.sh created a working account" ;;
+    *) echo "smoke: the account accounts.sh created cannot log in" >&2; exit 1 ;;
+esac
+if printf '%s\n' "$second" | accounts smoke2 >/dev/null 2>&1; then
+    echo "smoke: accounts.sh created a duplicate account" >&2; exit 1
+fi
+echo "ok    duplicate account refused"
+if printf '%s\n' "$second" | accounts 'bad"id' >/dev/null 2>&1; then
+    echo "smoke: accounts.sh accepted an unsafe id" >&2; exit 1
+fi
+echo "ok    unsafe id refused"
 
 echo "==> provision is idempotent"
 before="$(secrets_digest)"
