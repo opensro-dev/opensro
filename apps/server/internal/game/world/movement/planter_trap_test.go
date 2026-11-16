@@ -21,7 +21,10 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-const constantinopleWestRegion = 26959
+const (
+	constantinopleWestRegion   = 26959
+	constantinoplePlanterAsset = 1639
+)
 
 /*
 ================
@@ -54,5 +57,34 @@ func TestPublishedConstantinoplePlanterWallStopsADeckWalk(t *testing.T) {
 	}
 	if back := v.ClipMovementPath(got.Rest, start); back.Outcome != ClipArrived {
 		t.Fatalf("walking back out from %+v: %+v", got.Rest, back)
+	}
+}
+
+/*
+================
+TestPublishedConstantinoplePlanterLinkedKeepsTheDeckPass
+
+A linked placement is not a closed object: with the planter given a link
+edge in a private validator, the deck walk passes it as before.
+================
+*/
+func TestPublishedConstantinoplePlanterLinkedKeepsTheDeckPass(t *testing.T) {
+	clientdata.RequireGameData(t)
+	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
+	set := v.objectNavSetForOffset(v.surfaceForRegion(constantinopleWestRegion), 0, 0)
+	linked := 0
+	for i := range set {
+		if set[i].placement.assetID == constantinoplePlanterAsset {
+			set[i].placement.linkEdgeCount = 1
+			linked++
+		}
+	}
+	if linked == 0 {
+		t.Fatal("missing the published planter placement")
+	}
+	start := simulation.Spawn{RegionID: constantinopleWestRegion, X: 1083, Y: 83, Z: 913}
+	inside := simulation.Spawn{RegionID: constantinopleWestRegion, X: 1027, Y: 78, Z: 190}
+	if got := v.ClipMovementPath(start, inside); got.Outcome != ClipArrived {
+		t.Fatalf("a linked planter blocked the deck walk: %+v", got)
 	}
 }

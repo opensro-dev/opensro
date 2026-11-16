@@ -197,6 +197,9 @@ type objectContactOptions struct {
 	// placementY is the world height of the placement this mesh belongs
 	// to: the walk's surface heights are world heights, the mesh's local.
 	placementY float64
+	// placementLinked says the placement has link edges into a neighbour:
+	// its meshes are not closed objects (InsideClosedObject skips them too).
+	placementLinked bool
 	// walkerAt is the chord fraction the terrain walker stood at when it
 	// stepped this object (native visit or its last exit back onto terrain).
 	// 428300's blocked branch nudges that position, not the chord start.
@@ -266,8 +269,9 @@ terrain, where every wall applies, so it could never walk out (#3668).
 
 INFERENCE: neither binary is cited for object-on-object contact. The
 height band is InsideClosedObject's (a deck over a closed footprint is
-tens of units higher), and the rule is limited to closed meshes, which
-no walk can enter legitimately, so no authored passage changes.
+tens of units higher), and the rule is limited to closed meshes of an
+unlinked placement (InsideClosedObject's rule), which no walk can enter
+legitimately, so no authored passage changes.
 ================
 */
 func closedWallAtStand(mesh *objectNavMesh, outline bool, walk *navWalk, t, placementY float64) bool {
@@ -337,7 +341,7 @@ func objectEdgeGroupChordContactDetail(
 		}
 		if !owned {
 			if other, _, elsewhere := opts.walk.objectAt(t); elsewhere && other != opts.path {
-				if !closedWallAtStand(mesh, outline, opts.walk, t, opts.placementY) {
+				if opts.placementLinked || !closedWallAtStand(mesh, outline, opts.walk, t, opts.placementY) {
 					continue
 				}
 				deckWall = true
@@ -565,7 +569,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 						continue
 					}
 					walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
-					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, walkerAt: walkerAt}); ok {
+					if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, placementY: placement.y, placementLinked: placement.linkEdgeCount != 0, walkerAt: walkerAt}); ok {
 						key := visit
 						if path != nil {
 							key = t // an owned mesh is walked cell by cell: its own contact order
