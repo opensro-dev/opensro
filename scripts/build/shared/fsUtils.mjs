@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { compareText } from "./textOrder.mjs";
 
 /** True when an ES module is the process entrypoint. */
 export function isMainScript( importMetaUrl, argvPath = process.argv[1] ) {
@@ -55,7 +56,7 @@ export async function listFiles(
 	}
 
 	await walk( root );
-	return sort ? files.sort( ( left, right ) => left.localeCompare( right ) ) : files;
+	return sort ? files.sort( ( left, right ) => compareText( left, right ) ) : files;
 }
 
 /** Return false only for a missing path; surface permission and I/O failures. */

@@ -21,6 +21,9 @@ createNpcPanel
 */
 export function createNpcPanel() {
 	let destinations = false, hidden = false;
+	// Port-only, not native: the open destination group (portal.ts
+	// PORTAL_GROUPS), "" for the gate's top page.
+	let group = "";
 	let gid = 0, windowRevision = 0;
 	let key = "", top = 0, range = 0, travel = 0, bounds: UiRect = [ 0, 0, 0, 0 ];
 	/*
@@ -58,6 +61,7 @@ export function createNpcPanel() {
 			if ( next !== key || visibilityChanged && !hidden ) {
 				key = next;
 				destinations = false;
+				group = "";
 				top = 0;
 				range = 0;
 				return true;
@@ -89,6 +93,12 @@ export function createNpcPanel() {
 		destinations: () => destinations,
 		/*
 		================
+		destinationGroup
+		================
+		*/
+		destinationGroup: () => group,
+		/*
+		================
 		top
 		================
 		*/
@@ -113,6 +123,14 @@ export function createNpcPanel() {
 			if ( !key || hidden ) return false;
 			if ( event.kind === "activate" && event.id === "npc-portal-open" ) {
 				destinations = true;
+				group = "";
+				top = 0;
+				return true;
+			}
+			// Port-only, not native: a group row opens its page (portal.ts
+			// PORTAL_GROUPS); End conversation closes it as any menu.
+			if ( event.kind === "activate" && destinations && event.id.startsWith( "npc-portal-group:" ) ) {
+				group = event.id.slice( 17 );
 				top = 0;
 				return true;
 			}

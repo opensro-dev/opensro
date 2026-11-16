@@ -185,7 +185,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if count == 0 {
 				count = 1
 			}
-			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound}, rt.maxStackFor(item.TypeFlags, item.Codename))
+			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, Data: item.Data, Summon: domain.CloneCOS(item.Summon), ForgeBound: item.ForgeBound}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
 				code := fault.Code
 				if code == wire.ErrCodeStorageFull {
@@ -217,7 +217,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 				refusalCause = "grant-build"
 				return false
 			}
-			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
+			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, Data: granted.Data, Summon: domain.CloneCOS(granted.Summon)}
 			plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 			receipt = wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(q.CosGID).Bytes(plain[2:]).Payload()
 			remainder = grant.GroundRemainder
@@ -473,7 +473,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 			TradeOwner: current.TradeOwner, RecordID: current.RecordID, RefObjID: current.RefObjID,
 			Codename: current.Codename, TypeFlags: current.TypeFlags, Quantity: count, Plus: current.Plus,
 			VarianceBits: current.VarianceBits, Durability: current.Durability, MagicOptions: current.MagicOptions,
-			TransformRefObjID: current.TransformRefObjID, Summon: domain.CloneCOS(current.Summon),
+			Data: current.Data, Summon: domain.CloneCOS(current.Summon),
 		}, rt.maxStackFor(current.TypeFlags, current.Codename))
 		if fault != nil {
 			peerBagFull = fault.Code == wire.ErrCodeStorageFull
@@ -497,7 +497,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 			TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID,
 			Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits,
 			Durability: granted.Durability, MagicOptions: granted.MagicOptions,
-			TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon),
+			Data: granted.Data, Summon: domain.CloneCOS(granted.Summon),
 		}
 		plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 		receipt := wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(peerPetGID).Bytes(plain[2:]).Payload()
