@@ -19,6 +19,7 @@ import (
 
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/nasrun"
 )
 
 /*
@@ -371,7 +372,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 			}
 		}
 		switch {
-		case category(ref.Flags) != "":
+		case category(ref.Flags) != "" || c.Nasrun && nasrun.IsSpirit(ref.Flags):
 			if target >= 0 {
 				return zero, Refusal(0x12)
 			}
@@ -399,6 +400,9 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	item := &out[target]
 	ref := c.Items[item.Codename]
 	recipe := c.Items[out[elixir].Codename]
+	if nasrun.IsSpirit(ref.Flags) {
+		return c.reinforceSpirit(out, target, elixir, powder, roll)
+	}
 	if item.Plus >= nativeReinforceCeiling {
 		return zero, Refusal(0x0f)
 	}

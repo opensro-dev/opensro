@@ -49,5 +49,22 @@ These are inferences and port choices, not native evidence:
 - **Left out.** The event copies (`ITEM_EVENT_*`) belong to events this port does not have. The Umdu magic
   stone (`ITEM_MALL_NASRUN_ARCHEMY_MAGICSTONE_UMDU`) names `MATTR_NASRUN_UMDU`, which has no row in the
   v1.150 magicoption table.
-- **Still open (#3348).** The socket, the awakening clock (2,419,200 seconds on the wearable and the extension
-  gear), the Nasrun alchemy outcome and the mall listing.
+- **Built since (#3456).** The socket (#3477), the awakening clock (#3622), the unique-kill tokens (#3710), the
+  token shop (#3741) and Nasrun alchemy (below).
+- **Still open (#3456).** The extension gear's use, the lucky drops, and the awakening skill whose tiers read the
+  Spirit's plus (the +3 and +6 damage steps); until that skill is ported a Spirit's plus changes nothing.
+
+## Nasrun alchemy (#3456 step 3c)
+
+With `SRO_NASRUN` on, Sabakun's jewel reinforces a Spirit in the bag through the native alchemy window, one plus
+at a time up to +6 (`internal/game/item/alchemy/nasrun.go`):
+
+| Attempt | +0→+1 | +1→+2 | +2→+3 | +3→+4 | +4→+5 | +5→+6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Chance | 70 % | 60 % | 50 % | 40 % | 30 % | 20 % |
+
+- A failure spends the jewel and keeps the plus: no break, no curse, no reset (the owner's rule, 2026-11-16).
+- The chance is the table alone: Lucky options, avatar luck and the shard's rate table do not change it.
+- Refusals use the native codes: a lucky powder staged with the jewel (0x0a), a Spirit at +6 (0x0f), a native
+  elixir on a Spirit or the jewel on native gear (0x09). Off, a Spirit is no target (0x10).
+- The token shop sells the jewel for 20 tokens beside the Spirits.

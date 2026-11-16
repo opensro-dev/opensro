@@ -14,10 +14,10 @@ in PaymentNasrunToken on the second tab of every town's honor shop
 (STORE_*_HONOR_TAB2), the tab whose authored stock is a single package
 (inferred placement; recorded on #3456).
 
-The owner's prices (2026-11-16, #3456): the Spirit 60 tokens. Only goods
-whose use is built are listed: Sabakun's jewel joins with Nasrun alchemy
-(step 3c) and the extension gear with its use (step 4), so the shop never
-sells an item that does nothing. The A grade Spirits are the plain, yellow
+The owner's prices (2026-11-16, #3456): the Spirit 60 tokens, Sabakun's
+jewel 20. Only goods whose use is built are listed: the jewel since Nasrun
+alchemy (step 3c, item/alchemy/nasrun.go), and the extension gear joins
+with its use (step 4), so the shop never sells an item that does nothing. The A grade Spirits are the plain, yellow
 and blue rows; the _UNIQUE pair is the S grade and is not sold.
 
 ===========================================================================
@@ -30,8 +30,14 @@ import (
 	"opensro.online/server/internal/game/nasrun"
 )
 
-// nasrunSpiritTokenPrice is the owner's Spirit price in tokens.
-const nasrunSpiritTokenPrice = 60
+// The owner's prices in tokens: a Spirit and Sabakun's jewel.
+const (
+	nasrunSpiritTokenPrice = 60
+	nasrunJewelTokenPrice  = 20
+)
+
+// nasrunJewel is Sabakun's jewel (scripts/nasrun_import.py).
+const nasrunJewel = "ITEM_ETC_NASRUN_ARCHEMY_UPGRADE_STONE"
 
 // nasrunShopTabs are the honor shops' second tabs, one per town.
 var nasrunShopTabs = []string{
@@ -56,8 +62,8 @@ var nasrunSpirits = []string{
 ================
 NasrunGoods
 
-The token goods: every A grade Spirit on every honor shop's second tab,
-priced in tokens.
+The token goods: every A grade Spirit and Sabakun's jewel on every honor
+shop's second tab, priced in tokens.
 ================
 */
 func NasrunGoods() []ExtraGood {
@@ -66,6 +72,7 @@ func NasrunGoods() []ExtraGood {
 		for _, spirit := range nasrunSpirits {
 			goods = append(goods, ExtraGood{Tab: tab, Codename: spirit, Price: nasrunSpiritTokenPrice, Currency: PaymentNasrunToken})
 		}
+		goods = append(goods, ExtraGood{Tab: tab, Codename: nasrunJewel, Price: nasrunJewelTokenPrice, Currency: PaymentNasrunToken})
 	}
 	return goods
 }

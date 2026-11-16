@@ -20,16 +20,27 @@ TestNasrunGoodsAreTokenPricedSpiritsOnEveryHonorShop
 */
 func TestNasrunGoodsAreTokenPricedSpiritsOnEveryHonorShop(t *testing.T) {
 	goods := NasrunGoods()
-	if len(goods) != len(nasrunShopTabs)*len(nasrunSpirits) {
-		t.Fatalf("%d goods, want %d", len(goods), len(nasrunShopTabs)*len(nasrunSpirits))
+	want := len(nasrunShopTabs) * (len(nasrunSpirits) + 1)
+	if len(goods) != want {
+		t.Fatalf("%d goods, want %d", len(goods), want)
 	}
+	jewels := map[string]bool{}
 	for _, good := range goods {
-		if good.Currency != PaymentNasrunToken || good.Price != nasrunSpiritTokenPrice {
-			t.Fatalf("%+v is not a %d-token offer", good, nasrunSpiritTokenPrice)
+		price := uint64(nasrunSpiritTokenPrice)
+		if good.Codename == nasrunJewel {
+			price = nasrunJewelTokenPrice
+			jewels[good.Tab] = true
+		}
+		if good.Currency != PaymentNasrunToken || good.Price != price {
+			t.Fatalf("%+v is not a %d-token offer", good, price)
 		}
 		if good.Codename == "ITEM_MALL_AVATAR_M_NASRUN_UNIQUE" || good.Codename == "ITEM_MALL_AVATAR_W_NASRUN_UNIQUE" {
 			t.Fatalf("the S grade Spirit %s is sold", good.Codename)
 		}
+	}
+	// Sabakun's jewel (step 3c) is on every token tab.
+	if len(jewels) != len(nasrunShopTabs) {
+		t.Fatalf("the jewel is on %d tabs, want %d", len(jewels), len(nasrunShopTabs))
 	}
 }
 
