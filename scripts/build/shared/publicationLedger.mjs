@@ -211,14 +211,34 @@ export async function claimKeptOutput( absolutePath, named ) {
 
 /*
 ================
+detachedString
+
+A copy of value that holds no reference to the text it was cut from. V8
+returns a match, a slice or a JSON.parse value of 13 or more characters
+as a view into its source, so a kept path keeps the whole source alive:
+the outdoor pass kept every region bundle's text (about 1.2 MB each)
+through the paths recorded per region, and its heap grew to 2 GB (#3422).
+================
+*/
+export function detachedString( value ) {
+	return Buffer.from( value, "utf8" ).toString( "utf8" );
+}
+
+/*
+================
 namedPublicPaths
 
 The /assets/... paths a JSON text names, in the spelling it wrote: what
 claimKeptOutput follows, recorded by a builder when it writes the text.
+Each path is detached from the text, so a caller may keep the list.
 ================
 */
 export function namedPublicPaths( text ) {
-	return [ ...new Set( Array.from( text.matchAll( REFERENCED_PUBLIC_PATH ), ( [, reference] ) => reference ) ) ];
+	return [
+		...new Set(
+			Array.from( text.matchAll( REFERENCED_PUBLIC_PATH ), ( [, reference] ) => detachedString( reference ) )
+		)
+	];
 }
 
 // A JSON string value that is a public path; paths never contain a quote or backslash.

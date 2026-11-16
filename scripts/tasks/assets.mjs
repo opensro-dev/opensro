@@ -12,6 +12,12 @@ first build is `assets prepare`, `assets doctor`, then `assets build full`.
 */
 import { commandTask, seriesTask } from "./define.mjs";
 
+// The outdoor world pass's heap ceiling. With every kept path detached from
+// its region's text (detachedString, #3422) the full forced pass peaks near
+// 510 MB resident at 2 jobs; it once held every bundle's text and needed 8 GB.
+// The ceiling keeps the build inside a 4 GB machine's budget.
+const OUTDOOR_WORLD_HEAP_MB = 1024;
+
 /*
 ================
 familyTask
@@ -165,7 +171,7 @@ export const ASSET_TASKS = [
 		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		command: "node",
-		args: [ "--max-old-space-size=8192", "scripts/build_outdoor_world_resources.mjs" ]
+		args: [ `--max-old-space-size=${OUTDOOR_WORLD_HEAP_MB}`, "scripts/build_outdoor_world_resources.mjs" ]
 	} ),
 	seriesTask( {
 		name: "assets:build:full",
