@@ -26,10 +26,16 @@ const ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..
 const { SCENARIOS } = await import( "../../tools/perf/presentation/scenarios.mjs" );
 const { createPresentationHarness } = await import( "../../tools/perf/presentation/harness.mjs" );
 const { PRESENTATION_DUE } = await import( "../../src/engine/runtime/characters/presentation-due.ts" );
+const { createActorSnapshots } = await import( "../../src/engine/runtime/renderer/characters/actor-snapshots.ts" );
+const { encodeCrowdValue } = await import( "../../tools/perf/core/crowd-capture.mjs" );
 // The settle scenario's seed, and the share of presented entities the
 // production rule must skip: its crowd stands still most of the run.
 const SEED = 1;
 const SKIPPED_SHARE = .5;
+// The share of renderer copies that must copy only clocks: the session's
+// equipment particle actors and fading copies are not frozen, and are
+// copied in full on every frame.
+const CLOCK_COPY_SHARE = .4;
 
 /*
 ================
@@ -61,10 +67,15 @@ function freezeDeep( actor ) {
 replay
 
 Every frame's outputs of one run of the session, encoded, and how often
-each rule was asked and answered not due.
+each rule was asked and answered not due. The published actors also enter
+two of the renderer's snapshot owners, one that copies only the clocks of
+a frozen actor whose other fields did not change and one that copies every
+actor in full: every frame's rows must be the same.
 ================
 */
 async function replay( session, rules ) {
+	const reused = createActorSnapshots(), full = createActorSnapshots( false );
+	let rowsDiffer = -1, frame = 0;
 	const asked = { appearance: 0, motion: 0, record: 0 }, skipped = { appearance: 0, motion: 0, record: 0 };
 	const counted = kind => ( retained, stamp ) => {
 		asked[kind]++;
@@ -76,15 +87,18 @@ async function replay( session, rules ) {
 		due: { appearance: counted( "appearance" ), motion: counted( "motion" ), record: counted( "record" ) },
 		actors: actors => {
 			for ( const actor of actors ) freezeDeep( actor );
+			const a = JSON.stringify( encodeCrowdValue( reused.update( actors ) ) ),
+				b = JSON.stringify( encodeCrowdValue( full.update( actors ) ) );
+			if ( a !== b && rowsDiffer < 0 ) rowsDiffer = frame;
 		}
 	} );
 	const frames = [];
 	try {
-		for ( let i = 0; i < harness.frames; i++ ) frames.push( JSON.stringify( harness.step( i ) ) );
+		for ( ; frame < harness.frames; frame++ ) frames.push( JSON.stringify( harness.step( frame ) ) );
 	} finally {
 		harness.dispose();
 	}
-	return { frames, asked, skipped };
+	return { frames, asked, skipped, rowsDiffer, copies: reused.stats() };
 }
 
 /*
@@ -103,6 +117,13 @@ test("skipped resolves, decides and actor builds present every frame as doing th
 		assert.equal( production.frames[i], forced.frames[i], `frame ${i}` );
 		assert.equal( JSON.parse( production.frames[i] ).reads.error, null, `frame ${i} error` );
 	}
+	assert.equal( production.rowsDiffer, -1, `renderer rows differ from frame ${production.rowsDiffer}` );
+	assert.equal( forced.rowsDiffer, -1, `renderer rows differ from frame ${forced.rowsDiffer}` );
+	const { copies, clockCopies } = production.copies;
+	assert.ok(
+		clockCopies > (copies + clockCopies) * CLOCK_COPY_SHARE,
+		`${clockCopies} of ${copies + clockCopies} copied clocks only`
+	);
 	for ( const kind of [ "appearance", "motion", "record" ] ) {
 		assert.ok(
 			production.skipped[kind] > production.asked[kind] * SKIPPED_SHARE,
